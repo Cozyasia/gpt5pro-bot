@@ -1,31 +1,32 @@
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
-from app.config import settings
+import logging
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from .config import settings
 
-async def cmd_start(update, context):
-    await update.message.reply_text("Бот работает ✅")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 
-async def echo(update, context):
-    await update.message.reply_text(update.message.text)
-
-def build_app():
-    app = ApplicationBuilder().token(settings.BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-    return app
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Webhook-бот запущен ✅")
 
 def main():
-    application = build_app()
+    app = ApplicationBuilder().token(settings.BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
 
-    # PUBLIC_URL из pydantic — это объект Url → приводим к строке
-    public_url = str(settings.PUBLIC_URL).rstrip('/')
-    webhook_url = f"{public_url}/{settings.WEBHOOK_SECRET}"
+    # Полный URL для вебхука: https://<host>/<секретный-путь>
+    base = settings.PUBLIC_URL.rstrip("/")
+    webhook_url = f"{base}/{settings.WEBHOOK_SECRET}"
 
-    # ВАЖНО: run_webhook — синхронный и блокирующий. НЕ вызываем через asyncio.run!
-    application.run_webhook(
+    # ВАЖНО: run_webhook сам поднимет aiohttp-сервер и выставит вебхук
+    app.run_webhook(
         listen="0.0.0.0",
         port=settings.PORT,
         webhook_url=webhook_url,
-        secret_token=settings.WEBHOOK_SECRET,
+        secret_token=settings.WEBHOOK_SECRET,    # валидация X-Telegram-Bot-Api-Secret-Token
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES,
     )
 
 if __name__ == "__main__":
