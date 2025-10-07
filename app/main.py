@@ -1,40 +1,32 @@
-import asyncio
-import logging
-import os
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from app.config import settings
 
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("bot")
+async def cmd_start(update, context):
+    await update.message.reply_text("Бот работает ✅")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Бот запущен")
+async def echo(update, context):
+    await update.message.reply_text(update.message.text)
 
 def build_app():
-    # ВАЖНО: отключаем Updater, он нужен только для polling
-    app = ApplicationBuilder().token(settings.BOT_TOKEN).updater(None).build()
-    app.add_handler(CommandHandler("start", start))
+    app = ApplicationBuilder().token(settings.BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
     return app
 
-async def run():
-    app = build_app()
+def main():
+    application = build_app()
 
-    webhook_url = f"{settings.PUBLIC_URL.rstrip('/')}/{settings.WEBHOOK_SECRET}"
-    port = int(os.getenv("PORT", settings.PORT))
+    # PUBLIC_URL из pydantic — это объект Url → приводим к строке
+    public_url = str(settings.PUBLIC_URL).rstrip('/')
+    webhook_url = f"{public_url}/{settings.WEBHOOK_SECRET}"
 
-    # выставим вебхук явно (повторный вызов — ок)
-    await app.bot.set_webhook(url=webhook_url, secret_token=settings.WEBHOOK_SECRET)
-
-    await app.run_webhook(
+    # ВАЖНО: run_webhook — синхронный и блокирующий. НЕ вызываем через asyncio.run!
+    application.run_webhook(
         listen="0.0.0.0",
-        port=port,
+        port=settings.PORT,
         webhook_url=webhook_url,
         secret_token=settings.WEBHOOK_SECRET,
     )
-
-def main():
-    asyncio.run(run())
 
 if __name__ == "__main__":
     main()
