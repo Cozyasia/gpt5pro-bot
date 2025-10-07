@@ -2,40 +2,38 @@ import asyncio
 import logging
 import os
 
-from telegram import Update
-from telegram.ext import ApplicationBuilder, Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from .config import settings
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("bot")
 
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👍 Bot is alive!")
+async def start(update, context):
+    await update.message.reply_text("Бот запущен ✅")
 
-def build_app() -> Application:
-    app = ApplicationBuilder().token(settings.BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start_cmd))
+async def echo(update, context):
+    if update.message and update.message.text:
+        await update.message.reply_text(update.message.text)
+
+def build_application() -> Application:
+    app = Application.builder().token(settings.BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
     return app
 
 async def run():
-    app = build_app()
+    application = build_application()
 
-    port = int(os.environ.get("PORT", "8080"))   # Render подставит PORT
-    path = settings.WEBHOOK_SECRET.strip("/")    # путь = секрет
-    base = settings.PUBLIC_URL.rstrip("/")       # базовый URL без '/'
+    public = settings.PUBLIC_URL.rstrip("/")
+    path = settings.WEBHOOK_SECRET         # это будет URL-путь
+    port = int(os.environ.get("PORT", "8080"))  # Render задаёт PORT автоматически
 
-    webhook_url = f"{base}/{path}"
-    log.info("Starting webhook on %s", webhook_url)
-
-    await app.run_webhook(
+    # одна команда делает всё: регистрирует вебхук и запускает aiohttp-сервер
+    await application.run_webhook(
         listen="0.0.0.0",
         port=port,
-        url_path=path,                 # <-- ВАЖНО: url_path (не webhook_path)
-        webhook_url=webhook_url,
-        secret_token=settings.WEBHOOK_SECRET,
+        url_path=path,                                  # важно: url_path (НЕ webhook_path)
+        webhook_url=f"{public}/{path}",
     )
 
 def main():
