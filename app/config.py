@@ -1,17 +1,12 @@
-import os
-from pydantic import AnyUrl, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseSettings, Field
 
 class Settings(BaseSettings):
     BOT_TOKEN: str
-    WEBHOOK_SECRET: str
-    PUBLIC_URL: AnyUrl           # https://gpt5pro-bot.onrender.com
-    # Render сам кладёт порт в env PORT → подхватываем его
-    PORT: int = Field(default_factory=lambda: int(os.getenv("PORT", "10000")))
+    PUBLIC_URL: str                     # https://<твой-сервис>.onrender.com  (без хвостового /)
+    WEBHOOK_SECRET: str = Field(min_length=1)  # любой секрет, см. ниже
+    PORT: int = 8000                    # Render подставит свой PORT из env
 
-    model_config = SettingsConfigDict(
-        env_prefix="",            # имена env = имена полей (BOT_TOKEN, ...)
-        case_sensitive=True
-    )
+    class Config:
+        extra = "ignore"
 
 settings = Settings()
