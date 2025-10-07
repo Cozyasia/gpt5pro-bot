@@ -1,27 +1,40 @@
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+import asyncio
+import logging
+import os
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update
 from app.config import settings
 
-async def start(update, context):
-    await update.message.reply_text("Бот на Render запущен ✅")
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("bot")
 
-async def echo(update, context):
-    await update.message.reply_text(update.message.text)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ Бот запущен")
 
 def build_app():
-    app = ApplicationBuilder().token(settings.BOT_TOKEN).build()
+    # ВАЖНО: отключаем Updater, он нужен только для polling
+    app = ApplicationBuilder().token(settings.BOT_TOKEN).updater(None).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
     return app
 
-def main():
+async def run():
     app = build_app()
-    webhook_url = f"{settings.PUBLIC_URL}/{settings.WEBHOOK_SECRET}"
-    # ВАЖНО: без await — метод блокирующий и сам управляет loop.
-    app.run_webhook(
+
+    webhook_url = f"{settings.PUBLIC_URL.rstrip('/')}/{settings.WEBHOOK_SECRET}"
+    port = int(os.getenv("PORT", settings.PORT))
+
+    # выставим вебхук явно (повторный вызов — ок)
+    await app.bot.set_webhook(url=webhook_url, secret_token=settings.WEBHOOK_SECRET)
+
+    await app.run_webhook(
         listen="0.0.0.0",
-        port=settings.PORT,            # Render передаст свой $PORT
+        port=port,
         webhook_url=webhook_url,
+        secret_token=settings.WEBHOOK_SECRET,
     )
+
+def main():
+    asyncio.run(run())
 
 if __name__ == "__main__":
     main()
