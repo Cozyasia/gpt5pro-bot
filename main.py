@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-import re
 import logging
 from typing import List, Tuple
 
@@ -9,178 +8,185 @@ from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
 
-# -------------------- LOGGING --------------------
+# ---- LOGGING ----
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
-log = logging.getLogger("gpt-bot")
+log = logging.getLogger("gpt5pro-bot")
 
-# -------------------- ENV --------------------
-BOT_TOKEN       = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain>.onrender.com
-OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL    = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
-WEBHOOK_SECRET  = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL      = os.environ.get("BANNER_URL", "").strip()
-TAVILY_API_KEY  = os.environ.get("TAVILY_API_KEY", "").strip()
-WEB_MODE        = os.environ.get("WEB_MODE", "always").strip().lower()   # always | auto | never
-PORT            = int(os.environ.get("PORT", "10000"))
+# ---- ENV ----
+BOT_TOKEN      = os.environ.get("BOT_TOKEN", "").strip()
+PUBLIC_URL     = os.environ.get("PUBLIC_URL", "").strip()
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL   = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
+BANNER_URL     = os.environ.get("BANNER_URL", "").strip()
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "").strip()
+ALWAYS_BROWSE  = os.environ.get("ALWAYS_BROWSE", "1").lower() not in ("0","false","no")
+PORT           = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 
-# -------------------- OPTIONAL: OPENAI client --------------------
+# ---- OPENAI ----
 from openai import OpenAI
-_oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+oa_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# -------------------- OPTIONAL: Tavily client -------------------
+# ---- Tavily ----
 try:
     from tavily import TavilyClient
-    _tv = TavilyClient(api_key=TAVILY_API_KEY) if TAVILY_API_KEY else None
+    tv_client = TavilyClient(api_key=TAVILY_API_KEY) if TAVILY_API_KEY else None
 except Exception as e:
+    tv_client = None
     log.warning("Tavily import failed: %s", e)
-    _tv = None
 
-# -------------------- UTILS --------------------
-SEARCH_KEYWORDS = re.compile(
-    r"(что такое|кто такой|когда|дата|новост|курс|сколько стоит|цена|прогноз|"
-    r"релиз|выйдет|объясни события|итоги|статистик|как дела у|когда будет|"
-    r"опубликован|запуск|release|price|wiki|изобрели|история|биограф|"
-    r"закон|постановлен|регламент|инструкция|how to|why|when|where|what)",
-    re.IGNORECASE
-)
 
-CREATIVE_KEYWORDS = re.compile(
-    r"(напиши|сочини|переведи|перефразируй|придумай|сгенерируй|оформи|подбери|тон|"
-    r"письмо|пост|статью|эссе|тз|бриф|слоган|скрипт|диалог|код(?!\s+пример)|"
-    r"таблиц|презентац|резюме|summary|перескажи)",
-    re.IGNORECASE
-)
+# ---------- helpers ----------
+def _clip(text: str, limit: int = 3600) -> str:
+    """telegram ~4096; оставим запас под ссылки"""
+    if text and len(text) > limit:
+        return text[:limit-20].rstrip() + "…"
+    return text
 
-def need_web_search(q: str) -> bool:
-    """Решаем, идти ли в веб."""
-    if WEB_MODE == "never":
-        return False
-    if WEB_MODE == "always":
-        # кроме явно креативных/генеративных задач
-        return not bool(CREATIVE_KEYWORDS.search(q))
-    # WEB_MODE == "auto"
-    if CREATIVE_KEYWORDS.search(q):
-        return False
-    return bool(SEARCH_KEYWORDS.search(q)) or ("http" in q or "www" in q)
+def _to_links(results: List[dict]) -> Tuple[str, List[str]]:
+    """Возвращает текстовый список ссылок и список URL для приоритезации."""
+    lines, urls = [], []
+    for i, r in enumerate(results[:6], start=1):
+        url = r.get("url") or r.get("source") or ""
+        title = (r.get("title") or "").strip() or url
+        urls.append(url)
+        lines.append(f"[{i}] {title} — {url}")
+    return "\n".join(lines), urls
 
-def tavily_search(query: str, max_results: int = 6) -> Tuple[str, List[dict]]:
-    """Ищем в Tavily. Возвращаем (краткий ответ, список источников)."""
-    if not _tv:
-        return "", []
+
+async def _browse_then_answer(query: str) -> str:
+    """
+    1) Ищем Tavily (всегда, если включен ALWAYS_BROWSE)
+    2) Суммаризуем источники в OpenAI
+    """
+    if not tv_client:
+        return ""  # пусть сработает офлайн-фолбэк
+
+    results = []
     try:
-        resp = _tv.search(
+        # advanced = лучше для свежести/точности
+        sr = tv_client.search(
             query=query,
-            max_results=max_results,
-            include_answer=True,
-            include_raw_content=True,
             search_depth="advanced",
+            max_results=6,
+            include_answer=False,
         )
-        answer = (resp.get("answer") or "").strip()
-        sources = resp.get("results") or []
-        return answer, sources
+        results = sr.get("results") or []
     except Exception as e:
         log.exception("Tavily error: %s", e)
-        return "", []
+        results = []
 
-def format_sources(sources: List[dict], limit: int = 5) -> str:
-    out = []
-    for i, s in enumerate(sources[:limit], start=1):
-        title = (s.get("title") or s.get("url") or "").strip()
-        url = (s.get("url") or "").strip()
-        if title and url:
-            out.append(f"{i}) {title}\n{url}")
-    return "\n".join(out)
+    if not results:
+        return ""
 
-def llm_answer(user_text: str, web_summary: str = "", sources: List[dict] = None) -> str:
-    """Готовим ответ от модели. Если есть веб-данные — просим их учесть и дать итог + ссылки."""
-    if not _oai:
-        return "OPENAI_API_KEY не задан. Сообщи админу."
+    links_text, urls = _to_links(results)
 
-    sys_prompt = (
-        "Ты аналитичный помощник. Если предоставлены источники/сводка — опирайся на них. "
-        "Пиши по-русски, кратко по делу. Если факты зависят от времени — "
-        "излагай как «на данный момент» и добавляй ссылки.\n"
-        "Структура: короткий ответ, затем при необходимости маркированный список. "
-        "Если источники переданы — в конце раздел «Источники»."
+    # Собираем «корпус» фактов
+    chunks = []
+    for idx, r in enumerate(results[:6], start=1):
+        title = r.get("title") or ""
+        url = r.get("url") or r.get("source") or ""
+        content = r.get("content") or r.get("snippet") or ""
+        chunks.append(f"[{idx}] {title}\nURL: {url}\n{content}")
+
+    research_block = "\n\n".join(_clip(c, 1200) for c in chunks)
+
+    system = (
+        "Ты аналитичный ассистент. ДЕЛАЙ ВЫВОДЫ ТОЛЬКО из предоставленных источников. "
+        "Если источники противоречат друг другу — укажи это и отметь степень уверенности. "
+        "Будь краток и точен, отвечай на русском. Сначала дай прямой ответ на запрос, "
+        "затем добавь раздел «Ссылки» со списком вида [1] Тайтл — URL."
     )
 
-    user_prompt = f"Вопрос пользователя: {user_text}"
-    if web_summary:
-        user_prompt += f"\n\nСводка из веб-поиска:\n{web_summary}"
-
-    if sources:
-        numbered = format_sources(sources)
-        user_prompt += f"\n\nИсточники (нумерованные):\n{numbered}\n\n" \
-                       f"Пожалуйста, используй эти источники при ответе."
+    user = (
+        f"Запрос пользователя: {query}\n\n"
+        f"ИСТОЧНИКИ (выдержки):\n{research_block}\n\n"
+        "Сформируй итоговый ответ (3–8 предложений максимум). "
+        "Если запрос о датах/суммах/курсах/сроках — приводи актуальные числа из источников. "
+        "Если нет однозначной информации — честно укажи это."
+    )
 
     try:
-        resp = _oai.chat.completions.create(
+        resp = oa_client.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": sys_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.3,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": user}],
+            temperature=0.2,
         )
-        return (resp.choices[0].message.content or "").strip()
+        summary = (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        log.exception("OpenAI error: %s", e)
-        return "Не удалось получить ответ от модели. Попробуй ещё раз позже."
+        log.exception("OpenAI summarize error: %s", e)
+        summary = ""
 
-# -------------------- HANDLERS --------------------
+    if not summary:
+        return ""
+
+    return _clip(summary) + "\n\n" + links_text
+
+
+# ---------- handlers ----------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Баннер (если хочешь показывать при /start)
+    # баннер (если задан)
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception as e:
             log.warning("Banner send failed: %s", e)
 
-    text = (
+    greet = (
         "Привет! Я готов. Напиши любой вопрос.\n\n"
         "Подсказки:\n"
-        "• Могу искать в интернете: просто спроси «что такое…», «найди…», «новости…», «когда выйдет…» и т.д.\n"
-        "• Примеры: «Какая погода в Москве?», «Найди учебник алгебры (официальные источники)», "
-        "«Кто такой Ньютон?», «Дата выхода GTA 6»."
+        "• Я всегда ищу свежую информацию в интернете и даю ответ с ссылками.\n"
+        "• Примеры: «Дата выхода GTA 6?», «Курс биткоина сейчас и прогноз», "
+        "«Найди учебник алгебры 11 класс (официальные источники)», "
+        "«Новости по …», «Кто такой …?» и т.д."
     )
-    await update.effective_message.reply_text(text)
+    await update.effective_message.reply_text(greet)
+
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = (update.message.text or "").strip()
 
-    use_web = need_web_search(q)
-    web_summary = ""
-    sources = []
+    # 1) Всегда пробуем веб-поиск (если включен флаг)
+    answer = ""
+    if ALWAYS_BROWSE:
+        answer = await _browse_then_answer(q)
 
-    if use_web:
-        # небольшой “перефраз” запроса, чтобы поиску легче:
-        enriched_q = q
-        # если есть явный объект (бренд, игра, компания) — чаще полезно добавить «официальный сайт»
-        if re.search(r"(официальн|official|rockstar|gta|дат[аы]\s+выхода)", q, re.I):
-            enriched_q += " официальный сайт"
-        # ищем
-        ans, srcs = tavily_search(enriched_q, max_results=6)
-        web_summary = ans or ""   # краткая сводка Tavily
-        sources = srcs or []
+    # 2) Если веб-поиск не дал результата — офлайн-ответ (как фолбэк)
+    if not answer:
+        if not oa_client:
+            await update.message.reply_text("Не удалось получить ответ. Попробуй ещё раз.")
+            return
+        try:
+            sys_prompt = (
+                "Ты дружелюбный и лаконичный ассистент. "
+                "Если тебя спрашивают о свежих новостях/датах/ценах — скажи, что не уверен без доступа к сети."
+            )
+            resp = oa_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": q},
+                ],
+                temperature=0.6,
+            )
+            answer = (resp.choices[0].message.content or "").strip()
+        except Exception as e:
+            log.exception("OpenAI offline error: %s", e)
+            answer = "Не удалось получить ответ. Попробуй ещё раз."
 
-    answer = llm_answer(q, web_summary=web_summary, sources=sources)
+    await update.message.reply_text(_clip(answer))
 
-    # Если не поискали (или Tavily дал пусто) и ответ выглядит «старым», а вопрос фактологический — сделаем fallback: короткий список ссылок
-    if use_web and not web_summary and sources:
-        answer += "\n\nИсточники:\n" + format_sources(sources)
 
-    await update.message.reply_text(answer, disable_web_page_preview=False)
-
-# -------------------- BOOTSTRAP --------------------
+# ---------- bootstrap ----------
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
@@ -190,7 +196,6 @@ def build_app():
 def run_webhook(app):
     url_path = f"webhook/{BOT_TOKEN}"
     webhook_url = f"{PUBLIC_URL.rstrip('/')}/{url_path}"
-
     log.info("Starting webhook on 0.0.0.0:%s  ->  %s", PORT, webhook_url)
     app.run_webhook(
         listen="0.0.0.0",
