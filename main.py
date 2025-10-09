@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
 import logging
+from typing import List, Dict
+
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
@@ -15,12 +17,15 @@ log = logging.getLogger("gpt-bot")
 
 # -------------------- ENV --------------------
 BOT_TOKEN       = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain>.onrender.com
+PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").strip()
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL    = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
 WEBHOOK_SECRET  = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL      = os.environ.get("BANNER_URL", "").strip()   # напр.: https://.../assets/IMG_3451.jpeg
 TAVILY_API_KEY  = os.environ.get("TAVILY_API_KEY", "").strip()
+
+# баннер для /start (положи картинку и укажи прямую ссылку)
+BANNER_URL      = os.environ.get("BANNER_URL", "").strip()
+
 PORT            = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -28,94 +33,140 @@ if not BOT_TOKEN:
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 
-# -------------------- UTILS: web search --------------------
-def _should_search_web(s: str) -> bool:
-    """Грубая эвристика: что-то явно «актуальное» -> пробуем веб-поиск."""
-    s = (s or "").lower()
-    triggers = [
-        # RU
-        "сегодня", "вчера", "сейчас", "новост", "погода", "курс",
-        "котиров", "цена акций", "расписан", "матч", "играет", "рейс",
-        "пробк", "трафик",
-        # EN (на всякий)
-        "today", "now", "current", "latest", "news", "weather",
-        "price", "stock", "schedule", "traffic", "score"
+# -------------------- HELPERS --------------------
+def wants_web(q: str) -> bool:
+    """Грубая эвристика: когда стоит звать веб-поиск."""
+    text = (q or "").lower()
+
+    # явные принуждения к вебу
+    force_words = [
+        "в интернете", "в сети", "онлайн",
+        "найти", "найди", "ищи", "поищи", "поиск",
+        "новости", "сегодня", "сейчас",
+        "кто такой", "что такое",
+        "курс", "цена", "погода",
+        "список", "топ", "лучшие",
+        "pdf", "github", "скачать", "инструкция",
+        "учебник", "реферат", "статья", "официальный сайт",
     ]
-    return any(t in s for t in triggers)
+    if any(w in text for w in force_words):
+        return True
 
-def search_web_answer(query: str) -> str | None:
-    """Ищем через Tavily и формируем компактный ответ + 2-3 источника."""
-    if not TAVILY_API_KEY:
-        log.info("Tavily disabled: no TAVILY_API_KEY")
-        return None
-    try:
-        from tavily import TavilyClient  # импорт внутри, чтобы не падать без пакета
-        client = TavilyClient(api_key=TAVILY_API_KEY)
-        res = client.search(
-            query=query,
-            max_results=5,
-            include_answer=True,
-        )
-        answer = (res.get("answer") or "").strip()
-        results = res.get("results") or []
-        bullets = []
-        for r in results[:3]:
-            title = (r.get("title") or "").strip()
-            url = (r.get("url") or "").strip()
-            if title and url:
-                bullets.append(f"• {title}\n{url}")
-        tail = ("\n\n" + "\n".join(bullets)) if bullets else ""
-        text = (answer + tail).strip()
-        return text or None
-    except Exception as e:
-        log.error("Tavily search failed: %s", e)
-        return None
+    # вопросительный знак часто означает запрос фактов
+    if "?" in text:
+        return True
 
-# -------------------- HANDLERS --------------------
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1) баннер, если указан
-    if BANNER_URL:
-        try:
-            await update.effective_message.reply_photo(BANNER_URL)
-        except Exception as e:
-            log.warning("Failed to send BANNER_URL: %s", e)
-    # 2) приветствие
-    await update.effective_message.reply_text(
-        "Привет! Я готов. Напиши любой вопрос."
-    )
+    # Негативные триггеры: генеративные задания без интернета
+    negative = ["напиши", "сочини", "перепиши", "сгенерируй",
+                "придумай", "переведи", "рассчитай", "посчитай"]
+    if any(w in text for w in negative):
+        return False
 
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (update.message.text or "").strip()
+    return False
 
-    # Попытка веб-поиска для «живых» вопросов
-    if _should_search_web(text):
-        web = search_web_answer(text)
-        if web:
-            await update.message.reply_text(web, disable_web_page_preview=False)
-            return
 
-    if not OPENAI_API_KEY:
-        await update.message.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
-        return
+def build_sources_block(results: List[Dict], limit: int = 5) -> str:
+    lines = []
+    for it in results[:limit]:
+        url = it.get("url") or ""
+        title = it.get("title") or url
+        lines.append(f"• {title}\n{url}")
+    return "\n".join(lines)
 
-    # Обычный ответ модели
+
+async def answer_via_openai(prompt: str) -> str:
+    """Обычный ответ модели без веба."""
     try:
         from openai import OpenAI
         client = OpenAI(api_key=OPENAI_API_KEY)
 
-        sys_prompt = "Ты дружелюбный и лаконичный ассистент. Отвечай по сути."
+        sys_prompt = "Ты дружелюбный и лаконичный ассистент. Отвечай по сути на русском языке."
         resp = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": sys_prompt},
-                {"role": "user", "content": text},
+                {"role": "user", "content": prompt},
             ],
             temperature=0.6,
         )
-        answer = (resp.choices[0].message.content or "").strip()
+        return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("OpenAI error: %s", e)
-        answer = "Не удалось получить ответ от модели. Попробуй еще раз позже."
+        return "Не удалось получить ответ от модели. Попробуй ещё раз позже."
+
+
+async def answer_via_web(prompt: str) -> str:
+    """Поиск Tavily + компактный ответ со списком источников."""
+    if not TAVILY_API_KEY:
+        # если ключа нет — мягко откатываемся к оффлайн-ответу
+        return await answer_via_openai(prompt)
+
+    try:
+        from tavily import TavilyClient  # требует tavily-python
+        tv = TavilyClient(TAVILY_API_KEY)
+
+        data = tv.search(
+            query=prompt,
+            search_depth="advanced",
+            include_answer=True,
+            max_results=5,
+        )
+
+        # может вернуться пусто — отдаем оффлайн-ответ
+        if not data or not data.get("results"):
+            return await answer_via_openai(prompt)
+
+        ans = (data.get("answer") or "").strip()
+        sources = build_sources_block(data.get("results", []), limit=5)
+
+        # Если краткого ответа нет — попросим OpenAI сжать сниппеты.
+        if not ans:
+            snippets = "\n\n".join(
+                f"{i+1}) {r.get('title','')}: {r.get('content','')[:500]}"
+                for i, r in enumerate(data.get("results", []))
+            )
+            ans = await answer_via_openai(
+                f"Суммируй по-русски, коротко и по фактам, с учётом источников ниже.\n\nВопрос: {prompt}\n\nИсточники:\n{snippets}"
+            )
+
+        return f"{ans}\n\n{sources}" if sources else ans
+
+    except Exception as e:
+        log.exception("Tavily error: %s", e)
+        return await answer_via_openai(prompt)
+
+# -------------------- HANDLERS --------------------
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Пытаемся показать баннер, если указан
+    if BANNER_URL:
+        try:
+            await update.effective_message.reply_photo(BANNER_URL)
+        except Exception as e:
+            log.warning("Banner send failed: %s", e)
+
+    greet = (
+        "Привет! Я готов. Напиши любой вопрос.\n\n"
+        "Подсказки:\n"
+        "• Могу искать в интернете: просто спроси «что такое…», «найди…», «новости…» и т.д.\n"
+        "• Примеры: «Какая погода в Москве?», «Найди учебник алгебры 11 класс (официальные источники)», "
+        "«Кто такой Ньютон?», «Курс биткоина»."
+    )
+    await update.effective_message.reply_text(greet)
+
+
+async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or "").strip()
+
+    # если нет OpenAI ключа — сразу выходим
+    if not OPENAI_API_KEY:
+        await update.message.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
+        return
+
+    use_web = wants_web(text)
+    if use_web:
+        answer = await answer_via_web(text)
+    else:
+        answer = await answer_via_openai(text)
 
     await update.message.reply_text(answer)
 
@@ -126,8 +177,8 @@ def build_app():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     return app
 
+
 def run_webhook(app):
-    # уникальный путь (чтоб никто случайно не дергал)
     url_path = f"webhook/{BOT_TOKEN}"
     webhook_url = f"{PUBLIC_URL.rstrip('/')}/{url_path}"
 
@@ -137,13 +188,15 @@ def run_webhook(app):
         port=PORT,
         url_path=url_path,
         webhook_url=webhook_url,
-        secret_token=WEBHOOK_SECRET or None,   # Telegram header X-Telegram-Bot-Api-Secret-Token
+        secret_token=WEBHOOK_SECRET or None,
         drop_pending_updates=True,
     )
+
 
 def main():
     app = build_app()
     run_webhook(app)
+
 
 if __name__ == "__main__":
     main()
