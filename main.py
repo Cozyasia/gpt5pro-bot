@@ -1,9 +1,19 @@
 # -*- coding: utf-8 -*-
+"""
+GPT5PRO Telegram Bot
+- Умные ответы: локально или с веб-поиском (Tavily) по необходимости
+- Надёжный анализ изображений (OpenAI Vision) — без проблем с invalid_image_url
+- Webhook-режим для Render
+"""
+
 import os
 import re
+import base64
+import mimetypes
 import logging
-from typing import List, Tuple
+from typing import List, Dict, Any
 
+import httpx
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
@@ -17,261 +27,328 @@ logging.basicConfig(
 log = logging.getLogger("gpt-bot")
 
 # -------------------- ENV --------------------
-BOT_TOKEN      = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL     = os.environ.get("PUBLIC_URL", "").strip()
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL   = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()  # поддерживает изображения
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
-TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "").strip()
-BANNER_URL     = os.environ.get("BANNER_URL", "").strip()
-PORT           = int(os.environ.get("PORT", "10000"))
+BOT_TOKEN       = os.environ.get("BOT_TOKEN", "").strip()
+PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain>.onrender.com
+OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL    = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
+VISION_MODEL    = os.environ.get("VISION_MODEL", OPENAI_MODEL).strip()
+WEBHOOK_SECRET  = os.environ.get("WEBHOOK_SECRET", "").strip()
+BANNER_URL      = os.environ.get("BANNER_URL", "").strip()   # например: https://.../assets/IMG_3451.jpeg
+TAVILY_API_KEY  = os.environ.get("TAVILY_API_KEY", "").strip()
+PORT            = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 
-# -------------------- TEXTS --------------------
-START_GREETING = (
-    "Привет! Я готов. Напиши любой вопрос.\n\n"
-    "Подсказки:\n"
-    "• Я отвечаю сам, а если нужно — сверяюсь с интернетом и даю ссылки.\n"
-    "• Могу анализировать фото/картинки (через 📎) — прочитать текст, описать объекты, сделать выводы.\n"
-    "• Примеры: «Дата выхода GTA 6?», «Курс биткоина сейчас и прогноз», "
-    "«Найди учебник алгебры 11 класс (официальные источники)», «Кто такой …?» и т.д."
+# -------------------- OPENAI CLIENT --------------------
+from openai import OpenAI
+oa_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+
+# ---------- эвристика: нужно ли идти в веб-поиск ----------
+_NEWSY = (
+    r"\b(сейчас|сегодня|вчера|завтра|только что|актуальн|последн(ие|яя)|итоги|новост|апдейт|обновлен)\b"
+)
+_QUESY = (
+    r"\b(когда|где|кто|что такое|почему|как (?:получить|сделать|настроить)|найди|посмотри|узнай|сколько|курс|цена|стоимость)\b"
+)
+_TOPICS_FORCE_WEB = (
+    r"\b(погода|курс|биткоин|доллар|евро|акци(я|и)|индекс|тариф|расписани|мероприяти|релиз|выходит|выйдет|дата выхода|E3|GTA|Rockstar|мировой|матч|score|ваканси|самолет|рейс)\b"
 )
 
-# -------------------- HEURISTICS --------------------
-_greetings = re.compile(r"\b(прив(ет|ствую)|здравств|доброе|добрый|hello|hi|hey)\b", re.I)
-_smalltalk = re.compile(r"(как дела|кто ты|что умеешь|спасибо|благодарю|пока|до свид|рад знакомству)", re.I)
-_no_web_hint = re.compile(r"(без интернета|не ищи|не гугли)", re.I)
-
-_need_web_keywords = [
-    "сегодня", "сейчас", "завтра", "новост", "обновлен", "релиз", "когда", "дата",
-    "курс", "котиров", "цена", "стоимость", "ставка", "индекс", "акци", "биткоин", "btc",
-    "погода", "расписан", "трансляц", "матч", "турнир", "рейс", "самолет", "поезд",
-    "найди", "ссылка", "ссылки", "официальн", "википед", "pdf", "скачать", "документ",
-    "учебник", "мануал", "руководств", "адрес", "телефон", "контакты", "как добраться",
-]
-
-def need_web_search(text: str) -> bool:
-    t = text.strip().lower()
-    if _no_web_hint.search(t):
-        return False
-    if len(t) <= 2 or _greetings.search(t) or _smalltalk.search(t):
-        return False
-    for kw in _need_web_keywords:
-        if kw in t:
-            return True
-    if re.search(r"\b(что|кто|где|когда|почему|зачем|какой|какие|сколько|как)\b", t) and "пример" not in t:
-        if any(x in t for x in ["переведи", "перевод", "перепиши", "сформулируй", "придумай", "написать", "наполни"]):
-            return False
+def need_browse(q: str) -> bool:
+    ql = q.lower().strip()
+    # Явные команды поиска
+    if re.search(_QUESY, ql):
         return True
-    return len(t) >= 160
+    # Темы, которые почти всегда требуют онлайна
+    if re.search(_TOPICS_FORCE_WEB, ql):
+        return True
+    # Новостная/временная лексика
+    if re.search(_NEWSY, ql):
+        return True
+    # Очень длинный или фактологический вопрос
+    if len(ql) > 160 and ("http" not in ql):
+        return True
+    return False
 
-# -------------------- LLM & SEARCH --------------------
-from openai import OpenAI
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+def is_smalltalk(q: str) -> bool:
+    ql = q.lower().strip()
+    return bool(re.fullmatch(r"(пр(иве)?т|здравств(уй|уйте)|добрый (день|вечер|утро)|как дела\??|спасибо|ок|пока)", ql))
 
-def llm_answer(user_text: str, system_hint: str = "") -> str:
-    sp = (
-        "Ты дружелюбный и лаконичный ассистент. Отвечай по делу, "
-        "не выдумывай фактов. Если не хватает контекста — предложи уточнить."
-    )
-    if system_hint:
-        sp += " " + system_hint
+
+# ---------- Tavily ----------
+async def tavily_search(query: str, max_results: int = 5) -> Dict[str, Any]:
+    """
+    Возвращает dict вида:
+    {
+      "answer": str|None,
+      "results": [ { "title":..., "url":..., "content":... }, ... ]
+    }
+    """
+    if not TAVILY_API_KEY:
+        return {"answer": None, "results": []}
+
+    payload = {
+        "api_key": TAVILY_API_KEY,
+        "query": query,
+        "search_depth": "advanced",
+        "max_results": max_results,
+        "include_answer": True,
+        "include_images": False,
+        "include_domains": [],
+        "exclude_domains": [],
+    }
     try:
-        resp = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": sp},
-                {"role": "user", "content": user_text},
-            ],
-            temperature=0.6,
-        )
-        return (resp.choices[0].message.content or "").strip()
-    except Exception as e:
-        log.exception("OpenAI error: %s", e)
-        return "Не удалось получить ответ от модели. Попробуй ещё раз позже."
-
-def web_search(query: str) -> Tuple[str, List[Tuple[str, str]]]:
-    try:
-        from tavily import TavilyClient
-        tv = TavilyClient(api_key=TAVILY_API_KEY)
-        res = tv.search(
-            query=query, search_depth="advanced",
-            max_results=6, include_answer=True,
-        )
-        answer = (res.get("answer") or "").strip()
-        sources = []
-        for item in res.get("results", []):
-            title = (item.get("title") or "Источник").strip()
-            url = (item.get("url") or "").strip()
-            if url:
-                sources.append((title, url))
-        return answer, sources
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post("https://api.tavily.com/search", json=payload)
+            r.raise_for_status()
+            data = r.json()
+            # Нормализуем
+            results = data.get("results") or data.get("results_list") or []
+            norm = []
+            for it in results:
+                norm.append({
+                    "title": it.get("title") or "",
+                    "url": it.get("url") or it.get("url_link") or "",
+                    "content": it.get("content") or it.get("snippet") or "",
+                })
+            return {"answer": data.get("answer"), "results": norm}
     except Exception as e:
         log.exception("Tavily error: %s", e)
-        return "", []
+        return {"answer": None, "results": []}
 
-def synthesize_with_sources(user_text: str, web_answer: str, sources: List[Tuple[str, str]]) -> str:
-    context = (
-        "Используй сводку из поиска и оформи ясный ответ на русском. "
-        "Если в сводке нет точного факта — скажи об этом. "
-        "Не пиши огромный реферат — 3–7 коротких абзацев или список. "
-        "В конце перечисли источники списком."
+def format_sources(results: List[Dict[str, str]], limit: int = 6) -> str:
+    if not results:
+        return ""
+    lines = []
+    for i, r in enumerate(results[:limit], 1):
+        url = (r.get("url") or "").strip()
+        title = (r.get("title") or url or "Источник").strip()
+        if not url:
+            continue
+        lines.append(f"[{i}] {title} — {url}")
+    return "\n".join(lines)
+
+
+# ---------- Внутренний вызов OpenAI без веба ----------
+async def llm_answer_local(prompt: str) -> str:
+    if not oa_client:
+        return "OPENAI_API_KEY не задан. Сообщи админу."
+
+    sys = (
+        "Ты дружелюбный и лаконичный ассистент. Отвечай по делу, "
+        "можешь задавать уточняющие вопросы. Если вопрос приветственный — поприветствуй и предложи помощь."
     )
-    combined_prompt = (
-        f"Вопрос пользователя: {user_text}\n\n"
-        f"Сводка из поиска:\n{web_answer or '—'}\n"
-        f"(Подробные ссылки добавит бот.)"
-    )
-    body = llm_answer(combined_prompt, system_hint=context)
-    if sources:
-        links = "\n".join([f"• {title} — {url}" for title, url in sources[:6]])
-        body = f"{body}\n\nСсылки:\n{links}"
-    return body
-
-# ---------- Helpers для загрузок из Telegram ----------
-async def _tg_file_url(context: ContextTypes.DEFAULT_TYPE, file_id: str) -> str:
-    """
-    Получаем прямую ссылку на файл Telegram (с токеном бота).
-    OpenAI сможет её скачать, чтобы проанализировать изображение.
-    """
-    f = await context.bot.get_file(file_id)
-    return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{f.file_path}"
-
-def vision_on_image(image_url: str, user_hint: str = "") -> str:
-    """
-    Анализ изображения через модель с поддержкой vision.
-    """
     try:
-        sys = (
-            "Ты компьютерное зрение-ассистент. Описывай кратко и точно, "
-            "извлекай ключевые факты, перечисляй объекты, по возможности считывай текст (OCR) "
-            "и делай выводы, полезные пользователю."
-        )
-        user_text = user_hint.strip() or "Проанализируй изображение. Извлеки текст, перечисли важные объекты и сделай выводы."
-        resp = client.chat.completions.create(
+        resp = oa_client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": sys},
-                {"role": "user", "content": [
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ]},
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.6,
+            max_tokens=600,
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        log.exception("Vision error: %s", e)
-        return "Не удалось проанализировать изображение. Попробуй ещё раз или пришли другой файл."
+        log.exception("OpenAI local error: %s", e)
+        return "Не удалось получить ответ от модели. Попробуй ещё раз позже."
 
-# -------------------- HANDLERS --------------------
+
+# ---------- Комбинированный ответ: веб-поиск + анализ ----------
+async def llm_answer_with_browse(query: str) -> str:
+    # 1) Поиск
+    search = await tavily_search(query, max_results=6)
+    sources = search.get("results", [])
+    fused_context = "\n\n".join(
+        f"Источник {i+1}: {s.get('title','')}\nURL: {s.get('url','')}\nСодержание: {s.get('content','')}"
+        for i, s in enumerate(sources)
+    )[:12000]  # подрежем на всякий
+
+    # 2) Анализ в LLM
+    if not oa_client:
+        # Без ключа хотя бы вернём ссылки
+        src = format_sources(sources)
+        return f"Вот, что нашёл:\n{src if src else 'Источники не найдены.'}"
+
+    sys = (
+        "Ты аналитик-исследователь. Используй предоставленные сниппеты как основное основание ответа. "
+        "Дай краткий, точный вывод и, если уместно, укажи цифры/даты. "
+        "Если есть противоречия — явно укажи это. Не выдумывай фактов."
+    )
+    user = (
+        f"Вопрос пользователя:\n{query}\n\n"
+        f"Материалы из поиска:\n{fused_context if fused_context else 'Нет результатов'}\n\n"
+        "Сформируй ответ по сути. В конце не вставляй литеральных [1], [2]; ссылки я добавлю отдельно."
+    )
+    try:
+        resp = oa_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "system", "content": sys}, {"role": "user", "content": user}],
+            temperature=0.3,
+            max_tokens=700,
+        )
+        answer = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        log.exception("OpenAI browse error: %s", e)
+        answer = "Не удалось проанализировать результаты поиска. Попробуй уточнить запрос."
+
+    src_block = format_sources(sources)
+    if src_block:
+        answer = f"{answer}\n\nСсылки:\n{src_block}"
+    return answer
+
+
+# -------------------- ВИЗУАЛ (ФОТО/ДОКУМЕНТ-ИЗОБРАЖЕНИЕ) --------------------
+
+async def _tg_get_file_url(bot, file_id: str) -> str:
+    """Возвращает ПОЛНЫЙ корректный URL файла Telegram (без ручного склеивания)."""
+    f = await bot.get_file(file_id)
+    # telegram.ext.File имеет поле .file_path — это уже полный https-URL
+    return f.file_path
+
+async def _download_bytes(url: str) -> bytes:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        return r.content
+
+def _to_data_url(raw: bytes, mime: str = "image/jpeg") -> str:
+    b64 = base64.b64encode(raw).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    try:
+        if not OPENAI_API_KEY:
+            await msg.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
+            return
+
+        # Берём самую большую копию
+        file_id = msg.photo[-1].file_id
+        file_url = await _tg_get_file_url(context.bot, file_id)
+
+        raw = await _download_bytes(file_url)
+        data_url = _to_data_url(raw, "image/jpeg")
+
+        user_prompt = (msg.caption or "Опиши изображение и вытащи важные факты.").strip()
+        resp = oa_client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=[
+                {"role": "system", "content": "Ты кратко и по делу описываешь изображение и извлекаешь факты."},
+                {"role": "user", "content": [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": data_url}}
+                ]}
+            ],
+            temperature=0.2,
+            max_tokens=700,
+        )
+        ans = (resp.choices[0].message.content or "").strip()
+        await msg.reply_text(ans)
+    except Exception as e:
+        log.exception("Vision error: %s", e)
+        await msg.reply_text("Не удалось проанализировать изображение. Попробуй ещё раз или пришли другой файл.")
+
+async def on_document_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    doc = update.effective_message.document
+    if not doc or not (doc.mime_type or "").startswith("image/"):
+        return
+    try:
+        if not OPENAI_API_KEY:
+            await update.effective_message.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
+            return
+
+        file_url = await _tg_get_file_url(context.bot, doc.file_id)
+        mime = doc.mime_type or mimetypes.guess_type(doc.file_name or "")[0] or "image/jpeg"
+        raw = await _download_bytes(file_url)
+        data_url = _to_data_url(raw, mime)
+
+        user_prompt = (update.effective_message.caption or "Опиши изображение и вытащи важные факты.").strip()
+        resp = oa_client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=[
+                {"role": "system", "content": "Ты кратко и по делу описываешь изображение и извлекаешь факты."},
+                {"role": "user", "content": [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": data_url}}
+                ]}
+            ],
+            temperature=0.2,
+            max_tokens=700,
+        )
+        ans = (resp.choices[0].message.content or "").strip()
+        await update.effective_message.reply_text(ans)
+    except Exception as e:
+        log.exception("Vision(doc) error: %s", e)
+        await update.effective_message.reply_text("Не удалось проанализировать изображение. Попробуй другой файл.")
+
+
+# -------------------- ТЕКСТОВЫЕ ХЕНДЛЕРЫ --------------------
+
+START_GREETING = (
+    "Привет! Я готов. Напиши любой вопрос.\n\n"
+    "Подсказки:\n"
+    "• Я ищу свежую информацию в интернете и даю ответ со ссылками при необходимости.\n"
+    "• Простые фразы («привет», «спасибо») — отвечаю сразу, без поиска.\n"
+    "• Примеры: «Дата выхода GTA 6?», «Курс биткоина сейчас и прогноз», "
+    "«Найди учебник алгебры 11 класс (официальные источники)», «Новости по ...», «Кто такой ...?»."
+)
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Пытаемся отправить баннер, если указан
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
-        except Exception:
+        except Exception:  # не мешаем старту, если картинка недоступна
             pass
-    await update.effective_message.reply_text(START_GREETING, disable_web_page_preview=True)
+    await update.effective_message.reply_text(START_GREETING)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
+
     if not OPENAI_API_KEY:
         await update.message.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
         return
 
-    use_web = bool(TAVILY_API_KEY) and need_web_search(text)
-    if not use_web:
-        answer = llm_answer(text)
-        await update.message.reply_text(answer, disable_web_page_preview=True)
+    # 1) болталка — без веба
+    if is_smalltalk(text):
+        reply = await llm_answer_local(text)
+        await update.message.reply_text(reply)
         return
 
-    web_answer, sources = web_search(text)
-    if not web_answer and not sources:
-        fallback = llm_answer(
-            f"Пользователь спросил: {text}\n"
-            f"Поиск в интернете временно не дал результатов. "
-            f"Дай общий ответ и предложи уточнить критерии/источники."
-        )
-        await update.message.reply_text(fallback, disable_web_page_preview=True)
-        return
+    # 2) решаем: нужен ли веб
+    if need_browse(text):
+        reply = await llm_answer_with_browse(text)
+    else:
+        reply = await llm_answer_local(text)
 
-    final = synthesize_with_sources(text, web_answer, sources)
-    await update.message.reply_text(final, disable_web_page_preview=True)
+    await update.message.reply_text(reply)
 
-# ---- Фото и картинки (включая отправленные «как файл») ----
-async def on_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-    caption = (msg.caption or "").strip()
-
-    file_id = None
-    if msg.photo:
-        # берём самое большое превью
-        file_id = msg.photo[-1].file_id
-    elif msg.document and (msg.document.mime_type or "").startswith("image/"):
-        file_id = msg.document.file_id
-
-    if not file_id:
-        await msg.reply_text("Файл не распознан как изображение.")
-        return
-
-    if not OPENAI_API_KEY:
-        await msg.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
-        return
-
-    try:
-        url = await _tg_file_url(context, file_id)
-        result = vision_on_image(url, user_hint=caption)
-        await msg.reply_text(result, disable_web_page_preview=True)
-    except Exception as e:
-        log.exception("on_image error: %s", e)
-        await msg.reply_text("Не удалось обработать изображение. Попробуй ещё раз.")
-
-# ---- Видео: разбираем превью-кадр (thumbnail) ----
-async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-    v = msg.video
-    thumb = getattr(v, "thumbnail", None) or getattr(v, "thumb", None)
-
-    if not thumb:
-        await msg.reply_text(
-            "Я получил видео. Сейчас могу анализировать его превью-кадр. "
-            "Пожалуйста, пришли скриншоты ключевых моментов — дам подробный разбор."
-        )
-        return
-
-    if not OPENAI_API_KEY:
-        await msg.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
-        return
-
-    try:
-        url = await _tg_file_url(context, thumb.file_id)
-        hint = (msg.caption or "").strip()
-        hint = ("Это превью кадр видео. Опиши, что видно, считай текст, "
-                "выдели ключевые объекты и сделай выводы. " + (hint if hint else ""))
-        result = vision_on_image(url, user_hint=hint)
-        await msg.reply_text(result, disable_web_page_preview=True)
-    except Exception as e:
-        log.exception("on_video error: %s", e)
-        await msg.reply_text("Не удалось обработать превью видео. Пришли скриншоты — разберу их.")
 
 # -------------------- BOOTSTRAP --------------------
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", cmd_start))
 
-    # медиа
-    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, on_image))
-    app.add_handler(MessageHandler(filters.VIDEO, on_video))
+    # Фото как медиа
+    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+    # Изображение, присланное как документ
+    app.add_handler(MessageHandler(filters.Document.IMAGE, on_document_image))
 
-    # текст
+    # Обычный текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     return app
 
+
 def run_webhook(app):
+    # уникальный путь (чтоб никто случайно не дергал)
     url_path = f"webhook/{BOT_TOKEN}"
     webhook_url = f"{PUBLIC_URL.rstrip('/')}/{url_path}"
 
@@ -281,13 +358,15 @@ def run_webhook(app):
         port=PORT,
         url_path=url_path,
         webhook_url=webhook_url,
-        secret_token=WEBHOOK_SECRET or None,
+        secret_token=WEBHOOK_SECRET or None,   # Telegram header X-Telegram-Bot-Api-Secret-Token
         drop_pending_updates=True,
     )
+
 
 def main():
     app = build_app()
     run_webhook(app)
+
 
 if __name__ == "__main__":
     main()
