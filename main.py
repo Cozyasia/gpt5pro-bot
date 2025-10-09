@@ -19,6 +19,7 @@ PUBLIC_URL     = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL   = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
+BANNER_URL = os.environ.get("BANNER_URL", "https://<твой-домен>/assets/IMG_3451.jpeg").strip()
 PORT           = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
