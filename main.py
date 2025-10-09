@@ -1,351 +1,371 @@
 # -*- coding: utf-8 -*-
-"""
-GPT5PRO Telegram Bot
-- Умные ответы: локально или с веб-поиском (Tavily) по необходимости
-- Надёжный анализ изображений (OpenAI Vision) — без проблем с invalid_image_url
-- Webhook-режим для Render
-"""
-
 import os
 import re
+import json
 import base64
-import mimetypes
 import logging
-from typing import List, Dict, Any
+from io import BytesIO
 
-import httpx
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
+from telegram.constants import ChatAction
 
-# -------------------- LOGGING --------------------
+# ========== LOGGING ==========
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 log = logging.getLogger("gpt-bot")
 
-# -------------------- ENV --------------------
+# ========== ENV ==========
 BOT_TOKEN       = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain>.onrender.com
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL    = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
-VISION_MODEL    = os.environ.get("VISION_MODEL", OPENAI_MODEL).strip()
 WEBHOOK_SECRET  = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL      = os.environ.get("BANNER_URL", "").strip()   # например: https://.../assets/IMG_3451.jpeg
+BANNER_URL      = os.environ.get("BANNER_URL", "").strip()   # можно пустым
 TAVILY_API_KEY  = os.environ.get("TAVILY_API_KEY", "").strip()
+TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 PORT            = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
+if not OPENAI_API_KEY:
+    log.warning("OPENAI_API_KEY is empty — ответы модели работать не будут")
 
-# -------------------- OPENAI CLIENT --------------------
+# ========== OPENAI / Tavily clients ==========
 from openai import OpenAI
-oa_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+try:
+    if TAVILY_API_KEY:
+        from tavily import TavilyClient
+        tavily = TavilyClient(api_key=TAVILY_API_KEY)
+    else:
+        tavily = None
+except Exception:
+    tavily = None
 
-# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-
-# ---------- эвристика: нужно ли идти в веб-поиск ----------
-_NEWSY = (
-    r"\b(сейчас|сегодня|вчера|завтра|только что|актуальн|последн(ие|яя)|итоги|новост|апдейт|обновлен)\b"
+# ========== PROMPTS & HEURISTICS ==========
+SYSTEM_PROMPT = (
+    "Ты дружелюбный и лаконичный ассистент на русском. "
+    "Отвечай по сути, добавляй списки и шаги, когда это полезно. "
+    "Если приводишь источники — в конце дай короткий список ссылок. "
+    "Не выдумывай факты; если не уверен — скажи об этом."
 )
-_QUESY = (
-    r"\b(когда|где|кто|что такое|почему|как (?:получить|сделать|настроить)|найди|посмотри|узнай|сколько|курс|цена|стоимость)\b"
-)
-_TOPICS_FORCE_WEB = (
-    r"\b(погода|курс|биткоин|доллар|евро|акци(я|и)|индекс|тариф|расписани|мероприяти|релиз|выходит|выйдет|дата выхода|E3|GTA|Rockstar|мировой|матч|score|ваканси|самолет|рейс)\b"
+
+VISION_SYSTEM_PROMPT = (
+    "Ты описываешь изображения: предметы, текст, макеты, графики. "
+    "Не определяй личности людей и не давай их имен, если они не напечатаны на изображении. "
+    "Будь конкретным и полезным."
 )
 
-def need_browse(q: str) -> bool:
-    ql = q.lower().strip()
-    # Явные команды поиска
-    if re.search(_QUESY, ql):
-        return True
-    # Темы, которые почти всегда требуют онлайна
-    if re.search(_TOPICS_FORCE_WEB, ql):
-        return True
-    # Новостная/временная лексика
-    if re.search(_NEWSY, ql):
-        return True
-    # Очень длинный или фактологический вопрос
-    if len(ql) > 160 and ("http" not in ql):
+VISION_CAPABILITY_HELP = (
+    "Да — я умею анализировать изображения. Прикрепи фото или скриншот 📎\n"
+    "• Форматы: JPG/PNG/WebP, до ~10 МБ.\n"
+    "• PDF и документы — пришли как *файл*, извлеку текст/таблицы.\n"
+    "• Видео: пришли 1–3 скриншота (кадра) — опишу и проанализирую по кадрам.\n"
+    "Если файл уже отправлен — просто добавь вопрос к нему 😉"
+)
+
+_SMALLTALK_RE = re.compile(
+    r"^(привет|здравствуй|добрый\s*(день|вечер|утро)|хи|hi|hello|хелло|как дела|спасибо|пока)\b",
+    re.IGNORECASE
+)
+_NEWSY_RE = re.compile(
+    r"(когда|дата|выйдет|релиз|новост|курс|цена|прогноз|что такое|кто такой|найди|ссылка|официал|адрес|телефон|"
+    r"погода|сегодня|сейчас|штраф|закон|тренд|котировк|обзор|расписани|запуск|update|новая версия)",
+    re.IGNORECASE
+)
+_CAPABILITY_RE = re.compile(
+    r"(мож(ешь|но)\s*(ли\s*)?(анализ(ировать)?|распознав(ать|ание))\s*(фото|картинк|изображен|image|picture)|"
+    r"анализ(ировать)?\s*(фото|картинк|изображен)|"
+    r"(мож(ешь|но)\s*(ли\s*)?)?(анализ|работать)\s*с\s*видео)",
+    re.IGNORECASE
+)
+
+def is_smalltalk(text: str) -> bool:
+    return bool(_SMALLTALK_RE.search(text.strip()))
+
+def should_browse(text: str) -> bool:
+    t = text.strip()
+    if is_smalltalk(t):
+        return False
+    # если явная информационная цель или вопрос – смотрим в интернет
+    if _NEWSY_RE.search(t) or "?" in t or len(t) > 80:
         return True
     return False
 
-def is_smalltalk(q: str) -> bool:
-    ql = q.lower().strip()
-    return bool(re.fullmatch(r"(пр(иве)?т|здравств(уй|уйте)|добрый (день|вечер|утро)|как дела\??|спасибо|ок|пока)", ql))
+def is_vision_capability_question(text: str) -> bool:
+    return bool(_CAPABILITY_RE.search(text))
 
-
-# ---------- Tavily ----------
-async def tavily_search(query: str, max_results: int = 5) -> Dict[str, Any]:
-    """
-    Возвращает dict вида:
-    {
-      "answer": str|None,
-      "results": [ { "title":..., "url":..., "content":... }, ... ]
-    }
-    """
-    if not TAVILY_API_KEY:
-        return {"answer": None, "results": []}
-
-    payload = {
-        "api_key": TAVILY_API_KEY,
-        "query": query,
-        "search_depth": "advanced",
-        "max_results": max_results,
-        "include_answer": True,
-        "include_images": False,
-        "include_domains": [],
-        "exclude_domains": [],
-    }
+# ========== UTILS ==========
+async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post("https://api.tavily.com/search", json=payload)
-            r.raise_for_status()
-            data = r.json()
-            # Нормализуем
-            results = data.get("results") or data.get("results_list") or []
-            norm = []
-            for it in results:
-                norm.append({
-                    "title": it.get("title") or "",
-                    "url": it.get("url") or it.get("url_link") or "",
-                    "content": it.get("content") or it.get("snippet") or "",
-                })
-            return {"answer": data.get("answer"), "results": norm}
-    except Exception as e:
-        log.exception("Tavily error: %s", e)
-        return {"answer": None, "results": []}
+        await ctx.bot.send_chat_action(chat_id, action=ChatAction.TYPING)
+    except Exception:
+        pass
 
-def format_sources(results: List[Dict[str, str]], limit: int = 6) -> str:
-    if not results:
+def sniff_image_mime(data: bytes) -> str:
+    if data.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data[:4] == b"RIFF" and b"WEBP" in data[:16]:
+        return "image/webp"
+    return "image/jpeg"
+
+def format_sources(items):
+    if not items:
         return ""
     lines = []
-    for i, r in enumerate(results[:limit], 1):
-        url = (r.get("url") or "").strip()
-        title = (r.get("title") or url or "Источник").strip()
-        if not url:
-            continue
+    for i, it in enumerate(items, 1):
+        title = it.get("title") or it.get("url") or "Источник"
+        url = it.get("url") or ""
         lines.append(f"[{i}] {title} — {url}")
-    return "\n".join(lines)
+    return "\n\nСсылки:\n" + "\n".join(lines)
 
-
-# ---------- Внутренний вызов OpenAI без веба ----------
-async def llm_answer_local(prompt: str) -> str:
-    if not oa_client:
-        return "OPENAI_API_KEY не задан. Сообщи админу."
-
-    sys = (
-        "Ты дружелюбный и лаконичный ассистент. Отвечай по делу, "
-        "можешь задавать уточняющие вопросы. Если вопрос приветственный — поприветствуй и предложи помощь."
-    )
+def tavily_search(query: str, max_results: int = 5):
+    if not tavily:
+        return None, []
     try:
-        resp = oa_client.chat.completions.create(
+        res = tavily.search(
+            query=query,
+            search_depth="advanced",
+            max_results=max_results,
+            include_answer=True,
+            include_raw_content=False,
+        )
+        answer = res.get("answer") or ""
+        results = res.get("results") or []
+        return answer, results
+    except Exception as e:
+        log.exception("Tavily error: %s", e)
+        return None, []
+
+async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
+    """Чисто текстовый ответ (с опциональным контекстом ссылок)."""
+    if not oai:
+        return "OPENAI_API_KEY не задан. Сообщи админу."
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if web_ctx:
+        messages.append({"role": "system", "content": f"В помощь тебе контекст с веб-источниками:\n{web_ctx}"})
+    messages.append({"role": "user", "content": user_text})
+    try:
+        resp = oai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": sys},
-                {"role": "user", "content": prompt},
-            ],
+            messages=messages,
             temperature=0.6,
-            max_tokens=600,
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        log.exception("OpenAI local error: %s", e)
+        log.exception("OpenAI chat error: %s", e)
         return "Не удалось получить ответ от модели. Попробуй ещё раз позже."
 
-
-# ---------- Комбинированный ответ: веб-поиск + анализ ----------
-async def llm_answer_with_browse(query: str) -> str:
-    # 1) Поиск
-    search = await tavily_search(query, max_results=6)
-    sources = search.get("results", [])
-    fused_context = "\n\n".join(
-        f"Источник {i+1}: {s.get('title','')}\nURL: {s.get('url','')}\nСодержание: {s.get('content','')}"
-        for i, s in enumerate(sources)
-    )[:12000]  # подрежем на всякий
-
-    # 2) Анализ в LLM
-    if not oa_client:
-        # Без ключа хотя бы вернём ссылки
-        src = format_sources(sources)
-        return f"Вот, что нашёл:\n{src if src else 'Источники не найдены.'}"
-
-    sys = (
-        "Ты аналитик-исследователь. Используй предоставленные сниппеты как основное основание ответа. "
-        "Дай краткий, точный вывод и, если уместно, укажи цифры/даты. "
-        "Если есть противоречия — явно укажи это. Не выдумывай фактов."
-    )
-    user = (
-        f"Вопрос пользователя:\n{query}\n\n"
-        f"Материалы из поиска:\n{fused_context if fused_context else 'Нет результатов'}\n\n"
-        "Сформируй ответ по сути. В конце не вставляй литеральных [1], [2]; ссылки я добавлю отдельно."
-    )
+async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
+    """Анализ изображения + текстовый вопрос."""
+    if not oai:
+        return "OPENAI_API_KEY не задан. Сообщи админу."
     try:
-        resp = oa_client.chat.completions.create(
+        resp = oai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[{"role": "system", "content": sys}, {"role": "user", "content": user}],
-            temperature=0.3,
-            max_tokens=700,
-        )
-        answer = (resp.choices[0].message.content or "").strip()
-    except Exception as e:
-        log.exception("OpenAI browse error: %s", e)
-        answer = "Не удалось проанализировать результаты поиска. Попробуй уточнить запрос."
-
-    src_block = format_sources(sources)
-    if src_block:
-        answer = f"{answer}\n\nСсылки:\n{src_block}"
-    return answer
-
-
-# -------------------- ВИЗУАЛ (ФОТО/ДОКУМЕНТ-ИЗОБРАЖЕНИЕ) --------------------
-
-async def _tg_get_file_url(bot, file_id: str) -> str:
-    """Возвращает ПОЛНЫЙ корректный URL файла Telegram (без ручного склеивания)."""
-    f = await bot.get_file(file_id)
-    # telegram.ext.File имеет поле .file_path — это уже полный https-URL
-    return f.file_path
-
-async def _download_bytes(url: str) -> bytes:
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        return r.content
-
-def _to_data_url(raw: bytes, mime: str = "image/jpeg") -> str:
-    b64 = base64.b64encode(raw).decode("ascii")
-    return f"data:{mime};base64,{b64}"
-
-async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.effective_message
-    try:
-        if not OPENAI_API_KEY:
-            await msg.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
-            return
-
-        # Берём самую большую копию
-        file_id = msg.photo[-1].file_id
-        file_url = await _tg_get_file_url(context.bot, file_id)
-
-        raw = await _download_bytes(file_url)
-        data_url = _to_data_url(raw, "image/jpeg")
-
-        user_prompt = (msg.caption or "Опиши изображение и вытащи важные факты.").strip()
-        resp = oa_client.chat.completions.create(
-            model=VISION_MODEL,
             messages=[
-                {"role": "system", "content": "Ты кратко и по делу описываешь изображение и извлекаешь факты."},
-                {"role": "user", "content": [
-                    {"type": "text", "text": user_prompt},
-                    {"type": "image_url", "image_url": {"url": data_url}}
-                ]}
+                {"role": "system", "content": VISION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text or "Опиши, что на изображении и какой там текст."},
+                        {"type": "image_url",
+                         "image_url": {"url": f"data:{mime};base64,{img_b64}"}}
+                    ]
+                }
             ],
-            temperature=0.2,
-            max_tokens=700,
+            temperature=0.4,
         )
-        ans = (resp.choices[0].message.content or "").strip()
-        await msg.reply_text(ans)
+        return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("Vision error: %s", e)
-        await msg.reply_text("Не удалось проанализировать изображение. Попробуй ещё раз или пришли другой файл.")
+        return "Не удалось проанализировать изображение. Попробуй ещё раз или пришли другой файл."
 
-async def on_document_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    doc = update.effective_message.document
-    if not doc or not (doc.mime_type or "").startswith("image/"):
-        return
+async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
+    """Распознаём голос (OGG/OPUS и пр.), возвращаем текст."""
+    if not oai:
+        return ""
     try:
-        if not OPENAI_API_KEY:
-            await update.effective_message.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
-            return
-
-        file_url = await _tg_get_file_url(context.bot, doc.file_id)
-        mime = doc.mime_type or mimetypes.guess_type(doc.file_name or "")[0] or "image/jpeg"
-        raw = await _download_bytes(file_url)
-        data_url = _to_data_url(raw, mime)
-
-        user_prompt = (update.effective_message.caption or "Опиши изображение и вытащи важные факты.").strip()
-        resp = oa_client.chat.completions.create(
-            model=VISION_MODEL,
-            messages=[
-                {"role": "system", "content": "Ты кратко и по делу описываешь изображение и извлекаешь факты."},
-                {"role": "user", "content": [
-                    {"type": "text", "text": user_prompt},
-                    {"type": "image_url", "image_url": {"url": data_url}}
-                ]}
-            ],
-            temperature=0.2,
-            max_tokens=700,
+        # OpenAI SDK ожидает file-like с именем; присвоим BytesIO «name»
+        buf.seek(0)
+        setattr(buf, "name", filename_hint)
+        tr = oai.audio.transcriptions.create(
+            model=TRANSCRIBE_MODEL,
+            file=buf
         )
-        ans = (resp.choices[0].message.content or "").strip()
-        await update.effective_message.reply_text(ans)
+        text = (tr.text or "").strip()
+        return text
     except Exception as e:
-        log.exception("Vision(doc) error: %s", e)
-        await update.effective_message.reply_text("Не удалось проанализировать изображение. Попробуй другой файл.")
+        log.exception("Transcribe error: %s", e)
+        return ""
 
-
-# -------------------- ТЕКСТОВЫЕ ХЕНДЛЕРЫ --------------------
-
+# ========== HANDLERS ==========
 START_GREETING = (
     "Привет! Я готов. Напиши любой вопрос.\n\n"
     "Подсказки:\n"
-    "• Я ищу свежую информацию в интернете и даю ответ со ссылками при необходимости.\n"
-    "• Простые фразы («привет», «спасибо») — отвечаю сразу, без поиска.\n"
-    "• Примеры: «Дата выхода GTA 6?», «Курс биткоина сейчас и прогноз», "
-    "«Найди учебник алгебры 11 класс (официальные источники)», «Новости по ...», «Кто такой ...?»."
+    "• Я ищу свежую информацию в интернете для фактов и дат, когда это нужно.\n"
+    "• Примеры: «Когда выйдет GTA 6?», «Курс биткоина сейчас и прогноз», "
+    "«Найди учебник алгебры 11 класс (официальные источники)», «Новости по ...?»\n"
+    "• Можно прислать фото — опишу и извлеку текст.\n"
+    "• Можно отправить голосовое — я распознаю и отвечу по содержанию."
 )
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Пытаемся отправить баннер, если указан
+    # баннер — опционально
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
-        except Exception:  # не мешаем старту, если картинка недоступна
+        except Exception:
             pass
     await update.effective_message.reply_text(START_GREETING)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
+    chat_id = update.effective_chat.id
 
-    if not OPENAI_API_KEY:
-        await update.message.reply_text("OPENAI_API_KEY не задан. Сообщи админу.")
+    # Вопрос про возможности анализа изображений/видео
+    if is_vision_capability_question(text):
+        await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True)
         return
 
-    # 1) болталка — без веба
+    await typing(context, chat_id)
+
+    # Маленькие разговорные сообщения — без веба
     if is_smalltalk(text):
-        reply = await llm_answer_local(text)
+        reply = await ask_openai_text(text)
         await update.message.reply_text(reply)
         return
 
-    # 2) решаем: нужен ли веб
-    if need_browse(text):
-        reply = await llm_answer_with_browse(text)
-    else:
-        reply = await llm_answer_local(text)
+    # Нужен ли веб-поиск?
+    web_ctx = ""
+    sources = []
+    if should_browse(text):
+        answer_from_search, results = tavily_search(text, max_results=5)
+        sources = results or []
+        # Краткий контекст для модели (ответ + ссылки)
+        ctx_lines = []
+        if answer_from_search:
+            ctx_lines.append(f"Краткая сводка поиском: {answer_from_search}")
+        for i, it in enumerate(sources, 1):
+            ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
+        web_ctx = "\n".join(ctx_lines)
 
-    await update.message.reply_text(reply)
+    # Генерация ответа модели
+    answer = await ask_openai_text(text, web_ctx=web_ctx)
 
+    # Приклеим явные ссылки (если были)
+    answer += format_sources(sources)
+    await update.message.reply_text(answer, disable_web_page_preview=False)
 
-# -------------------- BOOTSTRAP --------------------
+async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    await typing(context, chat_id)
+
+    # берём самый качественный размер
+    photo = update.message.photo[-1]
+    file = await context.bot.get_file(photo.file_id)
+    buf = BytesIO()
+    await file.download_to_memory(buf)
+    data = buf.getvalue()
+
+    mime = sniff_image_mime(data)
+    img_b64 = base64.b64encode(data).decode("ascii")
+
+    # попробуем взять подпись пользователя как вопрос
+    user_text = (update.message.caption or "").strip()
+
+    answer = await ask_openai_vision(user_text, img_b64, mime)
+    await update.message.reply_text(answer, disable_web_page_preview=True)
+
+async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Voice message (OGG/OPUS)."""
+    chat_id = update.effective_chat.id
+    await typing(context, chat_id)
+
+    voice = update.message.voice
+    file = await context.bot.get_file(voice.file_id)
+    buf = BytesIO()
+    await file.download_to_memory(buf)
+
+    text = await transcribe_audio(buf, filename_hint="audio.ogg")
+    if not text:
+        await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз.")
+        return
+
+    # Отвечаем по распознанному тексту (и мягко показываем, что было понято)
+    prefix = f"🗣️ Распознал: «{text}»\n\n"
+    web_ctx = ""
+    sources = []
+    if should_browse(text):
+        answer_from_search, results = tavily_search(text, max_results=5)
+        sources = results or []
+        ctx_lines = []
+        if answer_from_search:
+            ctx_lines.append(f"Краткая сводка поиском: {answer_from_search}")
+        for i, it in enumerate(sources, 1):
+            ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
+        web_ctx = "\n".join(ctx_lines)
+
+    answer = await ask_openai_text(text, web_ctx=web_ctx)
+    answer = prefix + answer + format_sources(sources)
+    await update.message.reply_text(answer, disable_web_page_preview=False)
+
+async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обычные аудио-файлы (mp3/m4a/wav) — обрабатываем как voice."""
+    chat_id = update.effective_chat.id
+    await typing(context, chat_id)
+
+    audio = update.message.audio
+    file = await context.bot.get_file(audio.file_id)
+    buf = BytesIO()
+    await file.download_to_memory(buf)
+
+    # Попробуем угадать имя файла из подписи/метаданных
+    filename = (audio.file_name or "audio.mp3")
+    text = await transcribe_audio(buf, filename_hint=filename)
+    if not text:
+        await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз.")
+        return
+
+    prefix = f"🗣️ Распознал: «{text}»\n\n"
+    web_ctx = ""
+    sources = []
+    if should_browse(text):
+        answer_from_search, results = tavily_search(text, max_results=5)
+        sources = results or []
+        ctx_lines = []
+        if answer_from_search:
+            ctx_lines.append(f"Краткая сводка поиском: {answer_from_search}")
+        for i, it in enumerate(sources, 1):
+            ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
+        web_ctx = "\n".join(ctx_lines)
+
+    answer = await ask_openai_text(text, web_ctx=web_ctx)
+    answer = prefix + answer + format_sources(sources)
+    await update.message.reply_text(answer, disable_web_page_preview=False)
+
+# ========== BOOTSTRAP ==========
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", cmd_start))
-
-    # Фото как медиа
-    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
-    # Изображение, присланное как документ
-    app.add_handler(MessageHandler(filters.Document.IMAGE, on_document_image))
-
-    # Обычный текст
+    # текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    # фото
+    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+    # голосовые (voice) и аудио
+    app.add_handler(MessageHandler(filters.VOICE, on_voice))
+    app.add_handler(MessageHandler(filters.AUDIO, on_audio))
     return app
-
 
 def run_webhook(app):
     # уникальный путь (чтоб никто случайно не дергал)
@@ -362,11 +382,9 @@ def run_webhook(app):
         drop_pending_updates=True,
     )
 
-
 def main():
     app = build_app()
     run_webhook(app)
-
 
 if __name__ == "__main__":
     main()
