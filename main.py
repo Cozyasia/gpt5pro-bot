@@ -6,10 +6,9 @@ import base64
 import logging
 from io import BytesIO
 
+import httpx
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 from telegram.constants import ChatAction
 
 # ========== LOGGING ==========
@@ -20,15 +19,18 @@ logging.basicConfig(
 log = logging.getLogger("gpt-bot")
 
 # ========== ENV ==========
-BOT_TOKEN       = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain>.onrender.com
-OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL    = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
-WEBHOOK_SECRET  = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL      = os.environ.get("BANNER_URL", "").strip()   # можно пустым
-TAVILY_API_KEY  = os.environ.get("TAVILY_API_KEY", "").strip()
+BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
+PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain>.onrender.com
+WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
+BANNER_URL       = os.environ.get("BANNER_URL", "").strip()   # можно пустым
+PORT             = int(os.environ.get("PORT", "10000"))
+
+OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
-PORT            = int(os.environ.get("PORT", "10000"))
+
+DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
+TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
@@ -37,7 +39,7 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
 if not OPENAI_API_KEY:
     log.warning("OPENAI_API_KEY is empty — ответы модели работать не будут")
 
-# ========== OPENAI / Tavily clients ==========
+# ========== CLIENTS ==========
 from openai import OpenAI
 oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
@@ -50,7 +52,9 @@ try:
 except Exception:
     tavily = None
 
-# ========== PROMPTS & HEURISTICS ==========
+httpx_client = httpx.AsyncClient(timeout=60)
+
+# ========== PROMPTS ==========
 SYSTEM_PROMPT = (
     "Ты дружелюбный и лаконичный ассистент на русском. "
     "Отвечай по сути, добавляй списки и шаги, когда это полезно. "
@@ -65,12 +69,19 @@ VISION_SYSTEM_PROMPT = (
 )
 
 VISION_CAPABILITY_HELP = (
-    "Да — я умею анализировать изображения. Прикрепи фото или скриншот 📎\n"
-    "• Форматы: JPG/PNG/WebP, до ~10 МБ.\n"
-    "• PDF и документы — пришли как *файл*, извлеку текст/таблицы.\n"
-    "• Видео: пришли 1–3 скриншота (кадра) — опишу и проанализирую по кадрам.\n"
-    "Если файл уже отправлен — просто добавь вопрос к нему 😉"
+    "Да — я умею анализировать изображения и помогать с видео.\n\n"
+    "• Фото/скриншоты: пришли JPG/PNG/WebP — опишу содержимое и извлеку текст.\n"
+    "• Видео: пришли короткий MP4 — извлеку речь и отвечу по содержанию; "
+    "для визуального разбора пришли 1–3 ключевых кадра.\n"
+    "• Голосовые/аудио: отправь голосовое — распознаю и отвечу по смыслу."
 )
+
+# Расширенная эвристика: вопрос о способностях анализировать фото/видео/голос
+def asks_about_capabilities(text: str) -> bool:
+    t = text.lower()
+    has_media_word = any(w in t for w in ("фото", "картинк", "изображен", "image", "picture", "видео", "video", "голос", "аудио"))
+    has_action_word = any(w in t for w in ("анализ", "анализиру", "распозна", "видиш", "умееш", "можеш", "обрабатыва", "работаешь"))
+    return has_media_word and has_action_word
 
 _SMALLTALK_RE = re.compile(
     r"^(привет|здравствуй|добрый\s*(день|вечер|утро)|хи|hi|hello|хелло|как дела|спасибо|пока)\b",
@@ -81,12 +92,6 @@ _NEWSY_RE = re.compile(
     r"погода|сегодня|сейчас|штраф|закон|тренд|котировк|обзор|расписани|запуск|update|новая версия)",
     re.IGNORECASE
 )
-_CAPABILITY_RE = re.compile(
-    r"(мож(ешь|но)\s*(ли\s*)?(анализ(ировать)?|распознав(ать|ание))\s*(фото|картинк|изображен|image|picture)|"
-    r"анализ(ировать)?\s*(фото|картинк|изображен)|"
-    r"(мож(ешь|но)\s*(ли\s*)?)?(анализ|работать)\s*с\s*видео)",
-    re.IGNORECASE
-)
 
 def is_smalltalk(text: str) -> bool:
     return bool(_SMALLTALK_RE.search(text.strip()))
@@ -95,13 +100,9 @@ def should_browse(text: str) -> bool:
     t = text.strip()
     if is_smalltalk(t):
         return False
-    # если явная информационная цель или вопрос – смотрим в интернет
     if _NEWSY_RE.search(t) or "?" in t or len(t) > 80:
         return True
     return False
-
-def is_vision_capability_question(text: str) -> bool:
-    return bool(_CAPABILITY_RE.search(text))
 
 # ========== UTILS ==========
 async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
@@ -118,6 +119,21 @@ def sniff_image_mime(data: bytes) -> str:
     if data[:4] == b"RIFF" and b"WEBP" in data[:16]:
         return "image/webp"
     return "image/jpeg"
+
+def sniff_av_mime(data: bytes, filename_hint: str = "") -> str:
+    name = (filename_hint or "").lower()
+    if data[:4] == b"OggS" or name.endswith(".ogg") or "opus" in name:
+        return "audio/ogg"
+    if data[:3] == b"ID3" or name.endswith(".mp3"):
+        return "audio/mpeg"
+    if name.endswith(".m4a"):
+        return "audio/mp4"
+    if b"ftyp" in data[:16] and (name.endswith(".mp4") or name.endswith(".mov") or name.endswith(".m4v")):
+        # для видео подойдёт video/mp4 — Deepgram сам вытащит аудиодорожку
+        return "video/mp4"
+    if name.endswith(".wav"):
+        return "audio/wav"
+    return "application/octet-stream"
 
 def format_sources(items):
     if not items:
@@ -147,8 +163,8 @@ def tavily_search(query: str, max_results: int = 5):
         log.exception("Tavily error: %s", e)
         return None, []
 
+# ========== OPENAI CALLS ==========
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
-    """Чисто текстовый ответ (с опциональным контекстом ссылок)."""
     if not oai:
         return "OPENAI_API_KEY не задан. Сообщи админу."
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -164,10 +180,9 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("OpenAI chat error: %s", e)
-        return "Не удалось получить ответ от модели. Попробуй ещё раз позже."
+        return "Не удалось получить ответ от модели (лимит/ключ). Попробуй позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
-    """Анализ изображения + текстовый вопрос."""
     if not oai:
         return "OPENAI_API_KEY не задан. Сообщи админу."
     try:
@@ -191,23 +206,71 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         log.exception("Vision error: %s", e)
         return "Не удалось проанализировать изображение. Попробуй ещё раз или пришли другой файл."
 
-async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
-    """Распознаём голос (OGG/OPUS и пр.), возвращаем текст."""
+# ========== STT (Deepgram -> OpenAI fallback) ==========
+async def deepgram_transcribe(data: bytes, content_type: str) -> str:
+    """Распознаём речь через Deepgram. Возвращаем текст или пустую строку."""
+    if not DEEPGRAM_API_KEY:
+        return ""
+    try:
+        params = {
+            "smart_format": "true",
+            "punctuate": "true",
+            "language": "ru",   # можно auto с detect_language=true, но так быстрее/дешевле
+        }
+        headers = {
+            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+            "Content-Type": content_type or "application/octet-stream",
+        }
+        r = await httpx_client.post(
+            "https://api.deepgram.com/v1/listen",
+            params=params,
+            headers=headers,
+            content=data,
+        )
+        if r.status_code != 200:
+            log.error("Deepgram HTTP %s: %s", r.status_code, r.text[:500])
+            return ""
+        j = r.json()
+        # универсальный парсинг
+        transcript = (
+            j.get("results", {})
+             .get("channels", [{}])[0]
+             .get("alternatives", [{}])[0]
+             .get("transcript", "")
+            or j.get("results", {})
+             .get("channels", [{}])[0]
+             .get("alternatives", [{}])[0]
+             .get("paragraphs", {})
+             .get("transcript", "")
+        )
+        return (transcript or "").strip()
+    except Exception as e:
+        log.exception("Deepgram error: %s", e)
+        return ""
+
+async def openai_transcribe(buf: BytesIO, filename_hint: str) -> str:
     if not oai:
         return ""
     try:
-        # OpenAI SDK ожидает file-like с именем; присвоим BytesIO «name»
         buf.seek(0)
         setattr(buf, "name", filename_hint)
-        tr = oai.audio.transcriptions.create(
-            model=TRANSCRIBE_MODEL,
-            file=buf
-        )
-        text = (tr.text or "").strip()
-        return text
+        tr = oai.audio.transcriptions.create(model=TRANSCRIBE_MODEL, file=buf)
+        return (tr.text or "").strip()
     except Exception as e:
-        log.exception("Transcribe error: %s", e)
+        log.exception("OpenAI Whisper error: %s", e)
         return ""
+
+async def transcribe_audio_unified(raw: bytes, filename_hint: str = "") -> str:
+    """Единая точка входа: сначала Deepgram, если нет — OpenAI Whisper."""
+    ct = sniff_av_mime(raw, filename_hint)
+    # 1) Deepgram
+    if DEEPGRAM_API_KEY:
+        text = await deepgram_transcribe(raw, ct)
+        if text:
+            return text
+    # 2) OpenAI fallback (нужно file-like)
+    buf = BytesIO(raw)
+    return await openai_transcribe(buf, filename_hint or "audio.bin")
 
 # ========== HANDLERS ==========
 START_GREETING = (
@@ -215,13 +278,12 @@ START_GREETING = (
     "Подсказки:\n"
     "• Я ищу свежую информацию в интернете для фактов и дат, когда это нужно.\n"
     "• Примеры: «Когда выйдет GTA 6?», «Курс биткоина сейчас и прогноз», "
-    "«Найди учебник алгебры 11 класс (официальные источники)», «Новости по ...?»\n"
+    "«Найди учебник алгебры 11 класс (официальные источники)», «Новости по …?»\n"
     "• Можно прислать фото — опишу и извлеку текст.\n"
-    "• Можно отправить голосовое — я распознаю и отвечу по содержанию."
+    "• Можно отправить голосовое/аудио/видео — распознаю речь и отвечу по содержанию."
 )
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # баннер — опционально
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
@@ -233,26 +295,23 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
-    # Вопрос про возможности анализа изображений/видео
-    if is_vision_capability_question(text):
+    # Явный вопрос про «умеешь ли анализировать…» — отвечаем утверждением
+    if asks_about_capabilities(text):
         await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True)
         return
 
     await typing(context, chat_id)
 
-    # Маленькие разговорные сообщения — без веба
     if is_smalltalk(text):
         reply = await ask_openai_text(text)
         await update.message.reply_text(reply)
         return
 
-    # Нужен ли веб-поиск?
     web_ctx = ""
     sources = []
     if should_browse(text):
         answer_from_search, results = tavily_search(text, max_results=5)
         sources = results or []
-        # Краткий контекст для модели (ответ + ссылки)
         ctx_lines = []
         if answer_from_search:
             ctx_lines.append(f"Краткая сводка поиском: {answer_from_search}")
@@ -260,10 +319,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
 
-    # Генерация ответа модели
     answer = await ask_openai_text(text, web_ctx=web_ctx)
-
-    # Приклеим явные ссылки (если были)
     answer += format_sources(sources)
     await update.message.reply_text(answer, disable_web_page_preview=False)
 
@@ -271,7 +327,6 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
-    # берём самый качественный размер
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
     buf = BytesIO()
@@ -280,34 +335,18 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mime = sniff_image_mime(data)
     img_b64 = base64.b64encode(data).decode("ascii")
-
-    # попробуем взять подпись пользователя как вопрос
     user_text = (update.message.caption or "").strip()
 
     answer = await ask_openai_vision(user_text, img_b64, mime)
     await update.message.reply_text(answer, disable_web_page_preview=True)
 
-async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Voice message (OGG/OPUS)."""
-    chat_id = update.effective_chat.id
-    await typing(context, chat_id)
-
-    voice = update.message.voice
-    file = await context.bot.get_file(voice.file_id)
-    buf = BytesIO()
-    await file.download_to_memory(buf)
-
-    text = await transcribe_audio(buf, filename_hint="audio.ogg")
-    if not text:
-        await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз.")
-        return
-
-    # Отвечаем по распознанному тексту (и мягко показываем, что было понято)
-    prefix = f"🗣️ Распознал: «{text}»\n\n"
+async def handle_stt_reply(update: Update, recognized_text: str):
+    """Общий ответ после распознавания речи."""
+    prefix = f"🗣️ Распознал: «{recognized_text}»\n\n"
     web_ctx = ""
     sources = []
-    if should_browse(text):
-        answer_from_search, results = tavily_search(text, max_results=5)
+    if should_browse(recognized_text):
+        answer_from_search, results = tavily_search(recognized_text, max_results=5)
         sources = results or []
         ctx_lines = []
         if answer_from_search:
@@ -316,12 +355,29 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
 
-    answer = await ask_openai_text(text, web_ctx=web_ctx)
-    answer = prefix + answer + format_sources(sources)
-    await update.message.reply_text(answer, disable_web_page_preview=False)
+    answer = await ask_openai_text(recognized_text, web_ctx=web_ctx)
+    return prefix + answer + format_sources(sources)
+
+async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Telegram voice (OGG/OPUS)."""
+    chat_id = update.effective_chat.id
+    await typing(context, chat_id)
+
+    file = await context.bot.get_file(update.message.voice.file_id)
+    buf = BytesIO()
+    await file.download_to_memory(buf)
+    raw = buf.getvalue()
+
+    text = await transcribe_audio_unified(raw, filename_hint="audio.ogg")
+    if not text:
+        await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз.")
+        return
+
+    reply = await handle_stt_reply(update, text)
+    await update.message.reply_text(reply, disable_web_page_preview=False)
 
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обычные аудио-файлы (mp3/m4a/wav) — обрабатываем как voice."""
+    """Обычные аудио-файлы (mp3/m4a/wav)."""
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
@@ -329,56 +385,60 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file = await context.bot.get_file(audio.file_id)
     buf = BytesIO()
     await file.download_to_memory(buf)
+    raw = buf.getvalue()
 
-    # Попробуем угадать имя файла из подписи/метаданных
     filename = (audio.file_name or "audio.mp3")
-    text = await transcribe_audio(buf, filename_hint=filename)
+    text = await transcribe_audio_unified(raw, filename_hint=filename)
     if not text:
         await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз.")
         return
 
-    prefix = f"🗣️ Распознал: «{text}»\n\n"
-    web_ctx = ""
-    sources = []
-    if should_browse(text):
-        answer_from_search, results = tavily_search(text, max_results=5)
-        sources = results or []
-        ctx_lines = []
-        if answer_from_search:
-            ctx_lines.append(f"Краткая сводка поиском: {answer_from_search}")
-        for i, it in enumerate(sources, 1):
-            ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
-        web_ctx = "\n".join(ctx_lines)
+    reply = await handle_stt_reply(update, text)
+    await update.message.reply_text(reply, disable_web_page_preview=False)
 
-    answer = await ask_openai_text(text, web_ctx=web_ctx)
-    answer = prefix + answer + format_sources(sources)
-    await update.message.reply_text(answer, disable_web_page_preview=False)
+async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Короткие видео (mp4) — отправляем целиком в Deepgram, он сам вытащит аудио."""
+    chat_id = update.effective_chat.id
+    await typing(context, chat_id)
+
+    video = update.message.video
+    file = await context.bot.get_file(video.file_id)
+    buf = BytesIO()
+    await file.download_to_memory(buf)
+    raw = buf.getvalue()
+
+    filename = (video.file_name or "video.mp4")
+    text = await transcribe_audio_unified(raw, filename_hint=filename)
+    if not text:
+        await update.message.reply_text("Не удалось извлечь речь из видео. Пришли 1–3 кадра (скриншота) — разберу по изображениям.")
+        return
+
+    reply = await handle_stt_reply(update, text)
+    await update.message.reply_text(reply, disable_web_page_preview=False)
 
 # ========== BOOTSTRAP ==========
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
-    # текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    # фото
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
-    # голосовые (voice) и аудио
     app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.AUDIO, on_audio))
+    app.add_handler(MessageHandler(filters.VIDEO, on_video))
     return app
 
 def run_webhook(app):
-    # уникальный путь (чтоб никто случайно не дергал)
     url_path = f"webhook/{BOT_TOKEN}"
     webhook_url = f"{PUBLIC_URL.rstrip('/')}/{url_path}"
 
     log.info("Starting webhook on 0.0.0.0:%s  ->  %s", PORT, webhook_url)
+    # ВАЖНО: только webhook, без polling — иначе будет 409 Conflict
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path=url_path,
         webhook_url=webhook_url,
-        secret_token=WEBHOOK_SECRET or None,   # Telegram header X-Telegram-Bot-Api-Secret-Token
+        secret_token=WEBHOOK_SECRET or None,
         drop_pending_updates=True,
     )
 
