@@ -1,416 +1,329 @@
-# -*- coding: utf-8 -*-
+# main.py
 import os
-import io
-import base64
+import re
+import json
 import logging
-import asyncio
-from typing import List, Tuple
+from typing import Optional, Tuple
 
 import httpx
-from telegram import Update
+from telegram import Update, MessageEntity
+from telegram.constants import ParseMode
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+    Application, CommandHandler, MessageHandler, ContextTypes, filters
 )
 
-# =============== LOGGING ===============
+# ====== ЛОГИ ======
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    level=LOG_LEVEL,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 )
-log = logging.getLogger("gpt-bot")
+log = logging.getLogger("gpt5pro-bot")
 
-# =============== ENV ===============
-BOT_TOKEN       = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").strip()   # https://<subdomain>.onrender.com
-OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL    = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
-WEBHOOK_SECRET  = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL      = os.environ.get("BANNER_URL", "").strip()
-PORT            = int(os.environ.get("PORT", "10000"))
+# ====== ENV ======
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")  # опционально
+ALWAYS_BROWSE = os.environ.get("ALWAYS_BROWSE", "0") == "1"
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # опционально
 
-# Веб-поиск (опционально)
-TAVILY_API_KEY  = os.environ.get("TAVILY_API_KEY", "").strip()
+# ====== КЛИЕНТЫ ======
+HTTP_TIMEOUT = httpx.Timeout(60.0, connect=30.0)
+http = httpx.AsyncClient(timeout=HTTP_TIMEOUT)
 
-# Голос/аудио/видео (Deepgram)
-DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
+# -------- OpenAI (чтение, визион, ответы) --------
+# Используем Chat Completions для универсальности
+OPENAI_BASE = os.environ.get("OPENAI_BASE", "https://api.openai.com/v1")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")  # поддерживает vision
 
-if not BOT_TOKEN:
-    raise RuntimeError("ENV BOT_TOKEN is required")
-if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
-    raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
-
-# =============== OPENAI CLIENT (ленивая инициализация) ===============
-def _openai_client():
-    from openai import OpenAI
-    return OpenAI(api_key=OPENAI_API_KEY)
-
-# =============== TAVILY (опционально) ===============
-def _tavily_client():
-    if not TAVILY_API_KEY:
-        return None
-    try:
-        from tavily import TavilyClient
-        return TavilyClient(api_key=TAVILY_API_KEY)
-    except Exception as e:
-        log.warning("Tavily not available: %s", e)
-        return None
-
-# ------------- Хелперы -------------
-SIMPLE_GREETINGS = {
-    "привет", "привет!", "здравствуй", "здравствуйте", "ку", "салют",
-    "hi", "hello", "hey", "yo", "hola"
-}
-
-def is_simple_greeting(text: str) -> bool:
-    t = (text or "").strip().lower()
-    # только короткие приветствия без вопросительных слов
-    return (t in SIMPLE_GREETINGS) or (t.startswith("привет") and len(t) <= 12) or (t in {"/start", "/help"})
-
-def should_browse(text: str) -> bool:
-    """Грубая эвристика: ищем, если вопрос про факты/даты/новости/цены и т.п."""
-    t = (text or "").lower()
-    if is_simple_greeting(t):
-        return False
-    # ключевые “интернетные” слова
-    keys = [
-        "когда", "дата", "сколько", "цена", "курс", "новости", "кто такой",
-        "что такое", "найди", "официальн", "источн", "релиз", "расписани",
-        "выйдет", "адрес", "телефон", "ссылк", "buy", "price", "release", "news"
-    ]
-    if any(k in t for k in keys):
-        return True
-    # длинные запросы с фактологией
-    return len(t) >= 80
-
-async def tavily_search(query: str) -> Tuple[str, List[Tuple[str, str]]]:
-    """
-    Возвращает (краткий ответ от Tavily, [(title, url), ...]).
-    Если Tavily не настроен — вернётся ("", []).
-    """
-    tv = _tavily_client()
-    if not tv:
-        return "", []
-
-    try:
-        res = tv.search(
-            query=query,
-            max_results=6,
-            include_answer=True,
-            include_raw_content=False,
-        )
-        answer = (res.get("answer") or "").strip()
-        sources = []
-        for i in res.get("results", []):
-            title = (i.get("title") or i.get("url") or "").strip()
-            url = (i.get("url") or "").strip()
-            if url:
-                sources.append((title, url))
-        return answer, sources
-    except Exception as e:
-        log.exception("Tavily error: %s", e)
-        return "", []
-
-def format_sources(sources: List[Tuple[str, str]]) -> str:
-    if not sources:
-        return ""
-    lines = []
-    for idx, (title, url) in enumerate(sources, 1):
-        safe_title = title[:120] or url
-        lines.append(f"[{idx}] {safe_title} — {url}")
-    return "\n\nСсылки:\n" + "\n".join(lines)
-
-# =============== Ответ по ТЕКСТУ ===============
-async def answer_text(update: Update, text: str):
-    if is_simple_greeting(text):
-        msg = "Привет! Как я могу помочь?"
-        await update.message.reply_text(msg)
-        return
-
-    browse = should_browse(text)
-    web_answer, web_sources = ("", [])
-    if browse and TAVILY_API_KEY:
-        web_answer, web_sources = await asyncio.get_event_loop().run_in_executor(
-            None, tavily_search, text
-        )
-
-    if not OPENAI_API_KEY:
-        # если OpenAI недоступен — просто отдадим найденное
-        fallback = (web_answer or "Готов помочь. Уточни, что именно найти?")
-        fallback += format_sources(web_sources)
-        await update.message.reply_text(fallback.strip())
-        return
-
-    try:
-        client = _openai_client()
-
-        sys_prompt = (
-            "Ты дружелюбный и лаконичный ассистент. "
-            "Если тебе дано резюме из поиска и ссылки — используй их, "
-            "но пиши своими словами, структурировано и без воды."
-        )
-
-        user_parts = [{"type": "text", "text": text}]
-        if web_answer or web_sources:
-            sources_block = (web_answer or "") + format_sources(web_sources)
-            if sources_block.strip():
-                user_parts.append({"type": "text", "text": "\n\n---\nМатериалы из поиска:\n" + sources_block})
-
-        resp = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": sys_prompt},
-                {"role": "user", "content": user_parts},
-            ],
-            temperature=0.6,
-        )
-        answer = (resp.choices[0].message.content or "").strip()
-    except Exception as e:
-        log.exception("OpenAI error: %s", e)
-        # фолбэк: вернём хотя бы то, что нашли
-        answer = (web_answer or "Не удалось получить ответ от модели.")
-        answer += format_sources(web_sources)
-
-    await update.message.reply_text(answer)
-
-# =============== ВИЗИОН (фото) ===============
-def _guess_img_mime(path: str) -> str:
-    p = (path or "").lower()
-    if p.endswith(".png"): return "image/png"
-    if p.endswith(".webp"): return "image/webp"
-    if p.endswith(".bmp"): return "image/bmp"
-    if p.endswith(".gif"): return "image/gif"
-    return "image/jpeg"
-
-async def tg_download_file_bytes(bot, file_id: str) -> Tuple[bytes, str]:
-    f = await bot.get_file(file_id)
-    url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{f.file_path}"
-    mime = _guess_img_mime(f.file_path)
-    async with httpx.AsyncClient(timeout=90) as cli:
-        r = await cli.get(url)
-        r.raise_for_status()
-        return r.content, mime
-
-async def describe_image_bytes(image_bytes: bytes, mime: str, ask: str) -> str:
-    """
-    Отправляем изображение в OpenAI через data:URL (надёжно для приватных ссылок).
-    """
-    if not OPENAI_API_KEY:
-        return "Визуальный анализ недоступен (нет OPENAI_API_KEY)."
-
-    try:
-        client = _openai_client()
-        b64 = base64.b64encode(image_bytes).decode("ascii")
-        data_url = f"data:{mime};base64,{b64}"
-
-        sys_prompt = (
-            "Ты видишь изображение. Кратко опиши, что на нём, и, если уместно, извлеки текст (OCR). "
-            "Будь точным, не выдумывай."
-        )
-        user_parts = [
-            {"type": "input_text", "text": ask or "Опиши изображение и извлеки текст, если он есть."},
-            {"type": "input_image", "image_url": data_url},
-        ]
-
-        # Для совместимости с chat.completions используем типы 'text' и 'image_url':
-        # некоторые окружения ещё не поддерживают input_* — используем классический формат.
-        user_parts_compat = [
-            {"type": "text", "text": ask or "Опиши изображение и извлеки текст, если он есть."},
-            {"type": "image_url", "image_url": {"url": data_url}},
-        ]
-
-        try:
-            resp = client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_parts_compat},
-                ],
-                temperature=0.2,
-            )
-        except Exception:
-            # на случай, если какой-то формат не поддерживается в вашей версии
-            resp = client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_parts},
-                ],
-                temperature=0.2,
-            )
-
-        return (resp.choices[0].message.content or "").strip()
-
-    except Exception as e:
-        log.exception("Vision error: %s", e)
-        return "Не удалось проанализировать изображение. Попробуй ещё раз или пришли другой файл."
-
-async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if not update.message or not update.message.photo:
-            return
-        # берём самый большой размер
-        file_id = update.message.photo[-1].file_id
-        img_bytes, mime = await tg_download_file_bytes(context.bot, file_id)
-        ask = (update.message.caption or "").strip()
-        answer = await describe_image_bytes(img_bytes, mime, ask)
-        await update.message.reply_text(answer)
-    except Exception as e:
-        log.exception("Photo handler error: %s", e)
-        await update.message.reply_text("Не удалось проанализировать изображение. Попробуй ещё раз.")
-
-# =============== ГОЛОС/АУДИО/ВИДЕО (Deepgram) ===============
-def _guess_media_mime(path: str) -> str:
-    p = (path or "").lower()
-    if p.endswith(".ogg") or p.endswith(".oga") or p.endswith(".opus"):
-        return "audio/ogg"
-    if p.endswith(".mp3"):
-        return "audio/mpeg"
-    if p.endswith(".wav"):
-        return "audio/wav"
-    if p.endswith(".m4a"):
-        return "audio/mp4"
-    if p.endswith(".mp4") or p.endswith(".mov"):
-        return "video/mp4"
-    return "application/octet-stream"
-
-async def tg_download_media_bytes(bot, file_id: str) -> Tuple[bytes, str]:
-    f = await bot.get_file(file_id)
-    url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{f.file_path}"
-    mime = _guess_media_mime(f.file_path)
-    async with httpx.AsyncClient(timeout=90) as cli:
-        r = await cli.get(url)
-        r.raise_for_status()
-        return r.content, mime
-
-async def transcribe_deepgram(audio_or_video_bytes: bytes, mime: str) -> str:
-    if not DEEPGRAM_API_KEY:
-        return ""
-    params = {
-        "model": "nova-2-general",
-        "smart_format": "true",
-        "punctuate": "true",
-        "detect_language": "true",  # можете зафиксировать язык: "language": "ru"
+async def openai_chat(messages, temperature=0.3):
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": messages,
+        "temperature": temperature,
     }
+    r = await http.post(f"{OPENAI_BASE}/chat/completions", headers=headers, json=payload)
+    r.raise_for_status()
+    data = r.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+async def openai_vision_describe(image_url: str, user_prompt: str = "Опиши, что на изображении. Извлеки видимый текст."):
+    if not OPENAI_API_KEY:
+        return "Не настроен ключ OpenAI для анализа изображений."
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    messages = [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": user_prompt},
+            {"type": "image_url", "image_url": {"url": image_url}}
+        ],
+    }]
+    payload = {"model": OPENAI_MODEL, "messages": messages, "temperature": 0.2}
+    r = await http.post(f"{OPENAI_BASE}/chat/completions", headers=headers, json=payload)
+    r.raise_for_status()
+    data = r.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+# -------- Deepgram (ASR) --------
+DEEPGRAM_API = "https://api.deepgram.com/v1/listen"
+# Будем использовать prerecord URL (Deepgram сам тянет файл по URL)
+async def deepgram_transcribe(file_url: str, language_hint: Optional[str] = None) -> Optional[str]:
+    """
+    Возвращает распознанный текст или None в случае неудачи.
+    """
+    if not DEEPGRAM_API_KEY:
+        log.warning("DEEPGRAM_API_KEY is not set.")
+        return None
+
+    params = {
+        "model": "nova-2",          # качественная универсальная модель
+        "smart_format": "true",     # пунктуация/форматирование
+        "punctuate": "true",
+    }
+    if language_hint:
+        params["language"] = language_hint  # например "ru"; можно не указывать — авто
+
     headers = {
         "Authorization": f"Token {DEEPGRAM_API_KEY}",
-        "Content-Type": mime or "application/octet-stream",
+        "Content-Type": "application/json",
     }
-    url = "https://api.deepgram.com/v1/listen"
-    try:
-        async with httpx.AsyncClient(timeout=120) as cli:
-            resp = await cli.post(url, params=params, headers=headers, content=audio_or_video_bytes)
-            resp.raise_for_status()
-            data = resp.json()
-        text = (data.get("results", {})
-                    .get("channels", [{}])[0]
-                    .get("alternatives", [{}])[0]
-                    .get("transcript", "")).strip()
-        return text
-    except Exception as e:
-        log.exception("Deepgram error: %s", e)
-        return ""
+    body = {"url": file_url}
 
-async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if not update.message or not update.message.voice:
-            return
-        if not DEEPGRAM_API_KEY:
-            await update.message.reply_text("Распознавание голоса временно недоступно.")
-            return
-        bts, mime = await tg_download_media_bytes(context.bot, update.message.voice.file_id)
-        text = await transcribe_deepgram(bts, mime)
+        r = await http.post(DEEPGRAM_API, params=params, headers=headers, json=body)
+        if r.status_code >= 400:
+            log.error("Deepgram error %s: %s", r.status_code, r.text)
+            return None
+        data = r.json()
+        # Безопасно достаем текст
+        alt = (
+            data.get("results", {})
+                .get("channels", [{}])[0]
+                .get("alternatives", [{}])[0]
+        )
+        transcript = alt.get("transcript", "").strip()
+        return transcript or None
+    except Exception as e:
+        log.exception("Deepgram request failed: %s", e)
+        return None
+
+# ====== УТИЛИТЫ ======
+
+HELLO_RE = re.compile(r"^(привет|здравствуй|hi|hello|добрый\s+(день|вечер|утро))[\s!,.]*$", re.I)
+SIMPLE_THANKS = re.compile(r"(спасибо|благодарю)\b", re.I)
+
+CAPS_RE = re.compile(
+    r"(можешь|умеешь|умеет|способен|анализируешь).*(фото|изображени|картин|видео|аудио|голос|voice)",
+    re.I
+)
+
+FACTY_RE = re.compile(
+    r"(когда|сколько|курс|новост|что\sтакое|кто\sтакой|дата|цена|прогноз|объясни).*",
+    re.I
+)
+
+def is_simple_greeting(text: str) -> bool:
+    return bool(HELLO_RE.match(text.strip()))
+
+def is_capability_question(text: str) -> bool:
+    return bool(CAPS_RE.search(text))
+
+def likely_needs_web(text: str) -> bool:
+    return ALWAYS_BROWSE or bool(FACTY_RE.search(text))
+
+def user_lang(update: Update) -> str:
+    code = "ru"
+    try:
+        code = (update.effective_user.language_code or "ru").split("-")[0]
+    except Exception:
+        pass
+    return code or "ru"
+
+async def telegram_file_url(context: ContextTypes.DEFAULT_TYPE, file_id: str) -> str:
+    """
+    Возвращает корректный публичный URL файла Telegram:
+    https://api.telegram.org/file/bot<token>/<file_path>
+    """
+    tg_file = await context.bot.get_file(file_id)
+    # tg_file.file_path уже содержит относительный путь вида `voice/file_123.oga`
+    return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{tg_file.file_path}"
+
+# ====== БАЗОВЫЕ ОТВЕТЫ ======
+
+START_TEXT = (
+    "Привет! Я готов. Напиши любой вопрос.\n\n"
+    "Подсказки:\n"
+    "• Я ищу свежую информацию в интернете для фактов и дат, когда это нужно.\n"
+    "• Примеры: «Когда выйдет GTA 6?», «Курс биткоина сейчас и прогноз», "
+    "«Найди учебник алгебры 11 класс (официальные источники)», «Новости по …?»\n"
+    "• Можно прислать фото — опишу и извлеку текст.\n"
+    "• Можно отправить голосовое или видео — распознаю речь и отвечу по содержанию."
+)
+
+CAPABILITIES_TEXT = (
+    "Да, умею:\n"
+    "• Фото/картинки — опишу, извлеку текст (OCR) и уточню детали.\n"
+    "• Голос/аудио — распознаю речь и отвечу по смыслу (Deepgram).\n"
+    "• Видео — извлеку звуковую дорожку через Deepgram и сгенерирую ответ.\n\n"
+    "Просто пришли файл (фото, голосовое, аудио или видео)."
+)
+
+# ====== ХЕНДЛЕРЫ ======
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(START_TEXT)
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or "").strip()
+    lang = user_lang(update)
+
+    # 1) Приветствия/простое общение — без интернета
+    if is_simple_greeting(text):
+        await update.message.reply_text("Привет! Как я могу помочь?")
+        return
+
+    # 2) Вопрос о возможностях
+    if is_capability_question(text):
+        await update.message.reply_text(CAPABILITIES_TEXT)
+        return
+
+    # 3) “Спасибо”
+    if SIMPLE_THANKS.search(text):
+        await update.message.reply_text("Пожалуйста! 😊 Чем ещё помочь?")
+        return
+
+    # 4) Ответ: либо оффлайн, либо с походом в сеть (при необходимости)
+    if likely_needs_web(text):
+        # Мини-агент: спросим модель, как лучше ответить, и попросим сослаться на источники
+        prompt = (
+            "Пользователь спросил:\n"
+            f"{text}\n\n"
+            "Сначала найди свежую информацию в интернете (используй популярные и надёжные источники), "
+            "затем коротко и по делу ответь по-русски и приведи 2–5 ссылок внизу."
+        )
+    else:
+        prompt = (
+            "Ответь по-русски кратко и по делу. Если вопрос фактический/новостной, "
+            "сам предложи при необходимости поискать и уточнить в интернете."
+            f"\n\nВопрос: {text}"
+        )
+
+    try:
+        reply = await openai_chat([
+            {"role": "system", "content": "Ты вежливый и полезный помощник."},
+            {"role": "user", "content": prompt},
+        ])
+    except Exception as e:
+        log.exception("OpenAI text error: %s", e)
+        reply = "Извини, сейчас не получилось ответить. Попробуй ещё раз."
+    await update.message.reply_text(reply, disable_web_page_preview=False)
+
+# ----- Фото (Vision) -----
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        # Берём самое большое превью
+        photo = update.message.photo[-1]
+        url = await telegram_file_url(context, photo.file_id)
+        desc = await openai_vision_describe(url)
+        await update.message.reply_text(desc, disable_web_page_preview=True)
+    except Exception as e:
+        log.exception("Vision/photo failed: %s", e)
+        await update.message.reply_text("Не удалось проанализировать изображение. Попробуй ещё раз или пришли другой файл.")
+
+# ----- Голос (voice) / аудио (audio) / видео (video) / видео-заметка (video_note) -----
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # voice: .ogg (opus)
+    voice = update.message.voice
+    await transcribe_and_answer(update, context, voice.file_id, hint_lang=user_lang(update))
+
+async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    audio = update.message.audio  # mp3/m4a/wav…
+    await transcribe_and_answer(update, context, audio.file_id, hint_lang=user_lang(update))
+
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    video = update.message.video  # mp4/mov…
+    await transcribe_and_answer(update, context, video.file_id, hint_lang=user_lang(update))
+
+async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    v = update.message.video_note  # кружочек
+    await transcribe_and_answer(update, context, v.file_id, hint_lang=user_lang(update))
+
+async def transcribe_and_answer(update: Update, context: ContextTypes.DEFAULT_TYPE, file_id: str, hint_lang: str = "ru"):
+    try:
+        url = await telegram_file_url(context, file_id)
+        log.info("Transcribing via Deepgram: %s", url)
+        text = await deepgram_transcribe(url, language_hint=hint_lang)
         if not text:
             await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз.")
             return
-        await answer_text(update, text)
+
+        # Отвечаем по содержанию распознанного текста
+        user_q = text.strip()
+        pre = f"Распознанный текст: «{user_q}».\n\n"
+        needs_web = likely_needs_web(user_q)
+        if needs_web:
+            prompt = (
+                "Пользователь продиктовал вопрос. Найди свежие данные в интернете и "
+                "ответь по-русски кратко и по делу. В конце дай 2–5 ссылок-источников.\n\n"
+                f"Вопрос: {user_q}"
+            )
+        else:
+            prompt = (
+                "Ответь по-русски кратко и по делу.\n\n"
+                f"Вопрос: {user_q}"
+            )
+
+        try:
+            answer = await openai_chat([
+                {"role": "system", "content": "Ты вежливый и полезный помощник."},
+                {"role": "user", "content": prompt},
+            ])
+        except Exception as e:
+            log.exception("OpenAI after ASR error: %s", e)
+            answer = "Принял текст, но не смог сформировать ответ. Попробуй снова."
+
+        await update.message.reply_text(pre + answer, disable_web_page_preview=False)
     except Exception as e:
-        log.exception("Voice handler error: %s", e)
+        log.exception("ASR flow failed: %s", e)
         await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз.")
 
-async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if not update.message or not update.message.audio:
-            return
-        if not DEEPGRAM_API_KEY:
-            await update.message.reply_text("Распознавание аудио временно недоступно.")
-            return
-        bts, mime = await tg_download_media_bytes(context.bot, update.message.audio.file_id)
-        text = await transcribe_deepgram(bts, mime)
-        if not text:
-            await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз.")
-            return
-        await answer_text(update, text)
-    except Exception as e:
-        log.exception("Audio handler error: %s", e)
-        await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз.")
+# ====== РЕГИСТРАЦИЯ ======
 
-async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        vid = update.message.video or update.message.video_note
-        if not vid:
-            return
-        if not DEEPGRAM_API_KEY:
-            await update.message.reply_text("Распознавание речи в видео временно недоступно.")
-            return
-        bts, mime = await tg_download_media_bytes(context.bot, vid.file_id)
-        if not mime.startswith("video/"):
-            mime = "video/mp4"
-        text = await transcribe_deepgram(bts, mime)
-        if not text:
-            await update.message.reply_text("Не удалось распознать речь в видео. Попробуй ещё раз.")
-            return
-        await answer_text(update, text)
-    except Exception as e:
-        log.exception("Video handler error: %s", e)
-        await update.message.reply_text("Не удалось распознать речь в видео. Попробуй ещё раз.")
+def build_app() -> Application:
+    app = Application.builder().token(BOT_TOKEN).build()
 
-# =============== ХЕНДЛЕРЫ ТЕКСТА И /start ===============
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    tips = (
-        "Привет! Я готов. Напиши любой вопрос.\n\n"
-        "Подсказки:\n"
-        "• Я ищу свежую информацию в интернете для фактов и дат, когда это нужно.\n"
-        "• Примеры: «Когда выйдет GTA 6?», «Курс биткоина сейчас и прогноз», "
-        "«Найди учебник алгебры 11 класс (официальные источники)», «Новости по …?»\n"
-        "• Можно прислать фото — опишу и извлеку текст.\n"
-        "• Можно отправить голосовое или видео — распознаю речь и отвечу по содержанию."
-    )
-    await update.message.reply_text(tips)
+    app.add_handler(CommandHandler("start", start))
 
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (update.message.text or "").strip()
-    await answer_text(update, text)
+    # Медиа
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.add_handler(MessageHandler(filters.AUDIO, handle_audio))
+    app.add_handler(MessageHandler(filters.VIDEO, handle_video))
+    app.add_handler(MessageHandler(filters.VIDEO_NOTE, handle_video_note))
 
-# =============== BOOTSTRAP ===============
-def build_app():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", cmd_start))
-    # media
-    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
-    app.add_handler(MessageHandler(filters.VOICE, on_voice))
-    app.add_handler(MessageHandler(filters.AUDIO, on_audio))
-    app.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, on_video))
-    # text
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    # Текст в самом конце (чтобы не перехватывал медиа)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
     return app
 
-def run_webhook(app):
-    url_path = f"webhook/{BOT_TOKEN}"
-    webhook_url = f"{PUBLIC_URL.rstrip('/')}/{url_path}"
-
-    log.info("Starting webhook on 0.0.0.0:%s  ->  %s", PORT, webhook_url)
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=url_path,
-        webhook_url=webhook_url,
-        secret_token=WEBHOOK_SECRET or None,   # Telegram header X-Telegram-Bot-Api-Secret-Token
-        drop_pending_updates=True,
-    )
+async def on_startup(app: Application):
+    if WEBHOOK_URL:
+        await app.bot.set_webhook(WEBHOOK_URL)
+        log.info("Webhook set to %s", WEBHOOK_URL)
+    else:
+        log.info("Running in long-polling mode")
 
 def main():
     app = build_app()
-    run_webhook(app)
+    if WEBHOOK_URL:
+        # Render обычно за прокси — слушаем 0.0.0.0:10000 (или как в Render)
+        port = int(os.environ.get("PORT", "10000"))
+        app.run_webhook(listen="0.0.0.0", port=port, webhook_url=WEBHOOK_URL, drop_pending_updates=True)
+    else:
+        app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
