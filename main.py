@@ -6,13 +6,7 @@ import logging
 from io import BytesIO
 
 import httpx
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    WebAppInfo,
-    ReplyKeyboardRemove,
-)
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
@@ -27,15 +21,16 @@ log = logging.getLogger("gpt-bot")
 
 # ========== ENV ==========
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()     # https://<subdomain>.onrender.com
+PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()       # https://<subdomain>.onrender.com (сервер бота)
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL       = os.environ.get("BANNER_URL", "").strip()     # не обязательно
+BANNER_URL       = os.environ.get("BANNER_URL", "").strip()       # необязательно (картинка приветствия)
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()     # URL мини-приложения
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip().rstrip("/")  # домен мини-приложения! (не сервер бота)
+WEBAPP_PREMIUM_PATH = os.environ.get("WEBAPP_PREMIUM_PATH", "/premium").strip()  # для SPA можно поставить "#/premium"
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -43,7 +38,7 @@ if not BOT_TOKEN:
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 
-# ========== OPENAI / Tavily clients ==========
+# ========== OPENAI / Tavily ==========
 from openai import OpenAI
 oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
@@ -76,6 +71,7 @@ VISION_CAPABILITY_HELP = (
     "• Голосовые/аудио: распознаю речь и отвечу по содержанию."
 )
 
+# Красивое приветствие (одно, без «подсказок» ниже)
 START_TEXT = (
     "**GPT-5 PRO — умный помощник на базе ChatGPT 🤖**\n"
     "Отвечаю по делу, *ищу факты в интернете* 🌐, *понимаю фото* 🖼️ и *распознаю голос* 🎙️.\n\n"
@@ -85,9 +81,29 @@ START_TEXT = (
     "• 📚 Объяснения, конспекты, переводы.\n"
     "• 🔎 Поиск в сети со *ссылками*.\n"
     "• 🖼️ Фото: описание, OCR, схемы/графики.\n"
-    "• 🎧 Голос/аудио: распознаю и отвечу по содержанию.\n"
+    "• 🎧 Голос/аудио: распознаю и отвечаю по содержанию.\n"
     "• 💼 Работа: письма, брифы, чек-листы, идеи.\n\n"
     "Кнопки: 🧭 Меню · ⚙️ Режимы · 🧩 Примеры · ⭐ Подписка"
+)
+
+MODES_TEXT = (
+    "⚙️ **Режимы работы**\n"
+    "• 💬 Универсальный — обычный диалог.\n"
+    "• 🧠 Исследователь — факты/источники, сводки.\n"
+    "• ✍️ Редактор — правки текста, стиль, структура.\n"
+    "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
+    "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
+    "• 🎙️ Голос — распознаю аудио и отвечаю по сути.\n\n"
+    "Выбирай режим сообщением или просто сформулируй задачу 😉"
+)
+
+EXAMPLES_TEXT = (
+    "🧩 **Примеры запросов**\n"
+    "• «Сделай конспект главы 3 и выдели формулы»\n"
+    "• «Проанализируй CSV, найди тренды и сделай краткий вывод»\n"
+    "• «Составь письмо клиенту, дружелюбно и по делу»\n"
+    "• «Суммируй статью из ссылки и дай источники»\n"
+    "• «Опиши текст на фото и извлеки таблицу»"
 )
 
 # ========== HEURISTICS ==========
@@ -118,18 +134,6 @@ def should_browse(text: str) -> bool:
 
 def is_vision_capability_question(text: str) -> bool:
     return bool(_CAPABILITY_RE.search(text))
-
-# ========== UI HELPERS ==========
-def build_main_kb() -> ReplyKeyboardMarkup:
-    base = WEBAPP_URL or PUBLIC_URL
-    return ReplyKeyboardMarkup(
-        [
-            [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=base))],
-            [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-            [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{base.rstrip('/')}/premium"))],
-        ],
-        resize_keyboard=True
-    )
 
 # ========== UTILS ==========
 async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
@@ -177,7 +181,6 @@ def tavily_search(query: str, max_results: int = 5):
 
 # ========== OPENAI HELPERS ==========
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
-    """Чисто текстовый ответ (с опциональным контекстом ссылок)."""
     if not oai:
         return "Не удалось получить ответ от модели (ключ/лимит). Попробуй позже."
 
@@ -198,7 +201,6 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         return "Не удалось получить ответ от модели (лимит/ключ). Попробуй позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
-    """Анализ изображения + текстовый вопрос."""
     if not oai:
         return "Не удалось проанализировать изображение (ключ/лимит). Попробуй позже."
     try:
@@ -224,154 +226,99 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
 
 # ========== STT: Deepgram -> Whisper fallback ==========
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
-    """
-    1) Пытаемся распознать в Deepgram (если есть ключ/кредит).
-    2) Если не получилось — fallback на OpenAI Whisper.
-    """
     data = buf.getvalue()
 
-    # --- Deepgram ---
+    # Deepgram
     if DEEPGRAM_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                params = {
-                    "model": "nova-2",
-                    "language": "ru",
-                    "smart_format": "true",
-                    "punctuate": "true",
-                }
+                params = {"model": "nova-2", "language": "ru", "smart_format": "true", "punctuate": "true"}
                 headers = {
                     "Authorization": f"Token {DEEPGRAM_API_KEY}",
                     "Content-Type": "audio/ogg" if filename_hint.endswith(".ogg") else "application/octet-stream",
                 }
-                r = await client.post(
-                    "https://api.deepgram.com/v1/listen",
-                    params=params,
-                    headers=headers,
-                    content=data
-                )
+                r = await client.post("https://api.deepgram.com/v1/listen", params=params, headers=headers, content=data)
                 r.raise_for_status()
                 dg = r.json()
                 text = (
-                    dg.get("results", {})
-                      .get("channels", [{}])[0]
-                      .get("alternatives", [{}])[0]
-                      .get("transcript", "")
+                    dg.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
                 ).strip()
                 if text:
                     return text
         except Exception as e:
             log.exception("Deepgram STT error: %s", e)
 
-    # --- Whisper fallback ---
+    # OpenAI Whisper fallback
     if oai:
         try:
-            buf2 = BytesIO(data)
-            buf2.seek(0)
+            buf2 = BytesIO(data); buf2.seek(0)
             setattr(buf2, "name", filename_hint)
-            tr = oai.audio.transcriptions.create(
-                model=TRANSCRIBE_MODEL,  # whisper-1
-                file=buf2
-            )
+            tr = oai.audio.transcriptions.create(model=TRANSCRIBE_MODEL, file=buf2)
             return (tr.text or "").strip()
         except Exception as e:
             log.exception("Whisper STT error: %s", e)
 
     return ""
 
+# ========== KEYBOARD (ReplyKeyboard + WebApp) ==========
+def build_main_keyboard() -> ReplyKeyboardMarkup:
+    # Если WEBAPP_URL не задан — откроем сервер бота (скорее всего 404). Поэтому лучше задать переменную!
+    base_url = WEBAPP_URL or PUBLIC_URL
+    premium_url = f"{(WEBAPP_URL or PUBLIC_URL)}{WEBAPP_PREMIUM_PATH}"
+
+    kb = ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=base_url))],
+            [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
+            [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=premium_url))],
+        ],
+        resize_keyboard=True
+    )
+    return kb
+
 # ========== HANDLERS ==========
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Уберём старую клавиатуру — Telegram часто кэширует её
-    try:
-        await update.effective_message.reply_text("…", reply_markup=ReplyKeyboardRemove())
-    except Exception:
-        pass
-
+    # Только одно приветствие с кнопками (без второго «Подсказки»)
     if BANNER_URL:
         try:
+            # Покажем баннер отдельно (без подписи, чтобы не дублировать текст)
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
 
     await update.effective_message.reply_text(
         START_TEXT,
-        reply_markup=build_main_kb(),
+        reply_markup=build_main_keyboard(),
         disable_web_page_preview=True,
         parse_mode="Markdown"
-    )
-
-    await update.effective_message.reply_text(
-        "Привет! Я готов. Напиши любой вопрос.\n\n"
-        "Подсказки:\n"
-        "• Я при необходимости ищу свежую информацию в интернете.\n"
-        "• Можно прислать фото — опишу и извлеку текст.\n"
-        "• Можно отправить голосовое/аудио — распознаю речь и отвечу по содержанию.\n"
-        "• Видео: пришли 1–3 ключевых кадра (скриншота) — разберу по кадрам."
     )
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
-    # Обработка кнопок клавиатуры
-    if text.startswith("🧭"):
-        await update.message.reply_text(
-            "Открываю мини-приложение. Если не открылось — нажми кнопку ещё раз 👇",
-            reply_markup=build_main_kb()
-        )
+    # Кнопки/команды «Режимы» и «Примеры»
+    if text in ("⚙️ Режимы", "Режимы", "/modes"):
+        await update.message.reply_text(MODES_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+        return
+    if text in ("🧩 Примеры", "Примеры", "/examples"):
+        await update.message.reply_text(EXAMPLES_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
         return
 
-    if text.startswith("⚙️"):
-        modes = (
-            "⚙️ **Режимы работы**\n"
-            "• 💬 Универсальный — обычный диалог.\n"
-            "• 🧠 Исследователь — факты/источники, сводки.\n"
-            "• ✍️ Редактор — правки текста, стиль, структура.\n"
-            "• 📊 Аналитик — формулы, таблицы, расчетные шаги.\n"
-            "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
-            "• 🎙️ Голос — распознаю аудио и отвечаю по сути.\n\n"
-            "Выбирай режим сообщением или просто сформулируй задачу 😉"
-        )
-        await update.message.reply_text(modes, reply_markup=build_main_kb(), parse_mode="Markdown")
-        return
-
-    if text.startswith("🧩"):
-        examples = (
-            "🧩 **Примеры запросов**\n"
-            "• «Сделай конспект главы 3 и выдели формулы»\n"
-            "• «Проанализируй CSV, найди тренды и сделай краткий вывод»\n"
-            "• «Составь письмо клиенту, дружелюбно и по делу»\n"
-            "• «Суммируй статью из ссылки и дай источники»\n"
-            "• «Опиши текст на фото и извлеки таблицу»"
-        )
-        await update.message.reply_text(examples, reply_markup=build_main_kb(), parse_mode="Markdown")
-        return
-
-    if text.startswith("⭐"):
-        base = WEBAPP_URL or PUBLIC_URL
-        await update.message.reply_text(
-            f"⭐ **Подписка 499 ₽/мес** — больше запросов, приоритет, улучшенные лимиты.\n"
-            f"Оформить: открой мини-приложение → *Тарифы* или перейди: {base.rstrip('/')}/premium",
-            reply_markup=build_main_kb(),
-            parse_mode="Markdown",
-            disable_web_page_preview=True
-        )
-        return
-
-    # Явный вопрос про возможности — отвечаем сразу "Да"
+    # Вопрос про возможности анализа изображений/видео
     if is_vision_capability_question(text):
         await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True)
         return
 
     await typing(context, chat_id)
 
-    # Маленькие разговоры — без веба
+    # Small talk — без веба
     if is_smalltalk(text):
         reply = await ask_openai_text(text)
         await update.message.reply_text(reply)
         return
 
-    # Нужен ли веб-поиск?
+    # Веб-поиск?
     web_ctx = ""
     sources = []
     if should_browse(text):
@@ -398,16 +345,13 @@ async def _handle_image_bytes(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
-
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
-    buf = BytesIO()
-    await file.download_to_memory(buf)
+    buf = BytesIO(); await file.download_to_memory(buf)
     user_text = (update.message.caption or "").strip()
     await _handle_image_bytes(update, context, buf.getvalue(), user_text)
 
 async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Картинки, присланные как файл (image/*). PDF/документы — просто отвечаем подсказкой."""
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
@@ -415,8 +359,7 @@ async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mime = (doc.mime_type or "").lower()
     if mime.startswith("image/"):
         file = await context.bot.get_file(doc.file_id)
-        buf = BytesIO()
-        await file.download_to_memory(buf)
+        buf = BytesIO(); await file.download_to_memory(buf)
         user_text = (update.message.caption or "").strip()
         await _handle_image_bytes(update, context, buf.getvalue(), user_text)
     else:
@@ -425,14 +368,12 @@ async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Voice message (OGG/OPUS)."""
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
     voice = update.message.voice
     file = await context.bot.get_file(voice.file_id)
-    buf = BytesIO()
-    await file.download_to_memory(buf)
+    buf = BytesIO(); await file.download_to_memory(buf)
 
     text = await transcribe_audio(buf, filename_hint="audio.ogg")
     if not text:
@@ -457,14 +398,12 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(answer, disable_web_page_preview=False)
 
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обычные аудиофайлы (mp3/m4a/wav) — обрабатываем как voice."""
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
     audio = update.message.audio
     file = await context.bot.get_file(audio.file_id)
-    buf = BytesIO()
-    await file.download_to_memory(buf)
+    buf = BytesIO(); await file.download_to_memory(buf)
 
     filename = (audio.file_name or "audio.mp3")
     text = await transcribe_audio(buf, filename_hint=filename)
@@ -490,7 +429,6 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(answer, disable_web_page_preview=False)
 
 async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Позитивный ответ на видео: просим прислать ключевые кадры."""
     await update.message.reply_text(
         "Да, помогу с видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам и отвечу по содержанию. 📽️"
     )
@@ -499,6 +437,8 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("modes", lambda u,c: u.message.reply_text(MODES_TEXT, parse_mode="Markdown")))
+    app.add_handler(CommandHandler("examples", lambda u,c: u.message.reply_text(EXAMPLES_TEXT, parse_mode="Markdown")))
     # текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     # фото и документы-картинки
@@ -507,22 +447,20 @@ def build_app():
     # голосовые и аудио
     app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.AUDIO, on_audio))
-    # видео — даём позитивную инструкцию
+    # видео
     app.add_handler(MessageHandler(filters.VIDEO, on_video))
     return app
 
 def run_webhook(app):
-    # уникальный путь, чтобы никто посторонний не дёргал
     url_path = f"webhook/{BOT_TOKEN}"
     webhook_url = f"{PUBLIC_URL.rstrip('/')}/{url_path}"
-
     log.info("Starting webhook on 0.0.0.0:%s  ->  %s", PORT, webhook_url)
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path=url_path,
         webhook_url=webhook_url,
-        secret_token=WEBHOOK_SECRET or None,   # Telegram header X-Telegram-Bot-Api-Secret-Token
+        secret_token=WEBHOOK_SECRET or None,
         drop_pending_updates=True,
     )
 
