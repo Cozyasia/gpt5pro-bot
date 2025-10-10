@@ -6,7 +6,7 @@ import logging
 from io import BytesIO
 
 import httpx
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
@@ -29,6 +29,7 @@ BANNER_URL       = os.environ.get("BANNER_URL", "").strip()     # не обяз�
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()     # URL мини-приложения (если есть)
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -162,7 +163,6 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("OpenAI chat error: %s", e)
-        # Не палим детали конечному пользователю
         return "Не удалось получить ответ от модели (лимит/ключ). Попробуй позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
@@ -247,23 +247,48 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
     return ""
 
-# ========== HANDLERS ==========
-START_GREETING = (
-    "Привет! Я готов. Напиши любой вопрос.\n\n"
-    "Подсказки:\n"
-    "• Я при необходимости ищу свежую информацию в интернете.\n"
-    "• Можно прислать фото — опишу и извлеку текст.\n"
-    "• Можно отправить голосовое/аудио — распознаю речь и отвечу по содержанию.\n"
-    "• Видео: пришли 1–3 ключевых кадра (скриншота) — разберу по кадрам."
+# ========== START MESSAGE + KEYBOARD ==========
+START_TEXT = (
+    "**GPT-5 PRO — умный помощник на базе ChatGPT 🤖**\n"
+    "Отвечаю по делу, *ищу факты в интернете* 🌐, *понимаю фото* 🖼️ и *распознаю голос* 🎙️.\n\n"
+    "**Что умею:**\n"
+    "• ✍️ Эссе/рефераты/отчёты, планы, правки.\n"
+    "• 🧮 Расчёты, формулы, таблицы, наброски графиков.\n"
+    "• 📚 Объяснения, конспекты, переводы.\n"
+    "• 🔎 Поиск в сети со *ссылками*.\n"
+    "• 🖼️ Фото: описание, OCR, схемы/графики.\n"
+    "• 🎧 Голос/аудио: распознаю и отвечу по содержанию.\n"
+    "• 💼 Работа: письма, брифы, чек-листы, идеи.\n\n"
+    "Кнопки: 🧭 Меню · ⚙️ Режимы · 🧩 Примеры · ⭐ Подписка"
 )
 
+# Куда ведут WebApp-кнопки
+_WEBAPP_HOME = WEBAPP_URL or PUBLIC_URL
+_WEBAPP_PREMIUM = f"{_WEBAPP_HOME.rstrip('/')}/premium"
+
+main_kb = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=_WEBAPP_HOME))],
+        [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=_WEBAPP_PREMIUM))],
+    ],
+    resize_keyboard=True
+)
+
+# ========== HANDLERS ==========
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # баннер — по желанию
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
-    await update.effective_message.reply_text(START_GREETING)
+    await update.effective_message.reply_text(
+        START_TEXT,
+        reply_markup=main_kb,
+        disable_web_page_preview=True,
+        parse_mode="Markdown"
+    )
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
