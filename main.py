@@ -6,7 +6,13 @@ import logging
 from io import BytesIO
 
 import httpx
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    WebAppInfo,
+    ReplyKeyboardRemove,
+)
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
@@ -29,7 +35,7 @@ BANNER_URL       = os.environ.get("BANNER_URL", "").strip()     # не обяз�
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()     # URL мини-приложения (если есть)
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()     # URL мини-приложения
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -70,6 +76,20 @@ VISION_CAPABILITY_HELP = (
     "• Голосовые/аудио: распознаю речь и отвечу по содержанию."
 )
 
+START_TEXT = (
+    "**GPT-5 PRO — умный помощник на базе ChatGPT 🤖**\n"
+    "Отвечаю по делу, *ищу факты в интернете* 🌐, *понимаю фото* 🖼️ и *распознаю голос* 🎙️.\n\n"
+    "**Что умею:**\n"
+    "• ✍️ Эссе/рефераты/отчёты, планы, правки.\n"
+    "• 🧮 Расчёты, формулы, таблицы, наброски графиков.\n"
+    "• 📚 Объяснения, конспекты, переводы.\n"
+    "• 🔎 Поиск в сети со *ссылками*.\n"
+    "• 🖼️ Фото: описание, OCR, схемы/графики.\n"
+    "• 🎧 Голос/аудио: распознаю и отвечу по содержанию.\n"
+    "• 💼 Работа: письма, брифы, чек-листы, идеи.\n\n"
+    "Кнопки: 🧭 Меню · ⚙️ Режимы · 🧩 Примеры · ⭐ Подписка"
+)
+
 # ========== HEURISTICS ==========
 _SMALLTALK_RE = re.compile(
     r"^(привет|здравствуй|добрый\s*(день|вечер|утро)|хи|hi|hello|хелло|как дела|спасибо|пока)\b",
@@ -98,6 +118,18 @@ def should_browse(text: str) -> bool:
 
 def is_vision_capability_question(text: str) -> bool:
     return bool(_CAPABILITY_RE.search(text))
+
+# ========== UI HELPERS ==========
+def build_main_kb() -> ReplyKeyboardMarkup:
+    base = WEBAPP_URL or PUBLIC_URL
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=base))],
+            [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
+            [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{base.rstrip('/')}/premium"))],
+        ],
+        resize_keyboard=True
+    )
 
 # ========== UTILS ==========
 async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
@@ -193,7 +225,7 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
 # ========== STT: Deepgram -> Whisper fallback ==========
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
     """
-    1) Пытаемся распознать в Deepgram (есть кредит).
+    1) Пытаемся распознать в Deepgram (если есть ключ/кредит).
     2) Если не получилось — fallback на OpenAI Whisper.
     """
     data = buf.getvalue()
@@ -247,52 +279,84 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
     return ""
 
-# ========== START MESSAGE + KEYBOARD ==========
-START_TEXT = (
-    "**GPT-5 PRO — умный помощник на базе ChatGPT 🤖**\n"
-    "Отвечаю по делу, *ищу факты в интернете* 🌐, *понимаю фото* 🖼️ и *распознаю голос* 🎙️.\n\n"
-    "**Что умею:**\n"
-    "• ✍️ Эссе/рефераты/отчёты, планы, правки.\n"
-    "• 🧮 Расчёты, формулы, таблицы, наброски графиков.\n"
-    "• 📚 Объяснения, конспекты, переводы.\n"
-    "• 🔎 Поиск в сети со *ссылками*.\n"
-    "• 🖼️ Фото: описание, OCR, схемы/графики.\n"
-    "• 🎧 Голос/аудио: распознаю и отвечу по содержанию.\n"
-    "• 💼 Работа: письма, брифы, чек-листы, идеи.\n\n"
-    "Кнопки: 🧭 Меню · ⚙️ Режимы · 🧩 Примеры · ⭐ Подписка"
-)
-
-# Куда ведут WebApp-кнопки
-_WEBAPP_HOME = WEBAPP_URL or PUBLIC_URL
-_WEBAPP_PREMIUM = f"{_WEBAPP_HOME.rstrip('/')}/premium"
-
-main_kb = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=_WEBAPP_HOME))],
-        [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=_WEBAPP_PREMIUM))],
-    ],
-    resize_keyboard=True
-)
-
 # ========== HANDLERS ==========
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # баннер — по желанию
+    # Уберём старую клавиатуру — Telegram часто кэширует её
+    try:
+        await update.effective_message.reply_text("…", reply_markup=ReplyKeyboardRemove())
+    except Exception:
+        pass
+
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
+
     await update.effective_message.reply_text(
         START_TEXT,
-        reply_markup=main_kb,
+        reply_markup=build_main_kb(),
         disable_web_page_preview=True,
         parse_mode="Markdown"
+    )
+
+    await update.effective_message.reply_text(
+        "Привет! Я готов. Напиши любой вопрос.\n\n"
+        "Подсказки:\n"
+        "• Я при необходимости ищу свежую информацию в интернете.\n"
+        "• Можно прислать фото — опишу и извлеку текст.\n"
+        "• Можно отправить голосовое/аудио — распознаю речь и отвечу по содержанию.\n"
+        "• Видео: пришли 1–3 ключевых кадра (скриншота) — разберу по кадрам."
     )
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
+
+    # Обработка кнопок клавиатуры
+    if text.startswith("🧭"):
+        await update.message.reply_text(
+            "Открываю мини-приложение. Если не открылось — нажми кнопку ещё раз 👇",
+            reply_markup=build_main_kb()
+        )
+        return
+
+    if text.startswith("⚙️"):
+        modes = (
+            "⚙️ **Режимы работы**\n"
+            "• 💬 Универсальный — обычный диалог.\n"
+            "• 🧠 Исследователь — факты/источники, сводки.\n"
+            "• ✍️ Редактор — правки текста, стиль, структура.\n"
+            "• 📊 Аналитик — формулы, таблицы, расчетные шаги.\n"
+            "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
+            "• 🎙️ Голос — распознаю аудио и отвечаю по сути.\n\n"
+            "Выбирай режим сообщением или просто сформулируй задачу 😉"
+        )
+        await update.message.reply_text(modes, reply_markup=build_main_kb(), parse_mode="Markdown")
+        return
+
+    if text.startswith("🧩"):
+        examples = (
+            "🧩 **Примеры запросов**\n"
+            "• «Сделай конспект главы 3 и выдели формулы»\n"
+            "• «Проанализируй CSV, найди тренды и сделай краткий вывод»\n"
+            "• «Составь письмо клиенту, дружелюбно и по делу»\n"
+            "• «Суммируй статью из ссылки и дай источники»\n"
+            "• «Опиши текст на фото и извлеки таблицу»"
+        )
+        await update.message.reply_text(examples, reply_markup=build_main_kb(), parse_mode="Markdown")
+        return
+
+    if text.startswith("⭐"):
+        base = WEBAPP_URL or PUBLIC_URL
+        await update.message.reply_text(
+            f"⭐ **Подписка 499 ₽/мес** — больше запросов, приоритет, улучшенные лимиты.\n"
+            f"Оформить: открой мини-приложение → *Тарифы* или перейди: {base.rstrip('/')}/premium",
+            reply_markup=build_main_kb(),
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
+        return
 
     # Явный вопрос про возможности — отвечаем сразу "Да"
     if is_vision_capability_question(text):
