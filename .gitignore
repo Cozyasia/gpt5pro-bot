@@ -1,0 +1,34 @@
+# Python / build
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# IDE / ОС
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Секреты
+.env
+.env.*
+.env.local
+
+# Логи и временные
+logs/
+*.log
+
+# Медиа / временные загрузки / сессии (если используете)
+media/
+downloads/
+sessions/
+*.session
+
+# Сертификаты вебхука (если генерируете)
+webhook_cert.pem
+webhook_pkey.pem
