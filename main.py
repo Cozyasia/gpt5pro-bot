@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 import os
 import re
+import json
 import base64
 import logging
 from io import BytesIO
 
 import httpx
-from telegram import (
-    Update, InlineKeyboardMarkup, InlineKeyboardButton,
-    ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
-)
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
@@ -20,29 +18,25 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
-log = logging.getLogger("gpt5pro-bot")
+log = logging.getLogger("gpt-bot")
 
 # ========== ENV ==========
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()      # https://<subdomain>.onrender.com
+PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()     # https://<subdomain>.onrender.com
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()     # корень мини-приложения (статик)
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL       = os.environ.get("BANNER_URL", "").strip()      # можно пустым
+BANNER_URL       = os.environ.get("BANNER_URL", "").strip()     # не обязательно
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()      # адрес вашего мини-приложения (лендинга)
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
-
-BASE_WEB_URL = (WEBAPP_URL or PUBLIC_URL).rstrip("/")
-PREMIUM_URL  = f"{BASE_WEB_URL}/premium"
-TERMS_URL    = f"{BASE_WEB_URL}/terms"
 
 # ========== OPENAI / Tavily clients ==========
 from openai import OpenAI
@@ -63,10 +57,12 @@ SYSTEM_PROMPT = (
     "Отвечай по сути, структурируй списками/шагами, не выдумывай факты. "
     "Если ссылаешься на источники — в конце дай короткий список ссылок."
 )
+
 VISION_SYSTEM_PROMPT = (
-    "Ты чётко описываешь содержимое изображений: объекты, текст (OCR), схемы и графики. "
+    "Ты чётко описываешь содержимое изображений: объекты, текст, схемы, графики. "
     "Не идентифицируй личности людей и не пиши имена, если они не напечатаны на изображении."
 )
+
 VISION_CAPABILITY_HELP = (
     "Да — анализирую изображения и помогаю с видео по кадрам, а ещё распознаю голос. ✅\n\n"
     "• Фото/скриншоты: JPG/PNG/WebP (до ~10 МБ) — опишу, прочитаю текст, разберу графики.\n"
@@ -74,37 +70,6 @@ VISION_CAPABILITY_HELP = (
     "• Видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам.\n"
     "• Голосовые/аудио: распознаю речь и отвечу по содержанию."
 )
-
-START_TEXT = (
-    "**GPT-5 PRO — умный помощник на базе ChatGPT 🤖**\n"
-    "Отвечаю по делу, *ищу факты в интернете* 🌐, *понимаю фото* 🖼️ и *распознаю голос* 🎙️.\n\n"
-    "**Что умею:**\n"
-    "• ✍️ Эссе/рефераты/отчёты, планы, правки.\n"
-    "• 🧮 Расчёты, формулы, таблицы, наброски графиков.\n"
-    "• 📚 Объяснения, конспекты, переводы.\n"
-    "• 🔎 Поиск в сети со *ссылками*.\n"
-    "• 🖼️ Фото: описание, OCR, схемы/графики.\n"
-    "• 🎧 Голос/аудио: распознаю и отвечу по содержанию.\n"
-    "• 💼 Работа: письма, брифы, чек-листы, идеи.\n\n"
-    "Кнопки: 🧭 Меню · ⚙️ Режимы · 🧩 Примеры · ⭐ Подписка · 📄 Условия"
-)
-
-TERMS_MD = r"""
-ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ (ПУБЛИЧНАЯ ОФЕРТА)
-Краткая версия (полный текст в мини-приложении по кнопке ниже)
-
-Оператор: Алдуненков Сергей Сергеевич, ИНН 773001688050, e-mail: sale.rielt@bk.ru.
-Статус: самозанятый (НПД). Сервис: Telegram-бот «GPT-5 PRO · умный помощник».
-Используя бота, вы подтверждаете согласие с Соглашением и Политикой ПДн.
-
-— Функции: ответы ИИ, поиск в интернете со ссылками, анализ фото/скриншотов, распознавание аудио.
-— Ограничения: материалы ИИ носят рекомендательный характер, не являются юр/мед/инвест консультацией.
-— Подписка: 499 ₽/мес. Оплата через интегрированные провайдеры, доступ после подтверждения.
-— ПДн: Telegram-id/username/имя, тексты/файлы для обработки ИИ, тех. метаданные. Возможна трансграничная передача ПДн
-  поставщикам ИИ/хостинга/оплаты. Права субъекта ПДн доступны по запросу на sale.rielt@bk.ru.
-
-Полная версия: откройте мини-приложение → «Условия» или кнопка ниже.
-""".strip()
 
 # ========== HEURISTICS ==========
 _SMALLTALK_RE = re.compile(
@@ -179,8 +144,9 @@ def tavily_search(query: str, max_results: int = 5):
         log.exception("Tavily error: %s", e)
         return None, []
 
+# ========== OPENAI HELPERS ==========
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
-    """Текстовый ответ (с опциональным контекстом ссылок)."""
+    """Чисто текстовый ответ (с опциональным контекстом ссылок)."""
     if not oai:
         return "Не удалось получить ответ от модели (ключ/лимит). Попробуй позже."
 
@@ -228,7 +194,7 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
 # ========== STT: Deepgram -> Whisper fallback ==========
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
     """
-    1) Пытаемся распознать в Deepgram (есть кредит).
+    1) Пытаемся распознать в Deepgram (если есть ключ).
     2) Если не получилось — fallback на OpenAI Whisper.
     """
     data = buf.getvalue()
@@ -282,70 +248,105 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
     return ""
 
-# ========== KEYBOARD ==========
+# ========== UI: приветствие и клавиатура ==========
+def _w(tail: str = "") -> str:
+    """Склеиваем URL к мини-приложению/сайту."""
+    base = (WEBAPP_URL or PUBLIC_URL).rstrip("/")
+    if not tail:
+        return base
+    return f"{base}/{tail.lstrip('/')}"
+
+START_TEXT = (
+    "**GPT-5 PRO — умный помощник на базе ChatGPT 🤖**\n"
+    "Отвечаю по делу, *ищу факты в интернете* 🌐, *понимаю фото* 🖼️ и *распознаю голос* 🎙️.\n\n"
+    "**Что умею:**\n"
+    "• ✍️ Эссе/рефераты/отчёты, планы, правки.\n"
+    "• 🧮 Расчёты, формулы, таблицы, наброски графиков.\n"
+    "• 📚 Объяснения, конспекты, переводы.\n"
+    "• 🔎 Поиск в сети со *ссылками*.\n"
+    "• 🖼️ Фото: описание, OCR, схемы/графики.\n"
+    "• 🎧 Голос/аудио: распознаю и отвечу по содержанию.\n"
+    "• 💼 Работа: письма, брифы, чек-листы, идеи.\n\n"
+    "Кнопки: 🧭 Меню · ⚙️ Режимы · 🧩 Примеры · ⭐ Подписка"
+)
+
+MODES_TEXT = (
+    "⚙️ **Режимы работы**\n"
+    "• 💬 Универсальный — обычный диалог.\n"
+    "• 🧠 Исследователь — факты/источники, сводки.\n"
+    "• ✍️ Редактор — правки текста, стиль, структура.\n"
+    "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
+    "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
+    "• 🎙️ Голос — распознаю аудио и отвечаю по сути.\n\n"
+    "Выбирай режим сообщением или просто сформулируй задачу 😉"
+)
+
+EXAMPLES_TEXT = (
+    "🧩 **Примеры запросов**\n"
+    "• «Сделай конспект главы 3 и выдели формулы»\n"
+    "• «Проанализируй CSV, найди тренды и сделай краткий вывод»\n"
+    "• «Составь письмо клиенту, дружелюбно и по делу»\n"
+    "• «Суммируй статью из ссылки и дай источники»\n"
+    "• «Опиши текст на фото и извлеки таблицу»"
+)
+
 main_kb = ReplyKeyboardMarkup(
     [
-        [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=BASE_WEB_URL))],
+        [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=_w()))],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=PREMIUM_URL))],
-        [KeyboardButton("📄 Условия")],
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=_w("premium.html")))],
+        # при желании добавьте кнопку условий:
+        # [KeyboardButton("📄 Условия", web_app=WebAppInfo(url=_w("terms.html")))]
     ],
     resize_keyboard=True
 )
 
 # ========== HANDLERS ==========
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # однократный баннер (если задан)
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
     await update.effective_message.reply_text(
-        START_TEXT,
-        reply_markup=main_kb,
-        disable_web_page_preview=True,
-        parse_mode="Markdown"
+        START_TEXT, reply_markup=main_kb, disable_web_page_preview=True, parse_mode="Markdown"
     )
 
-async def on_terms(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("Открыть полный текст в мини-приложении", url=TERMS_URL)
-    ]])
-    await update.message.reply_text(TERMS_MD, disable_web_page_preview=True)
-    await update.message.reply_text(
-        "Продолжая работу с ботом, вы принимаете Пользовательское соглашение и Политику ПДн.",
-        reply_markup=kb,
-        disable_web_page_preview=True
-    )
+async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получаем события из WebApp (terms/premium/open_bot и т.п.)."""
+    wad = getattr(update.message, "web_app_data", None)
+    if not wad:
+        return
+    try:
+        payload = json.loads(wad.data or "{}")
+    except Exception:
+        payload = {"type": (wad.data or "")}
 
-async def on_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = (
-        "⚙️ **Режимы работы**\n\n"
-        "• **GPT-5 PRO (по умолчанию)** — умные ответы, структура, стиль.\n"
-        "• **Поиск в сети** — автоматически включается на фактических вопросах (даты, новости, цены).\n"
-        "• **Видение** — отправь фото/скриншот: опишу, прочитаю текст (OCR), разберу графики.\n"
-        "• **Голос** — отправь голосовое или аудио: распознаю и отвечу по содержанию.\n\n"
-        "Подписка **499 ₽/мес.** даёт комфортные лимиты и приоритет."
-    )
-    await update.message.reply_text(txt, disable_web_page_preview=True, parse_mode="Markdown")
-
-async def on_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = (
-        "🧩 **Примеры**\n\n"
-        "• «Сделай план эссе про цифровую безопасность»\n"
-        "• «Объясни простыми словами интегралы и дай 3 задачи»\n"
-        "• «Найди свежие данные по инфляции в РФ со ссылками»\n"
-        "• «Проанализируй этот скриншот — что на графике?» (пришли фото)\n"
-        "• «Вот аудио с идеей — набросай план проекта» (пришли голос/аудио)"
-    )
-    await update.message.reply_text(txt, disable_web_page_preview=True, parse_mode="Markdown")
+    t = (payload.get("type") or "").lower()
+    if "plan" in t or "subscribe" in t or "premium" in t:
+        await update.message.reply_text(
+            "⭐ Подписка: 499 ₽/мес.\n"
+            "Скоро запустим оплату в один клик (Telegram/ЮKassa/Крипто). "
+            "Пока оформить можно вручную — напишите на sale.rielt@bk.ru."
+        )
+    elif "help" in t:
+        await update.message.reply_text("Напишите ваш вопрос — ответим по делу 😉")
+    else:
+        await update.message.reply_text("Открыл бота из мини-приложения ✅")
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
-    # Явный вопрос про возможности — отвечаем сразу "Да"
+    # Быстрые разделы
+    if text.startswith("⚙️"):
+        await update.message.reply_text(MODES_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+        return
+    if text.startswith("🧩"):
+        await update.message.reply_text(EXAMPLES_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+        return
+
+    # Явный вопрос про возможности
     if is_vision_capability_question(text):
         await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True)
         return
@@ -394,7 +395,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _handle_image_bytes(update, context, buf.getvalue(), user_text)
 
 async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Картинки, присланные как файл (image/*). PDF/документы — отвечаем подсказкой."""
+    """Картинки, присланные как файл (image/*). PDF/документы — просто отвечаем подсказкой."""
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
@@ -485,28 +486,20 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ========== BOOTSTRAP ==========
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    # Команды
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("terms", on_terms))
 
-    # Кнопки клавиатуры
-    app.add_handler(MessageHandler(filters.Regex(r"^⚙️ Режимы$"), on_modes))
-    app.add_handler(MessageHandler(filters.Regex(r"^🧩 Примеры$"), on_examples))
-    app.add_handler(MessageHandler(filters.Regex(r"^📄 Условия$"), on_terms))
+    # WebApp события (кнопки из mini-app)
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
-    # Текстовые запросы
+    # текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-
-    # Фото и документы-картинки
+    # фото и документы-картинки
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document.IMAGE, on_document))
-
-    # Голосовые и аудио
+    # голосовые и аудио
     app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.AUDIO, on_audio))
-
-    # Видео — даём позитивную инструкцию
+    # видео — даём позитивную инструкцию
     app.add_handler(MessageHandler(filters.VIDEO, on_video))
     return app
 
