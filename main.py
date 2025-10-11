@@ -22,12 +22,12 @@ log = logging.getLogger("gpt-bot")
 
 # ========== ENV ==========
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()     # https://<subdomain>.onrender.com
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()     # корень мини-приложения (статик)
+PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()       # https://<subdomain>.onrender.com
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()       # можно оставить пустым — возьмем PUBLIC_URL
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL       = os.environ.get("BANNER_URL", "").strip()     # не обязательно
+BANNER_URL       = os.environ.get("BANNER_URL", "").strip()       # не обязательно
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
@@ -37,6 +37,8 @@ if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
+
+WEB_ROOT = WEBAPP_URL or PUBLIC_URL  # базовый адрес для WebApp-страниц
 
 # ========== OPENAI / Tavily clients ==========
 from openai import OpenAI
@@ -146,7 +148,6 @@ def tavily_search(query: str, max_results: int = 5):
 
 # ========== OPENAI HELPERS ==========
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
-    """Чисто текстовый ответ (с опциональным контекстом ссылок)."""
     if not oai:
         return "Не удалось получить ответ от модели (ключ/лимит). Попробуй позже."
 
@@ -167,7 +168,6 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         return "Не удалось получить ответ от модели (лимит/ключ). Попробуй позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
-    """Анализ изображения + текстовый вопрос."""
     if not oai:
         return "Не удалось проанализировать изображение (ключ/лимит). Попробуй позже."
     try:
@@ -194,7 +194,7 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
 # ========== STT: Deepgram -> Whisper fallback ==========
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
     """
-    1) Пытаемся распознать в Deepgram (если есть ключ).
+    1) Пытаемся распознать в Deepgram (есть кредит).
     2) Если не получилось — fallback на OpenAI Whisper.
     """
     data = buf.getvalue()
@@ -248,55 +248,14 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
     return ""
 
-# ========== UI: приветствие и клавиатура ==========
-def _w(tail: str = "") -> str:
-    """Склеиваем URL к мини-приложению/сайту."""
-    base = (WEBAPP_URL or PUBLIC_URL).rstrip("/")
-    if not tail:
-        return base
-    return f"{base}/{tail.lstrip('/')}"
-
-START_TEXT = (
-    "**GPT-5 PRO — умный помощник на базе ChatGPT 🤖**\n"
-    "Отвечаю по делу, *ищу факты в интернете* 🌐, *понимаю фото* 🖼️ и *распознаю голос* 🎙️.\n\n"
-    "**Что умею:**\n"
-    "• ✍️ Эссе/рефераты/отчёты, планы, правки.\n"
-    "• 🧮 Расчёты, формулы, таблицы, наброски графиков.\n"
-    "• 📚 Объяснения, конспекты, переводы.\n"
-    "• 🔎 Поиск в сети со *ссылками*.\n"
-    "• 🖼️ Фото: описание, OCR, схемы/графики.\n"
-    "• 🎧 Голос/аудио: распознаю и отвечу по содержанию.\n"
-    "• 💼 Работа: письма, брифы, чек-листы, идеи.\n\n"
-    "Кнопки: 🧭 Меню · ⚙️ Режимы · 🧩 Примеры · ⭐ Подписка"
-)
-
-MODES_TEXT = (
-    "⚙️ **Режимы работы**\n"
-    "• 💬 Универсальный — обычный диалог.\n"
-    "• 🧠 Исследователь — факты/источники, сводки.\n"
-    "• ✍️ Редактор — правки текста, стиль, структура.\n"
-    "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
-    "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
-    "• 🎙️ Голос — распознаю аудио и отвечаю по сути.\n\n"
-    "Выбирай режим сообщением или просто сформулируй задачу 😉"
-)
-
-EXAMPLES_TEXT = (
-    "🧩 **Примеры запросов**\n"
-    "• «Сделай конспект главы 3 и выдели формулы»\n"
-    "• «Проанализируй CSV, найди тренды и сделай краткий вывод»\n"
-    "• «Составь письмо клиенту, дружелюбно и по делу»\n"
-    "• «Суммируй статью из ссылки и дай источники»\n"
-    "• «Опиши текст на фото и извлеки таблицу»"
-)
+# ========== START UI ==========
+START_TEXT = "Привет! Я готов. Чем помочь?"
 
 main_kb = ReplyKeyboardMarkup(
     [
-        [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=_w()))],
+        [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=WEB_ROOT))],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=_w("premium.html")))],
-        # при желании добавьте кнопку условий:
-        # [KeyboardButton("📄 Условия", web_app=WebAppInfo(url=_w("terms.html")))]
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))],
     ],
     resize_keyboard=True
 )
@@ -308,45 +267,43 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
-    await update.effective_message.reply_text(
-        START_TEXT, reply_markup=main_kb, disable_web_page_preview=True, parse_mode="Markdown"
-    )
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
 
-async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получаем события из WebApp (terms/premium/open_bot и т.п.)."""
-    wad = getattr(update.message, "web_app_data", None)
+async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ловим события из мини-приложения (tg.sendData)."""
+    msg = update.effective_message
+    wad = getattr(msg, "web_app_data", None)
     if not wad:
         return
+    raw = wad.data or ""
     try:
-        payload = json.loads(wad.data or "{}")
+        payload = json.loads(raw) if raw.strip().startswith("{") else {"type": raw}
     except Exception:
-        payload = {"type": (wad.data or "")}
+        payload = {"type": str(raw)}
 
-    t = (payload.get("type") or "").lower()
-    if "plan" in t or "subscribe" in t or "premium" in t:
-        await update.message.reply_text(
-            "⭐ Подписка: 499 ₽/мес.\n"
-            "Скоро запустим оплату в один клик (Telegram/ЮKassa/Крипто). "
-            "Пока оформить можно вручную — напишите на sale.rielt@bk.ru."
+    ptype = (payload.get("type") or "").strip().lower()
+    log.info("web_app_data: %s", payload)
+
+    if ptype in ("help_from_webapp", "help", "question"):
+        await msg.reply_text("Готов помочь! Напишите ваш вопрос — отвечу здесь в чате. 🙂")
+        return
+    if ptype in ("plan_from_webapp", "plan", "subscribe", "subscription"):
+        # Дадим кнопку сразу открыть подписку как WebApp-страницу
+        kb = ReplyKeyboardMarkup(
+            [[KeyboardButton("⭐ Открыть подписку", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))]],
+            resize_keyboard=True, one_time_keyboard=True
         )
-    elif "help" in t:
-        await update.message.reply_text("Напишите ваш вопрос — ответим по делу 😉")
-    else:
-        await update.message.reply_text("Открыл бота из мини-приложения ✅")
+        await msg.reply_text("Оформить подписку можно по кнопке ниже. ⤵️", reply_markup=kb)
+        return
+
+    # По умолчанию — просто приветствуем и показываем основное меню
+    await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
-    # Быстрые разделы
-    if text.startswith("⚙️"):
-        await update.message.reply_text(MODES_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    if text.startswith("🧩"):
-        await update.message.reply_text(EXAMPLES_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-
-    # Явный вопрос про возможности
+    # Явный вопрос про возможности — отвечаем сразу "Да"
     if is_vision_capability_question(text):
         await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True)
         return
@@ -486,10 +443,11 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ========== BOOTSTRAP ==========
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", cmd_start))
 
-    # WebApp события (кнопки из mini-app)
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+    # события из WebApp (tg.sendData)
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
 
     # текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
