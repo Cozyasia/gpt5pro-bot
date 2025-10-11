@@ -23,7 +23,7 @@ log = logging.getLogger("gpt-bot")
 # ========== ENV ==========
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()       # https://<subdomain>.onrender.com
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()       # можно оставить пустым — возьмем PUBLIC_URL
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()       # опц.; если пусто — возьмём PUBLIC_URL
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
@@ -248,9 +248,30 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
     return ""
 
-# ========== START UI ==========
+# ========== STATIC TEXTS ==========
 START_TEXT = "Привет! Я готов. Чем помочь?"
 
+MODES_TEXT = (
+    "⚙️ *Режимы работы*\n"
+    "• 💬 Универсальный — обычный диалог.\n"
+    "• 🧠 Исследователь — факты/источники, сводки.\n"
+    "• ✍️ Редактор — правки текста, стиль, структура.\n"
+    "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
+    "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
+    "• 🎙️ Голос — распознаю аудио и отвечаю по сути.\n\n"
+    "_Выбирай режим сообщением или просто сформулируй задачу._"
+)
+
+EXAMPLES_TEXT = (
+    "🧩 *Примеры запросов*\n"
+    "• «Сделай конспект главы 3 и выдели формулы»\n"
+    "• «Проанализируй CSV, найди тренды и сделай краткий вывод»\n"
+    "• «Составь письмо клиенту, дружелюбно и по делу»\n"
+    "• «Суммируй статью из ссылки и дай источники»\n"
+    "• «Опиши текст на фото и извлеки таблицу»"
+)
+
+# ========== START UI / KEYBOARD ==========
 main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=WEB_ROOT))],
@@ -269,8 +290,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
     await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
 
+async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(MODES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
+
+async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
+
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ловим события из мини-приложения (tg.sendData)."""
+    """События из мини-приложения (tg.sendData)."""
     msg = update.effective_message
     wad = getattr(msg, "web_app_data", None)
     if not wad:
@@ -285,10 +312,13 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     log.info("web_app_data: %s", payload)
 
     if ptype in ("help_from_webapp", "help", "question"):
-        await msg.reply_text("Готов помочь! Напишите ваш вопрос — отвечу здесь в чате. 🙂")
+        await msg.reply_text(
+            "🧑‍💻 Поддержка GPT-5 PRO.\nНапиши здесь свой вопрос — отвечу в чате.\n\n"
+            "Также можно на почту: sale.rielt@bk.ru"
+        )
         return
+
     if ptype in ("plan_from_webapp", "plan", "subscribe", "subscription"):
-        # Дадим кнопку сразу открыть подписку как WebApp-страницу
         kb = ReplyKeyboardMarkup(
             [[KeyboardButton("⭐ Открыть подписку", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))]],
             resize_keyboard=True, one_time_keyboard=True
@@ -296,21 +326,29 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text("Оформить подписку можно по кнопке ниже. ⤵️", reply_markup=kb)
         return
 
-    # По умолчанию — просто приветствуем и показываем основное меню
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
-    # Явный вопрос про возможности — отвечаем сразу "Да"
+    # быстрые команды по кнопкам
+    lower = text.lower()
+    if lower in ("⚙️ режимы", "режимы", "/modes"):
+        await cmd_modes(update, context)
+        return
+    if lower in ("🧩 примеры", "примеры", "/examples"):
+        await cmd_examples(update, context)
+        return
+
+    # вопрос про возможности vision/voice
     if is_vision_capability_question(text):
         await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True)
         return
 
     await typing(context, chat_id)
 
-    # Маленькие разговоры — без веба
+    # Small talk — без веб-поиска
     if is_smalltalk(text):
         reply = await ask_openai_text(text)
         await update.message.reply_text(reply)
@@ -445,6 +483,8 @@ def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("modes", cmd_modes))
+    app.add_handler(CommandHandler("examples", cmd_examples))
 
     # события из WebApp (tg.sendData)
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
