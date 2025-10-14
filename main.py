@@ -1,4 +1,22 @@
 # -*- coding: utf-8 -*-
+"""
+GPT-5 PRO Bot (Telegram, PTB v20+)
+
+Ключевые фичи:
+- OpenAI/OpenRouter через ENV:
+    OPENAI_API_KEY   — ключ (OpenRouter или OpenAI)
+    OPENAI_BASE_URL  — при работе через OpenRouter укажи: https://openrouter.ai/api/v1
+    OPENAI_MODEL     — напр. "openai/gpt-4o-mini" (OpenRouter) или "gpt-4o-mini" (OpenAI)
+    OPENROUTER_SITE_URL — (опц.) для X-Referer заголовка
+    OPENROUTER_APP_NAME — (опц.) для X-Title заголовка
+- Mini-App web_app_data: кнопки «Задать вопрос», «Подписка», «Открыть бота»
+- Vision: фото/картинки, подпись к фото — в диалог
+- Голос: Deepgram → fallback Whisper
+- Веб-поиск Tavily (по эвристике should_browse)
+- /start, /modes, /examples, клавиатура с WebApp-кнопками
+- Вебхуки для Render: PUBLIC_URL/webhook/<BOT_TOKEN>
+"""
+
 import os
 import re
 import json
@@ -13,21 +31,27 @@ from telegram.ext import (
 )
 from telegram.constants import ChatAction
 
-# ========== LOGGING ==========
+# ================== LOGGING ==================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
-log = logging.getLogger("gpt-bot")
+log = logging.getLogger("gpt5pro-bot")
 
-# ========== ENV ==========
+# ================== ENV ==================
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
-PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()       # https://<subdomain>.onrender.com
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()       # опц.; если пусто — возьмём PUBLIC_URL
+PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()      # https://<subdomain>.onrender.com
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()      # если пусто — возьмём PUBLIC_URL
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip() # OpenRouter: https://openrouter.ai/api/v1
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
+
+# «Вежливые» заголовки для OpenRouter (необязательно, но желательно)
+OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
+OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
+
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
-BANNER_URL       = os.environ.get("BANNER_URL", "").strip()       # не обязательно
+BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
@@ -40,10 +64,26 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
 
 WEB_ROOT = WEBAPP_URL or PUBLIC_URL  # базовый адрес для WebApp-страниц
 
-# ========== OPENAI / Tavily clients ==========
+# ================== OpenAI / OpenRouter client ==================
 from openai import OpenAI
-oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+_default_headers = {}
+# Для OpenRouter — корректно заполняем заголовки (они их любят)
+if OPENROUTER_SITE_URL:
+    _default_headers["HTTP-Referer"] = OPENROUTER_SITE_URL
+if OPENROUTER_APP_NAME:
+    _default_headers["X-Title"] = OPENROUTER_APP_NAME
+
+oai = None
+if OPENAI_API_KEY:
+    # Если OPENAI_BASE_URL задан, клиент пойдёт в OpenRouter (или другой совместимый бэкенд)
+    oai = OpenAI(
+        api_key=OPENAI_API_KEY,
+        base_url=OPENAI_BASE_URL or None,
+        default_headers=_default_headers or None
+    )
+
+# ================== Tavily ==================
 try:
     if TAVILY_API_KEY:
         from tavily import TavilyClient
@@ -53,7 +93,7 @@ try:
 except Exception:
     tavily = None
 
-# ========== PROMPTS ==========
+# ================== PROMPTS ==================
 SYSTEM_PROMPT = (
     "Ты дружелюбный и лаконичный ассистент на русском. "
     "Отвечай по сути, структурируй списками/шагами, не выдумывай факты. "
@@ -62,7 +102,7 @@ SYSTEM_PROMPT = (
 
 VISION_SYSTEM_PROMPT = (
     "Ты чётко описываешь содержимое изображений: объекты, текст, схемы, графики. "
-    "Не идентифицируй личности людей и не пиши имена, если они не напечатаны на изображении."
+    "Не идентифицируй личности людей и не указывай имена, если они не напечатаны на изображении."
 )
 
 VISION_CAPABILITY_HELP = (
@@ -73,7 +113,7 @@ VISION_CAPABILITY_HELP = (
     "• Голосовые/аудио: распознаю речь и отвечу по содержанию."
 )
 
-# ========== HEURISTICS ==========
+# ================== HEURISTICS ==================
 _SMALLTALK_RE = re.compile(
     r"^(привет|здравствуй|добрый\s*(день|вечер|утро)|хи|hi|hello|хелло|как дела|спасибо|пока)\b",
     re.IGNORECASE
@@ -102,7 +142,7 @@ def should_browse(text: str) -> bool:
 def is_vision_capability_question(text: str) -> bool:
     return bool(_CAPABILITY_RE.search(text))
 
-# ========== UTILS ==========
+# ================== UTILS ==================
 async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
     try:
         await ctx.bot.send_chat_action(chat_id, action=ChatAction.TYPING)
@@ -146,7 +186,7 @@ def tavily_search(query: str, max_results: int = 5):
         log.exception("Tavily error: %s", e)
         return None, []
 
-# ========== OPENAI HELPERS ==========
+# ================== OPENAI HELPERS ==================
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     if not oai:
         return "Не удалось получить ответ от модели (ключ/лимит). Попробуй позже."
@@ -179,8 +219,7 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": user_text or "Опиши, что на изображении и какой там текст."},
-                        {"type": "image_url",
-                         "image_url": {"url": f"data:{mime};base64,{img_b64}"}}
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}" }}
                     ]
                 }
             ],
@@ -191,10 +230,10 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         log.exception("Vision error: %s", e)
         return "Не удалось проанализировать изображение (лимит/ключ). Попробуй позже."
 
-# ========== STT: Deepgram -> Whisper fallback ==========
+# ================== STT: Deepgram -> Whisper fallback ==================
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
     """
-    1) Пытаемся распознать в Deepgram (есть кредит).
+    1) Пытаемся распознать в Deepgram (если есть ключ).
     2) Если не получилось — fallback на OpenAI Whisper.
     """
     data = buf.getvalue()
@@ -239,7 +278,7 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
             buf2.seek(0)
             setattr(buf2, "name", filename_hint)
             tr = oai.audio.transcriptions.create(
-                model=TRANSCRIBE_MODEL,  # whisper-1
+                model=TRANSCRIBE_MODEL,  # "whisper-1"
                 file=buf2
             )
             return (tr.text or "").strip()
@@ -248,7 +287,7 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
     return ""
 
-# ========== STATIC TEXTS ==========
+# ================== STATIC TEXTS ==================
 START_TEXT = "Привет! Я готов. Чем помочь?"
 
 MODES_TEXT = (
@@ -256,9 +295,9 @@ MODES_TEXT = (
     "• 💬 Универсальный — обычный диалог.\n"
     "• 🧠 Исследователь — факты/источники, сводки.\n"
     "• ✍️ Редактор — правки текста, стиль, структура.\n"
-    "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
+    "• 📊 Аналитик — формулы, таблицы, расчёты.\n"
     "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
-    "• 🎙️ Голос — распознаю аудио и отвечаю по сути.\n\n"
+    "• 🎙️ Голос — распознаю аудио и отвечаю по содержанию.\n\n"
     "_Выбирай режим сообщением или просто сформулируй задачу._"
 )
 
@@ -271,7 +310,7 @@ EXAMPLES_TEXT = (
     "• «Опиши текст на фото и извлеки таблицу»"
 )
 
-# ========== START UI / KEYBOARD ==========
+# ================== START UI / KEYBOARD ==================
 main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=WEB_ROOT))],
@@ -281,7 +320,7 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ========== HANDLERS ==========
+# ================== HANDLERS ==================
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if BANNER_URL:
         try:
@@ -326,37 +365,35 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text("Оформить подписку можно по кнопке ниже. ⤵️", reply_markup=kb)
         return
 
+    if ptype in ("open_bot", "open"):
+        await msg.reply_text("Открыл бота. Можешь писать сюда свой запрос. 🙂", reply_markup=main_kb)
+        return
+
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
-    # быстрые команды по кнопкам
     lower = text.lower()
     if lower in ("⚙️ режимы", "режимы", "/modes"):
-        await cmd_modes(update, context)
-        return
+        await cmd_modes(update, context); return
     if lower in ("🧩 примеры", "примеры", "/examples"):
-        await cmd_examples(update, context)
-        return
+        await cmd_examples(update, context); return
 
-    # вопрос про возможности vision/voice
     if is_vision_capability_question(text):
         await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True)
         return
 
     await typing(context, chat_id)
 
-    # Small talk — без веб-поиска
     if is_smalltalk(text):
         reply = await ask_openai_text(text)
         await update.message.reply_text(reply)
         return
 
-    # Нужен ли веб-поиск?
-    web_ctx = ""
-    sources = []
+    # Веб-поиск по эвристике
+    web_ctx, sources = "", []
     if should_browse(text):
         answer_from_search, results = tavily_search(text, max_results=5)
         sources = results or []
@@ -367,7 +404,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
 
-    # Ответ модели
     answer = await ask_openai_text(text, web_ctx=web_ctx)
     answer += format_sources(sources)
     await update.message.reply_text(answer, disable_web_page_preview=False)
@@ -390,7 +426,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _handle_image_bytes(update, context, buf.getvalue(), user_text)
 
 async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Картинки, присланные как файл (image/*). PDF/документы — просто отвечаем подсказкой."""
+    """Картинки, присланные как файл (image/*). PDF/документы — даём подсказку."""
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
@@ -423,8 +459,7 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     prefix = f"🗣️ Распознал: «{text}»\n\n"
-    web_ctx = ""
-    sources = []
+    web_ctx, sources = "", []
     if should_browse(text):
         answer_from_search, results = tavily_search(text, max_results=5)
         sources = results or []
@@ -456,8 +491,7 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     prefix = f"🗣️ Распознал: «{text}»\n\n"
-    web_ctx = ""
-    sources = []
+    web_ctx, sources = "", []
     if should_browse(text):
         answer_from_search, results = tavily_search(text, max_results=5)
         sources = results or []
@@ -478,7 +512,7 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Да, помогу с видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам и отвечу по содержанию. 📽️"
     )
 
-# ========== BOOTSTRAP ==========
+# ================== BOOTSTRAP ==================
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
