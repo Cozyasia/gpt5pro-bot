@@ -41,6 +41,10 @@ DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()      # обычный OpenAI ключ для Whisper (опц.)
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
+# NEW: Media generation
+RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()      # Runway API (видео)
+OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY  # OpenAI Images
+
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -72,6 +76,9 @@ oai_llm = OpenAI(
 oai_stt = None
 if OPENAI_STT_KEY:
     oai_stt = OpenAI(api_key=OPENAI_STT_KEY)        # всегда официальный OpenAI для аудио
+
+# NEW: Отдельный клиент для картинок (Images API всегда на api.openai.com)
+oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)
 
 # Tavily (поиск)
 try:
@@ -268,8 +275,117 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
     return ""
 
+# ========== NEW: IMAGES (OpenAI gpt-image-1) ==========
+async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = " ".join(context.args).strip() if context.args else ""
+    if not prompt:
+        await update.effective_message.reply_text(
+            "Напиши так: /img «логотип Cozy Asia, неон, плоская иконка»"
+        )
+        return
+
+    try:
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+
+        resp = oai_img.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="1024x1024",
+            n=1,
+        )
+        b64 = resp.data[0].b64_json
+        img_bytes = base64.b64decode(b64)
+
+        await update.effective_message.reply_photo(
+            photo=img_bytes,
+            caption=f"Готово ✅\nЗапрос: {prompt}"
+        )
+    except Exception as e:
+        log.exception("Images API error: %s", e)
+        await update.effective_message.reply_text(
+            "⚠️ Не удалось создать изображение. Проверь OPENAI_IMAGE_KEY (нужен обычный OpenAI ключ)."
+        )
+
+# ========== NEW: VIDEO (Runway text_to_video) ==========
+RUNWAY_URL = "https://dev.runwayml.com/v1/text_to_video"   # из твоего Request History
+RUNWAY_JSON_TEMPLATE = {
+    "promptText": "{PROMPT}",
+    "model": "veo3",                # у тебя на скрине
+    "ratio": "720:1280",
+    "duration": 8
+}
+
+async def runway_create_task(prompt: str, duration: int = 8) -> str:
+    if not RUNWAY_API_KEY:
+        raise RuntimeError("RUNWAY_API_KEY не задан")
+    payload = json.loads(
+        json.dumps(RUNWAY_JSON_TEMPLATE)
+        .replace("{PROMPT}", prompt)
+        .replace("8", str(duration))
+    )
+    async with httpx.AsyncClient(timeout=None) as http:
+        r = await http.post(
+            RUNWAY_URL,
+            headers={
+                "Authorization": f"Bearer {RUNWAY_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+        r.raise_for_status()
+        data = r.json()
+        job_id = data.get("id")
+        if not job_id:
+            raise RuntimeError(f"Runway: не пришёл id задачи: {data}")
+        return job_id
+
+async def runway_wait_and_download(job_id: str) -> bytes:
+    status_url = f"https://dev.runwayml.com/v1/tasks/{job_id}"
+    async with httpx.AsyncClient(timeout=None) as http:
+        while True:
+            st = await http.get(
+                status_url,
+                headers={"Authorization": f"Bearer {RUNWAY_API_KEY}"},
+            )
+            st.raise_for_status()
+            data = st.json()
+            out = data.get("output") or {}
+            video_url = out.get("url") or out.get("video_url")
+            if video_url:
+                f = await http.get(video_url)
+                f.raise_for_status()
+                return f.content
+            await asyncio.sleep(3)
+
+async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = " ".join(context.args).strip()
+    if not prompt:
+        await update.effective_message.reply_text(
+            "Напиши так: /video «закат на Самуи, дрон, кинематографично, тёплые цвета»"
+        )
+        return
+
+    await update.effective_message.reply_text("🎬 Генерирую видео через Runway…")
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
+
+    try:
+        job_id = await runway_create_task(prompt, duration=8)
+        video_bytes = await runway_wait_and_download(job_id)
+        await update.effective_message.reply_video(
+            video=video_bytes,
+            supports_streaming=True,
+            caption=f"Готово 🎥\n{prompt}"
+        )
+    except Exception as e:
+        log.exception("Runway video error: %s", e)
+        await update.effective_message.reply_text(f"⚠️ Видео не удалось: {e}")
+
 # ========== STATIC TEXTS ==========
-START_TEXT = "Привет! Я готов. Чем помочь?"
+START_TEXT = (
+    "Привет! Я готов. Чем помочь?\n\n"
+    "🖼 /img <описание> — создать изображение (OpenAI)\n"
+    "🎬 /video <описание> — короткое видео (Runway, ~8 сек)\n"
+)
 
 MODES_TEXT = (
     "⚙️ *Режимы работы*\n"
@@ -278,7 +394,7 @@ MODES_TEXT = (
     "• ✍️ Редактор — правки текста, стиль, структура.\n"
     "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
     "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
-    "• 🎙️ Голос — распознаю аудио и отвечаю по содержанию.\n\n"
+    "• 🎙️ Голос — распознаю аудио и отвечу по содержанию.\n\n"
     "_Выбирай режим сообщением или просто сформулируй задачу._"
 )
 
@@ -487,6 +603,10 @@ def build_app():
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("modes", cmd_modes))
     app.add_handler(CommandHandler("examples", cmd_examples))
+
+    # NEW:
+    app.add_handler(CommandHandler("img", cmd_img))
+    app.add_handler(CommandHandler("video", cmd_make_video))
 
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
