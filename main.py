@@ -52,8 +52,7 @@ PREMIUM_USER_IDS = set(
 )
 
 # >>> LUMA: begin
-# Заготовка под Luma (когда дашь ключ — просто добавим реальные вызовы)
-LUMA_API_KEY = os.environ.get("LUMA_API_KEY", "").strip()
+LUMA_API_KEY = os.environ.get("LUMA_API_KEY", "").strip()  # ключ вида luma-xxxxxxxx
 # >>> LUMA: end
 
 PORT             = int(os.environ.get("PORT", "10000"))
@@ -388,6 +387,86 @@ async def _call_handler_with_prompt(handler, update: Update, context: ContextTyp
     finally:
         context.args = old_args
 
+# >>> LUMA HELPERS: begin
+# Парсинг длительности и соотношения сторон из текста: "6s", "10 sec", "9:16" и т.п.
+_DURATION_RE = re.compile(r"(?:(\d{1,2})\s*(?:sec|secs|s|сек))", re.I)
+_AR_RE = re.compile(r"\b(16:9|9:16|4:3|3:4|1:1|21:9|9:21)\b", re.I)
+
+def parse_video_opts_from_text(text: str, default_duration: int = 5, default_ar: str = "16:9"):
+    """Возвращает (duration_seconds:int, aspect_ratio:str, clean_prompt:str)."""
+    duration = default_duration
+    ar = default_ar
+    t = text
+
+    m = _DURATION_RE.search(t)
+    if m:
+        try:
+            duration = max(2, min(20, int(m.group(1))))
+        except Exception:
+            pass
+        t = _DURATION_RE.sub("", t, count=1)
+
+    m = _AR_RE.search(t)
+    if m:
+        ar = m.group(1)
+        t = _AR_RE.sub("", t, count=1)
+
+    clean = re.sub(r"\s{2,}", " ", t.replace(" ,", ",")).strip(" ,.;-—")
+    return duration, ar, clean
+
+def _luma_make_video_sync(prompt: str, duration: int = 5, aspect_ratio: str = "16:9") -> bytes:
+    """Создаёт задачу в Luma Dream Machine и возвращает mp4-байты (блокирующе)."""
+    if not LUMA_API_KEY:
+        raise RuntimeError("LUMA_API_KEY не задан")
+    headers = {
+        "Authorization": f"Bearer {LUMA_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    create_url = "https://api.lumalabs.ai/dream-machine/v1/generations"
+    payload = {
+        "prompt": prompt,
+        "duration": f"{duration}s",
+        "aspect_ratio": aspect_ratio,
+    }
+    with httpx.Client(timeout=None) as http:
+        r = http.post(create_url, headers=headers, json=payload)
+        try:
+            r.raise_for_status()
+        except Exception:
+            raise RuntimeError(f"Luma create error: {r.status_code} {r.text}")
+        gen = r.json()
+        gen_id = gen.get("id") or gen.get("generation_id")
+        if not gen_id:
+            raise RuntimeError(f"Luma: не получили id задачи: {gen}")
+
+        # Пуллим до завершения
+        get_url = f"https://api.lumalabs.ai/dream-machine/v1/generations/{gen_id}"
+        status = None
+        last_msg = ""
+        while True:
+            g = http.get(get_url, headers=headers)
+            try:
+                g.raise_for_status()
+            except Exception:
+                raise RuntimeError(f"Luma poll error: {g.status_code} {g.text}")
+            data = g.json()
+            status = data.get("state") or data.get("status")
+            last_msg = data.get("failure_reason") or data.get("message") or ""
+            if status in ("completed", "succeeded", "SUCCEEDED"):
+                assets = data.get("assets") or {}
+                video_url = assets.get("video") or assets.get("mp4") or assets.get("file")
+                if not video_url:
+                    raise RuntimeError(f"Luma: нет ссылки на видео в ответе: {data}")
+                # Скачиваем mp4
+                v = http.get(video_url)
+                v.raise_for_status()
+                return v.content
+            if status in ("failed", "error", "cancelled", "canceled"):
+                raise RuntimeError(f"Luma failed: {last_msg or status}")
+            time.sleep(2)
+# >>> LUMA HELPERS: end
+
 # >>> ENGINE MODES: begin
 # Режимы движков и меню выбора
 ENGINE_GPT    = "gpt"
@@ -489,6 +568,43 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# -------- LUMA HANDLERS --------
+async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    key = LUMA_API_KEY
+    lines = [f"LUMA_API_KEY: {'✅ найден' if key else '❌ нет'}"]
+    if key:
+        lines.append(f"Формат: {'ok' if key.startswith('luma-') else 'не начинается с luma-'}")
+        lines.append(f"Длина: {len(key)}")
+    await update.message.reply_text("\n".join(lines))
+
+async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # prompt может прийти как аргументы или из текста сообщения
+    prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
+    # удалить возможный префикс команды
+    prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
+
+    dur, ar, prompt = parse_video_opts_from_text(prompt_raw)
+
+    if not prompt:
+        await update.effective_message.reply_text("Напиши так: /video_luma закат над морем, 6s, 9:16")
+        return
+    if not LUMA_API_KEY:
+        await update.effective_message.reply_text("🎬 Luma: не задан LUMA_API_KEY.")
+        return
+
+    await update.effective_message.reply_text(f"🎬 Генерирую через Luma… (⏱ {dur}s • {ar})")
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
+    try:
+        video_bytes = await asyncio.to_thread(_luma_make_video_sync, prompt, dur, ar)
+        await update.effective_message.reply_video(
+            video=video_bytes,
+            supports_streaming=True,
+            caption=f"Готово 🎥 {dur}s • {ar}\n{prompt}"
+        )
+    except Exception as e:
+        await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
+        log.exception("Luma video error: %s", e)
+
 # -------- HANDLERS --------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if BANNER_URL:
@@ -567,24 +683,23 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mj = f"/imagine prompt: {prompt} --ar 3:2 --stylize 250 --v 6.0"
             await update.message.reply_text(f"🖼 Midjourney промпт:\n{mj}")
             return
-        # Luma пока не подключена — рендерим через OpenAI Images
+        # Luma пока не делает картинки — рендерим через OpenAI Images
         await _call_handler_with_prompt(cmd_img, update, context, prompt); return
 
     if intent == "video" and prompt:
+        # распакуем опции прямо из текста
+        dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
         eng = context.user_data.get("engine")
         if eng == ENGINE_LUMA:
-            # >>> LUMA: begin
             if not LUMA_API_KEY:
                 await update.message.reply_text(
                     "🎬 Luma выбрана, но API ключ не задан. Пока могу предложить Runway (если PRO) или описать промпт."
-                )
-                return
-            # здесь позже добавим реальный вызов Luma
-            await update.message.reply_text("🎬 Luma интеграция будет активирована после включения API-ключа.")
-            return
-            # >>> LUMA: end
+                ); return
+            # вызов Luma
+            context.args = [clean_prompt]  # чтобы handler увидел промпт
+            await cmd_make_video_luma(update, context); return
         elif eng == ENGINE_RUNWAY:
-            await _call_handler_with_prompt(cmd_make_video, update, context, prompt); return
+            await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
         else:
             # По умолчанию подскажем выбрать движок
             await update.message.reply_text("ℹ️ Для видео выбери Luma или Runway через «🧭 Меню движков».")
@@ -715,6 +830,7 @@ def build_app():
     app.add_handler(CommandHandler("modes", cmd_modes))
     app.add_handler(CommandHandler("examples", cmd_examples))
     app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))  # NEW
+    app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))      # NEW
 
     # NEW: меню движков командой
     app.add_handler(CommandHandler("engines", open_engines_menu))
@@ -722,6 +838,7 @@ def build_app():
     # Команды тоже доступны (оставляем, но не рекламируем)
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("video", cmd_make_video))
+    app.add_handler(CommandHandler("video_luma", cmd_make_video_luma))  # NEW
 
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
     # клики по кнопкам движков
