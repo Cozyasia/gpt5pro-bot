@@ -9,7 +9,7 @@ from io import BytesIO
 import asyncio
 
 import httpx
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InputFile
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
@@ -26,8 +26,8 @@ log = logging.getLogger("gpt-bot")
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
-OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()      # ключ для LLM (OpenRouter или OpenAI)
-OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()     # для OpenRouter: https://openrouter.ai/api/v1
+OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()      # LLM (OpenRouter или OpenAI)
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()     # напр. https://openrouter.ai/api/v1
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
@@ -39,12 +39,12 @@ TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
 # STT:
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
-OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()      # обычный OpenAI ключ для Whisper (опц.)
+OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()      # отдельный OpenAI ключ для Whisper (опц.)
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
-# NEW: Media generation
-RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()      # ключ Runway API (из dev.runwayml.com)
-OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY  # обычный OpenAI ключ
+# Media:
+RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()      # ключ Runway (dev.runwayml.com → API Keys)
+OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY  # обычный OpenAI ключ (для картинок)
 
 PORT             = int(os.environ.get("PORT", "10000"))
 
@@ -119,28 +119,50 @@ _CAPABILITY_RE = re.compile(
     re.IGNORECASE
 )
 
-# --- NEW: авто-распознавание намерений ---
-_IMG_TRIG = r"(картин\w+|изображен\w+|логотип\w+|иконк\w+|image|picture|logo|icon)"
-_VID_TRIG = r"(видео|ролик|анимаци\w+|clip|video|shorts|reel)"
-_VERB     = r"(сделай|сгенерируй|создай|нарисуй|сформируй|собери|сотвор|хочу|нужно|надо|please|make|generate|create)"
+# === INTENT: распознаём просьбы без команд ===
+_IMG_WORDS = r"(картин\w+|изображен\w+|логотип\w+|иконк\w+|постер\w*|image|picture|logo|icon|banner)"
+_VID_WORDS = r"(видео|ролик\w*|клип\w*|анимаци\w*|shorts|reel|clip|video)"
+_VERBS     = r"(сделай|создай|сгенерируй|нарисуй|сформируй|собери|сними|сотвор|хочу|нужно|надо|please|make|generate|create)"
 
 def detect_media_intent(text: str):
-    """Возвращает ('image'|'video'|None, prompt)"""
-    t = (text or "").lower().strip()
+    """
+    Возвращает ('image'|'video'|None, prompt)
+    Покрывает:
+      - "создай видео закат на Самуи..."
+      - "сгенерируй картинку логотип Cozy Asia..."
+      - "video ..." / "img ..." без слэшей
+    """
+    if not text:
+        return None, ""
+    t = text.strip()
+    tl = t.lower()
 
-    if t.startswith("img "):
-        return "image", text.split(" ", 1)[1].strip()
-    if t.startswith("video "):
-        return "video", text.split(" ", 1)[1].strip()
+    prefixes_video = [
+        "создай видео", "сделай видео", "сгенерируй видео", "сними видео",
+        "create video", "generate video", "make video", "video "
+    ]
+    for p in prefixes_video:
+        if tl.startswith(p):
+            return "video", t[len(p):].strip(" :—-\"“”'«»")
 
-    vid = re.search(fr"{_VERB}[^\.!\n]{{0,80}}{_VID_TRIG}", t)
-    img = re.search(fr"{_VERB}[^\.!\n]{{0,80}}{_IMG_TRIG}", t)
-    if vid:
-        prompt = re.sub(fr"{_VERB}|{_VID_TRIG}", "", t)
-        return "video", prompt.strip(" :—-\"“”'«»") or text
-    if img:
-        prompt = re.sub(fr"{_VERB}|{_IMG_TRIG}", "", t)
-        return "image", prompt.strip(" :—-\"“”'«»") or text
+    prefixes_image = [
+        "создай картинку", "сделай картинку", "сгенерируй картинку", "нарисуй картинку",
+        "сгенерируй изображение", "создай изображение", "img ", "image ", "picture "
+    ]
+    for p in prefixes_image:
+        if tl.startswith(p):
+            return "image", t[len(p):].strip(" :—-\"“”'«»")
+
+    if re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
+        prompt = re.sub(_VID_WORDS, "", tl)
+        prompt = re.sub(_VERBS, "", prompt)
+        return "video", prompt.strip(" :—-\"“”'«»")
+
+    if re.search(_IMG_WORDS, tl) and re.search(_VERBS, tl):
+        prompt = re.sub(_IMG_WORDS, "", tl)
+        prompt = re.sub(_VERBS, "", prompt)
+        return "image", prompt.strip(" :—-\"“”'«»")
+
     return None, ""
 
 def is_smalltalk(text: str) -> bool:
@@ -268,19 +290,21 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("⚠️ Не удалось создать изображение. Проверь OPENAI_IMAGE_KEY (нужен обычный OpenAI ключ).")
 
 # -------- VIDEO (Runway SDK) --------
-# Используем официальный SDK runwayml — как в твоём примере.
+# прокинем ключ в окружение для SDK
+if RUNWAY_API_KEY:
+    os.environ["RUNWAY_API_KEY"] = RUNWAY_API_KEY
+
 from runwayml import RunwayML
 
 def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
-    """Синхронная функция: создаёт задачу Runway и возвращает mp4-байты (блокирующе).
-       Вызываем её из async кода через asyncio.to_thread."""
+    """Создаёт задачу Runway и возвращает mp4-байты (блокирующе)."""
     if not RUNWAY_API_KEY:
         raise RuntimeError("RUNWAY_API_KEY не задан")
     client = RunwayML(api_key=RUNWAY_API_KEY)
 
     task = client.text_to_video.create(
         promptText=prompt,
-        model="veo3",        # из твоего Get Code
+        model="veo3",            # из твоего Get Code
         ratio="720:1280",
         duration=duration,
     )
@@ -294,7 +318,6 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
     if task.status != "SUCCEEDED":
         raise RuntimeError(f"Runway task failed: {task.status}")
 
-    # У тебя в JSON output — это массив URL (берём первый)
     output = getattr(task, "output", None)
     if isinstance(output, list) and output:
         video_url = output[0]
@@ -303,7 +326,6 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
     else:
         raise RuntimeError(f"Runway: не найден URL результата в output: {output}")
 
-    # Скачиваем mp4
     with httpx.Client(timeout=None) as http:
         r = http.get(video_url)
         r.raise_for_status()
@@ -312,17 +334,30 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip()
     if not prompt:
-        await update.effective_message.reply_text("Напиши так: «создай видео закат на Самуи, дрон, тёплые цвета»")
+        await update.effective_message.reply_text("Напиши так: /video закат на Самуи, дрон, тёплые цвета")
         return
 
     await update.effective_message.reply_text("🎬 Генерирую видео через Runway…")
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
     try:
         video_bytes = await asyncio.to_thread(_runway_make_video_sync, prompt, 8)
-        await update.effective_message.reply_video(video=video_bytes, supports_streaming=True, caption=f"Готово 🎥\n{prompt}")
+        await update.effective_message.reply_video(
+            video=video_bytes, supports_streaming=True, caption=f"Готово 🎥\n{prompt}"
+        )
     except Exception as e:
+        msg = str(e)
+        if "401" in msg or "Unauthorized" in msg:
+            hint = (
+                "Похоже, ключ не принимается API (401).\n"
+                "Проверь:\n"
+                "• Ключ именно из dev.runwayml.com → API Keys (формат key_...)\n"
+                "• В Render переменная называется ровно RUNWAY_API_KEY\n"
+                "• После изменения ENV сделан Deploy\n"
+            )
+            await update.effective_message.reply_text(f"⚠️ Видео не удалось (401): проверь ключ.\n\n{hint}")
+        else:
+            await update.effective_message.reply_text(f"⚠️ Видео не удалось: {e}")
         log.exception("Runway video error: %s", e)
-        await update.effective_message.reply_text(f"⚠️ Видео не удалось: {e}")
 
 # -------- Автовызов генерации без команд --------
 async def _call_handler_with_prompt(handler, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
@@ -552,7 +587,7 @@ def build_app():
     app.add_handler(CommandHandler("modes", cmd_modes))
     app.add_handler(CommandHandler("examples", cmd_examples))
 
-    # Команды по-прежнему доступны
+    # Команды тоже доступны
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("video", cmd_make_video))
 
@@ -582,6 +617,11 @@ def run_webhook(app):
 def main():
     app = build_app()
     run_webhook(app)
+
+# короткие алиасы, чтобы совпало с handler-именами
+cmd_start = cmd_start if 'cmd_start' in globals() else None
+cmd_modes = cmd_modes if 'cmd_modes' in globals() else None
+cmd_examples = cmd_examples if 'cmd_examples' in globals() else None
 
 if __name__ == "__main__":
     main()
