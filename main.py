@@ -307,7 +307,7 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # ========== NEW: VIDEO (Runway text_to_video) ==========
-RUNWAY_URL = "https://dev.runwayml.com/v1/text_to_video"   # из твоего Request History
+RUNWAY_URL = "https://api.runwayml.com/v1/tasks"   # из твоего Request History
 RUNWAY_JSON_TEMPLATE = {
     "promptText": "{PROMPT}",
     "model": "veo3",                # у тебя на скрине
