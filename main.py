@@ -51,6 +51,11 @@ PREMIUM_USER_IDS = set(
     int(x) for x in os.environ.get("PREMIUM_USER_IDS", "").split(",") if x.strip().isdigit()
 )
 
+# >>> LUMA: begin
+# Заготовка под Luma (когда дашь ключ — просто добавим реальные вызовы)
+LUMA_API_KEY = os.environ.get("LUMA_API_KEY", "").strip()
+# >>> LUMA: end
+
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -383,14 +388,75 @@ async def _call_handler_with_prompt(handler, update: Update, context: ContextTyp
     finally:
         context.args = old_args
 
+# >>> ENGINE MODES: begin
+# Режимы движков и меню выбора
+ENGINE_GPT    = "gpt"
+ENGINE_LUMA   = "luma"
+ENGINE_RUNWAY = "runway"
+ENGINE_MJ     = "midjourney"
+
+ENGINE_TITLES = {
+    ENGINE_GPT:    "💬 GPT-5 (текст/фото)",
+    ENGINE_LUMA:   "🎬 Luma (видео/фото)",
+    ENGINE_RUNWAY: "🎥 Runway (PRO ~$7/видео)",
+    ENGINE_MJ:     "🖼 Midjourney (Discord)",
+}
+
+def engines_kb():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton(ENGINE_TITLES[ENGINE_GPT])],
+            [KeyboardButton(ENGINE_TITLES[ENGINE_LUMA])],
+            [KeyboardButton(ENGINE_TITLES[ENGINE_RUNWAY])],
+            [KeyboardButton(ENGINE_TITLES[ENGINE_MJ])],
+            [KeyboardButton("⬅️ Назад")]
+        ],
+        resize_keyboard=True
+    )
+
+def _engine_from_button(text: str):
+    for k, v in ENGINE_TITLES.items():
+        if v == text:
+            return k
+    return None
+
+async def open_engines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["__prev_kb"] = main_kb
+    await update.effective_message.reply_text(
+        "Выбери движок для работы 👇\n\n"
+        "• GPT-5 — ответы и картинки через OpenAI\n"
+        "• Luma — видео/фото (экономнее Runway)\n"
+        "• Runway — студийное видео (PRO)\n"
+        "• Midjourney — помогу со сборкой промпта для Discord",
+        reply_markup=engines_kb()
+    )
+
+async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or "").strip()
+    if text == "⬅️ Назад":
+        await cmd_start(update, context)
+        return
+    eng = _engine_from_button(text)
+    if not eng:
+        return
+    context.user_data["engine"] = eng
+    if eng == ENGINE_RUNWAY and update.effective_user.id not in PREMIUM_USER_IDS:
+        await update.message.reply_text("⚠️ Runway доступен только на PRO-тарифе.")
+    elif eng == ENGINE_LUMA:
+        if not LUMA_API_KEY:
+            await update.message.reply_text("🎬 Luma выбрана. API-ключ не задан — пока использую запасные пути. Готов принимать запросы «создай видео…».")
+        else:
+            await update.message.reply_text("🎬 Luma активна. Пиши «создай видео…» или «сгенерируй фото…».")
+    elif eng == ENGINE_MJ:
+        await update.message.reply_text("🖼 Midjourney: пришли описание — соберу промпт для Discord.")
+    else:
+        await update.message.reply_text("💬 GPT-5 активирован.")
+# >>> ENGINE MODES: end
+
 # -------- STATIC TEXTS --------
 START_TEXT = (
     "Привет! Я готов. Чем помочь?\n\n"
-    "Можешь писать по-человечески:\n"
-    "• «сгенерируй картинку логотип Cozy Asia…»\n"
-    "• «создай видео закат на Самуи, дрон…»\n\n"
-    "Также работают команды:\n"
-    "🖼 /img <описание>  •  🎬 /video <описание>\n"
+    "Нажми «🧭 Меню движков», чтобы выбрать, на чем работать: GPT-5 / Luma / Runway / Midjourney."
 )
 
 MODES_TEXT = (
@@ -417,6 +483,7 @@ EXAMPLES_TEXT = (
 main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=WEB_ROOT))],
+        [KeyboardButton("🧭 Меню движков")],  # <<< добавлена кнопка
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
         [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))],
     ],
@@ -486,12 +553,43 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
+    # меню движков
+    if text == "🧭 Меню движков":
+        await open_engines_menu(update, context); return
+    # клики по кнопкам движков
+    if text in ENGINE_TITLES.values() or text == "⬅️ Назад":
+        await handle_engine_click(update, context); return
+
     # === авто-режим генерации без команд ===
     intent, prompt = detect_media_intent(text)
     if intent == "image" and prompt:
+        # Если выбран MJ — отдадим промпт для Discord
+        if context.user_data.get("engine") == ENGINE_MJ:
+            mj = f"/imagine prompt: {prompt} --ar 3:2 --stylize 250 --v 6.0"
+            await update.message.reply_text(f"🖼 Midjourney промпт:\n{mj}")
+            return
+        # Luma пока не подключена — рендерим через OpenAI Images
         await _call_handler_with_prompt(cmd_img, update, context, prompt); return
+
     if intent == "video" and prompt:
-        await _call_handler_with_prompt(cmd_make_video, update, context, prompt); return
+        eng = context.user_data.get("engine")
+        if eng == ENGINE_LUMA:
+            # >>> LUMA: begin
+            if not LUMA_API_KEY:
+                await update.message.reply_text(
+                    "🎬 Luma выбрана, но API ключ не задан. Пока могу предложить Runway (если PRO) или описать промпт."
+                )
+                return
+            # здесь позже добавим реальный вызов Luma
+            await update.message.reply_text("🎬 Luma интеграция будет активирована после включения API-ключа.")
+            return
+            # >>> LUMA: end
+        elif eng == ENGINE_RUNWAY:
+            await _call_handler_with_prompt(cmd_make_video, update, context, prompt); return
+        else:
+            # По умолчанию подскажем выбрать движок
+            await update.message.reply_text("ℹ️ Для видео выбери Luma или Runway через «🧭 Меню движков».")
+            return
 
     lower = text.lower()
     if lower in ("⚙️ режимы", "режимы", "/modes"):
@@ -619,11 +717,19 @@ def build_app():
     app.add_handler(CommandHandler("examples", cmd_examples))
     app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))  # NEW
 
-    # Команды тоже доступны
+    # NEW: меню движков командой
+    app.add_handler(CommandHandler("engines", open_engines_menu))
+
+    # Команды тоже доступны (оставляем, но не рекламируем)
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("video", cmd_make_video))
 
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
+    # клики по кнопкам движков
+    engine_buttons_pattern = "(" + "|".join(map(re.escape, list(ENGINE_TITLES.values()) + ["⬅️ Назад", "🧭 Меню движков"])) + ")"
+    app.add_handler(MessageHandler(filters.Regex(engine_buttons_pattern), on_text))
+
+    # остальной текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document.IMAGE, on_document))
