@@ -2,9 +2,11 @@
 import os
 import re
 import json
+import time
 import base64
 import logging
 from io import BytesIO
+import asyncio
 
 import httpx
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
@@ -13,14 +15,14 @@ from telegram.ext import (
 )
 from telegram.constants import ChatAction
 
-# ========== LOGGING ==========
+# -------- LOGGING --------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 log = logging.getLogger("gpt-bot")
 
-# ========== ENV ==========
+# -------- ENV --------
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
@@ -28,7 +30,6 @@ OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()      # ключ 
 OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()     # для OpenRouter: https://openrouter.ai/api/v1
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 
-# Для вежливых заголовков OpenRouter (кастомные, не обязательны):
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
 OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
 
@@ -42,8 +43,8 @@ OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()      # обыч�
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
 # NEW: Media generation
-RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()      # Runway API (видео)
-OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY  # OpenAI Images
+RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()      # ключ Runway API (из dev.runwayml.com)
+OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY  # обычный OpenAI ключ
 
 PORT             = int(os.environ.get("PORT", "10000"))
 
@@ -56,10 +57,10 @@ if not OPENAI_API_KEY:
 
 WEB_ROOT = WEBAPP_URL or PUBLIC_URL
 
-# ========== OPENAI / Tavily clients ==========
+# -------- OPENAI / Tavily clients --------
 from openai import OpenAI
 
-# Клиент для LLM (OpenRouter или OpenAI)
+# LLM (OpenRouter или OpenAI)
 default_headers = {}
 if OPENROUTER_SITE_URL:
     default_headers["HTTP-Referer"] = OPENROUTER_SITE_URL
@@ -68,19 +69,19 @@ if OPENROUTER_APP_NAME:
 
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
-    base_url=OPENAI_BASE_URL or None,               # если пусто — api.openai.com
+    base_url=OPENAI_BASE_URL or None,
     default_headers=default_headers or None,
 )
 
-# Отдельный клиент для Whisper (если указан OPENAI_STT_KEY, всегда идём на api.openai.com)
+# Whisper (если есть отдельный ключ OpenAI)
 oai_stt = None
 if OPENAI_STT_KEY:
-    oai_stt = OpenAI(api_key=OPENAI_STT_KEY)        # всегда официальный OpenAI для аудио
+    oai_stt = OpenAI(api_key=OPENAI_STT_KEY)  # всегда api.openai.com
 
-# NEW: Отдельный клиент для картинок (Images API всегда на api.openai.com)
+# Images API — всегда api.openai.com
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)
 
-# Tavily (поиск)
+# Tavily
 try:
     if TAVILY_API_KEY:
         from tavily import TavilyClient
@@ -90,27 +91,18 @@ try:
 except Exception:
     tavily = None
 
-# ========== PROMPTS ==========
+# -------- PROMPTS --------
 SYSTEM_PROMPT = (
     "Ты дружелюбный и лаконичный ассистент на русском. "
     "Отвечай по сути, структурируй списками/шагами, не выдумывай факты. "
     "Если ссылаешься на источники — в конце дай короткий список ссылок."
 )
-
 VISION_SYSTEM_PROMPT = (
     "Ты чётко описываешь содержимое изображений: объекты, текст, схемы, графики. "
     "Не идентифицируй личности людей и не пиши имена, если они не напечатаны на изображении."
 )
 
-VISION_CAPABILITY_HELP = (
-    "Да — анализирую изображения и помогаю с видео по кадрам, а ещё распознаю голос. ✅\n\n"
-    "• Фото/скриншоты: JPG/PNG/WebP (до ~10 МБ) — опишу, прочитаю текст, разберу графики.\n"
-    "• Документы/PDF: пришли как *файл*, извлеку текст/таблицы.\n"
-    "• Видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам.\n"
-    "• Голосовые/аудио: распознаю речь и отвечу по содержанию."
-)
-
-# ========== HEURISTICS ==========
+# -------- HEURISTICS --------
 _SMALLTALK_RE = re.compile(
     r"^(привет|здравствуй|добрый\s*(день|вечер|утро)|хи|hi|hello|хелло|как дела|спасибо|пока)\b",
     re.IGNORECASE
@@ -127,19 +119,41 @@ _CAPABILITY_RE = re.compile(
     re.IGNORECASE
 )
 
+# --- NEW: авто-распознавание намерений ---
+_IMG_TRIG = r"(картин\w+|изображен\w+|логотип\w+|иконк\w+|image|picture|logo|icon)"
+_VID_TRIG = r"(видео|ролик|анимаци\w+|clip|video|shorts|reel)"
+_VERB     = r"(сделай|сгенерируй|создай|нарисуй|сформируй|собери|сотвор|хочу|нужно|надо|please|make|generate|create)"
+
+def detect_media_intent(text: str):
+    """Возвращает ('image'|'video'|None, prompt)"""
+    t = (text or "").lower().strip()
+
+    if t.startswith("img "):
+        return "image", text.split(" ", 1)[1].strip()
+    if t.startswith("video "):
+        return "video", text.split(" ", 1)[1].strip()
+
+    vid = re.search(fr"{_VERB}[^\.!\n]{{0,80}}{_VID_TRIG}", t)
+    img = re.search(fr"{_VERB}[^\.!\n]{{0,80}}{_IMG_TRIG}", t)
+    if vid:
+        prompt = re.sub(fr"{_VERB}|{_VID_TRIG}", "", t)
+        return "video", prompt.strip(" :—-\"“”'«»") or text
+    if img:
+        prompt = re.sub(fr"{_VERB}|{_IMG_TRIG}", "", t)
+        return "image", prompt.strip(" :—-\"“”'«»") or text
+    return None, ""
+
 def is_smalltalk(text: str) -> bool:
     return bool(_SMALLTALK_RE.search(text.strip()))
-
 def should_browse(text: str) -> bool:
     t = text.strip()
     if is_smalltalk(t):
         return False
     return bool(_NEWSY_RE.search(t) or "?" in t or len(t) > 80)
-
 def is_vision_capability_question(text: str) -> bool:
     return bool(_CAPABILITY_RE.search(text))
 
-# ========== UTILS ==========
+# -------- UTILS --------
 async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
     try:
         await ctx.bot.send_chat_action(chat_id, action=ChatAction.TYPING)
@@ -147,17 +161,13 @@ async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
         pass
 
 def sniff_image_mime(data: bytes) -> str:
-    if data.startswith(b"\xff\xd8"):
-        return "image/jpeg"
-    if data.startswith(b"\x89PNG"):
-        return "image/png"
-    if data[:4] == b"RIFF" and b"WEBP" in data[:16]:
-        return "image/webp"
+    if data.startswith(b"\xff\xd8"): return "image/jpeg"
+    if data.startswith(b"\x89PNG"):  return "image/png"
+    if data[:4] == b"RIFF" and b"WEBP" in data[:16]: return "image/webp"
     return "image/jpeg"
 
 def format_sources(items):
-    if not items:
-        return ""
+    if not items: return ""
     lines = []
     for i, it in enumerate(items, 1):
         title = it.get("title") or it.get("url") or "Источник"
@@ -166,15 +176,11 @@ def format_sources(items):
     return "\n\nСсылки:\n" + "\n".join(lines)
 
 def tavily_search(query: str, max_results: int = 5):
-    if not tavily:
-        return None, []
+    if not tavily: return None, []
     try:
         res = tavily.search(
-            query=query,
-            search_depth="advanced",
-            max_results=max_results,
-            include_answer=True,
-            include_raw_content=False,
+            query=query, search_depth="advanced", max_results=max_results,
+            include_answer=True, include_raw_content=False,
         )
         answer = res.get("answer") or ""
         results = res.get("results") or []
@@ -183,18 +189,15 @@ def tavily_search(query: str, max_results: int = 5):
         log.exception("Tavily error: %s", e)
         return None, []
 
-# ========== OpenAI helpers ==========
+# -------- OpenAI helpers --------
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
         messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
     messages.append({"role": "user", "content": user_text})
-
     try:
         resp = oai_llm.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=messages,
-            temperature=0.6,
+            model=OPENAI_MODEL, messages=messages, temperature=0.6,
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
@@ -207,14 +210,10 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
             model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": VISION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": user_text or "Опиши, что на изображении и какой там текст."},
-                        {"type": "image_url",
-                         "image_url": {"url": f"data:{mime};base64,{img_b64}"}}
-                    ]
-                }
+                {"role": "user", "content": [
+                    {"type": "text", "text": user_text or "Опиши, что на изображении и какой там текст."},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}}
+                ]}
             ],
             temperature=0.4,
         )
@@ -223,168 +222,125 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         log.exception("Vision error: %s", e)
         return "Не удалось проанализировать изображение (лимит/ключ). Попробуй позже."
 
-# ========== STT: Deepgram -> Whisper(OpenAI) fallback ==========
+# -------- STT --------
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
     data = buf.getvalue()
-
-    # 1) Deepgram
+    # Deepgram
     if DEEPGRAM_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                params = {
-                    "model": "nova-2",
-                    "language": "ru",
-                    "smart_format": "true",
-                    "punctuate": "true",
-                }
+                params = {"model": "nova-2", "language": "ru", "smart_format": "true", "punctuate": "true"}
                 headers = {
                     "Authorization": f"Token {DEEPGRAM_API_KEY}",
                     "Content-Type": "audio/ogg" if filename_hint.endswith(".ogg") else "application/octet-stream",
                 }
-                r = await client.post(
-                    "https://api.deepgram.com/v1/listen",
-                    params=params,
-                    headers=headers,
-                    content=data
-                )
+                r = await client.post("https://api.deepgram.com/v1/listen", params=params, headers=headers, content=data)
                 r.raise_for_status()
                 dg = r.json()
-                text = (
-                    dg.get("results", {})
-                      .get("channels", [{}])[0]
-                      .get("alternatives", [{}])[0]
-                      .get("transcript", "")
-                ).strip()
-                if text:
-                    return text
+                text = (dg.get("results",{}).get("channels",[{}])[0].get("alternatives",[{}])[0].get("transcript","")).strip()
+                if text: return text
         except Exception as e:
             log.exception("Deepgram STT error: %s", e)
-
-    # 2) Whisper (ТОЛЬКО если есть отдельный ключ OpenAI)
+    # Whisper
     if oai_stt:
         try:
-            buf2 = BytesIO(data); buf2.seek(0)
-            setattr(buf2, "name", filename_hint)
-            tr = oai_stt.audio.transcriptions.create(
-                model=TRANSCRIBE_MODEL,  # whisper-1
-                file=buf2
-            )
+            buf2 = BytesIO(data); buf2.seek(0); setattr(buf2,"name",filename_hint)
+            tr = oai_stt.audio.transcriptions.create(model=TRANSCRIBE_MODEL, file=buf2)
             return (tr.text or "").strip()
         except Exception as e:
             log.exception("Whisper STT error: %s", e)
-
     return ""
 
-# ========== NEW: IMAGES (OpenAI gpt-image-1) ==========
+# -------- IMAGES (/img) --------
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
-        await update.effective_message.reply_text(
-            "Напиши так: /img «логотип Cozy Asia, неон, плоская иконка»"
-        )
+        await update.effective_message.reply_text("Напиши так: «сгенерируй картинку логотип Cozy Asia, неон, плоская иконка»")
         return
-
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
-
-        resp = oai_img.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            size="1024x1024",
-            n=1,
-        )
+        resp = oai_img.images.generate(model="gpt-image-1", prompt=prompt, size="1024x1024", n=1)
         b64 = resp.data[0].b64_json
         img_bytes = base64.b64decode(b64)
-
-        await update.effective_message.reply_photo(
-            photo=img_bytes,
-            caption=f"Готово ✅\nЗапрос: {prompt}"
-        )
+        await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
     except Exception as e:
         log.exception("Images API error: %s", e)
-        await update.effective_message.reply_text(
-            "⚠️ Не удалось создать изображение. Проверь OPENAI_IMAGE_KEY (нужен обычный OpenAI ключ)."
-        )
+        await update.effective_message.reply_text("⚠️ Не удалось создать изображение. Проверь OPENAI_IMAGE_KEY (нужен обычный OpenAI ключ).")
 
-# ========== NEW: VIDEO (Runway text_to_video) ==========
-RUNWAY_URL = "https://api.runwayml.com/v1/tasks"   # из твоего Request History
-RUNWAY_JSON_TEMPLATE = {
-    "promptText": "{PROMPT}",
-    "model": "veo3",                # у тебя на скрине
-    "ratio": "720:1280",
-    "duration": 8
-}
+# -------- VIDEO (Runway SDK) --------
+# Используем официальный SDK runwayml — как в твоём примере.
+from runwayml import RunwayML
 
-async def runway_create_task(prompt: str, duration: int = 8) -> str:
+def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
+    """Синхронная функция: создаёт задачу Runway и возвращает mp4-байты (блокирующе).
+       Вызываем её из async кода через asyncio.to_thread."""
     if not RUNWAY_API_KEY:
         raise RuntimeError("RUNWAY_API_KEY не задан")
-    payload = json.loads(
-        json.dumps(RUNWAY_JSON_TEMPLATE)
-        .replace("{PROMPT}", prompt)
-        .replace("8", str(duration))
-    )
-    async with httpx.AsyncClient(timeout=None) as http:
-        r = await http.post(
-            RUNWAY_URL,
-            headers={
-                "Authorization": f"Bearer {RUNWAY_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-        r.raise_for_status()
-        data = r.json()
-        job_id = data.get("id")
-        if not job_id:
-            raise RuntimeError(f"Runway: не пришёл id задачи: {data}")
-        return job_id
+    client = RunwayML(api_key=RUNWAY_API_KEY)
 
-async def runway_wait_and_download(job_id: str) -> bytes:
-    status_url = f"https://dev.runwayml.com/v1/tasks/{job_id}"
-    async with httpx.AsyncClient(timeout=None) as http:
-        while True:
-            st = await http.get(
-                status_url,
-                headers={"Authorization": f"Bearer {RUNWAY_API_KEY}"},
-            )
-            st.raise_for_status()
-            data = st.json()
-            out = data.get("output") or {}
-            video_url = out.get("url") or out.get("video_url")
-            if video_url:
-                f = await http.get(video_url)
-                f.raise_for_status()
-                return f.content
-            await asyncio.sleep(3)
+    task = client.text_to_video.create(
+        promptText=prompt,
+        model="veo3",        # из твоего Get Code
+        ratio="720:1280",
+        duration=duration,
+    )
+    task_id = task.id
+    time.sleep(1)
+    task = client.tasks.retrieve(task_id)
+    while task.status not in ["SUCCEEDED", "FAILED"]:
+        time.sleep(1)
+        task = client.tasks.retrieve(task_id)
+
+    if task.status != "SUCCEEDED":
+        raise RuntimeError(f"Runway task failed: {task.status}")
+
+    # У тебя в JSON output — это массив URL (берём первый)
+    output = getattr(task, "output", None)
+    if isinstance(output, list) and output:
+        video_url = output[0]
+    elif isinstance(output, dict):
+        video_url = output.get("url") or output.get("video_url")
+    else:
+        raise RuntimeError(f"Runway: не найден URL результата в output: {output}")
+
+    # Скачиваем mp4
+    with httpx.Client(timeout=None) as http:
+        r = http.get(video_url)
+        r.raise_for_status()
+        return r.content
 
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip()
     if not prompt:
-        await update.effective_message.reply_text(
-            "Напиши так: /video «закат на Самуи, дрон, кинематографично, тёплые цвета»"
-        )
+        await update.effective_message.reply_text("Напиши так: «создай видео закат на Самуи, дрон, тёплые цвета»")
         return
 
     await update.effective_message.reply_text("🎬 Генерирую видео через Runway…")
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
-
     try:
-        job_id = await runway_create_task(prompt, duration=8)
-        video_bytes = await runway_wait_and_download(job_id)
-        await update.effective_message.reply_video(
-            video=video_bytes,
-            supports_streaming=True,
-            caption=f"Готово 🎥\n{prompt}"
-        )
+        video_bytes = await asyncio.to_thread(_runway_make_video_sync, prompt, 8)
+        await update.effective_message.reply_video(video=video_bytes, supports_streaming=True, caption=f"Готово 🎥\n{prompt}")
     except Exception as e:
         log.exception("Runway video error: %s", e)
         await update.effective_message.reply_text(f"⚠️ Видео не удалось: {e}")
 
-# ========== STATIC TEXTS ==========
+# -------- Автовызов генерации без команд --------
+async def _call_handler_with_prompt(handler, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    old_args = getattr(context, "args", None)
+    try:
+        context.args = [prompt]
+        await handler(update, context)
+    finally:
+        context.args = old_args
+
+# -------- STATIC TEXTS --------
 START_TEXT = (
     "Привет! Я готов. Чем помочь?\n\n"
-    "🖼 /img <описание> — создать изображение (OpenAI)\n"
-    "🎬 /video <описание> — короткое видео (Runway, ~8 сек)\n"
+    "Можешь писать по-человечески:\n"
+    "• «сгенерируй картинку логотип Cozy Asia…»\n"
+    "• «создай видео закат на Самуи, дрон…»\n\n"
+    "Также работают команды:\n"
+    "🖼 /img <описание>  •  🎬 /video <описание>\n"
 )
 
 MODES_TEXT = (
@@ -394,8 +350,8 @@ MODES_TEXT = (
     "• ✍️ Редактор — правки текста, стиль, структура.\n"
     "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
     "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
-    "• 🎙️ Голос — распознаю аудио и отвечу по содержанию.\n\n"
-    "_Выбирай режим сообщением или просто сформулируй задачу._"
+    "• 🎙️ Голос — распознаю аудио и отвечаю по содержанию.\n\n"
+    "_Пиши задачу — я сам выберу нужный режим._"
 )
 
 EXAMPLES_TEXT = (
@@ -407,7 +363,7 @@ EXAMPLES_TEXT = (
     "• «Опиши текст на фото и извлеки таблицу»"
 )
 
-# ========== START UI / KEYBOARD ==========
+# -------- UI / KEYBOARD --------
 main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=WEB_ROOT))],
@@ -417,7 +373,7 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ========== HANDLERS ==========
+# -------- HANDLERS --------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if BANNER_URL:
         try:
@@ -447,10 +403,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     log.info("web_app_data: %s", payload)
 
     if ptype in ("help_from_webapp", "help", "question"):
-        await msg.reply_text(
-            "🧑‍💻 Поддержка GPT-5 PRO.\nНапиши здесь свой вопрос — отвечу в чате.\n\n"
-            "Также можно на почту: sale.rielt@bk.ru"
-        )
+        await msg.reply_text("🧑‍💻 Поддержка GPT-5 PRO.\nНапиши здесь свой вопрос — отвечу в чате.\n\nТакже можно на почту: sale.rielt@bk.ru")
         return
 
     if ptype in ("plan_from_webapp", "plan", "subscribe", "subscription"):
@@ -467,6 +420,13 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
+    # === авто-режим генерации без команд ===
+    intent, prompt = detect_media_intent(text)
+    if intent == "image" and prompt:
+        await _call_handler_with_prompt(cmd_img, update, context, prompt); return
+    if intent == "video" and prompt:
+        await _call_handler_with_prompt(cmd_make_video, update, context, prompt); return
+
     lower = text.lower()
     if lower in ("⚙️ режимы", "режимы", "/modes"):
         await cmd_modes(update, context); return
@@ -474,7 +434,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await cmd_examples(update, context); return
 
     if is_vision_capability_question(text):
-        await update.message.reply_text(VISION_CAPABILITY_HELP, disable_web_page_preview=True); return
+        await update.message.reply_text(
+            "Да — анализирую изображения и помогаю с видео по кадрам, а ещё распознаю голос. ✅\n\n"
+            "• Фото/скриншоты: JPG/PNG/WebP (до ~10 МБ)\n"
+            "• Видео: пришли 1–3 ключевых кадра (скриншота)"
+        ); return
 
     await typing(context, chat_id)
 
@@ -507,7 +471,6 @@ async def _handle_image_bytes(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
-
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
     buf = BytesIO(); await file.download_to_memory(buf)
@@ -517,7 +480,6 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
-
     doc = update.message.document
     mime = (doc.mime_type or "").lower()
     if mime.startswith("image/"):
@@ -526,24 +488,18 @@ async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_text = (update.message.caption or "").strip()
         await _handle_image_bytes(update, context, buf.getvalue(), user_text)
     else:
-        await update.message.reply_text(
-            "Файл получил. Если это PDF/документ — пришли конкретные страницы как изображения или укажи, что извлечь."
-        )
+        await update.message.reply_text("Файл получил. Если это PDF/документ — пришли конкретные страницы как изображения или укажи, что извлечь.")
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
-
     voice = update.message.voice
     file = await context.bot.get_file(voice.file_id)
     buf = BytesIO(); await file.download_to_memory(buf)
-
     text = await transcribe_audio(buf, filename_hint="audio.ogg")
     if not text:
         await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз."); return
-
     prefix = f"🗣️ Распознал: «{text}»\n\n"
-
     web_ctx = ""
     sources = []
     if should_browse(text):
@@ -554,7 +510,6 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, it in enumerate(sources, 1):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
-
     answer = await ask_openai_text(text, web_ctx=web_ctx)
     if sources:
         answer += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
@@ -563,18 +518,14 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
-
     audio = update.message.audio
     file = await context.bot.get_file(audio.file_id)
     buf = BytesIO(); await file.download_to_memory(buf)
-
     filename = (audio.file_name or "audio.mp3")
     text = await transcribe_audio(buf, filename_hint=filename)
     if not text:
         await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз."); return
-
     prefix = f"🗣️ Распознал: «{text}»\n\n"
-
     web_ctx = ""
     sources = []
     if should_browse(text):
@@ -585,18 +536,15 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, it in enumerate(sources, 1):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
-
     answer = await ask_openai_text(text, web_ctx=web_ctx)
     if sources:
         answer += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
     await update.message.reply_text(prefix + answer, disable_web_page_preview=False)
 
 async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Да, помогу с видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам и отвечу по содержанию. 📽️"
-    )
+    await update.message.reply_text("Да, помогу с видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам и отвечу по содержанию. 📽️")
 
-# ========== BOOTSTRAP ==========
+# -------- BOOTSTRAP --------
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -604,7 +552,7 @@ def build_app():
     app.add_handler(CommandHandler("modes", cmd_modes))
     app.add_handler(CommandHandler("examples", cmd_examples))
 
-    # NEW:
+    # Команды по-прежнему доступны
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("video", cmd_make_video))
 
