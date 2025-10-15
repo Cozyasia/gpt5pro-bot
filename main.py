@@ -303,11 +303,11 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
     client = RunwayML(api_key=RUNWAY_API_KEY)
 
     task = client.text_to_video.create(
-        promptText=prompt,
-        model="veo3",            # из твоего Get Code
-        ratio="720:1280",
-        duration=duration,
-    )
+    prompt_text=prompt,
+    model="veo3",
+    ratio="720:1280",
+    duration=duration,
+)
     task_id = task.id
     time.sleep(1)
     task = client.tasks.retrieve(task_id)
