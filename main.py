@@ -482,8 +482,7 @@ EXAMPLES_TEXT = (
 # -------- UI / KEYBOARD --------
 main_kb = ReplyKeyboardMarkup(
     [
-        [KeyboardButton("🧭 Меню", web_app=WebAppInfo(url=WEB_ROOT))],
-        [KeyboardButton("🧭 Меню движков")],  # <<< добавлена кнопка
+        [KeyboardButton("🧭 Меню движков")],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
         [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))],
     ],
