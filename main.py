@@ -52,7 +52,10 @@ PREMIUM_USER_IDS = set(
 )
 
 # >>> LUMA: begin
-LUMA_API_KEY = os.environ.get("LUMA_API_KEY", "").strip()  # ключ вида luma-xxxxxxxx
+LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()          # ключ вида luma-xxxxxxxx
+LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()       # ОБЯЗАТЕЛЬНО для API
+LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()       # дефолт аспект
+LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))         # дефолт длительность
 # >>> LUMA: end
 
 PORT             = int(os.environ.get("PORT", "10000"))
@@ -392,10 +395,10 @@ async def _call_handler_with_prompt(handler, update: Update, context: ContextTyp
 _DURATION_RE = re.compile(r"(?:(\d{1,2})\s*(?:sec|secs|s|сек))", re.I)
 _AR_RE = re.compile(r"\b(16:9|9:16|4:3|3:4|1:1|21:9|9:21)\b", re.I)
 
-def parse_video_opts_from_text(text: str, default_duration: int = 5, default_ar: str = "16:9"):
+def parse_video_opts_from_text(text: str, default_duration: int = None, default_ar: str = None):
     """Возвращает (duration_seconds:int, aspect_ratio:str, clean_prompt:str)."""
-    duration = default_duration
-    ar = default_ar
+    duration = default_duration if default_duration is not None else LUMA_DURATION_S
+    ar = default_ar if default_ar is not None else LUMA_ASPECT
     t = text
 
     m = _DURATION_RE.search(t)
@@ -414,10 +417,13 @@ def parse_video_opts_from_text(text: str, default_duration: int = 5, default_ar:
     clean = re.sub(r"\s{2,}", " ", t.replace(" ,", ",")).strip(" ,.;-—")
     return duration, ar, clean
 
-def _luma_make_video_sync(prompt: str, duration: int = 5, aspect_ratio: str = "16:9") -> bytes:
+def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str = None) -> bytes:
     """Создаёт задачу в Luma Dream Machine и возвращает mp4-байты (блокирующе)."""
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY не задан")
+    dur = duration if duration is not None else LUMA_DURATION_S
+    ar  = aspect_ratio if aspect_ratio is not None else LUMA_ASPECT
+
     headers = {
         "Authorization": f"Bearer {LUMA_API_KEY}",
         "Content-Type": "application/json",
@@ -426,8 +432,9 @@ def _luma_make_video_sync(prompt: str, duration: int = 5, aspect_ratio: str = "1
     create_url = "https://api.lumalabs.ai/dream-machine/v1/generations"
     payload = {
         "prompt": prompt,
-        "duration": f"{duration}s",
-        "aspect_ratio": aspect_ratio,
+        "model": LUMA_MODEL,              # ОБЯЗАТЕЛЬНО
+        "duration": f"{dur}s",
+        "aspect_ratio": ar,
     }
     with httpx.Client(timeout=None) as http:
         r = http.post(create_url, headers=headers, json=payload)
@@ -575,6 +582,7 @@ async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if key:
         lines.append(f"Формат: {'ok' if key.startswith('luma-') else 'не начинается с luma-'}")
         lines.append(f"Длина: {len(key)}")
+        lines.append(f"MODEL: {LUMA_MODEL}, ASPECT: {LUMA_ASPECT}, DURATION: {LUMA_DURATION_S}s")
     await update.message.reply_text("\n".join(lines))
 
 async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
