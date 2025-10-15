@@ -46,6 +46,11 @@ TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip(
 RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()      # ключ Runway (dev.runwayml.com → API Keys)
 OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY  # обычный OpenAI ключ (для картинок)
 
+# NEW: Premium доступ к Runway (список TG user_id через ENV, разделённых запятыми)
+PREMIUM_USER_IDS = set(
+    int(x) for x in os.environ.get("PREMIUM_USER_IDS", "").split(",") if x.strip().isdigit()
+)
+
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -303,11 +308,11 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
     client = RunwayML(api_key=RUNWAY_API_KEY)
 
     task = client.text_to_video.create(
-    prompt_text=prompt,
-    model="veo3",
-    ratio="720:1280",
-    duration=duration,
-)
+        prompt_text=prompt,   # ВАЖНО: snake_case
+        model="veo3",
+        ratio="720:1280",
+        duration=duration,
+    )
     task_id = task.id
     time.sleep(1)
     task = client.tasks.retrieve(task_id)
@@ -316,7 +321,7 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
         task = client.tasks.retrieve(task_id)
 
     if task.status != "SUCCEEDED":
-        raise RuntimeError(f"Runway task failed: {task.status}")
+        raise RuntimeError(getattr(task, "error", None) or f"Runway task failed: {task.status}")
 
     output = getattr(task, "output", None)
     if isinstance(output, list) and output:
@@ -332,6 +337,14 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
         return r.content
 
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 🔒 PRO-гейтинг Runway
+    if update.effective_user.id not in PREMIUM_USER_IDS:
+        await update.effective_message.reply_text(
+            "⚠️ Runway доступен только на PRO-тарифе.\n"
+            "Это студийное видео высокого качества, один запрос ≈ $7."
+        )
+        return
+
     prompt = " ".join(context.args).strip()
     if not prompt:
         await update.effective_message.reply_text("Напиши так: /video закат на Самуи, дрон, тёплые цвета")
@@ -355,6 +368,8 @@ async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• После изменения ENV сделан Deploy\n"
             )
             await update.effective_message.reply_text(f"⚠️ Видео не удалось (401): проверь ключ.\n\n{hint}")
+        elif "credit" in msg.lower():
+            await update.effective_message.reply_text("⚠️ Недостаточно кредитов Runway для этого запроса.")
         else:
             await update.effective_message.reply_text(f"⚠️ Видео не удалось: {e}")
         log.exception("Runway video error: %s", e)
@@ -422,6 +437,22 @@ async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
+
+# NEW: быстрая диагностика ключа Runway
+async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    key = RUNWAY_API_KEY
+    lines = [f"RUNWAY_API_KEY: {'✅ найден' if key else '❌ нет'}"]
+    if key:
+        lines.append(f"Формат: {'ok' if key.startswith('key_') else 'не начинается с key_'}")
+        lines.append(f"Длина: {len(key)}")
+        try:
+            _ = RunwayML(api_key=key)
+            lines.append("SDK инициализирован ✅")
+        except Exception as e:
+            lines.append(f"SDK error: {e}")
+    pro_list = ", ".join(map(str, sorted(PREMIUM_USER_IDS))) or "—"
+    lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
+    await update.message.reply_text("\n".join(lines))
 
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
@@ -586,6 +617,7 @@ def build_app():
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("modes", cmd_modes))
     app.add_handler(CommandHandler("examples", cmd_examples))
+    app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))  # NEW
 
     # Команды тоже доступны
     app.add_handler(CommandHandler("img", cmd_img))
