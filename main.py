@@ -337,8 +337,27 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img_bytes = base64.b64decode(b64)
         await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
     except Exception as e:
+        # Показать реальную причину, а не универсальный текст
+        msg = str(e)
         log.exception("Images API error: %s", e)
-        await update.effective_message.reply_text("⚠️ Не удалось создать изображение. Проверь OPENAI_IMAGE_KEY (нужен обычный OpenAI ключ).")
+        hint = ""
+        low = msg.lower()
+        if "401" in low or "unauthorized" in low or "invalid_api_key" in low:
+            hint = "\n\nПроверь OPENAI_IMAGE_KEY: действующий ключ (sk- или sk-proj-), без пробелов, и redeploy."
+        elif "insufficient_quota" in low or "billing" in low or "credit" in low:
+            hint = "\n\nПохоже на лимит/баланс. Проверь Billing на platform.openai.com."
+        elif "model" in low and "not found" in low:
+            hint = "\n\nМодель gpt-image-1 недоступна для ключа/проекта. Выбери проект с доступом к Images."
+        await update.effective_message.reply_text(f"⚠️ Не удалось создать изображение: {msg}{hint}")
+
+# Диагностика ключа картинок
+async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    key = OPENAI_IMAGE_KEY
+    lines = [f"OPENAI_IMAGE_KEY: {'✅ найден' if key else '❌ нет'}"]
+    if key:
+        pref = "sk-proj-" if key.startswith("sk-proj-") else ("sk-" if key.startswith("sk-") else "??")
+        lines += [f"Префикс: {pref}", f"Длина: {len(key)}"]
+    await update.message.reply_text("\n".join(lines))
 
 # -------- VIDEO (Runway SDK) --------
 if RUNWAY_API_KEY:
@@ -464,6 +483,35 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
             if status in ("failed", "error", "cancelled", "canceled"):
                 raise RuntimeError(f"Luma failed: {last_msg or status}")
             time.sleep(2)
+
+# ХЭНДЛЕР Luma (исправляет NameError в логах)
+async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # prompt может прийти как аргументы или из текста сообщения
+    prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
+    # убрать возможный префикс команды
+    prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
+
+    dur, ar, prompt = parse_video_opts_from_text(prompt_raw)
+
+    if not prompt:
+        await update.effective_message.reply_text("Напиши так: /video_luma закат над морем, 6s, 9:16")
+        return
+    if not LUMA_API_KEY:
+        await update.effective_message.reply_text("🎬 Luma: не задан LUMA_API_KEY.")
+        return
+
+    await update.effective_message.reply_text(f"🎬 Генерирую через Luma… (⏱ {dur}s • {ar})")
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
+    try:
+        video_bytes = await asyncio.to_thread(_luma_make_video_sync, prompt, dur, ar)
+        await update.effective_message.reply_video(
+            video=video_bytes,
+            supports_streaming=True,
+            caption=f"Готово 🎥 {dur}s • {ar}\n{prompt}"
+        )
+    except Exception as e:
+        await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
+        log.exception("Luma video error: %s", e)
 
 # >>> ENGINE MODES
 ENGINE_GPT    = "gpt"
@@ -902,6 +950,7 @@ def build_app():
     app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))
     app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))
     app.add_handler(CommandHandler("diag_payments", diag_payments))
+    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
     app.add_handler(CommandHandler("engines", open_engines_menu))
 
     # Премиум/подписка
