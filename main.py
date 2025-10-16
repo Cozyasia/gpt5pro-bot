@@ -32,9 +32,15 @@ log = logging.getLogger("gpt-bot")
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
-OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()
+
+OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()          # текст (OpenAI или OpenRouter)
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()         # для текста (если пусто и ключ sk-or-, подставим OpenRouter)
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
+
+# отдельный ключ/база для картинок — всегда официальный OpenAI
+OPENAI_IMAGE_KEY       = (os.environ.get("OPENAI_IMAGE_KEY", "").strip()
+                          or OPENAI_API_KEY)
+OPENAI_IMAGE_BASE_URL  = os.environ.get("OPENAI_IMAGE_BASE_URL", "https://api.openai.com/v1").strip()
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
 OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
@@ -50,8 +56,6 @@ TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip(
 
 # Media:
 RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()
-OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
-OPENAI_IMAGE_BASE_URL = os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip()  # опционально
 
 # Premium whitelist для Runway
 PREMIUM_USER_IDS = set(
@@ -86,43 +90,32 @@ TARIFF_URL = f"{WEB_ROOT}/premium.html#tariff"
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
 
+# Авто-выбор базового URL для текста:
+_llm_base = OPENAI_BASE_URL or ""
+if not _llm_base and OPENAI_API_KEY.startswith("sk-or-"):
+    _llm_base = "https://openrouter.ai/api/v1"   # ключ OpenRouter без BASE_URL — подставим сами
+
 default_headers = {}
 if OPENROUTER_SITE_URL:
     default_headers["HTTP-Referer"] = OPENROUTER_SITE_URL
 if OPENROUTER_APP_NAME:
     default_headers["X-Title"] = OPENROUTER_APP_NAME
 
-# нормализация модели: если base_url пуст (официальный OpenAI),
-# а модель задана в формате OpenRouter (с /), берём последний сегмент
-def _normalize_model(name: str) -> str:
-    if not name:
-        return "gpt-4o-mini"
-    if not OPENAI_BASE_URL and "/" in name:
-        return name.split("/")[-1]
-    return name
-
-OPENAI_MODEL = _normalize_model(OPENAI_MODEL)
-
+# Клиент для текста/чатов
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
-    base_url=OPENAI_BASE_URL or None,
+    base_url=_llm_base or None,
     default_headers=default_headers or None,
 )
 
-oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
-# для картинок отдельный клиент и (при желании) отдельный base_url
+# Отдельный клиент для картинок — ЖЁСТКО на официальный OpenAI
 oai_img = OpenAI(
     api_key=OPENAI_IMAGE_KEY,
-    base_url=OPENAI_IMAGE_BASE_URL or None,
+    base_url=OPENAI_IMAGE_BASE_URL or "https://api.openai.com/v1",
 )
 
-# немного полезной телеметрии в логи
-try:
-    log.info("LLM endpoint: %s | model: %s", OPENAI_BASE_URL or "OpenAI official", OPENAI_MODEL)
-    img_key_prefix = (OPENAI_IMAGE_KEY or "")[:7] + "…" if OPENAI_IMAGE_KEY else "-"
-    log.info("IMG endpoint: %s | key: %s", OPENAI_IMAGE_BASE_URL or "OpenAI official", img_key_prefix)
-except Exception:
-    pass
+# Клиент для STT (если нужен другой ключ)
+oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 
 # Tavily
 try:
@@ -356,35 +349,47 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+        # ВСЕГДА официальный OpenAI endpoint:
         resp = oai_img.images.generate(model="gpt-image-1", prompt=prompt, size="1024x1024", n=1)
         b64 = resp.data[0].b64_json
         img_bytes = base64.b64decode(b64)
         await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
     except Exception as e:
-        # Показать реальную причину, а не универсальный текст
         msg = str(e)
         log.exception("Images API error: %s", e)
         hint = ""
         low = msg.lower()
-        if "connection error" in low or "connect" in low:
-            hint = "\n\nПохоже на сетевую ошибку. Проверь, что OpenAI доступен из хостинга и нет прокси/VPN блокировок."
-        elif "401" in low or "unauthorized" in low or "invalid_api_key" in low:
-            hint = "\n\nПроверь OPENAI_IMAGE_KEY: действующий OpenAI-ключ (sk- или sk-proj-), без пробелов, и redeploy."
+        if "connection" in low or "timeout" in low:
+            hint = "\n\nПохоже на сетевую ошибку. Проверь, что api.openai.com доступен из хостинга (без VPN/прокси)."
+        elif "unauthorized" in low or "invalid_api_key" in low or "401" in low:
+            hint = "\n\nПроверь OPENAI_IMAGE_KEY: это должен быть ключ OpenAI (sk-… или sk-proj-…), не OpenRouter."
         elif "insufficient_quota" in low or "billing" in low or "credit" in low:
             hint = "\n\nПохоже на лимит/баланс. Проверь Billing на platform.openai.com."
         elif "model" in low and "not found" in low:
-            hint = "\n\nМодель gpt-image-1 недоступна для ключа/проекта. Выбери проект с доступом к Images."
+            hint = "\n\nМодель gpt-image-1 недоступна для проекта/ключа."
         await update.effective_message.reply_text(f"⚠️ Не удалось создать изображение: {msg}{hint}")
 
 # Диагностика ключа картинок
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = OPENAI_IMAGE_KEY
-    lines = [f"OPENAI_IMAGE_KEY: {'✅ найден' if key else '❌ нет'}"]
+    base = OPENAI_IMAGE_BASE_URL or "https://api.openai.com/v1"
+    lines = [
+        f"OPENAI_IMAGE_KEY: {'✅ найден' if key else '❌ нет'}",
+        f"BASE_URL: {base}",
+    ]
     if key:
-        pref = "sk-proj-" if key.startswith("sk-proj-") else ("sk-" if key.startswith("sk-") else "??")
-        lines += [f"Префикс: {pref}", f"Длина: {len(key)}"]
-    lines.append(f"OPENAI_IMAGE_BASE_URL: {OPENAI_IMAGE_BASE_URL or '— (официальный OpenAI)'}")
+        pref = "sk-proj-" if key.startswith("sk-proj-") else ("sk-" if key.startswith("sk-") else key[:6] + "…")
+        lines += [f"Префикс ключа: {pref}", f"Длина: {len(key)}"]
     await update.message.reply_text("\n".join(lines))
+
+# Небольшая диагностика текста
+async def cmd_diag_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    base = _llm_base or "(по умолчанию OpenAI)"
+    key = OPENAI_API_KEY
+    pref = "sk-or-…" if key.startswith("sk-or-") else (key[:6] + "…")
+    await update.message.reply_text(
+        f"Текстовый клиент:\nBASE_URL: {base}\nMODEL: {OPENAI_MODEL}\nKEY: {pref}"
+    )
 
 # -------- VIDEO (Runway SDK) --------
 if RUNWAY_API_KEY:
@@ -511,13 +516,10 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
                 raise RuntimeError(f"Luma failed: {last_msg or status}")
             time.sleep(2)
 
-# ХЭНДЛЕР Luma
 async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
     prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
-
     dur, ar, prompt = parse_video_opts_from_text(prompt_raw)
-
     if not prompt:
         await update.effective_message.reply_text("Напиши так: /video_luma закат над морем, 6s, 9:16")
         return
@@ -608,7 +610,7 @@ START_TEXT = (
 
 MODES_TEXT = (
     "⚙️ *Режимы работы*\n"
-    "• 💬 Универсальный — обычный диalog.\n"
+    "• 💬 Универсальный — обычный диалог.\n"
     "• 🧠 Исследователь — факты/источники, сводки.\n"
     "• ✍️ Редактор — правки текста, стиль, структура.\n"
     "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
@@ -636,7 +638,7 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# -------- LUMA HANDLERS --------
+# -------- LUMA/Runway DIAG --------
 async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = LUMA_API_KEY
     lines = [f"LUMA_API_KEY: {'✅ найден' if key else '❌ нет'}"]
@@ -646,7 +648,6 @@ async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"MODEL: {LUMA_MODEL}, ASPECT: {LUMA_ASPECT}, DURATION: {LUMA_DURATION_S}s")
     await update.message.reply_text("\n".join(lines))
 
-# NEW: быстрая диагностика ключа Runway
 async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = RUNWAY_API_KEY
     lines = [f"RUNWAY_API_KEY: {'✅ найден' if key else '❌ нет'}"]
@@ -804,7 +805,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
 
-    # меню движков
     if text == "🧭 Меню движков":
         await open_engines_menu(update, context); return
     if text in ENGINE_TITLES.values() or text == "⬅️ Назад":
@@ -907,7 +907,7 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз."); return
 
-    # <<< НОВОЕ: распознанный текст тоже проверяем на интент изображения/видео
+    # NEW: распознаём интент из голоса
     intent, prompt = detect_media_intent(text)
     if intent == "image" and prompt:
         await _call_handler_with_prompt(cmd_img, update, context, prompt); return
@@ -950,7 +950,7 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз."); return
 
-    # <<< НОВОЕ: интент для аудио
+    # NEW: интент и здесь
     intent, prompt = detect_media_intent(text)
     if intent == "image" and prompt:
         await _call_handler_with_prompt(cmd_img, update, context, prompt); return
@@ -1006,6 +1006,7 @@ def build_app():
     app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))
     app.add_handler(CommandHandler("diag_payments", diag_payments))
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
+    app.add_handler(CommandHandler("diag_text", cmd_diag_text))
     app.add_handler(CommandHandler("engines", open_engines_menu))
 
     # Премиум/подписка
