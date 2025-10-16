@@ -619,6 +619,22 @@ async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"MODEL: {LUMA_MODEL}, ASPECT: {LUMA_ASPECT}, DURATION: {LUMA_DURATION_S}s")
     await update.message.reply_text("\n".join(lines))
 
+# NEW: быстрая диагностика ключа Runway
+async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    key = RUNWAY_API_KEY
+    lines = [f"RUNWAY_API_KEY: {'✅ найден' if key else '❌ нет'}"]
+    if key:
+        lines.append(f"Формат: {'ok' if key.startswith('key_') else 'не начинается с key_'}")
+        lines.append(f"Длина: {len(key)}")
+        try:
+            _ = RunwayML(api_key=key)
+            lines.append("SDK инициализирован ✅")
+        except Exception as e:
+            lines.append(f"SDK error: {e}")
+    pro_list = ", ".join(map(str, sorted(PREMIUM_USER_IDS))) or "—"
+    lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
+    await update.message.reply_text("\n".join(lines))
+
 async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
     prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
