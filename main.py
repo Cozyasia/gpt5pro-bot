@@ -31,7 +31,7 @@ log = logging.getLogger("gpt-bot")
 # -------- ENV --------
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()  # если пусто — мини-приложение отключено
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
@@ -69,9 +69,6 @@ SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))
 CURRENCY       = "RUB"
 DB_PATH        = os.environ.get("DB_PATH", "subs.db")
 
-# Саппорт в Телеграм: @username (ENV без @ тоже ок)
-SUPPORT_TG     = os.environ.get("SUPPORT_TG", "").strip().lstrip("@")
-
 PORT = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -81,12 +78,25 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is required")
 
-# WEB ROOT / TARIFFS:
-# Если WEBAPP_URL НЕ задан, кнопку «⭐ Подписка» делаем обычной (без WebApp) и показываем тариф в чате.
-TARIFF_URL = WEBAPP_URL.strip() if WEBAPP_URL else ""
+# WEB_ROOT: всегда мини-лендинг premium.html
+WEB_ROOT = WEBAPP_URL or PUBLIC_URL
+TARIFF_URL = f"{WEB_ROOT}/premium.html#tariff"
 
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
+
+# Автодетект базы для LLM по ключу: если sk-or- → OpenRouter, иначе OpenAI
+def _infer_base_url(api_key: str, explicit_base: str) -> str | None:
+    """
+    Если база явно задана — используем её.
+    Если ключ похож на OpenRouter (sk-or-...), автоматически переключаемся на OpenRouter.
+    Иначе — стандартный OpenAI (None).
+    """
+    if explicit_base:
+        return explicit_base
+    if api_key and api_key.startswith("sk-or-"):
+        return "https://openrouter.ai/api/v1"
+    return None
 
 default_headers = {}
 if OPENROUTER_SITE_URL:
@@ -94,21 +104,20 @@ if OPENROUTER_SITE_URL:
 if OPENROUTER_APP_NAME:
     default_headers["X-Title"] = OPENROUTER_APP_NAME
 
-# Текст/визуал LLM (через OpenRouter, если указан base_url)
+# Автовыбор базы для LLM
+LLM_BASE = _infer_base_url(OPENAI_API_KEY, OPENAI_BASE_URL)
+
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
-    base_url=OPENAI_BASE_URL or None,
+    base_url=LLM_BASE or None,
     default_headers=default_headers or None,
-    # небольшая страховка от сетевых глитчей
-    max_retries=2,
-    timeout=60.0,
 )
 
-# STT отдельным ключом/проектом (опционально)
-oai_stt = OpenAI(api_key=OPENAI_STT_KEY, max_retries=2, timeout=120.0) if OPENAI_STT_KEY else None
+# STT отдельным ключом (если указан)
+oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 
-# Images — всегда прямой OpenAI ключ (должен быть проектный sk-proj-)
-oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, max_retries=2, timeout=60.0)
+# ВАЖНО: картинки всегда через OpenAI (официальная база)
+oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url="https://api.openai.com/v1")
 
 # Tavily
 try:
@@ -342,10 +351,9 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
-
-        # Автоповторы при сетевых глитчах
-        last_exc = None
-        for attempt in range(3):
+        # простой retry на случай сетевых флапов Render
+        last_err = None
+        for _ in range(2):
             try:
                 resp = oai_img.images.generate(model="gpt-image-1", prompt=prompt, size="1024x1024", n=1)
                 b64 = resp.data[0].b64_json
@@ -353,38 +361,36 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
                 return
             except Exception as e:
-                last_exc = e
-                msg = str(e).lower()
-                # если это явная авторизация/квота — не мучаем ретраями
-                if any(x in msg for x in ["unauthorized", "invalid_api_key", "insufficient_quota", "billing", "credit", "forbidden", "403"]):
-                    raise
-                await asyncio.sleep(1.0 * (attempt + 1))
-
-        # если сюда дошли – все попытки неудачны
-        raise last_exc
-
-    except Exception as e:
-        msg = str(e)
-        log.exception("Images API error: %s", e)
+                last_err = e
+                time.sleep(1.0)
+        # если два раза упало — вывести подробную причину
+        msg = str(last_err or "unknown error")
+        log.exception("Images API error: %s", last_err)
         hint = ""
         low = msg.lower()
         if "401" in low or "unauthorized" in low or "invalid_api_key" in low:
-            hint = "\n\nПроверь OPENAI_IMAGE_KEY: действующий ключ (sk-proj-), без пробелов, и redeploy."
+            hint = "\n\nПроверь OPENAI_IMAGE_KEY: действующий ключ (sk- или sk-proj-), без пробелов, и redeploy."
         elif "insufficient_quota" in low or "billing" in low or "credit" in low:
             hint = "\n\nПохоже на лимит/баланс. Проверь Billing на platform.openai.com."
         elif "model" in low and "not found" in low:
             hint = "\n\nМодель gpt-image-1 недоступна для ключа/проекта. Выбери проект с доступом к Images."
-        elif "connect" in low or "timeout" in low:
-            hint = "\n\nПохоже на сетевую ошибку. Проверь, что OpenAI доступен с хостинга (без VPN/прокси)."
+        elif "connection" in low or "timeout" in low:
+            hint = "\n\nПохоже на сетевую ошибку Render. Повтори запрос чуть позже."
         await update.effective_message.reply_text(f"⚠️ Не удалось создать изображение: {msg}{hint}")
+    except Exception as e:
+        await update.effective_message.reply_text(f"⚠️ Не удалось создать изображение: {e}")
 
 # Диагностика ключа картинок
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = OPENAI_IMAGE_KEY
     lines = [f"OPENAI_IMAGE_KEY: {'✅ найден' if key else '❌ нет'}"]
     if key:
-        pref = "sk-proj-" if key.startswith("sk-proj-") else ("sk-" if key.startswith("sk-") else "??")
-        lines += [f"Префикс: {pref}", f"Длина: {len(key)}"]
+        pref = ('OpenRouter (❌)' if key.startswith('sk-or-') else
+                'OpenAI project (✅)' if key.startswith('sk-proj-') else
+                'OpenAI user (✅)' if key.startswith('sk-') else 'неизвестный')
+        lines += [f"Тип: {pref}", f"Длина: {len(key)}"]
+        if key.startswith("sk-or-"):
+            lines.append("⚠️ Похоже, это ключ OpenRouter. Для Images нужен ключ OpenAI (sk- или sk-proj-).")
     await update.message.reply_text("\n".join(lines))
 
 # -------- VIDEO (Runway SDK) --------
@@ -514,15 +520,20 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
 
 # ХЭНДЛЕР Luma
 async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # prompt может прийти как аргументы или из текста сообщения
     prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
+    # убрать возможный префикс команды
     prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
+
     dur, ar, prompt = parse_video_opts_from_text(prompt_raw)
+
     if not prompt:
         await update.effective_message.reply_text("Напиши так: /video_luma закат над морем, 6s, 9:16")
         return
     if not LUMA_API_KEY:
         await update.effective_message.reply_text("🎬 Luma: не задан LUMA_API_KEY.")
         return
+
     await update.effective_message.reply_text(f"🎬 Генерирую через Luma… (⏱ {dur}s • {ar})")
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
     try:
@@ -568,7 +579,7 @@ def _engine_from_button(text: str):
     return None
 
 async def open_engines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["__prev_kb"] = make_main_kb()
+    context.user_data["__prev_kb"] = main_kb
     await update.effective_message.reply_text(
         "Выбери движок для работы 👇\n\n"
         "• GPT-5 — ответы и картинки через OpenAI\n"
@@ -625,20 +636,17 @@ EXAMPLES_TEXT = (
 )
 
 # -------- UI / KEYBOARD --------
-def make_main_kb():
-    rows = [
+main_kb = ReplyKeyboardMarkup(
+    [
         [KeyboardButton("🧭 Меню движков")],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-    ]
-    if TARIFF_URL:
-        rows.append([KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))])
-    else:
-        rows.append([KeyboardButton("⭐ Подписка")])
-    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+        # Ведём СРАЗУ на тарифы, чтобы не было 404 и не приходилось скроллить
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))],
+    ],
+    resize_keyboard=True
+)
 
-main_kb = make_main_kb()
-
-# -------- LUMA/Runway DIAG --------
+# -------- LUMA HANDLERS --------
 async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = LUMA_API_KEY
     lines = [f"LUMA_API_KEY: {'✅ найден' if key else '❌ нет'}"]
@@ -648,6 +656,7 @@ async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"MODEL: {LUMA_MODEL}, ASPECT: {LUMA_ASPECT}, DURATION: {LUMA_DURATION_S}s")
     await update.message.reply_text("\n".join(lines))
 
+# NEW: быстрая диагностика ключа Runway
 async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = RUNWAY_API_KEY
     lines = [f"RUNWAY_API_KEY: {'✅ найден' if key else '❌ нет'}"]
@@ -666,30 +675,22 @@ async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================== PAYMENTS: HANDLERS ==================
 async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_str = f"{SUB_PRICE_RUB} ₽ / 30 дней"
-    text = (
-        f"Подписка *GPT5PRO*\n\n"
-        f"Цена: *{price_str}*\n\n"
-        "✅ Доступ ко всем PRO-функциям бота\n"
-        "✅ Приоритетные ответы и стабильная скорость\n"
-        "✅ Анализ изображений, голос→текст, ссылки-источники\n"
-        "✅ Генерация медиа и расширенные подсказки\n\n"
-        "_Оплата проходит через Telegram Payments (ЮKassa)._"
+    kb = InlineKeyboardMarkup.from_button(
+        InlineKeyboardButton("Оформить подписку", callback_data="subscribe_open")
     )
-    buttons = [
-        [InlineKeyboardButton("Оформить подписку", callback_data="subscribe_open")],
-        [InlineKeyboardButton("Проверить статус", callback_data="status_open")],
-    ]
-    if SUPPORT_TG:
-        buttons.append([InlineKeyboardButton("Связаться с поддержкой", url=f"https://t.me/{SUPPORT_TG}")])
-    kb = InlineKeyboardMarkup(buttons)
-    await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+    await update.message.reply_text(
+        f"💳 Подписка GPT5PRO: {price_str}\n"
+        "Даст доступ ко всем PRO-функциям на 30 дней.",
+        reply_markup=kb
+    )
 
 async def _send_invoice_safely(msg, user_id: int):
+    """Единая точка выставления счёта с понятными ошибками."""
     prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
     try:
         await msg.reply_invoice(
             title="Подписка GPT5PRO (1 месяц)",
-            description="Доступ ко всем PRO-функциям на 30 дней",
+            description="Доступ к GPT5PRO на 30 дней",
             provider_token=PROVIDER_TOKEN,
             currency=CURRENCY,
             prices=prices,
@@ -713,14 +714,9 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if query.data == "subscribe_open":
         await _send_invoice_safely(query.message, query.from_user.id)
-    elif query.data == "status_open":
-        # показать статус прямо кнопкой
-        fake_update = Update(update.update_id, message=query.message)  # reuse
-        await status_cmd(fake_update, context)
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # открываем тариф (описание) + кнопка «Оформить подписку»
-    await plans(update, context)
+    await _send_invoice_safely(update.message, update.effective_user.id)
 
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
@@ -763,7 +759,7 @@ async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Подсказка: токен берётся в @BotFather → Payments → YooKassa. "
         "Убедитесь, что провайдер привязан, а токен без лишних пробелов/переводов строк.",
         f"Валюта в коде: {CURRENCY}, цена: {SUB_PRICE_RUB} RUB",
-        f"WEB тарифы: {TARIFF_URL or '— (показываю тариф в чате)'}"
+        f"WEB тарифы: {TARIFF_URL}"
     ]
     await update.message.reply_text("\n".join(lines))
 
@@ -783,8 +779,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     # из мини-приложения
     if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
-        await msg.reply_text("Открыл тарифы. Нажмите «Оформить подписку», чтобы выставить счёт.")
-        await plans(update, context)
+        await msg.reply_text("Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))]], resize_keyboard=True))
         return
     if ptype in ("subscribe", "subscription", "subscribe_click"):
         await _send_invoice_safely(msg, msg.chat.id)
@@ -793,10 +788,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         await status_cmd(update, context); return
 
     if ptype in ("help_from_webapp", "help", "question"):
-        if SUPPORT_TG:
-            await msg.reply_text(f"🧑‍💻 Поддержка: https://t.me/{SUPPORT_TG}\nНапишите здесь свой вопрос — отвечу в чате.")
-        else:
-            await msg.reply_text("🧑‍💻 Поддержка GPT-5 PRO. Напишите здесь свой вопрос — отвечу в чате.")
+        await msg.reply_text("🧑‍💻 Поддержка GPT-5 PRO.\nНапишите здесь свой вопрос — отвечу в чате.\n\nТакже можно на почту: sale.rielt@bk.ru")
         return
 
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
@@ -818,12 +810,16 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # алиасы
 async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # если мини-приложение не настроено — показываем тариф в чате
+    # открыть тарифы и дать кнопку оформить в чате
     await plans(update, context)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
+
+    # отдельная обработка нижней кнопки «⭐ Подписка» (если webapp не открылся)
+    if text == "⭐ Подписка":
+        await plans(update, context); return
 
     # меню движков
     if text == "🧭 Меню движков":
@@ -928,18 +924,23 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз."); return
 
-    # <<< НОВОЕ: после распознавания — такой же роутинг по интенту, как для текста
+    # Авто-маршрутизация медиа-намерений (как в on_text)
     intent, prompt = detect_media_intent(text)
     if intent == "image" and prompt:
         await _call_handler_with_prompt(cmd_img, update, context, prompt); return
     if intent == "video" and prompt:
         dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
         eng = context.user_data.get("engine")
-        if eng == ENGINE_LUMA and LUMA_API_KEY:
+        if eng == ENGINE_LUMA:
+            if not LUMA_API_KEY:
+                await update.message.reply_text("🎬 Luma выбрана, но API ключ не задан. Могу предложить Runway (если PRO) или помочь с промптом.")
+                return
             context.args = [clean_prompt]
             await cmd_make_video_luma(update, context); return
         elif eng == ENGINE_RUNWAY:
             await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
+        else:
+            await update.message.reply_text("ℹ️ Для видео выбери Luma или Runway через «🧭 Меню движков»."); return
 
     prefix = f"🗣️ Распознал: «{text}»\n\n"
     web_ctx = ""
@@ -968,18 +969,23 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз."); return
 
-    # <<< НОВОЕ: тот же роутинг для аудио
+    # Авто-маршрутизация медиа-намерений (как в on_text)
     intent, prompt = detect_media_intent(text)
     if intent == "image" and prompt:
         await _call_handler_with_prompt(cmd_img, update, context, prompt); return
     if intent == "video" and prompt:
         dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
         eng = context.user_data.get("engine")
-        if eng == ENGINE_LUMA and LUMA_API_KEY:
+        if eng == ENGINE_LUMA:
+            if not LUMA_API_KEY:
+                await update.message.reply_text("🎬 Luma выбрана, но API ключ не задан. Могу предложить Runway (если PRO) или помочь с промптом.")
+                return
             context.args = [clean_prompt]
             await cmd_make_video_luma(update, context); return
         elif eng == ENGINE_RUNWAY:
             await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
+        else:
+            await update.message.reply_text("ℹ️ Для видео выбери Luma или Runway через «🧭 Меню движков»."); return
 
     prefix = f"🗣️ Распознал: «{text}»\n\n"
     web_ctx = ""
@@ -1026,7 +1032,7 @@ def build_app():
     # Премиум/подписка
     app.add_handler(CommandHandler("plans", plans))
     app.add_handler(CommandHandler("premium", premium_cmd))   # синоним
-    app.add_handler(CallbackQueryHandler(on_cb, pattern="^(subscribe_open|status_open)$"))
+    app.add_handler(CallbackQueryHandler(on_cb, pattern="^subscribe_open$"))
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
