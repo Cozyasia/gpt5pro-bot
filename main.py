@@ -51,6 +51,7 @@ TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip(
 # Media:
 RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()
 OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
+OPENAI_IMAGE_BASE_URL = os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip()  # опционально
 
 # Premium whitelist для Runway
 PREMIUM_USER_IDS = set(
@@ -85,37 +86,43 @@ TARIFF_URL = f"{WEB_ROOT}/premium.html#tariff"
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
 
-# Автодетект OpenRouter: если ключ sk-or-… и base_url пуст — используем OpenRouter.
-if OPENAI_API_KEY.startswith("sk-or-") and not OPENAI_BASE_URL:
-    OPENAI_BASE_URL = "https://openrouter.ai/api/v1"
-    log.info("Detected OpenRouter key; using base_url=%s", OPENAI_BASE_URL)
-
-def _normalize_model_for_endpoint(model_id: str, base_url: str) -> str:
-    """Подгоняем имя модели под OpenRouter или под официальный OpenAI."""
-    if base_url and "openrouter.ai" in base_url:
-        # Для OpenRouter — с вендором (openai/…)
-        return model_id if "/" in model_id else f"openai/{model_id}"
-    # Для официального OpenAI — без префикса
-    return model_id.split("/", 1)[-1]
-
-MODEL_TEXT = _normalize_model_for_endpoint(OPENAI_MODEL, OPENAI_BASE_URL)
-
 default_headers = {}
 if OPENROUTER_SITE_URL:
     default_headers["HTTP-Referer"] = OPENROUTER_SITE_URL
 if OPENROUTER_APP_NAME:
     default_headers["X-Title"] = OPENROUTER_APP_NAME
 
-# Текст/визуал (vision) через OpenRouter или официальный OpenAI — зависит от OPENAI_BASE_URL
+# нормализация модели: если base_url пуст (официальный OpenAI),
+# а модель задана в формате OpenRouter (с /), берём последний сегмент
+def _normalize_model(name: str) -> str:
+    if not name:
+        return "gpt-4o-mini"
+    if not OPENAI_BASE_URL and "/" in name:
+        return name.split("/")[-1]
+    return name
+
+OPENAI_MODEL = _normalize_model(OPENAI_MODEL)
+
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL or None,
     default_headers=default_headers or None,
 )
 
-# STT (если задан отдельный ключ) и IMAGES — всегда официальный OpenAI
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
-oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)
+# для картинок отдельный клиент и (при желании) отдельный base_url
+oai_img = OpenAI(
+    api_key=OPENAI_IMAGE_KEY,
+    base_url=OPENAI_IMAGE_BASE_URL or None,
+)
+
+# немного полезной телеметрии в логи
+try:
+    log.info("LLM endpoint: %s | model: %s", OPENAI_BASE_URL or "OpenAI official", OPENAI_MODEL)
+    img_key_prefix = (OPENAI_IMAGE_KEY or "")[:7] + "…" if OPENAI_IMAGE_KEY else "-"
+    log.info("IMG endpoint: %s | key: %s", OPENAI_IMAGE_BASE_URL or "OpenAI official", img_key_prefix)
+except Exception:
+    pass
 
 # Tavily
 try:
@@ -289,30 +296,17 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     messages.append({"role": "user", "content": user_text})
     try:
         resp = oai_llm.chat.completions.create(
-            model=MODEL_TEXT, messages=messages, temperature=0.6,
+            model=OPENAI_MODEL, messages=messages, temperature=0.6,
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("OpenAI chat error: %s", e)
-        # Более понятное объяснение типовых причин
-        msg = str(e)
-        hint = ""
-        low = msg.lower()
-        if "401" in low or "unauthorized" in low or "invalid_api_key" in low:
-            if OPENAI_BASE_URL and "openrouter.ai" in OPENAI_BASE_URL:
-                hint = "\n\nПроверь OPENAI_API_KEY (OpenRouter sk-or-…) и реферер/название в OPENROUTER_*."
-            else:
-                hint = "\n\nПохоже, ключ не подходит для выбранного эндпоинта. Если ключ sk-or-…, добавь OPENAI_BASE_URL=https://openrouter.ai/api/v1."
-        elif "insufficient_quota" in low or "billing" in low or "credit" in low:
-            hint = "\n\nПохоже на лимит/баланс аккаунта."
-        elif "model" in low and "not found" in low:
-            hint = f"\n\nПроверь имя модели: сейчас '{MODEL_TEXT}'."
-        return f"Не удалось получить ответ от модели. {msg}{hint}"
+        return "Не удалось получить ответ от модели (лимит/ключ). Попробуй позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
         resp = oai_llm.chat.completions.create(
-            model=MODEL_TEXT,
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": VISION_SYSTEM_PROMPT},
                 {"role": "user", "content": [
@@ -372,8 +366,10 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("Images API error: %s", e)
         hint = ""
         low = msg.lower()
-        if "401" in low or "unauthorized" in low or "invalid_api_key" in low:
-            hint = "\n\nПроверь OPENAI_IMAGE_KEY: действующий ключ (sk- или sk-proj-), без пробелов, и redeploy."
+        if "connection error" in low or "connect" in low:
+            hint = "\n\nПохоже на сетевую ошибку. Проверь, что OpenAI доступен из хостинга и нет прокси/VPN блокировок."
+        elif "401" in low or "unauthorized" in low or "invalid_api_key" in low:
+            hint = "\n\nПроверь OPENAI_IMAGE_KEY: действующий OpenAI-ключ (sk- или sk-proj-), без пробелов, и redeploy."
         elif "insufficient_quota" in low or "billing" in low or "credit" in low:
             hint = "\n\nПохоже на лимит/баланс. Проверь Billing на platform.openai.com."
         elif "model" in low and "not found" in low:
@@ -387,18 +383,7 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if key:
         pref = "sk-proj-" if key.startswith("sk-proj-") else ("sk-" if key.startswith("sk-") else "??")
         lines += [f"Префикс: {pref}", f"Длина: {len(key)}"]
-    await update.message.reply_text("\n".join(lines))
-
-# Диагностика текстового клиента
-async def cmd_diag_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    key = OPENAI_API_KEY
-    base = OPENAI_BASE_URL or "— (OpenAI official)"
-    kpref = "sk-or-" if key.startswith("sk-or-") else ("sk-" if key.startswith("sk-") else key[:5] + "…")
-    lines = [
-        f"BASE_URL: {base}",
-        f"MODEL_TEXT: {MODEL_TEXT}",
-        f"KEY prefix: {kpref}",
-    ]
+    lines.append(f"OPENAI_IMAGE_BASE_URL: {OPENAI_IMAGE_BASE_URL or '— (официальный OpenAI)'}")
     await update.message.reply_text("\n".join(lines))
 
 # -------- VIDEO (Runway SDK) --------
@@ -526,11 +511,9 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
                 raise RuntimeError(f"Luma failed: {last_msg or status}")
             time.sleep(2)
 
-# ХЭНДЛЕР Luma (исправляет NameError в логах)
+# ХЭНДЛЕР Luma
 async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # prompt может прийти как аргументы или из текста сообщения
     prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
-    # убрать возможный префикс команды
     prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
 
     dur, ar, prompt = parse_video_opts_from_text(prompt_raw)
@@ -625,7 +608,7 @@ START_TEXT = (
 
 MODES_TEXT = (
     "⚙️ *Режимы работы*\n"
-    "• 💬 Универсальный — обычный диалог.\n"
+    "• 💬 Универсальный — обычный диalog.\n"
     "• 🧠 Исследователь — факты/источники, сводки.\n"
     "• ✍️ Редактор — правки текста, стиль, структура.\n"
     "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
@@ -648,7 +631,6 @@ main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню движков")],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        # Ведём СРАЗУ на тарифы, чтобы не было 404 и не приходилось скроллить
         [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))],
     ],
     resize_keyboard=True
@@ -693,7 +675,6 @@ async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def _send_invoice_safely(msg, user_id: int):
-    """Единая точка выставления счёта с понятными ошибками."""
     prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
     try:
         await msg.reply_invoice(
@@ -785,7 +766,6 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     ptype = (payload.get("type") or "").strip().lower()
     log.info("web_app_data: %s", payload)
 
-    # из мини-приложения
     if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
         await msg.reply_text("Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))]], resize_keyboard=True))
         return
@@ -818,7 +798,6 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # алиасы
 async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # открыть тарифы и дать кнопку оформить в чате
     await plans(update, context)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -927,6 +906,23 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = await transcribe_audio(buf, filename_hint="audio.ogg")
     if not text:
         await update.message.reply_text("Не удалось распознать голос. Попробуй ещё раз."); return
+
+    # <<< НОВОЕ: распознанный текст тоже проверяем на интент изображения/видео
+    intent, prompt = detect_media_intent(text)
+    if intent == "image" and prompt:
+        await _call_handler_with_prompt(cmd_img, update, context, prompt); return
+    if intent == "video" and prompt:
+        dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
+        eng = context.user_data.get("engine")
+        if eng == ENGINE_LUMA:
+            if not LUMA_API_KEY:
+                await update.message.reply_text("🎬 Luma выбрана, но API ключ не задан.")
+                return
+            context.args = [clean_prompt]
+            await cmd_make_video_luma(update, context); return
+        elif eng == ENGINE_RUNWAY:
+            await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
+
     prefix = f"🗣️ Распознал: «{text}»\n\n"
     web_ctx = ""
     sources = []
@@ -953,6 +949,23 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = await transcribe_audio(buf, filename_hint=filename)
     if not text:
         await update.message.reply_text("Не удалось распознать аудио. Попробуй ещё раз."); return
+
+    # <<< НОВОЕ: интент для аудио
+    intent, prompt = detect_media_intent(text)
+    if intent == "image" and prompt:
+        await _call_handler_with_prompt(cmd_img, update, context, prompt); return
+    if intent == "video" and prompt:
+        dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
+        eng = context.user_data.get("engine")
+        if eng == ENGINE_LUMA:
+            if not LUMA_API_KEY:
+                await update.message.reply_text("🎬 Luma выбрана, но API ключ не задан.")
+                return
+            context.args = [clean_prompt]
+            await cmd_make_video_luma(update, context); return
+        elif eng == ENGINE_RUNWAY:
+            await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
+
     prefix = f"🗣️ Распознал: «{text}»\n\n"
     web_ctx = ""
     sources = []
@@ -993,12 +1006,11 @@ def build_app():
     app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))
     app.add_handler(CommandHandler("diag_payments", diag_payments))
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
-    app.add_handler(CommandHandler("diag_text", cmd_diag_text))
     app.add_handler(CommandHandler("engines", open_engines_menu))
 
     # Премиум/подписка
     app.add_handler(CommandHandler("plans", plans))
-    app.add_handler(CommandHandler("premium", premium_cmd))   # синоним
+    app.add_handler(CommandHandler("premium", premium_cmd))
     app.add_handler(CallbackQueryHandler(on_cb, pattern="^subscribe_open$"))
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
