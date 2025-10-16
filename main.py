@@ -32,8 +32,8 @@ log = logging.getLogger("gpt-bot")
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
-OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()      # LLM (OpenRouter или OpenAI)
-OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()     # напр. https://openrouter.ai/api/v1
+OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
@@ -45,14 +45,14 @@ TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
 # STT:
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
-OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()      # отдельный OpenAI ключ для Whisper (опц.)
+OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
 # Media:
-RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()      # ключ Runway (dev.runwayml.com → API Keys)
-OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY  # обычный OpenAI ключ (для картинок)
+RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()
+OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 
-# NEW: Premium доступ к Runway (список TG user_id через ENV, разделённых запятыми)
+# Premium whitelist для Runway
 PREMIUM_USER_IDS = set(
     int(x) for x in os.environ.get("PREMIUM_USER_IDS", "").split(",") if x.strip().isdigit()
 )
@@ -64,12 +64,12 @@ LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
 LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))
 
 # ====== PAYMENTS (ЮKassa via Telegram Payments) ======
-PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()  # BotFather → Payments
-SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))            # цена за 30 дней (руб)
+PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
+SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))
 CURRENCY       = "RUB"
 DB_PATH        = os.environ.get("DB_PATH", "subs.db")
 
-PORT           = int(os.environ.get("PORT", "10000"))
+PORT = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
@@ -78,9 +78,11 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is required")
 
+# WEB_ROOT: всегда мини-лендинг premium.html
 WEB_ROOT = WEBAPP_URL or PUBLIC_URL
+TARIFF_URL = f"{WEB_ROOT}/premium.html#tariff"
 
-# -------- OPENAI / Tavily clients --------
+# -------- OPENAI / Tavily --------
 from openai import OpenAI
 
 default_headers = {}
@@ -95,12 +97,10 @@ oai_llm = OpenAI(
     default_headers=default_headers or None,
 )
 
-oai_stt = None
-if OPENAI_STT_KEY:
-    oai_stt = OpenAI(api_key=OPENAI_STT_KEY)
-
+oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)
 
+# Tavily
 try:
     if TAVILY_API_KEY:
         from tavily import TavilyClient
@@ -124,7 +124,6 @@ def db_init():
     con.close()
 
 def activate_subscription(user_id: int, months: int = 1):
-    """Активирует/продлевает подписку на N месяцев (30д * N)."""
     now = datetime.utcnow()
     until = now + timedelta(days=30 * months)
 
@@ -249,15 +248,6 @@ def sniff_image_mime(data: bytes) -> str:
     if data[:4] == b"RIFF" and b"WEBP" in data[:16]: return "image/webp"
     return "image/jpeg"
 
-def format_sources(items):
-    if not items: return ""
-    lines = []
-    for i, it in enumerate(items, 1):
-        title = it.get("title") or it.get("url") or "Источник"
-        url = it.get("url") or ""
-        lines.append(f"[{i}] {title} — {url}")
-    return "\n\nСсылки:\n" + "\n".join(lines)
-
 def tavily_search(query: str, max_results: int = 5):
     if not tavily: return None, []
     try:
@@ -273,6 +263,8 @@ def tavily_search(query: str, max_results: int = 5):
         return None, []
 
 # -------- OpenAI helpers --------
+from openai import OpenAI as _OpenAI
+
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
@@ -351,19 +343,14 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------- VIDEO (Runway SDK) --------
 if RUNWAY_API_KEY:
     os.environ["RUNWAY_API_KEY"] = RUNWAY_API_KEY
-
 from runwayml import RunwayML
 
 def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
     if not RUNWAY_API_KEY:
         raise RuntimeError("RUNWAY_API_KEY не задан")
     client = RunwayML(api_key=RUNWAY_API_KEY)
-
     task = client.text_to_video.create(
-        prompt_text=prompt,
-        model="veo3",
-        ratio="720:1280",
-        duration=duration,
+        prompt_text=prompt, model="veo3", ratio="720:1280", duration=duration,
     )
     task_id = task.id
     time.sleep(1)
@@ -371,10 +358,8 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
     while task.status not in ["SUCCEEDED", "FAILED"]:
         time.sleep(1)
         task = client.tasks.retrieve(task_id)
-
     if task.status != "SUCCEEDED":
         raise RuntimeError(getattr(task, "error", None) or f"Runway task failed: {task.status}")
-
     output = getattr(task, "output", None)
     if isinstance(output, list) and output:
         video_url = output[0]
@@ -382,7 +367,6 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
         video_url = output.get("url") or output.get("video_url")
     else:
         raise RuntimeError(f"Runway: не найден URL результата в output: {output}")
-
     with httpx.Client(timeout=None) as http:
         r = http.get(video_url)
         r.raise_for_status()
@@ -391,41 +375,32 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in PREMIUM_USER_IDS:
         await update.effective_message.reply_text(
-            "⚠️ Runway доступен только на PRO-тарифе.\n"
-            "Это студийное видео высокого качества, один запрос ≈ $7."
-        )
-        return
-
+            "⚠️ Runway доступен только на PRO-тарифе.\nОдин запрос ≈ $7."
+        ); return
     prompt = " ".join(context.args).strip()
     if not prompt:
-        await update.effective_message.reply_text("Напиши так: /video закат на Самуи, дрон, тёплые цвета")
-        return
-
+        await update.effective_message.reply_text("Напиши так: /video закат на Самуи, дрон, тёплые цвета"); return
     await update.effective_message.reply_text("🎬 Генерирую видео через Runway…")
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
     try:
         video_bytes = await asyncio.to_thread(_runway_make_video_sync, prompt, 8)
-        await update.effective_message.reply_video(
-            video=video_bytes, supports_streaming=True, caption=f"Готово 🎥\n{prompt}"
-        )
+        await update.effective_message.reply_video(video=video_bytes, supports_streaming=True, caption=f"Готово 🎥\n{prompt}")
     except Exception as e:
         msg = str(e)
         if "401" in msg or "Unauthorized" in msg:
             hint = (
                 "Похоже, ключ не принимается API (401).\n"
-                "Проверь:\n"
-                "• Ключ именно из dev.runwayml.com → API Keys (формат key_...)\n"
-                "• В Render переменная называется ровно RUNWAY_API_KEY\n"
-                "• После изменения ENV сделан Deploy\n"
+                "Проверь ключ с dev.runwayml.com → API Keys (формат key_...), "
+                "имя ENV RUNWAY_API_KEY и redeploy."
             )
             await update.effective_message.reply_text(f"⚠️ Видео не удалось (401): проверь ключ.\n\n{hint}")
         elif "credit" in msg.lower():
-            await update.effective_message.reply_text("⚠️ Недостаточно кредитов Runway для этого запроса.")
+            await update.effective_message.reply_text("⚠️ Недостаточно кредитов Runway.")
         else:
             await update.effective_message.reply_text(f"⚠️ Видео не удалось: {e}")
         log.exception("Runway video error: %s", e)
 
-# >>> LUMA HELPERS
+# >>> LUMA
 _DURATION_RE = re.compile(r"(?:(\d{1,2})\s*(?:sec|secs|s|сек))", re.I)
 _AR_RE = re.compile(r"\b(16:9|9:16|4:3|3:4|1:1|21:9|9:21)\b", re.I)
 
@@ -433,7 +408,6 @@ def parse_video_opts_from_text(text: str, default_duration: int = None, default_
     duration = default_duration if default_duration is not None else LUMA_DURATION_S
     ar = default_ar if default_ar is not None else LUMA_ASPECT
     t = text
-
     m = _DURATION_RE.search(t)
     if m:
         try:
@@ -441,12 +415,10 @@ def parse_video_opts_from_text(text: str, default_duration: int = None, default_
         except Exception:
             pass
         t = _DURATION_RE.sub("", t, count=1)
-
     m = _AR_RE.search(t)
     if m:
         ar = m.group(1)
         t = _AR_RE.sub("", t, count=1)
-
     clean = re.sub(r"\s{2,}", " ", t.replace(" ,", ",")).strip(" ,.;-—")
     return duration, ar, clean
 
@@ -455,19 +427,13 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
         raise RuntimeError("LUMA_API_KEY не задан")
     dur = duration if duration is not None else LUMA_DURATION_S
     ar  = aspect_ratio if aspect_ratio is not None else LUMA_ASPECT
-
     headers = {
         "Authorization": f"Bearer {LUMA_API_KEY}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
     create_url = "https://api.lumalabs.ai/dream-machine/v1/generations"
-    payload = {
-        "prompt": prompt,
-        "model": LUMA_MODEL,
-        "duration": f"{dur}s",
-        "aspect_ratio": ar,
-    }
+    payload = {"prompt": prompt, "model": LUMA_MODEL, "duration": f"{dur}s", "aspect_ratio": ar}
     with httpx.Client(timeout=None) as http:
         r = http.post(create_url, headers=headers, json=payload)
         try:
@@ -478,10 +444,7 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
         gen_id = gen.get("id") or gen.get("generation_id")
         if not gen_id:
             raise RuntimeError(f"Luma: не получили id задачи: {gen}")
-
         get_url = f"https://api.lumalabs.ai/dream-machine/v1/generations/{gen_id}"
-        status = None
-        last_msg = ""
         while True:
             g = http.get(get_url, headers=headers)
             try:
@@ -496,8 +459,7 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
                 video_url = assets.get("video") or assets.get("mp4") or assets.get("file")
                 if not video_url:
                     raise RuntimeError(f"Luma: нет ссылки на видео в ответе: {data}")
-                v = http.get(video_url)
-                v.raise_for_status()
+                v = http.get(video_url); v.raise_for_status()
                 return v.content
             if status in ("failed", "error", "cancelled", "canceled"):
                 raise RuntimeError(f"Luma failed: {last_msg or status}")
@@ -548,8 +510,7 @@ async def open_engines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     if text == "⬅️ Назад":
-        await cmd_start(update, context)
-        return
+        await cmd_start(update, context); return
     eng = _engine_from_button(text)
     if not eng:
         return
@@ -597,7 +558,8 @@ main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню движков")],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))],
+        # Ведём СРАЗУ на тарифы, чтобы не было 404 и не приходилось скроллить
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))],
     ],
     resize_keyboard=True
 )
@@ -628,30 +590,128 @@ async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
     await update.message.reply_text("\n".join(lines))
 
-async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
-    prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
-    dur, ar, prompt = parse_video_opts_from_text(prompt_raw)
-    if not prompt:
-        await update.effective_message.reply_text("Напиши так: /video_luma закат над морем, 6s, 9:16")
-        return
-    if not LUMA_API_KEY:
-        await update.effective_message.reply_text("🎬 Luma: не задан LUMA_API_KEY.")
-        return
-    await update.effective_message.reply_text(f"🎬 Генерирую через Luma… (⏱ {dur}s • {ar})")
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
+# ================== PAYMENTS: HANDLERS ==================
+async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    price_str = f"{SUB_PRICE_RUB} ₽ / 30 дней"
+    kb = InlineKeyboardMarkup.from_button(
+        InlineKeyboardButton("Оформить подписку", callback_data="subscribe_open")
+    )
+    await update.message.reply_text(
+        f"💳 Подписка GPT5PRO: {price_str}\n"
+        "Даст доступ ко всем PRO-функциям на 30 дней.",
+        reply_markup=kb
+    )
+
+async def _send_invoice_safely(msg, user_id: int):
+    """Единая точка выставления счёта с понятными ошибками."""
+    prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
     try:
-        video_bytes = await asyncio.to_thread(_luma_make_video_sync, prompt, dur, ar)
-        await update.effective_message.reply_video(
-            video=video_bytes,
-            supports_streaming=True,
-            caption=f"Готово 🎥 {dur}s • {ar}\n{prompt}"
+        await msg.reply_invoice(
+            title="Подписка GPT5PRO (1 месяц)",
+            description="Доступ к GPT5PRO на 30 дней",
+            provider_token=PROVIDER_TOKEN,
+            currency=CURRENCY,
+            prices=prices,
+            payload=f"sub_{user_id}"
         )
     except Exception as e:
-        await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
-        log.exception("Luma video error: %s", e)
+        log.exception("create invoice error: %s", e)
+        text = (
+            "⚠️ Не удалось сформировать счёт. Проверьте подключение платежей.\n\n"
+            "Частые причины:\n"
+            "• Неверный/пустой PROVIDER_TOKEN_YOOKASSA (из BotFather → Payments → YooKassa)\n"
+            "• В BotFather не выбран провайдер или выбран TEST при live-токене\n"
+            "• Валюта/сумма не поддерживается провайдером (ожидаем RUB)\n"
+            "• Бот не запущен публично / токен с пробелами / не redeploy после ENV\n\n"
+            f"Техническая деталь: {e}"
+        )
+        await msg.reply_text(text)
 
-# ================== PAYMENTS: HANDLERS ==================
+async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "subscribe_open":
+        await _send_invoice_safely(query.message, query.from_user.id)
+
+async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _send_invoice_safely(update.message, update.effective_user.id)
+
+async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.pre_checkout_query.answer(ok=True)
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sp = update.message.successful_payment
+    user_id = update.effective_user.id
+    if sp.currency != CURRENCY:
+        await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
+    if sp.total_amount != SUB_PRICE_RUB * 100:
+        await update.message.reply_text("❗️Сумма платежа не совпала, обратитесь в поддержку."); return
+    until = activate_subscription(user_id, months=1)
+    await update.message.reply_text(
+        f"✅ Оплата получена!\nПодписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
+        f"Команда /pro — проверить доступ к ПРО-функции."
+    )
+
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    until = get_subscription_until(update.effective_user.id)
+    if not until or until <= datetime.utcnow():
+        await update.message.reply_text("Статус: ❌ нет активной подписки.\nКоманда /subscribe — оформить.")
+    else:
+        days_left = max(0, (until - datetime.utcnow()).days)
+        await update.message.reply_text(
+            f"Статус: ✅ активна\nДействует до: {until.strftime('%d.%m.%Y %H:%M UTC')} ({days_left} дн.)"
+        )
+
+async def pro_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_active(update.effective_user.id):
+        await update.message.reply_text("❌ Нужна активная подписка. Введите /subscribe")
+        return
+    await update.message.reply_text("🎯 ПРО-доступ подтверждён. Тут выполняем PRO-действие...")
+
+# Диагностика платёжки
+async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    t = PROVIDER_TOKEN
+    lines = [
+        f"PROVIDER_TOKEN_YOOKASSA: {'✅ задан' if t else '❌ пуст'}",
+        f"Длина: {len(t) if t else 0}",
+        "Подсказка: токен берётся в @BotFather → Payments → YooKassa. "
+        "Убедитесь, что провайдер привязан, а токен без лишних пробелов/переводов строк.",
+        f"Валюта в коде: {CURRENCY}, цена: {SUB_PRICE_RUB} RUB",
+        f"WEB тарифы: {TARIFF_URL}"
+    ]
+    await update.message.reply_text("\n".join(lines))
+
+# -------- WEB APP DATA --------
+async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    wad = getattr(msg, "web_app_data", None)
+    if not wad:
+        return
+    raw = wad.data or ""
+    try:
+        payload = json.loads(raw) if raw.strip().startswith("{") else {"type": raw}
+    except Exception:
+        payload = {"type": str(raw)}
+    ptype = (payload.get("type") or "").strip().lower()
+    log.info("web_app_data: %s", payload)
+
+    # из мини-приложения
+    if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
+        await msg.reply_text("Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))]], resize_keyboard=True))
+        return
+    if ptype in ("subscribe", "subscription", "subscribe_click"):
+        await _send_invoice_safely(msg, msg.chat.id)
+        return
+    if ptype in ("status", "status_check"):
+        await status_cmd(update, context); return
+
+    if ptype in ("help_from_webapp", "help", "question"):
+        await msg.reply_text("🧑‍💻 Поддержка GPT-5 PRO.\nНапишите здесь свой вопрос — отвечу в чате.\n\nТакже можно на почту: sale.rielt@bk.ru")
+        return
+
+    await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
+
+# -------- MAIN TEXT FLOW --------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if BANNER_URL:
         try:
@@ -666,136 +726,11 @@ async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
 
-# диагностический хэндлер платежей
-async def cmd_diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ok_token = "✅" if PROVIDER_TOKEN else "❌"
-    await update.message.reply_text(
-        "Платежи (ЮKassa/Telegram Payments):\n"
-        f"• PROVIDER_TOKEN: {ok_token}\n"
-        f"• Валюта: {CURRENCY}\n"
-        f"• Сумма: {SUB_PRICE_RUB} RUB (x100 = {SUB_PRICE_RUB*100})\n"
-        "Если инвойс не уходит — проверь токен в ENV и подключение провайдера в BotFather (ЮKassa)."
-    )
+# алиасы
+async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # открыть тарифы и дать кнопку оформить в чате
+    await plans(update, context)
 
-async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    price_str = f"{SUB_PRICE_RUB} ₽ / 30 дней"
-    kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("Оформить подписку", callback_data="subscribe_open")
-    )
-    await update.message.reply_text(
-        f"💳 Подписка GPT5PRO: {price_str}\n"
-        "Даст доступ ко всем PRO-функциям на 30 дней.",
-        reply_markup=kb
-    )
-
-async def _send_invoice(chat, user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Единая точка отправки инвойса — используем и из кнопки, и из /subscribe, и из WebApp.
-    """
-    prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
-    try:
-        await chat.reply_invoice(
-            title="Подписка GPT5PRO (1 месяц)",
-            description="Доступ к GPT5PRO на 30 дней",
-            provider_token=PROVIDER_TOKEN,
-            currency=CURRENCY,
-            prices=prices,
-            payload=f"sub_{user_id}"
-        )
-    except Exception as e:
-        # Пришлём понятную подсказку и залогируем причину
-        msg = str(e)
-        log.exception("reply_invoice error: %s", msg)
-        hint = (
-            "Не удалось сформировать счёт. Проверьте подключение платежей.\n\n"
-            "Частые причины:\n"
-            "• Неверный или пустой PROVIDER_TOKEN (BotFather → Payments → ЮKassa)\n"
-            "• В BotFather не выбран провайдер или выбран тестовый при live-токене\n"
-            "• Валюта/сумма не поддерживается провайдером (ожидаем RUB)\n"
-            "• Бот не запущен как приватный/публичный и т.д."
-        )
-        await chat.reply_text(f"⚠️ {hint}")
-
-async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "subscribe_open":
-        await _send_invoice(query.message, query.from_user.id, context)
-
-async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await _send_invoice(update.message, update.effective_user.id, context)
-
-async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # можно добавить проверки суммы/валюты
-    await update.pre_checkout_query.answer(ok=True)
-
-async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sp = update.message.successful_payment
-    user_id = update.effective_user.id
-    if sp.currency != CURRENCY:
-        await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
-    if sp.total_amount != SUB_PRICE_RUB * 100:
-        await update.message.reply_text("❗️Сумма платежа не совпала, обратитесь в поддержку."); return
-
-    until = activate_subscription(user_id, months=1)
-    await update.message.reply_text(
-        f"✅ Оплата получена!\n"
-        f"Подписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
-        f"Команда /pro — проверить доступ к ПРО-функции."
-    )
-
-async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    until = get_subscription_until(update.effective_user.id)
-    if not until or until <= datetime.utcnow():
-        await update.message.reply_text("Статус: ❌ нет активной подписки.\nКоманда /subscribe — оформить.")
-    else:
-        days_left = max(0, (until - datetime.utcnow()).days)
-        await update.message.reply_text(
-            f"Статус: ✅ активна\n"
-            f"Действует до: {until.strftime('%d.%m.%Y %H:%M UTC')} ({days_left} дн.)"
-        )
-
-async def pro_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_active(update.effective_user.id):
-        await update.message.reply_text("❌ Нужна активная подписка. Введите /subscribe")
-        return
-    await update.message.reply_text("🎯 ПРО-доступ подтверждён. Тут выполняем PRO-действие...")
-
-# -------- WEB APP DATA --------
-async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.effective_message
-    wad = getattr(msg, "web_app_data", None)
-    if not wad:
-        return
-    raw = wad.data or ""
-    try:
-        payload = json.loads(raw) if raw.strip().startswith("{") else {"type": raw}
-    except Exception:
-        payload = {"type": str(raw)}
-
-    ptype = (payload.get("type") or "").strip().lower()
-    log.info("web_app_data: %s", payload)
-
-    # мгновенная покупка из WebApp
-    if ptype in ("subscribe_now", "subscribe", "pay", "buy"):
-        await _send_invoice(msg, update.effective_user.id, context)
-        return
-
-    if ptype in ("help_from_webapp", "help", "question"):
-        await msg.reply_text("🧑‍💻 Поддержка GPT-5 PRO.\nНапиши здесь свой вопрос — отвечу в чате.\n\nТакже можно на почту: sale.rielt@bk.ru")
-        return
-
-    if ptype in ("plan_from_webapp", "plan", "subscription"):
-        kb = ReplyKeyboardMarkup(
-            [[KeyboardButton("⭐ Открыть подписку", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))]],
-            resize_keyboard=True, one_time_keyboard=True
-        )
-        await msg.reply_text("Оформить подписку можно по кнопке ниже. ⤵️", reply_markup=kb)
-        return
-
-    await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
-
-# -------- MAIN TEXT FLOW --------
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
@@ -819,9 +754,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         eng = context.user_data.get("engine")
         if eng == ENGINE_LUMA:
             if not LUMA_API_KEY:
-                await update.message.reply_text(
-                    "🎬 Luma выбрана, но API ключ не задан. Пока могу предложить Runway (если PRO) или описать промпт."
-                ); return
+                await update.message.reply_text("🎬 Luma выбрана, но API ключ не задан. Могу предложить Runway (если PRO) или помочь с промптом.")
+                return
             context.args = [clean_prompt]
             await cmd_make_video_luma(update, context); return
         elif eng == ENGINE_RUNWAY:
@@ -835,8 +769,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await cmd_modes(update, context); return
     if lower in ("🧩 примеры", "примеры", "/examples"):
         await cmd_examples(update, context); return
-    if lower in ("/premium", "premium"):
-        await plans(update, context); return
 
     if is_vision_capability_question(text):
         await update.message.reply_text(
@@ -948,9 +880,9 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(prefix + answer, disable_web_page_preview=False)
 
 async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Да, помогу с видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам и отвечу по содержанию. 📽️")
+    await update.message.reply_text("Да, помогу с видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам. 📽️")
 
-# -------- helper to call handlers with prompt --------
+# -------- helper --------
 async def _call_handler_with_prompt(handler, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     old_args = getattr(context, "args", None)
     try:
@@ -969,20 +901,12 @@ def build_app():
     app.add_handler(CommandHandler("examples", cmd_examples))
     app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))
     app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))
-    app.add_handler(CommandHandler("diag_payments", cmd_diag_payments))
+    app.add_handler(CommandHandler("diag_payments", diag_payments))
     app.add_handler(CommandHandler("engines", open_engines_menu))
 
-    # Изображения/видео
-    app.add_handler(CommandHandler("img", cmd_img))
-    app.add_handler(CommandHandler("video", cmd_make_video))
-    app.add_handler(CommandHandler("video_luma", cmd_make_video_luma))
-
-    # WEB APP
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
-
-    # ===== Payments
+    # Премиум/подписка
     app.add_handler(CommandHandler("plans", plans))
-    app.add_handler(CommandHandler("premium", plans))  # алиас
+    app.add_handler(CommandHandler("premium", premium_cmd))   # синоним
     app.add_handler(CallbackQueryHandler(on_cb, pattern="^subscribe_open$"))
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
@@ -990,11 +914,19 @@ def build_app():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("pro", pro_cmd))
 
-    # Меню движков (кнопки)
+    # WEB APP
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
+
+    # Изображения/видео
+    app.add_handler(CommandHandler("img", cmd_img))
+    app.add_handler(CommandHandler("video", cmd_make_video))
+    app.add_handler(CommandHandler("video_luma", cmd_make_video_luma))
+
+    # Кнопки меню движков
     engine_buttons_pattern = "(" + "|".join(map(re.escape, list(ENGINE_TITLES.values()) + ["⬅️ Назад", "🧭 Меню движков"])) + ")"
     app.add_handler(MessageHandler(filters.Regex(engine_buttons_pattern), on_text))
 
-    # Остальной текст
+    # Остальной текст/медиа
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document.IMAGE, on_document))
@@ -1006,7 +938,6 @@ def build_app():
 def run_webhook(app):
     url_path = f"webhook/{BOT_TOKEN}"
     webhook_url = f"{PUBLIC_URL.rstrip('/')}/{url_path}"
-
     log.info("Starting webhook on 0.0.0.0:%s  ->  %s", PORT, webhook_url)
     app.run_webhook(
         listen="0.0.0.0",
@@ -1018,14 +949,13 @@ def run_webhook(app):
     )
 
 def main():
-    # Инициализируем БД подписок перед запуском
     db_init()
     if not PROVIDER_TOKEN:
         log.warning("⚠️ PROVIDER_TOKEN_YOOKASSA не задан — инвойсы не будут работать.")
     app = build_app()
     run_webhook(app)
 
-# короткие алиасы, чтобы совпало с handler-именами
+# короткие алиасы (для safety — не удаляй)
 cmd_start = cmd_start if 'cmd_start' in globals() else None
 cmd_modes = cmd_modes if 'cmd_modes' in globals() else None
 cmd_examples = cmd_examples if 'cmd_examples' in globals() else None
