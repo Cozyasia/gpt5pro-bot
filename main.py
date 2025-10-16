@@ -57,20 +57,19 @@ PREMIUM_USER_IDS = set(
     int(x) for x in os.environ.get("PREMIUM_USER_IDS", "").split(",") if x.strip().isdigit()
 )
 
-# >>> LUMA: begin
-LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()          # ключ вида luma-xxxxxxxx
-LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()       # ОБЯЗАТЕЛЬНО для API
-LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()       # дефолт аспект
-LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))         # дефолт длительность
-# >>> LUMA: end
+# >>> LUMA
+LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
+LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
+LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
+LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))
 
 # ====== PAYMENTS (ЮKassa via Telegram Payments) ======
-PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()  # из BotFather → Payments
+PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()  # BotFather → Payments
 SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))            # цена за 30 дней (руб)
 CURRENCY       = "RUB"
 DB_PATH        = os.environ.get("DB_PATH", "subs.db")
 
-PORT = int(os.environ.get("PORT", "10000"))
+PORT           = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
@@ -98,11 +97,10 @@ oai_llm = OpenAI(
 
 oai_stt = None
 if OPENAI_STT_KEY:
-    oai_stt = OpenAI(api_key=OPENAI_STT_KEY)  # всегда api.openai.com
+    oai_stt = OpenAI(api_key=OPENAI_STT_KEY)
 
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)
 
-# Tavily
 try:
     if TAVILY_API_KEY:
         from tavily import TavilyClient
@@ -161,45 +159,6 @@ def is_active(user_id: int) -> bool:
     until = get_subscription_until(user_id)
     return bool(until and until > datetime.utcnow())
 
-# ===== Payments helpers & diagnostics =====
-async def send_invoice(chat, user_id: int, ctx: ContextTypes.DEFAULT_TYPE):
-    """Безопасно отправляет инвойс; пишет в чат, если что-то не так."""
-    try:
-        if not PROVIDER_TOKEN:
-            await chat.reply_text("⚠️ Платёжный провайдер не настроен. Обратитесь в поддержку.")
-            log.error("No PROVIDER_TOKEN_YOOKASSA in ENV")
-            return
-        prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
-        await chat.reply_invoice(
-            title="Подписка GPT5PRO (1 месяц)",
-            description="Доступ к GPT5PRO на 30 дней",
-            provider_token=PROVIDER_TOKEN,
-            currency=CURRENCY,
-            prices=prices,
-            payload=f"sub_{user_id}"
-        )
-    except Exception as e:
-        log.exception("reply_invoice failed: %s", e)
-        msg = (
-            "⚠️ Не удалось сформировать счёт. "
-            "Проверьте подключение платежей. Если ошибка повторится — напишите в поддержку."
-        )
-        try:
-            await chat.reply_text(msg)
-        except Exception:
-            pass
-
-async def diag_pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ok = "✅" if PROVIDER_TOKEN else "❌"
-    token_hint = f"{PROVIDER_TOKEN[:10]}…{PROVIDER_TOKEN[-6:]}" if PROVIDER_TOKEN else "—"
-    text = (
-        f"Платежи: {ok}\n"
-        f"Provider token: {token_hint}\n"
-        f"Цена: {SUB_PRICE_RUB} {CURRENCY}\n"
-        f"Команды: /plans → кнопка, /subscribe → инвойс."
-    )
-    await update.message.reply_text(text)
-
 # -------- PROMPTS --------
 SYSTEM_PROMPT = (
     "Ты дружелюбный и лаконичный ассистент на русском. "
@@ -228,7 +187,7 @@ _CAPABILITY_RE = re.compile(
     re.IGNORECASE
 )
 
-# === INTENT: распознаём просьбы без команд ===
+# === INTENT
 _IMG_WORDS = r"(картин\w+|изображен\w+|логотип\w+|иконк\w+|постер\w*|image|picture|logo|icon|banner)"
 _VID_WORDS = r"(видео|ролик\w*|клип\w*|анимаци\w*|shorts|reel|clip|video)"
 _VERBS     = r"(сделай|создай|сгенерируй|нарисуй|сформируй|собери|сними|сотвор|хочу|нужно|надо|please|make|generate|create)"
@@ -349,7 +308,6 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
 # -------- STT --------
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
     data = buf.getvalue()
-    # Deepgram
     if DEEPGRAM_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -365,7 +323,6 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
                 if text: return text
         except Exception as e:
             log.exception("Deepgram STT error: %s", e)
-    # Whisper
     if oai_stt:
         try:
             buf2 = BytesIO(data); buf2.seek(0); setattr(buf2,"name",filename_hint)
@@ -560,8 +517,6 @@ ENGINE_TITLES = {
 }
 
 def engines_kb():
-    # если есть WEBAPP_URL — показываем кнопку WebApp, иначе простую «Подписка»
-    sub_btn = (KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html")))
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton(ENGINE_TITLES[ENGINE_GPT])],
@@ -572,6 +527,44 @@ def engines_kb():
         ],
         resize_keyboard=True
     )
+
+def _engine_from_button(text: str):
+    for k, v in ENGINE_TITLES.items():
+        if v == text:
+            return k
+    return None
+
+async def open_engines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["__prev_kb"] = main_kb
+    await update.effective_message.reply_text(
+        "Выбери движок для работы 👇\n\n"
+        "• GPT-5 — ответы и картинки через OpenAI\n"
+        "• Luma — видео/фото (экономнее Runway)\n"
+        "• Runway — студийное видео (PRO)\n"
+        "• Midjourney — помогу со сборкой промпта для Discord",
+        reply_markup=engines_kb()
+    )
+
+async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or "").strip()
+    if text == "⬅️ Назад":
+        await cmd_start(update, context)
+        return
+    eng = _engine_from_button(text)
+    if not eng:
+        return
+    context.user_data["engine"] = eng
+    if eng == ENGINE_RUNWAY and update.effective_user.id not in PREMIUM_USER_IDS:
+        await update.message.reply_text("⚠️ Runway доступен только на PRO-тарифе.")
+    elif eng == ENGINE_LUMA:
+        if not LUMA_API_KEY:
+            await update.message.reply_text("🎬 Luma выбрана. API-ключ не задан — пока использую запасные пути. Готов принимать запросы «создай видео…».")
+        else:
+            await update.message.reply_text("🎬 Luma активна. Пиши «создай видео…» или «сгенерируй фото…».")
+    elif eng == ENGINE_MJ:
+        await update.message.reply_text("🖼 Midjourney: пришли описание — соберу промпт для Discord.")
+    else:
+        await update.message.reply_text("💬 GPT-5 активирован.")
 
 # -------- STATIC TEXTS --------
 START_TEXT = (
@@ -600,57 +593,14 @@ EXAMPLES_TEXT = (
 )
 
 # -------- UI / KEYBOARD --------
-if WEBAPP_URL:
-    sub_button = KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))
-else:
-    sub_button = KeyboardButton("⭐ Подписка")  # фолбэк: обработаем как текст -> /plans
-
 main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню движков")],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        [sub_button],
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=f"{WEB_ROOT}/premium.html"))],
     ],
     resize_keyboard=True
 )
-
-async def _engine_from_button(text: str):
-    for k, v in ENGINE_TITLES.items():
-        if v == text:
-            return k
-    return None
-
-async def open_engines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["__prev_kb"] = main_kb
-    await update.effective_message.reply_text(
-        "Выбери движок для работы 👇\n\n"
-        "• GPT-5 — ответы и картинки через OpenAI\n"
-        "• Luma — видео/фото (экономнее Runway)\n"
-        "• Runway — студийное видео (PRO)\n"
-        "• Midjourney — помогу со сборкой промпта для Discord",
-        reply_markup=engines_kb()
-    )
-
-async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (update.message.text or "").strip()
-    if text == "⬅️ Назад":
-        await cmd_start(update, context)
-        return
-    eng = await _engine_from_button(text)
-    if not eng:
-        return
-    context.user_data["engine"] = eng
-    if eng == ENGINE_RUNWAY and update.effective_user.id not in PREMIUM_USER_IDS:
-        await update.message.reply_text("⚠️ Runway доступен только на PRO-тарифе.")
-    elif eng == ENGINE_LUMA:
-        if not LUMA_API_KEY:
-            await update.message.reply_text("🎬 Luma выбрана. API-ключ не задан — пока использую запасные пути. Готов принимать запросы «создай видео…».")
-        else:
-            await update.message.reply_text("🎬 Luma активна. Пиши «создай видео…» или «сгенерируй фото…».")
-    elif eng == ENGINE_MJ:
-        await update.message.reply_text("🖼 Midjourney: пришли описание — соберу промпт для Discord.")
-    else:
-        await update.message.reply_text("💬 GPT-5 активирован.")
 
 # -------- LUMA HANDLERS --------
 async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -701,7 +651,7 @@ async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
         log.exception("Luma video error: %s", e)
 
-# ================== PAYMENTS: HANDЛERS ==================
+# ================== PAYMENTS: HANDLERS ==================
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if BANNER_URL:
         try:
@@ -716,6 +666,17 @@ async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
 
+# диагностический хэндлер платежей
+async def cmd_diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ok_token = "✅" if PROVIDER_TOKEN else "❌"
+    await update.message.reply_text(
+        "Платежи (ЮKassa/Telegram Payments):\n"
+        f"• PROVIDER_TOKEN: {ok_token}\n"
+        f"• Валюта: {CURRENCY}\n"
+        f"• Сумма: {SUB_PRICE_RUB} RUB (x100 = {SUB_PRICE_RUB*100})\n"
+        "Если инвойс не уходит — проверь токен в ENV и подключение провайдера в BotFather (ЮKassa)."
+    )
+
 async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_str = f"{SUB_PRICE_RUB} ₽ / 30 дней"
     kb = InlineKeyboardMarkup.from_button(
@@ -727,16 +688,45 @@ async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=kb
     )
 
+async def _send_invoice(chat, user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Единая точка отправки инвойса — используем и из кнопки, и из /subscribe, и из WebApp.
+    """
+    prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
+    try:
+        await chat.reply_invoice(
+            title="Подписка GPT5PRO (1 месяц)",
+            description="Доступ к GPT5PRO на 30 дней",
+            provider_token=PROVIDER_TOKEN,
+            currency=CURRENCY,
+            prices=prices,
+            payload=f"sub_{user_id}"
+        )
+    except Exception as e:
+        # Пришлём понятную подсказку и залогируем причину
+        msg = str(e)
+        log.exception("reply_invoice error: %s", msg)
+        hint = (
+            "Не удалось сформировать счёт. Проверьте подключение платежей.\n\n"
+            "Частые причины:\n"
+            "• Неверный или пустой PROVIDER_TOKEN (BotFather → Payments → ЮKassa)\n"
+            "• В BotFather не выбран провайдер или выбран тестовый при live-токене\n"
+            "• Валюта/сумма не поддерживается провайдером (ожидаем RUB)\n"
+            "• Бот не запущен как приватный/публичный и т.д."
+        )
+        await chat.reply_text(f"⚠️ {hint}")
+
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "subscribe_open":
-        await send_invoice(query.message, query.from_user.id, context)
+        await _send_invoice(query.message, query.from_user.id, context)
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_invoice(update.message, update.effective_user.id, context)
+    await _send_invoice(update.message, update.effective_user.id, context)
 
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # можно добавить проверки суммы/валюты
     await update.pre_checkout_query.answer(ok=True)
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -786,12 +776,9 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     ptype = (payload.get("type") or "").strip().lower()
     log.info("web_app_data: %s", payload)
 
-    if ptype in ("subscribe", "subscribe_open"):
-        await send_invoice(msg, msg.chat.id, context)
-        return
-
-    if ptype in ("status",):
-        await status_cmd(update, context)
+    # мгновенная покупка из WebApp
+    if ptype in ("subscribe_now", "subscribe", "pay", "buy"):
+        await _send_invoice(msg, update.effective_user.id, context)
         return
 
     if ptype in ("help_from_webapp", "help", "question"):
@@ -812,10 +799,6 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
-
-    # быстрый фолбэк: если WEBAPP_URL пустой и нажата «⭐ Подписка» — показываем /plans
-    if text in ("⭐ Подписка", "подписка", "/premium", "/plan"):
-        await plans(update, context); return
 
     # меню движков
     if text == "🧭 Меню движков":
@@ -852,6 +835,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await cmd_modes(update, context); return
     if lower in ("🧩 примеры", "примеры", "/examples"):
         await cmd_examples(update, context); return
+    if lower in ("/premium", "premium"):
+        await plans(update, context); return
 
     if is_vision_capability_question(text):
         await update.message.reply_text(
@@ -984,6 +969,7 @@ def build_app():
     app.add_handler(CommandHandler("examples", cmd_examples))
     app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))
     app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))
+    app.add_handler(CommandHandler("diag_payments", cmd_diag_payments))
     app.add_handler(CommandHandler("engines", open_engines_menu))
 
     # Изображения/видео
@@ -995,14 +981,14 @@ def build_app():
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
 
     # ===== Payments
-    app.add_handler(CommandHandler(["plans", "plan", "pricing", "premium"], plans))
+    app.add_handler(CommandHandler("plans", plans))
+    app.add_handler(CommandHandler("premium", plans))  # алиас
     app.add_handler(CallbackQueryHandler(on_cb, pattern="^subscribe_open$"))
-    app.add_handler(CommandHandler(["subscribe", "buy", "pay"], subscribe_cmd))
+    app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("pro", pro_cmd))
-    app.add_handler(CommandHandler("diag_pay", diag_pay))
 
     # Меню движков (кнопки)
     engine_buttons_pattern = "(" + "|".join(map(re.escape, list(ENGINE_TITLES.values()) + ["⬅️ Назад", "🧭 Меню движков"])) + ")"
