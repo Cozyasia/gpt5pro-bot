@@ -7,11 +7,17 @@ import base64
 import logging
 from io import BytesIO
 import asyncio
+import sqlite3
+from datetime import datetime, timedelta
 
 import httpx
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InputFile
+from telegram import (
+    Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InputFile,
+    LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton
+)
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters,
+    PreCheckoutQueryHandler, CallbackQueryHandler
 )
 from telegram.constants import ChatAction
 
@@ -58,6 +64,12 @@ LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()       # деф�
 LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))         # дефолт длительность
 # >>> LUMA: end
 
+# ====== PAYMENTS (ЮKassa via Telegram Payments) ======
+PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()  # из BotFather → Payments
+SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))            # цена за 30 дней (руб)
+CURRENCY       = "RUB"
+DB_PATH        = os.environ.get("DB_PATH", "subs.db")
+
 PORT             = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -103,6 +115,55 @@ try:
 except Exception:
     tavily = None
 
+# ================== PAYMENTS: DB & HELPERS ==================
+def db_init():
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS subscriptions (
+        user_id INTEGER PRIMARY KEY,
+        until_ts INTEGER NOT NULL
+    )
+    """)
+    con.commit()
+    con.close()
+
+def activate_subscription(user_id: int, months: int = 1):
+    """Активирует/продлевает подписку на N месяцев (30д * N)."""
+    now = datetime.utcnow()
+    until = now + timedelta(days=30 * months)
+
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute("SELECT until_ts FROM subscriptions WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    if row and row[0] and row[0] > int(now.timestamp()):
+        current_until = datetime.utcfromtimestamp(row[0])
+        until = current_until + timedelta(days=30 * months)
+
+    cur.execute("""
+        INSERT INTO subscriptions (user_id, until_ts)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET until_ts=excluded.until_ts
+    """, (user_id, int(until.timestamp())))
+    con.commit()
+    con.close()
+    return until
+
+def get_subscription_until(user_id: int):
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute("SELECT until_ts FROM subscriptions WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    con.close()
+    if not row:
+        return None
+    return datetime.utcfromtimestamp(row[0])
+
+def is_active(user_id: int) -> bool:
+    until = get_subscription_until(user_id)
+    return bool(until and until > datetime.utcnow())
+
 # -------- PROMPTS --------
 SYSTEM_PROMPT = (
     "Ты дружелюбный и лаконичный ассистент на русском. "
@@ -137,13 +198,6 @@ _VID_WORDS = r"(видео|ролик\w*|клип\w*|анимаци\w*|shorts|re
 _VERBS     = r"(сделай|создай|сгенерируй|нарисуй|сформируй|собери|сними|сотвор|хочу|нужно|надо|please|make|generate|create)"
 
 def detect_media_intent(text: str):
-    """
-    Возвращает ('image'|'video'|None, prompt)
-    Покрывает:
-      - "создай видео закат на Самуи..."
-      - "сгенерируй картинку логотип Cozy Asia..."
-      - "video ..." / "img ..." без слэшей
-    """
     if not text:
         return None, ""
     t = text.strip()
@@ -302,20 +356,18 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("⚠️ Не удалось создать изображение. Проверь OPENAI_IMAGE_KEY (нужен обычный OpenAI ключ).")
 
 # -------- VIDEO (Runway SDK) --------
-# прокинем ключ в окружение для SDK
 if RUNWAY_API_KEY:
     os.environ["RUNWAY_API_KEY"] = RUNWAY_API_KEY
 
 from runwayml import RunwayML
 
 def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
-    """Создаёт задачу Runway и возвращает mp4-байты (блокирующе)."""
     if not RUNWAY_API_KEY:
         raise RuntimeError("RUNWAY_API_KEY не задан")
     client = RunwayML(api_key=RUNWAY_API_KEY)
 
     task = client.text_to_video.create(
-        prompt_text=prompt,   # ВАЖНО: snake_case
+        prompt_text=prompt,
         model="veo3",
         ratio="720:1280",
         duration=duration,
@@ -344,7 +396,6 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
         return r.content
 
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 🔒 PRO-гейтинг Runway
     if update.effective_user.id not in PREMIUM_USER_IDS:
         await update.effective_message.reply_text(
             "⚠️ Runway доступен только на PRO-тарифе.\n"
@@ -381,22 +432,11 @@ async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text(f"⚠️ Видео не удалось: {e}")
         log.exception("Runway video error: %s", e)
 
-# -------- Автовызов генерации без команд --------
-async def _call_handler_with_prompt(handler, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
-    old_args = getattr(context, "args", None)
-    try:
-        context.args = [prompt]
-        await handler(update, context)
-    finally:
-        context.args = old_args
-
-# >>> LUMA HELPERS: begin
-# Парсинг длительности и соотношения сторон из текста: "6s", "10 sec", "9:16" и т.п.
+# >>> LUMA HELPERS
 _DURATION_RE = re.compile(r"(?:(\d{1,2})\s*(?:sec|secs|s|сек))", re.I)
 _AR_RE = re.compile(r"\b(16:9|9:16|4:3|3:4|1:1|21:9|9:21)\b", re.I)
 
 def parse_video_opts_from_text(text: str, default_duration: int = None, default_ar: str = None):
-    """Возвращает (duration_seconds:int, aspect_ratio:str, clean_prompt:str)."""
     duration = default_duration if default_duration is not None else LUMA_DURATION_S
     ar = default_ar if default_ar is not None else LUMA_ASPECT
     t = text
@@ -418,7 +458,6 @@ def parse_video_opts_from_text(text: str, default_duration: int = None, default_
     return duration, ar, clean
 
 def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str = None) -> bytes:
-    """Создаёт задачу в Luma Dream Machine и возвращает mp4-байты (блокирующе)."""
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY не задан")
     dur = duration if duration is not None else LUMA_DURATION_S
@@ -432,7 +471,7 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
     create_url = "https://api.lumalabs.ai/dream-machine/v1/generations"
     payload = {
         "prompt": prompt,
-        "model": LUMA_MODEL,              # ОБЯЗАТЕЛЬНО
+        "model": LUMA_MODEL,
         "duration": f"{dur}s",
         "aspect_ratio": ar,
     }
@@ -447,7 +486,6 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
         if not gen_id:
             raise RuntimeError(f"Luma: не получили id задачи: {gen}")
 
-        # Пуллим до завершения
         get_url = f"https://api.lumalabs.ai/dream-machine/v1/generations/{gen_id}"
         status = None
         last_msg = ""
@@ -465,17 +503,14 @@ def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str =
                 video_url = assets.get("video") or assets.get("mp4") or assets.get("file")
                 if not video_url:
                     raise RuntimeError(f"Luma: нет ссылки на видео в ответе: {data}")
-                # Скачиваем mp4
                 v = http.get(video_url)
                 v.raise_for_status()
                 return v.content
             if status in ("failed", "error", "cancelled", "canceled"):
                 raise RuntimeError(f"Luma failed: {last_msg or status}")
             time.sleep(2)
-# >>> LUMA HELPERS: end
 
-# >>> ENGINE MODES: begin
-# Режимы движков и меню выбора
+# >>> ENGINE MODES
 ENGINE_GPT    = "gpt"
 ENGINE_LUMA   = "luma"
 ENGINE_RUNWAY = "runway"
@@ -537,7 +572,6 @@ async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("🖼 Midjourney: пришли описание — соберу промпт для Discord.")
     else:
         await update.message.reply_text("💬 GPT-5 активирован.")
-# >>> ENGINE MODES: end
 
 # -------- STATIC TEXTS --------
 START_TEXT = (
@@ -586,20 +620,15 @@ async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # prompt может прийти как аргументы или из текста сообщения
     prompt_raw = " ".join(context.args).strip() if context.args else (update.message.text or "").strip()
-    # удалить возможный префикс команды
     prompt_raw = re.sub(r"^/video_luma\b", "", prompt_raw, flags=re.I).strip(" -:—")
-
     dur, ar, prompt = parse_video_opts_from_text(prompt_raw)
-
     if not prompt:
         await update.effective_message.reply_text("Напиши так: /video_luma закат над морем, 6s, 9:16")
         return
     if not LUMA_API_KEY:
         await update.effective_message.reply_text("🎬 Luma: не задан LUMA_API_KEY.")
         return
-
     await update.effective_message.reply_text(f"🎬 Генерирую через Luma… (⏱ {dur}s • {ar})")
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
     try:
@@ -613,7 +642,7 @@ async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
         log.exception("Luma video error: %s", e)
 
-# -------- HANDLERS --------
+# ================== PAYMENTS: HANDLERS ==================
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if BANNER_URL:
         try:
@@ -628,22 +657,78 @@ async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
 
-# NEW: быстрая диагностика ключа Runway
-async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    key = RUNWAY_API_KEY
-    lines = [f"RUNWAY_API_KEY: {'✅ найден' if key else '❌ нет'}"]
-    if key:
-        lines.append(f"Формат: {'ok' if key.startswith('key_') else 'не начинается с key_'}")
-        lines.append(f"Длина: {len(key)}")
-        try:
-            _ = RunwayML(api_key=key)
-            lines.append("SDK инициализирован ✅")
-        except Exception as e:
-            lines.append(f"SDK error: {e}")
-    pro_list = ", ".join(map(str, sorted(PREMIUM_USER_IDS))) or "—"
-    lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
-    await update.message.reply_text("\n".join(lines))
+async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    price_str = f"{SUB_PRICE_RUB} ₽ / 30 дней"
+    kb = InlineKeyboardMarkup.from_button(
+        InlineKeyboardButton("Оформить подписку", callback_data="subscribe_open")
+    )
+    await update.message.reply_text(
+        f"💳 Подписка GPT5PRO: {price_str}\n"
+        "Даст доступ ко всем PRO-функциям на 30 дней.",
+        reply_markup=kb
+    )
 
+async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "subscribe_open":
+        prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
+        await query.message.reply_invoice(
+            title="Подписка GPT5PRO (1 месяц)",
+            description="Доступ к GPT5PRO на 30 дней",
+            provider_token=PROVIDER_TOKEN,
+            currency=CURRENCY,
+            prices=prices,
+            payload=f"sub_{query.from_user.id}"
+        )
+
+async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
+    await update.message.reply_invoice(
+        title="Подписка GPT5PRO (1 месяц)",
+        description="Доступ к GPT5PRO на 30 дней",
+        provider_token=PROVIDER_TOKEN,
+        currency=CURRENCY,
+        prices=prices,
+        payload=f"sub_{update.effective_user.id}"
+    )
+
+async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.pre_checkout_query.answer(ok=True)
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sp = update.message.successful_payment
+    user_id = update.effective_user.id
+    if sp.currency != CURRENCY:
+        await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
+    if sp.total_amount != SUB_PRICE_RUB * 100:
+        await update.message.reply_text("❗️Сумма платежа не совпала, обратитесь в поддержку."); return
+
+    until = activate_subscription(user_id, months=1)
+    await update.message.reply_text(
+        f"✅ Оплата получена!\n"
+        f"Подписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
+        f"Команда /pro — проверить доступ к ПРО-функции."
+    )
+
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    until = get_subscription_until(update.effective_user.id)
+    if not until or until <= datetime.utcnow():
+        await update.message.reply_text("Статус: ❌ нет активной подписки.\nКоманда /subscribe — оформить.")
+    else:
+        days_left = max(0, (until - datetime.utcnow()).days)
+        await update.message.reply_text(
+            f"Статус: ✅ активна\n"
+            f"Действует до: {until.strftime('%d.%m.%Y %H:%M UTC')} ({days_left} дн.)"
+        )
+
+async def pro_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_active(update.effective_user.id):
+        await update.message.reply_text("❌ Нужна активная подписка. Введите /subscribe")
+        return
+    await update.message.reply_text("🎯 ПРО-доступ подтверждён. Тут выполняем PRO-действие...")
+
+# -------- WEB APP DATA --------
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     wad = getattr(msg, "web_app_data", None)
@@ -672,6 +757,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
+# -------- MAIN TEXT FLOW --------
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
@@ -679,23 +765,18 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # меню движков
     if text == "🧭 Меню движков":
         await open_engines_menu(update, context); return
-    # клики по кнопкам движков
     if text in ENGINE_TITLES.values() or text == "⬅️ Назад":
         await handle_engine_click(update, context); return
 
-    # === авто-режим генерации без команд ===
     intent, prompt = detect_media_intent(text)
     if intent == "image" and prompt:
-        # Если выбран MJ — отдадим промпт для Discord
         if context.user_data.get("engine") == ENGINE_MJ:
             mj = f"/imagine prompt: {prompt} --ar 3:2 --stylize 250 --v 6.0"
             await update.message.reply_text(f"🖼 Midjourney промпт:\n{mj}")
             return
-        # Luma пока не делает картинки — рендерим через OpenAI Images
         await _call_handler_with_prompt(cmd_img, update, context, prompt); return
 
     if intent == "video" and prompt:
-        # распакуем опции прямо из текста
         dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
         eng = context.user_data.get("engine")
         if eng == ENGINE_LUMA:
@@ -703,13 +784,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "🎬 Luma выбрана, но API ключ не задан. Пока могу предложить Runway (если PRO) или описать промпт."
                 ); return
-            # вызов Luma
-            context.args = [clean_prompt]  # чтобы handler увидел промпт
+            context.args = [clean_prompt]
             await cmd_make_video_luma(update, context); return
         elif eng == ENGINE_RUNWAY:
             await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
         else:
-            # По умолчанию подскажем выбрать движок
             await update.message.reply_text("ℹ️ Для видео выбери Luma или Runway через «🧭 Меню движков».")
             return
 
@@ -748,6 +827,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
     await update.message.reply_text(answer, disable_web_page_preview=False)
 
+# -------- IMAGE / VOICE / AUDIO / DOC --------
 async def _handle_image_bytes(update: Update, context: ContextTypes.DEFAULT_TYPE, data: bytes, user_text: str):
     mime = sniff_image_mime(data)
     img_b64 = base64.b64encode(data).decode("ascii")
@@ -830,30 +910,49 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Да, помогу с видео: пришли 1–3 ключевых кадра (скриншота) — проанализирую по кадрам и отвечу по содержанию. 📽️")
 
+# -------- helper to call handlers with prompt --------
+async def _call_handler_with_prompt(handler, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    old_args = getattr(context, "args", None)
+    try:
+        context.args = [prompt]
+        await handler(update, context)
+    finally:
+        context.args = old_args
+
 # -------- BOOTSTRAP --------
 def build_app():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Базовые команды/экраны
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("modes", cmd_modes))
     app.add_handler(CommandHandler("examples", cmd_examples))
-    app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))  # NEW
-    app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))      # NEW
-
-    # NEW: меню движков командой
+    app.add_handler(CommandHandler("diag_runway", cmd_diag_runway))
+    app.add_handler(CommandHandler("diag_luma", cmd_diag_luma))
     app.add_handler(CommandHandler("engines", open_engines_menu))
 
-    # Команды тоже доступны (оставляем, но не рекламируем)
+    # Изображения/видео
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("video", cmd_make_video))
-    app.add_handler(CommandHandler("video_luma", cmd_make_video_luma))  # NEW
+    app.add_handler(CommandHandler("video_luma", cmd_make_video_luma))
 
+    # WEB APP
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
-    # клики по кнопкам движков
+
+    # ===== Payments
+    app.add_handler(CommandHandler("plans", plans))
+    app.add_handler(CallbackQueryHandler(on_cb, pattern="^subscribe_open$"))
+    app.add_handler(CommandHandler("subscribe", subscribe_cmd))
+    app.add_handler(PreCheckoutQueryHandler(pre_checkout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CommandHandler("pro", pro_cmd))
+
+    # Меню движков (кнопки)
     engine_buttons_pattern = "(" + "|".join(map(re.escape, list(ENGINE_TITLES.values()) + ["⬅️ Назад", "🧭 Меню движков"])) + ")"
     app.add_handler(MessageHandler(filters.Regex(engine_buttons_pattern), on_text))
 
-    # остальной текст
+    # Остальной текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document.IMAGE, on_document))
@@ -877,6 +976,10 @@ def run_webhook(app):
     )
 
 def main():
+    # Инициализируем БД подписок перед запуском
+    db_init()
+    if not PROVIDER_TOKEN:
+        log.warning("⚠️ PROVIDER_TOKEN_YOOKASSA не задан — инвойсы не будут работать.")
     app = build_app()
     run_webhook(app)
 
