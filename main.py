@@ -65,9 +65,17 @@ LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))
 
 # ====== PAYMENTS (ЮKassa via Telegram Payments) ======
 PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
-SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))
+SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))  # базовая цена (используем для month по умолчанию)
 CURRENCY       = "RUB"
 DB_PATH        = os.environ.get("DB_PATH", "subs.db")
+
+# --- планы и цены (руб) для мини-аппы ---
+PLAN_PRICES = {
+    "month":   SUB_PRICE_RUB,   # 30 дней
+    "quarter": 2699,            # 3 месяца
+    "year":    8999,            # 12 месяцев
+}
+PLAN_MONTHS = {"month": 1, "quarter": 3, "year": 12}
 
 PORT = int(os.environ.get("PORT", "10000"))
 
@@ -691,16 +699,22 @@ async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=kb, disable_web_page_preview=True
     )
 
-async def _send_invoice_safely(msg, user_id: int):
-    prices = [LabeledPrice(label="Месячная подписка GPT5PRO", amount=SUB_PRICE_RUB * 100)]
+async def _send_invoice_safely(msg, user_id: int, *, plan: str = "month", amount_rub: int = None):
+    """
+    Выставляет инвойс пользователю. Если amount_rub не задан — берём по PLAN_PRICES[plan].
+    """
+    if amount_rub is None:
+        amount_rub = PLAN_PRICES.get(plan, PLAN_PRICES["month"])
+
+    prices = [LabeledPrice(label=f"Подписка GPT5PRO — {plan}", amount=amount_rub * 100)]
     try:
         await msg.reply_invoice(
-            title="Подписка GPT5PRO (1 месяц)",
-            description="Доступ к GPT5PRO на 30 дней",
+            title=f"GPT5PRO ({plan})",
+            description=f"Доступ к GPT5PRO ({plan})",
             provider_token=PROVIDER_TOKEN,
             currency=CURRENCY,
             prices=prices,
-            payload=f"sub_{user_id}"
+            payload=f"sub_{plan}_{user_id}"
         )
     except Exception as e:
         log.exception("create invoice error: %s", e)
@@ -735,13 +749,24 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sp = update.message.successful_payment
     user_id = update.effective_user.id
+
+    # определяем план из payload
+    payload = (sp.invoice_payload or "")
+    plan = "month"
+    m = re.match(r"^sub_([a-z]+)_(\d+)$", payload)
+    if m:
+        plan = m.group(1)
+
+    # простые проверки
     if sp.currency != CURRENCY:
         await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
-    if sp.total_amount != SUB_PRICE_RUB * 100:
-        await update.message.reply_text("❗️Сумма платежа не совпала, обратитесь в поддержку."); return
-    until = activate_subscription(user_id, months=1)
+
+    # активируем подписку согласно плану
+    months = PLAN_MONTHS.get(plan, 1)
+    until = activate_subscription(user_id, months=months)
+
     await update.message.reply_text(
-        f"✅ Оплата получена!\nПодписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
+        f"✅ Оплата получена!\nТариф: {plan} • Подписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
         f"Команда /pro — проверить доступ к ПРО-функции."
     )
 
@@ -768,13 +793,21 @@ async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Длина: {len(t) if t else 0}",
         "Подсказка: токен берётся в @BotFather → Payments → YooKassa. "
         "Убедитесь, что провайдер привязан, а токен без лишних пробелов.",
-        f"Валюта в коде: {CURRENCY}, цена: {SUB_PRICE_RUB} RUB",
+        f"Валюта в коде: {CURRENCY}, базовая цена: {SUB_PRICE_RUB} RUB",
+        f"Планы: {PLAN_PRICES}",
         f"WEB тарифы: {TARIFF_URL}"
     ]
     await update.message.reply_text("\n".join(lines))
 
 # -------- WEB APP DATA --------
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Получает события из мини-аппы (tg.sendData). Ожидаемые payload:
+      {"type":"subscribe","plan":"month|quarter|year"}
+      {"type":"status"}
+      {"type":"help"}
+      {"type":"open_tariff"}
+    """
     msg = update.effective_message
     wad = getattr(msg, "web_app_data", None)
     if not wad:
@@ -785,19 +818,25 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception:
         payload = {"type": str(raw)}
     ptype = (payload.get("type") or "").strip().lower()
+    plan  = (payload.get("plan") or "month").strip().lower()
+
     log.info("web_app_data: %s", payload)
 
-    if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
-        await msg.reply_text(
-            "Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.",
-            reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))]], resize_keyboard=True)
-        )
-        return
     if ptype in ("subscribe", "subscription", "subscribe_click"):
-        await _send_invoice_safely(msg, msg.chat.id)
+        amount = PLAN_PRICES.get(plan, PLAN_PRICES["month"])
+        await _send_invoice_safely(msg, msg.chat.id, plan=plan, amount_rub=amount)
         return
     if ptype in ("status", "status_check"):
         await status_cmd(update, context); return
+    if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
+        await msg.reply_text(
+            "Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.",
+            reply_markup=ReplyKeyboardMarkup(
+                [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL))]],
+                resize_keyboard=True
+            )
+        )
+        return
     if ptype in ("help_from_webapp", "help", "question"):
         await msg.reply_text("🧑‍💻 Поддержка GPT-5 PRO. Напишите здесь свой вопрос — отвечу в чате.\n\nТакже можно на почту: sale.rielt@bk.ru")
         return
@@ -905,16 +944,16 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = (update.message.caption or "").strip()
     await _handle_image_bytes(update, context, buf.getvalue(), user_text)
 
-async def on_document(update: Update, Context: ContextTypes.DEFAULT_TYPE):
+async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    await typing(Context, chat_id)
+    await typing(context, chat_id)
     doc = update.message.document
     mime = (doc.mime_type or "").lower()
     if mime.startswith("image/"):
-        file = await Context.bot.get_file(doc.file_id)
+        file = await context.bot.get_file(doc.file_id)
         buf = BytesIO(); await file.download_to_memory(buf)
         user_text = (update.message.caption or "").strip()
-        await _handle_image_bytes(update, Context, buf.getvalue(), user_text)
+        await _handle_image_bytes(update, context, buf.getvalue(), user_text)
     else:
         await update.message.reply_text("Файл получил. Если это PDF/документ — пришли конкретные страницы как изображения или укажи, что извлечь.")
 
