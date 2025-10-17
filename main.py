@@ -78,9 +78,13 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is required")
 
-# WEB_ROOT: мини-лендинг premium.html
-WEB_ROOT = WEBAPP_URL or PUBLIC_URL
-TARIFF_URL = f"{WEB_ROOT.rstrip('/')}/premium.html#tariff"
+# --------- URL мини-приложения тарифов ---------
+# <<< PATCH: раньше тут конструировался .../premium.html#tariff, из-за чего получалось /mini?.../premium.html (404)
+if WEBAPP_URL:
+    TARIFF_URL = WEBAPP_URL  # напр., https://gpt5pro-api.onrender.com/mini?v=3
+else:
+    TARIFF_URL = f"{PUBLIC_URL.rstrip('/')}/mini"
+# >>> PATCH END
 
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
@@ -639,14 +643,16 @@ EXAMPLES_TEXT = (
 )
 
 # -------- UI / KEYBOARD --------
+# <<< PATCH: кнопка «⭐ Подписка» теперь открывает ровно URL мини-аппы (без /premium.html)
 main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню движков")],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))],  # мини-апп
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))],
     ],
     resize_keyboard=True
 )
+# >>> PATCH END
 
 # -------- LUMA & RUNWAY DIAG --------
 async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -899,16 +905,16 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = (update.message.caption or "").strip()
     await _handle_image_bytes(update, context, buf.getvalue(), user_text)
 
-async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def on_document(update: Update, Context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    await typing(context, chat_id)
+    await typing(Context, chat_id)
     doc = update.message.document
     mime = (doc.mime_type or "").lower()
     if mime.startswith("image/"):
-        file = await context.bot.get_file(doc.file_id)
+        file = await Context.bot.get_file(doc.file_id)
         buf = BytesIO(); await file.download_to_memory(buf)
         user_text = (update.message.caption or "").strip()
-        await _handle_image_bytes(update, context, buf.getvalue(), user_text)
+        await _handle_image_bytes(update, Context, buf.getvalue(), user_text)
     else:
         await update.message.reply_text("Файл получил. Если это PDF/документ — пришли конкретные страницы как изображения или укажи, что извлечь.")
 
