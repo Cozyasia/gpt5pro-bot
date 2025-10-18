@@ -558,12 +558,14 @@ async def on_video_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ENGINE MODES
 ENGINE_GPT    = "gpt"
+ENGINE_GEMINI = "gemini"     # ← добавили Gemini
 ENGINE_LUMA   = "luma"
 ENGINE_RUNWAY = "runway"
 ENGINE_MJ     = "midjourney"
 
 ENGINE_TITLES = {
     ENGINE_GPT:    "💬 GPT-5 (текст/фото)",
+    ENGINE_GEMINI: "🧠 Gemini (текст/мультимодаль)",
     ENGINE_LUMA:   "🎬 Luma (видео/фото)",
     ENGINE_RUNWAY: "🎥 Runway (PRO ~$7/видео)",
     ENGINE_MJ:     "🖼 Midjourney (Discord)",
@@ -573,6 +575,7 @@ def engines_kb():
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton(ENGINE_TITLES[ENGINE_GPT])],
+            [KeyboardButton(ENGINE_TITLES[ENGINE_GEMINI])],  # ← новая кнопка
             [KeyboardButton(ENGINE_TITLES[ENGINE_LUMA])],
             [KeyboardButton(ENGINE_TITLES[ENGINE_RUNWAY])],
             [KeyboardButton(ENGINE_TITLES[ENGINE_MJ])],
@@ -592,6 +595,7 @@ async def open_engines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "Выбери движок для работы 👇\n\n"
         "• GPT-5 — ответы и картинки через OpenAI\n"
+        "• Gemini — длинные PDF/видео/таблицы (точность по фактам)\n"
         "• Luma — видео/фото (экономнее Runway)\n"
         "• Runway — студийное видео (PRO)\n"
         "• Midjourney — помогу со сборкой промпта для Discord",
@@ -615,6 +619,11 @@ async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("🎬 Luma активна. Пиши «создай видео…» или «сгенерируй фото…».")
     elif eng == ENGINE_MJ:
         await update.message.reply_text("🖼 Midjourney: пришли описание — соберу промпт для Discord.")
+    elif eng == ENGINE_GEMINI:
+        await update.message.reply_text(
+            "🧠 Gemini режим активен. Буду использовать его для длинных документов (PDF/видео/таблицы), "
+            "когда это уместно. Если ключи не подключены — отвечу базовым движком."
+        )
     else:
         await update.message.reply_text("💬 GPT-5 активирован.")
 
@@ -697,19 +706,17 @@ def _receipt_provider_data(*, tier: str, term: str, amount_rub: int) -> dict:
     title_map = {"start": "START", "pro": "PRO", "ultimate": "ULTIMATE"}
     term_map  = {"month": "1 месяц", "quarter": "3 месяца", "year": "12 месяцев"}
     item_desc = f"Подписка {title_map.get(tier, 'PRO')} — {term_map.get(term, '1 месяц')}"
-    # ВНИМАНИЕ: value — в РУБЛЯХ (а не копейках)
     return {
         "receipt": {
-            # customer НЕ передаём: email соберёт Telegram на форме (need_email/send_email_to_provider)
             "items": [{
                 "description": item_desc[:128],
                 "quantity": 1,
                 "amount": {"value": amount_rub, "currency": "RUB"},
-                "vat_code": 1,  # при необходимости подстрой
+                "vat_code": 1,
                 "payment_mode": "full_payment",
                 "payment_subject": "service"
             }],
-            "tax_system_code": 1  # при необходимости подстрой
+            "tax_system_code": 1
         }
     }
 
@@ -739,9 +746,9 @@ async def _send_invoice_safely(msg, user_id: int, *, tier: str, term: str):
             currency=CURRENCY,
             prices=prices,
             payload=f"sub:{tier}:{term}:{user_id}",
-            provider_data=provider_data,                 # ← чек (items)
-            need_email=True,                             # ← попросим email на форме
-            send_email_to_provider=True                  # ← и отправим его провайдеру (ЮKassa)
+            provider_data=provider_data,
+            need_email=True,
+            send_email_to_provider=True
         )
     except Exception as e:
         log.exception("create invoice error: %s", e)
@@ -770,7 +777,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = (query.data or "")
     if data == "subscribe_open":
-        # старый запасной сценарий — спросим срок и тариф
         await query.message.reply_text("Выберите срок:", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("1 месяц", callback_data="subscribe_term:month")],
             [InlineKeyboardButton("3 месяца", callback_data="subscribe_term:quarter")],
@@ -852,7 +858,7 @@ async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Ожидаемые payload из мини-аппы:
-      {"type":"subscribe","plan":"month|quarter|year"}
+      {"type":"subscribe","tier":"start|pro|ultimate","plan":"month|quarter|year"}
       {"type":"status"} | {"type":"help"} | {"type":"open_tariff"}
     """
     msg = update.effective_message
@@ -864,17 +870,20 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         payload = json.loads(raw) if raw.strip().startswith("{") else {"type": raw}
     except Exception:
         payload = {"type": str(raw)}
+
     ptype = (payload.get("type") or "").strip().lower()
     term  = (payload.get("plan") or "month").strip().lower()
+    tier  = (payload.get("tier") or "").strip().lower()
 
     log.info("web_app_data: %s", payload)
 
     if ptype in ("subscribe", "subscription", "subscribe_click"):
-        # Спрашиваем тариф (start/pro/ultimate)
-        await msg.reply_text(
-            "Выберите тариф:",
-            reply_markup=_subscribe_choose_kb(term)
-        )
+        # если мини-аппа сразу прислала tier — формируем счёт,
+        # иначе даём выбор тарифа (старый флоу).
+        if tier in ("start", "pro", "ultimate"):
+            await _send_invoice_safely(msg, msg.chat.id, tier=tier, term=term)
+        else:
+            await msg.reply_text("Выберите тариф:", reply_markup=_subscribe_choose_kb(term))
         return
 
     if ptype in ("status", "status_check"):
