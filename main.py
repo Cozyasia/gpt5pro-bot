@@ -87,22 +87,18 @@ if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is required")
 
 # --------- URL мини-приложения тарифов ---------
-# <<< PATCH: раньше тут конструировался .../premium.html#tariff, из-за чего получалось /mini?.../premium.html (404)
 if WEBAPP_URL:
-    TARIFF_URL = WEBAPP_URL  # напр., https://gpt5pro-api.onrender.com/mini?v=3
+    TARIFF_URL = WEBAPP_URL
 else:
     TARIFF_URL = f"{PUBLIC_URL.rstrip('/')}/mini"
-# >>> PATCH END
 
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
 
-# <<< PATCH: авто-детект OpenRouter
 _auto_base = OPENAI_BASE_URL
 if not _auto_base and OPENAI_API_KEY.startswith("sk-or-"):
     _auto_base = "https://openrouter.ai/api/v1"
     log.info("Auto-select OpenRouter base_url for text LLM.")
-# >>>
 
 default_headers = {}
 if OPENROUTER_SITE_URL:
@@ -110,16 +106,16 @@ if OPENROUTER_SITE_URL:
 if OPENROUTER_APP_NAME:
     default_headers["X-Title"] = OPENROUTER_APP_NAME
 
-# LLM для текста (OpenRouter или OpenAI — по auto_base)
+# LLM для текста
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=_auto_base or None,
     default_headers=default_headers or None,
 )
 
-# STT и Images — всегда через официальный OpenAI прокси
+# STT и Images — через официальный OpenAI
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
-oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)  # base_url None => официальный
+oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)
 
 # Tavily
 try:
@@ -527,7 +523,7 @@ async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
         log.exception("Luma video error: %s", e)
 
-# <<< PATCH: быстрые кнопки предложения видео-движков
+# Кнопки выбора видео-движка
 def _video_choice_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Luma (короткие клипы)", callback_data="video_choose_luma")],
@@ -560,7 +556,6 @@ async def on_video_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await cmd_make_video_luma(Update.de_json(update.to_dict(), context.application.bot), context)
     elif data == "video_choose_runway":
         await _call_handler_with_prompt(cmd_make_video, Update.de_json(update.to_dict(), context.application.bot), context, prompt)
-# >>>
 
 # >>> ENGINE MODES
 ENGINE_GPT    = "gpt"
@@ -651,7 +646,6 @@ EXAMPLES_TEXT = (
 )
 
 # -------- UI / KEYBOARD --------
-# <<< PATCH: кнопка «⭐ Подписка» теперь открывает ровно URL мини-аппы (без /premium.html)
 main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню движков")],
@@ -660,7 +654,6 @@ main_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
-# >>> PATCH END
 
 # -------- LUMA & RUNWAY DIAG --------
 async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -687,7 +680,36 @@ async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
     await update.message.reply_text("\n".join(lines))
 
-# ================== PAYMENTS: HANDLERS ==================
+# ================== PAYMENTS: ЮKassa ==================
+
+def _format_amount_rub_for_receipt(amount_rub: int) -> str:
+    """ЮKassa в provider_data.receipt.items.amount.value ожидает строку с двумя десятичными."""
+    return f"{amount_rub:.2f}"
+
+def _build_provider_data(plan: str, amount_rub: int) -> str:
+    """
+    Формируем provider_data с чеком по требованиям ЮKassa.
+    Отправляем email на форме оплаты (need_email + send_email_to_provider),
+    поэтому customer.email здесь не указываем.
+    """
+    data = {
+        "receipt": {
+            "items": [
+                {
+                    "description": f"Подписка GPT5PRO — {plan}",
+                    "quantity": 1,
+                    "amount": {"value": _format_amount_rub_for_receipt(amount_rub), "currency": "RUB"},
+                    "vat_code": 1,                # 1 — без НДС (при необходимости измените под вашу систему)
+                    "payment_mode": "full_payment",
+                    "payment_subject": "service"  # цифровой/инфо-сервис
+                }
+            ],
+            "tax_system_code": 1  # 1 — ОСН (если у вас иная — поправьте значение)
+        }
+    }
+    # telegram требует строку:
+    return json.dumps(data, ensure_ascii=False)
+
 async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_str = f"{SUB_PRICE_RUB} ₽ / 30 дней"
     kb = InlineKeyboardMarkup.from_button(
@@ -702,11 +724,14 @@ async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _send_invoice_safely(msg, user_id: int, *, plan: str = "month", amount_rub: int = None):
     """
     Выставляет инвойс пользователю. Если amount_rub не задан — берём по PLAN_PRICES[plan].
+    Передаём provider_data с чеком + просим email на форме (need_email+send_email_to_provider).
     """
     if amount_rub is None:
         amount_rub = PLAN_PRICES.get(plan, PLAN_PRICES["month"])
 
     prices = [LabeledPrice(label=f"Подписка GPT5PRO — {plan}", amount=amount_rub * 100)]
+    provider_data = _build_provider_data(plan, amount_rub)
+
     try:
         await msg.reply_invoice(
             title=f"GPT5PRO ({plan})",
@@ -714,17 +739,21 @@ async def _send_invoice_safely(msg, user_id: int, *, plan: str = "month", amount
             provider_token=PROVIDER_TOKEN,
             currency=CURRENCY,
             prices=prices,
-            payload=f"sub_{plan}_{user_id}"
+            payload=f"sub_{plan}_{user_id}",
+            provider_data=provider_data,             # чек
+            need_email=True,                         # попросить email на форме
+            send_email_to_provider=True              # и передать его провайдеру для чека
         )
     except Exception as e:
         log.exception("create invoice error: %s", e)
         text = (
             "⚠️ Не удалось сформировать счёт. Проверьте подключение платежей.\n\n"
             "Частые причины:\n"
-            "• Неверный/пустой PROVIDER_TOKEN_YOOKASSA (из BotFather → Payments → YooKassa)\n"
-            "• В BotFather не выбран провайдер или выбран TEST при live-токене\n"
+            "• Неверный/пустой PROVIDER_TOKEN_YOOKASSA (из @BotFather → Payments → YooKassa)\n"
+            "• В @BotFather не выбран провайдер или выбран TEST при live-токене\n"
             "• Валюта/сумма не поддерживается провайдером (ожидаем RUB)\n"
-            "• Бот не запущен публично / токен с пробелами / не redeploy после ENV\n\n"
+            "• Авточеки включены у ЮKassa, но провайдер_data/контакт не передаются\n"
+            "• Бот не публичный / токен с лишними пробелами / нет redeploy после ENV\n\n"
             f"Техническая деталь: {e}"
         )
         await msg.reply_text(text)
@@ -757,11 +786,9 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if m:
         plan = m.group(1)
 
-    # простые проверки
     if sp.currency != CURRENCY:
         await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
 
-    # активируем подписку согласно плану
     months = PLAN_MONTHS.get(plan, 1)
     until = activate_subscription(user_id, months=months)
 
@@ -859,10 +886,8 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
 
 async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # открыть тарифы и дать кнопку оформить в чате
     await plans(update, context)
 
-# <<< PATCH: единая обработка текста с предложением Luma/Runway
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
@@ -926,7 +951,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if sources:
         answer += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
     await update.message.reply_text(answer, disable_web_page_preview=False)
-# >>>
 
 # -------- IMAGE / VOICE / AUDIO / DOC --------
 async def _handle_image_bytes(update: Update, context: ContextTypes.DEFAULT_TYPE, data: bytes, user_text: str):
