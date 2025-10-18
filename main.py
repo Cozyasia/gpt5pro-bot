@@ -878,13 +878,17 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     log.info("web_app_data: %s", payload)
 
     if ptype in ("subscribe", "subscription", "subscribe_click"):
-        # если мини-аппа сразу прислала tier — формируем счёт,
-        # иначе даём выбор тарифа (старый флоу).
-        if tier in ("start", "pro", "ultimate"):
-            await _send_invoice_safely(msg, msg.chat.id, tier=tier, term=term)
-        else:
-            await msg.reply_text("Выберите тариф:", reply_markup=_subscribe_choose_kb(term))
+    # Если мини-аппа прислала tier+plan — сразу выставляем счёт
+    tier = (payload.get("tier") or "").strip().lower()
+    if tier in ("start", "pro", "ultimate"):
+        await _send_invoice_safely(msg, msg.from_user.id, tier=tier, term=term)
         return
+    # Иначе — старый сценарий: попросим выбрать тариф
+    await msg.reply_text(
+        "Выберите тариф:",
+        reply_markup=_subscribe_choose_kb(term)
+    )
+    return
 
     if ptype in ("status", "status_check"):
         await status_cmd(update, context); return
