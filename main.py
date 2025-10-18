@@ -852,7 +852,9 @@ async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Таблица цен: {PLAN_PRICE_TABLE}",
         f"WEB тарифы: {TARIFF_URL}"
     ]
-    await update.message.reply_text("\n".join(# -------- WEB APP DATA --------
+    await update.message.reply_text("\n".join(lines))
+
+# -------- WEB APP DATA --------
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Ожидаемые payload из мини-аппы:
