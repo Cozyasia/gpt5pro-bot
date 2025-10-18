@@ -33,7 +33,7 @@ BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()  # может быть пустым
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
@@ -52,7 +52,7 @@ TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip(
 RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()
 OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 
-# Premium whitelist для Runway
+# Premium whitelist для Runway (пока оставляем; дальше переведём на Pay-Per-Use)
 PREMIUM_USER_IDS = set(
     int(x) for x in os.environ.get("PREMIUM_USER_IDS", "").split(",") if x.strip().isdigit()
 )
@@ -65,17 +65,17 @@ LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))
 
 # ====== PAYMENTS (ЮKassa via Telegram Payments) ======
 PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
-SUB_PRICE_RUB  = int(os.environ.get("SUB_PRICE_RUB", "999"))  # базовая цена (используем для month по умолчанию)
 CURRENCY       = "RUB"
 DB_PATH        = os.environ.get("DB_PATH", "subs.db")
 
-# --- планы и цены (руб) для мини-аппы ---
-PLAN_PRICES = {
-    "month":   SUB_PRICE_RUB,   # 30 дней
-    "quarter": 2699,            # 3 месяца
-    "year":    8999,            # 12 месяцев
+# --- тарифы и цены (руб) ---
+# month / quarter / year
+PLAN_PRICE_TABLE = {
+    "start":    {"month": 499,  "quarter": 1299, "year": 4490},
+    "pro":      {"month": 999,  "quarter": 2799, "year": 8490},
+    "ultimate": {"month": 1999, "quarter": 5490, "year": 15990},
 }
-PLAN_MONTHS = {"month": 1, "quarter": 3, "year": 12}
+TERM_MONTHS = {"month": 1, "quarter": 3, "year": 12}
 
 PORT = int(os.environ.get("PORT", "10000"))
 
@@ -88,7 +88,7 @@ if not OPENAI_API_KEY:
 
 # --------- URL мини-приложения тарифов ---------
 if WEBAPP_URL:
-    TARIFF_URL = WEBAPP_URL
+    TARIFF_URL = WEBAPP_URL  # напр., https://gpt5pro-api.onrender.com/mini?v=3
 else:
     TARIFF_URL = f"{PUBLIC_URL.rstrip('/')}/mini"
 
@@ -106,14 +106,12 @@ if OPENROUTER_SITE_URL:
 if OPENROUTER_APP_NAME:
     default_headers["X-Title"] = OPENROUTER_APP_NAME
 
-# LLM для текста
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=_auto_base or None,
     default_headers=default_headers or None,
 )
 
-# STT и Images — через официальный OpenAI
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY)
 
@@ -408,9 +406,10 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
         return r.content
 
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Пока оставим ограничение PRO (позже переведём на Pay-Per-Use с балансом)
     if update.effective_user.id not in PREMIUM_USER_IDS:
         await update.effective_message.reply_text(
-            "⚠️ Runway доступен только на PRO-тарифе.\nОдин запрос ≈ $7."
+            "⚠️ Runway сейчас доступен на PRO-тарифе. В ближайшем обновлении — разовая оплата за ролик."
         ); return
     prompt = " ".join(context.args).strip()
     if not prompt:
@@ -523,7 +522,7 @@ async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
         log.exception("Luma video error: %s", e)
 
-# Кнопки выбора видео-движка
+# Быстрые кнопки выбора движка видео
 def _video_choice_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Luma (короткие клипы)", callback_data="video_choose_luma")],
@@ -557,7 +556,7 @@ async def on_video_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "video_choose_runway":
         await _call_handler_with_prompt(cmd_make_video, Update.de_json(update.to_dict(), context.application.bot), context, prompt)
 
-# >>> ENGINE MODES
+# ENGINE MODES
 ENGINE_GPT    = "gpt"
 ENGINE_LUMA   = "luma"
 ENGINE_RUNWAY = "runway"
@@ -621,19 +620,19 @@ async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # -------- STATIC TEXTS --------
 START_TEXT = (
-    "Привет! Я готов. Чем помочь?\n\n"
-    "Нажми «🧭 Меню движков», чтобы выбрать, на чем работать: GPT-5 / Luma / Runway / Midjourney."
+    "Привет! Я *Neuro-Bot GPT-5 • Luma • Runway • Midjourney • Deepgram • Gemini*.\n"
+    "Пишу тексты, генерирую изображения и видео, понимаю голос и фото. Чем помочь?\n\n"
+    "Нажми «🧭 Меню движков», чтобы выбрать движок."
 )
 
 MODES_TEXT = (
-    "⚙️ *Режимы работы*\n"
-    "• 💬 Универсальный — обычный диалог.\n"
-    "• 🧠 Исследователь — факты/источники, сводки.\n"
-    "• ✍️ Редактор — правки текста, стиль, структура.\n"
-    "• 📊 Аналитик — формулы, таблицы, расчётные шаги.\n"
-    "• 🖼️ Визуальный — описание изображений, OCR, схемы.\n"
-    "• 🎙️ Голос — распознаю аудио и отвечаю по содержанию.\n\n"
-    "_Пиши задачу — я сам выберу нужный режим._"
+    "⚙️ *Режимы*\n"
+    "• 💬 Универсальный — диалог/тексты\n"
+    "• 🧠 Исследователь — факты/источники\n"
+    "• ✍️ Редактор — правки/стили\n"
+    "• 📊 Аналитик — формулы/таблицы\n"
+    "• 🖼️ Визуальный — описание изображений, OCR\n"
+    "• 🎙️ Голос — распознаю аудио и отвечаю по содержанию"
 )
 
 EXAMPLES_TEXT = (
@@ -680,95 +679,117 @@ async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
     await update.message.reply_text("\n".join(lines))
 
-# ================== PAYMENTS: ЮKassa ==================
+# ================== PAYMENTS: HELPERS ==================
 
-def _format_amount_rub_for_receipt(amount_rub: int) -> str:
-    """ЮKassa в provider_data.receipt.items.amount.value ожидает строку с двумя десятичными."""
-    return f"{amount_rub:.2f}"
+def _plan_amount_rub(tier: str, term: str) -> int:
+    tier = (tier or "").lower()
+    term = (term or "").lower()
+    return PLAN_PRICE_TABLE.get(tier, PLAN_PRICE_TABLE["pro"]).get(term, PLAN_PRICE_TABLE["pro"]["month"])
 
-def _build_provider_data(plan: str, amount_rub: int) -> str:
+def _term_to_months(term: str) -> int:
+    return TERM_MONTHS.get((term or "").lower(), 1)
+
+def _receipt_provider_data(*, tier: str, term: str, amount_rub: int) -> dict:
     """
-    Формируем provider_data с чеком по требованиям ЮKassa.
-    Отправляем email на форме оплаты (need_email + send_email_to_provider),
-    поэтому customer.email здесь не указываем.
+    Сборка provider_data для ЮKassa (чек формирует ЮKassa).
+    По рекомендации поддержки: передаём ITEMS и TAX, email возьмём на платёжной форме.
     """
-    data = {
+    title_map = {"start": "START", "pro": "PRO", "ultimate": "ULTIMATE"}
+    term_map  = {"month": "1 месяц", "quarter": "3 месяца", "year": "12 месяцев"}
+    item_desc = f"Подписка {title_map.get(tier, 'PRO')} — {term_map.get(term, '1 месяц')}"
+    # ВНИМАНИЕ: value — в РУБЛЯХ (а не копейках)
+    return {
         "receipt": {
-            "items": [
-                {
-                    "description": f"Подписка GPT5PRO — {plan}",
-                    "quantity": 1,
-                    "amount": {"value": _format_amount_rub_for_receipt(amount_rub), "currency": "RUB"},
-                    "vat_code": 1,                # 1 — без НДС (при необходимости измените под вашу систему)
-                    "payment_mode": "full_payment",
-                    "payment_subject": "service"  # цифровой/инфо-сервис
-                }
-            ],
-            "tax_system_code": 1  # 1 — ОСН (если у вас иная — поправьте значение)
+            # customer НЕ передаём: email соберёт Telegram на форме (need_email/send_email_to_provider)
+            "items": [{
+                "description": item_desc[:128],
+                "quantity": 1,
+                "amount": {"value": amount_rub, "currency": "RUB"},
+                "vat_code": 1,  # при необходимости подстрой
+                "payment_mode": "full_payment",
+                "payment_subject": "service"
+            }],
+            "tax_system_code": 1  # при необходимости подстрой
         }
     }
-    # telegram требует строку:
-    return json.dumps(data, ensure_ascii=False)
 
+# ================== PAYMENTS: HANDLERS ==================
 async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    price_str = f"{SUB_PRICE_RUB} ₽ / 30 дней"
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("Открыть тарифы (мини-приложение)", url=TARIFF_URL)
     )
     await update.message.reply_text(
-        f"💳 Подписка GPT5PRO: {price_str}\n"
-        "Открой мини-приложение — там кнопка «Оформить подписку». Если мини-приложение не открылось, нажмите ниже.",
-        reply_markup=kb, disable_web_page_preview=True
+        "💳 *Тарифы Neuro-Bot*\nОткрой мини-приложение и нажмите «Оформить подписку».",
+        reply_markup=kb, disable_web_page_preview=True, parse_mode="Markdown"
     )
 
-async def _send_invoice_safely(msg, user_id: int, *, plan: str = "month", amount_rub: int = None):
+async def _send_invoice_safely(msg, user_id: int, *, tier: str, term: str):
     """
-    Выставляет инвойс пользователю. Если amount_rub не задан — берём по PLAN_PRICES[plan].
-    Передаём provider_data с чеком + просим email на форме (need_email+send_email_to_provider).
+    Выставляет инвойс пользователю c корректным provider_data (ЮKassa чек).
     """
-    if amount_rub is None:
-        amount_rub = PLAN_PRICES.get(plan, PLAN_PRICES["month"])
-
-    prices = [LabeledPrice(label=f"Подписка GPT5PRO — {plan}", amount=amount_rub * 100)]
-    provider_data = _build_provider_data(plan, amount_rub)
+    amount_rub = _plan_amount_rub(tier, term)
+    prices = [LabeledPrice(label=f"Neuro-Bot {tier.upper()} — {term}", amount=amount_rub * 100)]  # копейки!
+    provider_data = _receipt_provider_data(tier=tier, term=term, amount_rub=amount_rub)
 
     try:
         await msg.reply_invoice(
-            title=f"GPT5PRO ({plan})",
-            description=f"Доступ к GPT5PRO ({plan})",
+            title=f"Neuro-Bot {tier.upper()}",
+            description=f"Доступ к {tier.upper()} • срок: {term}",
             provider_token=PROVIDER_TOKEN,
             currency=CURRENCY,
             prices=prices,
-            payload=f"sub_{plan}_{user_id}",
-            provider_data=provider_data,             # чек
-            need_email=True,                         # попросить email на форме
-            send_email_to_provider=True              # и передать его провайдеру для чека
+            payload=f"sub:{tier}:{term}:{user_id}",
+            provider_data=provider_data,                 # ← чек (items)
+            need_email=True,                             # ← попросим email на форме
+            send_email_to_provider=True                  # ← и отправим его провайдеру (ЮKassa)
         )
     except Exception as e:
         log.exception("create invoice error: %s", e)
         text = (
             "⚠️ Не удалось сформировать счёт. Проверьте подключение платежей.\n\n"
             "Частые причины:\n"
-            "• Неверный/пустой PROVIDER_TOKEN_YOOKASSA (из @BotFather → Payments → YooKassa)\n"
-            "• В @BotFather не выбран провайдер или выбран TEST при live-токене\n"
+            "• Неверный/пустой PROVIDER_TOKEN_YOOKASSA\n"
+            "• В BotFather не выбран или неверно выбран провайдер YooKassa\n"
             "• Валюта/сумма не поддерживается провайдером (ожидаем RUB)\n"
-            "• Авточеки включены у ЮKassa, но провайдер_data/контакт не передаются\n"
-            "• Бот не публичный / токен с лишними пробелами / нет redeploy после ENV\n\n"
+            "• Не redeploy после изменения ENV\n\n"
             f"Техническая деталь: {e}"
         )
         await msg.reply_text(text)
 
+# Клавиатура выбора тарифа после клика из мини-аппы
+def _subscribe_choose_kb(term: str) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton("START", callback_data=f"subscribe_choose:start:{term}")],
+        [InlineKeyboardButton("PRO", callback_data=f"subscribe_choose:pro:{term}")],
+        [InlineKeyboardButton("ULTIMATE", callback_data=f"subscribe_choose:ultimate:{term}")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if query.data == "subscribe_open":
-        await _send_invoice_safely(query.message, query.from_user.id)
+    data = (query.data or "")
+    if data == "subscribe_open":
+        # старый запасной сценарий — спросим срок и тариф
+        await query.message.reply_text("Выберите срок:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("1 месяц", callback_data="subscribe_term:month")],
+            [InlineKeyboardButton("3 месяца", callback_data="subscribe_term:quarter")],
+            [InlineKeyboardButton("12 месяцев", callback_data="subscribe_term:year")],
+        ]))
+        return
+    if data.startswith("subscribe_term:"):
+        term = data.split(":", 1)[1]
+        await query.message.reply_text("Выберите тариф:", reply_markup=_subscribe_choose_kb(term))
+        return
+    if data.startswith("subscribe_choose:"):
+        _, tier, term = data.split(":")
+        await _send_invoice_safely(query.message, query.from_user.id, tier=tier, term=term)
+        return
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # команда покажет мини-апп + запасной вариант ― сразу счёт
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Открыть тарифы (мини-приложение)", url=TARIFF_URL)],
-        [InlineKeyboardButton("Выставить счёт сразу", callback_data="subscribe_open")]
+        [InlineKeyboardButton("Выставить счёт здесь", callback_data="subscribe_open")]
     ])
     await update.message.reply_text("Как оформить подписку?", reply_markup=kb)
 
@@ -779,21 +800,23 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     sp = update.message.successful_payment
     user_id = update.effective_user.id
 
-    # определяем план из payload
-    payload = (sp.invoice_payload or "")
-    plan = "month"
-    m = re.match(r"^sub_([a-z]+)_(\d+)$", payload)
+    # payload: sub:{tier}:{term}:{user_id}
+    payload = sp.invoice_payload or ""
+    tier, term = "pro", "month"
+    m = re.match(r"^sub:([a-z]+):([a-z]+):(\d+)$", payload)
     if m:
-        plan = m.group(1)
+        tier = m.group(1)
+        term = m.group(2)
 
     if sp.currency != CURRENCY:
         await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
 
-    months = PLAN_MONTHS.get(plan, 1)
+    months = _term_to_months(term)
     until = activate_subscription(user_id, months=months)
 
     await update.message.reply_text(
-        f"✅ Оплата получена!\nТариф: {plan} • Подписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
+        f"✅ Оплата получена!\nТариф: {tier.upper()} • Срок: {term} • "
+        f"Подписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
         f"Команда /pro — проверить доступ к ПРО-функции."
     )
 
@@ -818,10 +841,9 @@ async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [
         f"PROVIDER_TOKEN_YOOKASSA: {'✅ задан' if t else '❌ пуст'}",
         f"Длина: {len(t) if t else 0}",
-        "Подсказка: токен берётся в @BotFather → Payments → YooKassa. "
-        "Убедитесь, что провайдер привязан, а токен без лишних пробелов.",
-        f"Валюта в коде: {CURRENCY}, базовая цена: {SUB_PRICE_RUB} RUB",
-        f"Планы: {PLAN_PRICES}",
+        "Подсказка: токен берётся в @BotFather → Payments → YooKassa.",
+        f"Валюта: {CURRENCY}",
+        f"Таблица цен: {PLAN_PRICE_TABLE}",
         f"WEB тарифы: {TARIFF_URL}"
     ]
     await update.message.reply_text("\n".join(lines))
@@ -829,11 +851,9 @@ async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------- WEB APP DATA --------
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Получает события из мини-аппы (tg.sendData). Ожидаемые payload:
+    Ожидаемые payload из мини-аппы:
       {"type":"subscribe","plan":"month|quarter|year"}
-      {"type":"status"}
-      {"type":"help"}
-      {"type":"open_tariff"}
+      {"type":"status"} | {"type":"help"} | {"type":"open_tariff"}
     """
     msg = update.effective_message
     wad = getattr(msg, "web_app_data", None)
@@ -845,16 +865,21 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception:
         payload = {"type": str(raw)}
     ptype = (payload.get("type") or "").strip().lower()
-    plan  = (payload.get("plan") or "month").strip().lower()
+    term  = (payload.get("plan") or "month").strip().lower()
 
     log.info("web_app_data: %s", payload)
 
     if ptype in ("subscribe", "subscription", "subscribe_click"):
-        amount = PLAN_PRICES.get(plan, PLAN_PRICES["month"])
-        await _send_invoice_safely(msg, msg.chat.id, plan=plan, amount_rub=amount)
+        # Спрашиваем тариф (start/pro/ultimate)
+        await msg.reply_text(
+            "Выберите тариф:",
+            reply_markup=_subscribe_choose_kb(term)
+        )
         return
+
     if ptype in ("status", "status_check"):
         await status_cmd(update, context); return
+
     if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
         await msg.reply_text(
             "Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.",
@@ -862,11 +887,10 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
                 [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL))]],
                 resize_keyboard=True
             )
-        )
-        return
+        ); return
+
     if ptype in ("help_from_webapp", "help", "question"):
-        await msg.reply_text("🧑‍💻 Поддержка GPT-5 PRO. Напишите здесь свой вопрос — отвечу в чате.\n\nТакже можно на почту: sale.rielt@bk.ru")
-        return
+        await msg.reply_text("🧑‍💻 Поддержка Neuro-Bot. Напишите здесь свой вопрос — отвечу в чате.\n\nПочта: sale.rielt@bk.ru"); return
 
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
@@ -877,7 +901,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
-    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True, parse_mode="Markdown")
 
 async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(MODES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
@@ -1064,7 +1088,7 @@ def build_app():
     # Премиум/подписка
     app.add_handler(CommandHandler("plans", plans))
     app.add_handler(CommandHandler("premium", premium_cmd))
-    app.add_handler(CallbackQueryHandler(on_cb, pattern="^subscribe_open$"))
+    app.add_handler(CallbackQueryHandler(on_cb, pattern=r"^subscribe_(open|term:|choose:)"))
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
@@ -1115,7 +1139,7 @@ def main():
     app = build_app()
     run_webhook(app)
 
-# короткие алиасы
+# короткие алиасы (для удобства REPL)
 cmd_start = cmd_start if 'cmd_start' in globals() else None
 cmd_modes = cmd_modes if 'cmd_modes' in globals() else None
 cmd_examples = cmd_examples if 'cmd_examples' in globals() else None
