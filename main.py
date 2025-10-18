@@ -658,7 +658,7 @@ main_kb = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🧭 Меню движков")],
         [KeyboardButton("⚙️ Режимы"), KeyboardButton("🧩 Примеры")],
-        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL))],
+        [KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))],
     ],
     resize_keyboard=True
 )
