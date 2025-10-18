@@ -852,9 +852,7 @@ async def diag_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Таблица цен: {PLAN_PRICE_TABLE}",
         f"WEB тарифы: {TARIFF_URL}"
     ]
-    await update.message.reply_text("\n".join(lines))
-
-# -------- WEB APP DATA --------
+    await update.message.reply_text("\n".join(# -------- WEB APP DATA --------
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Ожидаемые payload из мини-аппы:
@@ -865,6 +863,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     wad = getattr(msg, "web_app_data", None)
     if not wad:
         return
+
     raw = wad.data or ""
     try:
         payload = json.loads(raw) if raw.strip().startswith("{") else {"type": raw}
@@ -872,27 +871,30 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         payload = {"type": str(raw)}
 
     ptype = (payload.get("type") or "").strip().lower()
-    term  = (payload.get("plan") or "month").strip().lower()
+    term  = (payload.get("plan") or payload.get("term") or "month").strip().lower()
     tier  = (payload.get("tier") or "").strip().lower()
 
     log.info("web_app_data: %s", payload)
 
+    # ---- подписка из мини-аппы
     if ptype in ("subscribe", "subscription", "subscribe_click"):
-    # Если мини-аппа прислала tier+plan — сразу выставляем счёт
-    tier = (payload.get("tier") or "").strip().lower()
-    if tier in ("start", "pro", "ultimate"):
-        await _send_invoice_safely(msg, msg.from_user.id, tier=tier, term=term)
+        # Если тариф не указан в payload — предложим выбрать
+        if tier not in ("start", "pro", "ultimate"):
+            await msg.reply_text(
+                "Выберите тариф:",
+                reply_markup=_subscribe_choose_kb(term)
+            )
+        else:
+            # Сразу выставляем счёт
+            await _send_invoice_safely(msg, update.effective_user.id, tier=tier, term=term)
         return
-    # Иначе — старый сценарий: попросим выбрать тариф
-    await msg.reply_text(
-        "Выберите тариф:",
-        reply_markup=_subscribe_choose_kb(term)
-    )
-    return
 
+    # ---- проверка статуса
     if ptype in ("status", "status_check"):
-        await status_cmd(update, context); return
+        await status_cmd(update, context)
+        return
 
+    # ---- просто открыть страницу тарифов (кнопка в чате)
     if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
         await msg.reply_text(
             "Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.",
@@ -900,11 +902,17 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
                 [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL))]],
                 resize_keyboard=True
             )
-        ); return
+        )
+        return
 
+    # ---- помощь/поддержка
     if ptype in ("help_from_webapp", "help", "question"):
-        await msg.reply_text("🧑‍💻 Поддержка Neuro-Bot. Напишите здесь свой вопрос — отвечу в чате.\n\nПочта: sale.rielt@bk.ru"); return
+        await msg.reply_text(
+            "🧑‍💻 Поддержка Neuro-Bot. Напишите здесь свой вопрос — отвечу в чате.\n\nПочта: sale.rielt@bk.ru"
+        )
+        return
 
+    # ---- дефолт
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
 # -------- MAIN TEXT FLOW --------
