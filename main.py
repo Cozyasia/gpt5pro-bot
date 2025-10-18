@@ -88,10 +88,15 @@ if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is required")
 
 # --------- URL мини-приложения тарифов ---------
-if WEBAPP_URL:
-    TARIFF_URL = WEBAPP_URL  # напр., https://gpt5pro-api.onrender.com/mini?v=3
-else:
-    TARIFF_URL = f"{PUBLIC_URL.rstrip('/')}/mini"
+def _make_tariff_url() -> str:
+    base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/mini").strip()
+    # добавим ?bot=<username>, чтобы страница знала, в какой бот делать deep-link/close
+    if BOT_USERNAME:
+        sep = "&" if "?" in base else "?"
+        base = f"{base}{sep}bot={BOT_USERNAME}"
+    return base
+
+TARIFF_URL = _make_tariff_url()
 
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
