@@ -914,11 +914,15 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     # ---- помощь/поддержка
-    if ptype in ("help_from_webapp", "help", "question"):
-        await msg.reply_text(
-            "🧑‍💻 Поддержка Neuro-Bot. Напишите здесь свой вопрос — отвечу в чате.\n\nПочта: sale.rielt@bk.ru"
-        )
-        return
+if ptype in ("help_from_webapp", "help", "question"):
+    await msg.reply_text(
+        "🧑‍💻 *Поддержка Neuro-Bot*\n"
+        "Если у вас вопрос, напишите прямо сюда, я помогу.\n\n"
+        "📩 Также можно написать напрямую: [@gpt5pro_support](https://t.me/gpt5pro_support)",
+        parse_mode="Markdown",
+        disable_web_page_preview=True
+    )
+    return
 
     # ---- дефолт
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
