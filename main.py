@@ -927,30 +927,35 @@ if ptype in ("help_from_webapp", "help", "question"):
     # ---- дефолт
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
-# -------- MAIN TEXT FLOW --------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # если пришли с deep-link: /start subscribe_<tier>_<term>
+    args = context.args or []
+    if args:
+        payload = args[0]
+        if payload.startswith("subscribe"):
+            parts = payload.split("_")
+            tier = parts[1] if len(parts) > 1 else "pro"
+            term = parts[2] if len(parts) > 2 else "month"
+            await _send_invoice_safely(
+                update.effective_message,
+                update.effective_user.id,
+                tier=tier,
+                term=term
+            )
+            return
+
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
-    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True, parse_mode="Markdown")
 
-async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(MODES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
-
-async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True, parse_mode="Markdown")
-
-async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await plans(update, context)
-
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (update.message.text or "").strip()
-    chat_id = update.effective_chat.id
-
-    # меню движков
-    if text == "🧭 Меню движков":
+    await update.effective_message.reply_text(
+        START_TEXT,
+        reply_markup=main_kb,
+        disable_web_page_preview=True,
+        parse_mode="Markdown"
+    )    if text == "🧭 Меню движков":
         await open_engines_menu(update, context); return
     if text in ENGINE_TITLES.values() or text == "⬅️ Назад":
         await handle_engine_click(update, context); return
