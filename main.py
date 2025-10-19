@@ -85,7 +85,8 @@ if not BOT_TOKEN:
 if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
-    raise RuntimeError("ENV OPENAI_API_KEY is # --------- URL мини-приложения тарифов ---------
+    raise RuntimeError("ENV OPENAI_API_KEY is missing")
+# -------- URL мини-приложения тарифов ---------
 
 # --------- URL мини-приложения тарифов ---------
 def _make_tariff_url() -> str:
