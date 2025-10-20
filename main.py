@@ -692,7 +692,6 @@ async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 # ================== PAYMENTS: HELPERS ==================
-
 def _plan_amount_rub(tier: str, term: str) -> int:
     tier = (tier or "").lower()
     term = (term or "").lower()
@@ -722,11 +721,11 @@ def _receipt_provider_data(*, tier: str, term: str, amount_rub: int) -> dict:
 # ================== PAYMENTS: HANDLERS ==================
 async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup.from_button(
-    InlineKeyboardButton(
-        "Открыть тарифы (мини-приложение)",
-        web_app=WebAppInfo(url=TARIFF_URL)
+        InlineKeyboardButton(
+            "Открыть тарифы (мини-приложение)",
+            web_app=WebAppInfo(url=TARIFF_URL)
+        )
     )
-)
     await update.message.reply_text(
         "💳 *Тарифы Neuro-Bot*\nОткрой мини-приложение и нажмите «Оформить подписку».",
         reply_markup=kb, disable_web_page_preview=True, parse_mode="Markdown"
@@ -792,12 +791,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-    [InlineKeyboardButton(
-        "Открыть тарифы (мини-приложение)",
-        web_app=WebAppInfo(url=TARIFF_URL)
-    )],
-    [InlineKeyboardButton("Выставить счёт здесь", callback_data="subscribe_open")]
-])
+        [InlineKeyboardButton(
+            "Открыть тарифы (мини-приложение)",
+            web_app=WebAppInfo(url=TARIFF_URL)
+        )],
+        [InlineKeyboardButton("Выставить счёт здесь", callback_data="subscribe_open")]
+    ])
     await update.message.reply_text("Как оформить подписку?", reply_markup=kb)
 
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -876,7 +875,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     term  = (payload.get("plan") or payload.get("term") or "month").strip().lower()
     tier  = (payload.get("tier") or "").strip().lower()
 
-    log.info("web_app_data: %s", payload)
+    log.info("WEB_APP_DATA payload: %s", payload)
 
     # ---- подписка из мини-аппы
     if ptype in ("subscribe", "subscription", "subscribe_click"):
@@ -896,7 +895,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text(
             "Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.",
             reply_markup=ReplyKeyboardMarkup(
-                [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL))]],
+                [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL or TARIFF_URL))]],
                 resize_keyboard=True
             )
         )
@@ -907,7 +906,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text(
             "🧑‍💻 *Поддержка Neuro-Bot*\n"
             "Если у вас вопрос, напишите прямо сюда, я помогу.\n\n"
-            "📩 Также можно написать напрямую: [@gpt5pro_support](https://t.me/gpt5pro_support)",
+            "📩 Также можно написать напрямую: @gpt5pro_support",
             parse_mode="Markdown",
             disable_web_page_preview=True
         )
@@ -1135,14 +1134,15 @@ def build_app():
     # Премиум/подписка
     app.add_handler(CommandHandler("plans", plans))
     app.add_handler(CommandHandler("premium", premium_cmd))
-    app.add_handler(CallbackQueryHandler(on_cb, pattern=r"^subscribe_(open|term:|choose:)"))
+    # Паттерн делаем более либеральным, чтобы не терять колбэки с двоеточиями
+    app.add_handler(CallbackQueryHandler(on_cb, pattern=r"^subscribe_(open|term.*|choose.*)$"))
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("pro", pro_cmd))
 
-    # WEB APP
+    # WEB APP (ставим до текстовых хендлеров)
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
 
     # Изображения/видео
