@@ -736,7 +736,6 @@ async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💳 *Тарифы Neuro-Bot*\nОткрой мини-приложение и нажмите «Оформить подписку».",
         reply_markup=kb, disable_web_page_preview=True, parse_mode="Markdown"
     )
-
 async def _send_invoice_safely(msg, user_id: int, *, tier: str, term: str):
     """
     Выставляет инвойс пользователю c корректным provider_data (ЮKassa чек).
