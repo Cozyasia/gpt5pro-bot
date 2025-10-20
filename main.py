@@ -722,8 +722,11 @@ def _receipt_provider_data(*, tier: str, term: str, amount_rub: int) -> dict:
 # ================== PAYMENTS: HANDLERS ==================
 async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("Открыть тарифы (мини-приложение)", url=TARIFF_URL)
+    InlineKeyboardButton(
+        "Открыть тарифы (мини-приложение)",
+        web_app=WebAppInfo(url=TARIFF_URL)
     )
+)
     await update.message.reply_text(
         "💳 *Тарифы Neuro-Bot*\nОткрой мини-приложение и нажмите «Оформить подписку».",
         reply_markup=kb, disable_web_page_preview=True, parse_mode="Markdown"
@@ -789,9 +792,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Открыть тарифы (мини-приложение)", url=TARIFF_URL)],
-        [InlineKeyboardButton("Выставить счёт здесь", callback_data="subscribe_open")]
-    ])
+    [InlineKeyboardButton(
+        "Открыть тарифы (мини-приложение)",
+        web_app=WebAppInfo(url=TARIFF_URL)
+    )],
+    [InlineKeyboardButton("Выставить счёт здесь", callback_data="subscribe_open")]
+])
     await update.message.reply_text("Как оформить подписку?", reply_markup=kb)
 
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
