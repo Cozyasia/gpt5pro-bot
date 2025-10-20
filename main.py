@@ -30,7 +30,7 @@ log = logging.getLogger("gpt-bot")
 
 # -------- ENV --------
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
-BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")  # для deeplink
+BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -70,7 +70,6 @@ CURRENCY       = "RUB"
 DB_PATH        = os.environ.get("DB_PATH", "subs.db")
 
 # --- тарифы и цены (руб) ---
-# month / quarter / year
 PLAN_PRICE_TABLE = {
     "start":    {"month": 499,  "quarter": 1299, "year": 4490},
     "pro":      {"month": 999,  "quarter": 2799, "year": 8490},
@@ -411,7 +410,6 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
         return r.content
 
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Пока оставим ограничение PRO (позже переведём на Pay-Per-Use с балансом)
     if update.effective_user.id not in PREMIUM_USER_IDS:
         await update.effective_message.reply_text(
             "⚠️ Runway сейчас доступен на PRO-тарифе. В ближайшем обновлении — разовая оплата за ролик."
@@ -668,7 +666,33 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# -------- LUMA & RUNWAY DIAG --------
+async def cmd_diag_luma(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    key = LUMA_API_KEY
+    lines = [f"LUMA_API_KEY: {'✅ найден' if key else '❌ нет'}"]
+    if key:
+        lines.append(f"Формат: {'ok' if key.startswith('luma-') else 'не начинается с luma-'}")
+        lines.append(f"Длина: {len(key)}")
+        lines.append(f"MODEL: {LUMA_MODEL}, ASPECT: {LUMA_ASPECT}, DURATION: {LUMA_DURATION_S}s")
+    await update.message.reply_text("\n".join(lines))
+
+async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    key = RUNWAY_API_KEY
+    lines = [f"RUNWAY_API_KEY: {'✅ найден' if key else '❌ нет'}"]
+    if key:
+        lines.append(f"Формат: {'ok' if key.startswith('key_') else 'не начинается с key_'}")
+        lines.append(f"Длина: {len(key)}")
+        try:
+            _ = RunwayML(api_key=key)
+            lines.append("SDK инициализирован ✅")
+        except Exception as e:
+            lines.append(f"SDK error: {e}")
+    pro_list = ", ".join(map(str, sorted(PREMIUM_USER_IDS))) or "—"
+    lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
+    await update.message.reply_text("\n".join(lines))
+
 # ================== PAYMENTS: HELPERS ==================
+
 def _plan_amount_rub(tier: str, term: str) -> int:
     tier = (tier or "").lower()
     term = (term or "").lower()
@@ -737,8 +761,8 @@ async def _send_invoice_safely(msg, user_id: int, *, tier: str, term: str):
 
 def _subscribe_choose_kb(term: str) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton("START",    callback_data=f"subscribe_choose:start:{term}")],
-        [InlineKeyboardButton("PRO",      callback_data=f"subscribe_choose:pro:{term}")],
+        [InlineKeyboardButton("START", callback_data=f"subscribe_choose:start:{term}")],
+        [InlineKeyboardButton("PRO", callback_data=f"subscribe_choose:pro:{term}")],
         [InlineKeyboardButton("ULTIMATE", callback_data=f"subscribe_choose:ultimate:{term}")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -749,8 +773,8 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = (query.data or "")
     if data == "subscribe_open":
         await query.message.reply_text("Выберите срок:", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("1 месяц",    callback_data="subscribe_term:month")],
-            [InlineKeyboardButton("3 месяца",   callback_data="subscribe_term:quarter")],
+            [InlineKeyboardButton("1 месяц", callback_data="subscribe_term:month")],
+            [InlineKeyboardButton("3 месяца", callback_data="subscribe_term:quarter")],
             [InlineKeyboardButton("12 месяцев", callback_data="subscribe_term:year")],
         ]))
         return
@@ -781,7 +805,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     tier, term = "pro", "month"
     m = re.match(r"^sub:([a-z]+):([a-z]+):(\d+)$", payload)
     if m:
-        tier = m.group(1); term = m.group(2)
+        tier = m.group(1)
+        term = m.group(2)
 
     if sp.currency != CURRENCY:
         await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
@@ -860,12 +885,12 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         await status_cmd(update, context)
         return
 
-    # ---- просто открыть страницу тарифов (кнопка в чате)
+    # ---- открыть страницу тарифов
     if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
         await msg.reply_text(
             "Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.",
             reply_markup=ReplyKeyboardMarkup(
-                [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=TARIFF_URL))]],
+                [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL))]],
                 resize_keyboard=True
             )
         )
@@ -876,7 +901,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text(
             "🧑‍💻 *Поддержка Neuro-Bot*\n"
             "Если у вас вопрос, напишите прямо сюда, я помогу.\n\n"
-            "📩 Также можно написать напрямую: @gpt5pro_support",
+            "📩 Также можно написать напрямую: [@gpt5pro_support](https://t.me/gpt5pro_support)",
             parse_mode="Markdown",
             disable_web_page_preview=True
         )
@@ -885,7 +910,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     # ---- дефолт
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
-# -------- MAIN TEXT FLOW --------
+# -------- START --------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # deep-link: /start subscribe_<tier>_<term>
     args = context.args or []
@@ -916,10 +941,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# -------- ON_TEXT --------
+# -------- TEXT HANDLER --------
+async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(MODES_TEXT, parse_mode="Markdown")
+
+async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(EXAMPLES_TEXT, parse_mode="Markdown")
+
+async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # короткий алиас
+    await subscribe_cmd(update, context)
+
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     chat_id = update.effective_chat.id
+    await typing(context, chat_id)
 
     # меню движков
     if text == "🧭 Меню движков":
@@ -927,22 +963,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text in ENGINE_TITLES.values() or text == "⬅️ Назад":
         await handle_engine_click(update, context); return
 
-    # режимы и примеры
-    lower = text.lower()
-    if lower in ("⚙️ режимы", "режимы", "/modes"):
-        await cmd_modes(update, context); return
-    if lower in ("🧩 примеры", "примеры", "/examples"):
-        await cmd_examples(update, context); return
-
-    # определяем намерение
+    # интенты картинок/видео
     intent, prompt = detect_media_intent(text)
     if intent == "image" and prompt:
         if context.user_data.get("engine") == ENGINE_MJ:
             mj = f"/imagine prompt: {prompt} --ar 3:2 --stylize 250 --v 6.0"
             await update.message.reply_text(f"🖼 Midjourney промпт:\n{mj}")
             return
-        await _call_handler_with_prompt(cmd_img, update, context, prompt)
-        return
+        await _call_handler_with_prompt(cmd_img, update, context, prompt); return
 
     if intent == "video" and prompt:
         dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
@@ -955,42 +983,38 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await suggest_video_engines(update, context, clean_prompt, dur, ar); return
 
-    # ответы о возможностях
+    lower = text.lower()
+    if lower in ("⚙️ режимы", "режимы", "/modes"):
+        await cmd_modes(update, context); return
+    if lower in ("🧩 примеры", "примеры", "/examples"):
+        await cmd_examples(update, context); return
+
     if is_vision_capability_question(text):
         await update.message.reply_text(
             "Да — анализирую изображения и помогаю с видео по кадрам, а ещё распознаю голос. ✅\n\n"
             "• Фото/скриншоты: JPG/PNG/WebP (до ~10 МБ)\n"
             "• Видео: пришли 1–3 ключевых кадра (скриншота)"
-        )
-        return
+        ); return
 
-    await typing(context, chat_id)
-
-    # small talk
+    # smalltalk
     if is_smalltalk(text):
         reply = await ask_openai_text(text)
-        await update.message.reply_text(reply)
-        return
+        await update.message.reply_text(reply); return
 
-    # расширенные ответы с поиском
     web_ctx = ""
     sources = []
     if should_browse(text):
         ans, results = tavily_search(text, max_results=5)
         sources = results or []
         ctx_lines = []
-        if ans:
-            ctx_lines.append(f"Краткая сводка поиском: {ans}")
+        if ans: ctx_lines.append(f"Краткая сводка поиском: {ans}")
         for i, it in enumerate(sources, 1):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
 
     answer = await ask_openai_text(text, web_ctx=web_ctx)
     if sources:
-        answer += "\n\n" + "\n".join(
-            [f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)]
-        )
-
+        answer += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
     await update.message.reply_text(answer, disable_web_page_preview=False)
 
 # -------- IMAGE / VOICE / AUDIO / DOC --------
@@ -1124,9 +1148,7 @@ def build_app():
     app.add_handler(CallbackQueryHandler(on_video_choice, pattern="^video_choose_(luma|runway)$"))
 
     # Кнопки меню движков
-    engine_buttons_pattern = "(" + "|".join(
-        map(re.escape, list(ENGINE_TITLES.values()) + ["⬅️ Назад", "🧭 Меню движков"])
-    ) + ")"
+    engine_buttons_pattern = "(" + "|".join(map(re.escape, list(ENGINE_TITLES.values()) + ["⬅️ Назад", "🧭 Меню движков"])) + ")"
     app.add_handler(MessageHandler(filters.Regex(engine_buttons_pattern), on_text))
 
     # Остальной текст/медиа
