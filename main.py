@@ -87,14 +87,20 @@ if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
 
 # --------- URL мини-приложения тарифов ---------
-def _make_tariff_url() -> str:
+def _make_tariff_url(src: str | None = None) -> str:
     base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/mini").strip()
+    params = []
     if BOT_USERNAME:
+        params.append(f"bot={BOT_USERNAME}")
+    if src:
+        params.append(f"src={src}")
+    if params:
         sep = "&" if "?" in base else "?"
-        base = f"{base}{sep}bot={BOT_USERNAME}"
+        base = f"{base}{sep}{'&'.join(params)}"
     return base
 
-TARIFF_URL = _make_tariff_url()
+# URL для кнопки «⭐ Подписка» (из чата)
+TARIFF_URL = _make_tariff_url("subscribe")
 
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
