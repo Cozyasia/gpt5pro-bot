@@ -87,14 +87,16 @@ if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
 
 # --------- URL мини-приложения тарифов ---------
-def _make_tariff_url() -> str:
+def _make_tariff_url(src: str = "subscribe") -> str:
     base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/premium.html").strip()
-    # гарантируем src=subscribe
-    sep = "&" if "?" in base else "?"
-    base = f"{base}{sep}src=subscribe"
+    # добавляем src=<...> если он задан
+    if src:
+        sep = "&" if "?" in base else "?"
+        base = f"{base}{sep}src={src}"
+    # добавляем bot=<username> для корректной передачи юзернейма бота
     if BOT_USERNAME:
-        sep2 = "&" if "?" in base else "?"
-        base = f"{base}{sep2}bot={BOT_USERNAME}"
+        sep = "&" if "?" in base else "?"
+        base = f"{base}{sep}bot={BOT_USERNAME}"
     return base
 
 # URL для кнопки «⭐ Подписка» (из чата)
