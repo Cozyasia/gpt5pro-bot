@@ -209,42 +209,78 @@ _CAPABILITY_RE = re.compile(
     re.IGNORECASE
 )
 
-# === INTENT
-_IMG_WORDS = r"(картин\w+|изображен\w+|логотип\w+|иконк\w+|постер\w*|image|picture|logo|icon|banner)"
-_VID_WORDS = r"(видео|ролик\w*|клип\w*|анимаци\w*|shorts|reel|clip|video)"
-_VERBS     = r"(сделай|создай|сгенерируй|нарисуй|сформируй|собери|сними|сотвор|хочу|нужно|надо|please|make|generate|create)"
+# === INTENT (improved) ===
+# Словари ключевых слов: расширены формы глаголов (в т.ч. инфинитивы)
+_IMG_WORDS = r"(картин\w+|изображен\w+|логотип\w+|иконк\w+|постер\w*|баннер\w*|image|picture|logo|icon|banner)"
+_VID_WORDS = r"(видео|видос\w*|ролик\w*|клип\w*|анимаци\w*|шортс\w*|shorts?|рилс\w*|reels?|сторис\w*|clip|video)"
+
+# Глаголы/триггеры действия
+_VERBS = r"(сделай|создай|создать|сгенерируй|сгенерировать|нарисуй|нарисовать|сформируй|сформировать|" \
+         r"собери|собрать|сними|снять|смонтируй|смонтировать|хочу|нужно|надо|please|make|generate|create)"
+
+# Частые стартовые паттерны (начало фразы)
+_PREFIXES_VIDEO = [
+    r"^создай\s+видео", r"^сделай\s+видео", r"^сгенерируй\s+видео", r"^сними\s+видео",
+    r"^создать\s+видео", r"^смонтируй\s+видео", r"^смонтировать\s+видео",
+    r"^create\s+video", r"^generate\s+video", r"^make\s+video", r"^video\b", r"^reel[s]?\b", r"^shorts?\b"
+]
+
+_PREFIXES_IMAGE = [
+    r"^создай\s+(?:картин\w+|изображен\w+)", r"^сделай\s+(?:картин\w+|изображен\w+)",
+    r"^сгенерируй\s+(?:картин\w+|изображен\w+)", r"^нарисуй\s+(?:картин\w+|изображен\w+)",
+    r"^image\b", r"^picture\b", r"^img\b"
+]
+
+# Вспомогательная очистка
+def _strip_leading(text: str) -> str:
+    return text.strip(" :—-\"“”'«»")
 
 def detect_media_intent(text: str):
+    """
+    Возвращает кортеж: ('video'|'image'|None, prompt_without_trigger)
+    Примеры, которые теперь ловятся:
+      - "ты можешь создать видео закат на Самуи 10 сек 9:16"
+      - "создать видео с дроном над морем"
+      - "сделай ролик для reels про виллу"
+      - "сгенерируй картинку логотип Cozy Asia"
+    """
     if not text:
         return None, ""
     t = text.strip()
     tl = t.lower()
 
-    prefixes_video = [
-        "создай видео", "сделай видео", "сгенерируй видео", "сними видео",
-        "create video", "generate video", "make video", "video "
-    ]
-    for p in prefixes_video:
-        if tl.startswith(p):
-            return "video", t[len(p):].strip(" :—-\"“”'«»")
+    # 1) Явные префиксы
+    for p in _PREFIXES_VIDEO:
+        m = re.search(p, tl, flags=re.IGNORECASE)
+        if m:
+            rest = _strip_leading(t[m.end():])
+            return "video", rest
+    for p in _PREFIXES_IMAGE:
+        m = re.search(p, tl, flags=re.IGNORECASE)
+        if m:
+            rest = _strip_leading(t[m.end():])
+            return "image", rest
 
-    prefixes_image = [
-        "создай картинку", "сделай картинку", "сгенерируй картинку", "нарисуй картинку",
-        "сгенерируй изображение", "создай изображение", "img ", "image ", "picture "
-    ]
-    for p in prefixes_image:
-        if tl.startswith(p):
-            return "image", t[len(p):].strip(" :—-\"“”'«»")
+    # 2) Вопросительные/разговорные формы "ты можешь ... создать видео ..."
+    #    Схема: (можешь|можно|сможешь).*(создать|сделать|сгенерировать|снять).*(видео|reels|shorts)
+    if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
+        # вырезаем ключевые слова, чтобы оставить только описание сцены
+        tmp = re.sub(r"(ты|вы)\s+(можешь|можно|сможешь)\s*", "", tl)
+        tmp = re.sub(_VID_WORDS, "", tmp)
+        tmp = re.sub(_VERBS, "", tmp)
+        return "video", _strip_leading(tmp)
 
+    # 3) Общий случай: есть слово про видео + есть глагол действия
     if re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
-        prompt = re.sub(_VID_WORDS, "", tl)
-        prompt = re.sub(_VERBS, "", prompt)
-        return "video", prompt.strip(" :—-\"“”'«»")
+        tmp = re.sub(_VID_WORDS, "", tl)
+        tmp = re.sub(_VERBS, "", tmp)
+        return "video", _strip_leading(tmp)
 
+    # 4) Общий случай: картинка + глагол действия
     if re.search(_IMG_WORDS, tl) and re.search(_VERBS, tl):
-        prompt = re.sub(_IMG_WORDS, "", tl)
-        prompt = re.sub(_VERBS, "", prompt)
-        return "image", prompt.strip(" :—-\"“”'«»")
+        tmp = re.sub(_IMG_WORDS, "", tl)
+        tmp = re.sub(_VERBS, "", tmp)
+        return "image", _strip_leading(tmp)
 
     return None, ""
 
