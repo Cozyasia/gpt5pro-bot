@@ -209,78 +209,102 @@ _CAPABILITY_RE = re.compile(
     re.IGNORECASE
 )
 
-# === INTENT (improved) ===
-# Словари ключевых слов: расширены формы глаголов (в т.ч. инфинитивы)
-_IMG_WORDS = r"(картин\w+|изображен\w+|логотип\w+|иконк\w+|постер\w*|баннер\w*|image|picture|logo|icon|banner)"
-_VID_WORDS = r"(видео|видос\w*|ролик\w*|клип\w*|анимаци\w*|шортс\w*|shorts?|рилс\w*|reels?|сторис\w*|clip|video)"
+# === INTENT (unified) ===
+# словари-ядра (широкие стемы + английские термины)
+_IMG_WORDS = (
+    r"(картин\w+|изображен\w+|фото\w*|фотк\w*|рисунк\w+|арт\w*|аватар\w*|"
+    r"логотип\w+|иконк\w+|обложк\w*|постер\w*|баннер\w*|обои\w*|мем\w*|стикер\w*|"
+    r"image|picture|img\b|logo|icon|banner|poster|wallpaper|sticker|meme)"
+)
+_VID_WORDS = (
+    r"(видео|видос\w*|ролик\w*|клип\w*|анимаци\w*|шортс\w*|shorts?|"
+    r"рилс\w*|reels?|сторис\w*|stories?|clip|video|vid\b)"
+)
 
-# Глаголы/триггеры действия
-_VERBS = r"(сделай|создай|создать|сгенерируй|сгенерировать|нарисуй|нарисовать|сформируй|сформировать|" \
-         r"собери|собрать|сними|снять|смонтируй|смонтировать|хочу|нужно|надо|please|make|generate|create)"
+# глаголы/триггеры с охватом форм: "сделаешь/сделай", "создать/создай", "сгенерируй/сгенеришь", и т.п.
+_VERBS = (
+    r"(сдела\w+|созда\w+|сгенерир\w+|нарис\w+|сформир\w+|"
+    r"собер\w+|сним\w+|смонтир\w+|хочу|нужно|надо|please|make|generate|create|render|produce)"
+)
 
-# Частые стартовые паттерны (начало фразы)
+# частые стартовые паттерны (быстрая развилка)
 _PREFIXES_VIDEO = [
-    r"^создай\s+видео", r"^сделай\s+видео", r"^сгенерируй\s+видео", r"^сними\s+видео",
-    r"^создать\s+видео", r"^смонтируй\s+видео", r"^смонтировать\s+видео",
-    r"^create\s+video", r"^generate\s+video", r"^make\s+video", r"^video\b", r"^reel[s]?\b", r"^shorts?\b"
+    r"^созда\w*\s+видео", r"^сдела\w*\s+видео", r"^сгенерир\w*\s+видео",
+    r"^сним\w*\s+видео", r"^смонтир\w*\s+видео",
+    r"^video\b", r"^vid\b", r"^reel[s]?\b", r"^shorts?\b", r"^stories?\b"
 ]
-
 _PREFIXES_IMAGE = [
-    r"^создай\s+(?:картин\w+|изображен\w+)", r"^сделай\s+(?:картин\w+|изображен\w+)",
-    r"^сгенерируй\s+(?:картин\w+|изображен\w+)", r"^нарисуй\s+(?:картин\w+|изображен\w+)",
+    r"^созда\w*\s+(?:картин\w+|изображен\w+|фото\w*|рисунк\w+)",
+    r"^сдела\w*\s+(?:картин\w+|изображен\w+|фото\w*|рисунк\w+)",
+    r"^сгенерир\w*\s+(?:картин\w+|изображен\w+|фото\w*|рисунк\w+)",
+    r"^нарис\w*\s+(?:картин\w+|изображен\w+|рисунк\w+)",
     r"^image\b", r"^picture\b", r"^img\b"
 ]
 
-# Вспомогательная очистка
-def _strip_leading(text: str) -> str:
-    return text.strip(" :—-\"“”'«»")
+def _strip_leading(s: str) -> str:
+    # аккуратно чистим лидирующие знаки/пробелы
+    return s.strip(" \n\t:—–-\"“”'«»,.()[]")
+
+def _after_match(text: str, match) -> str:
+    return _strip_leading(text[match.end():])
 
 def detect_media_intent(text: str):
     """
     Возвращает кортеж: ('video'|'image'|None, prompt_without_trigger)
-    Примеры, которые теперь ловятся:
-      - "ты можешь создать видео закат на Самуи 10 сек 9:16"
-      - "создать видео с дроном над морем"
+
+    Примеры, которые ловятся:
+      - "создай видео закат на Самуи 10 сек 9:16"
       - "сделай ролик для reels про виллу"
       - "сгенерируй картинку логотип Cozy Asia"
+      - "ты можешь сделать видео про море на 5 секунд?"
+      - "img: лого кофейни в неон-стиле"
     """
     if not text:
         return None, ""
     t = text.strip()
     tl = t.lower()
 
-    # 1) Явные префиксы
+    # 1) Явные префиксы в начале фразы (быстрое ветвление)
     for p in _PREFIXES_VIDEO:
         m = re.search(p, tl, flags=re.IGNORECASE)
         if m:
-            rest = _strip_leading(t[m.end():])
-            return "video", rest
+            return "video", _after_match(t, m)
     for p in _PREFIXES_IMAGE:
         m = re.search(p, tl, flags=re.IGNORECASE)
         if m:
-            rest = _strip_leading(t[m.end():])
-            return "image", rest
+            return "image", _after_match(t, m)
 
-    # 2) Вопросительные/разговорные формы "ты можешь ... создать видео ..."
-    #    Схема: (можешь|можно|сможешь).*(создать|сделать|сгенерировать|снять).*(видео|reels|shorts)
-    if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
-        # вырезаем ключевые слова, чтобы оставить только описание сцены
-        tmp = re.sub(r"(ты|вы)\s+(можешь|можно|сможешь)\s*", "", tl)
-        tmp = re.sub(_VID_WORDS, "", tmp)
-        tmp = re.sub(_VERBS, "", tmp)
-        return "video", _strip_leading(tmp)
+    # 2) Разговорные формы с "можешь/можно/сможешь ... (сделать/создать/сгенерировать/снять) ... видео/картинку"
+    if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
+        if re.search(_VID_WORDS, tl):
+            tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
+            tmp = re.sub(_VID_WORDS, "", tmp)
+            tmp = re.sub(_VERBS, "", tmp)
+            return "video", _strip_leading(tmp)
+        if re.search(_IMG_WORDS, tl):
+            tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
+            tmp = re.sub(_IMG_WORDS, "", tmp)
+            tmp = re.sub(_VERBS, "", tmp)
+            return "image", _strip_leading(tmp)
 
-    # 3) Общий случай: есть слово про видео + есть глагол действия
+    # 3) Общие случаи: есть медиа-слово + есть глагол-действие
     if re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
         tmp = re.sub(_VID_WORDS, "", tl)
         tmp = re.sub(_VERBS, "", tmp)
         return "video", _strip_leading(tmp)
 
-    # 4) Общий случай: картинка + глагол действия
     if re.search(_IMG_WORDS, tl) and re.search(_VERBS, tl):
         tmp = re.sub(_IMG_WORDS, "", tl)
         tmp = re.sub(_VERBS, "", tmp)
         return "image", _strip_leading(tmp)
+
+    # 4) Короткие команды без глаголов: "video: ...", "img: ...", "picture: ..."
+    m = re.match(r"^(video|vid|reels?|shorts?|stories?)\s*[:\-]\s*(.+)$", tl)
+    if m:
+        return "video", _strip_leading(t[m.end(1)+1:])  # всё после метки
+    m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
+    if m:
+        return "image", _strip_leading(t[m.end(1)+1:])
 
     return None, ""
 
