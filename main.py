@@ -329,14 +329,13 @@ def detect_media_intent(text: str):
         if m:
             return "video", _after_match(t, m)
 
-    # затем префиксы КАРТИНОК (ОТДЕЛЬНЫЙ цикл, не внутри предыдущего)
+    # затем префиксы КАРТИНОК
     for p in _PREFIXES_IMAGE:
         m = re.search(p, tl, flags=re.IGNORECASE)
         if m:
             return "image", _after_match(t, m)
 
-    # дальше — как было
-    if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
+    # общие формулировки "можешь/можно/сможешь" + глагол
     if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
         if re.search(_VID_WORDS, tl):
             tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
@@ -348,20 +347,27 @@ def detect_media_intent(text: str):
             tmp = re.sub(_IMG_WORDS, "", tmp)
             tmp = re.sub(_VERBS, "", tmp)
             return "image", _strip_leading(tmp)
+
+    # просто "глагол + видео/картинка"
     if re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
         tmp = re.sub(_VID_WORDS, "", tl)
         tmp = re.sub(_VERBS, "", tmp)
         return "video", _strip_leading(tmp)
+
     if re.search(_IMG_WORDS, tl) and re.search(_VERBS, tl):
         tmp = re.sub(_IMG_WORDS, "", tl)
         tmp = re.sub(_VERBS, "", tmp)
         return "image", _strip_leading(tmp)
+
+    # форматы "video: ..." / "image: ..."
     m = re.match(r"^(video|vid|reels?|shorts?|stories?)\s*[:\-]\s*(.+)$", tl)
     if m:
         return "video", _strip_leading(t[m.end(1)+1:])
+
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
     if m:
         return "image", _strip_leading(t[m.end(1)+1:])
+
     return None, ""
 
 def is_smalltalk(text: str) -> bool:
