@@ -668,26 +668,127 @@ async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("Runway video error: %s", e)
 
 # >>> LUMA
-_DURATION_RE = re.compile(r"(?:(\d{1,2})\s*(?:sec|secs|s|сек))", re.I)
+# === LUMA DURATION PARSER — START =====================================
+# Понимаем 1–10 секунд в цифрах/словах и приводим к допустимым Luma значениям.
+# Разрешённые длительности Luma на сегодня: 5s, 9s, 10s.
+_ALLOWED_LUMA_DURS = (5, 9, 10)
+
+# Число + "сек"/"секунд"/"s"/"sec"/"seconds" (учитываем латинскую s и кириллицу с)
+_DURATION_NUM_RE = re.compile(
+    r"""
+    (?P<prefix>\b(?:на|в|около)?\s*)?                # необязательная приставка "на 6 сек"
+    (?P<num>\d+(?:[.,]\d+)?)                         # число (возможна десятичная)
+    \s*[-]?\s*
+    (?:
+        s(?:ec(?:onds?)?)?                           # s / sec / seconds
+        |                                             # или русские формы:
+        с|сек(?:\.|ун(?:д(?:а|ы|у|ам|ами|ах)?)?)?     # "с" (кирилл.), "сек", "сек.", "секунд", ...
+    )
+    \b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Слова-числа (ru/en) + единицы времени
+_WORD2NUM_RU = {
+    "один":1, "одна":1, "раз":1,
+    "два":2, "две":2,
+    "три":3, "четыре":4, "пять":5, "шесть":6,
+    "семь":7, "восемь":8, "девять":9, "десять":10,
+}
+_WORD2NUM_EN = {
+    "one":1, "two":2, "three":3, "four":4, "five":5,
+    "six":6, "seven":7, "eight":8, "nine":9, "ten":10,
+}
+_WORD_RE_SRC = (
+    r"(?:"
+    + "|".join(sorted(list(_WORD2NUM_RU.keys()) + list(_WORD2NUM_EN.keys()), key=len, reverse=True))
+    + r")"
+)
+_DURATION_WORD_RE = re.compile(
+    rf"""
+    (?P<prefix>\b(?:на|в|около)?\s*)?     # "на десять секунд"
+    (?P<word>{_WORD_RE_SRC})\s*
+    (?:
+        s(?:ec(?:onds?)?)?
+        |с|сек(?:\.|ун(?:д(?:а|ы|у|ам|ами|ах)?)?)?
+        |seconds?
+    )\b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Соотношения сторон как раньше
 _AR_RE = re.compile(r"\b(16:9|9:16|4:3|3:4|1:1|21:9|9:21)\b", re.I)
 
-def parse_video_opts_from_text(text: str, default_duration: int = None, default_ar: str = None):
-    duration = default_duration if default_duration is not None else LUMA_DURATION_S
-    ar = default_ar if default_ar is not None else LUMA_ASPECT
-    t = text
-    m = _DURATION_RE.search(t)
+def _snap_to_luma_allowed(x: int) -> int:
+    """Берём ближайшее из (5,9,10). При равенстве — вверх."""
+    best = min(_ALLOWED_LUMA_DURS, key=lambda a: (abs(a - x), -a))
+    return best
+
+def _extract_duration_seconds(t: str) -> tuple[int | None, tuple[int, int] | None]:
+    """Пытаемся вытащить длительность (секунды) и вернуть (secs, span) либо (None, None)."""
+    tl = t.lower()
+
+    # Вариант: цифры + единицы
+    m = _DURATION_NUM_RE.search(tl)
     if m:
+        raw = m.group("num").replace(",", ".")
         try:
-            duration = max(2, min(20, int(m.group(1))))
+            secs = float(raw)
+            secs = int(round(secs))
+            return secs, m.span()
         except Exception:
             pass
-        t = _DURATION_RE.sub("", t, count=1)
+
+    # Вариант: слова-числа + единицы
+    m = _DURATION_WORD_RE.search(tl)
+    if m:
+        w = m.group("word")
+        w = w.lower()
+        secs = _WORD2NUM_RU.get(w) or _WORD2NUM_EN.get(w)
+        if secs:
+            return int(secs), m.span()
+
+    return None, None
+
+def parse_video_opts_from_text(text: str, default_duration: int = None, default_ar: str = None):
+    """
+    Возвращает: (duration_for_luma, aspect_ratio, clean_prompt)
+    - duration_for_luma: 5/9/10 (ближайшее к запрошенному 1..10)
+    - aspect_ratio: как раньше
+    - clean_prompt: исходный текст без кусочка "10 сек"/"пять секунд"/и т.п.
+    """
+    # Базовые значения, если пользователь не указал
+    duration_req = default_duration if default_duration is not None else LUMA_DURATION_S
+    ar = default_ar if default_ar is not None else LUMA_ASPECT
+
+    t = text or ""
+
+    # 1) Достаём длительность (в любом виде)
+    secs, span = _extract_duration_seconds(t)
+    if secs is not None:
+        # нормируем 1..10
+        secs = max(1, min(10, int(secs)))
+        duration_req = secs
+        # вырезаем найденный фрагмент, чтобы он не попал в промпт
+        start, end = span
+        t = (t[:start] + t[end:]).strip()
+
+    # 2) Достаём AR, если есть
     m = _AR_RE.search(t)
     if m:
         ar = m.group(1)
         t = _AR_RE.sub("", t, count=1)
+
+    # 3) Приводим к допустимым длительностям Luma
+    duration_for_luma = _snap_to_luma_allowed(duration_req)
+
+    # 4) Чистим пробелы
     clean = re.sub(r"\s{2,}", " ", t.replace(" ,", ",")).strip(" ,.;-—")
-    return duration, ar, clean
+
+    return duration_for_luma, ar, clean
+# === LUMA DURATION PARSER — END =======================================
 
 def _luma_make_video_sync(prompt: str, duration: int = None, aspect_ratio: str = None) -> bytes:
     if not LUMA_API_KEY:
