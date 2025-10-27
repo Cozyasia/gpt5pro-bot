@@ -318,6 +318,138 @@ def should_browse(text: str) -> bool:
 def is_vision_capability_question(text: str) -> bool:
     return bool(_CAPABILITY_RE.search(text))
 
+# === B: ROUTER & HANDLERS ===============================================
+# Текст — через OpenRouter (если есть ключ), Картинки — через OpenAI Images,
+# Видео — мягко предлагаем Luma/Runway с готовыми командами.
+
+# ENV для OpenRouter (можно не трогать — берём, если задано)
+OPENROUTER_API_KEY   = os.environ.get("OPENROUTER_API_KEY", "").strip()
+OPENROUTER_TEXT_MODEL = os.environ.get("OPENROUTER_TEXT_MODEL", "").strip()  # опционально
+OPENROUTER_BASE_URL  = "https://openrouter.ai/api/v1"
+
+def _has_openrouter() -> bool:
+    # Используем отдельный ключ, либо (на крайний случай) если кто-то всё ещё задаёт base_url на OpenRouter
+    if OPENROUTER_API_KEY:
+        return True
+    bul = (OPENAI_BASE_URL or "").lower()
+    return ("openrouter" in bul)
+
+async def _ask_text_via_openrouter(user_text: str, web_ctx: str = "") -> str | None:
+    """
+    Лёгкий прямой вызов OpenRouter через httpx (без трогания твоего oai_llm),
+    чтобы гарантированно отправлять ТЕКСТ именно в OpenRouter, а не в OpenAI.
+    Возвращает текст ответа или None, если OpenRouter недоступен/ошибка.
+    """
+    if not _has_openrouter():
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY or OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    if OPENROUTER_SITE_URL:
+        headers["HTTP-Referer"] = OPENROUTER_SITE_URL
+    if OPENROUTER_APP_NAME:
+        headers["X-Title"] = OPENROUTER_APP_NAME
+
+    # модель: если явно не задана — берём «auto», чтобы OpenRouter сам подбирал
+    model = OPENROUTER_TEXT_MODEL or "openrouter/auto"
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if web_ctx:
+        messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
+    messages.append({"role": "user", "content": user_text})
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.6,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(f"{OPENROUTER_BASE_URL}/chat/completions", headers=headers, json=payload)
+            r.raise_for_status()
+            data = r.json()
+            return (data["choices"][0]["message"]["content"] or "").strip()
+    except Exception as e:
+        log.exception("OpenRouter text error: %s", e)
+        return None
+
+async def _handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, web_ctx: str = ""):
+    """
+    Текстовый ответ: пробуем OpenRouter; если его нет/ошибка — падаем на твой ask_openai_text().
+    """
+    # 1) OpenRouter (если есть)
+    reply = await _ask_text_via_openrouter(text, web_ctx=web_ctx)
+    if not reply:
+        # 2) Фоллбек: твой текущий клиент (oai_llm) и ask_openai_text()
+        reply = await ask_openai_text(text, web_ctx=web_ctx)
+    await update.message.reply_text(reply)
+
+async def _handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    """
+    Картинка: используем уже готовый /img-обработчик (OpenAI Images).
+    """
+    await _call_handler_with_prompt(cmd_img, update, context, prompt)
+
+def _video_suggestion_text(prompt: str, dur: int | None = None, ar: str | None = None, is_pro: bool = False) -> str:
+    """
+    Мягкая подсказка пользователю, как сделать видео через Luma/Runway.
+    """
+    dur_s = f"{dur}s" if dur else "6s"
+    ar_s  = ar or "9:16"
+    pro_line = "Runway — только на PRO." if not is_pro else "Runway доступен (PRO)."
+    p = prompt.strip() or "закат над морем, дрон, тёплые цвета"
+
+    return (
+        "🎬 Я не генерирую видео прямо в GPT-режиме, но помогу запустить в подходящем движке:\n\n"
+        "• Короткие ролики — **Luma** (экономнее)\n"
+        f"• Студийные/длинные — **Runway** ({pro_line})\n\n"
+        "Готовые команды:\n"
+        f"• Luma: `/video_luma {p} {dur_s} {ar_s}`\n"
+        f"• Runway: `/video {p}`\n\n"
+        "Или открой «🧭 Меню движков» и выбери Luma/Runway."
+    )
+
+async def _handle_video_request(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    """
+    Если пользователь просит видео в GPT-режиме — даём понятный next-step (Luma/Runway).
+    Пытаемся распарсить длительность/соотношение из текста, чтобы подсказать красивые команды.
+    """
+    dur, ar, clean = parse_video_opts_from_text(prompt)
+    is_pro = update.effective_user.id in PREMIUM_USER_IDS
+    text = _video_suggestion_text(clean, dur, ar, is_pro)
+    await update.message.reply_text(text, parse_mode=None)  # без MarkdownV2, чтобы не экранировать
+
+async def route_and_handle_textlike(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, web_ctx: str = ""):
+    """
+    Единая точка: определяем намерение (image/video/none) и отправляем в нужный хендлер.
+    ЭТО ЭТО И ЕСТЬ «B», который надо звать из on_text / on_voice после STT.
+    """
+    kind, payload = detect_media_intent(text)
+
+    if kind == "image":
+        await _handle_image(update, context, payload or text)
+        return
+
+    if kind == "video":
+        await _handle_video_request(update, context, payload or text)
+        return
+
+    # Обычный текст — отвечаем моделью для текста (OpenRouter → fallback OpenAI)
+    await _handle_text(update, context, text, web_ctx=web_ctx)
+
+# === КАК ПОДКЛЮЧИТЬ =========================================
+# 1) В on_text замените "обычный ответ" на:
+#    >>> await route_and_handle_textlike(update, context, text, web_ctx=web_ctx)
+#
+# 2) В on_voice / on_audio после STT (переменная `text`) тоже используйте:
+#    >>> await route_and_handle_textlike(update, context, text, web_ctx=web_ctx)
+#
+# 3) Всё остальное (cmd_img, /video_luma, /video и т.д.) остаётся как есть.
+# ========================================================================
+
 # -------- UTILS --------
 async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
     try:
