@@ -336,10 +336,13 @@ async def _ask_text_via_openrouter(user_text: str, web_ctx: str = "") -> str | N
         "Authorization": f"Bearer {OPENROUTER_API_KEY or OPENAI_API_KEY}",
         "Content-Type": "application/json",
     }
-    if OPENROUTER_SITE_URL:
-        headers["HTTP-Referer"] = OPENROUTER_SITE_URL
-    if OPENROUTER_APP_NAME:
-        headers["X-Title"] = OPENROUTER_APP_NAME
+    # !!! важная правка: только ASCII в заголовках
+    ref = _ascii_or_none(os.environ.get("OPENROUTER_SITE_URL", "").strip())
+    ttl = _ascii_or_none(os.environ.get("OPENROUTER_APP_NAME", "").strip())
+    if ref:
+        headers["HTTP-Referer"] = ref
+    if ttl:
+        headers["X-Title"] = ttl
 
     model = os.environ.get("OPENROUTER_TEXT_MODEL", "").strip() or "openrouter/auto"
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -529,12 +532,18 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
     return ""
 
 # -------- IMAGES (/img) --------
-async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args).strip() if context.args else ""
-    if not prompt:
-        await update.effective_message.reply_text(
-            "Напиши так: «сгенерируй картинку: логотип Cozy Asia, неон, плоская иконка»"
-        )
+async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    key = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
+    base = os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1"
+    lines = [
+        f"OPENAI_IMAGE_KEY: {'✅ найден' if key else '❌ нет'}",
+        f"BASE_URL: {base}",
+        f"MODEL: {IMAGES_MODEL}",
+    ]
+    if "openrouter" in base.lower():
+        lines.append("⚠️ Сейчас BASE_URL указывает на OpenRouter — там нет gpt-image-1.")
+        lines.append("   Поставь https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
+    await update.message.reply_text("\n".join(lines))
         return
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
