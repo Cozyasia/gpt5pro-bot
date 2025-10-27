@@ -1488,6 +1488,17 @@ def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # --- гарантированно отключаем вебхук и чистим хвост апдейтов
+    async def _post_init(app_):
+        try:
+            await app_.bot.delete_webhook(drop_pending_updates=True)
+            log.info("Webhook deleted (drop_pending_updates=True)")
+        except Exception as e:
+            log.exception("delete_webhook failed: %s", e)
+
+    app.post_init = _post_init
+
+    # handlers
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
@@ -1505,7 +1516,12 @@ def main():
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    app.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
+    # drop_pending_updates=True дублируем на всякий
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+        stop_signals=None
+    )
 
 if __name__ == "__main__":
     main()
