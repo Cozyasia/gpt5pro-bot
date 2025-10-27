@@ -20,6 +20,8 @@ from telegram.ext import (
     PreCheckoutQueryHandler, CallbackQueryHandler
 )
 from telegram.constants import ChatAction
+
+# HTTP stub for Render
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -111,6 +113,7 @@ TARIFF_URL = _make_tariff_url("subscribe")
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
 
+# clean helper (ASCII-only header values)
 def _ascii_or_none(s: str | None):
     if not s:
         return None
@@ -120,7 +123,9 @@ def _ascii_or_none(s: str | None):
     except Exception:
         # в HTTP заголовках можно только ASCII — кириллицу отбрасываем
         return None
-        def _start_http_stub():
+
+# ---- Tiny HTTP server (for Render Web Service health/port binding)
+def _start_http_stub():
     class _H(BaseHTTPRequestHandler):
         def do_GET(self):
             path = (self.path or "/").split("?", 1)[0]
@@ -129,19 +134,23 @@ def _ascii_or_none(s: str | None):
                 self.wfile.write(b"ok")
                 return
             if path == "/premium.html":
+                # если задана внешняя страница тарифов — редиректим
                 if WEBAPP_URL:
                     self.send_response(302)
                     self.send_header("Location", WEBAPP_URL)
                     self.end_headers()
                 else:
                     self.send_response(200); self.end_headers()
-                    self.wfile.write(b"<html><body><h3>Premium page</h3>"
-                                     b"<p>WEBAPP_URL не задан. Установите переменную окружения.</p>"
-                                     b"</body></html>")
+                    self.wfile.write(
+                        b"<html><body><h3>Premium page</h3>"
+                        b"<p>WEBAPP_URL не задан. Установите переменную окружения.</p>"
+                        b"</body></html>"
+                    )
                 return
             self.send_response(404); self.end_headers()
             self.wfile.write(b"not found")
 
+        # глушим лишние логи
         def log_message(self, *_):
             return
 
@@ -166,7 +175,7 @@ if ref:
 if ttl:
     default_headers["X-Title"] = ttl
 
-# Текст/визуал (LLM) — как было
+# Текст/визуал (LLM)
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=_auto_base or None,
@@ -372,7 +381,7 @@ async def _ask_text_via_openrouter(user_text: str, web_ctx: str = "") -> str | N
         "Authorization": f"Bearer {OPENROUTER_API_KEY or OPENAI_API_KEY}",
         "Content-Type": "application/json",
     }
-    # !!! важная правка: только ASCII в заголовках
+    # только ASCII в заголовках
     ref = _ascii_or_none(os.environ.get("OPENROUTER_SITE_URL", "").strip())
     ttl = _ascii_or_none(os.environ.get("OPENROUTER_APP_NAME", "").strip())
     if ref:
