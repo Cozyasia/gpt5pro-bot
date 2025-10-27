@@ -109,16 +109,29 @@ TARIFF_URL = _make_tariff_url("subscribe")
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
 
+def _ascii_or_none(s: str | None):
+    if not s:
+        return None
+    try:
+        s.encode("ascii")
+        return s
+    except Exception:
+        # в HTTP заголовках можно только ASCII — кириллицу отбрасываем
+        return None
+
 _auto_base = OPENAI_BASE_URL
 if not _auto_base and OPENAI_API_KEY.startswith("sk-or-"):
     _auto_base = "https://openrouter.ai/api/v1"
     log.info("Auto-select OpenRouter base_url for text LLM.")
 
+# Заголовки только ASCII (иначе httpx кинет ascii/latin1 error)
 default_headers = {}
-if OPENROUTER_SITE_URL:
-    default_headers["HTTP-Referer"] = OPENROUTER_SITE_URL
-if OPENROUTER_APP_NAME:
-    default_headers["X-Title"] = OPENROUTER_APP_NAME
+ref = _ascii_or_none(os.environ.get("OPENROUTER_SITE_URL", "").strip())
+ttl = _ascii_or_none(os.environ.get("OPENROUTER_APP_NAME", "").strip())
+if ref:
+    default_headers["HTTP-Referer"] = ref
+if ttl:
+    default_headers["X-Title"] = ttl
 
 # Текст/визуал (LLM) — как было
 oai_llm = OpenAI(
@@ -129,28 +142,16 @@ oai_llm = OpenAI(
 
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 
-# === Images: базу определяем отдельно, чтобы не упираться в api.openai.com ===
-def _is_openrouter_like():
-    bul1 = (OPENAI_BASE_URL or "").lower()
-    bul2 = (os.environ.get("OPENAI_IMAGE_BASE_URL", "") or "").lower()
-    return (
-        OPENAI_IMAGE_KEY.startswith("sk-or-") or
-        "openrouter" in bul1 or
-        "openrouter" in bul2
-    )
-
-IMAGES_BASE_URL = (
-    os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip()
-    or ("https://openrouter.ai/api/v1" if _is_openrouter_like() else "https://api.openai.com/v1")
-)
-
-# Модель подбираем под базу: у OpenRouter своё имя неймспейса
-IMAGES_MODEL = "openai/gpt-image-1" if "openrouter" in IMAGES_BASE_URL else "gpt-image-1"
+# === Images: ВСЕГДА OpenAI (или ваш прокси), т.к. на OpenRouter модели нет ===
+# Если хостинг не пускает к api.openai.com — укажите прокси в ENV:
+#   OPENAI_IMAGE_BASE_URL=https://<ваш-домен>/v1
+IMAGES_BASE_URL = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip()
+                   or "https://api.openai.com/v1")
+IMAGES_MODEL = "gpt-image-1"
 
 oai_img = OpenAI(
-    api_key=OPENAI_IMAGE_KEY or OPENAI_API_KEY,   # можно тем же OR-ключом
+    api_key=(os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY),
     base_url=IMAGES_BASE_URL,
-    default_headers=default_headers or None,
 )
 # Tavily
 try:
@@ -532,7 +533,7 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
         await update.effective_message.reply_text(
-            "Напиши так: «сгенерируй картинку логотип Cozy Asia, неон, плоская иконка»"
+            "Напиши так: «сгенерируй картинку: логотип Cozy Asia, неон, плоская иконка»"
         )
         return
     try:
@@ -545,43 +546,32 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         b64 = resp.data[0].b64_json
         img_bytes = base64.b64decode(b64)
-        await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
+        await update.effective_message.reply_photo(
+            photo=img_bytes,
+            caption=f"Готово ✅\nЗапрос: {prompt}"
+        )
     except Exception as e:
         msg = str(e)
         log.exception("Images API error: %s", e)
         low = msg.lower()
-        hint = [
-            f"База: {IMAGES_BASE_URL}",
-            f"Модель: {IMAGES_MODEL}",
-            "—"
-        ]
-        if "401" in low or "unauthorized" in low or "invalid_api_key" in low:
-            hint.append("Проверь OPENAI_IMAGE_KEY (или OPENAI_API_KEY для OpenRouter): действующий ключ без пробелов.")
+        hint = []
+        # полезные подсказки
+        hint.append(f"База: {IMAGES_BASE_URL}")
+        hint.append(f"Модель: {IMAGES_MODEL}")
+        if "unauthorized" in low or "401" in low or "invalid_api_key" in low:
+            hint.append("Проверь OPENAI_IMAGE_KEY (или OPENAI_API_KEY): действующий ключ без пробелов.")
         elif "insufficient_quota" in low or "billing" in low or "credit" in low:
-            hint.append("Похоже на лимит/баланс. Проверь Billing на платформе провайдера.")
+            hint.append("Похоже на исчерпанный баланс/квоты в OpenAI.")
+        elif "connection" in low or "timed out" in low or "name or service not known" in low:
+            hint.append("Сетевая ошибка. Если хостинг блокирует api.openai.com — задайте "
+                        "OPENAI_IMAGE_BASE_URL с вашим прокси (например, через Cloudflare Worker).")
         elif "model" in low and "not found" in low:
-            hint.append("Для OpenRouter используем имя модели openai/gpt-image-1; для OpenAI — gpt-image-1.")
-        elif "connection" in low or "name or service not known" in low or "timed out" in low:
-            hint.append("Сетевая ошибка: хостинг не пускает к endpoint'у. Сейчас картинки идут на "
-                        f"{IMAGES_BASE_URL}. При необходимости задай ENV OPENAI_IMAGE_BASE_URL.")
-        await update.effective_message.reply_text("⚠️ Не удалось создать изображение:\n" + msg + "\n\n" + "\n".join(hint))
-
-# Диагностика клиента картинок
-async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    key = OPENAI_IMAGE_KEY or OPENAI_API_KEY
-    lines = [
-        f"KEY: {'✅ задан' if key else '❌ нет'}",
-        f"BASE_URL: {IMAGES_BASE_URL}",
-        f"MODEL: {IMAGES_MODEL}",
-    ]
-    if key:
-        pref = (
-            "sk-or-" if key.startswith("sk-or-") else
-            "sk-proj-" if key.startswith("sk-proj-") else
-            "sk-" if key.startswith("sk-") else "??"
+            hint.append("Для OpenAI используем gpt-image-1. Для OpenRouter этой модели нет — поэтому мы и ведём на OpenAI/прокси.")
+        elif "ascii" in low or "latin-1" in low:
+            hint.append("В ENV OPENROUTER_APP_NAME и HTTP-Referer должны быть только ASCII. Я уже чищу заголовки, но проверьте переменные.")
+        await update.effective_message.reply_text(
+            "⚠️ Не удалось создать изображение:\n" + msg + "\n\n" + "\n".join(hint)
         )
-        lines += [f"Префикс ключа: {pref}", f"Длина: {len(key)}"]
-    await update.message.reply_text("\n".join(lines))
 
 # -------- VIDEO (Runway SDK) --------
 if RUNWAY_API_KEY:
