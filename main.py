@@ -20,6 +20,8 @@ from telegram.ext import (
     PreCheckoutQueryHandler, CallbackQueryHandler
 )
 from telegram.constants import ChatAction
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # -------- LOGGING --------
 logging.basicConfig(
@@ -118,6 +120,37 @@ def _ascii_or_none(s: str | None):
     except Exception:
         # в HTTP заголовках можно только ASCII — кириллицу отбрасываем
         return None
+        def _start_http_stub():
+    class _H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = (self.path or "/").split("?", 1)[0]
+            if path in ("/", "/healthz"):
+                self.send_response(200); self.end_headers()
+                self.wfile.write(b"ok")
+                return
+            if path == "/premium.html":
+                if WEBAPP_URL:
+                    self.send_response(302)
+                    self.send_header("Location", WEBAPP_URL)
+                    self.end_headers()
+                else:
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(b"<html><body><h3>Premium page</h3>"
+                                     b"<p>WEBAPP_URL не задан. Установите переменную окружения.</p>"
+                                     b"</body></html>")
+                return
+            self.send_response(404); self.end_headers()
+            self.wfile.write(b"not found")
+
+        def log_message(self, *_):
+            return
+
+    try:
+        srv = HTTPServer(("0.0.0.0", PORT), _H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        log.info("HTTP stub bound on 0.0.0.0:%s", PORT)
+    except Exception as e:
+        log.exception("HTTP stub start failed: %s", e)
 
 _auto_base = OPENAI_BASE_URL
 if not _auto_base and OPENAI_API_KEY.startswith("sk-or-"):
@@ -1354,6 +1387,7 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     db_init()
     db_init_usage()
+    _start_http_stub()  # важно для Web Service на Render
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
