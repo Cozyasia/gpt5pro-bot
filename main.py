@@ -322,14 +322,21 @@ def detect_media_intent(text: str):
         return None, ""
     t = text.strip()
     tl = t.lower()
+
+    # сначала префиксы ВИДЕО
     for p in _PREFIXES_VIDEO:
         m = re.search(p, tl, flags=re.IGNORECASE)
         if m:
             return "video", _after_match(t, m)
-        for p in _PREFIXES_IMAGE:
-            m = re.search(p, tl, flags=re.IGNORECASE)
-            if m:
-                return "image", _after_match(t, m)
+
+    # затем префиксы КАРТИНОК (ОТДЕЛЬНЫЙ цикл, не внутри предыдущего)
+    for p in _PREFIXES_IMAGE:
+        m = re.search(p, tl, flags=re.IGNORECASE)
+        if m:
+            return "image", _after_match(t, m)
+
+    # дальше — как было
+    if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
     if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
         if re.search(_VID_WORDS, tl):
             tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
@@ -854,8 +861,11 @@ def _wallet_get(user_id: int) -> dict:
     cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (user_id,))
     con.commit()
     cur.execute("SELECT luma_usd, runway_usd, img_usd FROM wallet WHERE user_id=?", (user_id,))
-    row = cur.fetchone(); con.close()
-        return {"luma_usd": row[0], "runway_usd": row[1], "img_usd": row[2]}
+    row = cur.fetchone()
+    con.close()
+    if not row:
+        return {"luma_usd": 0.0, "runway_usd": 0.0, "img_usd": 0.0}
+    return {"luma_usd": row[0], "runway_usd": row[1], "img_usd": row[2]}
 
 def _wallet_add(user_id: int, engine: str, usd: float):
     col = {"luma": "luma_usd", "runway": "runway_usd", "img": "img_usd"}.get(engine)
