@@ -533,17 +533,27 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
 # -------- IMAGES (/img) --------
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    key = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
-    base = os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1"
+    key_env = os.environ.get("OPENAI_IMAGE_KEY", "").strip()
+    key_used = key_env or OPENAI_API_KEY
+    base = IMAGES_BASE_URL
     lines = [
-        f"OPENAI_IMAGE_KEY: {'✅ найден' if key else '❌ нет'}",
+        f"OPENAI_IMAGE_KEY: {'✅ найден' if key_used else '❌ нет'}",
         f"BASE_URL: {base}",
         f"MODEL: {IMAGES_MODEL}",
     ]
     if "openrouter" in base.lower():
-        lines.append("⚠️ Сейчас BASE_URL указывает на OpenRouter — там нет gpt-image-1.")
-        lines.append("   Поставь https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
+        lines.append("⚠️ BASE_URL указывает на OpenRouter — там нет gpt-image-1.")
+        lines.append("   Поставь https://api.openai.com/v1 или свой прокси в OPENAI_IMAGE_BASE_URL.")
     await update.message.reply_text("\n".join(lines))
+    return
+
+
+async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = " ".join(context.args).strip() if context.args else ""
+    if not prompt:
+        await update.effective_message.reply_text(
+            "Напиши так: «/img Земля из космоса, реалистично, 4k»"
+        )
         return
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
@@ -564,7 +574,6 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("Images API error: %s", e)
         low = msg.lower()
         hint = []
-        # полезные подсказки
         hint.append(f"База: {IMAGES_BASE_URL}")
         hint.append(f"Модель: {IMAGES_MODEL}")
         if "unauthorized" in low or "401" in low or "invalid_api_key" in low:
@@ -572,12 +581,12 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif "insufficient_quota" in low or "billing" in low or "credit" in low:
             hint.append("Похоже на исчерпанный баланс/квоты в OpenAI.")
         elif "connection" in low or "timed out" in low or "name or service not known" in low:
-            hint.append("Сетевая ошибка. Если хостинг блокирует api.openai.com — задайте "
-                        "OPENAI_IMAGE_BASE_URL с вашим прокси (например, через Cloudflare Worker).")
+            hint.append("Сетевая ошибка. Если хостинг блокирует api.openai.com — укажи "
+                        "OPENAI_IMAGE_BASE_URL с прокси (напр., Cloudflare Worker).")
         elif "model" in low and "not found" in low:
-            hint.append("Для OpenAI используем gpt-image-1. Для OpenRouter этой модели нет — поэтому мы и ведём на OpenAI/прокси.")
+            hint.append("gpt-image-1 доступна только на OpenAI/прокси, не на OpenRouter.")
         elif "ascii" in low or "latin-1" in low:
-            hint.append("В ENV OPENROUTER_APP_NAME и HTTP-Referer должны быть только ASCII. Я уже чищу заголовки, но проверьте переменные.")
+            hint.append("В HTTP заголовках только ASCII. Проверь OPENROUTER_APP_NAME / HTTP-Referer.")
         await update.effective_message.reply_text(
             "⚠️ Не удалось создать изображение:\n" + msg + "\n\n" + "\n".join(hint)
         )
