@@ -52,6 +52,13 @@ DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
+# TTS (новое):
+OPENAI_TTS_KEY       = os.environ.get("OPENAI_TTS_KEY", "").strip() or OPENAI_API_KEY
+OPENAI_TTS_BASE_URL  = (os.environ.get("OPENAI_TTS_BASE_URL", "").strip() or "https://api.openai.com/v1")
+OPENAI_TTS_MODEL     = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts").strip()
+OPENAI_TTS_VOICE     = os.environ.get("OPENAI_TTS_VOICE", "alloy").strip()
+TTS_MAX_CHARS        = int(os.environ.get("TTS_MAX_CHARS", "50").strip() or "50")
+
 # Media (Images / Video):
 OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 
@@ -93,6 +100,17 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
+
+# === UNLIMITED (whitelist) ===
+UNLIM_USER_IDS = set(int(x) for x in os.environ.get("UNLIM_USER_IDS","").split(",") if x.strip().isdigit())
+UNLIM_USERNAMES = set(s.strip().lstrip("@").lower() for s in os.environ.get("UNLIM_USERNAMES","").split(",") if s.strip())
+
+def is_unlimited(user_id: int, username: str | None = None) -> bool:
+    if user_id in UNLIM_USER_IDS:
+        return True
+    if username and username.lower() in UNLIM_USERNAMES:
+        return True
+    return False
 
 # --------- URL мини-приложения тарифов ---------
 def _make_tariff_url(src: str = "subscribe") -> str:
@@ -194,6 +212,12 @@ oai_img = OpenAI(
     base_url=IMAGES_BASE_URL,
 )
 
+# === TTS client ===
+oai_tts = OpenAI(
+    api_key=OPENAI_TTS_KEY,
+    base_url=OPENAI_TTS_BASE_URL,
+)
+
 # Tavily
 try:
     if TAVILY_API_KEY:
@@ -276,6 +300,13 @@ _CAPABILITY_RE = re.compile(
     r"(мож(ешь|но).{0,10}(анализ(ировать)?|распознав(ать|ание)).{0,10}(фото|картинк|изображен|image|picture)|"
     r"анализ(ировать)?.{0,8}(фото|картинк|изображен)|"
     r"(мож(ешь|но).{0,10})?(анализ|работать).{0,6}с.{0,6}видео)",
+    re.IGNORECASE
+)
+
+# Вопросы о документах (PDF/книги)
+_DOC_QA_RE = re.compile(
+    r"(мож(ешь|но).{0,10}(читать|прочитать|анализировать|разобрать).{0,30}"
+    r"(pdf|документ|epub|книг(у|и)|док|fb2|mobi|azw|файл))",
     re.IGNORECASE
 )
 
@@ -474,17 +505,64 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         log.exception("Vision error: %s", e)
         return "Не удалось проанализировать изображение (лимит/ключ). Попробуй позже."
 
+# -------- TTS (проговаривание коротких ответов) --------
+def _tts_bytes_sync(text: str) -> bytes | None:
+    try:
+        r = oai_tts.audio.speech.create(
+            model=OPENAI_TTS_MODEL,
+            voice=OPENAI_TTS_VOICE,
+            input=text,
+            format="opus"
+        )
+        audio = getattr(r, "content", None)
+        if audio is None and hasattr(r, "read"):
+            audio = r.read()
+        if isinstance(audio, (bytes, bytearray)):
+            return bytes(audio)
+    except Exception as e:
+        log.exception("TTS error: %s", e)
+    return None
+
+async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    if not text or len(text) > TTS_MAX_CHARS or not OPENAI_TTS_KEY:
+        return
+    try:
+        try:
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VOICE)
+        except Exception:
+            pass
+        audio = await asyncio.to_thread(_tts_bytes_sync, text)
+        if not audio:
+            return
+        bio = BytesIO(audio)
+        bio.name = "say.ogg"
+        await update.effective_message.reply_voice(voice=InputFile(bio), caption=text)
+    except Exception as e:
+        log.exception("maybe_tts_reply error: %s", e)
+
 # -------- STT --------
+def _mime_from_filename(fn: str) -> str:
+    fnl = (fn or "").lower()
+    if fnl.endswith(".ogg") or fnl.endswith(".oga"):
+        return "audio/ogg"
+    if fnl.endswith(".mp3"):
+        return "audio/mpeg"
+    if fnl.endswith(".m4a") or fnl.endswith(".mp4"):
+        return "audio/mp4"
+    if fnl.endswith(".wav"):
+        return "audio/wav"
+    if fnl.endswith(".webm"):
+        return "audio/webm"
+    return "application/octet-stream"
+
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
     data = buf.getvalue()
+    # Deepgram
     if DEEPGRAM_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 params = {"model": "nova-2", "language": "ru", "smart_format": "true", "punctuate": "true"}
-                headers = {
-                    "Authorization": f"Token {DEEPGRAM_API_KEY}",
-                    "Content-Type": "audio/ogg" if filename_hint.endswith(".ogg") else "application/octet-stream",
-                }
+                headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": _mime_from_filename(filename_hint)}
                 r = await client.post("https://api.deepgram.com/v1/listen", params=params, headers=headers, content=data)
                 r.raise_for_status()
                 dg = r.json()
@@ -492,14 +570,160 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
                 if text: return text
         except Exception as e:
             log.exception("Deepgram STT error: %s", e)
+    # Whisper
     if oai_stt:
         try:
-            buf2 = BytesIO(data); buf2.seek(0); setattr(buf2,"name",filename_hint)
+            buf2 = BytesIO(data); buf2.seek(0); setattr(buf2, "name", filename_hint)
             tr = oai_stt.audio.transcriptions.create(model=TRANSCRIBE_MODEL, file=buf2)
             return (tr.text or "").strip()
         except Exception as e:
             log.exception("Whisper STT error: %s", e)
     return ""
+
+# -------- Documents: extract & summarize --------
+def _safe_decode_txt(b: bytes) -> str:
+    for enc in ("utf-8", "cp1251", "latin-1"):
+        try:
+            return b.decode(enc)
+        except Exception:
+            continue
+    return b.decode("utf-8", errors="ignore")
+
+def _extract_pdf_text(data: bytes) -> str:
+    # Try PyPDF2
+    try:
+        import PyPDF2  # type: ignore
+        rd = PyPDF2.PdfReader(BytesIO(data))
+        parts = []
+        for p in rd.pages:
+            try:
+                parts.append(p.extract_text() or "")
+            except Exception:
+                continue
+        t = "\n".join(parts).strip()
+        if t:
+            return t
+    except Exception:
+        pass
+    # Try pdfminer.six
+    try:
+        from pdfminer.high_level import extract_text  # type: ignore
+        return (extract_text(BytesIO(data)) or "").strip()
+    except Exception:
+        pass
+    # Try PyMuPDF
+    try:
+        import fitz  # type: ignore
+        doc = fitz.open(stream=data, filetype="pdf")
+        txt = []
+        for page in doc:
+            try:
+                txt.append(page.get_text("text"))
+            except Exception:
+                continue
+        return ("\n".join(txt)).strip()
+    except Exception:
+        pass
+    return ""
+
+def _extract_epub_text(data: bytes) -> str:
+    try:
+        from ebooklib import epub  # type: ignore
+        from bs4 import BeautifulSoup  # type: ignore
+        book = epub.read_epub(BytesIO(data))
+        chunks = []
+        for item in book.get_items():
+            if item.get_type() == 9:  # DOCUMENT
+                try:
+                    soup = BeautifulSoup(item.get_content(), "html.parser")
+                    txt = soup.get_text(separator=" ", strip=True)
+                    if txt:
+                        chunks.append(txt)
+                except Exception:
+                    continue
+        return "\n".join(chunks).strip()
+    except Exception:
+        # naive fallback: try to unzip (epub is zip); but keep simple
+        return ""
+
+def _extract_docx_text(data: bytes) -> str:
+    try:
+        import docx  # python-docx  # type: ignore
+        f = BytesIO(data)
+        doc = docx.Document(f)
+        return "\n".join(p.text for p in doc.paragraphs).strip()
+    except Exception:
+        return ""
+
+def _extract_fb2_text(data: bytes) -> str:
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(data)
+        texts = []
+        for elem in root.iter():
+            if elem.text and elem.text.strip():
+                texts.append(elem.text.strip())
+        return " ".join(texts).strip()
+    except Exception:
+        return ""
+
+def extract_text_from_document(data: bytes, filename: str) -> tuple[str, str]:
+    """Return (extracted_text, format_hint)."""
+    name = (filename or "").lower()
+    if name.endswith(".pdf"):
+        t = _extract_pdf_text(data)
+        return t, "PDF"
+    if name.endswith(".epub"):
+        t = _extract_epub_text(data)
+        return t, "EPUB"
+    if name.endswith(".docx"):
+        t = _extract_docx_text(data)
+        return t, "DOCX"
+    if name.endswith(".fb2"):
+        t = _extract_fb2_text(data)
+        return t, "FB2"
+    if name.endswith(".txt"):
+        return _safe_decode_txt(data), "TXT"
+    if name.endswith((".mobi", ".azw", ".azw3")):
+        # ограниченная поддержка
+        return "", "MOBI/AZW"
+    # last resort: try to guess text
+    decoded = _safe_decode_txt(data)
+    return decoded if decoded else "", "UNKNOWN"
+
+async def _summarize_chunk(text: str, query: str | None = None) -> str:
+    prefix = "Суммируй кратко по пунктам основное из фрагмента документа на русском:\n"
+    if query:
+        prefix = (f"Суммируй фрагмент с учётом цели: {query}\n"
+                  f"Дай основные тезисы, факты, цифры. Русский язык.\n")
+    prompt = prefix + text
+    return await ask_openai_text(prompt)
+
+async def summarize_long_text(full_text: str, query: str | None = None) -> str:
+    # chunk ~7000-8000 символов для устойчивости
+    max_chunk = 8000
+    text = full_text.strip()
+    if len(text) <= max_chunk:
+        return await _summarize_chunk(text, query=query)
+    parts = []
+    i = 0
+    while i < len(text):
+        parts.append(text[i:i+max_chunk])
+        i += max_chunk
+        if len(parts) >= 8:  # ограничим первичные суммари, чтобы не уйти в десятки запросов
+            break
+    partials = []
+    for p in parts:
+        s = await _summarize_chunk(p, query=query)
+        partials.append(s)
+    combined = "\n\n".join(f"- Фрагмент {idx+1}:\n{s}" for idx, s in enumerate(partials))
+    final_prompt = (
+        "Объедини краткие выводы по фрагментам в цельное резюме документа.\n"
+        "Сделай: 1) 5-10 главных пунктов; 2) ключевые цифры/сроки; 3) вывод/рекомендации.\n"
+        "Русский язык.\n\n"
+        + combined
+    )
+    return await ask_openai_text(final_prompt)
 
 # -------- IMAGES (/img) --------
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -523,18 +747,10 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
-        resp = oai_img.images.generate(
-            model=IMAGES_MODEL,
-            prompt=prompt,
-            size="1024x1024",
-            n=1
-        )
+        resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
         b64 = resp.data[0].b64_json
         img_bytes = base64.b64decode(b64)
-        await update.effective_message.reply_photo(
-            photo=img_bytes,
-            caption=f"Готово ✅\nЗапрос: {prompt}"
-        )
+        await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
     except Exception as e:
         msg = str(e)
         log.exception("Images API error: %s", e)
@@ -902,7 +1118,9 @@ def _limits_for(user_id: int) -> dict:
     d["tier"] = tier
     return d
 
-def check_text_and_inc(user_id: int) -> tuple[bool, int, str]:
+def check_text_and_inc(user_id: int, username: str | None = None) -> tuple[bool, int, str]:
+    if is_unlimited(user_id, username):
+        return True, 999999, "ultimate"
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
     left = max(0, lim["text_per_day"] - row["text_count"])
@@ -941,7 +1159,8 @@ START_TEXT = (
     "• 💬 Текст/фото (GPT)\n"
     "• 🎬 Видео Luma (5–10 c, 9:16/16:9)\n"
     "• 🎥 Видео Runway (PRO)\n"
-    "• 🖼 Картинки /img <промпт>\n\n"
+    "• 🖼 Картинки /img <промпт>\n"
+    "• 📄 Чтение и анализ PDF/EPUB/DOCX/FB2/TXT — просто пришли файл.\n\n"
     "Открой «🎛 Движки», чтобы выбрать, и «⭐ Подписка» — для тарифов."
 )
 HELP_TEXT = (
@@ -950,7 +1169,8 @@ HELP_TEXT = (
     "• /img кот с очками — сгенерирует картинку\n"
     "• «сделай видео … на 9 секунд 9:16» — Luma/Runway\n"
     "• «🎛 Движки» — выбрать GPT / Luma / Runway / Midjourney\n"
-    "• «🧾 Баланс» — кошелёк и пополнение (100/500/1000/5000 ₽)"
+    "• «🧾 Баланс» — кошелёк и пополнение (100/500/1000/5000 ₽)\n"
+    "• Прочитать файл? Пришли PDF/EPUB/DOCX/FB2/TXT — сделаю конспект."
 )
 MODES_TEXT = "Выбери движок для следующего запроса:"
 EXAMPLES_TEXT = (
@@ -958,6 +1178,7 @@ EXAMPLES_TEXT = (
     "• сделай видео ретро-авто на берегу, 9:16 на 9 секунд\n"
     "• опиши текст на фото (пришли фото и подпиши запрос)\n"
     "• /img неоновый город в дождь, реализм\n"
+    "• пришли PDF — отвечу тезисами и выводами"
 )
 
 main_kb = ReplyKeyboardMarkup(
@@ -1008,24 +1229,33 @@ async def _send_invoice(
     payload: str,
     amount_rub: int,
 ):
-    prices = [LabeledPrice(label=title, amount=max(1, int(amount_rub)) * 100)]
-    photo_url = BANNER_URL if BANNER_URL else None
-    await context.bot.send_invoice(
-        chat_id=chat_id,
-        title=title,
-        description=description,
-        payload=payload,
-        provider_token=PROVIDER_TOKEN,
-        currency=CURRENCY,
-        prices=prices,
-        photo_url=photo_url,
-        need_name=False,
-        need_phone_number=False,
-        need_email=False,
-        need_shipping_address=False,
-        is_flexible=False,
-        max_tip_amount=0,
-    )
+    try:
+        prices = [LabeledPrice(label=title, amount=max(1, int(amount_rub)) * 100)]
+        photo_url = BANNER_URL if BANNER_URL else None
+        await context.bot.send_invoice(
+            chat_id=chat_id,
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token=PROVIDER_TOKEN,
+            currency=CURRENCY,
+            prices=prices,
+            photo_url=photo_url,
+            need_name=False,
+            need_phone_number=False,
+            need_email=False,
+            need_shipping_address=False,
+            is_flexible=False,
+            max_tip_amount=0,
+        )
+        return True
+    except Exception as e:
+        log.exception("send_invoice error: %s", e)
+        try:
+            await context.bot.send_message(chat_id, f"⚠️ Не удалось выставить счёт: {e}")
+        except Exception:
+            pass
+        return False
 
 _pending_actions: dict[str, dict] = {}  # action_id -> payload
 
@@ -1054,7 +1284,10 @@ async def _offer_oneoff_and_remember(
     title = f"Разовая оплата: {_oneoff_human(engine)}"
     desc = f"Пополнение кошелька на {usd_need:.2f}$ для запуска операции ({_oneoff_human(engine)})."
     payload = f"TOPUP:{engine}:{usd_need:.2f}:{aid}"
-    await _send_invoice(context, update.effective_chat.id, title, desc, payload, rub)
+    ok = await _send_invoice(context, update.effective_chat.id, title, desc, payload, rub)
+    if not ok:
+        await update.effective_message.reply_text("Не удалось выставить счёт — попробуй позже или обратись в поддержку.")
+        return
     await update.effective_message.reply_text(
         f"⚠️ Не хватает дневного бюджета по «{_oneoff_human(engine)}». "
         f"Выставил счёт на ~{rub} ₽ (≈ {usd_need:.2f}$) — после оплаты продолжу автоматически."
@@ -1070,6 +1303,12 @@ async def _try_pay_then_do(
     remember_kind: str,
     remember_payload: dict,
 ):
+    # ♾ Безлимит — пропускаем бюджетные проверки
+    uname = (update.effective_user.username if update and update.effective_user else None)
+    if is_unlimited(user_id, uname):
+        await do_coro_factory()
+        return
+
     ok, detail = _can_spend_or_offer(user_id, engine, est_cost_usd)
     if ok:
         await do_coro_factory()
@@ -1194,8 +1433,8 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title = f"Подписка {tier.capitalize()} ({months} мес.)"
             desc = "Оплата подписки через Telegram. Доступ к квотам и движкам согласно тарифу."
             payload = f"SUB:{tier}:{term}:{months}"
-            await _send_invoice(context, q.message.chat_id, title, desc, payload, rub)
-            await q.answer("Выставлен счёт.")
+            ok = await _send_invoice(context, q.message.chat_id, title, desc, payload, rub)
+            await q.answer("Выставлен счёт." if ok else "Ошибка при выставлении счёта", show_alert=not ok)
             return
 
         # пополнение
@@ -1219,8 +1458,8 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title = f"Пополнение кошелька: {_oneoff_human(eng)}"
             desc = f"Зачисление ≈ {usd:.2f}$ для «{_oneoff_human(eng)}»."
             payload = f"WALLET:{eng}:{usd:.2f}"
-            await _send_invoice(context, q.message.chat_id, title, desc, payload, rub)
-            await q.answer("Выставлен счёт.")
+            ok = await _send_invoice(context, q.message.chat_id, title, desc, payload, rub)
+            await q.answer("Выставлен счёт." if ok else "Ошибка при выставлении счёта", show_alert=not ok)
             return
 
         # выбор движка для видео
@@ -1343,6 +1582,52 @@ async def _do_runway_generate(update: Update, context: ContextTypes.DEFAULT_TYPE
         log.exception("Runway gen error: %s", e)
         await update.effective_message.reply_text(f"Не удалось собрать видео Runway: {e}")
 
+# ======= DOCS (handler) =======
+async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка документов: PDF/EPUB/DOCX/FB2/TXT (+ предупреждение для MOBI/AZW)."""
+    try:
+        if not update.message.document:
+            return
+        doc = update.message.document
+        name = (doc.file_name or "file").lower()
+        # Разрешённые расширения
+        if not name.endswith((".pdf", ".epub", ".docx", ".fb2", ".txt", ".mobi", ".azw", ".azw3")):
+            return
+        await typing(context, update.effective_chat.id)
+        f = await doc.get_file()
+        data = await f.download_as_bytearray()
+        data = bytes(data)
+
+        extracted, kind = await asyncio.to_thread(extract_text_from_document, data, name)
+        if kind in ("MOBI/AZW") and not extracted:
+            await update.effective_message.reply_text(
+                "Поддержка MOBI/AZW ограничена. По возможности пришли EPUB/PDF/DOCX/FB2/TXT."
+            )
+            return
+        if not extracted or len(extracted.strip()) < 20:
+            await update.effective_message.reply_text(
+                f"Не удалось извлечь текст из файла ({kind}). Попробуй другой формат (EPUB/PDF/DOCX/FB2/TXT)."
+            )
+            return
+
+        # Если пользователь добавил вопрос в подписи — используем как цель суммаризации
+        user_query = (update.message.caption or "").strip() or None
+        await update.effective_message.reply_text(f"📄 {kind} принят. Делаю конспект…")
+        summary = await summarize_long_text(extracted, query=user_query)
+
+        if len(summary) <= 3500:
+            await update.effective_message.reply_text(summary)
+        else:
+            bio = BytesIO(summary.encode("utf-8"))
+            bio.name = "summary.txt"
+            await update.effective_message.reply_document(
+                document=InputFile(bio),
+                caption="Итоговый конспект длинный — отправил файлом."
+            )
+    except Exception as e:
+        log.exception("Doc analyze error: %s", e)
+        await update.effective_message.reply_text("Не удалось обработать документ. Попробуй ещё раз или пришли в другом формате.")
+
 # ======= MSG PROCESSOR (used by text & voice) =======
 async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     user_id = update.effective_user.id
@@ -1357,6 +1642,14 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         await cmd_modes(update, context); return
     if text == "🧾 Баланс":
         await cmd_balance(update, context); return
+
+    # Позитивный ответ на "можешь читать pdf/книги?"
+    if _DOC_QA_RE.search(text):
+        await update.effective_message.reply_text(
+            "Да, могу 📄 Пришли файл (PDF/EPUB/DOCX/FB2/TXT). "
+            "Если нужно ответить на конкретный вопрос — напиши его в подписи к документу."
+        )
+        return
 
     eng = _engine_from_button(text)
     if eng:
@@ -1383,7 +1676,6 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         dur, ar, clean = parse_video_opts_from_text(rest)
         prompt = clean or "cinematic shot, dramatic lighting, highly detailed, film look"
 
-        # Предлагаем выбор движка сразу (inline)
         explain = (
             "🎬 Как делать видео?\n"
             "• Luma — 5–10 секунд, быстрая генерация, 9:16 или 16:9.\n"
@@ -1402,7 +1694,7 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         return
 
     # обычный текст
-    ok, left, tier = check_text_and_inc(user_id)
+    ok, left, tier = check_text_and_inc(user_id, (update.effective_user.username or ""))
     if not ok:
         await update.effective_message.reply_text(
             "Дневной лимит текстовых запросов исчерпан. Оформите подписку через /plans."
@@ -1426,12 +1718,14 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
     reply = await _ask_text_via_openrouter(text, web_ctx=web_ctx)
     if not reply:
         reply = await ask_openai_text(text, web_ctx=web_ctx)
-    await update.effective_message.reply_text(reply or "Готово.")
+    reply = reply or "Готово."
+    await update.effective_message.reply_text(reply)
+    await maybe_tts_reply(update, context, reply)
 
 # ======= MSG HANDLERS =======
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    ok, left, tier = check_text_and_inc(user_id)
+    ok, left, tier = check_text_and_inc(user_id, (update.effective_user.username or ""))
     if not ok:
         await update.effective_message.reply_text(
             "Дневной лимит текстовых запросов исчерпан. Оформите подписку через /plans."
@@ -1450,7 +1744,8 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("Не удалось обработать изображение.")
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Распознаём голос/аудио и отправляем в общий процессинг текста."""
+    """Распознаём голос/аудио (voice/audio) и отправляем в общий процессинг текста.
+       Эхо распознанного текста — перед _process_text."""
     try:
         f = None
         if update.message.voice:
@@ -1458,7 +1753,9 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fname = "voice.ogg"
         elif update.message.audio:
             f = await update.message.audio.get_file()
-            fname = update.message.audio.file_name or "audio.ogg"
+            fname = (update.message.audio.file_name or "audio").lower()
+            if not re.search(r"\.(ogg|mp3|m4a|wav|webm)$", fname):
+                fname += ".ogg"
         else:
             await update.effective_message.reply_text("Тип аудио не поддерживается.")
             return
@@ -1468,11 +1765,79 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not txt:
             await update.effective_message.reply_text("Не удалось распознать речь.")
             return
+        await update.effective_message.reply_text(f"🗣️ Распознано: {txt}")
         await _process_text(update, context, txt)
     except Exception as e:
         log.exception("Voice handler error: %s", e)
         await update.effective_message.reply_text("Ошибка обработки голосового сообщения.")
 
+async def on_audio_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Распознаём загруженные аудио-файлы как ДОКУМЕНТ (mp3/m4a/wav/ogg/webm),
+       эхо распознавания — перед _process_text."""
+    try:
+        if not update.message.document:
+            return
+        doc = update.message.document
+        mime = (doc.mime_type or "").lower()
+        name = (doc.file_name or "").lower()
+        is_audio_like = (
+            mime.startswith("audio/") or
+            name.endswith((".mp3", ".m4a", ".wav", ".ogg", ".oga", ".webm"))
+        )
+        if not is_audio_like:
+            return
+        f = await doc.get_file()
+        data = await f.download_as_bytearray()
+        fname = name or "audio.ogg"
+        buf = BytesIO(bytes(data))
+        txt = await transcribe_audio(buf, filename_hint=fname)
+        if not txt:
+            await update.effective_message.reply_text("Не удалось распознать речь из файла.")
+            return
+        await update.effective_message.reply_text(f"🗣️ Распознано (файл): {txt}")
+        await _process_text(update, context, txt)
+    except Exception as e:
+        log.exception("Audio document handler error: %s", e)
+        await update.effective_message.reply_text("Ошибка обработки аудио-файла.")
+
+# ======= Diagnostics =======
+async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lines = []
+    lines.append("🔎 STT диагностика:")
+    lines.append(f"• Deepgram: {'✅ ключ найден' if DEEPGRAM_API_KEY else '❌ нет ключа'}")
+    lines.append(f"• OpenAI Whisper: {'✅ клиент активен' if oai_stt else '❌ недоступен'}")
+    lines.append(f"• Модель Whisper: {TRANSCRIBE_MODEL}")
+    lines.append("• Поддержка форматов: ogg/oga, mp3, m4a/mp4, wav, webm")
+    await update.effective_message.reply_text("\n".join(lines))
+
+async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    uname = (update.effective_user.username or "")
+    tier = get_subscription_tier(uid)
+    lim = _limits_for(uid)
+    row = _usage_row(uid)
+    w = _wallet_get(uid)
+
+    if is_unlimited(uid, uname):
+        await update.effective_message.reply_text(
+            "♾ Безлимит: включён для этого пользователя (по ID/username).\n"
+            "• Тексты: без ограничений\n• Бюджеты: пропускаются\n"
+            f"• Кошелёк: Luma {w['luma_usd']:.2f}$, Runway {w['runway_usd']:.2f}$, Images {w['img_usd']:.2f}$"
+        )
+        return
+
+    txt = (
+        "📊 Лимиты и использование:\n"
+        f"• Тариф: {tier}\n"
+        f"• Текстов сегодня: {row['text_count']} / {lim['text_per_day']}\n"
+        f"• Бюджет Luma (день): {lim['luma_budget_usd']:.2f}$, израсходовано: {row['luma_usd']:.2f}$\n"
+        f"• Бюджет Runway (день): {lim['runway_budget_usd']:.2f}$, израсходовано: {row['runway_usd']:.2f}$\n"
+        f"• Бюджет Images (день): {lim['img_budget_usd']:.2f}$, израсходовано: {row['img_usd']:.2f}$\n"
+        f"• Кошелёк: Luma {w['luma_usd']:.2f}$, Runway {w['runway_usd']:.2f}$, Images {w['img_usd']:.2f}$"
+    )
+    await update.effective_message.reply_text(txt)
+
+# ======= TEXT =======
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     await _process_text(update, context, text)
@@ -1507,13 +1872,42 @@ def main():
     app.add_handler(CommandHandler("balance", cmd_balance))
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
+    app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
+    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
 
     app.add_handler(CallbackQueryHandler(on_cb))
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
 
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+
+    # Голос/аудио (voice/audio)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
+
+    # Документ с аудио (mp3/m4a/wav/ogg/webm)
+    audio_doc_filter = (
+        filters.Document.MimeType("audio/") |
+        filters.Document.FileExtension("mp3") |
+        filters.Document.FileExtension("m4a") |
+        filters.Document.FileExtension("wav") |
+        filters.Document.FileExtension("ogg") |
+        filters.Document.FileExtension("webm")
+    )
+    app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
+
+    # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
+    docs_filter = (
+        filters.Document.FileExtension("pdf")  |
+        filters.Document.FileExtension("epub") |
+        filters.Document.FileExtension("docx") |
+        filters.Document.FileExtension("fb2")  |
+        filters.Document.FileExtension("txt")  |
+        filters.Document.FileExtension("mobi") |
+        filters.Document.FileExtension("azw")  |
+        filters.Document.FileExtension("azw3")
+    )
+    app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
     # drop_pending_updates=True дублируем на всякий
