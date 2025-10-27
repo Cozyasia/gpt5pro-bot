@@ -39,6 +39,7 @@ OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
 OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
+OPENROUTER_API_KEY  = os.environ.get("OPENROUTER_API_KEY", "").strip()
 
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
 BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
@@ -49,11 +50,16 @@ DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
-# Media:
-RUNWAY_API_KEY   = os.environ.get("RUNWAY_API_KEY", "").strip()
+# Media (Images / Video):
 OPENAI_IMAGE_KEY = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 
-# Premium whitelist для Runway (пока оставляем; дальше переведём на Pay-Per-Use)
+# Runway (параметризовано)
+RUNWAY_API_KEY      = os.environ.get("RUNWAY_API_KEY", "").strip()
+RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "veo3").strip()
+RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
+RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8"))
+
+# Premium whitelist для Runway
 PREMIUM_USER_IDS = set(
     int(x) for x in os.environ.get("PREMIUM_USER_IDS", "").split(",") if x.strip().isdigit()
 )
@@ -62,7 +68,7 @@ PREMIUM_USER_IDS = set(
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
 LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
-LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "5"))
+LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "6"))
 
 # ====== PAYMENTS (ЮKassa via Telegram Payments) ======
 PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
@@ -89,11 +95,9 @@ if not OPENAI_API_KEY:
 # --------- URL мини-приложения тарифов ---------
 def _make_tariff_url(src: str = "subscribe") -> str:
     base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/premium.html").strip()
-    # добавляем src=<...> если он задан
     if src:
         sep = "&" if "?" in base else "?"
         base = f"{base}{sep}src={src}"
-    # добавляем bot=<username> для корректной передачи юзернейма бота
     if BOT_USERNAME:
         sep = "&" if "?" in base else "?"
         base = f"{base}{sep}bot={BOT_USERNAME}"
@@ -116,6 +120,7 @@ if OPENROUTER_SITE_URL:
 if OPENROUTER_APP_NAME:
     default_headers["X-Title"] = OPENROUTER_APP_NAME
 
+# текст/визуал (универсальный клиент — но ТЕКСТ мы всё равно шлём через _ask_text_via_openrouter)
 oai_llm = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=_auto_base or None,
@@ -210,7 +215,6 @@ _CAPABILITY_RE = re.compile(
 )
 
 # === INTENT (unified) ===
-# словари-ядра (широкие стемы + английские термины)
 _IMG_WORDS = (
     r"(картин\w+|изображен\w+|фото\w*|фотк\w*|рисунк\w+|арт\w*|аватар\w*|"
     r"логотип\w+|иконк\w+|обложк\w*|постер\w*|баннер\w*|обои\w*|мем\w*|стикер\w*|"
@@ -220,14 +224,10 @@ _VID_WORDS = (
     r"(видео|видос\w*|ролик\w*|клип\w*|анимаци\w*|шортс\w*|shorts?|"
     r"рилс\w*|reels?|сторис\w*|stories?|clip|video|vid\b)"
 )
-
-# глаголы/триггеры с охватом форм: "сделаешь/сделай", "создать/создай", "сгенерируй/сгенеришь", и т.п.
 _VERBS = (
     r"(сдела\w+|созда\w+|сгенерир\w+|нарис\w+|сформир\w+|"
     r"собер\w+|сним\w+|смонтир\w+|хочу|нужно|надо|please|make|generate|create|render|produce)"
 )
-
-# частые стартовые паттерны (быстрая развилка)
 _PREFIXES_VIDEO = [
     r"^созда\w*\s+видео", r"^сдела\w*\s+видео", r"^сгенерир\w*\s+видео",
     r"^сним\w*\s+видео", r"^смонтир\w*\s+видео",
@@ -240,31 +240,15 @@ _PREFIXES_IMAGE = [
     r"^нарис\w*\s+(?:картин\w+|изображен\w+|рисунк\w+)",
     r"^image\b", r"^picture\b", r"^img\b"
 ]
-
 def _strip_leading(s: str) -> str:
-    # аккуратно чистим лидирующие знаки/пробелы
     return s.strip(" \n\t:—–-\"“”'«»,.()[]")
-
 def _after_match(text: str, match) -> str:
     return _strip_leading(text[match.end():])
-
 def detect_media_intent(text: str):
-    """
-    Возвращает кортеж: ('video'|'image'|None, prompt_without_trigger)
-
-    Примеры, которые ловятся:
-      - "создай видео закат на Самуи 10 сек 9:16"
-      - "сделай ролик для reels про виллу"
-      - "сгенерируй картинку логотип Cozy Asia"
-      - "ты можешь сделать видео про море на 5 секунд?"
-      - "img: лого кофейни в неон-стиле"
-    """
     if not text:
         return None, ""
     t = text.strip()
     tl = t.lower()
-
-    # 1) Явные префиксы в начале фразы (быстрое ветвление)
     for p in _PREFIXES_VIDEO:
         m = re.search(p, tl, flags=re.IGNORECASE)
         if m:
@@ -273,8 +257,6 @@ def detect_media_intent(text: str):
         m = re.search(p, tl, flags=re.IGNORECASE)
         if m:
             return "image", _after_match(t, m)
-
-    # 2) Разговорные формы с "можешь/можно/сможешь ... (сделать/создать/сгенерировать/снять) ... видео/картинку"
     if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
         if re.search(_VID_WORDS, tl):
             tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
@@ -286,26 +268,20 @@ def detect_media_intent(text: str):
             tmp = re.sub(_IMG_WORDS, "", tmp)
             tmp = re.sub(_VERBS, "", tmp)
             return "image", _strip_leading(tmp)
-
-    # 3) Общие случаи: есть медиа-слово + есть глагол-действие
     if re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
         tmp = re.sub(_VID_WORDS, "", tl)
         tmp = re.sub(_VERBS, "", tmp)
         return "video", _strip_leading(tmp)
-
     if re.search(_IMG_WORDS, tl) and re.search(_VERBS, tl):
         tmp = re.sub(_IMG_WORDS, "", tl)
         tmp = re.sub(_VERBS, "", tmp)
         return "image", _strip_leading(tmp)
-
-    # 4) Короткие команды без глаголов: "video: ...", "img: ...", "picture: ..."
     m = re.match(r"^(video|vid|reels?|shorts?|stories?)\s*[:\-]\s*(.+)$", tl)
     if m:
-        return "video", _strip_leading(t[m.end(1)+1:])  # всё после метки
+        return "video", _strip_leading(t[m.end(1)+1:])
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
     if m:
         return "image", _strip_leading(t[m.end(1)+1:])
-
     return None, ""
 
 def is_smalltalk(text: str) -> bool:
@@ -319,30 +295,20 @@ def is_vision_capability_question(text: str) -> bool:
     return bool(_CAPABILITY_RE.search(text))
 
 # === B: ROUTER & HANDLERS ===============================================
-# Текст — через OpenRouter (если есть ключ), Картинки — через OpenAI Images,
-# Видео — мягко предлагаем Luma/Runway с готовыми командами.
 
-# ENV для OpenRouter (можно не трогать — берём, если задано)
-OPENROUTER_API_KEY   = os.environ.get("OPENROUTER_API_KEY", "").strip()
-OPENROUTER_TEXT_MODEL = os.environ.get("OPENROUTER_TEXT_MODEL", "").strip()  # опционально
 OPENROUTER_BASE_URL  = "https://openrouter.ai/api/v1"
 
 def _has_openrouter() -> bool:
-    # Используем отдельный ключ, либо (на крайний случай) если кто-то всё ещё задаёт base_url на OpenRouter
-    if OPENROUTER_API_KEY:
-        return True
     bul = (OPENAI_BASE_URL or "").lower()
-    return ("openrouter" in bul)
+    return bool(
+        OPENROUTER_API_KEY
+        or OPENAI_API_KEY.startswith("sk-or-")
+        or ("openrouter" in bul)
+    )
 
 async def _ask_text_via_openrouter(user_text: str, web_ctx: str = "") -> str | None:
-    """
-    Лёгкий прямой вызов OpenRouter через httpx (без трогания твоего oai_llm),
-    чтобы гарантированно отправлять ТЕКСТ именно в OpenRouter, а не в OpenAI.
-    Возвращает текст ответа или None, если OpenRouter недоступен/ошибка.
-    """
     if not _has_openrouter():
         return None
-
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY or OPENAI_API_KEY}",
         "Content-Type": "application/json",
@@ -352,19 +318,13 @@ async def _ask_text_via_openrouter(user_text: str, web_ctx: str = "") -> str | N
     if OPENROUTER_APP_NAME:
         headers["X-Title"] = OPENROUTER_APP_NAME
 
-    # модель: если явно не задана — берём «auto», чтобы OpenRouter сам подбирал
-    model = OPENROUTER_TEXT_MODEL or "openrouter/auto"
-
+    model = os.environ.get("OPENROUTER_TEXT_MODEL", "").strip() or "openrouter/auto"
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
         messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
     messages.append({"role": "user", "content": user_text})
 
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": 0.6,
-    }
+    payload = {"model": model, "messages": messages, "temperature": 0.6}
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -376,32 +336,22 @@ async def _ask_text_via_openrouter(user_text: str, web_ctx: str = "") -> str | N
         log.exception("OpenRouter text error: %s", e)
         return None
 
-async def _handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, web_ctx: str = ""):
-    """
-    Текстовый ответ: пробуем OpenRouter; если его нет/ошибка — падаем на твой ask_openai_text().
-    """
-    # 1) OpenRouter (если есть)
+async def _handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, web_ctx: str = "", sources=None):
     reply = await _ask_text_via_openrouter(text, web_ctx=web_ctx)
     if not reply:
-        # 2) Фоллбек: твой текущий клиент (oai_llm) и ask_openai_text()
         reply = await ask_openai_text(text, web_ctx=web_ctx)
-    await update.message.reply_text(reply)
+    if sources:
+        reply += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
+    await update.message.reply_text(reply, disable_web_page_preview=False)
 
 async def _handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
-    """
-    Картинка: используем уже готовый /img-обработчик (OpenAI Images).
-    """
     await _call_handler_with_prompt(cmd_img, update, context, prompt)
 
 def _video_suggestion_text(prompt: str, dur: int | None = None, ar: str | None = None, is_pro: bool = False) -> str:
-    """
-    Мягкая подсказка пользователю, как сделать видео через Luma/Runway.
-    """
-    dur_s = f"{dur}s" if dur else "6s"
-    ar_s  = ar or "9:16"
+    dur_s = f"{dur}s" if dur else f"{LUMA_DURATION_S}s"
+    ar_s  = ar or LUMA_ASPECT or "9:16"
     pro_line = "Runway — только на PRO." if not is_pro else "Runway доступен (PRO)."
     p = prompt.strip() or "закат над морем, дрон, тёплые цвета"
-
     return (
         "🎬 Я не генерирую видео прямо в GPT-режиме, но помогу запустить в подходящем движке:\n\n"
         "• Короткие ролики — **Luma** (экономнее)\n"
@@ -412,43 +362,61 @@ def _video_suggestion_text(prompt: str, dur: int | None = None, ar: str | None =
         "Или открой «🧭 Меню движков» и выбери Luma/Runway."
     )
 
+def _video_choice_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Luma (короткие клипы)", callback_data="video_choose_luma")],
+        [InlineKeyboardButton("🎥 Runway (PRO, студийное)", callback_data="video_choose_runway")],
+    ])
+
+async def suggest_video_engines(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, dur: int, ar: str):
+    context.user_data["pending_video"] = {"prompt": prompt, "dur": dur, "ar": ar}
+    text = (
+        "Я сам видео не рендерю в этом режиме. Выбери движок:\n\n"
+        "• 🎬 *Luma* — быстрые ролики 3–10s\n"
+        "• 🎥 *Runway* — качественно, дороже (PRO)\n\n"
+        "Нажми кнопку ниже — запущу генерацию."
+    )
+    await update.effective_message.reply_text(text, reply_markup=_video_choice_kb(), disable_web_page_preview=True, parse_mode="Markdown")
+
 async def _handle_video_request(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
-    """
-    Если пользователь просит видео в GPT-режиме — даём понятный next-step (Luma/Runway).
-    Пытаемся распарсить длительность/соотношение из текста, чтобы подсказать красивые команды.
-    """
     dur, ar, clean = parse_video_opts_from_text(prompt)
+    eng = context.user_data.get("engine")
+    if eng == ENGINE_LUMA:
+        context.args = [clean]
+        await cmd_make_video_luma(update, context); return
+    if eng == ENGINE_RUNWAY:
+        await _call_handler_with_prompt(cmd_make_video, update, context, clean); return
     is_pro = update.effective_user.id in PREMIUM_USER_IDS
-    text = _video_suggestion_text(clean, dur, ar, is_pro)
-    await update.message.reply_text(text, parse_mode=None)  # без MarkdownV2, чтобы не экранировать
+    await update.message.reply_text(_video_suggestion_text(clean, dur, ar, is_pro))
 
-async def route_and_handle_textlike(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, web_ctx: str = ""):
-    """
-    Единая точка: определяем намерение (image/video/none) и отправляем в нужный хендлер.
-    ЭТО ЭТО И ЕСТЬ «B», который надо звать из on_text / on_voice после STT.
-    """
+async def on_video_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    data = q.data
+    stash = context.user_data.get("pending_video") or {}
+    prompt = stash.get("prompt", "")
+    if not prompt:
+        await q.edit_message_text("Не нашёл ваш запрос. Напишите «создай видео …»."); return
+    if data == "video_choose_luma":
+        context.args = [prompt]
+        await cmd_make_video_luma(update, context)
+    elif data == "video_choose_runway":
+        await _call_handler_with_prompt(cmd_make_video, update, context, prompt)
+
+async def route_and_handle_textlike(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, web_ctx: str = "", sources=None):
     kind, payload = detect_media_intent(text)
-
+    eng = context.user_data.get("engine")
     if kind == "image":
+        if eng == ENGINE_MJ:
+            mj = f"/imagine prompt: {payload or text} --ar 3:2 --stylize 250 --v 6.0"
+            await update.message.reply_text(f"🖼 Midjourney промпт:\n{mj}")
+            return
         await _handle_image(update, context, payload or text)
         return
-
     if kind == "video":
         await _handle_video_request(update, context, payload or text)
         return
-
-    # Обычный текст — отвечаем моделью для текста (OpenRouter → fallback OpenAI)
-    await _handle_text(update, context, text, web_ctx=web_ctx)
-
-# === КАК ПОДКЛЮЧИТЬ =========================================
-# 1) В on_text замените "обычный ответ" на:
-#    >>> await route_and_handle_textlike(update, context, text, web_ctx=web_ctx)
-#
-# 2) В on_voice / on_audio после STT (переменная `text`) тоже используйте:
-#    >>> await route_and_handle_textlike(update, context, text, web_ctx=web_ctx)
-#
-# 3) Всё остальное (cmd_img, /video_luma, /video и т.д.) остаётся как есть.
-# ========================================================================
+    await _handle_text(update, context, text, web_ctx=web_ctx, sources=sources)
 
 # -------- UTILS --------
 async def typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
@@ -478,8 +446,6 @@ def tavily_search(query: str, max_results: int = 5):
         return None, []
 
 # -------- OpenAI helpers --------
-from openai import OpenAI as _OpenAI
-
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
@@ -578,14 +544,27 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------- VIDEO (Runway SDK) --------
 if RUNWAY_API_KEY:
     os.environ["RUNWAY_API_KEY"] = RUNWAY_API_KEY
-from runwayml import RunwayML
 
-def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
+# безопасный импорт runwayml
+RUNWAY_SDK_OK = True
+RUNWAY_IMPORT_ERROR = None
+try:
+    from runwayml import RunwayML
+except Exception as _e:
+    RUNWAY_SDK_OK = False
+    RUNWAY_IMPORT_ERROR = _e
+
+def _runway_make_video_sync(prompt: str, duration: int = None) -> bytes:
     if not RUNWAY_API_KEY:
         raise RuntimeError("RUNWAY_API_KEY не задан")
+    if not RUNWAY_SDK_OK:
+        raise RuntimeError(f"runwayml не установлен/не импортируется: {RUNWAY_IMPORT_ERROR}")
     client = RunwayML(api_key=RUNWAY_API_KEY)
     task = client.text_to_video.create(
-        prompt_text=prompt, model="veo3", ratio="720:1280", duration=duration,
+        prompt_text=prompt,
+        model=RUNWAY_MODEL,
+        ratio=RUNWAY_RATIO,
+        duration=(duration if duration is not None else RUNWAY_DURATION_S),
     )
     task_id = task.id
     time.sleep(1)
@@ -609,24 +588,27 @@ def _runway_make_video_sync(prompt: str, duration: int = 8) -> bytes:
 
 async def cmd_make_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in PREMIUM_USER_IDS:
-        await update.effective_message.reply_text(
-            "⚠️ Runway сейчас доступен на PRO-тарифе. В ближайшем обновлении — разовая оплата за ролик."
-        ); return
+        await update.effective_message.reply_text("⚠️ Runway сейчас доступен на PRO-тарифе.")
+        return
+    if not RUNWAY_SDK_OK:
+        await update.effective_message.reply_text("⚠️ Пакет runwayml не найден. Установите `pip install runwayml` и перезапустите бота.")
+        return
     prompt = " ".join(context.args).strip()
     if not prompt:
-        await update.effective_message.reply_text("Напиши так: /video закат на Самуи, дрон, тёплые цвета"); return
-    await update.effective_message.reply_text("🎬 Генерирую видео через Runway…")
+        await update.effective_message.reply_text("Напиши так: /video закат на Самуи, дрон, тёплые цвета")
+        return
+    await update.effective_message.reply_text(f"🎬 Генерирую видео через Runway… ({RUNWAY_MODEL}, {RUNWAY_RATIO})")
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VIDEO)
     try:
-        video_bytes = await asyncio.to_thread(_runway_make_video_sync, prompt, 8)
+        video_bytes = await asyncio.to_thread(_runway_make_video_sync, prompt, RUNWAY_DURATION_S)
         await update.effective_message.reply_video(video=video_bytes, supports_streaming=True, caption=f"Готово 🎥\n{prompt}")
     except Exception as e:
         msg = str(e)
         if "401" in msg or "Unauthorized" in msg:
             hint = (
                 "Похоже, ключ не принимается API (401).\n"
-                "Проверь ключ с dev.runwayml.com → API Keys (формат key_...), "
-                "имя ENV RUNWAY_API_KEY и redeploy."
+                "Проверь ключ на dev.runwayml.com → API Keys (формат key_...), "
+                "ENV RUNWAY_API_KEY и redeploy."
             )
             await update.effective_message.reply_text(f"⚠️ Видео не удалось (401): проверь ключ.\n\n{hint}")
         elif "credit" in msg.lower():
@@ -720,44 +702,18 @@ async def cmd_make_video_luma(update: Update, context: ContextTypes.DEFAULT_TYPE
             caption=f"Готово 🎥 {dur}s • {ar}\n{prompt}"
         )
     except Exception as e:
-        await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}")
+        low = str(e).lower()
+        hint = ""
+        if "401" in low or "403" in low:
+            hint = "\n\nПроверь LUMA_API_KEY (Bearer luma-…), проект и лимиты."
+        elif "429" in low:
+            hint = "\n\nПохоже на rate limit (429). Подожди немного или сократи частоту запросов."
+        elif "credit" in low or "quota" in low:
+            hint = "\n\nВероятно, закончились кредиты/квота."
+        await update.effective_message.reply_text(f"⚠️ Luma: не удалось создать видео: {e}{hint}")
         log.exception("Luma video error: %s", e)
 
-# Быстрые кнопки выбора движка видео
-def _video_choice_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Luma (короткие клипы)", callback_data="video_choose_luma")],
-        [InlineKeyboardButton("🎥 Runway (PRO, студийное)", callback_data="video_choose_runway")],
-    ])
-
-async def suggest_video_engines(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, dur: int, ar: str):
-    context.user_data["pending_video"] = {"prompt": prompt, "dur": dur, "ar": ar}
-    text = (
-        "Я сам видео не рендерю в этом режиме. Выбери движок:\n\n"
-        "• 🎬 *Luma* — быстрые ролики 3–10s\n"
-        "• 🎥 *Runway* — качественно, дороже (PRO)\n\n"
-        "Нажми кнопку ниже — запущу генерацию."
-    )
-    await update.effective_message.reply_text(text, reply_markup=_video_choice_kb(), disable_web_page_preview=True, parse_mode="Markdown")
-
-async def on_video_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    data = q.data
-    stash = context.user_data.get("pending_video") or {}
-    prompt = stash.get("prompt", "")
-    dur    = stash.get("dur", LUMA_DURATION_S)
-    ar     = stash.get("ar", LUMA_ASPECT)
-    if not prompt:
-        await q.edit_message_text("Не нашёл ваш запрос. Напишите «создай видео …».")
-        return
-    if data == "video_choose_luma":
-        context.args = [prompt]
-        await cmd_make_video_luma(Update.de_json(update.to_dict(), context.application.bot), context)
-    elif data == "video_choose_runway":
-        await _call_handler_with_prompt(cmd_make_video, Update.de_json(update.to_dict(), context.application.bot), context, prompt)
-
-# ENGINE MODES
+# -------- ENGINE MODES --------
 ENGINE_GPT    = "gpt"
 ENGINE_GEMINI = "gemini"
 ENGINE_LUMA   = "luma"
@@ -812,7 +768,7 @@ async def handle_engine_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     context.user_data["engine"] = eng
     if eng == ENGINE_RUNWAY and update.effective_user.id not in PREMIUM_USER_IDS:
-        await update.message.reply_text("⚠️ Runway доступен только на PRO-тарифе.")
+        await update.message.reply_text("⚠️ Runway доступен только на ПРО-тарифе.")
     elif eng == ENGINE_LUMA:
         if not LUMA_API_KEY:
             await update.message.reply_text("🎬 Luma выбрана. API-ключ не задан — пока использую запасные пути. Готов принимать запросы «создай видео…».")
@@ -880,13 +836,19 @@ async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if key:
         lines.append(f"Формат: {'ok' if key.startswith('key_') else 'не начинается с key_'}")
         lines.append(f"Длина: {len(key)}")
+    if RUNWAY_SDK_OK:
         try:
-            _ = RunwayML(api_key=key)
+            from runwayml import RunwayML as _R
+            _ = _R(api_key=key) if key else None
             lines.append("SDK инициализирован ✅")
         except Exception as e:
-            lines.append(f"SDK error: {e}")
+            lines.append(f"SDK init error: {e}")
+    else:
+        lines.append(f"SDK импорт: ❌ ({RUNWAY_IMPORT_ERROR})")
+        lines.append("Подсказка: pip install runwayml")
     pro_list = ", ".join(map(str, sorted(PREMIUM_USER_IDS))) or "—"
     lines.append(f"PRO (PREMIUM_USER_IDS): {pro_list}")
+    lines.append(f"MODEL: {RUNWAY_MODEL}, RATIO: {RUNWAY_RATIO}, DURATION: {RUNWAY_DURATION_S}s")
     await update.message.reply_text("\n".join(lines))
 
 # ================== PAYMENTS: HELPERS ==================
@@ -925,7 +887,7 @@ async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     )
     await update.message.reply_text(
-        "💳 *Тарифы Neuro-Bot*\nОткрой мини-приложение и нажмите «Оформить подписку».",
+        "💳 *Тарифы Neuro-Bot*\nОткрой мини-приложение и нажми «Оформить подписку».",
         reply_markup=kb, disable_web_page_preview=True, parse_mode="Markdown"
     )
 
@@ -933,7 +895,6 @@ async def _send_invoice_safely(msg, user_id: int, *, tier: str, term: str):
     amount_rub = _plan_amount_rub(tier, term)
     prices = [LabeledPrice(label=f"Neuro-Bot {tier.upper()} — {term}", amount=amount_rub * 100)]
     provider_data = _receipt_provider_data(tier=tier, term=term, amount_rub=amount_rub)
-
     try:
         await msg.reply_invoice(
             title=f"Neuro-Bot {tier.upper()}",
@@ -1003,20 +964,16 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sp = update.message.successful_payment
     user_id = update.effective_user.id
-
     payload = sp.invoice_payload or ""
     tier, term = "pro", "month"
     m = re.match(r"^sub:([a-z]+):([a-z]+):(\d+)$", payload)
     if m:
         tier = m.group(1)
         term = m.group(2)
-
     if sp.currency != CURRENCY:
         await update.message.reply_text("❗️Валюта платежа не совпала, обратитесь в поддержку."); return
-
     months = _term_to_months(term)
     until = activate_subscription(user_id, months=months)
-
     await update.message.reply_text(
         f"✅ Оплата получена!\nТариф: {tier.upper()} • Срок: {term} • "
         f"Подписка активна до {until.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
@@ -1062,20 +1019,16 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     wad = getattr(msg, "web_app_data", None)
     if not wad:
         return
-
     raw = wad.data or ""
     try:
         payload = json.loads(raw) if raw.strip().startswith("{") else {"type": raw}
     except Exception:
         payload = {"type": str(raw)}
-
     ptype = (payload.get("type") or "").strip().lower()
     term  = (payload.get("plan") or payload.get("term") or "month").strip().lower()
     tier  = (payload.get("tier") or "").strip().lower()
-
     log.info("WEB_APP_DATA payload: %s", payload)
 
-    # ---- подписка из мини-аппы
     if ptype in ("subscribe", "subscription", "subscribe_click"):
         if tier not in ("start", "pro", "ultimate"):
             await msg.reply_text("Выберите тариф:", reply_markup=_subscribe_choose_kb(term))
@@ -1083,12 +1036,9 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             await _send_invoice_safely(msg, update.effective_user.id, tier=tier, term=term)
         return
 
-    # ---- проверка статуса
     if ptype in ("status", "status_check"):
-        await status_cmd(update, context)
-        return
+        await status_cmd(update, context); return
 
-    # ---- открыть страницу тарифов
     if ptype in ("open_tariff", "tariff", "plan", "plan_from_webapp"):
         await msg.reply_text(
             "Открыл страницу тарифов. Нажмите «Оформить подписку», чтобы выставить счёт.",
@@ -1096,10 +1046,8 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
                 [[KeyboardButton("⭐ Подписка", web_app=WebAppInfo(url=WEBAPP_URL or TARIFF_URL))]],
                 resize_keyboard=True
             )
-        )
-        return
+        ); return
 
-    # ---- помощь/поддержка
     if ptype in ("help_from_webapp", "help", "question"):
         await msg.reply_text(
             "🧑‍💻 *Поддержка Neuro-Bot*\n"
@@ -1107,10 +1055,8 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             "📩 Также можно написать напрямую: @gpt5pro_support",
             parse_mode="Markdown",
             disable_web_page_preview=True
-        )
-        return
+        ); return
 
-    # ---- дефолт
     await msg.reply_text("Открыл бота. Чем помочь?", reply_markup=main_kb)
 
 # -------- START --------
@@ -1152,7 +1098,6 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(EXAMPLES_TEXT, parse_mode="Markdown")
 
 async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # короткий алиас
     await subscribe_cmd(update, context)
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1160,31 +1105,10 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await typing(context, chat_id)
 
-    # меню движков
     if text == "🧭 Меню движков":
         await open_engines_menu(update, context); return
     if text in ENGINE_TITLES.values() or text == "⬅️ Назад":
         await handle_engine_click(update, context); return
-
-    # интенты картинок/видео
-    intent, prompt = detect_media_intent(text)
-    if intent == "image" and prompt:
-        if context.user_data.get("engine") == ENGINE_MJ:
-            mj = f"/imagine prompt: {prompt} --ar 3:2 --stylize 250 --v 6.0"
-            await update.message.reply_text(f"🖼 Midjourney промпт:\n{mj}")
-            return
-        await _call_handler_with_prompt(cmd_img, update, context, prompt); return
-
-    if intent == "video" and prompt:
-        dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
-        eng = context.user_data.get("engine")
-        if eng == ENGINE_LUMA:
-            context.args = [clean_prompt]
-            await cmd_make_video_luma(update, context); return
-        elif eng == ENGINE_RUNWAY:
-            await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
-        else:
-            await suggest_video_engines(update, context, clean_prompt, dur, ar); return
 
     lower = text.lower()
     if lower in ("⚙️ режимы", "режимы", "/modes"):
@@ -1199,7 +1123,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Видео: пришли 1–3 ключевых кадра (скриншота)"
         ); return
 
-    # smalltalk
     if is_smalltalk(text):
         reply = await ask_openai_text(text)
         await update.message.reply_text(reply); return
@@ -1215,10 +1138,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
 
-    answer = await ask_openai_text(text, web_ctx=web_ctx)
-    if sources:
-        answer += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
-    await update.message.reply_text(answer, disable_web_page_preview=False)
+    # Единая маршрутизация
+    await route_and_handle_textlike(update, context, text, web_ctx=web_ctx, sources=sources)
 
 # -------- IMAGE / VOICE / AUDIO / DOC --------
 async def _handle_image_bytes(update: Update, context: ContextTypes.DEFAULT_TYPE, data: bytes, user_text: str):
@@ -1251,19 +1172,7 @@ async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _after_transcribed(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     prefix = f"🗣️ Распознал: «{text}»\n\n"
-    intent, prompt = detect_media_intent(text)
-    if intent == "image" and prompt:
-        await _call_handler_with_prompt(cmd_img, update, context, prompt); return
-    if intent == "video" and prompt:
-        dur, ar, clean_prompt = parse_video_opts_from_text(prompt)
-        eng = context.user_data.get("engine")
-        if eng == ENGINE_LUMA:
-            context.args = [clean_prompt]
-            await cmd_make_video_luma(update, context); return
-        elif eng == ENGINE_RUNWAY:
-            await _call_handler_with_prompt(cmd_make_video, update, context, clean_prompt); return
-        else:
-            await suggest_video_engines(update, context, clean_prompt, dur, ar); return
+    await update.message.reply_text(prefix)
 
     web_ctx = ""
     sources = []
@@ -1275,10 +1184,8 @@ async def _after_transcribed(update: Update, context: ContextTypes.DEFAULT_TYPE,
         for i, it in enumerate(sources, 1):
             ctx_lines.append(f"[{i}] {it.get('title','')}: {it.get('url','')}")
         web_ctx = "\n".join(ctx_lines)
-    answer = await ask_openai_text(text, web_ctx=web_ctx)
-    if sources:
-        answer += "\n\n" + "\n".join([f"[{i+1}] {s.get('title','')} — {s.get('url','')}" for i, s in enumerate(sources)])
-    await update.message.reply_text(prefix + answer, disable_web_page_preview=False)
+
+    await route_and_handle_textlike(update, context, text, web_ctx=web_ctx, sources=sources)
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -1332,7 +1239,6 @@ def build_app():
     # Премиум/подписка
     app.add_handler(CommandHandler("plans", plans))
     app.add_handler(CommandHandler("premium", premium_cmd))
-    # Паттерн делаем более либеральным, чтобы не терять колбэки с двоеточиями
     app.add_handler(CallbackQueryHandler(on_cb, pattern=r"^subscribe_(open|term.*|choose.*)$"))
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
@@ -1340,7 +1246,7 @@ def build_app():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("pro", pro_cmd))
 
-    # WEB APP (ставим до текстовых хендлеров)
+    # WEB APP
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
 
     # Изображения/видео
