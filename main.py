@@ -20,8 +20,6 @@ from telegram.ext import (
     PreCheckoutQueryHandler, CallbackQueryHandler
 )
 from telegram.constants import ChatAction
-
-# HTTP stub for Render
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -113,7 +111,6 @@ TARIFF_URL = _make_tariff_url("subscribe")
 # -------- OPENAI / Tavily --------
 from openai import OpenAI
 
-# clean helper (ASCII-only header values)
 def _ascii_or_none(s: str | None):
     if not s:
         return None
@@ -124,13 +121,15 @@ def _ascii_or_none(s: str | None):
         # в HTTP заголовках можно только ASCII — кириллицу отбрасываем
         return None
 
-# ---- Tiny HTTP server (for Render Web Service health/port binding)
+# -------- HTTP STUB (Render Web Service) --------
 def _start_http_stub():
     class _H(BaseHTTPRequestHandler):
         def do_GET(self):
             path = (self.path or "/").split("?", 1)[0]
             if path in ("/", "/healthz"):
-                self.send_response(200); self.end_headers()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
                 self.wfile.write(b"ok")
                 return
             if path == "/premium.html":
@@ -140,14 +139,19 @@ def _start_http_stub():
                     self.send_header("Location", WEBAPP_URL)
                     self.end_headers()
                 else:
-                    self.send_response(200); self.end_headers()
-                    self.wfile.write(
-                        b"<html><body><h3>Premium page</h3>"
-                        b"<p>WEBAPP_URL не задан. Установите переменную окружения.</p>"
-                        b"</body></html>"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    html = (
+                        "<html><body><h3>Premium page</h3>"
+                        "<p>WEBAPP_URL не задан. Установите переменную окружения.</p>"
+                        "</body></html>"
                     )
+                    self.wfile.write(html.encode("utf-8"))
                 return
-            self.send_response(404); self.end_headers()
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
             self.wfile.write(b"not found")
 
         # глушим лишние логи
@@ -184,7 +188,7 @@ oai_llm = OpenAI(
 
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 
-# === Images: ВСЕГДА OpenAI (или ваш прокси), т.к. на OpenRouter модели нет ===
+# === Images: ВСЕГДА OpenAI/прокси ===
 IMAGES_BASE_URL = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip()
                    or "https://api.openai.com/v1")
 IMAGES_MODEL = "gpt-image-1"
@@ -193,6 +197,7 @@ oai_img = OpenAI(
     api_key=(os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY),
     base_url=IMAGES_BASE_URL,
 )
+
 # Tavily
 try:
     if TAVILY_API_KEY:
@@ -321,10 +326,10 @@ def detect_media_intent(text: str):
         m = re.search(p, tl, flags=re.IGNORECASE)
         if m:
             return "video", _after_match(t, m)
-    for p in _PREFIXES_IMAGE:
-        m = re.search(p, tl, flags=re.IGNORECASE)
-        if m:
-            return "image", _after_match(t, m)
+        for p in _PREFIXES_IMAGE:
+            m = re.search(p, tl, flags=re.IGNORECASE)
+            if m:
+                return "image", _after_match(t, m)
     if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
         if re.search(_VID_WORDS, tl):
             tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
@@ -381,7 +386,7 @@ async def _ask_text_via_openrouter(user_text: str, web_ctx: str = "") -> str | N
         "Authorization": f"Bearer {OPENROUTER_API_KEY or OPENAI_API_KEY}",
         "Content-Type": "application/json",
     }
-    # только ASCII в заголовках
+    # !!! важная правка: только ASCII в заголовках
     ref = _ascii_or_none(os.environ.get("OPENROUTER_SITE_URL", "").strip())
     ttl = _ascii_or_none(os.environ.get("OPENROUTER_APP_NAME", "").strip())
     if ref:
@@ -496,7 +501,6 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 
 # -------- IMAGES (/img) --------
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Диагностика ключа и базового URL для генерации изображений."""
     key_env  = os.environ.get("OPENAI_IMAGE_KEY", "").strip()
     key_used = key_env or OPENAI_API_KEY
     base     = IMAGES_BASE_URL
@@ -511,12 +515,10 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Генерация изображения через OpenAI Images (gpt-image-1)."""
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
         await update.effective_message.reply_text("Напиши так: «/img Земля из космоса, реалистично, 4k»")
         return
-
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
         resp = oai_img.images.generate(
@@ -541,8 +543,7 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif "insufficient_quota" in low or "billing" in low or "credit" in low:
             hint.append("Похоже на исчерпанный баланс/квоты в OpenAI.")
         elif "connection" in low or "timed out" in low or "name or service not known" in low:
-            hint.append("Сетевая ошибка. Если хостинг блокирует api.openai.com — укажи "
-                        "OPENAI_IMAGE_BASE_URL с прокси (например, через Cloudflare Worker).")
+            hint.append("Сетевая ошибка. Если хостинг блокирует api.openai.com — укажи OPENAI_IMAGE_BASE_URL.")
         elif "model" in low and "not found" in low:
             hint.append("gpt-image-1 есть только в OpenAI/прокси, не в OpenRouter.")
         elif "ascii" in low or "latin-1" in low:
@@ -553,7 +554,6 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if RUNWAY_API_KEY:
     os.environ["RUNWAY_API_KEY"] = RUNWAY_API_KEY
 
-# безопасный импорт runwayml
 RUNWAY_SDK_OK = True
 RUNWAY_IMPORT_ERROR = None
 try:
@@ -759,19 +759,16 @@ def _engine_from_button(text: str):
     return None
 
 # === QUOTAS • BILLING • ONE-OFF =======================================
-# Валюта и наценки
-USD_RUB = float(os.environ.get("USD_RUB", "100"))             # курс для инвойсов
-ONEOFF_MARKUP_DEFAULT = float(os.environ.get("ONEOFF_MARKUP_DEFAULT", "1.0"))  # +100%
-ONEOFF_MARKUP_RUNWAY  = float(os.environ.get("ONEOFF_MARKUP_RUNWAY",  "0.5"))  # +50%
+USD_RUB = float(os.environ.get("USD_RUB", "100"))
+ONEOFF_MARKUP_DEFAULT = float(os.environ.get("ONEOFF_MARKUP_DEFAULT", "1.0"))
+ONEOFF_MARKUP_RUNWAY  = float(os.environ.get("ONEOFF_MARKUP_RUNWAY",  "0.5"))
 
-# Оценка себестоимости
 LUMA_RES_HINT = os.environ.get("LUMA_RES", "720p").lower()
-RUNWAY_UNIT_COST_USD = float(os.environ.get("RUNWAY_UNIT_COST_USD", "7.0"))  # ориентир за генерацию
-IMG_COST_USD = float(os.environ.get("IMG_COST_USD", "0.05"))  # 1024×1024
+RUNWAY_UNIT_COST_USD = float(os.environ.get("RUNWAY_UNIT_COST_USD", "7.0"))
+IMG_COST_USD = float(os.environ.get("IMG_COST_USD", "0.05"))
 
 def _estimate_luma_cost_usd(duration_s: int, res_hint: str | None = None) -> float:
-    """Оценка: 720p 5s ≈ $0.40 ⇒ $0.08/сек; 1080p ~2.25× дороже."""
-    per_sec_720 = 0.40 / 5.0  # $0.08
+    per_sec_720 = 0.40 / 5.0
     res = (res_hint or LUMA_RES_HINT).lower()
     factor = 1.0
     if res in ("1080p", "1920x1080", "fhd"):
@@ -787,7 +784,6 @@ def _estimate_luma_cost_usd(duration_s: int, res_hint: str | None = None) -> flo
             factor = max(0.5, mp / base_mp)
     return round(per_sec_720 * int(duration_s) * factor, 2)
 
-# Лимиты по тарифам (в день)
 LIMITS = {
     "free":      {"text_per_day": 5,    "luma_budget_usd": 0.0, "runway_budget_usd": 0.0,  "img_budget_usd": 0.0, "allow_engines": ["gpt"]},
     "start":     {"text_per_day": 200,  "luma_budget_usd": 0.8, "runway_budget_usd": 0.0,  "img_budget_usd": 0.2, "allow_engines": ["gpt","luma","midjourney"]},
@@ -819,7 +815,6 @@ def db_init_usage():
         runway_usd REAL DEFAULT 0.0,
         img_usd REAL DEFAULT 0.0
     )""")
-    # на случай, если db_init() ещё не добавил колонку tier
     try:
         cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
     except Exception:
@@ -860,32 +855,37 @@ def _wallet_get(user_id: int) -> dict:
     con.commit()
     cur.execute("SELECT luma_usd, runway_usd, img_usd FROM wallet WHERE user_id=?", (user_id,))
     row = cur.fetchone(); con.close()
-    return {"luma_usd": row[0], "runway_usd": row[1], "img_usd": row[2]}
+        return {"luma_usd": row[0], "runway_usd": row[1], "img_usd": row[2]}
 
 def _wallet_add(user_id: int, engine: str, usd: float):
-    col = {"luma":"luma_usd","runway":"runway_usd","img":"img_usd"}.get(engine)
-    if not col: return
+    col = {"luma": "luma_usd", "runway": "runway_usd", "img": "img_usd"}.get(engine)
+    if not col:
+        return
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute(f"UPDATE wallet SET {col} = {col} + ? WHERE user_id=?", (float(usd), user_id))
     con.commit(); con.close()
 
 def _wallet_take(user_id: int, engine: str, usd: float) -> bool:
-    col = {"luma":"luma_usd","runway":"runway_usd","img":"img_usd"}.get(engine)
-    if not col: return False
+    col = {"luma": "luma_usd", "runway": "runway_usd", "img": "img_usd"}.get(engine)
+    if not col:
+        return False
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("SELECT luma_usd, runway_usd, img_usd FROM wallet WHERE user_id=?", (user_id,))
     row = cur.fetchone()
-    bal = {"luma":row[0],"runway":row[1],"img":row[2]}[engine]
+    bal = {"luma": row[0], "runway": row[1], "img": row[2]}[engine]
     if bal + 1e-9 < usd:
-        con.close(); return False
+        con.close()
+        return False
     cur.execute(f"UPDATE wallet SET {col} = {col} - ? WHERE user_id=?", (float(usd), user_id))
-    con.commit(); con.close(); return True
+    con.commit(); con.close()
+    return True
 
 def get_subscription_tier(user_id: int) -> str:
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("SELECT until_ts, tier FROM subscriptions WHERE user_id=?", (user_id,))
     row = cur.fetchone(); con.close()
-    if not row: return "free"
+    if not row:
+        return "free"
     until_ts, tier = row[0], (row[1] or "pro")
     if until_ts and datetime.utcfromtimestamp(until_ts) > datetime.utcnow():
         return (tier or "pro").lower()
@@ -904,29 +904,27 @@ def check_text_and_inc(user_id: int) -> tuple[bool, int, str]:
     if left <= 0:
         return False, 0, lim["tier"]
     _usage_update(user_id, text_count=1)
-    return True, left-1, lim["tier"]
+    return True, left - 1, lim["tier"]
 
 def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     markup = ONEOFF_MARKUP_RUNWAY if engine == "runway" else ONEOFF_MARKUP_DEFAULT
     rub = usd_cost * (1.0 + markup) * USD_RUB
-    return int((rub + 0.999))  # ceil
+    return int(rub + 0.999)  # ceil
+
 def _can_spend_or_offer(user_id: int, engine: str, est_cost_usd: float) -> tuple[bool, str]:
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
     spent = row[f"{engine}_usd"]
     budget = lim[f"{engine}_budget_usd"]
 
-    # Влезаем в дневной бюджет → сразу учитываем расход и работаем
     if spent + est_cost_usd <= budget + 1e-9:
         _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
         return True, ""
 
-    # Не влезаем → считаем нехватку и предлагаем разовую оплату / кошелёк
     need = max(0.0, spent + est_cost_usd - budget)
     return False, f"OFFER:{need:.2f}"
 
 def _register_engine_spend(user_id: int, engine: str, usd: float):
-    # фиксируем фактический расход в usage_daily (после успешной генерации/операции)
     if engine not in ("luma", "runway", "img"):
         return
     _usage_update(user_id, **{f"{engine}_usd": float(usd)})
@@ -947,7 +945,7 @@ HELP_TEXT = (
     "• /img кот с очками — сгенерирует картинку\n"
     "• «сделай видео … на 9 секунд 9:16» — Luma\n"
     "• «🎛 Движки» — выбрать GPT / Luma / Runway / Midjourney\n"
-    "• «🧾 Баланс» — бюджет кошелька для разовых оплат\n"
+    "• «🧾 Баланс» — кошелёк для разовых оплат"
 )
 MODES_TEXT = "Выбери движок для следующего запроса:"
 EXAMPLES_TEXT = (
@@ -980,10 +978,10 @@ def set_subscription_tier(user_id: int, tier: str):
     tier = (tier or "pro").lower()
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-    # ensure row
-    cur.execute("INSERT OR IGNORE INTO subscriptions(user_id, until_ts, tier) VALUES (?, ?, ?)",
-                (user_id, int(datetime.utcnow().timestamp()), tier))
-    # update only tier
+    cur.execute(
+        "INSERT OR IGNORE INTO subscriptions(user_id, until_ts, tier) VALUES (?, ?, ?)",
+        (user_id, int(datetime.utcnow().timestamp()), tier),
+    )
     cur.execute("UPDATE subscriptions SET tier=? WHERE user_id=?", (tier, user_id))
     con.commit()
     con.close()
@@ -1021,7 +1019,7 @@ async def _send_invoice(
         need_email=False,
         need_shipping_address=False,
         is_flexible=False,
-        max_tip_amount=0
+        max_tip_amount=0,
     )
 
 _pending_actions: dict[str, dict] = {}  # action_id -> payload
@@ -1038,13 +1036,12 @@ async def _offer_oneoff_and_remember(
     after_kind: str,
     after_payload: dict,
 ):
-    # зарегистрируем pending
     aid = _new_action_id()
     _pending_actions[aid] = {
         "user_id": user_id,
         "engine": engine,
         "usd_need": float(usd_need),
-        "after_kind": after_kind,  # "luma_generate" / "runway_generate" / "img_generate"
+        "after_kind": after_kind,
         "after_payload": after_payload,
         "ts": time.time(),
     }
@@ -1064,18 +1061,15 @@ async def _try_pay_then_do(
     user_id: int,
     engine: str,
     est_cost_usd: float,
-    do_coro_factory,  # callable -> coroutine to execute the action when paid/allowed
+    do_coro_factory,  # callable -> coroutine
     remember_kind: str,
     remember_payload: dict,
 ):
-    # 1) Проверим дневной бюджет
     ok, detail = _can_spend_or_offer(user_id, engine, est_cost_usd)
     if ok:
-        # влезаем в дневной бюджет — сразу выполняем
         await do_coro_factory()
         return
 
-    # 2) detail в виде "OFFER:<usd_need>"
     usd_need = 0.0
     if isinstance(detail, str) and detail.startswith("OFFER:"):
         try:
@@ -1083,21 +1077,16 @@ async def _try_pay_then_do(
         except Exception:
             usd_need = max(0.0, est_cost_usd)
 
-    # 3) попытаемся списать из кошелька
     if usd_need > 0:
-        # есть ли достаточно в кошельке?
         if _wallet_take(user_id, engine, usd_need):
-            # учли кошелек, регистрируем расход и выполняем
             _register_engine_spend(user_id, engine, usd_need)
             await do_coro_factory()
             return
-        # 4) предложим разовую оплату (пополним кошелек и автопродолжим)
         await _offer_oneoff_and_remember(
             update, context, user_id, engine, usd_need, remember_kind, remember_payload
         )
         return
 
-    # safety-fallback
     await update.effective_message.reply_text("Не удалось оценить доплату. Попробуй ещё раз.")
 
 # ======= COMMANDS =======
@@ -1137,7 +1126,7 @@ def _plans_markup_term(term: str):
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "Выбери подписку: ограничения по дневным квотам будут выше, а движки — доступны.",
-        reply_markup=_plans_markup()
+        reply_markup=_plans_markup(),
     )
 
 async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1199,7 +1188,6 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     payload = sp.invoice_payload or ""
     try:
         if payload.startswith("SUB:"):
-            # SUB:tier:term:months
             _, tier, term, months_s = payload.split(":")
             months = int(months_s)
             until = activate_subscription_with_tier(user_id, tier, months)
@@ -1209,7 +1197,6 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return
         if payload.startswith("TOPUP:"):
-            # TOPUP:engine:usd:aid
             parts = payload.split(":")
             engine = parts[1]
             usd = float(parts[2])
@@ -1219,14 +1206,11 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"✅ Кошелёк пополнен на {usd:.2f}$ для «{_oneoff_human(engine)}»."
             )
             if aid and aid in _pending_actions:
-                # автопродолжение
                 act = _pending_actions.pop(aid, None)
                 if act and act.get("user_id") == user_id and act.get("engine") == engine:
                     kind = act.get("after_kind")
                     payload = act.get("after_payload") or {}
-                    # после пополнения считаем расход зарегистрированным
                     _register_engine_spend(user_id, engine, act.get("usd_need", 0.0))
-                    # выполняем действие
                     if kind == "luma_generate":
                         await _do_luma_generate(update, context, **payload)
                     elif kind == "runway_generate":
@@ -1270,7 +1254,6 @@ async def _do_runway_generate(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ======= MSG HANDLERS =======
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Vision анализ присланного фото с подписью
     user_id = update.effective_user.id
     ok, left, tier = check_text_and_inc(user_id)
     if not ok:
@@ -1294,7 +1277,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     user_id = update.effective_user.id
 
-    # кнопки основного меню
     if text == "ℹ️ Помощь":
         await cmd_help(update, context); return
     if text == "⭐ Подписка":
@@ -1304,7 +1286,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🧾 Баланс":
         await cmd_balance(update, context); return
 
-    # выбор движка
     eng = _engine_from_button(text)
     if eng:
         _set_engine(user_id, eng)
@@ -1312,7 +1293,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     engine = _get_engine(user_id)
 
-    # Роутинг по намерениям
     intent, rest = detect_media_intent(text)
     if intent == "image":
         prompt = rest or "highly detailed photo, 4k"
@@ -1326,11 +1306,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if intent == "video":
-        # Парсим длительность и AR
         dur, ar, clean = parse_video_opts_from_text(rest)
         prompt = clean or "cinematic shot, dramatic lighting, highly detailed, film look"
         if engine == ENGINE_RUNWAY:
-            # проверка доступа
             tier = get_subscription_tier(user_id)
             allowed = (engine in LIMITS.get(tier, LIMITS["free"])["allow_engines"]) or (user_id in PREMIUM_USER_IDS)
             if not allowed:
@@ -1348,7 +1326,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         else:
-            # Luma по умолчанию
             est = _estimate_luma_cost_usd(dur, LUMA_RES_HINT)
             async def _go():
                 await _do_luma_generate(update, context, prompt=prompt, duration=dur, aspect=ar)
@@ -1358,7 +1335,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    # Обычный текстовый диалог
     ok, left, tier = check_text_and_inc(user_id)
     if not ok:
         await update.effective_message.reply_text(
@@ -1366,14 +1342,12 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # веб-поиск при необходимости
     web_ctx = ""
     if should_browse(text):
         ans, results = tavily_search(text, max_results=5)
         if ans:
             web_ctx = ans
             if results:
-                # добавим ссылки коротким списком
                 refs = []
                 for r in results[:5]:
                     u = r.get("url"); t = r.get("title") or ""
@@ -1382,7 +1356,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if refs:
                     web_ctx += "\n\nИсточники:\n" + "\n".join(refs)
 
-    # сначала пробуем OpenRouter (если доступен), затем OpenAI
     reply = await _ask_text_via_openrouter(text, web_ctx=web_ctx)
     if not reply:
         reply = await ask_openai_text(text, web_ctx=web_ctx)
