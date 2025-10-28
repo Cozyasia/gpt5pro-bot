@@ -2,6 +2,7 @@
 import os
 import re
 import json
+from telegram.error import TelegramError, Conflict
 import time
 import base64
 import logging
@@ -98,6 +99,11 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
+    
+    # ── Webhook settings ──
+USE_WEBHOOK   = bool(PUBLIC_URL) and bool(WEBHOOK_SECRET)
+WEBHOOK_PATH  = f"/tg/{WEBHOOK_SECRET}" if USE_WEBHOOK else ""
+WEBHOOK_URL   = f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}" if USE_WEBHOOK else ""
 
 # ── Безлимит ──
 UNLIM_USER_IDS     = set(int(x) for x in os.environ.get("UNLIM_USER_IDS","").split(",") if x.strip().isdigit())
@@ -1395,10 +1401,15 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
     
 # ======= APP INIT =======
+# ======= APP INIT =======
 def main():
     db_init()
     db_init_usage()
-    _start_http_stub()  # важно для Web Service на Render (healthcheck/premium.html)
+
+    # health-stub нужен только когда работаем в polling,
+    # при webhook порт занимает PTB/aiohttp.
+    if not USE_WEBHOOK:
+        _start_http_stub()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -1468,9 +1479,71 @@ def main():
     # Обычный текст (последним, чтобы не перехватывать команды)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    # Error handler (чтобы не было "No error handlers are registered, logging exception.")
+        # Error handler
     app.add_error_handler(on_error)
 
+    if USE_WEBHOOK:
+        # --- WEBHOOK MODE ---
+        async def _post_init(app_):
+            try:
+                # На всякий случай: сбросим старый вебхук/пуллинг
+                await app_.bot.delete_webhook(drop_pending_updates=True)
+                # Ставим наш вебхук с секретом (Telegram будет присылать X-Telegram-Bot-Api-Secret-Token)
+                await app_.bot.set_webhook(
+                    url=WEBHOOK_URL,
+                    secret_token=WEBHOOK_SECRET,
+                    allowed_updates=Update.ALL_TYPES,
+                    drop_pending_updates=True,
+                )
+                log.info("Webhook set to %s", WEBHOOK_URL)
+            except Exception as e:
+                log.exception("set_webhook failed: %s", e)
+                raise
+        app.post_init = _post_init
+
+        # Веб-сервер PTB на том же порту, что ждёт Render.
+        # NB: Render Health Check можно направить на WEBHOOK_PATH (GET); PTB вернёт 200.
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            webhook_url=WEBHOOK_URL,       # PTB сам установит вебхук при старте (дубль к post_init — не мешает)
+            secret_token=WEBHOOK_SECRET,
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+        )
+
+    else:
+        # --- POLLING MODE (фолбэк) ---
+        # Автолечение конфликтов, если когда-нибудь вернёшься к пуллингу.
+        while True:
+            try:
+                try:
+                    await app.bot.delete_webhook(drop_pending_updates=True)
+                    log.info("Webhook deleted before polling start.")
+                except Exception as e:
+                    log.warning("delete_webhook warning: %s", e)
+
+                app.run_polling(
+                    allowed_updates=Update.ALL_TYPES,
+                    drop_pending_updates=True,
+                    stop_signals=None
+                )
+                break
+            except Conflict as e:
+                log.warning("Conflict getUpdates. Forcing reset and retry: %s", e)
+                try:
+                    fake_url = f"{PUBLIC_URL.rstrip('/')}/__fake_{int(time.time())}"
+                    await app.bot.set_webhook(url=fake_url, drop_pending_updates=True)
+                    await asyncio.sleep(1.0)
+                    await app.bot.delete_webhook(drop_pending_updates=True)
+                except Exception as ee:
+                    log.warning("force reset webhook failed: %s", ee)
+                time.sleep(5)
+                continue
+            except Exception as e:
+                log.exception("Polling crashed. Restarting in 5s: %s", e)
+                time.sleep(5)
+                continue
     # drop_pending_updates=True дублируем на всякий
     app.run_polling(
         allowed_updates=Update.ALL_TYPES,
