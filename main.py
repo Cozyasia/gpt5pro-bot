@@ -1041,7 +1041,6 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Платёж прошёл, но возникла ошибка при активации. Напишите в поддержку.")
 
 # ───────── Diagnostics ───────
-
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key_env  = os.environ.get("OPENAI_IMAGE_KEY", "").strip()
     key_used = key_env or OPENAI_API_KEY
@@ -1056,8 +1055,6 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("⚠️ BASE_URL указывает на OpenRouter — там нет gpt-image-1.")
         lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
     await update.effective_message.reply_text("\n".join(lines))
-
-
 
     txt = (
         "📊 Лимиты и использование:\n"
@@ -1352,17 +1349,20 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
         return
 
-    # медиазадачи (интент)
+        # медиазадачи (интент)
     intent, clean = detect_media_intent(text)
+
     if intent == "image":
         async def _go():
             await _do_img_generate(update, context, clean or text)
-        await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go,
-                               remember_kind="img_generate",
-                               remember_payload={"prompt": clean or text})
+        await _try_pay_then_do(
+            update, context, user_id, "img", IMG_COST_USD, _go,
+            remember_kind="img_generate",
+            remember_payload={"prompt": clean or text}
+        )
         return
 
-        if intent == "video":
+    if intent == "video":
         dur, ar, prompt = parse_video_opts_from_text(
             clean or text,
             default_duration=LUMA_DURATION_S,
