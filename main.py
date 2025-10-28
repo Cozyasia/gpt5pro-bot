@@ -10,7 +10,6 @@ import asyncio
 import sqlite3
 from datetime import datetime, timedelta
 import threading
-from telegram.error import TelegramError
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram.error import TelegramError
 import httpx
