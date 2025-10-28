@@ -1434,8 +1434,8 @@ def main():
     # Голос/аудио (voice/audio)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
 
-    # Документ с аудио (mp3/m4a/wav/ogg/webm)
-    audio_doc_filter = (
+    # Документ с аудио (mp3/m4a/wav/ogg/oga/webm)
+audio_doc_filter = (
     filters.Document.MimeType("audio/mpeg")
     | filters.Document.MimeType("audio/ogg")
     | filters.Document.MimeType("audio/oga")
@@ -1443,9 +1443,14 @@ def main():
     | filters.Document.MimeType("audio/x-m4a")
     | filters.Document.MimeType("audio/webm")
     | filters.Document.MimeType("audio/wav")
-    | filters.Document.FileExtension(["mp3","m4a","wav","ogg","oga","webm"])
+    | filters.Document.FileExtension("mp3")
+    | filters.Document.FileExtension("m4a")
+    | filters.Document.FileExtension("wav")
+    | filters.Document.FileExtension("ogg")
+    | filters.Document.FileExtension("oga")
+    | filters.Document.FileExtension("webm")
 )
-    app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
+app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
 
     # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
     docs_filter = (
