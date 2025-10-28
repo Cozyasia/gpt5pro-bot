@@ -1490,6 +1490,204 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("on_error failed: %s", e)
 
+
+# ==================== PATCH: compact invoice payload + buy buttons ====================
+# Paste this whole block ABOVE `def main():` in your main.py. It overrides a few helpers.
+
+# --- Compact payload helpers (fit Telegram 1..128 bytes & ASCII) ---
+def _payload_oneoff(engine: str, usd: float) -> str:
+    # t=1 (oneoff), e=l/r/i, u=<cents>
+    e = {"luma":"l", "runway":"r", "img":"i"}.get(engine, "i")
+    cents = int(round(float(usd) * 100))
+    return f"t=1;e={e};u={cents}"
+
+def _payload_subscribe(tier: str, months: int) -> str:
+    # t=2 (subscribe), s=s/p/u, m=<months>
+    s = {"start":"s","pro":"p","ultimate":"u"}.get((tier or "pro").lower(), "p")
+    m = int(months or 1)
+    return f"t=2;s={s};m={m}"
+
+def _payload_parse(s: str) -> dict:
+    # accepts strings like "t=1;e=r;u=400" or "t=2;s=p;m=3"
+    out = {}
+    for part in (s or "").split(";"):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+# --- Safe invoice sender (accepts dict OR str) ---
+async def _send_invoice_rub(title: str, description: str, amount_rub: int, payload, update: Update):
+    """
+    Override: accept dict OR str payload, ensure Telegram constraints:
+    - title 1..32, description 1..255, payload 1..128 ASCII
+    """
+    if not PROVIDER_TOKEN:
+        await update.effective_message.reply_text("ÐÑÐ¾Ð²Ð°Ð¹Ð´ÐµÑ Ð¿Ð»Ð°ÑÐµÐ¶ÐµÐ¹ Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ (PROVIDER_TOKEN_YOOKASSA).")
+        return False
+
+    # trim title/description
+    title = (title or "")[:32] or "ÐÐ¿Ð»Ð°ÑÐ°"
+    description = (description or "")[:255]
+
+    # build payload string
+    if isinstance(payload, dict):
+        # shortest possible JSON (but still can exceed 128). Try; if too long, fallback to compact string.
+        p_try = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+        if len(p_try.encode("ascii", "ignore")) <= 128:
+            payload_str = p_try
+        else:
+            # fallback minimal
+            kind = payload.get("t") or payload.get("type")
+            if kind == "oneoff_topup":
+                payload_str = _payload_oneoff(payload.get("engine","img"), float(payload.get("usd", 0)))
+            elif kind == "subscribe":
+                payload_str = _payload_subscribe(payload.get("tier","pro"), int(payload.get("months", 1)))
+            else:
+                payload_str = f"t=0;note={int(time.time())}"
+    elif isinstance(payload, str):
+        payload_str = payload
+    else:
+        payload_str = "t=0"
+
+    # final safety
+    payload_str = (payload_str or "t=0")[:128]
+
+    prices = [LabeledPrice(label=title, amount=int(amount_rub) * 100)]
+    try:
+        await update.effective_message.reply_invoice(
+            title=title,
+            description=description,
+            payload=payload_str,
+            provider_token=PROVIDER_TOKEN,
+            currency=CURRENCY,
+            prices=prices,
+            need_name=False, need_phone_number=False, need_email=False, need_shipping_address=False,
+            is_flexible=False
+        )
+        return True
+    except TelegramError as e:
+        log.exception("send_invoice error: %s", e)
+        await update.effective_message.reply_text(f"ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð²ÑÑÑÐ°Ð²Ð¸ÑÑ ÑÑÑÑ: {e}")
+        return False
+
+# --- Oneâoff offer wrapper (uses compact payload) ---
+async def _try_pay_then_do(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int,
+                           engine: str, est_cost_usd: float, coroutine_to_run,
+                           remember_kind: str = "", remember_payload: dict | None = None):
+    ok, offer = _can_spend_or_offer(user_id, engine, est_cost_usd)
+    if ok:
+        await coroutine_to_run()
+        return
+    need_usd = float(offer.split(":", 1)[-1])
+    amount_rub = _calc_oneoff_price_rub(engine, need_usd)
+    title = f"{engine.upper()} Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ"
+    desc = f"ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ Ð±ÑÐ´Ð¶ÐµÑÐ° Ð´Ð»Ñ {engine} Ð½Ð° ${need_usd:.2f} (â {amount_rub} â½)."
+    payload = _payload_oneoff(engine, need_usd)  # compact string
+    await _send_invoice_rub(title, desc, amount_rub, payload, update)
+
+# --- Success payment handler (parses compact payloads) ---
+async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        pay = update.message.successful_payment
+        raw = pay.invoice_payload or ""
+        kv = _payload_parse(raw)
+        t = kv.get("t")
+
+        if t == "1":  # oneoff topup
+            e = kv.get("e", "i")
+            engine = {"l": "luma", "r": "runway", "i": "img"}.get(e, "img")
+            cents = int(kv.get("u", "0") or 0)
+            usd = cents / 100.0
+            _wallet_add(update.effective_user.id, {"luma":"luma","runway":"runway","img":"img"}[engine], usd)
+            await update.effective_message.reply_text("ð³ ÐÐ¿Ð»Ð°ÑÐ° Ð¿ÑÐ¾ÑÐ»Ð°! ÐÑÐ´Ð¶ÐµÑ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÑÐ½, Ð¼Ð¾Ð¶Ð½Ð¾ Ð·Ð°Ð¿ÑÑÐºÐ°ÑÑ Ð·Ð°Ð´Ð°ÑÑ ÐµÑÑ ÑÐ°Ð·.")
+            return
+
+        if t == "2":  # subscribe
+            tier = {"s":"start","p":"pro","u":"ultimate"}.get(kv.get("s","p"), "pro")
+            months = int(kv.get("m", "1") or 1)
+            until = activate_subscription_with_tier(update.effective_user.id, tier, months)
+            await update.effective_message.reply_text(f"â­ ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Ð°ÐºÑÐ¸Ð²Ð½Ð° Ð´Ð¾ {until.strftime('%Y-%m-%d')}. Ð¢Ð°ÑÐ¸Ñ: {tier}.")
+            return
+
+        # fallback: old JSON payloads (if any)
+        try:
+            payload = json.loads(raw)
+            if payload.get("t") == "subscribe":
+                until = activate_subscription_with_tier(update.effective_user.id, payload.get("tier","pro"), int(payload.get("months",1)))
+                await update.effective_message.reply_text(f"â­ ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Ð°ÐºÑÐ¸Ð²Ð½Ð° Ð´Ð¾ {until.strftime('%Y-%m-%d')}.")
+                return
+            if payload.get("t") == "oneoff_topup":
+                _wallet_add(update.effective_user.id, payload.get("engine","img"), float(payload.get("usd",0)))
+                await update.effective_message.reply_text("ð³ ÐÐ¿Ð»Ð°ÑÐ° Ð¿ÑÐ¾ÑÐ»Ð°! ÐÑÐ´Ð¶ÐµÑ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÑÐ½.")
+                return
+        except Exception:
+            pass
+
+        await update.effective_message.reply_text("â ÐÐ»Ð°ÑÑÐ¶ Ð¿ÑÐ¸Ð½ÑÑ.")
+    except Exception as e:
+        log.exception("on_success_payment error: %s", e)
+        await update.effective_message.reply_text("ÐÑÐ¸Ð±ÐºÐ° Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐºÐ¸ Ð¿Ð»Ð°ÑÐµÐ¶Ð°.")
+
+# --- Plans UI: add inline Buy buttons that send invoices in-chat ---
+def _plan_rub(tier: str, term: str) -> int:
+    return int(PLAN_PRICE_TABLE[tier][term])
+
+def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
+    # choose closest term label for description
+    term = {1:"Ð¼ÐµÑ",3:"ÐºÐ²Ð°ÑÑÐ°Ð»",12:"Ð³Ð¾Ð´"}.get(months, f"{months} Ð¼ÐµÑ")
+    amount = _plan_rub(tier, {1:"month",3:"quarter",12:"year"}[months])
+    payload = _payload_subscribe(tier, months)
+    title = f"ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {tier}/{term}"
+    return payload, amount, title
+
+async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lines = ["â­ Ð¢Ð°ÑÐ¸ÑÑ Ð¸ Ð¾ÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸:"]
+    for t in ("start","pro","ultimate"):
+        p = PLAN_PRICE_TABLE[t]
+        lines.append(f"â¢ {t.upper()}: {p['month']}â½/Ð¼ÐµÑ â¢ {p['quarter']}â½/ÐºÐ²Ð°ÑÑÐ°Ð» â¢ {p['year']}â½/Ð³Ð¾Ð´")
+    lines.append("\nÐÑÐ±ÐµÑÐ¸ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÑ ÐºÐ½Ð¾Ð¿ÐºÐ¾Ð¹ Ð½Ð¸Ð¶Ðµ Ð¸Ð»Ð¸ Ð¾ÑÐºÑÐ¾Ð¹ Ð¼Ð¸Ð½Ð¸âÐ¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ.")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("START â Ð¼ÐµÑÑÑ",   callback_data="buy:start:1"),
+         InlineKeyboardButton("ÐºÐ²Ð°ÑÑÐ°Ð»",         callback_data="buy:start:3"),
+         InlineKeyboardButton("Ð³Ð¾Ð´",             callback_data="buy:start:12")],
+        [InlineKeyboardButton("PRO â Ð¼ÐµÑÑÑ",     callback_data="buy:pro:1"),
+         InlineKeyboardButton("ÐºÐ²Ð°ÑÑÐ°Ð»",         callback_data="buy:pro:3"),
+         InlineKeyboardButton("Ð³Ð¾Ð´",             callback_data="buy:pro:12")],
+        [InlineKeyboardButton("ULTIMATE â Ð¼ÐµÑ",  callback_data="buy:ultimate:1"),
+         InlineKeyboardButton("ÐºÐ²Ð°ÑÑÐ°Ð»",         callback_data="buy:ultimate:3"),
+         InlineKeyboardButton("Ð³Ð¾Ð´",             callback_data="buy:ultimate:12")],
+        [InlineKeyboardButton("ÐÑÐºÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ ÑÐ°ÑÐ¸ÑÐ¾Ð² (Ð¼Ð¸Ð½Ð¸âÐ¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ)", web_app=WebAppInfo(url=TARIFF_URL))],
+    ])
+    await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
+
+# Extend existing callback to handle "buy:<tier>:<months>"
+_old_on_cb = on_cb
+async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = q.data or ""
+    if data.startswith("buy:"):
+        try:
+            _, tier, months = data.split(":", 2)
+            months = int(months)
+            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
+            desc = f"ÐÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ {tier.upper()} Ð½Ð° {months} Ð¼ÐµÑ."
+            ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
+            await q.answer("ÐÑÑÑÐ°Ð²Ð»ÑÑ ÑÑÑÑâ¦" if ok else "ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð²ÑÑÑÐ°Ð²Ð¸ÑÑ ÑÑÑÑ", show_alert=not ok)
+        except Exception as e:
+            log.exception("buy cb error: %s", e)
+            with contextlib.suppress(Exception):
+                await q.answer("ÐÑÐ¸Ð±ÐºÐ°", show_alert=True)
+        return
+    # otherwise fall back to original behavior
+    return await _old_on_cb(update, context)
+
+# Also expose /subscribe alias
+async def cmd_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_plans(update, context)
+
+# ==================== END PATCH ====================
+
 # ======= APP INIT =======
 def main():
     # Инициализация БД и prefs
