@@ -46,12 +46,8 @@ OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
 OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
 OPENROUTER_API_KEY  = os.environ.get("OPENROUTER_API_KEY", "").strip()
 USE_WEBHOOK      = os.environ.get("USE_WEBHOOK", "1").lower() in ("1","true","yes","on")
-PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()              # https://gpt5pro-bot.onrender.com
 WEBHOOK_PATH     = os.environ.get("WEBHOOK_PATH", "/tg").strip()         # путь для Telegram: например, /tg
 WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip() # опционально
-PORT             = int(os.environ.get("PORT", "10000"))                  # Render сам прокидывает PORT
-
-WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
 BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
