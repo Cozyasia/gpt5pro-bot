@@ -1393,47 +1393,52 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
     await update.effective_message.reply_text(ans)
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
     
-# ======= APP INIT =======
+# ======= APP RUN (webhook / polling) =======
 def run_by_mode(app):
-    async def _cleanup():
+    """
+    Запуск бота так, чтобы на Python 3.12–3.13 всегда был текущий event loop.
+    Не используем asyncio.run() перед run_webhook/run_polling — это ломает PTB.
+    """
+    # 1) Гарантируем current event loop в MainThread
+    try:
+        asyncio.get_running_loop()
+        _have_running_loop = True
+    except RuntimeError:
+        _have_running_loop = False
+    if not _have_running_loop:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    # 2) Синхронно удалим старый вебхук в этом же loop
+    async def _cleanup_webhook():
         try:
             await app.bot.delete_webhook(drop_pending_updates=True)
-            log.info("Old webhook deleted (drop_pending_updates=True)")
+            log.info("Webhook cleanup done (drop_pending_updates=True)")
         except Exception as e:
             log.warning(f"delete_webhook failed: {e}")
 
+    try:
+        asyncio.get_event_loop().run_until_complete(_cleanup_webhook())
+    except Exception:
+        pass
+
+    # 3) Стартуем режим
     if USE_WEBHOOK:
-        # всегда просто:
-        asyncio.run(_cleanup())
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
             url_path=WEBHOOK_PATH,
             webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
-            secret_token=WEBHOOK_SECRET or None,
+            secret_token=(WEBHOOK_SECRET or None),
             drop_pending_updates=True,
             allowed_updates=Update.ALL_TYPES,
         )
     else:
-        # polling
-        try:
-            asyncio.run(_cleanup())
-        except Exception:
-            pass
+        _start_http_stub()  # healthcheck только в polling
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
-def main():
-    db_init()
-    db_init_usage()
-
-    # health-stub нужен только когда работаем в polling,
-    # при webhook порт занимает PTB/aiohttp.
-    if not USE_WEBHOOK:
-        _start_http_stub()
-
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # --- handlers
     app.add_handler(CommandHandler("start", cmd_start))
