@@ -1440,7 +1440,16 @@ def run_by_mode(app):
             drop_pending_updates=True,
         )
 
-    # --- handlers
+# ======= APP INIT =======
+def main():
+    # Инициализация БД
+    db_init()
+    db_init_usage()
+
+    # Создаём приложение
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # --- handlers (ВСЁ РЕГИСТРИРУЕМ ДО ЗАПУСКА) ---
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
@@ -1462,7 +1471,7 @@ def run_by_mode(app):
     # Голос/аудио (voice/audio)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
 
-    # Документ с аудио (mp3/m4a/wav/ogg/oga/webm + mime)
+    # Документ с аудио (mp3/m4a/wav/ogg/oga/webm + mime/расширение)
     audio_doc_filter = (
         filters.Document.MimeType("audio/mpeg")
         | filters.Document.MimeType("audio/ogg")
@@ -1480,7 +1489,7 @@ def run_by_mode(app):
     )
     app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
 
-        # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
+    # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
     docs_filter = (
         filters.Document.FileExtension("pdf")
         | filters.Document.FileExtension("epub")
@@ -1491,23 +1500,22 @@ def run_by_mode(app):
         | filters.Document.FileExtension("azw")
         | filters.Document.FileExtension("azw3")
     )
-    app.add_handler(MessageHandler(docs_filter, on_doc_analyze))  # ← ЭТОГО НЕ ХВАТАЛО
+    app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
 
-    # Кнопки из ReplyKeyboard ("⭐ Подписка", "🎛 Движки", "🧾 Баланс", "ℹ️ Помощь")
+    # Кнопки ReplyKeyboard
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), cmd_plans))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🎛\s*Движки\s*$"), cmd_modes))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🧾\s*Баланс\s*$"), cmd_balance))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*ℹ️\s*Помощь\s*$"), cmd_help))
 
-    # Обычный текст (последним, чтобы не перехватывать команды)
+    # Обычный текст — в самом конце
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
     # Error handler
     app.add_error_handler(on_error)
 
-    # ⬇️ запуск бота (webhook / polling) — единая точка входа
+    # Запуск
     run_by_mode(app)
-
 
 if __name__ == "__main__":
     main()
