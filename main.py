@@ -22,7 +22,6 @@ from telegram.ext import (
     PreCheckoutQueryHandler, CallbackQueryHandler
 )
 from telegram.constants import ChatAction
-from telegram.error import TelegramError
 
 # ───────── LOGGING ─────────
 logging.basicConfig(
@@ -36,7 +35,7 @@ BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
-
+PORT = int(os.environ.get("PORT", "10000"))
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
@@ -1488,7 +1487,7 @@ def main():
         | filters.Document.FileExtension("azw")
         | filters.Document.FileExtension("azw3")
     )
-    app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
+
     # добавь до "Обычный текст":
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), cmd_plans))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🎛\s*Движки\s*$"), cmd_modes))
