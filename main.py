@@ -1231,7 +1231,242 @@ def run_by_mode(app):
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
+# ───────────────────────────────────────────────────────────
+# UI: главная клавиатура
+main_kb = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("⭐ Подписка"), KeyboardButton("🎛 Движки")],
+        [KeyboardButton("🧾 Баланс"), KeyboardButton("ℹ️ Помощь")],
+    ],
+    resize_keyboard=True,
+)
 
+# ───────── Diagnostics: лимиты/остатки ─────────
+async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    tier = get_subscription_tier(user_id)
+    lim = _limits_for(user_id)
+    row = _usage_row(user_id, _today_ymd())
+    lines = [
+        f"👤 Тариф: {tier}",
+        f"• Тексты сегодня: {row['text_count']} / {lim['text_per_day']}",
+        f"• Luma $: {row['luma_usd']:.2f} / {lim['luma_budget_usd']:.2f}",
+        f"• Runway $: {row['runway_usd']:.2f} / {lim['runway_budget_usd']:.2f}",
+        f"• Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
+    ]
+    await update.effective_message.reply_text("\n".join(lines))
+
+# ───────── Команды UI ─────────
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if BANNER_URL:
+        try:
+            await update.effective_message.reply_photo(BANNER_URL)
+        except Exception:
+            pass
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
+
+async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text("Выбери движок:", reply_markup=engines_kb())
+
+async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
+
+async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    w = _wallet_get(user_id)
+    await update.effective_message.reply_text(
+        "🧾 Кошелёк (доллары экв. движков):\n"
+        f"• Luma: ${w['luma_usd']:.2f}\n"
+        f"• Runway: ${w['runway_usd']:.2f}\n"
+        f"• Images: ${w['img_usd']:.2f}\n\n"
+        "Чтобы пополнить при превышении бюджета — просто запусти задачу, я предложу счёт."
+    )
+
+async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = " ".join(context.args) if context.args else (update.message.text.split(" ", 1)[-1] if " " in update.message.text else "")
+    prompt = prompt.strip()
+    if not prompt:
+        await update.effective_message.reply_text("Формат: /img <описание>")
+        return
+
+    async def _go():
+        await _do_img_generate(update, context, prompt)
+
+    user_id = update.effective_user.id
+    await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go,
+                           remember_kind="img_generate", remember_payload={"prompt": prompt})
+
+# ───────── Вспомогательные: видео и отложенные действия ─────────
+import uuid
+_pending_actions: dict[str, dict] = {}
+
+def _new_aid() -> str:
+    return uuid.uuid4().hex[:10]
+
+def parse_video_opts_from_text(text: str, default_duration: int, default_ar: str) -> tuple[int, str, str]:
+    t = text.lower()
+    # длительность, сек
+    m = re.search(r"(\d{1,2})\s*(?:сек|с|sec|seconds?)", t)
+    duration = int(m.group(1)) if m else default_duration
+    duration = max(3, min(12, duration))
+    # соотношение
+    ar = default_ar
+    if re.search(r"\b9[:/]\s*16\b", t) or "9:16" in t:
+        ar = "9:16"
+    elif re.search(r"\b16[:/]\s*9\b", t) or "16:9" in t:
+        ar = "16:9"
+    elif re.search(r"\b1[:/]\s*1\b", t) or "1:1" in t:
+        ar = "1:1"
+    # сам промпт
+    prompt = text.strip()
+    return duration, ar, prompt
+
+# ───────── Платежи: единоразовые предложения и инвойсы ─────────
+def _calc_oneoff_rub_amount(required_usd: float) -> int:
+    return _calc_oneoff_price_rub("runway", required_usd)  # формула уже учитывает наценку
+
+async def _send_invoice_rub(
+    update: Update,
+    title: str,
+    description: str,
+    amount_rub: int,
+    payload: dict,
+):
+    if not PROVIDER_TOKEN:
+        await update.effective_message.reply_text("Провайдер платежей не настроен (PROVIDER_TOKEN_YOOKASSA).")
+        return False
+    prices = [LabeledPrice(label=title, amount=amount_rub * 100)]
+    try:
+        await update.effective_message.reply_invoice(
+            title=title,
+            description=description[:255],
+            payload=json.dumps(payload, ensure_ascii=False),
+            provider_token=PROVIDER_TOKEN,
+            currency=CURRENCY,
+            prices=prices,
+            need_name=False, need_phone_number=False, need_email=False, need_shipping_address=False,
+            is_flexible=False
+        )
+        return True
+    except TelegramError as e:
+        log.exception("send_invoice error: %s", e)
+        await update.effective_message.reply_text(f"Не удалось выставить счёт: {e}")
+        return False
+
+async def _try_pay_then_do(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    engine: str,              # 'luma' | 'runway' | 'img'
+    est_cost_usd: float,      # оценка
+    coroutine_to_run,         # async fn()
+    remember_kind: str = "",
+    remember_payload: dict | None = None
+):
+    ok, offer = _can_spend_or_offer(user_id, engine, est_cost_usd)
+    if ok:
+        await coroutine_to_run()
+        return
+    # нужно доплатить
+    need_usd = float(offer.split(":", 1)[-1])
+    amount_rub = _calc_oneoff_price_rub(engine, need_usd)
+    title = f"Разовая операция {engine}"
+    desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽) для выполнения задачи."
+    payload = {"t": "oneoff_topup", "engine": engine, "usd": need_usd}
+    if remember_kind:
+        payload["remember"] = {"kind": remember_kind, "data": remember_payload or {}}
+    await _send_invoice_rub(update, title, desc, amount_rub, payload)
+
+# ───────── CallbackQuery / меню ─────────
+async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = q.data or ""
+    try:
+        if data.startswith("plan_menu:"):
+            await q.answer()
+            await q.edit_message_text("Открой страницу тарифов:", reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
+            ))
+            return
+
+        if data.startswith("choose:"):
+            # choose:<engine>:<aid>
+            _, engine, aid = data.split(":", 2)
+            meta = _pending_actions.pop(aid, None)
+            if not meta:
+                await q.answer("Задача устарела", show_alert=True); return
+            prompt = meta["prompt"]; duration = meta["duration"]; aspect = meta["aspect"]
+
+            async def _do_fake_render():
+                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
+                # Здесь должен быть реальный вызов Luma/Runway + учёт стоимости
+                # Для примера считаем Luma= $0.40, Runway= $1 * (duration/8)
+                if engine == "luma":
+                    cost = 0.40
+                else:
+                    base = RUNWAY_UNIT_COST_USD or 7.0
+                    cost = base * (duration / max(1, RUNWAY_DURATION_S))
+                _register_engine_spend(update.effective_user.id, "runway" if engine == "runway" else "luma", cost)
+
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            await _try_pay_then_do(update, context, update.effective_user.id,
+                                   "runway" if engine == "runway" else "luma", est, _do_fake_render,
+                                   remember_kind=f"video_{engine}",
+                                   remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect})
+            return
+
+    except Exception as e:
+        log.exception("on_cb error: %s", e)
+    finally:
+        with contextlib.suppress(Exception):
+            await q.answer()
+
+# ───────── Telegram Payments plumbing ─────────
+import contextlib
+
+async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.pre_checkout_query.answer(ok=True)
+    except Exception as e:
+        log.exception("precheckout error: %s", e)
+
+async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        pay = update.message.successful_payment
+        payload = json.loads(pay.invoice_payload or "{}")
+        t = payload.get("t")
+        if t == "oneoff_topup":
+            engine = payload.get("engine", "")
+            usd = float(payload.get("usd", 0))
+            _wallet_add(update.effective_user.id, {"luma":"luma","runway":"runway","img":"img"}.get(engine,"img"), usd)
+            await update.effective_message.reply_text("💳 Оплата прошла! Бюджет пополнён, можешь запускать задачу ещё раз.")
+        elif t == "subscribe":
+            tier = payload.get("tier", "pro")
+            months = int(payload.get("months", 1))
+            until = activate_subscription_with_tier(update.effective_user.id, tier, months)
+            await update.effective_message.reply_text(f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}. Тариф: {tier}.")
+        else:
+            await update.effective_message.reply_text("✅ Платёж принят.")
+    except Exception as e:
+        log.exception("on_success_payment error: %s", e)
+        await update.effective_message.reply_text("Ошибка обработки платежа.")
+
+# ───────── Страница тарифов и покупка подписки ─────────
+def _plan_prices_lines(tier: str) -> list[str]:
+    p = PLAN_PRICE_TABLE[tier]
+    return [f"• {tier.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год"]
+
+async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lines = ["⭐ Тарифы и оформление подписки:"]
+    for t in ("start","pro","ultimate"):
+        lines += _plan_prices_lines(t)
+    lines.append("")
+    lines.append("Открой страницу тарифов кнопкой ниже ⬇️")
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Открыть тарифы", web_app=WebAppInfo(url=TARIFF_URL))]])
+    await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
 # ======= APP INIT =======
 def main():
     # Инициализация БД и prefs
