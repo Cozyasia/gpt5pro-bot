@@ -2,7 +2,6 @@
 import os
 import re
 import json
-from telegram.error import TelegramError, Conflict
 import time
 import base64
 import logging
@@ -1490,6 +1489,11 @@ def main():
         | filters.Document.FileExtension("azw3")
     )
     app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
+    # добавь до "Обычный текст":
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), cmd_plans))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🎛\s*Движки\s*$"), cmd_modes))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🧾\s*Баланс\s*$"), cmd_balance))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*ℹ️\s*Помощь\s*$"), cmd_help))
 
     # Обычный текст (последним, чтобы не перехватывать команды)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
