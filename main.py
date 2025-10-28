@@ -1056,17 +1056,6 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
     await update.effective_message.reply_text("\n".join(lines))
 
-    txt = (
-        "📊 Лимиты и использование:\n"
-        f"• Тариф: {tier}\n"
-        f"• Текстов сегодня: {row['text_count']} / {lim['text_per_day']}\n"
-        f"• Бюджет Luma (день): {lim['luma_budget_usd']:.2f}$, израсходовано: {row['luma_usd']:.2f}$\n"
-        f"• Бюджет Runway (день): {lim['runway_budget_usd']:.2f}$, израсходовано: {row['runway_usd']:.2f}$\n"
-        f"• Бюджет Images (день): {lim['img_budget_usd']:.2f}$, израсходовано: {row['img_usd']:.2f}$\n"
-        f"• Кошелёк: Luma {w['luma_usd']:.2f}$, Runway {w['runway_usd']:.2f}$, Images {w['img_usd']:.2f}$"
-    )
-    await update.effective_message.reply_text(txt)
-
 # ───────── Router: text/photo/voice/docs/img/video ───────
 # (предполагается, что все вспомогательные функции и генераторы определены выше в файле)
 
