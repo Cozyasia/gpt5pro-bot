@@ -1047,14 +1047,15 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key_used = key_env or OPENAI_API_KEY
     base     = IMAGES_BASE_URL
     lines = [
-        f"OPENAI_IMAGE_KEY: {'✅ найден' if key_used else '❌ нет'}",
-        f"BASE_URL: {base}",
-        f"MODEL: {IMAGES_MODEL}",
+        "🧪 Images (OpenAI) диагностика:",
+        f"• OPENAI_IMAGE_KEY: {'✅ найден' if key_used else '❌ нет'}",
+        f"• BASE_URL: {base}",
+        f"• MODEL: {IMAGES_MODEL}",
     ]
-    if "openrouter" in base.lower():
+    if "openrouter" in (base or "").lower():
         lines.append("⚠️ BASE_URL указывает на OpenRouter — там нет gpt-image-1.")
         lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
-    await update.message.reply_text("\n".join(lines))
+    await update.effective_message.reply_text("\n".join(lines))
 
 
 
@@ -1361,20 +1362,22 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
                                remember_payload={"prompt": clean or text})
         return
 
-    if intent == "video":
-        dur, ar, prompt = parse_video_opts_from_text(clean or text, default_duration=LUMA_DURATION_S, default_ar=LUMA_ASPECT)
-        # если есть Runway SDK — предложим выбор
-        choose_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎬 Luma", callback_data=f"choose:luma:{_new_aid()}"),
-             InlineKeyboardButton("🎥 Runway", callback_data=f"choose:runway:{_new_aid()}")]
-        ])
-        # Сохраняем одно действие и повторно используем AID в обеих кнопках
+        if intent == "video":
+        dur, ar, prompt = parse_video_opts_from_text(
+            clean or text,
+            default_duration=LUMA_DURATION_S,
+            default_ar=LUMA_ASPECT
+        )
+
+        # Сохраняем одну задачу и используем один AID в обеих кнопках
         aid = _new_aid()
-_pending_actions[aid] = {"prompt": prompt, "duration": dur, "aspect": ar}
-choose_kb = InlineKeyboardMarkup([
-    [InlineKeyboardButton("🎬 Luma", callback_data=f"choose:luma:{aid}"),
-     InlineKeyboardButton("🎥 Runway", callback_data=f"choose:runway:{aid}")]
-])
+        _pending_actions[aid] = {"prompt": prompt, "duration": dur, "aspect": ar}
+
+        choose_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎬 Luma",   callback_data=f"choose:luma:{aid}"),
+             InlineKeyboardButton("🎥 Runway", callback_data=f"choose:runway:{aid}")]
+        ])
+
         await update.effective_message.reply_text(
             f"Видео {dur}s • {ar}\nВыберите движок:",
             reply_markup=choose_kb
