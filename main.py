@@ -1042,15 +1042,6 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # ───────── Diagnostics ───────
 
-async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = []
-    lines.append("🔎 STT диагностика:")
-    lines.append(f"• Deepgram: {'✅ ключ найден' if DEEPGRAM_API_KEY else '❌ нет ключа'}")
-    lines.append(f"• OpenAI Whisper: {'✅ клиент активен' if oai_stt else '❌ недоступен'}")
-    lines.append(f"• Модель Whisper: {TRANSCRIBE_MODEL}")
-    lines.append("• Поддержка форматов: ogg/oga, mp3, m4a/mp4, wav, webm")
-    await update.effective_message.reply_text("\n".join(lines))
-
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key_env  = os.environ.get("OPENAI_IMAGE_KEY", "").strip()
     key_used = key_env or OPENAI_API_KEY
@@ -1065,21 +1056,7 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
     await update.message.reply_text("\n".join(lines))
 
-async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    uname = (update.effective_user.username or "")
-    tier = get_subscription_tier(uid)
-    lim = _limits_for(uid)
-    row = _usage_row(uid)
-    w = _wallet_get(uid)
 
-    if is_unlimited(uid, uname):
-        await update.effective_message.reply_text(
-            "♾ Безлимит: включён для этого пользователя (по ID/username).\n"
-            "• Тексты: без ограничений\n• Бюджеты: пропускаются\n"
-            f"• Кошелёк: Luma {w['luma_usd']:.2f}$, Runway {w['runway_usd']:.2f}$, Images {w['img_usd']:.2f}$"
-        )
-        return
 
     txt = (
         "📊 Лимиты и использование:\n"
@@ -1226,14 +1203,6 @@ async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Кошелёк: Luma {w['luma_usd']:.2f}$, Runway {w['runway_usd']:.2f}$, Images {w['img_usd']:.2f}$"
     )
     await update.effective_message.reply_text(txt)
-
-# ======= TEXT =======
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (update.message.text or "").strip()
-    await _process_text(update, context, text)
-
-async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(EXAMPLES_TEXT)
 
 # ======= Error handler (важно, чтобы не падали хендлеры) =======
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1485,13 +1454,9 @@ def main():
 
     # Документ с аудио (mp3/m4a/wav/ogg/webm)
     audio_doc_filter = (
-        filters.Document.MimeType("audio/") |
-        filters.Document.FileExtension("mp3") |
-        filters.Document.FileExtension("m4a") |
-        filters.Document.FileExtension("wav") |
-        filters.Document.FileExtension("ogg") |
-        filters.Document.FileExtension("webm")
-    )
+    filters.Document.MimeType(["audio/mpeg","audio/ogg","audio/oga","audio/mp4","audio/x-m4a","audio/webm","audio/wav"])
+    | filters.Document.FileExtension(["mp3","m4a","wav","ogg","oga","webm"])
+)
     app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
 
     # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
