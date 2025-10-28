@@ -1431,37 +1431,37 @@ def main():
     # Фото -> vision
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
 
-    # Голос/аудио (voice/audio)
+        # Голос/аудио (voice/audio)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
 
-    # Документ с аудио (mp3/m4a/wav/ogg/oga/webm)
-audio_doc_filter = (
-    filters.Document.MimeType("audio/mpeg")
-    | filters.Document.MimeType("audio/ogg")
-    | filters.Document.MimeType("audio/oga")
-    | filters.Document.MimeType("audio/mp4")
-    | filters.Document.MimeType("audio/x-m4a")
-    | filters.Document.MimeType("audio/webm")
-    | filters.Document.MimeType("audio/wav")
-    | filters.Document.FileExtension("mp3")
-    | filters.Document.FileExtension("m4a")
-    | filters.Document.FileExtension("wav")
-    | filters.Document.FileExtension("ogg")
-    | filters.Document.FileExtension("oga")
-    | filters.Document.FileExtension("webm")
-)
-app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
+    # Документ с аудио (mp3/m4a/wav/ogg/oga/webm + mime)
+    audio_doc_filter = (
+        filters.Document.MimeType("audio/mpeg")
+        | filters.Document.MimeType("audio/ogg")
+        | filters.Document.MimeType("audio/oga")
+        | filters.Document.MimeType("audio/mp4")
+        | filters.Document.MimeType("audio/x-m4a")
+        | filters.Document.MimeType("audio/webm")
+        | filters.Document.MimeType("audio/wav")
+        | filters.Document.FileExtension("mp3")
+        | filters.Document.FileExtension("m4a")
+        | filters.Document.FileExtension("wav")
+        | filters.Document.FileExtension("ogg")
+        | filters.Document.FileExtension("oga")
+        | filters.Document.FileExtension("webm")
+    )
+    app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
 
     # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
     docs_filter = (
-        filters.Document.FileExtension("pdf")  |
-        filters.Document.FileExtension("epub") |
-        filters.Document.FileExtension("docx") |
-        filters.Document.FileExtension("fb2")  |
-        filters.Document.FileExtension("txt")  |
-        filters.Document.FileExtension("mobi") |
-        filters.Document.FileExtension("azw")  |
-        filters.Document.FileExtension("azw3")
+        filters.Document.FileExtension("pdf")
+        | filters.Document.FileExtension("epub")
+        | filters.Document.FileExtension("docx")
+        | filters.Document.FileExtension("fb2")
+        | filters.Document.FileExtension("txt")
+        | filters.Document.FileExtension("mobi")
+        | filters.Document.FileExtension("azw")
+        | filters.Document.FileExtension("azw3")
     )
     app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
 
