@@ -18,6 +18,9 @@ Thumbs.db
 .env
 .env.*
 .env.local
+.env
+subs.db
+__pycache__/
 
 # Логи и временные
 logs/
