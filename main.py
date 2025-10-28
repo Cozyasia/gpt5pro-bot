@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-
+from telegram.error import TelegramError
 import httpx
 from telegram import (
     Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InputFile,
@@ -35,7 +35,6 @@ BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
 BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
-PORT = int(os.environ.get("PORT", "10000"))
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
@@ -1476,7 +1475,7 @@ def main():
     )
     app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
 
-    # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
+        # Документы для анализа текста (PDF/EPUB/DOCX/FB2/TXT/MOBI/AZW)
     docs_filter = (
         filters.Document.FileExtension("pdf")
         | filters.Document.FileExtension("epub")
@@ -1487,12 +1486,13 @@ def main():
         | filters.Document.FileExtension("azw")
         | filters.Document.FileExtension("azw3")
     )
+    app.add_handler(MessageHandler(docs_filter, on_doc_analyze))  # ← ЭТОГО НЕ ХВАТАЛО
 
-    # добавь до "Обычный текст":
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), cmd_plans))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🎛\s*Движки\s*$"), cmd_modes))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🧾\s*Баланс\s*$"), cmd_balance))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*ℹ️\s*Помощь\s*$"), cmd_help))
+    # Кнопки из ReplyKeyboard ("⭐ Подписка", "🎛 Движки", "🧾 Баланс", "ℹ️ Помощь")
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), cmd_plans))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🎛\s*Движки\s*$"), cmd_modes))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🧾\s*Баланс\s*$"), cmd_balance))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*ℹ️\s*Помощь\s*$"), cmd_help))
 
     # Обычный текст (последним, чтобы не перехватывать команды)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
