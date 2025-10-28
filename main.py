@@ -1398,20 +1398,16 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
     
 # ======= APP INIT =======
 def run_by_mode(app):
-    if USE_WEBHOOK:
-        async def _cleanup():
-            try:
-                await app.bot.delete_webhook(drop_pending_updates=True)
-                log.info("Old webhook deleted (drop_pending_updates=True)")
-            except Exception as e:
-                log.warning(f"delete_webhook failed: {e}")
-
+    async def _cleanup():
         try:
-            asyncio.get_running_loop()
-            asyncio.get_event_loop().run_until_complete(_cleanup())
-        except RuntimeError:
-            asyncio.run(_cleanup())
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            log.info("Old webhook deleted (drop_pending_updates=True)")
+        except Exception as e:
+            log.warning(f"delete_webhook failed: {e}")
 
+    if USE_WEBHOOK:
+        # всегда просто:
+        asyncio.run(_cleanup())
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -1422,10 +1418,9 @@ def run_by_mode(app):
             allowed_updates=Update.ALL_TYPES,
         )
     else:
+        # polling
         try:
-            asyncio.get_event_loop().run_until_complete(
-                app.bot.delete_webhook(drop_pending_updates=True)
-            )
+            asyncio.run(_cleanup())
         except Exception:
             pass
         app.run_polling(
