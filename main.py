@@ -1467,6 +1467,28 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("Открой страницу тарифов кнопкой ниже ⬇️")
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Открыть тарифы", web_app=WebAppInfo(url=TARIFF_URL))]])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
+    # ======= Error handler =======
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        err = getattr(context, "error", None)
+        chat_id = None
+        try:
+            # Попробуем уведомить пользователя только если есть контекст сообщения/чата
+            if hasattr(update, "effective_chat") and update.effective_chat:
+                chat_id = update.effective_chat.id
+            elif hasattr(update, "message") and update.message:
+                chat_id = update.message.chat_id
+        except Exception:
+            pass
+
+        log.exception("Unhandled exception in handler: %s", err)
+        if chat_id:
+            try:
+                await context.bot.send_message(chat_id, "⚠️ Произошла внутренняя ошибка. Уже разбираюсь, попробуй ещё раз.")
+            except Exception:
+                pass
+    except Exception as e:
+        log.exception("on_error failed: %s", e)
 # ======= APP INIT =======
 def main():
     # Инициализация БД и prefs
