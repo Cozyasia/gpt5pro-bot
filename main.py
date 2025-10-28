@@ -104,11 +104,6 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
-    
-    # ── Webhook settings ──
-USE_WEBHOOK   = bool(PUBLIC_URL) and bool(WEBHOOK_SECRET)
-WEBHOOK_PATH  = f"/tg/{WEBHOOK_SECRET}" if USE_WEBHOOK else ""
-WEBHOOK_URL   = f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}" if USE_WEBHOOK else ""
 
 # ── Безлимит ──
 UNLIM_USER_IDS     = set(int(x) for x in os.environ.get("UNLIM_USER_IDS","").split(",") if x.strip().isdigit())
@@ -1452,16 +1447,6 @@ def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # --- гарантированно отключаем вебхук и чистим хвост апдейтов (если раньше был webhook)
-    async def _post_init(app_):
-        try:
-            await app_.bot.delete_webhook(drop_pending_updates=True)
-            log.info("Webhook deleted (drop_pending_updates=True)")
-        except Exception as e:
-            log.exception("delete_webhook failed: %s", e)
-
-    app.post_init = _post_init
-
     # --- handlers
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
@@ -1481,7 +1466,7 @@ def main():
     # Фото -> vision
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
 
-        # Голос/аудио (voice/audio)
+    # Голос/аудио (voice/audio)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
 
     # Документ с аудио (mp3/m4a/wav/ogg/oga/webm + mime)
@@ -1518,52 +1503,12 @@ def main():
     # Обычный текст (последним, чтобы не перехватывать команды)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-        # Error handler
+    # Error handler
     app.add_error_handler(on_error)
 
-    if USE_WEBHOOK:
-        # --- WEBHOOK MODE ---
-        async def _post_init(app_):
-            try:
-                # На всякий случай: сбросим старый вебхук/пуллинг
-                await app_.bot.delete_webhook(drop_pending_updates=True)
-                # Ставим наш вебхук с секретом (Telegram будет присылать X-Telegram-Bot-Api-Secret-Token)
-                # ⬇️ запуск бота (webhook / polling)
-run_by_mode(app)
-            try:
-                try:
-                    await app.bot.delete_webhook(drop_pending_updates=True)
-                    log.info("Webhook deleted before polling start.")
-                except Exception as e:
-                    log.warning("delete_webhook warning: %s", e)
+    # ⬇️ запуск бота (webhook / polling) — единая точка входа
+    run_by_mode(app)
 
-                app.run_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True,
-                    stop_signals=None
-                )
-                break
-            except Conflict as e:
-                log.warning("Conflict getUpdates. Forcing reset and retry: %s", e)
-                try:
-                    fake_url = f"{PUBLIC_URL.rstrip('/')}/__fake_{int(time.time())}"
-                    await app.bot.set_webhook(url=fake_url, drop_pending_updates=True)
-                    await asyncio.sleep(1.0)
-                    await app.bot.delete_webhook(drop_pending_updates=True)
-                except Exception as ee:
-                    log.warning("force reset webhook failed: %s", ee)
-                time.sleep(5)
-                continue
-            except Exception as e:
-                log.exception("Polling crashed. Restarting in 5s: %s", e)
-                time.sleep(5)
-                continue
-    # drop_pending_updates=True дублируем на всякий
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        stop_signals=None
-    )
 
 if __name__ == "__main__":
     main()
