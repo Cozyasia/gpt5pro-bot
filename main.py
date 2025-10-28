@@ -1069,16 +1069,6 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt)
 
-# ───────── Error handler (важно: убирает «No error handlers are registered…») ───────
-
-async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
-    log.exception("Unhandled error", exc_info=context.error)
-    try:
-        if isinstance(update, Update) and update.effective_message:
-            await update.effective_message.reply_text("⚠️ Произошла ошибка. Уже разбираемся.")
-    except Exception:
-        pass
-
 # ───────── Router: text/photo/voice/docs/img/video ───────
 # (предполагается, что все вспомогательные функции и генераторы определены выше в файле)
 
@@ -1380,11 +1370,11 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         ])
         # Сохраняем одно действие и повторно используем AID в обеих кнопках
         aid = _new_aid()
-        _pending_actions[aid] = {"prompt": prompt, "duration": dur, "aspect": ar}
-        choose_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎬 Luma", callback_data=f"choose:luma:{aid}"),
-             InlineKeyboardButton("🎥 Runway", callback_data=f"choose:runway:{aid}")]
-        ])
+_pending_actions[aid] = {"prompt": prompt, "duration": dur, "aspect": ar}
+choose_kb = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🎬 Luma", callback_data=f"choose:luma:{aid}"),
+     InlineKeyboardButton("🎥 Runway", callback_data=f"choose:runway:{aid}")]
+])
         await update.effective_message.reply_text(
             f"Видео {dur}s • {ar}\nВыберите движок:",
             reply_markup=choose_kb
@@ -1454,7 +1444,13 @@ def main():
 
     # Документ с аудио (mp3/m4a/wav/ogg/webm)
     audio_doc_filter = (
-    filters.Document.MimeType(["audio/mpeg","audio/ogg","audio/oga","audio/mp4","audio/x-m4a","audio/webm","audio/wav"])
+    filters.Document.MimeType("audio/mpeg")
+    | filters.Document.MimeType("audio/ogg")
+    | filters.Document.MimeType("audio/oga")
+    | filters.Document.MimeType("audio/mp4")
+    | filters.Document.MimeType("audio/x-m4a")
+    | filters.Document.MimeType("audio/webm")
+    | filters.Document.MimeType("audio/wav")
     | filters.Document.FileExtension(["mp3","m4a","wav","ogg","oga","webm"])
 )
     app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
