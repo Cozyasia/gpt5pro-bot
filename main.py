@@ -45,6 +45,11 @@ OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
 OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
 OPENROUTER_API_KEY  = os.environ.get("OPENROUTER_API_KEY", "").strip()
+USE_WEBHOOK      = os.environ.get("USE_WEBHOOK", "1").lower() in ("1","true","yes","on")
+PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()              # https://gpt5pro-bot.onrender.com
+WEBHOOK_PATH     = os.environ.get("WEBHOOK_PATH", "/tg").strip()         # путь для Telegram: например, /tg
+WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip() # опционально
+PORT             = int(os.environ.get("PORT", "10000"))                  # Render сам прокидывает PORT
 
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "").strip()
 BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
@@ -1401,7 +1406,41 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
     
 # ======= APP INIT =======
-# ======= APP INIT =======
+def run_by_mode(app):
+    if USE_WEBHOOK:
+        async def _cleanup():
+            try:
+                await app.bot.delete_webhook(drop_pending_updates=True)
+                log.info("Old webhook deleted (drop_pending_updates=True)")
+            except Exception as e:
+                log.warning(f"delete_webhook failed: {e}")
+
+        try:
+            asyncio.get_running_loop()
+            asyncio.get_event_loop().run_until_complete(_cleanup())
+        except RuntimeError:
+            asyncio.run(_cleanup())
+
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=WEBHOOK_PATH,
+            webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
+            secret_token=WEBHOOK_SECRET or None,
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        try:
+            asyncio.get_event_loop().run_until_complete(
+                app.bot.delete_webhook(drop_pending_updates=True)
+            )
+        except Exception:
+            pass
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+        )
 def main():
     db_init()
     db_init_usage()
@@ -1489,33 +1528,8 @@ def main():
                 # На всякий случай: сбросим старый вебхук/пуллинг
                 await app_.bot.delete_webhook(drop_pending_updates=True)
                 # Ставим наш вебхук с секретом (Telegram будет присылать X-Telegram-Bot-Api-Secret-Token)
-                await app_.bot.set_webhook(
-                    url=WEBHOOK_URL,
-                    secret_token=WEBHOOK_SECRET,
-                    allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True,
-                )
-                log.info("Webhook set to %s", WEBHOOK_URL)
-            except Exception as e:
-                log.exception("set_webhook failed: %s", e)
-                raise
-        app.post_init = _post_init
-
-        # Веб-сервер PTB на том же порту, что ждёт Render.
-        # NB: Render Health Check можно направить на WEBHOOK_PATH (GET); PTB вернёт 200.
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            webhook_url=WEBHOOK_URL,       # PTB сам установит вебхук при старте (дубль к post_init — не мешает)
-            secret_token=WEBHOOK_SECRET,
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-        )
-
-    else:
-        # --- POLLING MODE (фолбэк) ---
-        # Автолечение конфликтов, если когда-нибудь вернёшься к пуллингу.
-        while True:
+                # ⬇️ запуск бота (webhook / polling)
+run_by_mode(app)
             try:
                 try:
                     await app.bot.delete_webhook(drop_pending_updates=True)
