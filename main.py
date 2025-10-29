@@ -94,6 +94,9 @@ PLAN_PRICE_TABLE = {
 }
 TERM_MONTHS = {"month": 1, "quarter": 3, "year": 12}
 
+# минимальная сумма инвойса (защита от Currency_total_amount_invalid)
+MIN_RUB_FOR_INVOICE = int(os.environ.get("MIN_RUB_FOR_INVOICE", "100") or "100")
+
 PORT = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
@@ -146,6 +149,14 @@ def _ascii_or_none(s: str | None):
         return s
     except Exception:
         return None
+
+def _ascii_label(s: str | None) -> str:
+    s = (s or "").strip() or "Item"
+    try:
+        s.encode("ascii")
+        return s[:32]
+    except Exception:
+        return "Item"
 
 # HTTP stub для Render Web Service (healthcheck + редирект premium.html)
 def _start_http_stub():
@@ -292,7 +303,7 @@ def db_init_usage():
         user_id INTEGER PRIMARY KEY,
         luma_usd  REAL DEFAULT 0.0,
         runway_usd REAL DEFAULT 0.0,
-        img_usd REAL DEFAULT 0.0
+        img_usd  REAL DEFAULT 0.0
     )""")
     try:
         cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
@@ -379,6 +390,7 @@ def _limits_for(user_id: int) -> dict:
 def check_text_and_inc(user_id: int, username: str | None = None) -> tuple[bool, int, str]:
     """True/False, left_after, tier"""
     if is_unlimited(user_id, username):
+        _usage_update(user_id, text_count=1)
         return True, 999999, "ultimate"
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
@@ -391,13 +403,24 @@ def check_text_and_inc(user_id: int, username: str | None = None) -> tuple[bool,
 def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     markup = ONEOFF_MARKUP_RUNWAY if engine == "runway" else ONEOFF_MARKUP_DEFAULT
     rub = usd_cost * (1.0 + markup) * USD_RUB
-    return int(rub + 0.999)
+    val = int(rub + 0.999)
+    return max(MIN_RUB_FOR_INVOICE, val)
 
-def _can_spend_or_offer(user_id: int, engine: str, est_cost_usd: float) -> tuple[bool, str]:
-    if is_unlimited(user_id):
+def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cost_usd: float) -> tuple[bool, str]:
+    """
+    True/"" — можно тратить
+    False/"ASK_SUBSCRIBE" — нет подписки, просим оформить
+    False/"OFFER:<need_usd>" — подписка есть, но бюджета не хватает → предложить разовый платёж
+    """
+    if is_unlimited(user_id, username):
         return True, ""
     if engine not in ("luma", "runway", "img"):
         return True, ""
+
+    tier = get_subscription_tier(user_id)
+    if tier == "free":
+        return False, "ASK_SUBSCRIBE"
+
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
     spent = row[f"{engine}_usd"]; budget = lim[f"{engine}_budget_usd"]
@@ -485,16 +508,22 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     if web_ctx:
         messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
     messages.append({"role": "user", "content": user_text})
-    for attempt in range(2):
+
+    last_err = None
+    for attempt in range(3):
         try:
             resp = oai_llm.chat.completions.create(
-                model=OPENAI_MODEL, messages=messages, temperature=0.6, timeout=60_000
+                model=OPENAI_MODEL, messages=messages, temperature=0.6, timeout=90_000
             )
-            return (resp.choices[0].message.content or "").strip()
+            txt = (resp.choices[0].message.content or "").strip()
+            if txt:
+                return txt
         except Exception as e:
-            log.warning("OpenAI chat attempt %s failed: %s", attempt+1, e)
-            await asyncio.sleep(0.8)
-    return "Не удалось получить ответ от модели. Попробуй позже."
+            last_err = e
+            log.warning("OpenAI/OpenRouter chat attempt %d failed: %s", attempt+1, e)
+            await asyncio.sleep(0.8 * (attempt + 1))
+    log.error("ask_openai_text failed: %s", last_err)
+    return "⚠️ Сейчас не получилось получить ответ от модели. Я на связи — попробуй переформулировать запрос или повторить чуть позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
@@ -623,10 +652,14 @@ def _extract_pdf_text(data: bytes) -> str:
     except Exception:
         pass
     try:
-        from pdfminer.high_level import extract_text
-        return (extract_text(BytesIO(data)) or "").strip()
+        from pdfminer_high_level import extract_text  # может не быть — fallback ниже
     except Exception:
-        pass
+        extract_text = None
+    if extract_text:
+        try:
+            return (extract_text(BytesIO(data)) or "").strip()
+        except Exception:
+            pass
     try:
         import fitz
         doc = fitz.open(stream=data, filetype="pdf")
@@ -721,7 +754,7 @@ async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
     except Exception as e:
         log.exception("IMG gen error: %s", e)
-        await update.effective_message.reply_text(f"Не удалось создать изображение: {e}")
+        await update.effective_message.reply_text(f"Не удалось создать изображение.")
 
 # ───────── UI / тексты ─────────
 START_TEXT = (
@@ -756,13 +789,13 @@ EXAMPLES_TEXT = (
 
 def engines_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💬 GPT (текст)", callback_data="plan_menu:root"),
-         InlineKeyboardButton("🖼 Images (OpenAI)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🎬 Luma (видео)", callback_data="plan_menu:root"),
-         InlineKeyboardButton("🎥 Runway (видео)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🎨 Midjourney (генеративно)", callback_data="plan_menu:root"),
-         InlineKeyboardButton("🗣 STT/TTS (голос)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("Открыть страницу тарифов", web_app=WebAppInfo(url=TARIFF_URL))]
+        [InlineKeyboardButton("💬 GPT — текст/фото (основной чат)", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🖼 Images (OpenAI) — генерация картинок", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🎬 Luma — ролики 5–10 c (9:16/16:9)", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🎥 Runway — премиум-видео (PRO)", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🎨 Midjourney — фотореалистичные изображения", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🗣 STT/TTS — распознавание и озвучка", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("⭐ Открыть страницу тарифов", web_app=WebAppInfo(url=TARIFF_URL))]
     ])
 
 # ───────── Router: text/photo/voice/docs/img/video ───────
@@ -959,7 +992,7 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         pass
 
     ans = await ask_openai_text(text, web_ctx=web_ctx)
-    if not ans or ans.strip() == "" or "Не удалось получить ответ от модели" in ans:
+    if not ans or ans.strip() == "" or "не получилось получить ответ" in ans.lower():
         ans = "⚠️ Сейчас не удалось получить ответ от модели. Я всё равно на связи — попробуй переформулировать запрос или повторить через минуту."
     await update.effective_message.reply_text(ans)
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
@@ -1014,11 +1047,12 @@ async def _send_invoice_rub(title: str, description: str, amount_rub: int, paylo
     - payload: 1..128 байт ASCII
     """
     if not PROVIDER_TOKEN:
-        await update.effective_message.reply_text("Провайдер платежей не настроен (PROVIDER_TOKEN_YOOKASSA).")
+        await update.effective_message.reply_text("Провайдер платежей не настроен.")
         return False
 
-    title = (title or "")[:32] or "Оплата"
+    title = _ascii_label(title)
     description = (description or "")[:255]
+    amount_rub = max(1, int(amount_rub))
 
     if isinstance(payload, dict):
         p_try = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
@@ -1033,12 +1067,11 @@ async def _send_invoice_rub(title: str, description: str, amount_rub: int, paylo
             else:
                 payload_str = f"t=0;note={int(time.time())}"
     elif isinstance(payload, str):
-        payload_str = payload
+        payload_str = payload[:128]
     else:
         payload_str = "t=0"
 
-    payload_str = (payload_str or "t=0")[:128]
-    prices = [LabeledPrice(label=title, amount=int(amount_rub) * 100)]
+    prices = [LabeledPrice(label=title, amount=amount_rub * 100)]
     try:
         await update.effective_message.reply_invoice(
             title=title,
@@ -1047,26 +1080,36 @@ async def _send_invoice_rub(title: str, description: str, amount_rub: int, paylo
             provider_token=PROVIDER_TOKEN,
             currency=CURRENCY,
             prices=prices,
-            need_name=False, need_phone_number=False, need_email=False, need_shipping_address=False,
             is_flexible=False,
         )
         return True
     except TelegramError as e:
         log.exception("send_invoice error: %s", e)
-        await update.effective_message.reply_text(f"Не удалось выставить счёт: {e}")
+        await update.effective_message.reply_text("Не удалось выставить счёт. Оформите подписку через /plans.")
         return False
 
 async def _try_pay_then_do(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int,
                            engine: str, est_cost_usd: float, coroutine_to_run,
                            remember_kind: str = "", remember_payload: dict | None = None):
-    ok, offer = _can_spend_or_offer(user_id, engine, est_cost_usd)
+    username = (update.effective_user.username or "")
+    ok, offer = _can_spend_or_offer(user_id, username, engine, est_cost_usd)
     if ok:
         await coroutine_to_run()
         return
+
+    if offer == "ASK_SUBSCRIBE":
+        await update.effective_message.reply_text(
+            "Для этой функции нужна активная подписка. Выбери подходящий план:",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Открыть тарифы", web_app=WebAppInfo(url=TARIFF_URL))]]
+            )
+        )
+        return
+
     need_usd = float(offer.split(":", 1)[-1])
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    title = f"{engine.upper()} пополнение"
-    desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽)."
+    title = _ascii_label(f"{engine.upper()} topup")
+    desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f}."
     payload = _payload_oneoff(engine, need_usd)
     await _send_invoice_rub(title, desc, amount_rub, payload, update)
 
@@ -1082,7 +1125,7 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         raw = pay.invoice_payload or ""
         kv = _payload_parse(raw)
         t = kv.get("t")
-        if t == "1":  # oneoff topup
+                if t == "1":  # oneoff topup
             e = kv.get("e", "i")
             engine = {"l": "luma", "r": "runway", "i": "img"}.get(e, "img")
             cents = int(kv.get("u", "0") or 0)
