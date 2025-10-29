@@ -789,15 +789,15 @@ EXAMPLES_TEXT = (
 
 def engines_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💬 GPT — текст/фото (основной чат)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🖼 Images (OpenAI) — генерация картинок", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🎬 Luma — ролики 5–10 c (9:16/16:9)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🎥 Runway — премиум-видео (PRO)", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("💬 GPT (текст/фото/документы)", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🖼 Images (OpenAI, генерация картинок)", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🎬 Luma — короткие видео 5–10 c (9:16 / 16:9)", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("🎥 Runway — премиум-видео FullHD/4K", callback_data="plan_menu:root")],
         [InlineKeyboardButton("🎨 Midjourney — фотореалистичные изображения", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🗣 STT/TTS — распознавание и озвучка", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("⭐ Открыть страницу тарифов", web_app=WebAppInfo(url=TARIFF_URL))]
+        [InlineKeyboardButton("🗣 STT/TTS — распознавание и озвучка речи", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("Открыть страницу тарифов", web_app=WebAppInfo(url=TARIFF_URL))],
     ])
-
+    
 # ───────── Router: text/photo/voice/docs/img/video ───────
 def sniff_image_mime(b: bytes) -> str:
     if b.startswith(b"\x89PNG\r\n\x1a\n"): return "image/png"
@@ -1088,28 +1088,48 @@ async def _send_invoice_rub(title: str, description: str, amount_rub: int, paylo
         await update.effective_message.reply_text("Не удалось выставить счёт. Оформите подписку через /plans.")
         return False
 
-async def _try_pay_then_do(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int,
-                           engine: str, est_cost_usd: float, coroutine_to_run,
-                           remember_kind: str = "", remember_payload: dict | None = None):
-    username = (update.effective_user.username or "")
-    ok, offer = _can_spend_or_offer(user_id, username, engine, est_cost_usd)
+async def _try_pay_then_do(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    engine: str,
+    est_cost_usd: float,
+    coroutine_to_run,
+    remember_kind: str = "",
+    remember_payload: dict | None = None,
+):
+    # Полный доступ для владельца/сервисного аккаунта
+    if is_unlimited(user_id, (update.effective_user.username or "")):
+        await coroutine_to_run()
+        return
+
+    # Текстовые запросы/прочее — без биллинга
+    if engine not in ("luma", "runway", "img"):
+        await coroutine_to_run()
+        return
+
+    tier = get_subscription_tier(user_id)
+    # Если нет подписки — предлагаем подписку вместо разового платежа
+    if tier == "free":
+        await update.effective_message.reply_text(
+            "Для этого действия нужна активная подписка. Открой /plans и оформи тариф. "
+            "После исчерпания лимитов я предложу пополнить бюджет."
+        )
+        return
+
+    ok, offer = _can_spend_or_offer(user_id, engine, est_cost_usd)
     if ok:
         await coroutine_to_run()
         return
 
-    if offer == "ASK_SUBSCRIBE":
-        await update.effective_message.reply_text(
-            "Для этой функции нужна активная подписка. Выбери подходящий план:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Открыть тарифы", web_app=WebAppInfo(url=TARIFF_URL))]]
-            )
-        )
-        return
-
-    need_usd = float(offer.split(":", 1)[-1])
+    # Подписка есть, но лимит исчерпан — предлагаем разовое пополнение
+    try:
+        need_usd = float(offer.split(":", 1)[-1])
+    except Exception:
+        need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    title = _ascii_label(f"{engine.upper()} topup")
-    desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f}."
+    title = f"{engine.upper()} пополнение"
+    desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽)."
     payload = _payload_oneoff(engine, need_usd)
     await _send_invoice_rub(title, desc, amount_rub, payload, update)
 
@@ -1120,58 +1140,58 @@ async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("precheckout error: %s", e)
 
 async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обработка успешного платежа Telegram. Поддерживает компактный payload:
+      t=1;e=<l|r|i>;u=<cents>   — разовое пополнение кошелька по движку
+      t=2;s=<s|p|u>;m=<months>  — подписка (start/pro/ultimate), месяцы
+    Также пытается распарсить старый JSON payload на всякий случай.
+    """
     try:
         pay = update.message.successful_payment
         raw = pay.invoice_payload or ""
         kv = _payload_parse(raw)
-        t = kv.get("t")
+        t = kv.get("t", "")
 
-        # --- One-off пополнение кошелька ---
-        if t == "1":  # oneoff topup
+        # --- One-off topup ---
+        if t == "1":
             e = kv.get("e", "i")
             engine = {"l": "luma", "r": "runway", "i": "img"}.get(e, "img")
             cents = int(kv.get("u", "0") or 0)
             usd = cents / 100.0
             _wallet_add(update.effective_user.id, engine, usd)
-            await update.effective_message.reply_text(
-                "💳 Оплата прошла! Бюджет пополнён, можно запускать задачу снова."
-            )
+            await update.effective_message.reply_text("💳 Оплата прошла! Бюджет пополнён, можно запускать задачу снова.")
             return
 
-        # --- Подписка ---
-        if t == "2":  # subscribe
+        # --- Subscribe ---
+        if t == "2":
             tier = {"s": "start", "p": "pro", "u": "ultimate"}.get(kv.get("s", "p"), "pro")
             months = int(kv.get("m", "1") or 1)
             until = activate_subscription_with_tier(update.effective_user.id, tier, months)
-            await update.effective_message.reply_text(
-                f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}. Тариф: {tier}."
-            )
+            await update.effective_message.reply_text(f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}. Тариф: {tier}.")
             return
 
-        # --- Фолбэк: старый json-payload (на всякий случай) ---
+        # --- Fallback: старый JSON-payload ---
         try:
             payload = json.loads(raw)
-        except Exception:
-            payload = None
-
-        if payload:
             if payload.get("t") == "subscribe":
                 until = activate_subscription_with_tier(
                     update.effective_user.id,
                     payload.get("tier", "pro"),
                     int(payload.get("months", 1)),
                 )
-                await update.effective_message.reply_text(
-                    f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}."
-                )
+                await update.effective_message.reply_text(f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}.")
                 return
             if payload.get("t") == "oneoff_topup":
-                _wallet_add(
-                    update.effective_user.id,
-                    payload.get("engine", "img"),
-                    float(payload.get("usd", 0)),
-                )
-                await update.effective_message.reply_text("💳 Оп
+                _wallet_add(update.effective_user.id, payload.get("engine", "img"), float(payload.get("usd", 0)))
+                await update.effective_message.reply_text("💳 Оплата прошла! Бюджет пополнён.")
+                return
+        except Exception:
+            pass
+
+        await update.effective_message.reply_text("✅ Платёж принят.")
+    except Exception as e:
+        log.exception("on_success_payment error: %s", e)
+        await update.effective_message.reply_text("Ошибка обработки платежа.")
 
 # --- /plans с кнопками «Купить» (инвойсы в чате) + ссылка на мини-приложение ---
 def _plan_rub(tier: str, term: str) -> int:
@@ -1302,13 +1322,14 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     w = _wallet_get(user_id)
-    await update.effective_message.reply_text(
+    msg = (
         "🧾 Кошелёк (доллары экв. движков):\n"
         f"• Luma: ${w['luma_usd']:.2f}\n"
         f"• Runway: ${w['runway_usd']:.2f}\n"
         f"• Images: ${w['img_usd']:.2f}\n\n"
         "Чтобы пополнить при превышении бюджета — просто запусти задачу, я предложу счёт."
     )
+    await update.effective_message.reply_text(msg)
 
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args) if context.args else (update.message.text.split(" ", 1)[-1] if " " in update.message.text else "")
