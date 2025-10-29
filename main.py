@@ -1125,37 +1125,53 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         raw = pay.invoice_payload or ""
         kv = _payload_parse(raw)
         t = kv.get("t")
-                if t == "1":  # oneoff topup
+
+        # --- One-off пополнение кошелька ---
+        if t == "1":  # oneoff topup
             e = kv.get("e", "i")
             engine = {"l": "luma", "r": "runway", "i": "img"}.get(e, "img")
             cents = int(kv.get("u", "0") or 0)
             usd = cents / 100.0
             _wallet_add(update.effective_user.id, engine, usd)
-            await update.effective_message.reply_text("💳 Оплата прошла! Бюджет пополнён, можно запускать задачу снова.")
+            await update.effective_message.reply_text(
+                "💳 Оплата прошла! Бюджет пополнён, можно запускать задачу снова."
+            )
             return
+
+        # --- Подписка ---
         if t == "2":  # subscribe
             tier = {"s": "start", "p": "pro", "u": "ultimate"}.get(kv.get("s", "p"), "pro")
             months = int(kv.get("m", "1") or 1)
             until = activate_subscription_with_tier(update.effective_user.id, tier, months)
-            await update.effective_message.reply_text(f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}. Тариф: {tier}.")
+            await update.effective_message.reply_text(
+                f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}. Тариф: {tier}."
+            )
             return
-        # Фолбэк: вдруг старый JSON
+
+        # --- Фолбэк: старый json-payload (на всякий случай) ---
         try:
             payload = json.loads(raw)
+        except Exception:
+            payload = None
+
+        if payload:
             if payload.get("t") == "subscribe":
-                until = activate_subscription_with_tier(update.effective_user.id, payload.get("tier", "pro"), int(payload.get("months", 1)))
-                await update.effective_message.reply_text(f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}.")
+                until = activate_subscription_with_tier(
+                    update.effective_user.id,
+                    payload.get("tier", "pro"),
+                    int(payload.get("months", 1)),
+                )
+                await update.effective_message.reply_text(
+                    f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}."
+                )
                 return
             if payload.get("t") == "oneoff_topup":
-                _wallet_add(update.effective_user.id, payload.get("engine", "img"), float(payload.get("usd", 0)))
-                await update.effective_message.reply_text("💳 Оплата прошла! Бюджет пополнён.")
-                return
-        except Exception:
-            pass
-        await update.effective_message.reply_text("✅ Платёж принят.")
-    except Exception as e:
-        log.exception("on_success_payment error: %s", e)
-        await update.effective_message.reply_text("Ошибка обработки платежа.")
+                _wallet_add(
+                    update.effective_user.id,
+                    payload.get("engine", "img"),
+                    float(payload.get("usd", 0)),
+                )
+                await update.effective_message.reply_text("💳 Оп
 
 # --- /plans с кнопками «Купить» (инвойсы в чате) + ссылка на мини-приложение ---
 def _plan_rub(tier: str, term: str) -> int:
