@@ -453,59 +453,78 @@ VISION_SYSTEM_PROMPT = (
 # ───────── Heuristics / intent ─────────
 _SMALLTALK_RE = re.compile(r"^(привет|здравствуй|добрый\s*(день|вечер|утро)|хи|hi|hello|как дела|спасибо|пока)\b", re.I)
 _NEWSY_RE     = re.compile(r"(когда|дата|выйдет|релиз|новост|курс|цена|прогноз|найди|официал|погода|сегодня|тренд|адрес|телефон)", re.I)
-_CAPABILITY_RE= re.compile(r"(мож(ешь|но).{0,12}(анализ|распознав).{0,16}(фото|картинк|изображен|видео))", re.I)
+_CAPABILITY_RE= re.compile(r"(мож(ешь|но|ете).{0,16}(анализ|распозн|читать|созда(ва)?т|дела(ть)?).{0,24}(фото|картинк|изображен|pdf|docx|epub|fb2|аудио|книг))", re.I)
 
-_IMG_WORDS = (r"(картин\w+|изображен\w+|фото\w*|рисунк\w+|аватар\w*|логотип\w+|image|picture|img\b|logo|banner|poster)")
-_VID_WORDS = (r"(видео|ролик\w*|анимаци\w*|shorts?|reels?|clip|video|vid\b)")
-_VERBS     = (r"(сдела\w+|созда\w+|сгенерир\w+|нарис\w+|сформир\w+|make|generate|create|render)")
+_IMG_WORDS = r"(картин\w+|изображен\w+|фото\w*|рисунк\w+|image|picture|img\b|logo|banner|poster)"
+_VID_WORDS = r"(видео|ролик\w*|анимаци\w*|shorts?|reels?|clip|video|vid\b)"
 
-_PREFIXES_VIDEO = [r"^созда\w*\s+видео", r"^сдела\w*\s+видео", r"^video\b", r"^reels?\b", r"^shorts?\b"]
-_PREFIXES_IMAGE = [r"^созда\w*\s+(?:картин\w+|изображен\w+|фото\w*|рисунк\w+)", r"^image\b", r"^picture\b", r"^img\b"]
+# Именно повелительные «сделай/создай/сгенерируй/нарисуй», а не просто «можешь создавать»
+_CREATE_CMD = r"(сдела(й|йте)|созда(й|йте)|сгенериру(й|йте)|нарису(й|йте)|render|generate|create|make)"
+
+_PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+видео", r"^video\b", r"^reels?\b", r"^shorts?\b"]
+_PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:картин\w+|изображен\w+|фото\w+|рисунк\w+)", r"^image\b", r"^picture\b", r"^img\b"]
 
 def _strip_leading(s: str) -> str:
     return s.strip(" \n\t:—–-\"“”'«»,.()[]")
+
 def _after_match(text: str, match) -> str:
     return _strip_leading(text[match.end():])
 
-def detect_media_intent(text: str):
-    if not text: return (None, "")
-    t = text.strip(); tl = t.lower()
+def _looks_like_capability_question(tl: str) -> bool:
+    # Вопрос про возможности без явного задания
+    if "?" in tl and re.search(_CAPABILITY_RE, tl):
+        # если нет повелительной формы из _CREATE_CMD — считаем это вопросом о возможностях
+        if not re.search(_CREATE_CMD, tl, re.I):
+            return True
+    # Фразы вида «ты можешь создавать картинки» без вопросительного знака — тоже capability,
+    # если нет конкретного описания (≤ 3 значимых слова после удаления служебных)
+    m = re.search(r"\b(ты|вы)?\s*мож(ешь|но|ете)\b", tl)
+    if m and re.search(_CAPABILITY_RE, tl) and not re.search(_CREATE_CMD, tl, re.I):
+        return True
+    return False
 
+def detect_media_intent(text: str):
+    """Возвращает ('image'|'video'|None, cleaned_prompt)"""
+    if not text:
+        return (None, "")
+    t = text.strip()
+    tl = t.lower()
+
+    # 0) если это вопрос «про возможности» — ничего не создаём
+    if _looks_like_capability_question(tl):
+        return (None, "")
+
+    # 1) Явные повелительные префиксы
     for p in _PREFIXES_VIDEO:
         m = re.search(p, tl, re.I)
-        if m: return ("video", _after_match(t, m))
+        if m: 
+            return ("video", _after_match(t, m))
     for p in _PREFIXES_IMAGE:
         m = re.search(p, tl, re.I)
-        if m: return ("image", _after_match(t, m))
+        if m: 
+            return ("image", _after_match(t, m))
 
-    if re.search(r"(можешь|можно|сможешь)", tl) and re.search(_VERBS, tl):
-        if re.search(_VID_WORDS, tl):
-            tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
-            tmp = re.sub(_VID_WORDS, "", tmp); tmp = re.sub(_VERBS, "", tmp)
-            return ("video", _strip_leading(tmp))
-        if re.search(_IMG_WORDS, tl):
-            tmp = re.sub(r"(ты|вы)?\s*(можешь|можно|сможешь)\s*", "", tl)
-            tmp = re.sub(_IMG_WORDS, "", tmp); tmp = re.sub(_VERBS, "", tmp)
-            return ("image", _strip_leading(tmp))
+    # 2) Сочетание «повелительный глагол + ключевое слово»
+    if re.search(_CREATE_CMD, tl, re.I):
+        if re.search(_VID_WORDS, tl, re.I):
+            clean = re.sub(_VID_WORDS, "", tl, flags=re.I)
+            clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
+            return ("video", _strip_leading(clean))
+        if re.search(_IMG_WORDS, tl, re.I):
+            clean = re.sub(_IMG_WORDS, "", tl, flags=re.I)
+            clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
+            return ("image", _strip_leading(clean))
 
-    if re.search(_VID_WORDS, tl) and re.search(_VERBS, tl):
-        tmp = re.sub(_VID_WORDS, "", tl); tmp = re.sub(_VERBS, "", tmp)
-        return ("video", _strip_leading(tmp))
-    if re.search(_IMG_WORDS, tl) and re.search(_VERBS, tl):
-        tmp = re.sub(_IMG_WORDS, "", tl); tmp = re.sub(_VERBS, "", tmp)
-        return ("image", _strip_leading(tmp))
-
+    # 3) /img, image: prompt и т.п. остаются как есть — будут пойманы выше или в /img
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
-    if m: return ("image", _strip_leading(t[m.end(1)+1:]))
-    m = re.match(r"^(video|vid|reels?|shorts?)\s*[:\-]\s*(.+)$", tl)
-    if m: return ("video", _strip_leading(t[m.end(1)+1:]))
-    return (None, "")
+    if m: 
+        return ("image", _strip_leading(t[m.end(1)+1:]))
 
-def is_smalltalk(text: str) -> bool:
-    return bool(_SMALLTALK_RE.search(text.strip()))
-def should_browse(text: str) -> bool:
-    if is_smalltalk(text): return False
-    return bool(_NEWSY_RE.search(text) or "?" in text or len(text) > 80)
+    m = re.match(r"^(video|vid|reels?|shorts?)\s*[:\-]\s*(.+)$", tl)
+    if m:
+        return ("video", _strip_leading(t[m.end(1)+1:]))
+
+    return (None, "")
 
 # ───────── OpenAI helpers ─────────
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
@@ -949,6 +968,13 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
         return
 
+        # 1) Явные вопросы о возможностях: отвечаем твёрдо и не запускаем генерацию
+    cap_ans = capability_answer(text)
+    if cap_ans:
+        await update.effective_message.reply_text(cap_ans)
+        await maybe_tts_reply(update, context, cap_ans[:TTS_MAX_CHARS])
+        return
+
     intent, clean = detect_media_intent(text)
 
     if intent == "image":
@@ -1282,6 +1308,47 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
 
+# ───────── Capability Q&A (твёрдые ответы, чтобы модель не «скромничала») ─────────
+_CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
+_CAP_EBOOK = re.compile(r"(ebook|e-?book|электронн(ая|ые)\s+книг|epub|fb2|docx|txt|mobi|azw)", re.I)
+_CAP_AUDIO = re.compile(r"(аудио ?книг|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
+_CAP_IMAGE = re.compile(r"(изображен|картинк|фото|image|picture|img)", re.I)
+
+def capability_answer(text: str) -> str | None:
+    tl = (text or "").lower().strip()
+    if not tl:
+        return None
+
+    # Чтение и анализ PDF/электронных книг
+    if re.search(r"(ты|вы)?\s*чита(ешь|ете)|анализиру(ешь|ете)", tl) and (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)):
+        return (
+            "Да. Пришли файл — я извлеку текст и сделаю краткий конспект/ответ по цели.\n"
+            "Поддержка: PDF, EPUB, DOCX, FB2, TXT (а также MOBI/AZW — если удастся извлечь текст). "
+            "Можно добавить подпись к файлу с целью анализа."
+        )
+
+    # Аудиокниги/аудиофайлы
+    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшифр|транскриб|понима)", tl)) or "аудио" in tl:
+        return (
+            "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
+            "Я распознаю речь (Deepgram/Whisper) и смогу сделать конспект, тезисы, тайм-коды, Q&A."
+        )
+
+    # Изображения
+    if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
+        return (
+            "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
+        )
+
+    # Создание изображений — объяснение, как запускать
+    if _CAP_IMAGE.search(tl) and re.search(r"(созда(ва)?т|дела(ть)?|генерир)", tl) and "?" in tl:
+        return (
+            "Да, могу создавать изображения. Запусти через команду: /img <описание>, "
+            "или фразой в повелительном виде — например: «Сгенерируй изображение неонового города под дождём»."
+        )
+
+    return None
+    
 # ───────── UI: клавиатура ─────────
 main_kb = ReplyKeyboardMarkup(
     [
