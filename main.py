@@ -1280,7 +1280,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── CallbackQuery / меню ─────────
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    data = q.data or ""
+    data = (q.data or "").strip()
     try:
         # --- Покупка подписки (кнопки в /plans)
         if data.startswith("buy:"):
@@ -1298,7 +1298,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             engine = data.split(":", 1)[1]  # gpt|images|luma|runway|midjourney|stt_tts
 
             username = (update.effective_user.username or "")
-            # Безлимит для владельца/сервисного аккаунта — никаких ограничений
             if is_unlimited(update.effective_user.id, username):
                 await q.edit_message_text(
                     f"✅ Движок «{engine}» доступен без ограничений.\n"
@@ -1306,7 +1305,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # Бесплатные/текстовые движки
             if engine in ("gpt", "stt_tts", "midjourney"):
                 await q.edit_message_text(
                     f"✅ Выбран «{engine}». Отправь запрос текстом/фото. "
@@ -1314,7 +1312,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # Платные движки: проверяем подписку и бюджеты
             est_cost = IMG_COST_USD if engine == "images" else (0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD))
             map_engine = {"images": "img", "luma": "luma", "runway": "runway"}[engine]
             ok, offer = _can_spend_or_offer(update.effective_user.id, username, map_engine, est_cost)
@@ -1336,7 +1333,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # Лимит исчерпан — предлагаем разовое пополнение
             try:
                 need_usd = float(offer.split(":", 1)[-1])
             except Exception:
@@ -1351,15 +1347,46 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # --- Выбор движка для уже сформированного видео (после парсинга текста)
+        # --- Выбор движка для уже распарсенного видео (после текста)
         if data.startswith("choose:"):  # choose:<engine>:<aid>
+            await q.answer()
             _, engine, aid = data.split(":", 2)
             meta = _pending_actions.pop(aid, None)
             if not meta:
                 await q.answer("Задача устарела", show_alert=True)
                 return
 
-            prompt = meta["prompt"]; duration = meta["duration"]; aspect = meta["aspect"]
+            prompt = meta["prompt"]
+            duration = meta["duration"]
+            aspect = meta["aspect"]
+
+            async def _do_fake_render():
+                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
+                if engine == "luma":
+                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
+                else:
+                    base = RUNWAY_UNIT_COST_USD or 7.0
+                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
+                    _register_engine_spend(update.effective_user.id, "runway", cost)
+
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            await _try_pay_then_do(
+                update, context, update.effective_user.id,
+                "runway" if engine == "runway" else "luma",
+                est, _do_fake_render,
+                remember_kind=f"video_{engine}",
+                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
+            )
+            return
+
+        # Если коллбэк нам неизвестен
+        await q.answer("Неизвестная команда", show_alert=True)
+
+    except Exception as e:
+        log.exception("on_cb error: %s", e)
+    finally:
+        with contextlib.suppress(Exception):
+            await q.answer()
 
             async def _do_fake_render():
                 await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
@@ -1419,11 +1446,16 @@ _CAP_IMAGE = re.compile(r"(изображен|картинк|фото|image|pict
 _CAP_VIDEO = re.compile(r"(видео|ролик|shorts?|reels?|clip)", re.I)
 
 def capability_answer(text: str) -> str | None:
-    tl = (text or "").lower().strip()
+    """
+    Возвращает готовый ответ на вопросы о возможностях (без запуска задач).
+    Если распознаём, что пользователь спрашивает «можешь ли…», — даём инструкцию.
+    Иначе возвращаем None, чтобы дальше шёл обычный пайплайн.
+    """
+    tl = (text or "").strip().lower()
     if not tl:
         return None
 
-    # Чтение/анализ PDF и электронных книг — ловим и инфинитивы
+    # Чтение/анализ PDF и электронных книг
     if (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)) and re.search(
         r"(чита(ешь|ете)|читать|анализиру(ешь|ете)|анализировать|распозна(ешь|ете)|распознавать)", tl
     ):
@@ -1444,14 +1476,14 @@ def capability_answer(text: str) -> str | None:
     if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
         return "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
 
-    # Создание изображений (вопросы «можешь создать…?»)
-    if _CAP_IMAGE.search(tl) and re.search(r"(созда(ва)?т|дела(ть)?|генерир)", tl):
+    # Создание изображений (вопрос «можешь создать…?»)
+    if _CAP_IMAGE.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|генерир)", tl):
         return (
             "Да, могу создавать изображения. Запусти через /img <описание> "
             "или фразой в повелительном виде: «Сгенерируй изображение неонового города под дождём»."
         )
 
-    # ВИДЕО — позитивный ответ на «можешь создать видео?»
+    # Видеогенерация
     if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
         return (
             "Да, могу запускать генерацию коротких видео. Напиши командой: "
@@ -1459,45 +1491,6 @@ def capability_answer(text: str) -> str | None:
         )
 
     return None
-
-    # Чтение и анализ PDF/электронных книг
-    if re.search(r"(ты|вы)?\s*чита(ешь|ете)|анализиру(ешь|ете)", tl) and (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)):
-        return (
-            "Да. Пришли файл — я извлеку текст и сделаю краткий конспект/ответ по цели.\n"
-            "Поддержка: PDF, EPUB, DOCX, FB2, TXT (а также MOBI/AZW — если удастся извлечь текст). "
-            "Можно добавить подпись к файлу с целью анализа."
-        )
-
-    # Аудиокниги/аудиофайлы
-    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшифр|транскриб|понима)", tl)) or "аудио" in tl:
-        return (
-            "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
-            "Я распознаю речь (Deepgram/Whisper) и смогу сделать конспект, тезисы, тайм-коды, Q&A."
-        )
-
-    # Изображения
-    if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
-        return (
-            "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
-        )
-
-    # Создание изображений — объяснение, как запускать
-    if _CAP_IMAGE.search(tl) and re.search(r"(созда(ва)?т|дела(ть)?|генерир)", tl) and "?" in tl:
-        return (
-            "Да, могу создавать изображения. Запусти через команду: /img <описание>, "
-            "или фразой в повелительном виде — например: «Сгенерируй изображение неонового города под дождём»."
-        )
-
-    return None
-    
-# ───────── UI: клавиатура ─────────
-main_kb = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton("⭐ Подписка"), KeyboardButton("🎛 Движки")],
-        [KeyboardButton("🧾 Баланс"), KeyboardButton("ℹ️ Помощь")],
-    ],
-    resize_keyboard=True,
-)
 
 # ───────── Diagnostics: лимиты/остатки ─────────
 async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
