@@ -830,6 +830,21 @@ EXAMPLES_TEXT = (
     "• /img неоновый город в дождь, реализм\n"
     "• пришли PDF — отвечу тезисами и выводами"
 )
+# ───────── Main keyboard (главное меню) ─────────
+def main_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🎛 Движки"), KeyboardButton("⭐ Подписка")],
+            [KeyboardButton("🧾 Баланс"), KeyboardButton("ℹ️ Помощь")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        selective=False,
+        input_field_placeholder="Напишите запрос или выберите пункт меню",
+    )
+
+# Глобальный экземпляр для удобства
+main_kb = main_keyboard()
 
 def engines_kb():
     return InlineKeyboardMarkup([
