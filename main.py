@@ -833,12 +833,12 @@ EXAMPLES_TEXT = (
 
 def engines_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💬 GPT (текст/фото/документы)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🖼 Images (OpenAI, генерация картинок)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🎬 Luma — короткие видео 5–10 c (9:16 / 16:9)", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🎥 Runway — премиум-видео FullHD/4K", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🎨 Midjourney — фотореалистичные изображения", callback_data="plan_menu:root")],
-        [InlineKeyboardButton("🗣 STT/TTS — распознавание и озвучка речи", callback_data="plan_menu:root")],
+        [InlineKeyboardButton("💬 GPT (текст/фото/документы)", callback_data="engine:gpt")],
+        [InlineKeyboardButton("🖼 Images (OpenAI)",             callback_data="engine:images")],
+        [InlineKeyboardButton("🎬 Luma — короткие видео",       callback_data="engine:luma")],
+        [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
+        [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
+        [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
         [InlineKeyboardButton("Открыть страницу тарифов", web_app=WebAppInfo(url=TARIFF_URL))],
     ])
 
@@ -1282,6 +1282,64 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = q.data or ""
     try:
         if data.startswith("plan_menu:"):
+                    # Выбор движка из меню «Движки»
+        if data.startswith("engine:"):
+            await q.answer()
+            engine = data.split(":", 1)[1]
+
+            # Безлимит для владельца/сервисного аккаунта
+            username = (update.effective_user.username or "")
+            if is_unlimited(update.effective_user.id, username):
+                await q.edit_message_text(
+                    f"✅ Движок «{engine}» доступен без ограничений. "
+                    f"Просто напиши задачу: например, «сделай видео ретро-авто, 9 секунд, 9:16»."
+                )
+                return
+
+            # Бесплатные/текстовые движки — всегда доступны
+            if engine in ("gpt", "stt_tts", "midjourney"):
+                await q.edit_message_text(
+                    f"✅ Выбран «{engine}». Отправь запрос текстом или изображением. "
+                    f"Для Luma/Runway/Images действуют бюджеты тарифа."
+                )
+                return
+
+            # Для платных движков проверим подписку/бюджет и сформулируем корректное сообщение
+            est_cost = IMG_COST_USD if engine == "images" else (0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD))
+            ok, offer = _can_spend_or_offer(update.effective_user.id, username, 
+                                            {"images": "img", "luma": "luma", "runway": "runway"}[engine], est_cost)
+
+            if ok:
+                await q.edit_message_text(
+                    f"✅ «{engine}» доступен. Отправь задачу: "
+                    + ("«/img кот в очках»" if engine == "images" else "«сделай видео … 9 секунд 9:16»")
+                )
+                return
+
+            if offer == "ASK_SUBSCRIBE":
+                await q.edit_message_text(
+                    "Для этого движка нужна активная подписка. Оформите подписку через /plans "
+                    "или кнопку ниже, затем повторите задачу.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
+                    ),
+                )
+                return
+
+            # Лимит исчерпан — предложим разовый платёж
+            try:
+                need_usd = float(offer.split(":", 1)[-1])
+            except Exception:
+                need_usd = est_cost
+            amount_rub = _calc_oneoff_price_rub({"images":"img","luma":"luma","runway":"runway"}[engine], need_usd)
+            await q.edit_message_text(
+                f"Ваш лимит по «{engine}» исчерпан. Можно оформить разовую покупку на ≈ {amount_rub} ₽ "
+                f"или пополнить бюджет в рамках подписки.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
+                ),
+            )
+            return
             await q.answer()
             await q.edit_message_text("Открой страницу тарифов:", reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
@@ -1333,11 +1391,49 @@ _CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
 _CAP_EBOOK = re.compile(r"(ebook|e-?book|электронн(ая|ые)\s+книг|epub|fb2|docx|txt|mobi|azw)", re.I)
 _CAP_AUDIO = re.compile(r"(аудио ?книг|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
 _CAP_IMAGE = re.compile(r"(изображен|картинк|фото|image|picture|img)", re.I)
+_CAP_VIDEO = re.compile(r"(видео|ролик|shorts?|reels?|clip)", re.I)
 
 def capability_answer(text: str) -> str | None:
     tl = (text or "").lower().strip()
     if not tl:
         return None
+
+    # Чтение/анализ PDF и электронных книг — ловим и инфинитивы
+    if (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)) and re.search(
+        r"(чита(ешь|ете)|читать|анализиру(ешь|ете)|анализировать|распозна(ешь|ете)|распознавать)", tl
+    ):
+        return (
+            "Да. Пришли файл — я извлеку текст и сделаю краткий конспект/ответ по цели.\n"
+            "Поддержка: PDF, EPUB, DOCX, FB2, TXT (MOBI/AZW — по возможности). "
+            "Можно добавить подпись к файлу с целью анализа."
+        )
+
+    # Аудио/аудиокниги
+    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшифр|транскриб|понима|распозна)", tl)) or "аудио" in tl:
+        return (
+            "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
+            "Распознаю речь (Deepgram/Whisper) и сделаю конспект, тезисы, тайм-коды, Q&A."
+        )
+
+    # Анализ изображений
+    if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
+        return "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
+
+    # Создание изображений (вопросы «можешь создать…?»)
+    if _CAP_IMAGE.search(tl) and re.search(r"(созда(ва)?т|дела(ть)?|генерир)", tl):
+        return (
+            "Да, могу создавать изображения. Запусти через /img <описание> "
+            "или фразой в повелительном виде: «Сгенерируй изображение неонового города под дождём»."
+        )
+
+    # ВИДЕО — позитивный ответ на «можешь создать видео?»
+    if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
+        return (
+            "Да, могу запускать генерацию коротких видео. Напиши командой: "
+            "«сделай видео … на 9 секунд 9:16». После запроса предложу выбрать движок Luma или Runway."
+        )
+
+    return None
 
     # Чтение и анализ PDF/электронных книг
     if re.search(r"(ты|вы)?\s*чита(ешь|ете)|анализиру(ешь|ете)", tl) and (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)):
