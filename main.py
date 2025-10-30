@@ -982,13 +982,14 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         await update.effective_message.reply_text("Дневной лимит текстовых запросов исчерпан. Оформите подписку через /plans.")
         return
 
+        # smalltalk
     if is_smalltalk(text):
         ans = await ask_openai_text(text)
         await update.effective_message.reply_text(ans)
         await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
         return
 
-        # 1) Явные вопросы о возможностях: отвечаем твёрдо и не запускаем генерацию
+    # 1) Вопросы о возможностях — отвечаем твёрдо, но ничего не запускаем
     cap_ans = capability_answer(text)
     if cap_ans:
         await update.effective_message.reply_text(cap_ans)
@@ -1281,71 +1282,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data or ""
     try:
-        if data.startswith("plan_menu:"):
-                    # Выбор движка из меню «Движки»
-        if data.startswith("engine:"):
-            await q.answer()
-            engine = data.split(":", 1)[1]
-
-            # Безлимит для владельца/сервисного аккаунта
-            username = (update.effective_user.username or "")
-            if is_unlimited(update.effective_user.id, username):
-                await q.edit_message_text(
-                    f"✅ Движок «{engine}» доступен без ограничений. "
-                    f"Просто напиши задачу: например, «сделай видео ретро-авто, 9 секунд, 9:16»."
-                )
-                return
-
-            # Бесплатные/текстовые движки — всегда доступны
-            if engine in ("gpt", "stt_tts", "midjourney"):
-                await q.edit_message_text(
-                    f"✅ Выбран «{engine}». Отправь запрос текстом или изображением. "
-                    f"Для Luma/Runway/Images действуют бюджеты тарифа."
-                )
-                return
-
-            # Для платных движков проверим подписку/бюджет и сформулируем корректное сообщение
-            est_cost = IMG_COST_USD if engine == "images" else (0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD))
-            ok, offer = _can_spend_or_offer(update.effective_user.id, username, 
-                                            {"images": "img", "luma": "luma", "runway": "runway"}[engine], est_cost)
-
-            if ok:
-                await q.edit_message_text(
-                    f"✅ «{engine}» доступен. Отправь задачу: "
-                    + ("«/img кот в очках»" if engine == "images" else "«сделай видео … 9 секунд 9:16»")
-                )
-                return
-
-            if offer == "ASK_SUBSCRIBE":
-                await q.edit_message_text(
-                    "Для этого движка нужна активная подписка. Оформите подписку через /plans "
-                    "или кнопку ниже, затем повторите задачу.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
-                    ),
-                )
-                return
-
-            # Лимит исчерпан — предложим разовый платёж
-            try:
-                need_usd = float(offer.split(":", 1)[-1])
-            except Exception:
-                need_usd = est_cost
-            amount_rub = _calc_oneoff_price_rub({"images":"img","luma":"luma","runway":"runway"}[engine], need_usd)
-            await q.edit_message_text(
-                f"Ваш лимит по «{engine}» исчерпан. Можно оформить разовую покупку на ≈ {amount_rub} ₽ "
-                f"или пополнить бюджет в рамках подписки.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
-                ),
-            )
-            return
-            await q.answer()
-            await q.edit_message_text("Открой страницу тарифов:", reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
-            ))
-            return
-
+        # --- Покупка подписки (кнопки в /plans)
         if data.startswith("buy:"):
             _, tier, months = data.split(":", 2)
             months = int(months)
@@ -1355,13 +1292,101 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
-        if data.startswith("choose:"):
-            # choose:<engine>:<aid>
+        # --- Выбор движка из меню «Движки»
+        if data.startswith("engine:"):
+            await q.answer()
+            engine = data.split(":", 1)[1]  # gpt|images|luma|runway|midjourney|stt_tts
+
+            username = (update.effective_user.username or "")
+            # Безлимит для владельца/сервисного аккаунта — никаких ограничений
+            if is_unlimited(update.effective_user.id, username):
+                await q.edit_message_text(
+                    f"✅ Движок «{engine}» доступен без ограничений.\n"
+                    f"Отправь задачу, например: «сделай видео ретро-авто, 9 секунд, 9:16»."
+                )
+                return
+
+            # Бесплатные/текстовые движки
+            if engine in ("gpt", "stt_tts", "midjourney"):
+                await q.edit_message_text(
+                    f"✅ Выбран «{engine}». Отправь запрос текстом/фото. "
+                    f"Для Luma/Runway/Images действуют лимиты тарифа."
+                )
+                return
+
+            # Платные движки: проверяем подписку и бюджеты
+            est_cost = IMG_COST_USD if engine == "images" else (0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD))
+            map_engine = {"images": "img", "luma": "luma", "runway": "runway"}[engine]
+            ok, offer = _can_spend_or_offer(update.effective_user.id, username, map_engine, est_cost)
+
+            if ok:
+                await q.edit_message_text(
+                    "✅ Доступно. "
+                    + ("Запусти: /img кот в очках" if engine == "images"
+                       else "Напиши: «сделай видео … 9 секунд 9:16» — выберу Luma/Runway.")
+                )
+                return
+
+            if offer == "ASK_SUBSCRIBE":
+                await q.edit_message_text(
+                    "Для этого движка нужна активная подписка. Оформите /plans или откройте мини-приложение.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
+                    ),
+                )
+                return
+
+            # Лимит исчерпан — предлагаем разовое пополнение
+            try:
+                need_usd = float(offer.split(":", 1)[-1])
+            except Exception:
+                need_usd = est_cost
+            amount_rub = _calc_oneoff_price_rub(map_engine, need_usd)
+            await q.edit_message_text(
+                f"Ваш лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
+                f"или пополните бюджет в /plans.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
+                ),
+            )
+            return
+
+        # --- Выбор движка для уже сформированного видео (после парсинга текста)
+        if data.startswith("choose:"):  # choose:<engine>:<aid>
             _, engine, aid = data.split(":", 2)
             meta = _pending_actions.pop(aid, None)
             if not meta:
-                await q.answer("Задача устарела", show_alert=True); return
+                await q.answer("Задача устарела", show_alert=True)
+                return
+
             prompt = meta["prompt"]; duration = meta["duration"]; aspect = meta["aspect"]
+
+            async def _do_fake_render():
+                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
+                # Учёт стоимости
+                if engine == "luma":
+                    cost = 0.40
+                    _register_engine_spend(update.effective_user.id, "luma", cost)
+                else:
+                    base = RUNWAY_UNIT_COST_USD or 7.0
+                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
+                    _register_engine_spend(update.effective_user.id, "runway", cost)
+
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            await _try_pay_then_do(
+                update, context, update.effective_user.id,
+                "runway" if engine == "runway" else "luma",
+                est, _do_fake_render,
+                remember_kind=f"video_{engine}",
+                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
+            )
+            return
+
+    except Exception as e:
+        log.exception("on_cb error: %s", e)
+    finally:
+        with contextlib.suppress(Exception):
+            await q.answer()
 
             async def _do_fake_render():
                 await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
@@ -1647,12 +1672,12 @@ def main():
     app.add_handler(CommandHandler("voice_on", cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
 
-    # Коллбэки/платежи
+        # Коллбэки/платежи
     app.add_handler(CallbackQueryHandler(on_cb))
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
 
-        # Фото/визион
+    # Фото/визион
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
 
     # Голос/аудио
