@@ -1294,7 +1294,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
-        # --- Выбор движка из меню «Движки»
+        # --- Выбор «движка» из меню «Движки»
         if data.startswith("engine:"):
             await q.answer()
             engine = data.split(":", 1)[1]  # gpt|images|luma|runway|midjourney|stt_tts
@@ -1335,7 +1335,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # предложение разовой покупки
+            # Предложение разовой покупки
             try:
                 need_usd = float(offer.split(":", 1)[-1])
             except Exception:
@@ -1362,6 +1362,36 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prompt   = meta["prompt"]
             duration = meta["duration"]
             aspect   = meta["aspect"]
+
+            async def _do_fake_render():
+                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
+                # учёт стоимости (упрощённо)
+                if engine == "luma":
+                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
+                else:
+                    base = RUNWAY_UNIT_COST_USD or 7.0
+                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
+                    _register_engine_spend(update.effective_user.id, "runway", cost)
+
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            await _try_pay_then_do(
+                update, context, update.effective_user.id,
+                "runway" if engine == "runway" else "luma",
+                est, _do_fake_render,
+                remember_kind=f"video_{engine}",
+                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
+            )
+            return
+
+        # --- Неизвестный коллбэк
+        await q.answer("Неизвестная команда", show_alert=True)
+
+    except Exception as e:
+        log.exception("on_cb error: %s", e)
+    finally:
+        # На всякий случай закрываем «часики»
+        with contextlib.suppress(Exception):
+            await q.answer()
 
             async def _do_fake_render():
                 await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
