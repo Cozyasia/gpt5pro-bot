@@ -1290,7 +1290,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload, amount_rub, title = _plan_payload_and_amount(tier, months)
             desc = f"Оформление подписки {tier.upper()} на {months} мес."
             ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
-            # всплывашка только если не удалось
+            # всплывашка (alert только при ошибке)
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
@@ -1365,36 +1365,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             async def _do_fake_render():
                 await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
-                # учёт стоимости (упрощённо)
-                if engine == "luma":
-                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
-                else:
-                    base = RUNWAY_UNIT_COST_USD or 7.0
-                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
-                    _register_engine_spend(update.effective_user.id, "runway", cost)
-
-            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-            await _try_pay_then_do(
-                update, context, update.effective_user.id,
-                "runway" if engine == "runway" else "luma",
-                est, _do_fake_render,
-                remember_kind=f"video_{engine}",
-                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
-            )
-            return
-
-        # --- Неизвестный коллбэк
-        await q.answer("Неизвестная команда", show_alert=True)
-
-    except Exception as e:
-        log.exception("on_cb error: %s", e)
-    finally:
-        # На всякий случай закрываем «часики»
-        with contextlib.suppress(Exception):
-            await q.answer()
-
-            async def _do_fake_render():
-                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
                 # учёт стоимости (псевдо-рендер)
                 if engine == "luma":
                     _register_engine_spend(update.effective_user.id, "luma", 0.40)
@@ -1418,87 +1388,8 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         log.exception("on_cb error: %s", e)
-
     finally:
         # на всякий случай закрываем «часики»
-        with contextlib.suppress(Exception):
-            await q.answer()
-
-            async def _do_fake_render():
-                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
-                if engine == "luma":
-                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
-                else:
-                    base = RUNWAY_UNIT_COST_USD or 7.0
-                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
-                    _register_engine_spend(update.effective_user.id, "runway", cost)
-
-            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-            await _try_pay_then_do(
-                update, context, update.effective_user.id,
-                "runway" if engine == "runway" else "luma",
-                est, _do_fake_render,
-                remember_kind=f"video_{engine}",
-                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
-            )
-            return
-
-        # Если коллбэк нам неизвестен
-        await q.answer("Неизвестная команда", show_alert=True)
-
-    except Exception as e:
-        log.exception("on_cb error: %s", e)
-    finally:
-        with contextlib.suppress(Exception):
-            await q.answer()
-
-            async def _do_fake_render():
-                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
-                # Учёт стоимости
-                if engine == "luma":
-                    cost = 0.40
-                    _register_engine_spend(update.effective_user.id, "luma", cost)
-                else:
-                    base = RUNWAY_UNIT_COST_USD or 7.0
-                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
-                    _register_engine_spend(update.effective_user.id, "runway", cost)
-
-            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-            await _try_pay_then_do(
-                update, context, update.effective_user.id,
-                "runway" if engine == "runway" else "luma",
-                est, _do_fake_render,
-                remember_kind=f"video_{engine}",
-                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
-            )
-            return
-
-    except Exception as e:
-        log.exception("on_cb error: %s", e)
-    finally:
-        with contextlib.suppress(Exception):
-            await q.answer()
-
-            async def _do_fake_render():
-                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
-                # Здесь должен быть реальный вызов Luma/Runway + учёт стоимости
-                if engine == "luma":
-                    cost = 0.40
-                else:
-                    base = RUNWAY_UNIT_COST_USD or 7.0
-                    cost = base * (duration / max(1, RUNWAY_DURATION_S))
-                _register_engine_spend(update.effective_user.id, "runway" if engine == "runway" else "luma", cost)
-
-            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-            await _try_pay_then_do(update, context, update.effective_user.id,
-                                   "runway" if engine == "runway" else "luma", est, _do_fake_render,
-                                   remember_kind=f"video_{engine}",
-                                   remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect})
-            return
-
-    except Exception as e:
-        log.exception("on_cb error: %s", e)
-    finally:
         with contextlib.suppress(Exception):
             await q.answer()
 
@@ -1540,7 +1431,7 @@ def capability_answer(text: str) -> str | None:
     if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
         return "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
 
-    # Создание изображений (вопрос «можешь создать…?»)
+    # Создание изображений
     if _CAP_IMAGE.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|генерир)", tl):
         return (
             "Да, могу создавать изображения. Запусти через /img <описание> "
@@ -1729,7 +1620,7 @@ def main():
     app.add_handler(CommandHandler("voice_on", cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
 
-        # Коллбэки/платежи
+    # Коллбэки/платежи
     app.add_handler(CallbackQueryHandler(on_cb))
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
