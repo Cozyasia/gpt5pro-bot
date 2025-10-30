@@ -1168,7 +1168,7 @@ async def _try_pay_then_do(
         )
         return
 
-    ok, offer = _can_spend_or_offer(user_id, engine, est_cost_usd)
+    ok, offer = _can_spend_or_offer(user_id, (update.effective_user.username or ""), engine, est_cost_usd)
     if ok:
         await coroutine_to_run()
         return
