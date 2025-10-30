@@ -1281,6 +1281,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
+
     try:
         # --- Покупка подписки (кнопки в /plans)
         if data.startswith("buy:"):
@@ -1289,6 +1290,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload, amount_rub, title = _plan_payload_and_amount(tier, months)
             desc = f"Оформление подписки {tier.upper()} на {months} мес."
             ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
+            # всплывашка только если не удалось
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
@@ -1333,6 +1335,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+            # предложение разовой покупки
             try:
                 need_usd = float(offer.split(":", 1)[-1])
             except Exception:
@@ -1356,9 +1359,40 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("Задача устарела", show_alert=True)
                 return
 
-            prompt = meta["prompt"]
+            prompt   = meta["prompt"]
             duration = meta["duration"]
-            aspect = meta["aspect"]
+            aspect   = meta["aspect"]
+
+            async def _do_fake_render():
+                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
+                # учёт стоимости (псевдо-рендер)
+                if engine == "luma":
+                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
+                else:
+                    base = RUNWAY_UNIT_COST_USD or 7.0
+                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
+                    _register_engine_spend(update.effective_user.id, "runway", cost)
+
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            await _try_pay_then_do(
+                update, context, update.effective_user.id,
+                "runway" if engine == "runway" else "luma",
+                est, _do_fake_render,
+                remember_kind=f"video_{engine}",
+                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
+            )
+            return
+
+        # --- Неизвестный коллбэк
+        await q.answer("Неизвестная команда", show_alert=True)
+
+    except Exception as e:
+        log.exception("on_cb error: %s", e)
+
+    finally:
+        # на всякий случай закрываем «часики»
+        with contextlib.suppress(Exception):
+            await q.answer()
 
             async def _do_fake_render():
                 await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
