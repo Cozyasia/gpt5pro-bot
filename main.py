@@ -72,7 +72,7 @@ IMAGES_MODEL        = "gpt-image-1"
 
 # Runway
 RUNWAY_API_KEY      = os.environ.get("RUNWAY_API_KEY", "").strip()
-RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "veo3").strip()
+RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()     # важно: валидная модель Runway
 RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
 RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
@@ -220,7 +220,6 @@ if ref:
 if ttl:
     default_headers["X-Title"] = ttl
 
-# В некоторых версиях SDK параметр default_headers отсутствует. Если так — просто не передаём его.
 try:
     oai_llm = OpenAI(api_key=OPENAI_API_KEY, base_url=_auto_base or None, default_headers=default_headers or None)
 except TypeError:
@@ -230,7 +229,7 @@ oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url=IMAGES_BASE_URL)
 oai_tts = OpenAI(api_key=OPENAI_TTS_KEY, base_url=OPENAI_TTS_BASE_URL)
 
-# Tavily
+# Tavily (опционально)
 try:
     if TAVILY_API_KEY:
         from tavily import TavilyClient
@@ -425,20 +424,13 @@ def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     return max(MIN_RUB_FOR_INVOICE, val)
 
 def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cost_usd: float) -> tuple[bool, str]:
-    """
-    True/"" — можно тратить
-    False/"ASK_SUBSCRIBE" — нет подписки, просим оформить
-    False/"OFFER:<need_usd>" — подписка есть, но бюджета не хватает → предложить разовый платёж
-    """
     if is_unlimited(user_id, username):
         return True, ""
     if engine not in ("luma", "runway", "img"):
         return True, ""
-
     tier = get_subscription_tier(user_id)
     if tier == "free":
         return False, "ASK_SUBSCRIBE"
-
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
     spent = row[f"{engine}_usd"]; budget = lim[f"{engine}_budget_usd"]
@@ -471,27 +463,18 @@ _CAPABILITY_RE= re.compile(r"(мож(ешь|но|ете).{0,16}(анализ|р�
 _IMG_WORDS = r"(картин\w+|изображен\w+|фото\w*|рисунк\w+|image|picture|img\b|logo|banner|poster)"
 _VID_WORDS = r"(видео|ролик\w*|анимаци\w*|shorts?|reels?|clip|video|vid\b)"
 
-# ───────── Heuristics helpers ─────────
 def is_smalltalk(text: str) -> bool:
-    """Приветствия/вежливости — отвечаем коротко без лишней логики."""
     t = (text or "").strip().lower()
     return bool(_SMALLTALK_RE.search(t))
 
 def should_browse(text: str) -> bool:
-    """
-    Решаем, подключать ли веб-поиск (Tavily).
-    Логика простая и безопасная: новости/цены/датировки и т.п., без явных ссылок.
-    """
     t = (text or "").strip().lower()
     if len(t) < 8:
         return False
     if "http://" in t or "https://" in t:
-        # уже есть источник, не ходим в поиск
         return False
-    # ключевые «новостные» паттерны + не похоже на чистый smalltalk
     return bool(_NEWSY_RE.search(t)) and not is_smalltalk(t)
 
-# Именно повелительные «сделай/создай/сгенерируй/нарисуй», а не просто «можешь создавать»
 _CREATE_CMD = r"(сдела(й|йте)|созда(й|йте)|сгенериру(й|йте)|нарису(й|йте)|render|generate|create|make)"
 
 _PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+видео", r"^video\b", r"^reels?\b", r"^shorts?\b"]
@@ -504,7 +487,6 @@ def _after_match(text: str, match) -> str:
     return _strip_leading(text[match.end():])
 
 def _looks_like_capability_question(tl: str) -> bool:
-    # Вопрос про возможности без явного задания
     if "?" in tl and re.search(_CAPABILITY_RE, tl):
         if not re.search(_CREATE_CMD, tl, re.I):
             return True
@@ -514,27 +496,23 @@ def _looks_like_capability_question(tl: str) -> bool:
     return False
 
 def detect_media_intent(text: str):
-    """Возвращает ('image'|'video'|None, cleaned_prompt)"""
     if not text:
         return (None, "")
     t = text.strip()
     tl = t.lower()
 
-    # 0) если это вопрос «про возможности» — ничего не создаём
     if _looks_like_capability_question(tl):
         return (None, "")
 
-    # 1) Явные повелительные префиксы
     for p in _PREFIXES_VIDEO:
         m = re.search(p, tl, re.I)
-        if m: 
+        if m:
             return ("video", _after_match(t, m))
     for p in _PREFIXES_IMAGE:
         m = re.search(p, tl, re.I)
-        if m: 
+        if m:
             return ("image", _after_match(t, m))
 
-    # 2) Сочетание «повелительный глагол + ключевое слово»
     if re.search(_CREATE_CMD, tl, re.I):
         if re.search(_VID_WORDS, tl, re.I):
             clean = re.sub(_VID_WORDS, "", tl, flags=re.I)
@@ -545,9 +523,8 @@ def detect_media_intent(text: str):
             clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
             return ("image", _strip_leading(clean))
 
-    # 3) /img, image: prompt и т.п.
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
-    if m: 
+    if m:
         return ("image", _strip_leading(t[m.end(1)+1:]))
 
     m = re.match(r"^(video|vid|reels?|shorts?)\s*[:\-]\s*(.+)$", tl)
@@ -598,7 +575,6 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         return "Не удалось проанализировать изображение."
 
 # ───────── TTS (единая версия) ─────────
-# БД с предпочтениями
 def _db_init_prefs():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -623,7 +599,6 @@ def _tts_set(user_id: int, on: bool):
     cur.execute("UPDATE user_prefs SET tts_on=? WHERE user_id=?", (1 if on else 0, user_id))
     con.commit(); con.close()
 
-# гарантия минимума
 try:
     TTS_MAX_CHARS = max(int(TTS_MAX_CHARS), 150)
 except Exception:
@@ -706,7 +681,7 @@ def _extract_pdf_text(data: bytes) -> str:
     except Exception:
         pass
     try:
-        from pdfminer.high_level import extract_text  # ← исправленный импорт
+        from pdfminer.high_level import extract_text
     except Exception:
         extract_text = None
     if extract_text:
@@ -759,7 +734,7 @@ def _extract_fb2_text(data: bytes) -> str:
         texts = []
         for elem in root.iter():
             if elem.text and elem.text.strip(): texts.append(elem.text.strip())
-        return " ".join(texts).strip()
+        return " " .join(texts).strip()
     except Exception:
         return ""
 
@@ -840,7 +815,7 @@ EXAMPLES_TEXT = (
     "• /img неоновый город в дождь, реализм\n"
     "• пришли PDF — отвечу тезисами и выводами"
 )
-# ───────── Main keyboard (главное меню) ─────────
+
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -853,7 +828,6 @@ def main_keyboard():
         input_field_placeholder="Напишите запрос или выберите пункт меню",
     )
 
-# Глобальный экземпляр для удобства
 main_kb = main_keyboard()
 
 def engines_kb():
@@ -1018,7 +992,7 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         await update.effective_message.reply_text("Дневной лимит текстовых запросов исчерпан. Оформите подписку через /plans.")
         return
 
-        # smalltalk
+    # smalltalk
     if is_smalltalk(text):
         ans = await ask_openai_text(text)
         await update.effective_message.reply_text(ans)
