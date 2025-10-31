@@ -82,6 +82,19 @@ LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
 LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "6") or 6)
 
+# ── Видеосервисы: базовые пути/таймауты/поллинг ──
+LUMA_BASE_URL    = os.environ.get("LUMA_BASE_URL", "https://api.luma.ai").rstrip("/")
+LUMA_CREATE_PATH = os.environ.get("LUMA_CREATE_PATH", "/v1/dream").strip()
+LUMA_STATUS_PATH = os.environ.get("LUMA_STATUS_PATH", "/v1/dream/{id}").strip()
+
+RUNWAY_BASE_URL    = os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com").rstrip("/")
+RUNWAY_CREATE_PATH = os.environ.get("RUNWAY_CREATE_PATH", "/v1/tasks").strip()
+RUNWAY_STATUS_PATH = os.environ.get("RUNWAY_STATUS_PATH", "/v1/tasks/{id}").strip()
+
+LUMA_MAX_WAIT_S   = int(os.environ.get("LUMA_MAX_WAIT_S", "900") or 900)      # 15 мин
+RUNWAY_MAX_WAIT_S = int(os.environ.get("RUNWAY_MAX_WAIT_S", "1200") or 1200)  # 20 мин
+VIDEO_POLL_DELAY_S = float(os.environ.get("VIDEO_POLL_DELAY_S", "6.0"))
+
 # Payments / DB
 PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
 CURRENCY       = "RUB"
@@ -458,7 +471,7 @@ _CAPABILITY_RE= re.compile(r"(мож(ешь|но|ете).{0,16}(анализ|р�
 _IMG_WORDS = r"(картин\w+|изображен\w+|фото\w*|рисунк\w+|image|picture|img\b|logo|banner|poster)"
 _VID_WORDS = r"(видео|ролик\w*|анимаци\w*|shorts?|reels?|clip|video|vid\b)"
 
-# ───────── Heuristics helpers (missing) ─────────
+# ───────── Heuristics helpers ─────────
 def is_smalltalk(text: str) -> bool:
     """Приветствия/вежливости — отвечаем коротко без лишней логики."""
     t = (text or "").strip().lower()
@@ -493,11 +506,8 @@ def _after_match(text: str, match) -> str:
 def _looks_like_capability_question(tl: str) -> bool:
     # Вопрос про возможности без явного задания
     if "?" in tl and re.search(_CAPABILITY_RE, tl):
-        # если нет повелительной формы из _CREATE_CMD — считаем это вопросом о возможностях
         if not re.search(_CREATE_CMD, tl, re.I):
             return True
-    # Фразы вида «ты можешь создавать картинки» без вопросительного знака — тоже capability,
-    # если нет конкретного описания (≤ 3 значимых слова после удаления служебных)
     m = re.search(r"\b(ты|вы)?\s*мож(ешь|но|ете)\b", tl)
     if m and re.search(_CAPABILITY_RE, tl) and not re.search(_CREATE_CMD, tl, re.I):
         return True
@@ -535,7 +545,7 @@ def detect_media_intent(text: str):
             clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
             return ("image", _strip_leading(clean))
 
-    # 3) /img, image: prompt и т.п. остаются как есть — будут пойманы выше или в /img
+    # 3) /img, image: prompt и т.п.
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
     if m: 
         return ("image", _strip_leading(t[m.end(1)+1:]))
@@ -969,6 +979,17 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
     await update.effective_message.reply_text("\n".join(lines))
 
+async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lines = [
+        "🎬 Видео-движки:",
+        f"• Luma key: {'✅' if bool(LUMA_API_KEY) else '❌'}  base={LUMA_BASE_URL}",
+        f"  create={LUMA_CREATE_PATH}  status={LUMA_STATUS_PATH}",
+        f"• Runway key: {'✅' if bool(RUNWAY_API_KEY) else '❌'}  base={RUNWAY_BASE_URL}",
+        f"  create={RUNWAY_CREATE_PATH}  status={RUNWAY_STATUS_PATH}",
+        f"• Поллинг каждые {VIDEO_POLL_DELAY_S}s; таймауты: Luma {LUMA_MAX_WAIT_S}s / Runway {RUNWAY_MAX_WAIT_S}s",
+    ]
+    await update.effective_message.reply_text("\n".join(lines))
+
 # ======= Core: документы =======
 async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -1085,6 +1106,172 @@ def parse_video_opts_from_text(text: str, default_duration: int, default_ar: str
     prompt = text.strip()
     return duration, ar, prompt
 
+def _norm_ar(ar: str) -> str:
+    ar = (ar or "").replace(" ", "").replace("/", ":")
+    if ar in ("9:16","16:9","1:1"):
+        return ar
+    if ar in ("720:1280","1080:1920"): return "9:16"
+    if ar in ("1280:720","1920:1080"): return "16:9"
+    return "16:9"
+
+def _safe_caption(prompt: str, engine: str, duration: int, ar: str) -> str:
+    p = (prompt or "").strip()
+    if len(p) > 500: p = p[:497] + "…"
+    return f"✅ {engine} • {duration}s • {ar}\nЗапрос: {p}"
+
+# ========= Luma client =========
+async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
+    if not LUMA_API_KEY:
+        raise RuntimeError("LUMA_API_KEY is missing")
+    url = f"{LUMA_BASE_URL}{LUMA_CREATE_PATH}"
+    payload = {
+        "prompt": prompt,
+        "aspect_ratio": _norm_ar(ar),
+        "duration": int(duration),
+        "model": LUMA_MODEL,
+    }
+    headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        r = await client.post(url, headers=headers, json=payload)
+        try:
+            r.raise_for_status()
+        except Exception:
+            log.error("Luma create error %s: %s", r.status_code, r.text)
+            return None
+        j = r.json()
+        job_id = j.get("id") or j.get("task_id") or j.get("data", {}).get("id")
+        if not job_id:
+            log.error("Luma create: cannot find job id in %s", j)
+            return None
+        return str(job_id)
+
+async def _luma_poll_and_get_url(job_id: str) -> tuple[str | None, str]:
+    url_tpl = f"{LUMA_BASE_URL}{LUMA_STATUS_PATH}"
+    url = url_tpl.replace("{id}", job_id)
+    headers = {"Authorization": f"Bearer {LUMA_API_KEY}"}
+    start = time.time()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        while time.time() - start < LUMA_MAX_WAIT_S:
+            r = await client.get(url, headers=headers)
+            if r.status_code >= 400:
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                continue
+            j = r.json()
+            status = (j.get("status") or j.get("state") or "").lower()
+            if status in ("completed","succeeded","done","finished"):
+                video_url = (
+                    j.get("result", {}).get("video_url")
+                    or j.get("assets",{}).get("video")
+                    or j.get("output",{}).get("url")
+                    or j.get("url")
+                )
+                return (video_url, "completed")
+            if status in ("failed","error","canceled"):
+                return (None, status)
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+    return (None, "timeout")
+
+async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
+    await update.effective_message.reply_text(f"✅ Запускаю Luma: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}")
+    job_id = await _luma_create(prompt, duration, ar)
+    if not job_id:
+        await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Luma.")
+        return
+    await update.effective_message.reply_text("⏳ Luma рендерит… Я пришлю видео как будет готово.")
+    url, st = await _luma_poll_and_get_url(job_id)
+    if not url:
+        await update.effective_message.reply_text(f"⚠️ Luma вернула статус: {st}.")
+        return
+    try:
+        await update.effective_message.reply_video(video=url, caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)))
+    except Exception:
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                bio = BytesIO(r.content); bio.name = "luma.mp4"
+                await update.effective_message.reply_video(video=InputFile(bio), caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)))
+        except Exception as e:
+            log.exception("send luma video failed: %s", e)
+            await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
+
+# ========= Runway client =========
+async def _runway_create(prompt: str, duration: int, ar: str) -> str | None:
+    if not RUNWAY_API_KEY:
+        raise RuntimeError("RUNWAY_API_KEY is missing")
+    url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
+    payload = {
+        "prompt": prompt,
+        "ratio": _norm_ar(ar),
+        "duration": int(duration),
+        "model": RUNWAY_MODEL,
+        "type": "text-to-video"
+    }
+    headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        r = await client.post(url, headers=headers, json=payload)
+        try:
+            r.raise_for_status()
+        except Exception:
+            log.error("Runway create error %s: %s", r.status_code, r.text)
+            return None
+        j = r.json()
+        task_id = j.get("id") or j.get("task_id") or j.get("data", {}).get("id")
+        if not task_id:
+            log.error("Runway create: cannot find task id in %s", j)
+            return None
+        return str(task_id)
+
+async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
+    url_tpl = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}"
+    url = url_tpl.replace("{id}", task_id)
+    headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}"}
+    start = time.time()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        while time.time() - start < RUNWAY_MAX_WAIT_S:
+            r = await client.get(url, headers=headers)
+            if r.status_code >= 400:
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                continue
+            j = r.json()
+            status = (j.get("status") or j.get("state") or "").lower()
+            if status in ("completed","succeeded","done","finished"):
+                url = (
+                    j.get("output", {}).get("url")
+                    or j.get("result", {}).get("video")
+                    or j.get("assets", {}).get("video")
+                    or j.get("url")
+                )
+                return (url, "completed")
+            if status in ("failed","error","canceled"):
+                return (None, status)
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+    return (None, "timeout")
+
+async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
+    await update.effective_message.reply_text(f"✅ Запускаю Runway: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}")
+    task_id = await _runway_create(prompt, duration, ar)
+    if not task_id:
+        await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Runway.")
+        return
+    await update.effective_message.reply_text("⏳ Runway рендерит… Я пришлю видео как будет готово.")
+    url, st = await _runway_poll_and_get_url(task_id)
+    if not url:
+        await update.effective_message.reply_text(f"⚠️ Runway вернул статус: {st}.")
+        return
+    try:
+        await update.effective_message.reply_video(video=url, caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)))
+    except Exception:
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                bio = BytesIO(r.content); bio.name = "runway.mp4"
+                await update.effective_message.reply_video(video=InputFile(bio), caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)))
+        except Exception as e:
+            log.exception("send runway video failed: %s", e)
+            await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
+
 # ───────── Telegram Payments: компактные payload и инвойсы ─────────
 def _payload_oneoff(engine: str, usd: float) -> str:
     # t=1 (oneoff), e=l/r/i, u=<cents>
@@ -1195,7 +1382,7 @@ async def _try_pay_then_do(
     except Exception:
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    title = f"{engine.upper()} пополнение"
+    title = f"{engine.UPPER()} пополнение" if hasattr(engine, "UPPER") else f"{engine.upper()} пополнение"
     desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽)."
     payload = _payload_oneoff(engine, need_usd)
     await _send_invoice_rub(title, desc, amount_rub, payload, update)
@@ -1275,7 +1462,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы и оформление подписки:"]
     for t in ("start", "pro", "ultimate"):
         p = PLAN_PRICE_TABLE[t]
-        lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
+        lines.append(f"• {t.UPPER() if hasattr(t,'UPPER') else t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
     lines.append("")
     lines.append("Выбери подписку кнопкой ниже или открой мини-приложение.")
     kb = InlineKeyboardMarkup([
@@ -1305,7 +1492,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload, amount_rub, title = _plan_payload_and_amount(tier, months)
             desc = f"Оформление подписки {tier.upper()} на {months} мес."
             ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
-            # всплывашка (alert только при ошибке)
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
@@ -1378,21 +1564,22 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             duration = meta["duration"]
             aspect   = meta["aspect"]
 
-            async def _do_fake_render():
-                await q.edit_message_text(f"✅ Запускаю {engine}: {duration}s • {aspect}\nЗапрос: {prompt}")
-                # учёт стоимости (псевдо-рендер)
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            map_engine = "luma" if engine == "luma" else "runway"
+
+            async def _start_real_render():
                 if engine == "luma":
+                    await _run_luma_video(update, context, prompt, duration, aspect)
                     _register_engine_spend(update.effective_user.id, "luma", 0.40)
                 else:
+                    await _run_runway_video(update, context, prompt, duration, aspect)
                     base = RUNWAY_UNIT_COST_USD or 7.0
                     cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
                     _register_engine_spend(update.effective_user.id, "runway", cost)
 
-            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
             await _try_pay_then_do(
                 update, context, update.effective_user.id,
-                "runway" if engine == "runway" else "luma",
-                est, _do_fake_render,
+                map_engine, est, _start_real_render,
                 remember_kind=f"video_{engine}",
                 remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
             )
@@ -1404,11 +1591,10 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("on_cb error: %s", e)
     finally:
-        # на всякий случай закрываем «часики»
         with contextlib.suppress(Exception):
             await q.answer()
 
-# ───────── Capability Q&A (твёрдые ответы, чтобы модель не «скромничала») ─────────
+# ───────── Capability Q&A ─────────
 _CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
 _CAP_EBOOK = re.compile(r"(ebook|e-?book|электронн(ая|ые)\s+книг|epub|fb2|docx|txt|mobi|azw)", re.I)
 _CAP_AUDIO = re.compile(r"(аудио ?книг|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
@@ -1416,16 +1602,10 @@ _CAP_IMAGE = re.compile(r"(изображен|картинк|фото|image|pict
 _CAP_VIDEO = re.compile(r"(видео|ролик|shorts?|reels?|clip)", re.I)
 
 def capability_answer(text: str) -> str | None:
-    """
-    Возвращает готовый ответ на вопросы о возможностях (без запуска задач).
-    Если распознаём, что пользователь спрашивает «можешь ли…», — даём инструкцию.
-    Иначе возвращаем None, чтобы дальше шёл обычный пайплайн.
-    """
     tl = (text or "").strip().lower()
     if not tl:
         return None
 
-    # Чтение/анализ PDF и электронных книг
     if (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)) and re.search(
         r"(чита(ешь|ете)|читать|анализиру(ешь|ете)|анализировать|распозна(ешь|ете)|распознавать)", tl
     ):
@@ -1435,28 +1615,24 @@ def capability_answer(text: str) -> str | None:
             "Можно добавить подпись к файлу с целью анализа."
         )
 
-    # Аудио/аудиокниги
     if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшифр|транскриб|понима|распозна)", tl)) or "аудио" in tl:
         return (
             "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
             "Распознаю речь (Deepgram/Whisper) и сделаю конспект, тезисы, тайм-коды, Q&A."
         )
 
-    # Анализ изображений
     if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
         return "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
 
-    # Создание изображений
     if _CAP_IMAGE.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|генерир)", tl):
         return (
             "Да, могу создавать изображения. Запусти через /img <описание> "
-            "или фразой в повелительном виде: «Сгенерируй изображение неонового города под дождём»."
+            "или фразой: «Сгенерируй изображение неонового города под дождём»."
         )
 
-    # Видеогенерация
     if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
         return (
-            "Да, могу запускать генерацию коротких видео. Напиши командой: "
+            "Да, могу запускать генерацию коротких видео. Напиши: "
             "«сделай видео … на 9 секунд 9:16». После запроса предложу выбрать движок Luma или Runway."
         )
 
@@ -1632,6 +1808,7 @@ def main():
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
     app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
     app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
+    app.add_handler(CommandHandler("diag_video", cmd_diag_video))
     app.add_handler(CommandHandler("voice_on", cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
 
