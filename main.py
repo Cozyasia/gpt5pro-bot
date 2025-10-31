@@ -1710,7 +1710,7 @@ def capability_answer(text: str) -> str | None:
             "Можно добавить подпись к файлу с целью анализа."
         )
 
-    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшифр|транскриб|понима|распозна)", tl)) or "аудио" в tl:
+    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшифр|транскриб|понима|распозна)", tl)) or "аудио" in tl:
         return (
             "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
             "Распознаю речь (Deepgram/Whisper) и сделаю конспект, тезисы, тайм-коды, Q&A."
