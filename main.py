@@ -72,7 +72,7 @@ IMAGES_MODEL        = "gpt-image-1"
 
 # Runway
 RUNWAY_API_KEY      = os.environ.get("RUNWAY_API_KEY", "").strip()
-RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()     # важно: валидная модель Runway
+RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
 RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
 RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
@@ -82,22 +82,28 @@ LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
 LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "6").strip() or 6)
 
-# ВАЖНО: рабочий домен Luma — api.lumalabs.ai
-LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai") or "https://api.lumalabs.ai").strip().rstrip("/")
+# Luma — корректные базовые URL/пути Dream Machine
+LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
+LUMA_CREATE_PATH = (os.environ.get("LUMA_CREATE_PATH", "/generations/video").strip())
+LUMA_STATUS_PATH = (os.environ.get("LUMA_STATUS_PATH", "/generations/{id}").strip())
 
-# Можно указать несколько запасных баз (через ; или ,)
-# Пример в ENV:  https://api.lumalabs.ai;https://api.luma.ai
-_LUMA_FB_RAW     = os.environ.get("LUMA_FALLBACKS", "https://api.lumalabs.ai;https://api.luma.ai")
-LUMA_FALLBACKS   = [u.strip().rstrip("/") for u in re.split(r"[;,]\s*", _LUMA_FB_RAW) if u and u.strip()]
-
-# Пути Luma
-LUMA_CREATE_PATH = (os.environ.get("LUMA_CREATE_PATH", "/v1/dream") or "/v1/dream").strip()
-LUMA_STATUS_PATH = (os.environ.get("LUMA_STATUS_PATH", "/v1/dream/{id}") or "/v1/dream/{id}").strip()
+# Fallback'и: поддерживаем и LUMA_FALLBACKS, и LUMA_FALLBACK_BASE_URL, без дублей
+_fallbacks_raw = ",".join([
+    os.environ.get("LUMA_FALLBACKS", ""),
+    os.environ.get("LUMA_FALLBACK_BASE_URL", "")
+])
+LUMA_FALLBACKS: list[str] = []
+for u in re.split(r"[;,]\s*", _fallbacks_raw):
+    if not u:
+        continue
+    u = u.strip().rstrip("/")
+    if u and u != LUMA_BASE_URL and u not in LUMA_FALLBACKS:
+        LUMA_FALLBACKS.append(u)
 
 # Runway — базовые значения
-RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com") or "https://api.runwayml.com").strip().rstrip("/")
-RUNWAY_CREATE_PATH = (os.environ.get("RUNWAY_CREATE_PATH", "/v1/tasks") or "/v1/tasks").strip()
-RUNWAY_STATUS_PATH = (os.environ.get("RUNWAY_STATUS_PATH", "/v1/tasks/{id}") or "/v1/tasks/{id}").strip()
+RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com").strip().rstrip("/"))
+RUNWAY_CREATE_PATH = (os.environ.get("RUNWAY_CREATE_PATH", "/v1/tasks").strip())
+RUNWAY_STATUS_PATH = (os.environ.get("RUNWAY_STATUS_PATH", "/v1/tasks/{id}").strip())
 
 # Таймауты и поллинг
 LUMA_MAX_WAIT_S     = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)      # 15 мин
@@ -111,23 +117,19 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
     """
     Возвращает живой базовый URL для Luma.
     Порядок: LUMA_BASE_URL → LUMA_FALLBACKS.
-    404 для OPTIONS — норм: DNS/TLS/роут ок, значит базу можно брать.
+    404/405 на OPTIONS считаем нормальным «пингом» (DNS/TLS/роут ок).
     """
     global _LUMA_ACTIVE_BASE
 
-    # Если уже нашли живую базу ранее — пробуем её первой
     candidates: list[str] = []
     if _LUMA_ACTIVE_BASE:
         candidates.append(_LUMA_ACTIVE_BASE)
-
     if LUMA_BASE_URL and LUMA_BASE_URL not in candidates:
         candidates.append(LUMA_BASE_URL)
-
     for b in LUMA_FALLBACKS:
         if b not in candidates:
             candidates.append(b)
 
-    # Быстрый «прозвон» OPTIONS
     for base in candidates:
         try:
             url = f"{base}{LUMA_CREATE_PATH}"
@@ -140,9 +142,9 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
         except Exception as e:
             log.warning("Luma base probe failed for %s: %s", base, e)
 
-    # ничего не ответило — вернём основной; пусть упадёт явно
-    return candidates[0] if candidates else "https://api.lumalabs.ai"
-    
+    # если ничего не ответило — вернём основной
+    return LUMA_BASE_URL or "https://api.lumalabs.ai/dream-machine/v1"
+
 # Payments / DB
 PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
 CURRENCY       = "RUB"
@@ -1181,7 +1183,7 @@ def _safe_caption(prompt: str, engine: str, duration: int, ar: str) -> str:
     return f"✅ {engine} • {duration}s • {ar}\nЗапрос: {p}"
 
 # ========= Luma client =========
-# страхуемся: если глобальный кэш базы ещё не определён — создаём
+# кэш последней «живой» базы
 try:
     _LUMA_LAST_BASE
 except NameError:
@@ -1189,30 +1191,33 @@ except NameError:
 
 async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
     """
-    Создаёт задачу в Luma и возвращает job_id, либо None.
-    Порядок баз: detected(_pick_luma_base) → LUMA_BASE_URL → LUMA_FALLBACKS → legacy https://api.luma.ai
+    Создаёт задачу в Luma Dream Machine и возвращает job_id (generation id) либо None.
+    Порядок баз: auto-detect(_pick_luma_base) → LUMA_BASE_URL → LUMA_FALLBACKS.
     """
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
 
     headers = {
         "Authorization": f"Bearer {LUMA_API_KEY}",
+        "Accept": "application/json",
         "Content-Type": "application/json",
     }
     payload = {
         "prompt": prompt,
-        "aspect_ratio": _norm_ar(ar),
-        "duration": int(duration),
-        "model": LUMA_MODEL,
+        "duration": max(1, int(duration)),
+        "aspect_ratio": _norm_ar(ar),   # DM v1 принимает aspect_ratio
+        "ratio": _norm_ar(ar),          # на всякий совместимость
     }
+    if LUMA_MODEL:
+        payload["model"] = LUMA_MODEL
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         # 1) определяем «живую» базу и формируем очередь кандидатов без дублей
         candidates: list[str] = []
-        seen = set()
+        seen: set[str] = set()
 
         try:
-            detected = await _pick_luma_base(client)  # <- твой хелпер авто-детекта базы
+            detected = await _pick_luma_base(client)
             if detected:
                 b = detected.rstrip("/")
                 if b and b not in seen:
@@ -1220,41 +1225,35 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
         except Exception as e:
             log.warning("Luma: auto-detect base failed: %s", e)
 
-        for b in [LUMA_BASE_URL]:
-            b = (b or "").strip().rstrip("/")
-            if b and b not in seen:
-                candidates.append(b); seen.add(b)
+        b = (LUMA_BASE_URL or "").strip().rstrip("/")
+        if b and b not in seen:
+            candidates.append(b); seen.add(b)
 
-        for b in LUMA_FALLBACKS:
-            b = (b or "").strip().rstrip("/")
-            if b and b not in seen:
-                candidates.append(b); seen.add(b)
+        for fb in LUMA_FALLBACKS:
+            u = (fb or "").strip().rstrip("/")
+            if u and u not in seen:
+                candidates.append(u); seen.add(u)
 
-        # финальный «legacy» домен — на всякий случай
-        legacy = "https://api.luma.ai"
-        if legacy not in seen:
-            candidates.append(legacy); seen.add(legacy)
-
-        # 2) пробуем по очереди
+        # 2) создаём задачу по очереди кандидатов
         last_text = None
         for base in candidates:
             url = f"{base}{LUMA_CREATE_PATH}"
             try:
                 r = await client.post(url, headers=headers, json=payload)
-                # 401/403/4xx — полезно увидеть ответ сервера
                 last_text = r.text
                 r.raise_for_status()
 
                 j = r.json()
                 job_id = (
                     j.get("id")
+                    or j.get("generation_id")
                     or j.get("task_id")
                     or (j.get("data") or {}).get("id")
                 )
                 if job_id:
                     if base != LUMA_BASE_URL:
                         log.warning("Luma: switched base_url to %s (fallback worked)", base)
-                    # запоминаем рабочую базу для последующего поллинга статуса
+                    # запомним базу для последующего поллинга
                     global _LUMA_LAST_BASE
                     _LUMA_LAST_BASE = base
                     return str(job_id)
@@ -1262,21 +1261,20 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
                 log.error("Luma create: no job id in response from %s: %s", base, j)
 
             except httpx.HTTPStatusError as e:
-                log.error("Luma create HTTP %s at %s | body=%s", e.response.status_code, base, last_text)
+                log.error("Luma create HTTP %s at %s | body=%s",
+                          e.response.status_code, base, last_text)
             except httpx.RequestError as e:
                 log.error("Luma create network/http error at %s: %s", base, e)
             except Exception as e:
-                log.error("Luma create unexpected error at %s: %s | body=%s", base, e, last_text)
+                log.error("Luma create unexpected error at %s: %s | body=%s",
+                          base, e, last_text)
 
     return None
 
 async def luma_get_status(task_id: str, base_hint: str | None = None) -> dict:
     """
     Возвращает «сырой» JSON статуса задачи Luma.
-    Приоритет выбора base:
-      1) base_hint (если передали явно)
-      2) _LUMA_LAST_BASE (запомненная при создании)
-      3) авто-детект через _pick_luma_base(...)
+    Приоритет базы: base_hint → _LUMA_LAST_BASE → _pick_luma_base(...)
     """
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
@@ -1290,7 +1288,7 @@ async def luma_get_status(task_id: str, base_hint: str | None = None) -> dict:
         url = f"{base}{LUMA_STATUS_PATH}".format(id=task_id)
         r = await client.get(
             url,
-            headers={"Authorization": f"Bearer {LUMA_API_KEY}"},
+            headers={"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"},
             timeout=20.0,
         )
         r.raise_for_status()
@@ -1299,7 +1297,6 @@ async def luma_get_status(task_id: str, base_hint: str | None = None) -> dict:
 async def _luma_poll_and_get_url(job_id: str, base_hint: str | None = None) -> tuple[str | None, str]:
     """
     Поллит статус Luma, возвращает (video_url | None, 'completed'|'failed'|'error'|'canceled'|'timeout').
-    Использует ту же базу, что и при создании (через base_hint или _LUMA_LAST_BASE).
     """
     start = time.time()
     while time.time() - start < LUMA_MAX_WAIT_S:
@@ -1310,134 +1307,63 @@ async def _luma_poll_and_get_url(job_id: str, base_hint: str | None = None) -> t
             continue
 
         status = (j.get("status") or j.get("state") or "").lower()
-        if status in ("completed", "succeeded", "done", "finished"):
+        # возможные промежуточные статусы DM v1
+        if status in ("queued", "processing", "in_progress", "running", "pending"):
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            continue
+
+        if status in ("completed", "succeeded", "done", "finished", "success"):
             video_url = (
                 j.get("result", {}).get("video_url")
+                or j.get("result", {}).get("video")
                 or j.get("assets", {}).get("video")
                 or j.get("output", {}).get("url")
                 or j.get("url")
+                or j.get("video")
             )
             return (video_url, "completed")
+
         if status in ("failed", "error", "canceled"):
             return (None, status)
 
+        # если пришёл незнакомый статус — подождём и продолжим
         await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     return (None, "timeout")
 
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
-    await update.effective_message.reply_text(f"✅ Запускаю Luma: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}")
+    await update.effective_message.reply_text(
+        f"✅ Запускаю Luma: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}"
+    )
     job_id = await _luma_create(prompt, duration, ar)
     if not job_id:
         await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Luma.")
         return
+
     await update.effective_message.reply_text("⏳ Luma рендерит… Я пришлю видео как будет готово.")
     url, st = await _luma_poll_and_get_url(job_id, base_hint=_LUMA_LAST_BASE)
     if not url:
         await update.effective_message.reply_text(f"⚠️ Luma вернула статус: {st}.")
         return
+
     try:
-        await update.effective_message.reply_video(video=url, caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)))
+        await update.effective_message.reply_video(
+            video=url,
+            caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)),
+        )
     except Exception:
+        # если Telegram не скачал по URL — подтянем вручную и отправим как файл
         try:
             async with httpx.AsyncClient(timeout=None) as client:
                 r = await client.get(url)
                 r.raise_for_status()
                 bio = BytesIO(r.content); bio.name = "luma.mp4"
-                await update.effective_message.reply_video(video=InputFile(bio), caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)))
+                await update.effective_message.reply_video(
+                    video=InputFile(bio),
+                    caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)),
+                )
         except Exception as e:
             log.exception("send luma video failed: %s", e)
-            await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
-
-# ========= Runway client =========
-async def _runway_create(prompt: str, duration: int, ar: str) -> str | None:
-    if not RUNWAY_API_KEY:
-        raise RuntimeError("RUNWAY_API_KEY is missing")
-    url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
-    payload = {
-        "prompt": prompt,
-        "ratio": _norm_ar(ar),
-        "duration": int(duration),
-        "model": RUNWAY_MODEL,
-        "type": "text-to-video"
-    }
-    headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        try:
-            r.raise_for_status()
-        except Exception:
-            log.error("Runway create error %s: %s", r.status_code, r.text)
-            return None
-        j = r.json()
-        task_id = j.get("id") or j.get("task_id") or j.get("data", {}).get("id")
-        if not task_id:
-            log.error("Runway create: cannot find task id in %s", j)
-            return None
-        return str(task_id)
-
-async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
-    url_tpl = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}"
-    url = url_tpl.replace("{id}", task_id)
-    headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}"}
-    start = time.time()
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        while time.time() - start < RUNWAY_MAX_WAIT_S:
-            try:
-                r = await client.get(url, headers=headers)
-                if r.status_code >= 400:
-                    log.warning("Runway poll http %s: %s", r.status_code, r.text[:300])
-                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
-                    continue
-                j = r.json()
-            except httpx.HTTPError as e:
-                log.warning("Runway poll network error: %s", e)
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
-                continue
-            except Exception as e:
-                log.exception("Runway poll unexpected error: %s", e)
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
-                continue
-
-            status = (j.get("status") or j.get("state") or "").lower()
-            if status in ("completed","succeeded","done","finished"):
-                url = (
-                    j.get("output", {}).get("url")
-                    or j.get("result", {}).get("video")
-                    or j.get("assets", {}).get("video")
-                    or j.get("url")
-                )
-                return (url, "completed")
-            if status in ("failed","error","canceled"):
-                return (None, status)
-
-            await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
-    return (None, "timeout")
-
-async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
-    await update.effective_message.reply_text(f"✅ Запускаю Runway: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}")
-    task_id = await _runway_create(prompt, duration, ar)
-    if not task_id:
-        await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Runway.")
-        return
-    await update.effective_message.reply_text("⏳ Runway рендерит… Я пришлю видео как будет готово.")
-    url, st = await _runway_poll_and_get_url(task_id)
-    if not url:
-        await update.effective_message.reply_text(f"⚠️ Runway вернул статус: {st}.")
-        return
-    try:
-        await update.effective_message.reply_video(video=url, caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)))
-    except Exception:
-        try:
-            async with httpx.AsyncClient(timeout=None) as client:
-                r = await client.get(url)
-                r.raise_for_status()
-                bio = BytesIO(r.content); bio.name = "runway.mp4"
-                await update.effective_message.reply_video(video=InputFile(bio), caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)))
-        except Exception as e:
-            log.exception("send runway video failed: %s", e)
             await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
 # ───────── Telegram Payments: компактные payload и инвойсы ─────────
