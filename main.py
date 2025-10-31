@@ -1178,39 +1178,6 @@ async def _luma_poll_and_get_url(job_id: str) -> tuple[str | None, str]:
             await asyncio.sleep(VIDEO_POLL_DELAY_S)
     return (None, "timeout")
 
-async def _luma_poll_and_get_url(job_id: str) -> tuple[str | None, str]:
-    bases = [LUMA_BASE_URL] + [b.rstrip("/") for b in LUMA_FALLBACKS if b.strip()]
-    headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"}
-    start = time.time()
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        while time.time() - start < LUMA_MAX_WAIT_S:
-            for base in bases:
-                url = f"{base}{LUMA_STATUS_PATH}".replace("{id}", job_id)
-                try:
-                    r = await client.get(url, headers=headers)
-                    if r.status_code >= 400:
-                        log.warning("Luma status %s: HTTP %s %s", url, r.status_code, r.text[:300])
-                        continue
-                    j = r.json()
-                    status = (j.get("status") or j.get("state") or "").lower()
-                    if status in ("completed", "succeeded", "done", "finished"):
-                        video_url = (
-                            j.get("result", {}).get("video_url")
-                            or j.get("assets", {}).get("video")
-                            or j.get("output", {}).get("url")
-                            or j.get("url")
-                        )
-                        return (video_url, "completed")
-                    if status in ("failed", "error", "canceled"):
-                        return (None, status)
-                except httpx.RequestError as e:
-                    log.warning("Luma status network error on %s: %s", url, e)
-                    continue
-            await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
-    return (None, "timeout")
-
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
     await update.effective_message.reply_text(f"✅ Запускаю Luma: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}")
     job_id = await _luma_create(prompt, duration, ar)
