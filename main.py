@@ -77,20 +77,14 @@ RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
 RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
 # Luma
-# Luma
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
 LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
 LUMA_DURATION_S  = int(os.environ.get("LUMA_DURATION_S", "6") or 6)
 
-# Базы/пути
-LUMA_BASE_URL    = os.environ.get("LUMA_BASE_URL", "https://api.luma.ai").rstrip("/")
-LUMA_FALLBACKS   = ["https://api.lumalabs.ai"]  # <= добавили запасной домен
-LUMA_CREATE_PATH = os.environ.get("LUMA_CREATE_PATH", "/v1/dream").strip()
-LUMA_STATUS_PATH = os.environ.get("LUMA_STATUS_PATH", "/v1/dream/{id}").strip()
-
 # ── Видеосервисы: базовые пути/таймауты/поллинг ──
-LUMA_BASE_URL    = os.environ.get("LUMA_BASE_URL", "https://api.luma.ai").rstrip("/")
+# ВАЖНО: рабочий домен Luma — api.lumalabs.ai
+LUMA_BASE_URL    = os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai").rstrip("/")
 LUMA_CREATE_PATH = os.environ.get("LUMA_CREATE_PATH", "/v1/dream").strip()
 LUMA_STATUS_PATH = os.environ.get("LUMA_STATUS_PATH", "/v1/dream/{id}").strip()
 
@@ -1119,45 +1113,70 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
 
-    bases = [LUMA_BASE_URL] + [b.rstrip("/") for b in LUMA_FALLBACKS if b.strip()]
+    # порядок попыток: текущий BASE, затем гарантированно рабочий lumalabs, затем legacy luma.ai
+    bases = [LUMA_BASE_URL, "https://api.lumalabs.ai", "https://api.luma.ai"]
+    seen = []
+    headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Content-Type": "application/json"}
     payload = {
         "prompt": prompt,
         "aspect_ratio": _norm_ar(ar),
         "duration": int(duration),
         "model": LUMA_MODEL,
     }
-    headers = {
-        "Authorization": f"Bearer {LUMA_API_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
 
-    last_err = None
     async with httpx.AsyncClient(timeout=120.0) as client:
         for base in bases:
+            base = (base or "").rstrip("/")
+            if not base or base in seen:
+                continue
+            seen.append(base)
             url = f"{base}{LUMA_CREATE_PATH}"
             try:
                 r = await client.post(url, headers=headers, json=payload)
                 r.raise_for_status()
                 j = r.json()
                 job_id = j.get("id") or j.get("task_id") or j.get("data", {}).get("id")
-                if not job_id:
-                    log.error("Luma create: job id not found. Response: %s", j)
-                    return None
-                if base != LUMA_BASE_URL:
-                    log.warning("Luma: used fallback base %s", base)
-                return str(job_id)
+                if job_id:
+                    if base != LUMA_BASE_URL:
+                        log.warning("Luma: switched base_url to %s (fallback worked)", base)
+                    return str(job_id)
+                log.error("Luma create: no job id in response: %s", j)
             except httpx.RequestError as e:
-                last_err = e
-                log.error("Luma create network/http error on %s: %s", url, e)
-                continue
+                log.error("Luma create network/http error at %s: %s", base, e)
             except Exception as e:
-                last_err = e
-                log.error("Luma create error on %s: %s | body=%s", url, e, getattr(r, "text", ""))
-                continue
-
-    await asyncio.sleep(0)  # уступить циклу
+                log.error("Luma create error at %s: %s | body=%s", base, e, getattr(r, "text", ""))
     return None
+
+async def _luma_poll_and_get_url(job_id: str) -> tuple[str | None, str]:
+    headers = {"Authorization": f"Bearer {LUMA_API_KEY}"}
+    start = time.time()
+    # тоже пробуем обе базы на всякий случай
+    bases = [LUMA_BASE_URL, "https://api.lumalabs.ai", "https://api.luma.ai"]
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        while time.time() - start < LUMA_MAX_WAIT_S:
+            for base in bases:
+                base = (base or "").rstrip("/")
+                url = f"{base}{LUMA_STATUS_PATH}".replace("{id}", job_id)
+                try:
+                    r = await client.get(url, headers=headers)
+                    if r.status_code >= 400:
+                        continue
+                    j = r.json()
+                    status = (j.get("status") or j.get("state") or "").lower()
+                    if status in ("completed", "succeeded", "done", "finished"):
+                        video_url = (
+                            j.get("result", {}).get("video_url")
+                            or j.get("assets", {}).get("video")
+                            or j.get("output", {}).get("url")
+                            or j.get("url")
+                        )
+                        return (video_url, "completed")
+                    if status in ("failed", "error", "canceled"):
+                        return (None, status)
+                except Exception:
+                    pass
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+    return (None, "timeout")
 
 async def _luma_poll_and_get_url(job_id: str) -> tuple[str | None, str]:
     bases = [LUMA_BASE_URL] + [b.rstrip("/") for b in LUMA_FALLBACKS if b.strip()]
