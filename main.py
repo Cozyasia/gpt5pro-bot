@@ -164,7 +164,8 @@ PORT = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
-if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
+# PUBLIC_URL обязателен только в режиме webhook
+if USE_WEBHOOK and (not PUBLIC_URL or not PUBLIC_URL.startswith("http")):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
@@ -1367,6 +1368,139 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
             log.exception("send luma video failed: %s", e)
             await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
+# ========= Runway client =========
+def _ar_to_runway_ratio(ar: str) -> str:
+    ar = _norm_ar(ar)
+    if ar == "9:16":
+        return "720:1280"
+    if ar == "16:9":
+        return "1280:720"
+    if ar == "1:1":
+        return "1024:1024"
+    return RUNWAY_RATIO or "1280:720"
+
+async def _runway_create(prompt: str, duration: int, ar: str) -> str | None:
+    """
+    Runway tasks: POST {base}/v1/tasks with JSON payload.
+    Мы используем универсальное поле input; конкретный формат может отличаться — всё обёрнуто try/except.
+    Возвращаем task_id либо None.
+    """
+    if not RUNWAY_API_KEY:
+        raise RuntimeError("RUNWAY_API_KEY is missing")
+
+    headers = {
+        "Authorization": f"Bearer {RUNWAY_API_KEY}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    ratio = _ar_to_runway_ratio(ar)
+    payload = {
+        "model": RUNWAY_MODEL or "gen3a_turbo",
+        "input": {
+            "prompt": prompt,
+            "ratio": ratio,
+            "duration": int(max(1, duration)),
+            # дополнительные поля оставляем по умолчанию на стороне Runway
+        },
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
+            r = await client.post(url, headers=headers, json=payload)
+            body = r.text
+            r.raise_for_status()
+            j = r.json()
+            task_id = j.get("id") or j.get("task_id") or (j.get("data") or {}).get("id")
+            if not task_id:
+                log.error("Runway create: no id in response: %s", j)
+                return None
+            return str(task_id)
+    except Exception as e:
+        log.exception("Runway create error: %s", e)
+        return None
+
+async def runway_get_status(task_id: str) -> dict | None:
+    if not RUNWAY_API_KEY:
+        raise RuntimeError("RUNWAY_API_KEY is missing")
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=task_id)
+            r = await client.get(url, headers={"Authorization": f"Bearer {RUNWAY_API_KEY}", "Accept": "application/json"})
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        log.exception("Runway status error: %s", e)
+        return None
+
+async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
+    start = time.time()
+    while time.time() - start < RUNWAY_MAX_WAIT_S:
+        j = await runway_get_status(task_id)
+        if not j:
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            continue
+
+        status = (j.get("status") or j.get("state") or "").lower()
+        if status in ("queued", "processing", "in_progress", "running", "pending"):
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            continue
+
+        if status in ("completed", "succeeded", "done", "finished", "success"):
+            video_url = (
+                (j.get("output") or {}).get("url")
+                or (j.get("result") or {}).get("video")
+                or (j.get("assets") or {}).get("video")
+                or j.get("url")
+                or j.get("video")
+            )
+            return (video_url, "completed")
+
+        if status in ("failed", "error", "canceled"):
+            return (None, status)
+
+        await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
+    return (None, "timeout")
+
+async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
+    if not RUNWAY_API_KEY:
+        await update.effective_message.reply_text("⚠️ Runway не настроен (нет RUNWAY_API_KEY).")
+        return
+
+    await update.effective_message.reply_text(
+        f"✅ Запускаю Runway: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}"
+    )
+    task_id = await _runway_create(prompt, duration, ar)
+    if not task_id:
+        await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Runway.")
+        return
+
+    await update.effective_message.reply_text("⏳ Runway рендерит… Я пришлю видео как будет готово.")
+    url, st = await _runway_poll_and_get_url(task_id)
+    if not url:
+        await update.effective_message.reply_text(f"⚠️ Runway вернул статус: {st}.")
+        return
+
+    try:
+        await update.effective_message.reply_video(
+            video=url,
+            caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
+        )
+    except Exception:
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                bio = BytesIO(r.content); bio.name = "runway.mp4"
+                await update.effective_message.reply_video(
+                    video=InputFile(bio),
+                    caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
+                )
+        except Exception as e:
+            log.exception("send runway video failed: %s", e)
+            await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
+
 # ───────── Telegram Payments: компактные payload и инвойсы ─────────
 def _payload_oneoff(engine: str, usd: float) -> str:
     # t=1 (oneoff), e=l/r/i, u=<cents>
@@ -1852,6 +1986,8 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
     return ""
 
 # ───────── Запуск (webhook / polling) ─────────
+_ALLOWED_UPDATES = getattr(Update, "ALL_TYPES", None)
+
 def run_by_mode(app):
     try:
         asyncio.get_running_loop()
@@ -1882,12 +2018,12 @@ def run_by_mode(app):
             webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
             secret_token=(WEBHOOK_SECRET or None),
             drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES,
+            allowed_updates=_ALLOWED_UPDATES,
         )
     else:
         _start_http_stub()
         app.run_polling(
-            allowed_updates=Update.ALL_TYPES,
+            allowed_updates=_ALLOWED_UPDATES,
             drop_pending_updates=True,
         )
 
