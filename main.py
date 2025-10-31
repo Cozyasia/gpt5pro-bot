@@ -1105,32 +1105,49 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
         "model": LUMA_MODEL,
     }
     headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        try:
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(url, headers=headers, json=payload)
             r.raise_for_status()
-        except Exception:
-            log.error("Luma create error %s: %s", r.status_code, r.text)
-            return None
-        j = r.json()
-        job_id = j.get("id") or j.get("task_id") or j.get("data", {}).get("id")
-        if not job_id:
-            log.error("Luma create: cannot find job id in %s", j)
-            return None
-        return str(job_id)
+            j = r.json()
+    except httpx.HTTPError as e:
+        log.error("Luma create network/http error: %s", e)
+        return None
+    except Exception as e:
+        log.exception("Luma create unexpected error: %s", e)
+        return None
+
+    job_id = j.get("id") or j.get("task_id") or j.get("data", {}).get("id")
+    if not job_id:
+        log.error("Luma create: cannot find job id in %s", j)
+        return None
+    return str(job_id)
 
 async def _luma_poll_and_get_url(job_id: str) -> tuple[str | None, str]:
     url_tpl = f"{LUMA_BASE_URL}{LUMA_STATUS_PATH}"
     url = url_tpl.replace("{id}", job_id)
     headers = {"Authorization": f"Bearer {LUMA_API_KEY}"}
     start = time.time()
+
     async with httpx.AsyncClient(timeout=60.0) as client:
         while time.time() - start < LUMA_MAX_WAIT_S:
-            r = await client.get(url, headers=headers)
-            if r.status_code >= 400:
+            try:
+                r = await client.get(url, headers=headers)
+                if r.status_code >= 400:
+                    log.warning("Luma poll http %s: %s", r.status_code, r.text[:300])
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    continue
+                j = r.json()
+            except httpx.HTTPError as e:
+                log.warning("Luma poll network error: %s", e)
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
                 continue
-            j = r.json()
+            except Exception as e:
+                log.exception("Luma poll unexpected error: %s", e)
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                continue
+
             status = (j.get("status") or j.get("state") or "").lower()
             if status in ("completed","succeeded","done","finished"):
                 video_url = (
@@ -1142,7 +1159,9 @@ async def _luma_poll_and_get_url(job_id: str) -> tuple[str | None, str]:
                 return (video_url, "completed")
             if status in ("failed","error","canceled"):
                 return (None, status)
+
             await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
     return (None, "timeout")
 
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
@@ -1201,13 +1220,25 @@ async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
     url = url_tpl.replace("{id}", task_id)
     headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}"}
     start = time.time()
+
     async with httpx.AsyncClient(timeout=60.0) as client:
         while time.time() - start < RUNWAY_MAX_WAIT_S:
-            r = await client.get(url, headers=headers)
-            if r.status_code >= 400:
+            try:
+                r = await client.get(url, headers=headers)
+                if r.status_code >= 400:
+                    log.warning("Runway poll http %s: %s", r.status_code, r.text[:300])
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    continue
+                j = r.json()
+            except httpx.HTTPError as e:
+                log.warning("Runway poll network error: %s", e)
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
                 continue
-            j = r.json()
+            except Exception as e:
+                log.exception("Runway poll unexpected error: %s", e)
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                continue
+
             status = (j.get("status") or j.get("state") or "").lower()
             if status in ("completed","succeeded","done","finished"):
                 url = (
@@ -1219,7 +1250,9 @@ async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
                 return (url, "completed")
             if status in ("failed","error","canceled"):
                 return (None, status)
+
             await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
     return (None, "timeout")
 
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
