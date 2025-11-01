@@ -78,16 +78,14 @@ RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
 # Luma — ключ и базовые параметры (Dream Machine v1)
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
-LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()  # актуальные: 'ray-2','ray-3','ray-1-6','ray-flash-2','ray-hdr-3','ray-flash-3'
+LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()  # 'ray-2','ray-3','ray-1-6','ray-flash-2','ray-hdr-3','ray-flash-3'
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
-LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)  # Luma принимает только 5/9/10s
-
+LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)  # Luma: 5/9/10s only
 LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
-# Жёстко нормализуем путь: /generations (создание) и /generations/{id} (статус)
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
 
-# Fallback'и: поддерживаем и LUMA_FALLBACKS, и LUMA_FALLBACK_BASE_URL, без дублей
+# Fallback'и
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
     os.environ.get("LUMA_FALLBACK_BASE_URL", "")
@@ -117,7 +115,7 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
     """
     Возвращает живой базовый URL для Luma.
     Порядок: LUMA_BASE_URL → LUMA_FALLBACKS.
-    404/405 на OPTIONS считаем нормальным «пингом» (DNS/TLS/роут ок).
+    404/405 на OPTIONS считаем нормальным «пингом».
     """
     global _LUMA_ACTIVE_BASE
 
@@ -301,7 +299,6 @@ def db_init():
     con.commit(); con.close()
 
 def _utcnow():
-    # убираем DeprecationWarning
     return datetime.now(timezone.utc)
 
 def activate_subscription(user_id: int, months: int = 1):
@@ -373,8 +370,14 @@ def db_init_usage():
         user_id INTEGER PRIMARY KEY,
         luma_usd  REAL DEFAULT 0.0,
         runway_usd REAL DEFAULT 0.0,
-        img_usd  REAL DEFAULT 0.0
+        img_usd  REAL DEFAULT 0.0,
+        usd REAL DEFAULT 0.0
     )""")
+    # миграции для старых БД
+    try:
+        cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
+    except Exception:
+        pass
     try:
         cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
     except Exception:
@@ -414,9 +417,9 @@ def _wallet_get(user_id: int) -> dict:
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (user_id,))
     con.commit()
-    cur.execute("SELECT luma_usd, runway_usd, img_usd FROM wallet WHERE user_id=?", (user_id,))
+    cur.execute("SELECT luma_usd, runway_usd, img_usd, usd FROM wallet WHERE user_id=?", (user_id,))
     row = cur.fetchone(); con.close()
-    return {"luma_usd": row[0], "runway_usd": row[1], "img_usd": row[2]}
+    return {"luma_usd": row[0], "runway_usd": row[1], "img_usd": row[2], "usd": row[3]}
 
 def _wallet_add(user_id: int, engine: str, usd: float):
     col = {"luma": "luma_usd", "runway": "runway_usd", "img": "img_usd"}[engine]
@@ -433,6 +436,31 @@ def _wallet_take(user_id: int, engine: str, usd: float) -> bool:
     if bal + 1e-9 < usd:
         con.close(); return False
     cur.execute(f"UPDATE wallet SET {col} = {col} - ? WHERE user_id=?", (float(usd), user_id))
+    con.commit(); con.close()
+    return True
+
+# === ЕДИНЫЙ КОШЕЛЁК (USD) ===
+def _wallet_total_get(user_id: int) -> float:
+    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+    cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (user_id,))
+    con.commit()
+    cur.execute("SELECT usd FROM wallet WHERE user_id=?", (user_id,))
+    row = cur.fetchone(); con.close()
+    return float(row[0] if row and row[0] is not None else 0.0)
+
+def _wallet_total_add(user_id: int, usd: float):
+    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+    cur.execute("UPDATE wallet SET usd = COALESCE(usd,0)+? WHERE user_id=?", (float(usd), user_id))
+    con.commit(); con.close()
+
+def _wallet_total_take(user_id: int, usd: float) -> bool:
+    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+    cur.execute("SELECT usd FROM wallet WHERE user_id=?", (user_id,))
+    row = cur.fetchone()
+    bal = float(row[0] if row and row[0] is not None else 0.0)
+    if bal + 1e-9 < usd:
+        con.close(); return False
+    cur.execute("UPDATE wallet SET usd = usd - ? WHERE user_id=?", (float(usd), user_id))
     con.commit(); con.close()
     return True
 
@@ -476,21 +504,36 @@ def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     return max(MIN_RUB_FOR_INVOICE, val)
 
 def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cost_usd: float) -> tuple[bool, str]:
+    # безлимит — просто учитываем расход и пропускаем
     if is_unlimited(user_id, username):
+        if engine in ("luma", "runway", "img"):
+            _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
         return True, ""
     if engine not in ("luma", "runway", "img"):
         return True, ""
+
     tier = get_subscription_tier(user_id)
     if tier == "free":
         return False, "ASK_SUBSCRIBE"
+
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
     spent = row[f"{engine}_usd"]; budget = lim[f"{engine}_budget_usd"]
+
+    # в пределах тарифа
     if spent + est_cost_usd <= budget + 1e-9:
         _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
         return True, ""
+
+    # перерасход — пытаемся покрыть из единого кошелька usd
     need = max(0.0, spent + est_cost_usd - budget)
-    return False, f"OFFER:{need:.2f}"
+    if need > 0:
+        if _wallet_total_take(user_id, need):
+            _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
+            return True, ""
+        return False, f"OFFER:{need:.2f}"
+
+    return True, ""
 
 def _register_engine_spend(user_id: int, engine: str, usd: float):
     if engine in ("luma","runway","img"):
@@ -733,9 +776,12 @@ def _extract_pdf_text(data: bytes) -> str:
     except Exception:
         pass
     try:
-        from pdfminer.high_level import extract_text
+        from pdfminer_high_level import extract_text  # type: ignore
     except Exception:
-        extract_text = None
+        try:
+            from pdfminer.high_level import extract_text  # fallback
+        except Exception:
+            extract_text = None  # type: ignore
     if extract_text:
         try:
             return (extract_text(BytesIO(data)) or "").strip()
@@ -748,7 +794,7 @@ def _extract_pdf_text(data: bytes) -> str:
         for page in doc:
             try: txt.append(page.get_text("text"))
             except Exception: continue
-        return ("\n.join(txt)")  # small fallback; not critical
+        return ("\n.join(txt)")  # оставляем как было
     except Exception:
         pass
     return ""
@@ -1177,14 +1223,13 @@ except NameError:
 def _luma_duration_string(seconds: int) -> str:
     # Luma принимает только '5s','9s','10s'
     allowed = [5, 9, 10]
-    # берём ближайшее допустимое
     best = min(allowed, key=lambda x: abs(x - max(1, int(seconds))))
     return f"{best}s"
 
 async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
     """
     POST {base}/generations
-    Fields: model (required), prompt (str), duration (string '5s'|'9s'|'10s'), aspect_ratio ('16:9'|'9:16'|'1:1')
+    Fields: model, prompt, duration ('5s'|'9s'|'10s'), aspect_ratio ('16:9'|'9:16'|'1:1')
     """
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
@@ -1350,7 +1395,6 @@ async def _runway_create(prompt: str, duration_s: int, ratio: str) -> str | None
         raise RuntimeError("RUNWAY_API_KEY is missing")
     url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
     headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
-    # API у Runway может меняться; поля ниже — безопасный минимум
     payload = {
         "model": RUNWAY_MODEL,
         "input": {
@@ -1395,7 +1439,6 @@ async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
         if status in ("PENDING","RUNNING","IN_PROGRESS","QUEUED"):
             await asyncio.sleep(VIDEO_POLL_DELAY_S); continue
         if status in ("SUCCEEDED","COMPLETED","SUCCESS"):
-            # разные варианты структуры
             out = j.get("output") or {}
             url = None
             if isinstance(out, dict):
@@ -1535,7 +1578,7 @@ async def _try_pay_then_do(
     except Exception:
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    title = f"{engine.upper()} пополнение"
+    title = f"{engine.UPPER()} пополнение" if hasattr(engine, "UPPER") else f"{engine.upper()} пополнение"
     desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽)."
     payload = _payload_oneoff(engine, need_usd)
     await _send_invoice_rub(title, desc, amount_rub, payload, update)
@@ -1569,6 +1612,18 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.effective_message.reply_text(f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}. Тариф: {tier}.")
             return
 
+        if t == "3":
+            # Пополнение единого кошелька (рубли → USD)
+            try:
+                amt_rub = (update.message.successful_payment.total_amount or 0) / 100.0
+            except Exception:
+                amt_rub = 0.0
+            usd = float(amt_rub) / max(1e-9, USD_RUB)
+            _wallet_total_add(update.effective_user.id, usd)
+            await update.effective_message.reply_text(f"💳 Баланс пополнен на {amt_rub:.2f} ₽ (≈ ${usd:.2f}).")
+            return
+
+        # на случай старых JSON payload
         try:
             payload = json.loads(raw)
             if payload.get("t") == "subscribe":
@@ -1606,7 +1661,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы и оформление подписки:"]
     for t in ("start", "pro", "ultimate"):
         p = PLAN_PRICE_TABLE[t]
-        lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
+        lines.append(f"• {t.UPPER() if hasattr(t,'UPPER') else t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
     lines.append("")
     lines.append("Выбери подписку кнопкой ниже или открой мини-приложение.")
     kb = InlineKeyboardMarkup([
@@ -1618,10 +1673,35 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("год",            callback_data="buy:pro:12")],
         [InlineKeyboardButton("ULTIMATE — мес", callback_data="buy:ultimate:1"),
          InlineKeyboardButton("квартал",        callback_data="buy:ultimate:3"),
-         [InlineKeyboardButton("год",            callback_data="buy:ultimate:12")]],
+         InlineKeyboardButton("год",            callback_data="buy:ultimate:12")],
         [InlineKeyboardButton("Открыть страницу тарифов (мини-приложение)", web_app=WebAppInfo(url=TARIFF_URL))],
     ])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
+
+# ===== Пополнение кошелька =====
+def _make_topup_webapp_url(amount: int | None = None):
+    base = _make_tariff_url(src="topup")
+    if amount:
+        sep = "&" if "?" in base else "?"
+        base = f"{base}{sep}amount={int(amount)}"
+    return base
+
+async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("100 ₽",  callback_data="topup:rub:100"),
+            InlineKeyboardButton("500 ₽",  callback_data="topup:rub:500"),
+            InlineKeyboardButton("1000 ₽", callback_data="topup:rub:1000"),
+            InlineKeyboardButton("5000 ₽", callback_data="topup:rub:5000"),
+        ],
+        [
+            InlineKeyboardButton("Crypto (TON/USDT) — мини-приложение", web_app=WebAppInfo(url=_make_topup_webapp_url()))
+        ],
+    ])
+    await update.effective_message.reply_text(
+        "Выберите сумму пополнения (ЮKassa, RUB) или откройте крипто-оплату в мини-приложении:",
+        reply_markup=kb
+    )
 
 # ───────── CallbackQuery / меню ─────────
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1629,6 +1709,27 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = (q.data or "").strip()
 
     try:
+        # TOPUP: показать меню пополнения
+        if data == "topup":
+            await q.answer()
+            await _send_topup_menu(update, context)
+            return
+
+        # TOPUP RUB фиксированной суммой
+        if data.startswith("topup:rub:"):
+            await q.answer()
+            try:
+                amount_rub = int((data.split(":", 2)[-1] or "0").strip() or "0")
+            except Exception:
+                amount_rub = 0
+            if amount_rub < MIN_RUB_FOR_INVOICE:
+                await q.edit_message_text(f"Минимальная сумма пополнения: {MIN_RUB_FOR_INVOICE} ₽")
+                return
+            payload = "t=3"
+            ok = await _send_invoice_rub("Пополнение баланса", "Единый кошелёк для перерасходов.", amount_rub, payload, update)
+            await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
+            return
+
         if data.startswith("buy:"):
             _, tier, months = data.split(":", 2)
             months = int(months)
@@ -1685,9 +1786,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             amount_rub = _calc_oneoff_price_rub(map_engine, need_usd)
             await q.edit_message_text(
                 f"Ваш лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
-                f"или пополните бюджет в /plans.",
+                f"или пополните баланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
+                    [
+                        [InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
+                    ]
                 ),
             )
             return
@@ -1820,14 +1924,20 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     w = _wallet_get(user_id)
+    total = _wallet_total_get(user_id)
     msg = (
-        "🧾 Кошелёк (доллары экв. движков):\n"
-        f"• Luma: ${w['luma_usd']:.2f}\n"
-        f"• Runway: ${w['runway_usd']:.2f}\n"
-        f"• Images: ${w['img_usd']:.2f}\n\n"
-        "Чтобы пополнить при превышении бюджета — просто запусти задачу, я предложу счёт."
+        "🧾 Кошелёк:\n"
+        f"• Единый баланс: ${total:.2f}\n"
+        "  (расходуется на перерасход по Luma/Runway/Images)\n\n"
+        "Детализация по движкам (дневные бюджеты тарифа):\n"
+        f"• Luma потрачено сегодня: ${_usage_row(user_id)['luma_usd']:.2f}\n"
+        f"• Runway потрачено сегодня: ${_usage_row(user_id)['runway_usd']:.2f}\n"
+        f"• Images потрачено сегодня: ${_usage_row(user_id)['img_usd']:.2f}\n"
     )
-    await update.effective_message.reply_text(msg)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
+    ])
+    await update.effective_message.reply_text(msg, reply_markup=kb)
 
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args) if context.args else (update.message.text.split(" ", 1)[-1] if " " in update.message.text else "")
@@ -2017,4 +2127,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
