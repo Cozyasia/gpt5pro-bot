@@ -1775,6 +1775,37 @@ def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
     title = f"Подписка {tier}/{term_label}"
     return payload, amount, title
 
+# --- /start pay_* из мини-приложения (deeplink) ---
+import re as _re
+
+def _parse_start_token(token: str) -> tuple[str, int] | None:
+    """
+    Поддерживаем форматы:
+      pay:start:1   |  buy:pro:3   |  plan:ultimate:12
+      pay_start_1   |  buy_pro_3   |  plan_ultimate_12
+    """
+    if not token:
+        return None
+    t = token.strip().replace("__", ":").replace("_", ":")
+    m = _re.match(r"^(?:pay|buy|plan):(start|pro|ultimate):(1|3|12)$", t, _re.I)
+    if not m:
+        return None
+    tier = m.group(1).lower()
+    months = int(m.group(2))
+    return tier, months
+
+async def _start_try_invoice_from_token(update: Update, token: str) -> bool:
+    parsed = _parse_start_token(token)
+    if not parsed:
+        return False
+    tier, months = parsed
+    payload, amount_rub, title = _plan_payload_and_amount(tier, months)
+    desc = f"Оформление подписки {tier.upper()} на {months} мес."
+    ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
+    if not ok:
+        await update.effective_message.reply_text("Не удалось выставить счёт. Попробуй /plans.")
+    return True
+
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы и оформление подписки:"]
     for t in ("start", "pro", "ultimate"):
@@ -2037,12 +2068,29 @@ async def cmd_diag_luma_err(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Команды UI ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1) если пришёл deeplink из мини-приложения — сразу выставим счёт
+    token = ""
+    if context.args:
+        token = ":".join(context.args).strip()
+    else:
+        txt = (update.message.text or "")
+        parts = txt.split(maxsplit=1)
+        if len(parts) == 2:
+            token = parts[1].strip()
+    if token:
+        handled = await _start_try_invoice_from_token(update, token)
+        if handled:
+            return
+
+    # 2) обычный start
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
-    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
+    await update.effective_message.reply_text(
+        START_TEXT, reply_markup=main_kb, disable_web_page_preview=True
+    )
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
