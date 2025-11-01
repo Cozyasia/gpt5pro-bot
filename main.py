@@ -2061,21 +2061,22 @@ async def cmd_diag_luma_err(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Команды UI ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1) если пришёл deeplink из мини-приложения — сразу выставим счёт
-    token = ""
-    if context.args:
-        token = ":".join(context.args).strip()
-    else:
-        txt = (update.message.text or "")
-        parts = txt.split(maxsplit=1)
-        if len(parts) == 2:
-            token = parts[1].strip()
-    if token:
-        handled = await _start_try_invoice_from_token(update, token)
-        if handled:
-            return
+    # deep-link: /start pay_<tier>_<months>  (например: pay_pro_3)
+    try:
+        args = context.args or []
+    except Exception:
+        args = []
+    if args:
+        m = re.match(r"^pay_(start|pro|ultimate)_(1|3|12)$", args[0])
+        if m:
+            tier = m.group(1)
+            months = int(m.group(2))
+            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
+            desc = f"Оформление подписки {tier.upper()} на {months} мес."
+            ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
+            if ok:
+                return
 
-    # 2) обычный start
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
