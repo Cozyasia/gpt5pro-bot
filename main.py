@@ -1853,13 +1853,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # --- баланс и пополнение
-        if data == "bal:topup":
-    rows = [
-        [InlineKeyboardButton("Пополнить в RUB (ЮKassa)", callback_data="bal:topup_rub")],
-        [InlineKeyboardButton("Пополнить в Crypto", callback_data="bal:topup_crypto")],
-    ]
-    await q.edit_message_text("Выберите способ пополнения:", reply_markup=InlineKeyboardMarkup(rows))
-    return
+                if data == "bal:topup":
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Пополнить в RUB (ЮKassa)", callback_data="bal:topup_rub")],
+                [InlineKeyboardButton("Пополнить в Crypto",       callback_data="bal:topup_crypto")],
+            ])
+            await q.edit_message_text("Выберите способ пополнения:", reply_markup=kb)
+            return
 
         if data == "bal:ledger":
             user_id = q.from_user.id
@@ -1903,13 +1903,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "bal:topup_rub_other":
             context.user_data["await_topup"] = {"cur":"rub"}
             await q.edit_message_text("Введите сумму в рублях (числом):"); return
-
-        if data == "bal:topup_usd":
-            if not PROVIDER_TOKEN_USD:
-                kb = InlineKeyboardMarkup([[InlineKeyboardButton("Пополнить в Crypto", callback_data="bal:topup_crypto")]])
-                await q.edit_message_text("USD-провайдер не настроен. Можно пополнить в Crypto:", reply_markup=kb); return
-            context.user_data["await_topup"] = {"cur":"usd"}
-            await q.edit_message_text("Введите сумму в USD (числом, например 25):"); return
 
         if data == "bal:topup_crypto":
             await q.edit_message_text(
@@ -1986,6 +1979,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             aspect   = meta["aspect"]
             est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
             map_engine = "luma" if engine == "luma" else "runway"
+            
             async def _start_real_render():
                 if engine == "luma":
                     await _run_luma_video(update, context, prompt, duration, aspect)
@@ -2110,11 +2104,11 @@ async def topup_amount_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amt = float(amt_str)
         if amt <= 0:
             return await update.effective_message.reply_text("Нужна положительная сумма.")
-        if st["cur"]=="rub":
+        if st["cur"] == "rub":
             if not PROVIDER_TOKEN:
                 return await update.effective_message.reply_text("RUB-платежи не настроены.")
             rub = int(round(amt))
-            prices = [LabeledPrice(label=f"Пополнение кошелька на {rub}₽", amount=rub*100)]
+            prices = [LabeledPrice(label=f"Пополнение кошелька на {rub}₽", amount=rub * 100)]
             await update.effective_message.reply_text("Готовлю счёт…")
             await update.effective_message.reply_invoice(
                 title="Пополнение кошелька",
@@ -2125,21 +2119,7 @@ async def topup_amount_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 prices=prices,
                 is_flexible=False,
             )
-        elif st["cur"]=="usd":
-            if not PROVIDER_TOKEN_USD:
-                return await update.effective_message.reply_text("USD-провайдер не настроен.")
-            usd = round(amt, 2)
-            prices = [LabeledPrice(label=f"Top-up ${usd}", amount=int(round(usd*100)))]
-            await update.effective_message.reply_text("Готовлю счёт…")
-            await update.effective_message.reply_invoice(
-                title="Wallet Top-up",
-                description=f"Top-up ${usd}",
-                payload=f"topup:usd:{usd}",
-                provider_token=PROVIDER_TOKEN_USD,
-                currency="USD",
-                prices=prices,
-                is_flexible=False,
-            )
+        # очищаем состояние ввода суммы
         context.user_data.pop("await_topup", None)
     except Exception as e:
         log.exception("topup_amount_text error: %s", e)
