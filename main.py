@@ -303,56 +303,8 @@ def _ascii_label(s: str | None) -> str:
     except Exception:
         return "Item"
 
-# HTTP stub (healthcheck + встроенная /premium.html)
+# HTTP stub (healthcheck + /premium.html redirect)
 def _start_http_stub():
-    # Готовая HTML-страница с кнопками deeplink
-    _PREMIUM_HTML = f"""<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Тарифы</title>
-  <script>
-    function buy(tier, months){{
-      var bot = "{BOT_USERNAME}";
-      var link = "https://t.me/" + bot + "?start=pay_" + tier + "_" + months;
-      if (window.Telegram && Telegram.WebApp && Telegram.WebApp.openTelegramLink) {{
-        Telegram.WebApp.openTelegramLink(link);
-        setTimeout(function(){{ window.close(); }}, 300);
-      }} else {{
-        location.href = link;
-      }}
-    }}
-  </script>
-  <style>
-    body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:16px}}
-    h1{{font-size:18px;margin:0 0 12px}}
-    .grid{{display:grid;gap:10px}}
-    button{{padding:12px 16px;border:0;border-radius:8px;background:#2b6fff;color:#fff;font-size:16px}}
-    a{{
-      display:inline-block;margin-top:12px;text-decoration:none;color:#2b6fff
-    }}
-  </style>
-</head>
-<body>
-  <h1>Оформить подписку</h1>
-  <div class="grid">
-    <button onclick="buy('start',1)">START — месяц</button>
-    <button onclick="buy('start',3)">START — квартал</button>
-    <button onclick="buy('start',12)">START — год</button>
-
-    <button onclick="buy('pro',1)">PRO — месяц</button>
-    <button onclick="buy('pro',3)">PRO — квартал</button>
-    <button onclick="buy('pro',12)">PRO — год</button>
-
-    <button onclick="buy('ultimate',1)">ULTIMATE — месяц</button>
-    <button onclick="buy('ultimate',3)">ULTIMATE — квартал</button>
-    <button onclick="buy('ultimate',12)">ULTIMATE — год</button>
-  </div>
-  {"<a href='"+WEBAPP_URL+"' target='_blank' rel='noopener'>Открыть полную страницу тарифов</a>" if WEBAPP_URL else ""}
-</body>
-</html>"""
-
     class _H(BaseHTTPRequestHandler):
         def do_GET(self):
             path = (self.path or "/").split("?", 1)[0]
@@ -363,10 +315,15 @@ def _start_http_stub():
                 self.wfile.write(b"ok")
                 return
             if path == "/premium.html":
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(_PREMIUM_HTML.encode("utf-8"))
+                if WEBAPP_URL:
+                    self.send_response(302)
+                    self.send_header("Location", WEBAPP_URL)
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b"<html><body><h3>Premium page</h3><p>Set WEBAPP_URL env.</p></body></html>")
                 return
             self.send_response(404)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -1419,7 +1376,7 @@ async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
                     global _LUMA_LAST_BASE
                     _LUMA_LAST_BASE = base
                     if base != LUMA_BASE_URL:
-                        log.warning("Luma: switched base_url to %s (fallback worked)")
+                        log.warning("Luma: switched base_url to %s (fallback worked)", base)
                     _LUMA_LAST_ERR = None
                     return str(job_id)
                 log.error("Luma create: no job id in response from %s: %s", base, j)
@@ -1818,37 +1775,6 @@ def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
     title = f"Подписка {tier}/{term_label}"
     return payload, amount, title
 
-# --- /start pay_* из мини-приложения (deeplink) ---
-import re as _re
-
-def _parse_start_token(token: str) -> tuple[str, int] | None:
-    """
-    Поддерживаем форматы:
-      pay:start:1   |  buy:pro:3   |  plan:ultimate:12
-      pay_start_1   |  buy_pro_3   |  plan_ultimate_12
-    """
-    if not token:
-        return None
-    t = token.strip().replace("__", ":").replace("_", ":")
-    m = _re.match(r"^(?:pay|buy|plan):(start|pro|ultimate):(1|3|12)$", t, _re.I)
-    if not m:
-        return None
-    tier = m.group(1).lower()
-    months = int(m.group(2))
-    return tier, months
-
-async def _start_try_invoice_from_token(update: Update, token: str) -> bool:
-    parsed = _parse_start_token(token)
-    if not parsed:
-        return False
-    tier, months = parsed
-    payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-    desc = f"Оформление подписки {tier.upper()} на {months} мес."
-    ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
-    if not ok:
-        await update.effective_message.reply_text("Не удалось выставить счёт. Попробуй /plans.")
-    return True
-
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы и оформление подписки:"]
     for t in ("start", "pro", "ultimate"):
@@ -1897,11 +1823,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # --- баланс и пополнение
         if data == "bal:topup":
-            kb = InlineKeyboardMarkup([
+            rows = [
                 [InlineKeyboardButton("Пополнить в RUB (ЮKassa)", callback_data="bal:topup_rub")],
-                [InlineKeyboardButton("Пополнить в Crypto",       callback_data="bal:topup_crypto")],
-            ])
-            await q.edit_message_text("Выберите способ пополнения:", reply_markup=kb)
+                [InlineKeyboardButton("Пополнить в USD", callback_data="bal:topup_usd")],
+                [InlineKeyboardButton("Пополнить в Crypto", callback_data="bal:topup_crypto")],
+            ]
+            await q.edit_message_text("Выберите способ пополнения:", reply_markup=InlineKeyboardMarkup(rows))
             return
 
         if data == "bal:ledger":
@@ -1946,6 +1873,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "bal:topup_rub_other":
             context.user_data["await_topup"] = {"cur":"rub"}
             await q.edit_message_text("Введите сумму в рублях (числом):"); return
+
+        if data == "bal:topup_usd":
+            if not PROVIDER_TOKEN_USD:
+                kb = InlineKeyboardMarkup([[InlineKeyboardButton("Пополнить в Crypto", callback_data="bal:topup_crypto")]])
+                await q.edit_message_text("USD-провайдер не настроен. Можно пополнить в Crypto:", reply_markup=kb); return
+            context.user_data["await_topup"] = {"cur":"usd"}
+            await q.edit_message_text("Введите сумму в USD (числом, например 25):"); return
 
         if data == "bal:topup_crypto":
             await q.edit_message_text(
@@ -2022,7 +1956,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             aspect   = meta["aspect"]
             est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
             map_engine = "luma" if engine == "luma" else "runway"
-            
             async def _start_real_render():
                 if engine == "luma":
                     await _run_luma_video(update, context, prompt, duration, aspect)
@@ -2104,30 +2037,12 @@ async def cmd_diag_luma_err(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Команды UI ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # deep-link: /start pay_<tier>_<months>  (например: pay_pro_3)
-    try:
-        args = context.args or []
-    except Exception:
-        args = []
-    if args:
-        m = re.match(r"^pay_(start|pro|ultimate)_(1|3|12)$", args[0])
-        if m:
-            tier = m.group(1)
-            months = int(m.group(2))
-            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-            desc = f"Оформление подписки {tier.upper()} на {months} мес."
-            ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
-            if ok:
-                return
-
     if BANNER_URL:
         try:
             await update.effective_message.reply_photo(BANNER_URL)
         except Exception:
             pass
-    await update.effective_message.reply_text(
-        START_TEXT, reply_markup=main_kb, disable_web_page_preview=True
-    )
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
@@ -2148,11 +2063,11 @@ async def topup_amount_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amt = float(amt_str)
         if amt <= 0:
             return await update.effective_message.reply_text("Нужна положительная сумма.")
-        if st["cur"] == "rub":
+        if st["cur"]=="rub":
             if not PROVIDER_TOKEN:
                 return await update.effective_message.reply_text("RUB-платежи не настроены.")
             rub = int(round(amt))
-            prices = [LabeledPrice(label=f"Пополнение кошелька на {rub}₽", amount=rub * 100)]
+            prices = [Labeled Price(label=f"Пополнение кошелька на {rub}₽", amount=rub*100)]
             await update.effective_message.reply_text("Готовлю счёт…")
             await update.effective_message.reply_invoice(
                 title="Пополнение кошелька",
@@ -2163,7 +2078,21 @@ async def topup_amount_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 prices=prices,
                 is_flexible=False,
             )
-        # очищаем состояние ввода суммы
+        elif st["cur"]=="usd":
+            if not PROVIDER_TOKEN_USD:
+                return await update.effective_message.reply_text("USD-провайдер не настроен.")
+            usd = round(amt, 2)
+            prices = [LabeledPrice(label=f"Top-up ${usd}", amount=int(round(usd*100)))]
+            await update.effective_message.reply_text("Готовлю счёт…")
+            await update.effective_message.reply_invoice(
+                title="Wallet Top-up",
+                description=f"Top-up ${usd}",
+                payload=f"topup:usd:{usd}",
+                provider_token=PROVIDER_TOKEN_USD,
+                currency="USD",
+                prices=prices,
+                is_flexible=False,
+            )
         context.user_data.pop("await_topup", None)
     except Exception as e:
         log.exception("topup_amount_text error: %s", e)
