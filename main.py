@@ -1,3 +1,6 @@
+Main 02.11.26
+
+
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -53,10 +56,11 @@ WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
-# STT:
+# STT (OpenAI Whisper/4o-mini-transcribe + Deepgram):
+OPENAI_STT_KEY   = (os.environ.get("OPENAI_STT_KEY", "").strip()
+                    or os.environ.get("OPENAI_API_KEY", "").strip())  # ← фолбэк на основной ключ
+TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "").strip() or "gpt-4o-mini-transcribe"  # фолбэк с whisper-1 ниже
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
-OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
-TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
 # TTS:
 OPENAI_TTS_KEY       = os.environ.get("OPENAI_TTS_KEY", "").strip() or OPENAI_API_KEY
@@ -167,42 +171,60 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- STT: распознавание речи (Whisper → Deepgram) ---
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
+    """
+    1) Пытаемся OpenAI STT (gpt-4o-mini-transcribe/whisper-1) — официальная API.
+    2) Если не вышло — Deepgram (nova-2) со smart_format, language=ru.
+    Возвращаем чистый текст либо "".
+    """
     try:
-        # 1) Whisper (OpenAI)
+        # ---------- OpenAI ----------
         if oai_stt:
             buf.seek(0)
+            model_try = TRANSCRIBE_MODEL or "gpt-4o-mini-transcribe"
             try:
+                # Подаём (filename, fileobj) — так стабильнее определяются заголовки
                 r = oai_stt.audio.transcriptions.create(
-                    model=TRANSCRIBE_MODEL,
-                    file=buf
+                    model=model_try,
+                    file=(filename_hint, buf),
+                    response_format="text",
+                    # language можно не указывать — автоопределение, но для русского помогает:
+                    language="ru"
                 )
-                txt = getattr(r, "text", None) or getattr(r, "output_text", None)
-                if txt:
-                    return txt.strip()
-            except Exception:
-                pass
-            buf.seek(0)
-            try:
-                r = oai_stt.audio.transcriptions.create(
-                    model=TRANSCRIBE_MODEL,
-                    file=(filename_hint, buf)
-                )
-                txt = getattr(r, "text", None) or getattr(r, "output_text", None)
+                txt = (r or "").strip() if isinstance(r, str) else getattr(r, "text", None) or getattr(r, "output_text", None)
                 if txt:
                     return txt.strip()
             except Exception as e:
-                log.warning("OpenAI STT failed: %s", e)
+                log.warning("OpenAI STT (%s) failed: %s", model_try, e)
+                # Фолбэк на whisper-1
+                try:
+                    buf.seek(0)
+                    r = oai_stt.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=(filename_hint, buf),
+                        response_format="text",
+                        language="ru"
+                    )
+                    txt = (r or "").strip() if isinstance(r, str) else getattr(r, "text", None) or getattr(r, "output_text", None)
+                    if txt:
+                        return txt.strip()
+                except Exception as e2:
+                    log.warning("OpenAI STT (whisper-1) failed: %s", e2)
 
-        # 2) Deepgram
+        # ---------- Deepgram ----------
         if DEEPGRAM_API_KEY:
             buf.seek(0)
             headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
-            files = {"audio": (filename_hint, buf, "application/octet-stream")}
+            params = {
+                "model": "nova-2",          # стабильная универсальная модель
+                "smart_format": "true",
+                "language": "ru"
+            }
+            files = {"audio": (filename_hint, buf, "audio/ogg")}
             async with httpx.AsyncClient(timeout=120.0) as client:
-                r = await client.post(
-                    "https://api.deepgram.com/v1/listen?model=nova-2-general&smart_format=true",
-                    headers=headers, files=files
-                )
+                r = await client.post("https://api.deepgram.com/v1/listen", headers=headers, params=params, files=files)
+                if r.status_code != 200:
+                    log.warning("Deepgram HTTP %s: %s", r.status_code, r.text[:400])
+                    return ""
                 j = r.json()
                 txt = (
                     j.get("results", {})
@@ -212,8 +234,10 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
                 )
                 if txt:
                     return txt.strip()
+
     except Exception as e:
-        log.warning("transcribe_audio error: %s", e)
+        log.warning("transcribe_audio fatal error: %s", e)
+
     return ""
 
 # --- Глобальный обработчик ошибок telegram.ext ---
@@ -352,12 +376,17 @@ if ref:
 if ttl:
     default_headers["X-Title"] = ttl
 
+# Текстовый клиент (как было)
 try:
     oai_llm = OpenAI(api_key=OPENAI_API_KEY, base_url=_auto_base or None, default_headers=default_headers or None)
 except TypeError:
     oai_llm = OpenAI(api_key=OPENAI_API_KEY, base_url=_auto_base or None)
 
-oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
+# STT — всегда на официальный OpenAI endpoint, чтобы не ушло на OpenRouter
+oai_stt = None
+if OPENAI_STT_KEY:
+    oai_stt = OpenAI(api_key=OPENAI_STT_KEY, base_url="https://api.openai.com/v1")
+
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url=IMAGES_BASE_URL)
 oai_tts = OpenAI(api_key=OPENAI_TTS_KEY, base_url=OPENAI_TTS_BASE_URL)
 
