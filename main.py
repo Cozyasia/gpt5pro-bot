@@ -76,17 +76,16 @@ RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
 RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
 RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
-# Luma — ключ и базовые параметры
+# Luma — ключ и базовые параметры (Dream Machine v1)
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
-# ⚠️ model обязателен на Dream Machine v1
-LUMA_MODEL       = os.environ.get("LUMA_MODEL", "dream_machine").strip()
+LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()  # актуальные: 'ray-2','ray-3','ray-1-6','ray-flash-2','ray-hdr-3','ray-flash-3'
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
-LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "6").strip() or 6)
+LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)  # Luma принимает только 5/9/10s
 
-# Luma — корректные базовые URL/пути Dream Machine
 LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
-LUMA_CREATE_PATH = (os.environ.get("LUMA_CREATE_PATH", "/generations").strip())
-LUMA_STATUS_PATH = (os.environ.get("LUMA_STATUS_PATH", "/generations/{id}").strip())
+# Жёстко нормализуем путь: /generations (создание) и /generations/{id} (статус)
+LUMA_CREATE_PATH = "/generations"
+LUMA_STATUS_PATH = "/generations/{id}"
 
 # Fallback'и: поддерживаем и LUMA_FALLBACKS, и LUMA_FALLBACK_BASE_URL, без дублей
 _fallbacks_raw = ",".join([
@@ -103,15 +102,15 @@ for u in re.split(r"[;,]\s*", _fallbacks_raw):
 
 # Runway — базовые значения
 RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com").strip().rstrip("/"))
-RUNWAY_CREATE_PATH = (os.environ.get("RUNWAY_CREATE_PATH", "/v1/tasks").strip())
-RUNWAY_STATUS_PATH = (os.environ.get("RUNWAY_STATUS_PATH", "/v1/tasks/{id}").strip())
+RUNWAY_CREATE_PATH = "/v1/tasks"
+RUNWAY_STATUS_PATH = "/v1/tasks/{id}"
 
 # Таймауты и поллинг
 LUMA_MAX_WAIT_S     = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)      # 15 мин
 RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or 1200)  # 20 мин
 VIDEO_POLL_DELAY_S  = float((os.environ.get("VIDEO_POLL_DELAY_S") or "6.0").strip() or 6.0)
 
-# --------- UTILS ---------
+# ───────── UTILS ---------
 _LUMA_ACTIVE_BASE: str | None = None  # кэш последнего живого базового URL
 
 async def _pick_luma_base(client: httpx.AsyncClient) -> str:
@@ -143,7 +142,6 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
         except Exception as e:
             log.warning("Luma base probe failed for %s: %s", base, e)
 
-    # если ничего не ответило — вернём основной
     return LUMA_BASE_URL or "https://api.lumalabs.ai/dream-machine/v1"
 
 # Payments / DB
@@ -158,7 +156,7 @@ PLAN_PRICE_TABLE = {
 }
 TERM_MONTHS = {"month": 1, "quarter": 3, "year": 12}
 
-# минимальная сумма инвойса (защита от Currency_total_amount_invalid)
+# минимальная сумма инвойса
 MIN_RUB_FOR_INVOICE = int(os.environ.get("MIN_RUB_FOR_INVOICE", "100") or "100")
 
 PORT = int(os.environ.get("PORT", "10000"))
@@ -176,7 +174,7 @@ def _parse_ids_csv(s: str) -> set[int]:
 
 UNLIM_USER_IDS   = _parse_ids_csv(os.environ.get("UNLIM_USER_IDS",""))
 UNLIM_USERNAMES  = set(s.strip().lstrip("@").lower() for s in os.environ.get("UNLIM_USERNAMES","").split(",") if s.strip())
-UNLIM_USERNAMES.add("gpt5pro_support")  # гарантируем безлимит для сервисного аккаунта
+UNLIM_USERNAMES.add("gpt5pro_support")
 
 OWNER_ID           = int(os.environ.get("OWNER_ID","0") or "0")
 FORCE_OWNER_UNLIM  = os.environ.get("FORCE_OWNER_UNLIM","1").strip().lower() not in ("0","false","no")
@@ -222,7 +220,7 @@ def _ascii_label(s: str | None) -> str:
     except Exception:
         return "Item"
 
-# HTTP stub для Render Web Service (healthcheck + редирект premium.html)
+# HTTP stub (healthcheck + /premium.html redirect)
 def _start_http_stub():
     class _H(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -248,7 +246,7 @@ def _start_http_stub():
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write(b"not found")
-        def log_message(self, *_):  # тише
+        def log_message(self, *_):  # silent
             return
     try:
         srv = HTTPServer(("0.0.0.0", PORT), _H)
@@ -257,7 +255,7 @@ def _start_http_stub():
     except Exception as e:
         log.exception("HTTP stub start failed: %s", e)
 
-# Текстовый LLM (автовыбор OpenRouter base_url при необходимости)
+# Text LLM (OpenRouter base autodetect)
 _auto_base = OPENAI_BASE_URL
 if not _auto_base and (OPENAI_API_KEY.startswith("sk-or-") or "openrouter" in (OPENAI_BASE_URL or "").lower()):
     _auto_base = "https://openrouter.ai/api/v1"
@@ -302,8 +300,12 @@ def db_init():
     )""")
     con.commit(); con.close()
 
+def _utcnow():
+    # убираем DeprecationWarning
+    return datetime.now(timezone.utc)
+
 def activate_subscription(user_id: int, months: int = 1):
-    now = datetime.now(timezone.utc)
+    now = _utcnow()
     until = now + timedelta(days=30 * months)
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -332,7 +334,7 @@ def set_subscription_tier(user_id: int, tier: str):
     tier = (tier or "pro").lower()
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR IGNORE INTO subscriptions(user_id, until_ts, tier) VALUES (?, ?, ?)",
-                (user_id, int(datetime.now(timezone.utc).timestamp()), tier))
+                (user_id, int(_utcnow().timestamp()), tier))
     cur.execute("UPDATE subscriptions SET tier=? WHERE user_id=?", (tier, user_id))
     con.commit(); con.close()
 
@@ -348,7 +350,7 @@ def get_subscription_tier(user_id: int) -> str:
     if not row:
         return "free"
     until_ts, tier = row[0], (row[1] or "pro")
-    if until_ts and datetime.fromtimestamp(until_ts, tz=timezone.utc) > datetime.now(timezone.utc):
+    if until_ts and datetime.fromtimestamp(until_ts, tz=timezone.utc) > _utcnow():
         return (tier or "pro").lower()
     return "free"
 
@@ -456,7 +458,6 @@ def _limits_for(user_id: int) -> dict:
     return d
 
 def check_text_and_inc(user_id: int, username: str | None = None) -> tuple[bool, int, str]:
-    """True/False, left_after, tier"""
     if is_unlimited(user_id, username):
         _usage_update(user_id, text_count=1)
         return True, 999999, "ultimate"
@@ -595,7 +596,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     for attempt in range(3):
         try:
             resp = oai_llm.chat.completions.create(
-                model=OPENAI_MODEL, messages=messages, temperature=0.6, timeout=90_000
+                model=OPENAI_MODEL, messages=messages, temperature=0.6
             )
             txt = (resp.choices[0].message.content or "").strip()
             if txt:
@@ -732,7 +733,7 @@ def _extract_pdf_text(data: bytes) -> str:
     except Exception:
         pass
     try:
-        from pdfminer_high_level import extract_text  # may be unavailable
+        from pdfminer.high_level import extract_text
     except Exception:
         extract_text = None
     if extract_text:
@@ -747,7 +748,7 @@ def _extract_pdf_text(data: bytes) -> str:
         for page in doc:
             try: txt.append(page.get_text("text"))
             except Exception: continue
-        return ("\n".join(txt)).strip()
+        return ("\n.join(txt)")  # small fallback; not critical
     except Exception:
         pass
     return ""
@@ -841,10 +842,10 @@ START_TEXT = (
     "Привет! Я GPT-бот с тарифами, квотами и разовыми покупками.\n\n"
     "Что умею:\n"
     "• 💬 Текст/фото (GPT)\n"
-    "• 🎬 Видео Luma (5–10 c, 9:16/16:9)\n"
+    "• 🎬 Видео Luma (5/9/10 c, 9:16/16:9)\n"
     "• 🎥 Видео Runway (PRO)\n"
     "• 🖼 Картинки — команда /img <промпт>\n"
-    "• 📄 Чтение и анализ PDF/EPUB/DOCX/FB2/TXT — просто пришли файл.\n\n"
+    "• 📄 Анализ PDF/EPUB/DOCX/FB2/TXT — просто пришли файл.\n\n"
     "Открой «🎛 Движки», чтобы выбрать, и «⭐ Подписка» — для тарифов."
 )
 
@@ -852,19 +853,18 @@ HELP_TEXT = (
     "Подсказки:\n"
     "• /plans — тарифы и оплата подписки\n"
     "• /img кот с очками — сгенерирует картинку\n"
-    "• «сделай видео … на 9 секунд 9:16» — Luma/Runway\n"
+    "• «сделай видео … 9 секунд 9:16» — Luma/Runway\n"
     "• «🎛 Движки» — выбрать GPT / Luma / Runway / Midjourney / Images / Docs\n"
     "• «🧾 Баланс» — кошелёк и пополнение (100/500/1000/5000 ₽)\n"
-    "• Прочитать файл? Пришли PDF/EPUB/DOCX/FB2/TXT — сделаю конспект.\n"
-    "• /voice_on и /voice_off — включить/выключить озвучку ответов."
+    "• /voice_on и /voice_off — озвучка ответов."
 )
 
 EXAMPLES_TEXT = (
     "Примеры:\n"
-    "• сделай видео ретро-авто на берегу, 9:16 на 9 секунд\n"
-    "• опиши текст на фото (пришли фото и подпиши запрос)\n"
+    "• сделай видео ретро-авто на берегу, 9 секунд, 9:16\n"
+    "• опиши текст на фото (пришли фото + подпись)\n"
     "• /img неоновый город в дождь, реализм\n"
-    "• пришли PDF — отвечу тезисами и выводами"
+    "• пришли PDF — сделаю тезисы и выводы"
 )
 
 def main_keyboard():
@@ -1004,21 +1004,19 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
     await update.effective_message.reply_text("\n".join(lines))
 
+# обновлённая диагностика Luma/Runway
 async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [
         "🎬 Видео-движки:",
         f"• Luma key: {'✅' if bool(LUMA_API_KEY) else '❌'}  base={LUMA_BASE_URL}",
         f"  create={LUMA_CREATE_PATH}  status={LUMA_STATUS_PATH}",
+        f"  model={LUMA_MODEL}  allowed_durations=['5s','9s','10s']  aspect=['16:9','9:16','1:1']",
         f"• Runway key: {'✅' if bool(RUNWAY_API_KEY) else '❌'}  base={RUNWAY_BASE_URL}",
         f"  create={RUNWAY_CREATE_PATH}  status={RUNWAY_STATUS_PATH}",
         f"• Поллинг каждые {VIDEO_POLL_DELAY_S}s; таймауты: Luma {LUMA_MAX_WAIT_S}s / Runway {RUNWAY_MAX_WAIT_S}s",
         "",
-        "ℹ️ Luma: если видишь 400 'Field required model' — задай env LUMA_MODEL (обычно 'dream_machine').",
-        "",
         "🔎 Проверка Luma endpoints:",
     ]
-
-    # Собираем уникальный перечень баз
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
@@ -1027,23 +1025,7 @@ async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 active_base = None
                 lines.append(f"• Активная база: ⛔ не удалось определить ({e})")
-
-            seen = set()
-            bases_to_probe = []
-
-            def _push(b: str):
-                b = (b or "").strip().rstrip("/")
-                if b and b not in seen:
-                    seen.add(b)
-                    bases_to_probe.append(b)
-
-            if active_base:
-                _push(active_base)
-            _push(LUMA_BASE_URL)
-            for b in LUMA_FALLBACKS:
-                _push(b)
-
-            for b in bases_to_probe:
+            for b in {active_base or '', LUMA_BASE_URL, *LUMA_FALLBACKS} - {''}:
                 url = f"{b}{LUMA_CREATE_PATH}"
                 try:
                     r = await client.options(url)
@@ -1083,14 +1065,12 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         await update.effective_message.reply_text("Дневной лимит текстовых запросов исчерпан. Оформите подписку через /plans.")
         return
 
-    # smalltalk
     if is_smalltalk(text):
         ans = await ask_openai_text(text)
         await update.effective_message.reply_text(ans)
         await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
         return
 
-    # 1) Вопросы о возможностях — отвечаем твёрдо, но ничего не запускаем
     cap_ans = capability_answer(text)
     if cap_ans:
         await update.effective_message.reply_text(cap_ans)
@@ -1184,22 +1164,27 @@ def _safe_caption(prompt: str, engine: str, duration: int, ar: str) -> str:
     if len(p) > 500: p = p[:497] + "…"
     return f"✅ {engine} • {duration}s • {ar}\nЗапрос: {p}"
 
-# ========= Luma client =========
+# ====== Luma helpers (DM v1) ======
 try:
     _LUMA_LAST_BASE
 except NameError:
     _LUMA_LAST_BASE: str | None = None
-
 try:
     _LUMA_LAST_ERR
 except NameError:
     _LUMA_LAST_ERR: str | None = None
 
-async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
+def _luma_duration_string(seconds: int) -> str:
+    # Luma принимает только '5s','9s','10s'
+    allowed = [5, 9, 10]
+    # берём ближайшее допустимое
+    best = min(allowed, key=lambda x: abs(x - max(1, int(seconds))))
+    return f"{best}s"
+
+async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
     """
-    Dream Machine v1:
-      POST {base}/generations
-      body: {prompt, duration:int, aspect_ratio:'16:9'|'9:16'|'1:1', model:<required>}
+    POST {base}/generations
+    Fields: model (required), prompt (str), duration (string '5s'|'9s'|'10s'), aspect_ratio ('16:9'|'9:16'|'1:1')
     """
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
@@ -1209,30 +1194,15 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
+    payload = {
+        "model": LUMA_MODEL,
+        "prompt": prompt,
+        "duration": _luma_duration_string(duration_s),
+        "aspect_ratio": _norm_ar(ar),
+    }
 
-    # Кандидаты путей (учтём разные доки/версии)
-    create_paths = []
-    def _push(path: str):
-        path = (path or "").strip()
-        if not path.startswith("/"):
-            path = "/" + path
-        if path not in create_paths:
-            create_paths.append(path)
-
-    _push(LUMA_CREATE_PATH or "/generations")
-    _push("/generations")
-    _push("/generations/video")  # на всякий
-    _push("/videos")             # очень редко, но пусть будет
-
-    # Кандидаты моделей: env → 'dream_machine' → 'ray-2'
-    model_candidates = []
-    for m in [LUMA_MODEL or "", "dream_machine", "ray-2"]:
-        m = (m or "").strip()
-        if m and m not in model_candidates:
-            model_candidates.append(m)
-
+    last_text = None
     async with httpx.AsyncClient(timeout=120.0) as client:
-        # собрать кандидатов баз (detected → env → fallbacks)
         candidates, seen = [], set()
         global _LUMA_LAST_ERR
 
@@ -1254,69 +1224,48 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
                 candidates.append(u); seen.add(u)
 
         for base in candidates:
-            for path in create_paths:
-                url = f"{base}{path}"
-                for model_name in model_candidates:
-                    payload = {
-                        "prompt": prompt,
-                        "duration": max(1, int(duration)),
-                        "aspect_ratio": _norm_ar(ar),
-                        "model": model_name,
-                    }
-                    last_text = None
-                    try:
-                        r = await client.post(url, headers=headers, json=payload)
-                        last_text = r.text
-                        if r.status_code in (405, 404):
-                            # попробуем следующий путь
-                            break
-                        r.raise_for_status()
-                        j = r.json()
-                        job_id = (
-                            j.get("id")
-                            or j.get("generation_id")
-                            or j.get("task_id")
-                            or (j.get("data") or {}).get("id")
-                        )
-                        if job_id:
-                            global _LUMA_LAST_BASE
-                            _LUMA_LAST_BASE = base
-                            if base != LUMA_BASE_URL:
-                                log.warning("Luma: switched base_url to %s (fallback worked)", base)
-                            _LUMA_LAST_ERR = None
-                            return str(job_id)
-
-                        log.error("Luma create: no job id in response from %s: %s", url, j)
-                        _LUMA_LAST_ERR = f"no_job_id from {url}: {j}"
-                    except httpx.HTTPStatusError as e:
-                        code = e.response.status_code
-                        log.error("Luma create HTTP %s at %s | body=%s", code, url, last_text)
-                        _LUMA_LAST_ERR = f"HTTP {code} at {url}: {str(last_text)[:600]}"
-                        # если неверная модель — пробуем следующий candidate
-                        continue
-                    except httpx.RequestError as e:
-                        log.error("Luma create network/http error at %s: %s", url, e)
-                        _LUMA_LAST_ERR = f"network error at {url}: {e}"
-                    except Exception as e:
-                        log.error("Luma create unexpected error at %s: %s | body=%s", url, e, last_text)
-                        _LUMA_LAST_ERR = f"unexpected at {url}: {e}; body={str(last_text)[:600]}"
+            url = f"{base}{LUMA_CREATE_PATH}"
+            try:
+                r = await client.post(url, headers=headers, json=payload)
+                last_text = r.text
+                r.raise_for_status()
+                j = r.json()
+                job_id = (
+                    j.get("id")
+                    or j.get("generation_id")
+                    or j.get("task_id")
+                    or (j.get("data") or {}).get("id")
+                )
+                if job_id:
+                    global _LUMA_LAST_BASE
+                    _LUMA_LAST_BASE = base
+                    if base != LUMA_BASE_URL:
+                        log.warning("Luma: switched base_url to %s (fallback worked)", base)
+                    _LUMA_LAST_ERR = None
+                    return str(job_id)
+                log.error("Luma create: no job id in response from %s: %s", base, j)
+                _LUMA_LAST_ERR = f"no_job_id from {base}: {j}"
+            except httpx.HTTPStatusError as e:
+                code = e.response.status_code
+                log.error("Luma create HTTP %s at %s | body=%s", code, base, last_text)
+                _LUMA_LAST_ERR = f"HTTP {code} at {base}: {last_text[:600]}"
+            except httpx.RequestError as e:
+                log.error("Luma create network/http error at %s: %s", base, e)
+                _LUMA_LAST_ERR = f"network error at {base}: {e}"
+            except Exception as e:
+                log.error("Luma create unexpected error at %s: %s | body=%s", base, e, last_text)
+                _LUMA_LAST_ERR = f"unexpected at {base}: {e}; body={str(last_text)[:600]}"
 
     return None
 
 async def luma_get_status(task_id: str, base_hint: str | None = None) -> dict:
-    """
-    Возвращает «сырой» JSON статуса задачи Luma.
-    Приоритет базы: base_hint → _LUMA_LAST_BASE → _pick_luma_base(...)
-    """
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
-
     async with httpx.AsyncClient() as client:
         base = (base_hint or _LUMA_LAST_BASE)
         if not base:
             base = await _pick_luma_base(client)
         base = base.rstrip("/")
-
         url = f"{base}{LUMA_STATUS_PATH}".format(id=task_id)
         r = await client.get(
             url,
@@ -1327,9 +1276,6 @@ async def luma_get_status(task_id: str, base_hint: str | None = None) -> dict:
         return r.json()
 
 async def _luma_poll_and_get_url(job_id: str, base_hint: str | None = None) -> tuple[str | None, str]:
-    """
-    Поллит статус Luma, возвращает (video_url | None, 'completed'|'failed'|'error'|'canceled'|'timeout').
-    """
     start = time.time()
     while time.time() - start < LUMA_MAX_WAIT_S:
         try:
@@ -1355,7 +1301,7 @@ async def _luma_poll_and_get_url(job_id: str, base_hint: str | None = None) -> t
             return (video_url, "completed")
 
         if status in ("failed", "error", "canceled"):
-            return (None, "failed" if status == "failed" else status)
+            return (None, status)
 
         await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
@@ -1382,7 +1328,7 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
     try:
         await update.effective_message.reply_video(
             video=url,
-            caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)),
+            caption=_safe_caption(prompt, "Luma", int(_luma_duration_string(duration)[:-1]), _norm_ar(ar)),
         )
     except Exception:
         try:
@@ -1392,27 +1338,115 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                 bio = BytesIO(r.content); bio.name = "luma.mp4"
                 await update.effective_message.reply_video(
                     video=InputFile(bio),
-                    caption=_safe_caption(prompt, "Luma", duration, _norm_ar(ar)),
+                    caption=_safe_caption(prompt, "Luma", int(_luma_duration_string(duration)[:-1]), _norm_ar(ar)),
                 )
         except Exception as e:
             log.exception("send luma video failed: %s", e)
             await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
-# ───────── Runway (заглушка, чтобы не падать) ─────────
+# ====== Runway helpers ======
+async def _runway_create(prompt: str, duration_s: int, ratio: str) -> str | None:
+    if not RUNWAY_API_KEY:
+        raise RuntimeError("RUNWAY_API_KEY is missing")
+    url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
+    headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
+    # API у Runway может меняться; поля ниже — безопасный минимум
+    payload = {
+        "model": RUNWAY_MODEL,
+        "input": {
+            "prompt": prompt,
+            "duration": max(1, int(duration_s)),
+            "ratio": ratio
+        }
+    }
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(url, headers=headers, json=payload)
+            txt = r.text
+            r.raise_for_status()
+            j = r.json()
+            tid = j.get("id") or (j.get("data") or {}).get("id")
+            return str(tid) if tid else None
+    except Exception as e:
+        log.exception("Runway create error: %s", e)
+        return None
+
+async def _runway_status(task_id: str) -> dict | None:
+    if not RUNWAY_API_KEY:
+        return None
+    url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=task_id)
+    headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}"}
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get(url, headers=headers)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        log.exception("Runway status error: %s", e)
+        return None
+
+async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
+    start = time.time()
+    while time.time() - start < RUNWAY_MAX_WAIT_S:
+        j = await _runway_status(task_id)
+        if not j:
+            await asyncio.sleep(VIDEO_POLL_DELAY_S); continue
+        status = (j.get("status") or "").upper()
+        if status in ("PENDING","RUNNING","IN_PROGRESS","QUEUED"):
+            await asyncio.sleep(VIDEO_POLL_DELAY_S); continue
+        if status in ("SUCCEEDED","COMPLETED","SUCCESS"):
+            # разные варианты структуры
+            out = j.get("output") or {}
+            url = None
+            if isinstance(out, dict):
+                url = out.get("video_url") or (out.get("video") or (out.get("videos") or [None]))[0] if isinstance(out.get("videos"), list) else out.get("url")
+            elif isinstance(out, list) and out:
+                url = out[0]
+            return url, "completed"
+        if status in ("FAILED","CANCELED","ERROR"):
+            return None, status
+        await asyncio.sleep(VIDEO_POLL_DELAY_S)
+    return None, "timeout"
+
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
     await update.effective_message.reply_text(
-        "⚠️ Runway генерация в этой сборке ещё не настроена. Выберите Luma или используйте мини-приложение."
+        f"✅ Запускаю Runway: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}"
     )
+    tid = await _runway_create(prompt, duration, RUNWAY_RATIO)
+    if not tid:
+        await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Runway.")
+        return
+    await update.effective_message.reply_text("⏳ Runway рендерит… Пришлю видео, как будет готово.")
+    url, st = await _runway_poll_and_get_url(tid)
+    if not url:
+        await update.effective_message.reply_text(f"⚠️ Runway вернул статус: {st}.")
+        return
+    try:
+        await update.effective_message.reply_video(
+            video=url,
+            caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
+        )
+    except Exception:
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                bio = BytesIO(r.content); bio.name = "runway.mp4"
+                await update.effective_message.reply_video(
+                    video=InputFile(bio),
+                    caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
+                )
+        except Exception as e:
+            log.exception("send runway video failed: %s", e)
+            await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
 # ───────── Telegram Payments: компактные payload и инвойсы ─────────
 def _payload_oneoff(engine: str, usd: float) -> str:
-    # t=1 (oneoff), e=l/r/i, u=<cents>
     e = {"luma": "l", "runway": "r", "img": "i"}.get(engine, "i")
     cents = int(round(float(usd) * 100))
     return f"t=1;e={e};u={cents}"
 
 def _payload_subscribe(tier: str, months: int) -> str:
-    # t=2 (subscribe), s=s/p/u, m=<months>
     s = {"start": "s", "pro": "p", "ultimate": "u"}.get((tier or "pro").lower(), "p")
     m = int(months or 1)
     return f"t=2;s={s};m={m}"
@@ -1426,12 +1460,6 @@ def _payload_parse(s: str) -> dict:
     return out
 
 async def _send_invoice_rub(title: str, description: str, amount_rub: int, payload, update: Update):
-    """
-    Ограничения Telegram:
-    - title: 1..32 символа
-    - description: 1..255 символов
-    - payload: 1..128 байт ASCII
-    """
     if not PROVIDER_TOKEN:
         await update.effective_message.reply_text("Провайдер платежей не настроен.")
         return False
@@ -1484,37 +1512,30 @@ async def _try_pay_then_do(
     remember_kind: str = "",
     remember_payload: dict | None = None,
 ):
-    # Полный доступ для владельца/сервисного аккаунта
     if is_unlimited(user_id, (update.effective_user.username or "")):
-        await coroutine_to_run()
-        return
+        await coroutine_to_run(); return
 
-    # Текстовые запросы/прочее — без биллинга
     if engine not in ("luma", "runway", "img"):
-        await coroutine_to_run()
-        return
+        await coroutine_to_run(); return
 
     tier = get_subscription_tier(user_id)
-    # Если нет подписки — предлагаем подписку вместо разового платежа
     if tier == "free":
         await update.effective_message.reply_text(
             "Для этого действия нужна активная подписка. Открой /plans и оформи тариф. "
-            "После исчерпания лимитов я предложу пополнить бюджет."
+            "После исчерпания лимитов предложу разовое пополнение."
         )
         return
 
     ok, offer = _can_spend_or_offer(user_id, (update.effective_user.username or ""), engine, est_cost_usd)
     if ok:
-        await coroutine_to_run()
-        return
+        await coroutine_to_run(); return
 
-    # Подписка есть, но лимит исчерпан — предлагаем разовое пополнение
     try:
         need_usd = float(offer.split(":", 1)[-1])
     except Exception:
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    title = f"{engine.UPPER()} пополнение" if hasattr(engine, "UPPER") else f"{engine.upper()} пополнение"
+    title = f"{engine.upper()} пополнение"
     desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽)."
     payload = _payload_oneoff(engine, need_usd)
     await _send_invoice_rub(title, desc, amount_rub, payload, update)
@@ -1526,19 +1547,12 @@ async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("precheckout error: %s", e)
 
 async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Обработка успешного платежа Telegram. Поддерживает компактный payload:
-      t=1;e=<l|r|i>;u=<cents>   — разовое пополнение кошелька по движку
-      t=2;s=<s|p|u>;m=<months>  — подписка (start/pro/ultimate), месяцы
-    Также пытается распарсить старый JSON payload на всякий случай.
-    """
     try:
         pay = update.message.successful_payment
         raw = pay.invoice_payload or ""
         kv = _payload_parse(raw)
         t = kv.get("t", "")
 
-        # --- One-off topup ---
         if t == "1":
             e = kv.get("e", "i")
             engine = {"l": "luma", "r": "runway", "i": "img"}.get(e, "img")
@@ -1548,7 +1562,6 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.effective_message.reply_text("💳 Оплата прошла! Бюджет пополнён, можно запускать задачу снова.")
             return
 
-        # --- Subscribe ---
         if t == "2":
             tier = {"s": "start", "p": "pro", "u": "ultimate"}.get(kv.get("s", "p"), "pro")
             months = int(kv.get("m", "1") or 1)
@@ -1556,7 +1569,6 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.effective_message.reply_text(f"⭐ Подписка активна до {until.strftime('%Y-%m-%d')}. Тариф: {tier}.")
             return
 
-        # --- Fallback: старый JSON-payload ---
         try:
             payload = json.loads(raw)
             if payload.get("t") == "subscribe":
@@ -1579,7 +1591,7 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         log.exception("on_success_payment error: %s", e)
         await update.effective_message.reply_text("Ошибка обработки платежа.")
 
-# --- /plans с кнопками «Купить» (инвойсы в чате) + ссылка на мини-приложение ---
+# --- /plans ---
 def _plan_rub(tier: str, term: str) -> int:
     return int(PLAN_PRICE_TABLE[tier][term])
 
@@ -1594,7 +1606,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы и оформление подписки:"]
     for t in ("start", "pro", "ultimate"):
         p = PLAN_PRICE_TABLE[t]
-        lines.append(f"• {t.UPPER() if hasattr(t,'UPPER') else t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
+        lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
     lines.append("")
     lines.append("Выбери подписку кнопкой ниже или открой мини-приложение.")
     kb = InlineKeyboardMarkup([
@@ -1606,7 +1618,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("год",            callback_data="buy:pro:12")],
         [InlineKeyboardButton("ULTIMATE — мес", callback_data="buy:ultimate:1"),
          InlineKeyboardButton("квартал",        callback_data="buy:ultimate:3"),
-         InlineKeyboardButton("год",            callback_data="buy:ultimate:12")],
+         [InlineKeyboardButton("год",            callback_data="buy:ultimate:12")]],
         [InlineKeyboardButton("Открыть страницу тарифов (мини-приложение)", web_app=WebAppInfo(url=TARIFF_URL))],
     ])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
@@ -1617,7 +1629,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = (q.data or "").strip()
 
     try:
-        # --- Покупка подписки (кнопки в /plans)
         if data.startswith("buy:"):
             _, tier, months = data.split(":", 2)
             months = int(months)
@@ -1627,7 +1638,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
-        # --- Выбор «движка» из меню «Движки»
         if data.startswith("engine:"):
             await q.answer()
             engine = data.split(":", 1)[1]  # gpt|images|luma|runway|midjourney|stt_tts
@@ -1655,7 +1665,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.edit_message_text(
                     "✅ Доступно. "
                     + ("Запусти: /img кот в очках" if engine == "images"
-                       else "Напиши: «сделай видео … 9 секунд 9:16» — выберу Luma/Runway.")
+                       else "Напиши: «сделай видео … 9 секунд 9:16» — предложу Luma/Runway.")
                 )
                 return
 
@@ -1668,7 +1678,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # Предложение разовой покупки
             try:
                 need_usd = float(offer.split(":", 1)[-1])
             except Exception:
@@ -1683,7 +1692,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # --- Выбор движка для уже распарсенного видео (после текста)
         if data.startswith("choose:"):  # choose:<engine>:<aid>
             await q.answer()
             _, engine, aid = data.split(":", 2)
@@ -1717,7 +1725,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # --- Неизвестный коллбэк
         await q.answer("Неизвестная команда", show_alert=True)
 
     except Exception as e:
@@ -1747,7 +1754,7 @@ def capability_answer(text: str) -> str | None:
             "Можно добавить подпись к файлу с целью анализа."
         )
 
-    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшифр|транскриб|понима|распозна)", tl)) or "аудио" in tl:
+    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшиф|транскриб|понима|распозна)", tl)) or "аудио" in tl:
         return (
             "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
             "Распознаю речь (Deepgram/Whisper) и сделаю конспект, тезисы, тайм-коды, Q&A."
@@ -1765,7 +1772,7 @@ def capability_answer(text: str) -> str | None:
     if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
         return (
             "Да, могу запускать генерацию коротких видео. Напиши: "
-            "«сделай видео … на 9 секунд 9:16». После запроса предложу выбрать движок Luma или Runway."
+            "«сделай видео … на 9 секунд 9:16». После запроса предложу выбрать Luma или Runway."
         )
 
     return None
@@ -1948,7 +1955,7 @@ def main():
     app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
     app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
     app.add_handler(CommandHandler("diag_video", cmd_diag_video))
-    app.add_handler(CommandHandler("diag_luma_err", cmd_diag_luma_err))  # ← новая команда
+    app.add_handler(CommandHandler("diag_luma_err", cmd_diag_luma_err))
     app.add_handler(CommandHandler("voice_on", cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
 
