@@ -303,8 +303,56 @@ def _ascii_label(s: str | None) -> str:
     except Exception:
         return "Item"
 
-# HTTP stub (healthcheck + /premium.html redirect)
+# HTTP stub (healthcheck + встроенная /premium.html)
 def _start_http_stub():
+    # Готовая HTML-страница с кнопками deeplink
+    _PREMIUM_HTML = f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Тарифы</title>
+  <script>
+    function buy(tier, months){{
+      var bot = "{BOT_USERNAME}";
+      var link = "https://t.me/" + bot + "?start=pay_" + tier + "_" + months;
+      if (window.Telegram && Telegram.WebApp && Telegram.WebApp.openTelegramLink) {{
+        Telegram.WebApp.openTelegramLink(link);
+        setTimeout(function(){{ window.close(); }}, 300);
+      }} else {{
+        location.href = link;
+      }}
+    }}
+  </script>
+  <style>
+    body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:16px}}
+    h1{{font-size:18px;margin:0 0 12px}}
+    .grid{{display:grid;gap:10px}}
+    button{{padding:12px 16px;border:0;border-radius:8px;background:#2b6fff;color:#fff;font-size:16px}}
+    a{{
+      display:inline-block;margin-top:12px;text-decoration:none;color:#2b6fff
+    }}
+  </style>
+</head>
+<body>
+  <h1>Оформить подписку</h1>
+  <div class="grid">
+    <button onclick="buy('start',1)">START — месяц</button>
+    <button onclick="buy('start',3)">START — квартал</button>
+    <button onclick="buy('start',12)">START — год</button>
+
+    <button onclick="buy('pro',1)">PRO — месяц</button>
+    <button onclick="buy('pro',3)">PRO — квартал</button>
+    <button onclick="buy('pro',12)">PRO — год</button>
+
+    <button onclick="buy('ultimate',1)">ULTIMATE — месяц</button>
+    <button onclick="buy('ultimate',3)">ULTIMATE — квартал</button>
+    <button onclick="buy('ultimate',12)">ULTIMATE — год</button>
+  </div>
+  {"<a href='"+WEBAPP_URL+"' target='_blank' rel='noopener'>Открыть полную страницу тарифов</a>" if WEBAPP_URL else ""}
+</body>
+</html>"""
+
     class _H(BaseHTTPRequestHandler):
         def do_GET(self):
             path = (self.path or "/").split("?", 1)[0]
@@ -315,15 +363,10 @@ def _start_http_stub():
                 self.wfile.write(b"ok")
                 return
             if path == "/premium.html":
-                if WEBAPP_URL:
-                    self.send_response(302)
-                    self.send_header("Location", WEBAPP_URL)
-                    self.end_headers()
-                else:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(b"<html><body><h3>Premium page</h3><p>Set WEBAPP_URL env.</p></body></html>")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(_PREMIUM_HTML.encode("utf-8"))
                 return
             self.send_response(404)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -1376,7 +1419,7 @@ async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
                     global _LUMA_LAST_BASE
                     _LUMA_LAST_BASE = base
                     if base != LUMA_BASE_URL:
-                        log.warning("Luma: switched base_url to %s (fallback worked)", base)
+                        log.warning("Luma: switched base_url to %s (fallback worked)")
                     _LUMA_LAST_ERR = None
                     return str(job_id)
                 log.error("Luma create: no job id in response from %s: %s", base, j)
@@ -1853,7 +1896,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # --- баланс и пополнение
-                if data == "bal:topup":
+        if data == "bal:topup":
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("Пополнить в RUB (ЮKassa)", callback_data="bal:topup_rub")],
                 [InlineKeyboardButton("Пополнить в Crypto",       callback_data="bal:topup_crypto")],
