@@ -8,7 +8,7 @@ import logging
 from io import BytesIO
 import asyncio
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import threading
 import uuid
 import contextlib
@@ -78,11 +78,12 @@ RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
 # Luma — ключ и базовые параметры
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
-LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()  # не используем в DM v1, оставляем в env на будущее
+# ⚠️ model обязателен на Dream Machine v1
+LUMA_MODEL       = os.environ.get("LUMA_MODEL", "dream_machine").strip()
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
 LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "6").strip() or 6)
 
-# Luma — корректные базовые URL/пути Dream Machine (❗ create = /generations)
+# Luma — корректные базовые URL/пути Dream Machine
 LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
 LUMA_CREATE_PATH = (os.environ.get("LUMA_CREATE_PATH", "/generations").strip())
 LUMA_STATUS_PATH = (os.environ.get("LUMA_STATUS_PATH", "/generations/{id}").strip())
@@ -164,8 +165,7 @@ PORT = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
-# PUBLIC_URL обязателен только в режиме webhook
-if USE_WEBHOOK and (not PUBLIC_URL or not PUBLIC_URL.startswith("http")):
+if not PUBLIC_URL or not PUBLIC_URL.startswith("http"):
     raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
@@ -303,14 +303,14 @@ def db_init():
     con.commit(); con.close()
 
 def activate_subscription(user_id: int, months: int = 1):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     until = now + timedelta(days=30 * months)
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("SELECT until_ts FROM subscriptions WHERE user_id = ?", (user_id,))
     row = cur.fetchone()
     if row and row[0] and row[0] > int(now.timestamp()):
-        current_until = datetime.utcfromtimestamp(row[0])
+        current_until = datetime.fromtimestamp(row[0], tz=timezone.utc)
         until = current_until + timedelta(days=30 * months)
     cur.execute("""
         INSERT INTO subscriptions (user_id, until_ts)
@@ -326,13 +326,13 @@ def get_subscription_until(user_id: int):
     cur.execute("SELECT until_ts FROM subscriptions WHERE user_id = ?", (user_id,))
     row = cur.fetchone()
     con.close()
-    return None if not row else datetime.utcfromtimestamp(row[0])
+    return None if not row else datetime.fromtimestamp(row[0], tz=timezone.utc)
 
 def set_subscription_tier(user_id: int, tier: str):
     tier = (tier or "pro").lower()
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR IGNORE INTO subscriptions(user_id, until_ts, tier) VALUES (?, ?, ?)",
-                (user_id, int(datetime.utcnow().timestamp()), tier))
+                (user_id, int(datetime.now(timezone.utc).timestamp()), tier))
     cur.execute("UPDATE subscriptions SET tier=? WHERE user_id=?", (tier, user_id))
     con.commit(); con.close()
 
@@ -348,7 +348,7 @@ def get_subscription_tier(user_id: int) -> str:
     if not row:
         return "free"
     until_ts, tier = row[0], (row[1] or "pro")
-    if until_ts and datetime.utcfromtimestamp(until_ts) > datetime.utcnow():
+    if until_ts and datetime.fromtimestamp(until_ts, tz=timezone.utc) > datetime.now(timezone.utc):
         return (tier or "pro").lower()
     return "free"
 
@@ -380,7 +380,7 @@ def db_init_usage():
     con.commit(); con.close()
 
 def _today_ymd() -> str:
-    return datetime.utcnow().strftime("%Y-%m-%d")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 def _usage_row(user_id: int, ymd: str | None = None):
     ymd = ymd or _today_ymd()
@@ -732,7 +732,7 @@ def _extract_pdf_text(data: bytes) -> str:
     except Exception:
         pass
     try:
-        from pdfminer.high_level import extract_text
+        from pdfminer_high_level import extract_text  # may be unavailable
     except Exception:
         extract_text = None
     if extract_text:
@@ -1013,6 +1013,8 @@ async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"  create={RUNWAY_CREATE_PATH}  status={RUNWAY_STATUS_PATH}",
         f"• Поллинг каждые {VIDEO_POLL_DELAY_S}s; таймауты: Luma {LUMA_MAX_WAIT_S}s / Runway {RUNWAY_MAX_WAIT_S}s",
         "",
+        "ℹ️ Luma: если видишь 400 'Field required model' — задай env LUMA_MODEL (обычно 'dream_machine').",
+        "",
         "🔎 Проверка Luma endpoints:",
     ]
 
@@ -1183,7 +1185,6 @@ def _safe_caption(prompt: str, engine: str, duration: int, ar: str) -> str:
     return f"✅ {engine} • {duration}s • {ar}\nЗапрос: {p}"
 
 # ========= Luma client =========
-# Кэш и последняя ошибка создания
 try:
     _LUMA_LAST_BASE
 except NameError:
@@ -1196,9 +1197,9 @@ except NameError:
 
 async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
     """
-    Dream Machine v1: POST {base}/generations
-    Поля: prompt (str), duration (int, сек), aspect_ratio ('16:9'|'9:16'|'1:1')
-    ⚠️ Без ratio и без model — иначе 4xx.
+    Dream Machine v1:
+      POST {base}/generations
+      body: {prompt, duration:int, aspect_ratio:'16:9'|'9:16'|'1:1', model:<required>}
     """
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
@@ -1208,13 +1209,28 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
-    payload = {
-        "prompt": prompt,
-        "duration": max(1, int(duration)),
-        "aspect_ratio": _norm_ar(ar),
-    }
 
-    last_text = None
+    # Кандидаты путей (учтём разные доки/версии)
+    create_paths = []
+    def _push(path: str):
+        path = (path or "").strip()
+        if not path.startswith("/"):
+            path = "/" + path
+        if path not in create_paths:
+            create_paths.append(path)
+
+    _push(LUMA_CREATE_PATH or "/generations")
+    _push("/generations")
+    _push("/generations/video")  # на всякий
+    _push("/videos")             # очень редко, но пусть будет
+
+    # Кандидаты моделей: env → 'dream_machine' → 'ray-2'
+    model_candidates = []
+    for m in [LUMA_MODEL or "", "dream_machine", "ray-2"]:
+        m = (m or "").strip()
+        if m and m not in model_candidates:
+            model_candidates.append(m)
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         # собрать кандидатов баз (detected → env → fallbacks)
         candidates, seen = [], set()
@@ -1238,38 +1254,52 @@ async def _luma_create(prompt: str, duration: int, ar: str) -> str | None:
                 candidates.append(u); seen.add(u)
 
         for base in candidates:
-            url = f"{base}{LUMA_CREATE_PATH}"
-            try:
-                r = await client.post(url, headers=headers, json=payload)
-                last_text = r.text
-                r.raise_for_status()
-                j = r.json()
-                job_id = (
-                    j.get("id")
-                    or j.get("generation_id")
-                    or j.get("task_id")
-                    or (j.get("data") or {}).get("id")
-                )
-                if job_id:
-                    global _LUMA_LAST_BASE
-                    _LUMA_LAST_BASE = base
-                    if base != LUMA_BASE_URL:
-                        log.warning("Luma: switched base_url to %s (fallback worked)", base)
-                    _LUMA_LAST_ERR = None
-                    return str(job_id)
+            for path in create_paths:
+                url = f"{base}{path}"
+                for model_name in model_candidates:
+                    payload = {
+                        "prompt": prompt,
+                        "duration": max(1, int(duration)),
+                        "aspect_ratio": _norm_ar(ar),
+                        "model": model_name,
+                    }
+                    last_text = None
+                    try:
+                        r = await client.post(url, headers=headers, json=payload)
+                        last_text = r.text
+                        if r.status_code in (405, 404):
+                            # попробуем следующий путь
+                            break
+                        r.raise_for_status()
+                        j = r.json()
+                        job_id = (
+                            j.get("id")
+                            or j.get("generation_id")
+                            or j.get("task_id")
+                            or (j.get("data") or {}).get("id")
+                        )
+                        if job_id:
+                            global _LUMA_LAST_BASE
+                            _LUMA_LAST_BASE = base
+                            if base != LUMA_BASE_URL:
+                                log.warning("Luma: switched base_url to %s (fallback worked)", base)
+                            _LUMA_LAST_ERR = None
+                            return str(job_id)
 
-                log.error("Luma create: no job id in response from %s: %s", base, j)
-                _LUMA_LAST_ERR = f"no_job_id from {base}: {j}"
-            except httpx.HTTPStatusError as e:
-                code = e.response.status_code
-                log.error("Luma create HTTP %s at %s | body=%s", code, base, last_text)
-                _LUMA_LAST_ERR = f"HTTP {code} at {base}: {last_text[:600]}"
-            except httpx.RequestError as e:
-                log.error("Luma create network/http error at %s: %s", base, e)
-                _LUMA_LAST_ERR = f"network error at {base}: {e}"
-            except Exception as e:
-                log.error("Luma create unexpected error at %s: %s | body=%s", base, e, last_text)
-                _LUMA_LAST_ERR = f"unexpected at {base}: {e}; body={str(last_text)[:600]}"
+                        log.error("Luma create: no job id in response from %s: %s", url, j)
+                        _LUMA_LAST_ERR = f"no_job_id from {url}: {j}"
+                    except httpx.HTTPStatusError as e:
+                        code = e.response.status_code
+                        log.error("Luma create HTTP %s at %s | body=%s", code, url, last_text)
+                        _LUMA_LAST_ERR = f"HTTP {code} at {url}: {str(last_text)[:600]}"
+                        # если неверная модель — пробуем следующий candidate
+                        continue
+                    except httpx.RequestError as e:
+                        log.error("Luma create network/http error at %s: %s", url, e)
+                        _LUMA_LAST_ERR = f"network error at {url}: {e}"
+                    except Exception as e:
+                        log.error("Luma create unexpected error at %s: %s | body=%s", url, e, last_text)
+                        _LUMA_LAST_ERR = f"unexpected at {url}: {e}; body={str(last_text)[:600]}"
 
     return None
 
@@ -1325,7 +1355,7 @@ async def _luma_poll_and_get_url(job_id: str, base_hint: str | None = None) -> t
             return (video_url, "completed")
 
         if status in ("failed", "error", "canceled"):
-            return (None, status)
+            return (None, "failed" if status == "failed" else status)
 
         await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
@@ -1368,138 +1398,11 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
             log.exception("send luma video failed: %s", e)
             await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
-# ========= Runway client =========
-def _ar_to_runway_ratio(ar: str) -> str:
-    ar = _norm_ar(ar)
-    if ar == "9:16":
-        return "720:1280"
-    if ar == "16:9":
-        return "1280:720"
-    if ar == "1:1":
-        return "1024:1024"
-    return RUNWAY_RATIO or "1280:720"
-
-async def _runway_create(prompt: str, duration: int, ar: str) -> str | None:
-    """
-    Runway tasks: POST {base}/v1/tasks with JSON payload.
-    Мы используем универсальное поле input; конкретный формат может отличаться — всё обёрнуто try/except.
-    Возвращаем task_id либо None.
-    """
-    if not RUNWAY_API_KEY:
-        raise RuntimeError("RUNWAY_API_KEY is missing")
-
-    headers = {
-        "Authorization": f"Bearer {RUNWAY_API_KEY}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-    ratio = _ar_to_runway_ratio(ar)
-    payload = {
-        "model": RUNWAY_MODEL or "gen3a_turbo",
-        "input": {
-            "prompt": prompt,
-            "ratio": ratio,
-            "duration": int(max(1, duration)),
-            # дополнительные поля оставляем по умолчанию на стороне Runway
-        },
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
-            r = await client.post(url, headers=headers, json=payload)
-            body = r.text
-            r.raise_for_status()
-            j = r.json()
-            task_id = j.get("id") or j.get("task_id") or (j.get("data") or {}).get("id")
-            if not task_id:
-                log.error("Runway create: no id in response: %s", j)
-                return None
-            return str(task_id)
-    except Exception as e:
-        log.exception("Runway create error: %s", e)
-        return None
-
-async def runway_get_status(task_id: str) -> dict | None:
-    if not RUNWAY_API_KEY:
-        raise RuntimeError("RUNWAY_API_KEY is missing")
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=task_id)
-            r = await client.get(url, headers={"Authorization": f"Bearer {RUNWAY_API_KEY}", "Accept": "application/json"})
-            r.raise_for_status()
-            return r.json()
-    except Exception as e:
-        log.exception("Runway status error: %s", e)
-        return None
-
-async def _runway_poll_and_get_url(task_id: str) -> tuple[str | None, str]:
-    start = time.time()
-    while time.time() - start < RUNWAY_MAX_WAIT_S:
-        j = await runway_get_status(task_id)
-        if not j:
-            await asyncio.sleep(VIDEO_POLL_DELAY_S)
-            continue
-
-        status = (j.get("status") or j.get("state") or "").lower()
-        if status in ("queued", "processing", "in_progress", "running", "pending"):
-            await asyncio.sleep(VIDEO_POLL_DELAY_S)
-            continue
-
-        if status in ("completed", "succeeded", "done", "finished", "success"):
-            video_url = (
-                (j.get("output") or {}).get("url")
-                or (j.get("result") or {}).get("video")
-                or (j.get("assets") or {}).get("video")
-                or j.get("url")
-                or j.get("video")
-            )
-            return (video_url, "completed")
-
-        if status in ("failed", "error", "canceled"):
-            return (None, status)
-
-        await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
-    return (None, "timeout")
-
+# ───────── Runway (заглушка, чтобы не падать) ─────────
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
-    if not RUNWAY_API_KEY:
-        await update.effective_message.reply_text("⚠️ Runway не настроен (нет RUNWAY_API_KEY).")
-        return
-
     await update.effective_message.reply_text(
-        f"✅ Запускаю Runway: {duration}s • {_norm_ar(ar)}\nЗапрос: {prompt}"
+        "⚠️ Runway генерация в этой сборке ещё не настроена. Выберите Luma или используйте мини-приложение."
     )
-    task_id = await _runway_create(prompt, duration, ar)
-    if not task_id:
-        await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Runway.")
-        return
-
-    await update.effective_message.reply_text("⏳ Runway рендерит… Я пришлю видео как будет готово.")
-    url, st = await _runway_poll_and_get_url(task_id)
-    if not url:
-        await update.effective_message.reply_text(f"⚠️ Runway вернул статус: {st}.")
-        return
-
-    try:
-        await update.effective_message.reply_video(
-            video=url,
-            caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
-        )
-    except Exception:
-        try:
-            async with httpx.AsyncClient(timeout=None) as client:
-                r = await client.get(url)
-                r.raise_for_status()
-                bio = BytesIO(r.content); bio.name = "runway.mp4"
-                await update.effective_message.reply_video(
-                    video=InputFile(bio),
-                    caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
-                )
-        except Exception as e:
-            log.exception("send runway video failed: %s", e)
-            await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
 # ───────── Telegram Payments: компактные payload и инвойсы ─────────
 def _payload_oneoff(engine: str, usd: float) -> str:
@@ -1986,8 +1889,6 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
     return ""
 
 # ───────── Запуск (webhook / polling) ─────────
-_ALLOWED_UPDATES = getattr(Update, "ALL_TYPES", None)
-
 def run_by_mode(app):
     try:
         asyncio.get_running_loop()
@@ -2018,12 +1919,12 @@ def run_by_mode(app):
             webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
             secret_token=(WEBHOOK_SECRET or None),
             drop_pending_updates=True,
-            allowed_updates=_ALLOWED_UPDATES,
+            allowed_updates=Update.ALL_TYPES,
         )
     else:
         _start_http_stub()
         app.run_polling(
-            allowed_updates=_ALLOWED_UPDATES,
+            allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
 
