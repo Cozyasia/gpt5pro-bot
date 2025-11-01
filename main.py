@@ -1,6 +1,3 @@
-Main 02.11.26
-
-
 # -*- coding: utf-8 -*-
 import os
 import re
