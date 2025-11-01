@@ -1854,13 +1854,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # --- баланс и пополнение
         if data == "bal:topup":
-            rows = [
-                [InlineKeyboardButton("Пополнить в RUB (ЮKassa)", callback_data="bal:topup_rub")],
-                [InlineKeyboardButton("Пополнить в USD", callback_data="bal:topup_usd")],
-                [InlineKeyboardButton("Пополнить в Crypto", callback_data="bal:topup_crypto")],
-            ]
-            await q.edit_message_text("Выберите способ пополнения:", reply_markup=InlineKeyboardMarkup(rows))
-            return
+    rows = [
+        [InlineKeyboardButton("Пополнить в RUB (ЮKassa)", callback_data="bal:topup_rub")],
+        [InlineKeyboardButton("Пополнить в Crypto", callback_data="bal:topup_crypto")],
+    ]
+    await q.edit_message_text("Выберите способ пополнения:", reply_markup=InlineKeyboardMarkup(rows))
+    return
 
         if data == "bal:ledger":
             user_id = q.from_user.id
