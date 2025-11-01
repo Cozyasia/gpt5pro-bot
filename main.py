@@ -136,6 +136,95 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
             log.warning("Luma base probe failed for %s: %s", base, e)
     return LUMA_BASE_URL or "https://api.lumalabs.ai/dream-machine/v1"
 
+# ======= MISSING: /img команда, STT и глобальный error =======
+
+# --- /img: извлечь промпт из команды ---
+def _extract_prompt_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    if getattr(context, "args", None):
+        return " ".join(context.args).strip()
+    t = (update.effective_message.text or "")
+    m = re.match(r"^/img(?:@\w+)?\s*(.*)$", t, re.I)
+    return (m.group(1) or "").strip() if m else ""
+
+# --- /img: генерация изображения с учётом лимитов/кошелька ---
+async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = _extract_prompt_from_update(update, context)
+    if not prompt:
+        await update.effective_message.reply_text("Использование: /img <описание картинки>")
+        return
+    user_id = update.effective_user.id
+
+    async def _go():
+        await _do_img_generate(update, context, prompt)
+
+    await _try_pay_then_do(
+        update, context, user_id,
+        engine="img", est_cost_usd=IMG_COST_USD,
+        coroutine_to_run=_go,
+        remember_kind="img_generate",
+        remember_payload={"prompt": prompt},
+    )
+
+# --- STT: распознавание речи (Whisper → Deepgram) ---
+async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
+    try:
+        # 1) Whisper (OpenAI)
+        if oai_stt:
+            buf.seek(0)
+            try:
+                r = oai_stt.audio.transcriptions.create(
+                    model=TRANSCRIBE_MODEL,
+                    file=buf
+                )
+                txt = getattr(r, "text", None) or getattr(r, "output_text", None)
+                if txt:
+                    return txt.strip()
+            except Exception:
+                pass
+            buf.seek(0)
+            try:
+                r = oai_stt.audio.transcriptions.create(
+                    model=TRANSCRIBE_MODEL,
+                    file=(filename_hint, buf)
+                )
+                txt = getattr(r, "text", None) or getattr(r, "output_text", None)
+                if txt:
+                    return txt.strip()
+            except Exception as e:
+                log.warning("OpenAI STT failed: %s", e)
+
+        # 2) Deepgram
+        if DEEPGRAM_API_KEY:
+            buf.seek(0)
+            headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
+            files = {"audio": (filename_hint, buf, "application/octet-stream")}
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                r = await client.post(
+                    "https://api.deepgram.com/v1/listen?model=nova-2-general&smart_format=true",
+                    headers=headers, files=files
+                )
+                j = r.json()
+                txt = (
+                    j.get("results", {})
+                     .get("channels", [{}])[0]
+                     .get("alternatives", [{}])[0]
+                     .get("transcript")
+                )
+                if txt:
+                    return txt.strip()
+    except Exception as e:
+        log.warning("transcribe_audio error: %s", e)
+    return ""
+
+# --- Глобальный обработчик ошибок telegram.ext ---
+async def on_error(update: object, context):
+    log.exception("Unhandled error: %s", getattr(context, 'error', None))
+    try:
+        if hasattr(update, "effective_message") and update.effective_message:
+            await update.effective_message.reply_text("⚠️ Произошла ошибка. Попробуйте ещё раз.")
+    except Exception:
+        pass
+
 # ───────── Payments / DB ─────────
 PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()  # RUB
 PROVIDER_TOKEN_USD = os.environ.get("PROVIDER_TOKEN_USD", "").strip()   # опц.: USD
@@ -776,9 +865,11 @@ def _extract_pdf_text(data: bytes) -> str:
             except Exception:
                 continue
         t = "\n".join(parts).strip()
-        if t: return t
+        if t:
+            return t
     except Exception:
         pass
+
     try:
         from pdfminer.high_level import extract_text
     except Exception:
@@ -788,16 +879,20 @@ def _extract_pdf_text(data: bytes) -> str:
             return (extract_text(BytesIO(data)) or "").strip()
         except Exception:
             pass
+
     try:
         import fitz
         doc = fitz.open(stream=data, filetype="pdf")
         txt = []
         for page in doc:
-            try: txt.append(page.get_text("text"))
-            except Exception: continue
-        return ("\n.join(txt)")
+            try:
+                txt.append(page.get_text("text"))
+            except Exception:
+                continue
+        return "\n".join(txt)
     except Exception:
         pass
+
     return ""
 
 def _extract_epub_text(data: bytes) -> str:
