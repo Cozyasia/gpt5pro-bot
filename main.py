@@ -1,3 +1,6 @@
+Main 02.11.26
+
+
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -2067,7 +2070,7 @@ async def topup_amount_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not PROVIDER_TOKEN:
                 return await update.effective_message.reply_text("RUB-платежи не настроены.")
             rub = int(round(amt))
-            prices = [Labeled Price(label=f"Пополнение кошелька на {rub}₽", amount=rub*100)]
+            prices = [LabeledPrice(label=f"Пополнение кошелька на {rub}₽", amount=rub*100)]
             await update.effective_message.reply_text("Готовлю счёт…")
             await update.effective_message.reply_invoice(
                 title="Пополнение кошелька",
