@@ -76,16 +76,16 @@ RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
 RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
 RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
-# Luma — ключ и базовые параметры (Dream Machine v1)
+# Luma
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
-LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()  # 'ray-2','ray-3','ray-1-6','ray-flash-2','ray-hdr-3','ray-flash-3'
+LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
 LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
-LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)  # Luma: 5/9/10s only
+LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
 LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
 
-# Fallback'и
+# Фолбэки Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
     os.environ.get("LUMA_FALLBACK_BASE_URL", "")
@@ -98,27 +98,21 @@ for u in re.split(r"[;,]\s*", _fallbacks_raw):
     if u and u != LUMA_BASE_URL and u not in LUMA_FALLBACKS:
         LUMA_FALLBACKS.append(u)
 
-# Runway — базовые значения
+# Runway endpoints
 RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com").strip().rstrip("/"))
 RUNWAY_CREATE_PATH = "/v1/tasks"
 RUNWAY_STATUS_PATH = "/v1/tasks/{id}"
 
-# Таймауты и поллинг
-LUMA_MAX_WAIT_S     = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)      # 15 мин
-RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or 1200)  # 20 мин
+# Таймауты
+LUMA_MAX_WAIT_S     = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
+RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or 1200)
 VIDEO_POLL_DELAY_S  = float((os.environ.get("VIDEO_POLL_DELAY_S") or "6.0").strip() or 6.0)
 
 # ───────── UTILS ---------
 _LUMA_ACTIVE_BASE: str | None = None  # кэш последнего живого базового URL
 
 async def _pick_luma_base(client: httpx.AsyncClient) -> str:
-    """
-    Возвращает живой базовый URL для Luma.
-    Порядок: LUMA_BASE_URL → LUMA_FALLBACKS.
-    404/405 на OPTIONS считаем нормальным «пингом».
-    """
     global _LUMA_ACTIVE_BASE
-
     candidates: list[str] = []
     if _LUMA_ACTIVE_BASE:
         candidates.append(_LUMA_ACTIVE_BASE)
@@ -127,7 +121,6 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
     for b in LUMA_FALLBACKS:
         if b not in candidates:
             candidates.append(b)
-
     for base in candidates:
         try:
             url = f"{base}{LUMA_CREATE_PATH}"
@@ -139,7 +132,6 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
                 return base
         except Exception as e:
             log.warning("Luma base probe failed for %s: %s", base, e)
-
     return LUMA_BASE_URL or "https://api.lumalabs.ai/dream-machine/v1"
 
 # Payments / DB
@@ -154,7 +146,6 @@ PLAN_PRICE_TABLE = {
 }
 TERM_MONTHS = {"month": 1, "quarter": 3, "year": 12}
 
-# минимальная сумма инвойса
 MIN_RUB_FOR_INVOICE = int(os.environ.get("MIN_RUB_FOR_INVOICE", "100") or "100")
 
 PORT = int(os.environ.get("PORT", "10000"))
@@ -286,7 +277,7 @@ try:
 except Exception:
     tavily = None
 
-# ───────── DB: subscriptions / usage / wallet ─────────
+# ───────── DB: subscriptions / usage / wallet / kv ─────────
 def db_init():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -373,7 +364,9 @@ def db_init_usage():
         img_usd  REAL DEFAULT 0.0,
         usd REAL DEFAULT 0.0
     )""")
-    # миграции для старых БД
+    # kv store (для бэннера, пр.)
+    cur.execute("""CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)""")
+    # миграции
     try:
         cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
     except Exception:
@@ -382,6 +375,17 @@ def db_init_usage():
         cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
     except Exception:
         pass
+    con.commit(); con.close()
+
+def kv_get(key: str, default: str | None = None) -> str | None:
+    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+    cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+    row = cur.fetchone(); con.close()
+    return (row[0] if row else default)
+
+def kv_set(key: str, value: str):
+    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+    cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
     con.commit(); con.close()
 
 def _today_ymd() -> str:
@@ -472,11 +476,12 @@ LUMA_RES_HINT = os.environ.get("LUMA_RES", "720p").lower()
 RUNWAY_UNIT_COST_USD = float(os.environ.get("RUNWAY_UNIT_COST_USD", "7.0"))
 IMG_COST_USD = float(os.environ.get("IMG_COST_USD", "0.05"))
 
+# DEMO: free даёт попробовать ключевые движки
 LIMITS = {
-    "free":      {"text_per_day": 5,    "luma_budget_usd": 0.0, "runway_budget_usd": 0.0,  "img_budget_usd": 0.0, "allow_engines": ["gpt"]},
-    "start":     {"text_per_day": 200,  "luma_budget_usd": 0.8, "runway_budget_usd": 0.0,  "img_budget_usd": 0.2, "allow_engines": ["gpt","luma","midjourney"]},
-    "pro":       {"text_per_day": 1000, "luma_budget_usd": 4.0, "runway_budget_usd": 7.0,  "img_budget_usd": 1.0, "allow_engines": ["gpt","luma","runway","midjourney"]},
-    "ultimate":  {"text_per_day": 5000, "luma_budget_usd": 8.0, "runway_budget_usd": 14.0, "img_budget_usd": 2.0, "allow_engines": ["gpt","luma","runway","midjourney"]},
+    "free":      {"text_per_day": 5,    "luma_budget_usd": 0.40, "runway_budget_usd": 0.0,  "img_budget_usd": 0.05, "allow_engines": ["gpt","luma","images"]},
+    "start":     {"text_per_day": 200,  "luma_budget_usd": 0.8,  "runway_budget_usd": 0.0,  "img_budget_usd": 0.2,  "allow_engines": ["gpt","luma","midjourney","images"]},
+    "pro":       {"text_per_day": 1000, "luma_budget_usd": 4.0,  "runway_budget_usd": 7.0,  "img_budget_usd": 1.0,  "allow_engines": ["gpt","luma","runway","midjourney","images"]},
+    "ultimate":  {"text_per_day": 5000, "luma_budget_usd": 8.0,  "runway_budget_usd": 14.0, "img_budget_usd": 2.0,  "allow_engines": ["gpt","luma","runway","midjourney","images"]},
 }
 
 def _limits_for(user_id: int) -> dict:
@@ -504,35 +509,32 @@ def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     return max(MIN_RUB_FOR_INVOICE, val)
 
 def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cost_usd: float) -> tuple[bool, str]:
-    # безлимит — просто учитываем расход и пропускаем
     if is_unlimited(user_id, username):
         if engine in ("luma", "runway", "img"):
             _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
         return True, ""
     if engine not in ("luma", "runway", "img"):
         return True, ""
-
     tier = get_subscription_tier(user_id)
-    if tier == "free":
-        return False, "ASK_SUBSCRIBE"
-
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
     spent = row[f"{engine}_usd"]; budget = lim[f"{engine}_budget_usd"]
 
-    # в пределах тарифа
+    # В пределах тарифа (или demo free)
     if spent + est_cost_usd <= budget + 1e-9:
         _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
         return True, ""
 
-    # перерасход — пытаемся покрыть из единого кошелька usd
+    # Попытка покрыть из единого кошелька
     need = max(0.0, spent + est_cost_usd - budget)
     if need > 0:
         if _wallet_total_take(user_id, need):
             _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
             return True, ""
+        # если совсем free и кошелёк пуст — предлагаем подписку
+        if tier == "free":
+            return False, "ASK_SUBSCRIBE"
         return False, f"OFFER:{need:.2f}"
-
     return True, ""
 
 def _register_engine_spend(user_id: int, engine: str, usd: float):
@@ -794,7 +796,7 @@ def _extract_pdf_text(data: bytes) -> str:
         for page in doc:
             try: txt.append(page.get_text("text"))
             except Exception: continue
-        return ("\n.join(txt)")  # оставляем как было
+        return ("\n".join(txt))
     except Exception:
         pass
     return ""
@@ -885,7 +887,7 @@ async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, p
 
 # ───────── UI / тексты ─────────
 START_TEXT = (
-    "Привет! Я GPT-бот с тарифами, квотами и разовыми покупками.\n\n"
+    "Привет! Я GPT-бот с тарифами, квотами и разовыми пополнениями.\n\n"
     "Что умею:\n"
     "• 💬 Текст/фото (GPT)\n"
     "• 🎬 Видео Luma (5/9/10 c, 9:16/16:9)\n"
@@ -897,11 +899,11 @@ START_TEXT = (
 
 HELP_TEXT = (
     "Подсказки:\n"
-    "• /plans — тарифы и оплата подписки\n"
+    "• /plans — тарифы и оплата подписки (через чат или мини-приложение)\n"
     "• /img кот с очками — сгенерирует картинку\n"
     "• «сделай видео … 9 секунд 9:16» — Luma/Runway\n"
     "• «🎛 Движки» — выбрать GPT / Luma / Runway / Midjourney / Images / Docs\n"
-    "• «🧾 Баланс» — кошелёк и пополнение (100/500/1000/5000 ₽)\n"
+    "• «🧾 Баланс» — кошелёк и пополнение (RUB или CryptoBot USDT/TON)\n"
     "• /voice_on и /voice_off — озвучка ответов."
 )
 
@@ -997,7 +999,7 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("Voice handler error: %s", e)
         await update.effective_message.reply_text("Ошибка обработки голосового сообщения.")
 
-# документы: аудио-файлы как документ (mp3/m4a/wav/ogg/webm)
+# документы: аудио-файлы как документ (mp3/m4a/wav/ogg/webм)
 async def on_audio_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.document:
@@ -1210,7 +1212,7 @@ def _safe_caption(prompt: str, engine: str, duration: int, ar: str) -> str:
     if len(p) > 500: p = p[:497] + "…"
     return f"✅ {engine} • {duration}s • {ar}\nЗапрос: {p}"
 
-# ====== Luma helpers (DM v1) ======
+# ====== Luma helpers ======
 try:
     _LUMA_LAST_BASE
 except NameError:
@@ -1221,19 +1223,13 @@ except NameError:
     _LUMA_LAST_ERR: str | None = None
 
 def _luma_duration_string(seconds: int) -> str:
-    # Luma принимает только '5s','9s','10s'
     allowed = [5, 9, 10]
     best = min(allowed, key=lambda x: abs(x - max(1, int(seconds))))
     return f"{best}s"
 
 async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
-    """
-    POST {base}/generations
-    Fields: model, prompt, duration ('5s'|'9s'|'10s'), aspect_ratio ('16:9'|'9:16'|'1:1')
-    """
     if not LUMA_API_KEY:
         raise RuntimeError("LUMA_API_KEY is missing")
-
     headers = {
         "Authorization": f"Bearer {LUMA_API_KEY}",
         "Accept": "application/json",
@@ -1245,12 +1241,10 @@ async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
         "duration": _luma_duration_string(duration_s),
         "aspect_ratio": _norm_ar(ar),
     }
-
     last_text = None
     async with httpx.AsyncClient(timeout=120.0) as client:
         candidates, seen = [], set()
         global _LUMA_LAST_ERR
-
         try:
             detected = await _pick_luma_base(client)
             if detected:
@@ -1259,7 +1253,6 @@ async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
                     candidates.append(b); seen.add(b)
         except Exception as e:
             log.warning("Luma: auto-detect base failed: %s", e)
-
         b = (LUMA_BASE_URL or "").strip().rstrip("/")
         if b and b not in seen:
             candidates.append(b); seen.add(b)
@@ -1267,7 +1260,6 @@ async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
             u = (fb or "").strip().rstrip("/")
             if u and u not in seen:
                 candidates.append(u); seen.add(u)
-
         for base in candidates:
             url = f"{base}{LUMA_CREATE_PATH}"
             try:
@@ -1300,7 +1292,6 @@ async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
             except Exception as e:
                 log.error("Luma create unexpected error at %s: %s | body=%s", base, e, last_text)
                 _LUMA_LAST_ERR = f"unexpected at {base}: {e}; body={str(last_text)[:600]}"
-
     return None
 
 async def luma_get_status(task_id: str, base_hint: str | None = None) -> dict:
@@ -1328,12 +1319,9 @@ async def _luma_poll_and_get_url(job_id: str, base_hint: str | None = None) -> t
         except Exception:
             await asyncio.sleep(VIDEO_POLL_DELAY_S)
             continue
-
         status = (j.get("status") or j.get("state") or "").lower()
         if status in ("queued", "processing", "in_progress", "running", "pending"):
-            await asyncio.sleep(VIDEO_POLL_DELAY_S)
-            continue
-
+            await asyncio.sleep(VIDEO_POLL_DELAY_S); continue
         if status in ("completed", "succeeded", "done", "finished", "success"):
             video_url = (
                 j.get("result", {}).get("video_url")
@@ -1344,12 +1332,9 @@ async def _luma_poll_and_get_url(job_id: str, base_hint: str | None = None) -> t
                 or j.get("video")
             )
             return (video_url, "completed")
-
         if status in ("failed", "error", "canceled"):
             return (None, status)
-
         await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
     return (None, "timeout")
 
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, ar: str):
@@ -1363,13 +1348,11 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
             msg += f"\nПричина: {_LUMA_LAST_ERR}"
         await update.effective_message.reply_text(msg)
         return
-
     await update.effective_message.reply_text("⏳ Luma рендерит… Я пришлю видео как будет готово.")
     url, st = await _luma_poll_and_get_url(job_id, base_hint=_LUMA_LAST_BASE)
     if not url:
         await update.effective_message.reply_text(f"⚠️ Luma вернула статус: {st}.")
         return
-
     try:
         await update.effective_message.reply_video(
             video=url,
@@ -1397,11 +1380,7 @@ async def _runway_create(prompt: str, duration_s: int, ratio: str) -> str | None
     headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
     payload = {
         "model": RUNWAY_MODEL,
-        "input": {
-            "prompt": prompt,
-            "duration": max(1, int(duration_s)),
-            "ratio": ratio
-        }
+        "input": {"prompt": prompt, "duration": max(1, int(duration_s)), "ratio": ratio}
     }
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -1483,7 +1462,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             log.exception("send runway video failed: %s", e)
             await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
-# ───────── Telegram Payments: компактные payload и инвойсы ─────────
+# ───────── Telegram Payments: payload+инвойсы ─────────
 def _payload_oneoff(engine: str, usd: float) -> str:
     e = {"luma": "l", "runway": "r", "img": "i"}.get(engine, "i")
     cents = int(round(float(usd) * 100))
@@ -1506,11 +1485,9 @@ async def _send_invoice_rub(title: str, description: str, amount_rub: int, paylo
     if not PROVIDER_TOKEN:
         await update.effective_message.reply_text("Провайдер платежей не настроен.")
         return False
-
     title = _ascii_label(title)
     description = (description or "")[:255]
     amount_rub = max(1, int(amount_rub))
-
     if isinstance(payload, dict):
         p_try = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
         if len(p_try.encode("ascii", "ignore")) <= 128:
@@ -1545,6 +1522,84 @@ async def _send_invoice_rub(title: str, description: str, amount_rub: int, paylo
         await update.effective_message.reply_text("Не удалось выставить счёт. Оформите подписку через /plans.")
         return False
 
+# ───────── CryptoBot (Crypto Pay API) ─────────
+CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN","").strip()
+CRYPTO_ASSET_DEFAULT = os.environ.get("CRYPTO_ASSET_DEFAULT","USDT").strip().upper()  # USDT или TON
+TON_USD_RATE         = float(os.environ.get("TON_USD_RATE","6.0") or "6.0")
+
+async def _crypto_api(method: str, payload: dict) -> dict | None:
+    if not CRYPTO_PAY_API_TOKEN:
+        return None
+    url = f"https://pay.crypt.bot/api/{method}"
+    headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN, "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(url, headers=headers, json=payload)
+            j = r.json()
+            if not j.get("ok"):
+                log.warning("CryptoPay %s failed: %s", method, j)
+            return j
+    except Exception as e:
+        log.exception("CryptoPay error: %s", e)
+        return None
+
+async def _crypto_create_invoice(usd_amount: float, asset: str|None=None, description: str="Wallet top-up") -> tuple[str|None,str|None,float,str|None]:
+    asset = (asset or CRYPTO_ASSET_DEFAULT).upper()
+    if asset not in ("USDT","TON"):
+        asset = "USDT"
+    amount_asset = float(usd_amount) if asset=="USDT" else float(usd_amount)/max(1e-9, TON_USD_RATE)
+    j = await _crypto_api("createInvoice", {
+        "asset": asset,
+        "amount": round(amount_asset, 2),
+        "description": description,
+        "expires_in": 900,  # 15 мин
+        "allow_comments": False,
+        "allow_anonymous": True
+    })
+    if not j or not j.get("ok"):
+        return None, None, 0.0, None
+    res = j.get("result") or {}
+    invoice_id = str(res.get("invoice_id"))
+    pay_url    = res.get("pay_url")
+    return invoice_id, pay_url, float(usd_amount), asset
+
+async def _crypto_get_invoice(invoice_id: str) -> dict | None:
+    j = await _crypto_api("getInvoices", {"invoice_ids":[invoice_id]})
+    if not j or not j.get("ok"):
+        return None
+    lst = (j.get("result") or {}).get("items") or []
+    return lst[0] if lst else None
+
+async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, user_id: int, invoice_id: str, usd_amount: float):
+    deadline = time.time() + 900
+    while time.time() < deadline:
+        await asyncio.sleep(6.0)
+        inv = await _crypto_get_invoice(invoice_id)
+        if not inv:
+            continue
+        st = (inv.get("status") or "").lower()  # active, paid, expired
+        if st == "paid":
+            _wallet_total_add(user_id, usd_amount)
+            with contextlib.suppress(Exception):
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id,
+                    text=f"💳 Оплата через CryptoBot зачислена: ≈ ${usd_amount:.2f}. Баланс пополнен."
+                )
+            return
+        if st == "expired":
+            with contextlib.suppress(Exception):
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id,
+                    text="⏳ Ссылка CryptoBot истекла. Попробуйте создать новую."
+                )
+            return
+    with contextlib.suppress(Exception):
+        await context.bot.edit_message_text(
+            chat_id=chat_id, message_id=message_id,
+            text="⏳ Время ожидания оплаты истекло. Если оплатили — нажмите «Проверить оплату»."
+        )
+
+# ───────── TopUp / TryPay ─────────
 async def _try_pay_then_do(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1557,28 +1612,29 @@ async def _try_pay_then_do(
 ):
     if is_unlimited(user_id, (update.effective_user.username or "")):
         await coroutine_to_run(); return
-
     if engine not in ("luma", "runway", "img"):
         await coroutine_to_run(); return
-
-    tier = get_subscription_tier(user_id)
-    if tier == "free":
-        await update.effective_message.reply_text(
-            "Для этого действия нужна активная подписка. Открой /plans и оформи тариф. "
-            "После исчерпания лимитов предложу разовое пополнение."
-        )
-        return
 
     ok, offer = _can_spend_or_offer(user_id, (update.effective_user.username or ""), engine, est_cost_usd)
     if ok:
         await coroutine_to_run(); return
+
+    if offer == "ASK_SUBSCRIBE":
+        await update.effective_message.reply_text(
+            "Для этого действия нужна подписка либо единый баланс. Открой /plans или пополни «🧾 Баланс».",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                 [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
+            ),
+        )
+        return
 
     try:
         need_usd = float(offer.split(":", 1)[-1])
     except Exception:
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    title = f"{engine.UPPER()} пополнение" if hasattr(engine, "UPPER") else f"{engine.upper()} пополнение"
+    title = f"{engine.upper()} пополнение"
     desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽)."
     payload = _payload_oneoff(engine, need_usd)
     await _send_invoice_rub(title, desc, amount_rub, payload, update)
@@ -1613,7 +1669,6 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         if t == "3":
-            # Пополнение единого кошелька (рубли → USD)
             try:
                 amt_rub = (update.message.successful_payment.total_amount or 0) / 100.0
             except Exception:
@@ -1623,7 +1678,7 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.effective_message.reply_text(f"💳 Баланс пополнен на {amt_rub:.2f} ₽ (≈ ${usd:.2f}).")
             return
 
-        # на случай старых JSON payload
+        # JSON payload (на всякий)
         try:
             payload = json.loads(raw)
             if payload.get("t") == "subscribe":
@@ -1654,16 +1709,27 @@ def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
     term_label = {1: "мес", 3: "квартал", 12: "год"}.get(months, f"{months} мес")
     amount = _plan_rub(tier, {1: "month", 3: "quarter", 12: "year"}[months])
     payload = _payload_subscribe(tier, months)
-    title = f"Подписка {tier}/{term_label}"
+    title = f"Подписка {tier.upper()}/{term_label}"
     return payload, amount, title
+
+def _plan_mechanics_text() -> str:
+    return (
+        "📋 Как работают лимиты и кошелёк:\n"
+        "• FREE — демо: 5 текстов/день, 1× Luma (до $0.40) и 1× картинка (до $0.05).\n"
+        "• START — больше текстов + небольшие бюджеты на медиа.\n"
+        "• PRO/ULTIMATE — расширенные бюджеты Luma/Runway/Images.\n"
+        "• Если исчерпан дневной бюджет по движку, сверхлимит списывается с «Единого кошелька» (USD).\n"
+        "• Кошелёк пополняется в рублях (ЮKassa) или в USDT/TON через CryptoBot.\n"
+        "• Разовые списания рассчитываются по фактической себестоимости движка с наценкой.\n"
+    )
 
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы и оформление подписки:"]
     for t in ("start", "pro", "ultimate"):
         p = PLAN_PRICE_TABLE[t]
-        lines.append(f"• {t.UPPER() if hasattr(t,'UPPER') else t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
+        lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
     lines.append("")
-    lines.append("Выбери подписку кнопкой ниже или открой мини-приложение.")
+    lines.append(_plan_mechanics_text())
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("START — месяц",  callback_data="buy:start:1"),
          InlineKeyboardButton("квартал",        callback_data="buy:start:3"),
@@ -1695,11 +1761,14 @@ async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("5000 ₽", callback_data="topup:rub:5000"),
         ],
         [
-            InlineKeyboardButton("Crypto (TON/USDT) — мини-приложение", web_app=WebAppInfo(url=_make_topup_webapp_url()))
+            InlineKeyboardButton("CryptoBot USDT $5",  callback_data="topup:crypto:5"),
+            InlineKeyboardButton("$10",                 callback_data="topup:crypto:10"),
+            InlineKeyboardButton("$25",                 callback_data="topup:crypto:25"),
+            InlineKeyboardButton("$50",                 callback_data="topup:crypto:50"),
         ],
     ])
     await update.effective_message.reply_text(
-        "Выберите сумму пополнения (ЮKassa, RUB) или откройте крипто-оплату в мини-приложении:",
+        "Выберите сумму пополнения:\n• ЮKassa (RUB) — счёт в Telegram\n• CryptoBot (USDT/TON) — платёжная ссылка",
         reply_markup=kb
     )
 
@@ -1709,7 +1778,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = (q.data or "").strip()
 
     try:
-        # TOPUP: показать меню пополнения
+        # TOPUP: меню пополнения
         if data == "topup":
             await q.answer()
             await _send_topup_menu(update, context)
@@ -1728,6 +1797,56 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload = "t=3"
             ok = await _send_invoice_rub("Пополнение баланса", "Единый кошелёк для перерасходов.", amount_rub, payload, update)
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
+            return
+
+        # TOPUP CRYPTO через CryptoBot
+        if data.startswith("topup:crypto:"):
+            await q.answer()
+            if not CRYPTO_PAY_API_TOKEN:
+                await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
+                return
+            try:
+                usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
+            except Exception:
+                usd = 0.0
+            if usd <= 0.0:
+                await q.edit_message_text("Неверная сумма.")
+                return
+            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT", description="Wallet top-up")
+            if not inv_id or not pay_url:
+                await q.edit_message_text("Не удалось создать счёт в CryptoBot. Попробуйте позже.")
+                return
+            msg = await update.effective_message.reply_text(
+                f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\nПосле оплаты баланс пополнится автоматически.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
+                ])
+            )
+            # фоновая проверка
+            context.application.create_task(_poll_crypto_invoice(
+                context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
+            ))
+            return
+
+        if data.startswith("crypto:check:"):
+            await q.answer()
+            inv_id = data.split(":", 2)[-1]
+            inv = await _crypto_get_invoice(inv_id)
+            if not inv:
+                await q.edit_message_text("Не нашёл счёт. Создайте новый.")
+                return
+            st = (inv.get("status") or "").lower()
+            if st == "paid":
+                usd_amount = float(inv.get("amount", 0.0))  # для USDT = USD
+                if (inv.get("asset") or "").upper() == "TON":
+                    usd_amount *= TON_USD_RATE
+                _wallet_total_add(update.effective_user.id, usd_amount)
+                await q.edit_message_text(f"💳 Оплата получена. Баланс пополнен на ≈ ${usd_amount:.2f}.")
+            elif st == "active":
+                await q.answer("Платёж ещё не подтверждён", show_alert=True)
+            else:
+                await q.edit_message_text(f"Статус счёта: {st}")
             return
 
         if data.startswith("buy:"):
@@ -1754,7 +1873,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if engine in ("gpt", "stt_tts", "midjourney"):
                 await q.edit_message_text(
                     f"✅ Выбран «{engine}». Отправь запрос текстом/фото. "
-                    f"Для Luma/Runway/Images действуют лимиты тарифа."
+                    f"Для Luma/Runway/Images действуют дневные бюджеты тарифа."
                 )
                 return
 
@@ -1772,9 +1891,10 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if offer == "ASK_SUBSCRIBE":
                 await q.edit_message_text(
-                    "Для этого движка нужна активная подписка. Оформите /plans или откройте мини-приложение.",
+                    "Для этого движка нужна активная подписка или единый баланс. Откройте /plans или пополните «🧾 Баланс».",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))]]
+                        [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                         [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
                     ),
                 )
                 return
@@ -1785,11 +1905,11 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 need_usd = est_cost
             amount_rub = _calc_oneoff_price_rub(map_engine, need_usd)
             await q.edit_message_text(
-                f"Ваш лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
+                f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
                 f"или пополните баланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("⭐ Перейти к тарифам", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
                         [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
                     ]
                 ),
@@ -1803,14 +1923,11 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not meta:
                 await q.answer("Задача устарела", show_alert=True)
                 return
-
             prompt   = meta["prompt"]
             duration = meta["duration"]
             aspect   = meta["aspect"]
-
             est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
             map_engine = "luma" if engine == "luma" else "runway"
-
             async def _start_real_render():
                 if engine == "luma":
                     await _run_luma_video(update, context, prompt, duration, aspect)
@@ -1820,7 +1937,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     base = RUNWAY_UNIT_COST_USD or 7.0
                     cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
                     _register_engine_spend(update.effective_user.id, "runway", cost)
-
             await _try_pay_then_do(
                 update, context, update.effective_user.id,
                 map_engine, est, _start_real_render,
@@ -1848,7 +1964,6 @@ def capability_answer(text: str) -> str | None:
     tl = (text or "").strip().lower()
     if not tl:
         return None
-
     if (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)) and re.search(
         r"(чита(ешь|ете)|читать|анализиру(ешь|ете)|анализировать|распозна(ешь|ете)|распознавать)", tl
     ):
@@ -1857,28 +1972,23 @@ def capability_answer(text: str) -> str | None:
             "Поддержка: PDF, EPUB, DOCX, FB2, TXT (MOBI/AZW — по возможности). "
             "Можно добавить подпись к файлу с целью анализа."
         )
-
     if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшиф|транскриб|понима|распозна)", tl)) or "аудио" in tl:
         return (
             "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
             "Распознаю речь (Deepgram/Whisper) и сделаю конспект, тезисы, тайм-коды, Q&A."
         )
-
     if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
         return "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
-
     if _CAP_IMAGE.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|генерир)", tl):
         return (
             "Да, могу создавать изображения. Запусти через /img <описание> "
             "или фразой: «Сгенерируй изображение неонового города под дождём»."
         )
-
     if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
         return (
             "Да, могу запускать генерацию коротких видео. Напиши: "
             "«сделай видео … на 9 секунд 9:16». После запроса предложу выбрать Luma или Runway."
         )
-
     return None
 
 # ───────── Diagnostics: лимиты/остатки ─────────
@@ -1896,18 +2006,30 @@ async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.effective_message.reply_text("\n".join(lines))
 
-# ───────── Команда для показа последней ошибки Luma ─────────
-async def cmd_diag_luma_err(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global _LUMA_LAST_ERR
-    await update.effective_message.reply_text(
-        _LUMA_LAST_ERR or "Ошибок создания Luma в этой сессии не зафиксировано."
-    )
+# ───────── Команды UI и welcome ─────────
+async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        await update.effective_message.reply_text("Команда доступна только владельцу.")
+        return
+    if not context.args:
+        await update.effective_message.reply_text("Формат: /set_welcome <url_картинки>")
+        return
+    url = " ".join(context.args).strip()
+    kv_set("welcome_url", url)
+    await update.effective_message.reply_text("Картинка приветствия обновлена. Отправь /start для проверки.")
 
-# ───────── Команды UI ─────────
+async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    url = kv_get("welcome_url", BANNER_URL)
+    if url:
+        await update.effective_message.reply_photo(url, caption="Текущая картинка приветствия")
+    else:
+        await update.effective_message.reply_text("Картинка приветствия не задана.")
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if BANNER_URL:
+    welcome_url = kv_get("welcome_url", BANNER_URL)
+    if welcome_url:
         try:
-            await update.effective_message.reply_photo(BANNER_URL)
+            await update.effective_message.reply_photo(welcome_url)
         except Exception:
             pass
     await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
@@ -1925,14 +2047,16 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     w = _wallet_get(user_id)
     total = _wallet_total_get(user_id)
+    row = _usage_row(user_id)
+    lim = _limits_for(user_id)
     msg = (
         "🧾 Кошелёк:\n"
         f"• Единый баланс: ${total:.2f}\n"
         "  (расходуется на перерасход по Luma/Runway/Images)\n\n"
-        "Детализация по движкам (дневные бюджеты тарифа):\n"
-        f"• Luma потрачено сегодня: ${_usage_row(user_id)['luma_usd']:.2f}\n"
-        f"• Runway потрачено сегодня: ${_usage_row(user_id)['runway_usd']:.2f}\n"
-        f"• Images потрачено сегодня: ${_usage_row(user_id)['img_usd']:.2f}\n"
+        "Детализация сегодня / лимиты тарифа:\n"
+        f"• Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
+        f"• Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
+        f"• Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
@@ -1950,6 +2074,63 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go,
                            remember_kind="img_generate", remember_payload={"prompt": prompt})
+
+# ───────── WebApp: ловим sendData из мини-приложения ─────────
+async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        wad = update.effective_message.web_app_data
+        raw = wad.data if wad else ""
+        data = {}
+        try:
+            data = json.loads(raw)
+        except Exception:
+            # поддержка простых строк вида "type=subscribe&tier=pro&months=3"
+            for part in (raw or "").split("&"):
+                if "=" in part:
+                    k, v = part.split("=", 1); data[k]=v
+        typ = (data.get("type") or data.get("action") or "").lower()
+
+        if typ in ("subscribe","buy","buy_sub","sub"):
+            tier = (data.get("tier") or "pro").lower()
+            months = int(data.get("months") or 1)
+            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
+            desc = f"Оформление подписки {tier.upper()} на {months} мес. (из мини-приложения)"
+            await _send_invoice_rub(title, desc, amount_rub, payload, update)
+            return
+
+        if typ in ("topup_rub","rub_topup"):
+            amount_rub = int(data.get("amount") or 0)
+            if amount_rub < MIN_RUB_FOR_INVOICE:
+                await update.effective_message.reply_text(f"Минимальная сумма: {MIN_RUB_FOR_INVOICE} ₽")
+                return
+            await _send_invoice_rub("Пополнение баланса", "Единый кошелёк", amount_rub, "t=3", update)
+            return
+
+        if typ in ("topup_crypto","crypto_topup"):
+            if not CRYPTO_PAY_API_TOKEN:
+                await update.effective_message.reply_text("CryptoBot не настроен.")
+                return
+            usd = float(data.get("usd") or 0)
+            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT")
+            if not inv_id or not pay_url:
+                await update.effective_message.reply_text("Не удалось создать счёт в CryptoBot.")
+                return
+            msg = await update.effective_message.reply_text(
+                f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
+                ])
+            )
+            context.application.create_task(_poll_crypto_invoice(
+                context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
+            ))
+            return
+
+        await update.effective_message.reply_text("Получены данные из мини-приложения, но команда не распознана.")
+    except Exception as e:
+        log.exception("on_webapp_data error: %s", e)
+        await update.effective_message.reply_text("Ошибка обработки данных мини-приложения.")
 
 # ───────── Error handler ─────────
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -2065,9 +2246,13 @@ def main():
     app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
     app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
     app.add_handler(CommandHandler("diag_video", cmd_diag_video))
-    app.add_handler(CommandHandler("diag_luma_err", cmd_diag_luma_err))
     app.add_handler(CommandHandler("voice_on", cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
+    app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
+    app.add_handler(CommandHandler("welcome", cmd_show_welcome))
+
+    # WebApp data (кнопка «синяя» в мини-приложении)
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
     # Коллбэки/платежи
     app.add_handler(CallbackQueryHandler(on_cb))
