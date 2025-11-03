@@ -710,7 +710,29 @@ try:
 except Exception:
     TTS_MAX_CHARS = 150
 
+def _tts_bytes_sync_http(text: str) -> bytes | None:
+    """Фолбэк: прямой HTTP на /v1/audio/speech (Opus)."""
+    try:
+        url = f"{OPENAI_TTS_BASE_URL.rstrip('/')}/audio/speech"
+        headers = {
+            "Authorization": f"Bearer {OPENAI_TTS_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": OPENAI_TTS_MODEL,
+            "voice": OPENAI_TTS_VOICE,
+            "input": text,
+            "format": "opus"
+        }
+        r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
+        r.raise_for_status()
+        return r.content if r.content else None
+    except Exception as e:
+        log.exception("TTS HTTP fallback error: %s", e)
+        return None
+
 def _tts_bytes_sync(text: str) -> bytes | None:
+    # сначала SDK...
     try:
         r = oai_tts.audio.speech.create(model=OPENAI_TTS_MODEL, voice=OPENAI_TTS_VOICE, input=text, format="opus")
         audio = getattr(r, "content", None)
@@ -719,8 +741,9 @@ def _tts_bytes_sync(text: str) -> bytes | None:
         if isinstance(audio, (bytes, bytearray)):
             return bytes(audio)
     except Exception as e:
-        log.exception("TTS error: %s", e)
-    return None
+        log.warning("TTS SDK error: %s", e)
+    # ...затем HTTP-фолбэк
+    return _tts_bytes_sync_http(text)
 
 async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     user_id = update.effective_user.id
@@ -998,6 +1021,34 @@ def _photo_tools_kb():
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
+
+    # обработка «ожидания текста» после кнопок редактирования фото
+    user_id = update.effective_user.id
+    pend = _pending_edit.get(user_id)
+    if pend and pend.get("action") == "replace_bg":
+        _pending_edit.pop(user_id, None)
+        img = _last_photo.get(user_id)
+        if not img:
+            await update.effective_message.reply_text("Нет последнего фото для редактирования.")
+            return
+        await update.effective_message.reply_text("Меняю фон…")
+        try:
+            # gpt-image-1 edits без mask: проксируем «замени фон на ...»
+            resp = oai_img.images.edits(
+                model=IMAGES_MODEL,
+                image=BytesIO(img),
+                prompt=f"Replace the background to: {text}. Keep the subject intact, clean edges.",
+                size="1024x1024",
+                n=1
+            )
+            b64 = resp.data[0].b64_json
+            await update.effective_message.reply_photo(photo=base64.b64decode(b64), caption="Готово ✅")
+        except Exception as e:
+            log.exception("replace_bg edit error: %s", e)
+            await update.effective_message.reply_text("Не удалось заменить фон.")
+        return
+
+    # обычная обработка текста
     await _process_text(update, context, text)
 
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1789,7 +1840,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
     lines.append("")
     lines.append(_plan_mechanics_text())
-    kb = InlineKeyboardMarkup([
+        kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("START — месяц",  callback_data="buy:start:1"),
          InlineKeyboardButton("квартал",        callback_data="buy:start:3"),
          InlineKeyboardButton("год",            callback_data="buy:start:12")],
@@ -1799,6 +1850,16 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("ULTIMATE — мес", callback_data="buy:ultimate:1"),
          InlineKeyboardButton("квартал",        callback_data="buy:ultimate:3"),
          InlineKeyboardButton("год",            callback_data="buy:ultimate:12")],
+        # crypto-варианты
+        [InlineKeyboardButton("START (Crypto) месяц",  callback_data="buyc:start:1"),
+         InlineKeyboardButton("квартал",               callback_data="buyc:start:3"),
+         InlineKeyboardButton("год",                   callback_data="buyc:start:12")],
+        [InlineKeyboardButton("PRO (Crypto) месяц",    callback_data="buyc:pro:1"),
+         InlineKeyboardButton("квартал",               callback_data="buyc:pro:3"),
+         InlineKeyboardButton("год",                   callback_data="buyc:pro:12")],
+        [InlineKeyboardButton("ULTIMATE (Crypto) мес", callback_data="buyc:ultimate:1"),
+         InlineKeyboardButton("квартал",               callback_data="buyc:ultimate:3"),
+         InlineKeyboardButton("год",                   callback_data="buyc:ultimate:12")],
         [InlineKeyboardButton("Открыть страницу тарифов (мини-приложение)", web_app=WebAppInfo(url=TARIFF_URL))],
     ])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
@@ -1853,8 +1914,114 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if amount_rub < MIN_RUB_FOR_INVOICE:
                 await q.edit_message_text(f"Минимальная сумма пополнения: {MIN_RUB_FOR_INVOICE} ₽")
                 return
+        # Покупка подписки через CryptoBot
+        if data.startswith("buyc:"):
+            await q.answer()
+            if not CRYPTO_PAY_API_TOKEN:
+                await q.edit_message_text("CryptoBot не настроен. Укажите CRYPTO_PAY_API_TOKEN.")
+                return
+            _, tier, months = data.split(":", 2)
+            months = int(months)
+            # цену берем из таблицы и переводим в USD по вашему курсу
+            rub = _plan_rub(tier, {1:"month",3:"quarter",12:"year"}[months])
+            usd = float(rub) / max(1e-9, USD_RUB)
+            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT", description=f"Subscription {tier}/{months}m")
+            if not inv_id or not pay_url:
+                await q.edit_message_text("Не удалось создать счёт в CryptoBot.")
+                return
+            msg = await update.effective_message.reply_text(
+                f"Оплатите подписку {tier.upper()} на {months} мес: ≈ ${usd_amount:.2f} ({asset}).",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("Проверить оплату", callback_data=f"subcrypto:check:{tier}:{months}:{inv_id}")]
+                ])
+            )
+            # автопуллинг
+            async def _poll():
+                await _poll_crypto_invoice(context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount)
+            context.application.create_task(_poll())
+            return
+
+        if data.startswith("subcrypto:check:"):
+            await q.answer()
+            _, _, tier, months, inv_id = data.split(":", 4)
+            inv = await _crypto_get_invoice(inv_id)
+            if not inv:
+                await q.edit_message_text("Счёт не найден. Создайте новый.")
+                return
+            st = (inv.get("status") or "").lower()
+            if st == "paid":
+                until = activate_subscription_with_tier(update.effective_user.id, tier, int(months))
+                await q.edit_message_text(f"⭐ Подписка активирована до {until.strftime('%Y-%m-%d')} (Crypto).")
+            elif st == "active":
+                await q.answer("Платёж ещё не подтверждён", show_alert=True)
+            else:
+                await q.edit_message_text(f"Статус счёта: {st}")
+            return
             payload = "t=3"
             ok = await _send_invoice_rub("Пополнение баланса", "Единый кошелёк для перерасходов.", amount_rub, payload, update)
+        # ===== image tools =====
+        if data == "img:remove_bg":
+            await q.answer()
+            uid = update.effective_user.id
+            img = _last_photo.get(uid)
+            if not img:
+                await q.edit_message_text("Нет последнего фото. Пришлите фото ещё раз.")
+                return
+            await q.edit_message_text("Удаляю фон…")
+            out = await _remove_bg_bytes(img)
+            if not out:
+                await update.effective_message.reply_text("Не удалось удалить фон (проверьте REMOVE_BG_API_KEY).")
+                return
+            await update.effective_message.reply_document(document=InputFile(BytesIO(out), filename="no_bg.png"), caption="Готово ✅")
+            return
+
+        if data == "img:enhance":
+            await q.answer()
+            uid = update.effective_user.id
+            img = _last_photo.get(uid)
+            if not img:
+                await q.edit_message_text("Нет последнего фото. Пришлите фото ещё раз.")
+                return
+            await q.edit_message_text("Улучшаю качество…")
+            out = await _enhance_with_openai(img)
+            if not out:
+                await update.effective_message.reply_text("Не удалось улучшить изображение.")
+                return
+            await update.effective_message.reply_photo(photo=out, caption="Готово ✅")
+            return
+
+        if data == "img:replace_bg":
+            await q.answer()
+            _pending_edit[update.effective_user.id] = {"action": "replace_bg"}
+            await q.edit_message_text("Опишите, какой фон нужно поставить (например: «пляж на закате»).")
+            return
+
+        if data.startswith("img:animate:"):
+            await q.answer()
+            engine = data.split(":", 2)[-1]  # luma|runway
+            uid = update.effective_user.id
+            img = _last_photo.get(uid)
+            if not img:
+                await q.edit_message_text("Нет последнего фото. Пришлите фото ещё раз.")
+                return
+            # Соберём промпт из подписи предыдущего сообщения, если была
+            base_prompt = "Animate the subject from the photo: natural smile and puts the phone down."
+            # Для простоты: используем text-to-video по описанию (без image-input)
+            duration, ar, prompt = parse_video_opts_from_text(base_prompt, default_duration=LUMA_DURATION_S, default_ar=LUMA_ASPECT)
+            async def _go_luma():
+                await _run_luma_video(update, context, prompt, duration, ar)
+                _register_engine_spend(uid, "luma", 0.40)
+            async def _go_runway():
+                await _run_runway_video(update, context, prompt, duration, ar)
+                base = RUNWAY_UNIT_COST_USD or 7.0
+                _register_engine_spend(uid, "runway", max(1.0, base * (duration / max(1, RUNWAY_DURATION_S))))
+            if engine == "luma":
+                await _try_pay_then_do(update, context, uid, "luma", 0.40, _go_luma, remember_kind="video_luma", remember_payload={"prompt": prompt, "duration": duration, "aspect": ar})
+            else:
+                est = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+                await _try_pay_then_do(update, context, uid, "runway", est, _go_runway, remember_kind="video_runway", remember_payload={"prompt": prompt, "duration": duration, "aspect": ar})
+            return
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
