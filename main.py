@@ -907,7 +907,6 @@ async def _remove_bg_bytes(img_bytes: bytes) -> bytes | None:
 
 async def _enhance_with_openai(img_bytes: bytes, hint: str = "enhance quality, details, sharpness") -> bytes | None:
     try:
-        # variations == soft enhancement
         resp = oai_img.images.edits(
             model=IMAGES_MODEL,
             image=BytesIO(img_bytes),
@@ -973,7 +972,7 @@ def engines_kb():
         [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
         [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
         [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
-        [InlineKeyboardButton("Описание тарифов", web_app=WebAppInfo(url=TARIFF_URL))],
+        # Кнопка «Описание тарифов» убрана по твоей просьбе
     ])
 
 # ───────── Router: text/photo/voice/docs/img/video ───────
@@ -1513,7 +1512,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     video=InputFile(bio),
                     caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
                 )
-        except Exception as e:
+                except Exception as e:
             log.exception("send runway video failed: %s", e)
             await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
@@ -1689,7 +1688,7 @@ async def _try_pay_then_do(
     except Exception:
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    title = f"{engine.UPPER()} пополнение"
+    title = f"{engine.upper()} пополнение"
     desc = f"Пополнение бюджета для {engine} на ${need_usd:.2f} (≈ {amount_rub} ₽)."
     payload = _payload_oneoff(engine, need_usd)
     await _send_invoice_rub(title, desc, amount_rub, payload, update)
@@ -1764,7 +1763,7 @@ def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
     term_label = {1: "мес", 3: "квартал", 12: "год"}.get(months, f"{months} мес")
     amount = _plan_rub(tier, {1: "month", 3: "quarter", 12: "year"}[months])
     payload = _payload_subscribe(tier, months)
-    title = f"Подписка {tier.Upper()}/{term_label}"
+    title = f"Подписка {tier.upper()}/{term_label}"
     return payload, amount, title
 
 def _plan_mechanics_text() -> str:
@@ -2076,17 +2075,18 @@ async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = kv_get("welcome_url", BANNER_URL)
     if url:
-        await update.effective_message.reply_photo(url, caption="Текущая картинка приветствия")
+        try:
+            await update.effective_message.reply_photo(url, caption="Текущая картинка приветствия")
+        except Exception:
+            await update.effective_message.reply_text("Не удалось отправить изображение, проверь URL.")
     else:
         await update.effective_message.reply_text("Картинка приветствия не задана.")
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
-        try:
+        with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(welcome_url)
-        except Exception:
-            pass
     await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
