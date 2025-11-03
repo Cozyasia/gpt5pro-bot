@@ -1492,11 +1492,15 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if not tid:
         await update.effective_message.reply_text("⚠️ Не удалось создать задачу в Runway.")
         return
+
     await update.effective_message.reply_text("⏳ Runway рендерит… Пришлю видео, как будет готово.")
     url, st = await _runway_poll_and_get_url(tid)
     if not url:
         await update.effective_message.reply_text(f"⚠️ Runway вернул статус: {st}.")
         return
+
+    # сначала пытаемся отдать по URL (Telegram сам подтянет файл),
+    # если не получится — скачиваем и шлём как InputFile
     try:
         await update.effective_message.reply_video(
             video=url,
@@ -1507,12 +1511,13 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             async with httpx.AsyncClient(timeout=None) as client:
                 r = await client.get(url)
                 r.raise_for_status()
-                bio = BytesIO(r.content); bio.name = "runway.mp4"
+                bio = BytesIO(r.content)
+                bio.name = "runway.mp4"
                 await update.effective_message.reply_video(
                     video=InputFile(bio),
                     caption=_safe_caption(prompt, "Runway", duration, _norm_ar(ar)),
                 )
-                except Exception as e:
+        except Exception as e:
             log.exception("send runway video failed: %s", e)
             await update.effective_message.reply_text("⚠️ Видео готово, но не удалось отправить файл.")
 
