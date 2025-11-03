@@ -976,8 +976,10 @@ EXAMPLES_TEXT = (
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
-            [KeyboardButton("🎛 Движки"), KeyboardButton("⭐ Подписка")],
-            [KeyboardButton("🧾 Баланс"), KeyboardButton("ℹ️ Помощь")],
+            [KeyboardButton("🎛 Движки"), 
+             KeyboardButton("⭐ Подписка")],
+            [KeyboardButton("🧾 Баланс"), 
+             KeyboardButton("ℹ️ Помощь")],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
