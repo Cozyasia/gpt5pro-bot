@@ -209,59 +209,10 @@ def _ascii_label(s: str | None) -> str:
     except Exception:
         return "Item"
 
-# HTTP stub (healthcheck + /premium.html redirect)
-def _start_http_stub():
-    class _H(BaseHTTPRequestHandler):
-        def do_GET(self):
-            path = (self.path or "/").split("?", 1)[0]
-            if path in ("/", "/healthz"):
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"ok")
-                return
-            if path == "/premium.html":
-                if WEBAPP_URL:
-                    self.send_response(302)
-                    self.send_header("Location", WEBAPP_URL)
-                    self.end_headers()
-                else:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(b"<html><body><h3>Premium page</h3><p>Set WEBAPP_URL env.</p></body></html>")
-                return
-            self.send_response(404)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(b"not found")
-        def log_message(self, *_):  # silent
-            return
-    try:
-        srv = HTTPServer(("0.0.0.0", PORT), _H)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        log.info("HTTP stub bound on 0.0.0.0:%s", PORT)
-    except Exception as e:
-        log.exception("HTTP stub start failed: %s", e)
-
-# Text LLM (OpenRouter base autodetect)
-_auto_base = OPENAI_BASE_URL
-if not _auto_base and (OPENAI_API_KEY.startswith("sk-or-") or "openrouter" in (OPENAI_BASE_URL or "").lower()):
-    _auto_base = "https://openrouter.ai/api/v1"
-    log.info("Auto-select OpenRouter base_url for text LLM.")
-
-default_headers = {}
-ref = _ascii_or_none(OPENROUTER_SITE_URL)
-ttl = _ascii_or_none(OPENROUTER_APP_NAME)
-if ref:
-    default_headers["HTTP-Referer"] = ref
-if ttl:
-    default_headers["X-Title"] = ttl
-
 try:
-    oai_llm = OpenAI(api_key=OPENAI_API_KEY, base_url=_auto_base or None, default_headers=default_headers or None)
+    oai_llm = OpenAI(api_key=OPENAI_API_KEY, base_url=(OPENAI_BASE_URL or None))
 except TypeError:
-    oai_llm = OpenAI(api_key=OPENAI_API_KEY, base_url=_auto_base or None)
+    oai_llm = OpenAI(api_key=OPENAI_API_KEY, base_url=(OPENAI_BASE_URL or None))
 
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url=IMAGES_BASE_URL)
@@ -634,7 +585,7 @@ def detect_media_intent(text: str):
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
-        messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
+        messages.append({"role": "system", "content": f"Контекст из веб-поиска:\н{web_ctx}"})
     messages.append({"role": "user", "content": user_text})
 
     last_err = None
@@ -873,7 +824,7 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
                     "2) ключевые цифры/сроки; 3) вывод/рекомендации. Русский язык.\n\n" + combined)
     return await ask_openai_text(final_prompt)
 
-# ───────── Images ─────────
+# ───────── Images: генерация ─────────
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
@@ -885,11 +836,48 @@ async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         log.exception("IMG gen error: %s", e)
         await update.effective_message.reply_text(f"Не удалось создать изображение.")
 
+# ───────── Images: правки ─────────
+# Храним последнюю фотку пользователя (в памяти процесса)
+_last_photo: dict[int, bytes] = {}
+_pending_edit: dict[int, dict] = {}  # user_id -> {"action": "...", "ask": True/False}
+
+def _edit_menu_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✂️ Убрать фон", callback_data="edit:bg_remove"),
+         InlineKeyboardButton("🏖️ Заменить фон", callback_data="edit:bg_replace")],
+        [InlineKeyboardButton("🧍 Оставить одного человека", callback_data="edit:keep_one")],
+        [InlineKeyboardButton("➖ Удалить объект", callback_data="edit:remove_object")],
+        [InlineKeyboardButton("✨ Улучшить качество", callback_data="edit:enhance")],
+        [InlineKeyboardButton("Отмена", callback_data="edit:cancel")]
+    ])
+
+async def _do_img_edit_bytes(update: Update, context: ContextTypes.DEFAULT_TYPE, image_bytes: bytes, prompt: str, want_png: bool = False):
+    try:
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+        imgfile = BytesIO(image_bytes); imgfile.name = "image.png"  # Telegram фото может быть jpeg/webp — OpenAI примет PNG имя
+        resp = oai_img.images.edits(
+            model=IMAGES_MODEL,
+            image=imgfile,
+            prompt=prompt,
+            size="1024x1024",
+            n=1
+        )
+        b64 = resp.data[0].b64_json
+        result = base64.b64decode(b64)
+        if want_png:
+            bio = BytesIO(result); bio.name = "result.png"
+            await update.effective_message.reply_document(document=InputFile(bio), caption="Готово ✅")
+        else:
+            await update.effective_message.reply_photo(photo=result, caption="Готово ✅")
+    except Exception as e:
+        log.exception("IMG edit error: %s", e)
+        await update.effective_message.reply_text("Не удалось выполнить правку изображения.")
+
 # ───────── UI / тексты ─────────
 START_TEXT = (
     "Привет! Я GPT-бот с тарифами, квотами и разовыми пополнениями.\n\n"
     "Что умею:\n"
-    "• 💬 Текст/фото (GPT)\n"
+    "• 💬 Текст/фото (GPT) + фото-редактор (убрать/заменить фон, удалить объект, оставить одного человека)\n"
     "• 🎬 Видео Luma (5/9/10 c, 9:16/16:9)\n"
     "• 🎥 Видео Runway (PRO)\n"
     "• 🖼 Картинки — команда /img <промпт>\n"
@@ -899,10 +887,10 @@ START_TEXT = (
 
 HELP_TEXT = (
     "Подсказки:\n"
-    "• /plans — тарифы и оплата подписки (через чат или мини-приложение)\n"
+    "• /plans — описание тарифов\n"
     "• /img кот с очками — сгенерирует картинку\n"
+    "• Пришли фото — предложу варианты правки (фон, удаление объекта и т.д.)\n"
     "• «сделай видео … 9 секунд 9:16» — Luma/Runway\n"
-    "• «🎛 Движки» — выбрать GPT / Luma / Runway / Midjourney / Images / Docs\n"
     "• «🧾 Баланс» — кошелёк и пополнение (RUB или CryptoBot USDT/TON)\n"
     "• /voice_on и /voice_off — озвучка ответов."
 )
@@ -912,7 +900,8 @@ EXAMPLES_TEXT = (
     "• сделай видео ретро-авто на берегу, 9 секунд, 9:16\n"
     "• опиши текст на фото (пришли фото + подпись)\n"
     "• /img неоновый город в дождь, реализм\n"
-    "• пришли PDF — сделаю тезисы и выводы"
+    "• пришли PDF — сделаю тезисы и выводы\n"
+    "• пришли фото — нажми «✂️ Убрать фон» или «➖ Удалить объект»"
 )
 
 def main_keyboard():
@@ -937,7 +926,7 @@ def engines_kb():
         [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
         [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
         [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
-        [InlineKeyboardButton("Открыть страницу тарифов", web_app=WebAppInfo(url=TARIFF_URL))],
+        [InlineKeyboardButton("Описание тарифов", callback_data="show:plans")],  # переименовано
     ])
 
 # ───────── Router: text/photo/voice/docs/img/video ───────
@@ -950,6 +939,29 @@ def sniff_image_mime(b: bytes) -> str:
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
+    # перехват ожидаемого описания для правок
+    uid = update.effective_user.id
+    if uid in _pending_edit:
+        pend = _pending_edit.pop(uid)
+        action = pend.get("action")
+        desc = text
+        img = _last_photo.get(uid)
+        if not img:
+            await update.effective_message.reply_text("Не нашёл последнее фото. Пришлите изображение ещё раз.")
+            return
+        async def _go_edit(prompt: str, want_png: bool = False):
+            await _do_img_edit_bytes(update, context, img, prompt, want_png=want_png)
+        if action == "bg_replace":
+            prompt = f"Replace the background with: {desc}. Keep the main subject crisp. No cropping."
+            await _try_pay_then_do(update, context, uid, "img", IMG_COST_USD, lambda: _go_edit(prompt, want_png=False),
+                                   remember_kind="img_edit", remember_payload={"action": action, "desc": desc})
+            return
+        if action == "remove_object":
+            prompt = f"Remove object(s): {desc}. Fill the background naturally, seamless inpainting."
+            await _try_pay_then_do(update, context, uid, "img", IMG_COST_USD, lambda: _go_edit(prompt, want_png=False),
+                                   remember_kind="img_edit", remember_payload={"action": action, "desc": desc})
+            return
+        # если почему-то другой action — проброс в обычный пайплайн
     await _process_text(update, context, text)
 
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -963,11 +975,12 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         file = await update.message.photo[-1].get_file()
         data = await file.download_as_bytearray()
+        _last_photo[user_id] = bytes(data)  # кешируем оригинал
         b64 = base64.b64encode(bytes(data)).decode("ascii")
         mime = sniff_image_mime(bytes(data))
         user_text = (update.message.caption or "").strip()
         ans = await ask_openai_vision(user_text, b64, mime)
-        await update.effective_message.reply_text(ans or "Готово.")
+        await update.effective_message.reply_text((ans or "Готово.") + "\n\nЧто сделать с этим фото?", reply_markup=_edit_menu_kb())
         await maybe_tts_reply(update, context, (ans or "")[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("Photo handler error: %s", e)
@@ -1623,7 +1636,7 @@ async def _try_pay_then_do(
         await update.effective_message.reply_text(
             "Для этого действия нужна подписка либо единый баланс. Открой /plans или пополни «🧾 Баланс».",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                [[InlineKeyboardButton("Описание тарифов", callback_data="show:plans")],
                  [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
             ),
         )
@@ -1705,44 +1718,25 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 def _plan_rub(tier: str, term: str) -> int:
     return int(PLAN_PRICE_TABLE[tier][term])
 
-def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
-    term_label = {1: "мес", 3: "квартал", 12: "год"}.get(months, f"{months} мес")
-    amount = _plan_rub(tier, {1: "month", 3: "quarter", 12: "year"}[months])
-    payload = _payload_subscribe(tier, months)
-    title = f"Подписка {tier.upper()}/{term_label}"
-    return payload, amount, title
-
 def _plan_mechanics_text() -> str:
     return (
         "📋 Как работают лимиты и кошелёк:\n"
         "• FREE — демо: 5 текстов/день, 1× Luma (до $0.40) и 1× картинка (до $0.05).\n"
-        "• START — больше текстов + небольшие бюджеты на медиа.\n"
+        "• START — больше текстов и небольшие бюджеты на медиа.\n"
         "• PRO/ULTIMATE — расширенные бюджеты Luma/Runway/Images.\n"
-        "• Если исчерпан дневной бюджет по движку, сверхлимит списывается с «Единого кошелька» (USD).\n"
-        "• Кошелёк пополняется в рублях (ЮKassa) или в USDT/TON через CryptoBot.\n"
-        "• Разовые списания рассчитываются по фактической себестоимости движка с наценкой.\n"
+        "• Сверхлимит по движку списывается с «Единого кошелька» (USD).\n"
+        "• Кошелёк пополняется в рублях (ЮKassa) или USDT/TON через CryptoBot.\n"
     )
 
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = ["⭐ Тарифы и оформление подписки:"]
+    lines = ["⭐ Описание тарифов:"]
     for t in ("start", "pro", "ultimate"):
         p = PLAN_PRICE_TABLE[t]
         lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
     lines.append("")
     lines.append(_plan_mechanics_text())
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("START — месяц",  callback_data="buy:start:1"),
-         InlineKeyboardButton("квартал",        callback_data="buy:start:3"),
-         InlineKeyboardButton("год",            callback_data="buy:start:12")],
-        [InlineKeyboardButton("PRO — месяц",    callback_data="buy:pro:1"),
-         InlineKeyboardButton("квартал",        callback_data="buy:pro:3"),
-         InlineKeyboardButton("год",            callback_data="buy:pro:12")],
-        [InlineKeyboardButton("ULTIMATE — мес", callback_data="buy:ultimate:1"),
-         InlineKeyboardButton("квартал",        callback_data="buy:ultimate:3"),
-         InlineKeyboardButton("год",            callback_data="buy:ultimate:12")],
-        [InlineKeyboardButton("Открыть страницу тарифов (мини-приложение)", web_app=WebAppInfo(url=TARIFF_URL))],
-    ])
-    await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
+    # без кнопок оплаты/мини-приложения — только описание
+    await update.effective_message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 # ===== Пополнение кошелька =====
 def _make_topup_webapp_url(amount: int | None = None):
@@ -1778,6 +1772,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = (q.data or "").strip()
 
     try:
+        # показать описание тарифов из «Движки»
+        if data == "show:plans":
+            await q.answer()
+            await cmd_plans(update, context)
+            return
+
         # TOPUP: меню пополнения
         if data == "topup":
             await q.answer()
@@ -1823,7 +1823,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
                 ])
             )
-            # фоновая проверка
             context.application.create_task(_poll_crypto_invoice(
                 context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
             ))
@@ -1850,12 +1849,9 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if data.startswith("buy:"):
-            _, tier, months = data.split(":", 2)
-            months = int(months)
-            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-            desc = f"Оформление подписки {tier.upper()} на {months} мес."
-            ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
-            await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
+            # в текущей версии не предлагаем покупки из /plans (по запросу — только описание),
+            # но оставим обработчик на случай старых кнопок
+            await q.answer("Покупка из этого меню отключена. Откройте «🧾 Баланс» для пополнения.", show_alert=True)
             return
 
         if data.startswith("engine:"):
@@ -1891,9 +1887,9 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if offer == "ASK_SUBSCRIBE":
                 await q.edit_message_text(
-                    "Для этого движка нужна активная подписка или единый баланс. Откройте /plans или пополните «🧾 Баланс».",
+                    "Для этого движка нужна активная подписка или единый баланс.",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [[InlineKeyboardButton("Описание тарифов", callback_data="show:plans")],
                          [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
                     ),
                 )
@@ -1909,7 +1905,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"или пополните баланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [InlineKeyboardButton("Описание тарифов", callback_data="show:plans")],
                         [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
                     ]
                 ),
@@ -1944,6 +1940,49 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
             )
             return
+
+        # ─── Фото-редактор коллбэки ───
+        if data.startswith("edit:"):
+            await q.answer()
+            action = data.split(":",1)[1]
+            uid = update.effective_user.id
+            img = _last_photo.get(uid)
+            if action == "cancel":
+                await q.edit_message_text("Окей, правки отменены.")
+                return
+            if not img:
+                await q.edit_message_text("Не нашёл последнее фото. Пришлите изображение ещё раз.")
+                return
+
+            async def _go_edit(prompt: str, want_png: bool = False):
+                await _do_img_edit_bytes(update, context, img, prompt, want_png=want_png)
+
+            # мгновенные правки без уточнений
+            if action == "bg_remove":
+                prompt = "Remove the entire background to transparent, keep the main subject edges clean. Output PNG with alpha."
+                await _try_pay_then_do(update, context, uid, "img", IMG_COST_USD, lambda: _go_edit(prompt, want_png=True),
+                                       remember_kind="img_edit", remember_payload={"action": action})
+                return
+            if action == "keep_one":
+                prompt = "If multiple people are present, keep only the central primary person and remove all other people and distractions. Natural inpainting for removed regions."
+                await _try_pay_then_do(update, context, uid, "img", IMG_COST_USD, lambda: _go_edit(prompt, want_png=False),
+                                       remember_kind="img_edit", remember_payload={"action": action})
+                return
+            if action == "enhance":
+                prompt = "Enhance image quality: denoise, sharpen slightly, improve clarity and detail without changing content or aspect ratio."
+                await _try_pay_then_do(update, context, uid, "img", IMG_COST_USD, lambda: _go_edit(prompt, want_png=False),
+                                       remember_kind="img_edit", remember_payload={"action": action})
+                return
+
+            # правки с уточнениями
+            if action == "bg_replace":
+                _pending_edit[uid] = {"action": "bg_replace"}
+                await q.edit_message_text("Опишите, какой фон поставить (пример: «закатный пляж Самуи, мягкий боке»).")
+                return
+            if action == "remove_object":
+                _pending_edit[uid] = {"action": "remove_object"}
+                await q.edit_message_text("Что удалить на фото? Опишите объект(ы) и их положение.")
+                return
 
         await q.answer("Неизвестная команда", show_alert=True)
 
@@ -2091,11 +2130,8 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         typ = (data.get("type") or data.get("action") or "").lower()
 
         if typ in ("subscribe","buy","buy_sub","sub"):
-            tier = (data.get("tier") or "pro").lower()
-            months = int(data.get("months") or 1)
-            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-            desc = f"Оформление подписки {tier.upper()} на {months} мес. (из мини-приложения)"
-            await _send_invoice_rub(title, desc, amount_rub, payload, update)
+            # отключены покупки из мини-приложения в рамках запроса — игнорируем
+            await update.effective_message.reply_text("Оформление подписки через это меню отключено. Посмотрите /plans для описания.")
             return
 
         if typ in ("topup_rub","rub_topup"):
@@ -2226,6 +2262,41 @@ def run_by_mode(app):
             drop_pending_updates=True,
         )
 
+# HTTP stub (healthcheck + /premium.html redirect)
+def _start_http_stub():
+    class _H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = (self.path or "/").split("?", 1)[0]
+            if path in ("/", "/healthz"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"ok")
+                return
+            if path == "/premium.html":
+                if WEBAPP_URL:
+                    self.send_response(302)
+                    self.send_header("Location", WEBAPP_URL)
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b"<html><body><h3>Premium page</h3><p>Set WEBAPP_URL env.</p></body></html>")
+                return
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"not found")
+        def log_message(self, *_):  # silent
+            return
+    try:
+        srv = HTTPServer(("0.0.0.0", PORT), _H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        log.info("HTTP stub bound on 0.0.0.0:%s", PORT)
+    except Exception as e:
+        log.exception("HTTP stub start failed: %s", e)
+
 # ───────── Инициализация бота ─────────
 def main():
     db_init()
@@ -2251,7 +2322,7 @@ def main():
     app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
     app.add_handler(CommandHandler("welcome", cmd_show_welcome))
 
-    # WebApp data (кнопка «синяя» в мини-приложении)
+    # WebApp data (кнопка в мини-приложении)
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
     # Коллбэки/платежи
@@ -2259,7 +2330,7 @@ def main():
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
 
-    # Фото/визион
+    # Фото / визион
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
 
     # Голос/аудио
