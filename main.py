@@ -1138,13 +1138,18 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f = await doc.get_file()
         data = await f.download_as_bytearray()
         text, kind = extract_text_from_document(bytes(data), doc.file_name or "file")
-        if not text.strip():
-            await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
-            return         goal = (update.message.caption or "").strip() or None
-        await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
-        summary = await summarize_long_text(text, query=goal)
-        await update.effective_message.reply_text(summary or "Готово.")
-        await maybe_tts_reply(update, context, (summary or "")[:TTS_MAX_CHARS])
+            if not text.strip():
+        await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
+        return
+
+    # цель из подписи к документу (если была)
+    goal = (update.message.caption or "").strip() or None
+
+    await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
+    summary = await summarize_long_text(text, query=goal)
+
+    await update.effective_message.reply_text(summary or "Готово.")
+    await maybe_tts_reply(update, context, (summary or "")[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc_analyze error: %s", e)
         await update.effective_message.reply_text("Ошибка при анализе документа.")
@@ -1513,13 +1518,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = (q.data or "").strip()
 
     try:
-        # TOPUP: меню пополнения
+        # Меню пополнения
         if data == "topup":
             await q.answer()
             await _send_topup_menu(update, context)
             return
 
-        # TOPUP RUB фиксированной суммой
+        # Пополнение RUB фиксированной суммой (ЮKassa)
         if data.startswith("topup:rub:"):
             await q.answer()
             try:
@@ -1530,10 +1535,196 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.edit_message_text(f"Минимальная сумма пополнения: {MIN_RUB_FOR_INVOICE} ₽")
                 return
             payload = "t=3"
-            ok = await _send_invoice_rub("Пополнение баланса", "Единый кошелёк для перерасходов.", amount_rub, payload, update)
+            ok = await _send_invoice_rub(
+                "Пополнение баланса",
+                "Единый кошелёк для перерасходов.",
+                amount_rub,
+                payload,
+                update
+            )
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
 
+        # Пополнение через CryptoBot (USDT/TON)
+        if data.startswith("topup:crypto:"):
+            await q.answer()
+            if not CRYPTO_PAY_API_TOKEN:
+                await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
+                return
+            try:
+                usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
+            except Exception:
+                usd = 0.0
+            if usd <= 0.0:
+                await q.edit_message_text("Неверная сумма.")
+                return
+            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(
+                usd, asset="USDT", description="Wallet top-up"
+            )
+            if not inv_id or not pay_url:
+                await q.edit_message_text("Не удалось создать счёт в CryptoBot. Попробуйте позже.")
+                return
+            msg = await update.effective_message.reply_text(
+                f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\nПосле оплаты баланс пополнится автоматически.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
+                ])
+            )
+            context.application.create_task(_poll_crypto_invoice(
+                context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
+            ))
+            return
+
+        # Ручная проверка счёта CryptoBot
+        if data.startswith("crypto:check:"):
+            await q.answer()
+            inv_id = data.split(":", 2)[-1]
+            inv = await _crypto_get_invoice(inv_id)
+            if not inv:
+                await q.edit_message_text("Не нашёл счёт. Создайте новый.")
+                return
+            st = (inv.get("status") or "").lower()
+            if st == "paid":
+                usd_amount = float(inv.get("amount", 0.0))
+                if (inv.get("asset") or "").upper() == "TON":
+                    usd_amount *= TON_USD_RATE
+                _wallet_total_add(update.effective_user.id, usd_amount)
+                await q.edit_message_text(f"💳 Оплата получена. Баланс пополнен на ≈ ${usd_amount:.2f}.")
+            elif st == "active":
+                await q.answer("Платёж ещё не подтверждён", show_alert=True)
+            else:
+                await q.edit_message_text(f"Статус счёта: {st}")
+            return
+
+        # Покупка подписки через ЮKassa (RUB)
+        if data.startswith("buy:"):
+            _, tier, months = data.split(":", 2)
+            months = int(months)
+            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
+            desc = f"Оформление подписки {tier.upper()} на {months} мес."
+            ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
+            await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
+            return
+
+        # Покупка подписки через CryptoBot (USDT/TON)
+        if data.startswith("buyc:"):  # buyc:PLAN:PERIOD
+            await q.answer()
+            try:
+                _, plan, period = data.split(":")
+                async with httpx.AsyncClient() as client:
+                    pay_url = await create_crypto_invoice(plan, period, q.from_user.id, client)
+                txt = (
+                    f"🧾 Счёт для оплаты через CryptoBot\n"
+                    f"План: {plan}\nСрок: {period}\n\n"
+                    f"Перейди по ссылке для оплаты:\n{pay_url}\n\n"
+                    f"После оплаты доступ активируется автоматически (или пришли чек, если не подтянулся)."
+                )
+                await q.message.reply_text(txt, disable_web_page_preview=False)
+            except Exception as e:
+                await q.message.reply_text(f"Не удалось создать счёт CryptoBot: {e}")
+            return
+
+        # Выбор «движка» (кнопка «Движки»)
+        if data.startswith("engine:"):
+            await q.answer()
+            engine = data.split(":", 1)[1]  # gpt|images|luma|runway|midjourney|stt_tts
+            username = (update.effective_user.username or "")
+
+            if is_unlimited(update.effective_user.id, username):
+                await q.edit_message_text(
+                    f"✅ Движок «{engine}» доступен без ограничений.\n"
+                    f"Отправь задачу, например: «сделай видео ретро-авто, 9 секунд, 9:16»."
+                )
+                return
+
+            if engine in ("gpt", "stt_tts", "midjourney"):
+                await q.edit_message_text(
+                    f"✅ Выбран «{engine}». Отправь запрос текстом/фото. "
+                    f"Для Luma/Runway/Images действуют дневные бюджеты тарифа."
+                )
+                return
+
+            est_cost = IMG_COST_USD if engine == "images" else (0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD))
+            map_engine = {"images": "img", "luma": "luma", "runway": "runway"}[engine]
+            ok, offer = _can_spend_or_offer(update.effective_user.id, username, map_engine, est_cost)
+
+            if ok:
+                await q.edit_message_text(
+                    "✅ Доступно. "
+                    + ("Запусти: /img кот в очках" if engine == "images"
+                       else "Напиши: «сделай видео … 9 секунд 9:16» — предложу Luma/Runway.")
+                )
+                return
+
+            if offer == "ASK_SUBSCRIBE":
+                await q.edit_message_text(
+                    "Для этого движка нужна активная подписка или единый баланс. Откройте /plans или пополните «🧾 Баланс».",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                         [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
+                    ),
+                )
+                return
+
+            try:
+                need_usd = float(offer.split(":", 1)[-1])
+            except Exception:
+                need_usd = est_cost
+            amount_rub = _calc_oneoff_price_rub(map_engine, need_usd)
+            await q.edit_message_text(
+                f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
+                f"или пополните баланс в «🧾 Баланс».",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
+                    ]
+                ),
+            )
+            return
+
+        # Выбор движка для видео после парсинга текста: choose:<engine>:<aid>
+        if data.startswith("choose:"):
+            await q.answer()
+            _, engine, aid = data.split(":", 2)
+            meta = _pending_actions.pop(aid, None)
+            if not meta:
+                await q.answer("Задача устарела", show_alert=True)
+                return
+
+            prompt   = meta["prompt"]
+            duration = meta["duration"]
+            aspect   = meta["aspect"]
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            map_engine = "luma" if engine == "luma" else "runway"
+
+            async def _start_real_render():
+                if engine == "luma":
+                    await _run_luma_video(update, context, prompt, duration, aspect)
+                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
+                else:
+                    await _run_runway_video(update, context, prompt, duration, aspect)
+                    base = RUNWAY_UNIT_COST_USD or 7.0
+                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
+                    _register_engine_spend(update.effective_user.id, "runway", cost)
+
+            await _try_pay_then_do(
+                update, context, update.effective_user.id,
+                map_engine, est, _start_real_render,
+                remember_kind=f"video_{engine}",
+                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
+            )
+            return
+
+        await q.answer("Неизвестная команда", show_alert=True)
+
+    except Exception as e:
+        log.exception("on_cb error: %s", e)
+    finally:
+        with contextlib.suppress(Exception):
+            await q.answer()
+            
         # === CRYPTOBOT SUBSCRIBE ===
         if data.startswith("buyc:"):
             await q.answer()
@@ -2122,7 +2313,7 @@ def main():
     # Команды
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("plans", cmd_plans))
+    app.add_handler(CommandHandler("plans", plans))           # <-- функция называется plans
     app.add_handler(CommandHandler("modes", cmd_modes))
     app.add_handler(CommandHandler("examples", cmd_examples))
     app.add_handler(CommandHandler("balance", cmd_balance))
@@ -2136,11 +2327,13 @@ def main():
     app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
     app.add_handler(CommandHandler("welcome", cmd_show_welcome))
 
-    # WebApp data (если мини-приложение шлёт sendData)
+    # WebApp data
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
-    # Коллбэки/платежи
+    # Коллбэки (единый обработчик on_cb)
     app.add_handler(CallbackQueryHandler(on_cb))
+
+    # Платежи Telegram
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
 
@@ -2182,7 +2375,7 @@ def main():
     app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
 
     # Кнопки главного меню
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), cmd_plans))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), plans))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🎛\s*Движки\s*$"), cmd_modes))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🧾\s*Баланс\s*$"), cmd_balance))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*ℹ️\s*Помощь\s*$"), cmd_help))
@@ -2194,7 +2387,3 @@ def main():
     app.add_error_handler(on_error)
 
     run_by_mode(app)
-
-if __name__ == "__main__":
-    main()
-       
