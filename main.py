@@ -53,6 +53,17 @@ WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
+# --- CRYPTOBOT (Crypto Pay API) ---
+CRYPTO_PAY_TOKEN = os.environ.get("CRYPTO_PAY_TOKEN", "").strip()  # из @CryptoBot → Crypto Pay API
+CRYPTO_ASSET     = os.environ.get("CRYPTO_ASSET", "USDT").strip()  # USDT или TON
+
+# Цены для CryptoBot в единице CRYPTO_ASSET (по умолчанию USDT)
+PLAN_PRICE_USDT = {
+    "START":   {"month": 4.99,  "quarter": 12.99, "year": 49.90},
+    "PRO":     {"month": 9.99,  "quarter": 27.99, "year": 84.90},
+    "ULTIMATE":{"month": 19.99, "quarter": 54.90, "year": 159.90},
+}
+
 # STT:
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
@@ -133,6 +144,44 @@ async def _pick_luma_base(client: httpx.AsyncClient) -> str:
         except Exception as e:
             log.warning("Luma base probe failed for %s: %s", base, e)
     return LUMA_BASE_URL or "https://api.lumalabs.ai/dream-machine/v1"
+
+# === CRYPTOBOT UTILS BEGIN
+CRYPTO_CREATE_INVOICE_URL = "https://pay.crypt.bot/api/createInvoice"
+
+async def create_crypto_invoice(plan: str, period: str, user_id: int, http_client: httpx.AsyncClient) -> str:
+    """
+    Возвращает pay_url для оплаты через CryptoBot.
+    plan: START|PRO|ULTIMATE
+    period: month|quarter|year
+    """
+    if not CRYPTO_PAY_TOKEN:
+        raise RuntimeError("CRYPTO_PAY_TOKEN is not configured")
+
+    amount = PLAN_PRICE_USDT.get(plan, {}).get(period)
+    if not amount:
+        raise RuntimeError("Unknown plan/period for CryptoBot")
+
+    payload = f"{plan}:{period}:tg_{user_id}"  # прилетит в webhook CryptoBot (если подключишь)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Crypto-Pay-API-Token": CRYPTO_PAY_TOKEN,
+    }
+    data = {
+        "asset": CRYPTO_ASSET,          # 'USDT' или 'TON'
+        "amount": float(amount),        # сумма в asset
+        "description": f"Подписка {plan} ({period})",
+        "payload": payload,
+        "allow_anonymous": True,
+        "allow_comments": False,
+    }
+    r = await http_client.post(CRYPTO_CREATE_INVOICE_URL, headers=headers, json=data, timeout=30)
+    r.raise_for_status()
+    js = r.json()
+    if not js.get("ok"):
+        raise RuntimeError(f"CryptoBot error: {js}")
+    return js["result"]["pay_url"]
+# === CRYPTOBOT UTILS END
 
 # Payments / DB
 PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
@@ -937,7 +986,6 @@ def engines_kb():
         [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
         [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
         [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
-        [InlineKeyboardButton("Открыть страницу тарифов", web_app=WebAppInfo(url=TARIFF_URL))],
     ])
 
 # ───────── Router: text/photo/voice/docs/img/video ───────
@@ -1701,48 +1749,50 @@ async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         log.exception("on_success_payment error: %s", e)
         await update.effective_message.reply_text("Ошибка обработки платежа.")
 
-# --- /plans ---
-def _plan_rub(tier: str, term: str) -> int:
-    return int(PLAN_PRICE_TABLE[tier][term])
-
-def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
-    term_label = {1: "мес", 3: "квартал", 12: "год"}.get(months, f"{months} мес")
-    amount = _plan_rub(tier, {1: "month", 3: "quarter", 12: "year"}[months])
-    payload = _payload_subscribe(tier, months)
-    title = f"Подписка {tier.upper()}/{term_label}"
-    return payload, amount, title
-
-def _plan_mechanics_text() -> str:
-    return (
-        "📋 Как работают лимиты и кошелёк:\n"
-        "• FREE — демо: 5 текстов/день, 1× Luma (до $0.40) и 1× картинка (до $0.05).\n"
-        "• START — больше текстов + небольшие бюджеты на медиа.\n"
-        "• PRO/ULTIMATE — расширенные бюджеты Luma/Runway/Images.\n"
-        "• Если исчерпан дневной бюджет по движку, сверхлимит списывается с «Единого кошелька» (USD).\n"
-        "• Кошелёк пополняется в рублях (ЮKassa) или в USDT/TON через CryptoBot.\n"
-        "• Разовые списания рассчитываются по фактической себестоимости движка с наценкой.\n"
+# === PLANS HANDLER BEGIN
+async def plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    m = update.effective_message
+    text = (
+        "Тарифы:\n\n"
+        "START — 499₽/мес\n"
+        "PRO — 999₽/мес\n"
+        "ULTIMATE — 1 999₽/мес\n\n"
+        "Выбери план и способ оплаты:"
     )
 
-async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = ["⭐ Тарифы и оформление подписки:"]
-    for t in ("start", "pro", "ultimate"):
-        p = PLAN_PRICE_TABLE[t]
-        lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
-    lines.append("")
-    lines.append(_plan_mechanics_text())
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("START — месяц",  callback_data="buy:start:1"),
-         InlineKeyboardButton("квартал",        callback_data="buy:start:3"),
-         InlineKeyboardButton("год",            callback_data="buy:start:12")],
-        [InlineKeyboardButton("PRO — месяц",    callback_data="buy:pro:1"),
-         InlineKeyboardButton("квартал",        callback_data="buy:pro:3"),
-         InlineKeyboardButton("год",            callback_data="buy:pro:12")],
-        [InlineKeyboardButton("ULTIMATE — мес", callback_data="buy:ultimate:1"),
-         InlineKeyboardButton("квартал",        callback_data="buy:ultimate:3"),
-         InlineKeyboardButton("год",            callback_data="buy:ultimate:12")],
-        [InlineKeyboardButton("Открыть страницу тарифов (мини-приложение)", web_app=WebAppInfo(url=TARIFF_URL))],
+        # START
+        [
+            InlineKeyboardButton("START • CryptoBot", callback_data="buyc:START:month"),
+            InlineKeyboardButton("START • ЮKassa", callback_data="buyy:START:month"),
+        ],
+        [
+            InlineKeyboardButton("START • квартал (CryptoBot)", callback_data="buyc:START:quarter"),
+            InlineKeyboardButton("START • год (CryptoBot)", callback_data="buyc:START:year"),
+        ],
+
+        # PRO
+        [
+            InlineKeyboardButton("PRO • CryptoBot", callback_data="buyc:PRO:month"),
+            InlineKeyboardButton("PRO • ЮKassa", callback_data="buyy:PRO:month"),
+        ],
+        [
+            InlineKeyboardButton("PRO • квартал (CryptoBot)", callback_data="buyc:PRO:quarter"),
+            InlineKeyboardButton("PRO • год (CryptoBot)", callback_data="buyc:PRO:year"),
+        ],
+
+        # ULTIMATE
+        [
+            InlineKeyboardButton("ULTIMATE • CryptoBot", callback_data="buyc:ULTIMATE:month"),
+            InlineKeyboardButton("ULTIMATE • ЮKassa", callback_data="buyy:ULTIMATE:month"),
+        ],
+        [
+            InlineKeyboardButton("ULTIMATE • квартал (CryptoBot)", callback_data="buyc:ULTIMATE:quarter"),
+            InlineKeyboardButton("ULTIMATE • год (CryptoBot)", callback_data="buyc:ULTIMATE:year"),
+        ],
     ])
-    await update.effective_message.reply_text("\n".join(lines), reply_markup=kb, disable_web_page_preview=True)
+    await m.reply_text(text, reply_markup=kb, disable_web_page_preview=True)
+# === PLANS HANDLER END
 
 # ===== Пополнение кошелька =====
 def _make_topup_webapp_url(amount: int | None = None):
@@ -1798,6 +1848,25 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ok = await _send_invoice_rub("Пополнение баланса", "Единый кошелёк для перерасходов.", amount_rub, payload, update)
             await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
             return
+
+        # === CRYPTOBOT CALLBACKS BEGIN
+async def on_buy_crypto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    try:
+        _, plan, period = q.data.split(":")  # buyc:PLAN:PERIOD
+        async with httpx.AsyncClient() as client:
+            pay_url = await create_crypto_invoice(plan, period, q.from_user.id, client)
+        txt = (
+            f"🧾 Счёт для оплаты через CryptoBot\n"
+            f"План: {plan}\nСрок: {period}\n\n"
+            f"Перейди по ссылке для оплаты:\n{pay_url}\n\n"
+            f"После оплаты доступ активируется автоматически (или пришли чек, если не подтянулся)."
+        )
+        await q.message.reply_text(txt, disable_web_page_preview=False)
+    except Exception as e:
+        await q.message.reply_text(f"Не удалось создать счёт CryptoBot: {e}")
+# === CRYPTOBOT CALLBACKS END
 
         # TOPUP CRYPTO через CryptoBot
         if data.startswith("topup:crypto:"):
@@ -2233,6 +2302,8 @@ def main():
     _db_init_prefs()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    application.add_handler(CallbackQueryHandler(on_buy_crypto, pattern=r"^buyc:"))
+# ЮKassa-хендлеры у тебя уже есть; оставь как было (pattern="^buyy:")
 
     # Команды
     app.add_handler(CommandHandler("start", cmd_start))
