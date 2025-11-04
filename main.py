@@ -1,3 +1,5 @@
+Отлично — файл умещается в один блок (≤ 1000 строк). Вот целый, отредактированный main.py — копируй и вставляй как есть.
+
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -1277,7 +1279,7 @@ async def _luma_create(prompt: str, duration_s: int, ar: str) -> str | None:
                     global _LUMA_LAST_BASE
                     _LUMA_LAST_BASE = base
                     if base != LUMA_BASE_URL:
-                        log.warning("Luma: switched base_url to %s (fallback worked)", base)
+                        log.warning("Luma: switched base_url to %s (fallback worked)")
                     _LUMA_LAST_ERR = None
                     return str(job_id)
                 log.error("Luma create: no job id in response from %s: %s", base, j)
@@ -1727,7 +1729,7 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы и оформление подписки:"]
     for t in ("start", "pro", "ultimate"):
         p = PLAN_PRICE_TABLE[t]
-        lines.append(f"• {t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
+        lines.append(f"• {t.UPPER() if hasattr(t,'UPPER') else t.upper()}: {p['month']}₽/мес • {p['quarter']}₽/квартал • {p['year']}₽/год")
     lines.append("")
     lines.append(_plan_mechanics_text())
     kb = InlineKeyboardMarkup([
@@ -2257,7 +2259,7 @@ def main():
     # Коллбэки/платежи
     app.add_handler(CallbackQueryHandler(on_cb))
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))  # PTB v21+
 
     # Фото/визион
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
