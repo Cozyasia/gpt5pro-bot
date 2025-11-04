@@ -1671,163 +1671,138 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await _process_text(update, context, text)
 
+# ───────── RUB планы/инвойсы (ЮKassa), бюджеты и разовые списания ─────────
 
-# ───────── Баланс и пополнения ─────────
-def _plan_rub(tier: str, term: str) -> int:
+def _plan_rub(tier: str, term_key: str) -> int:
     tier = (tier or "pro").lower()
-    term = (term or "month").lower()
-    if tier not in PLAN_PRICE_TABLE or term not in PLAN_PRICE_TABLE[tier]:
-        return PLAN_PRICE_TABLE["pro"]["month"]
-    return int(PLAN_PRICE_TABLE[tier][term])
+    p = PLAN_PRICE_TABLE.get(tier)
+    if not p:
+        p = PLAN_PRICE_TABLE["pro"]
+    return int(p.get(term_key, p["month"]))
 
 def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
-    # payload для Telegram Payments и сумма в рублях
-    term_map = {1: "month", 3: "quarter", 12: "year"}
-    term = term_map.get(months, "month")
-    amount_rub = _plan_rub(tier, term)
+    term_key = {1: "month", 3: "quarter", 12: "year"}.get(months, "month")
+    amount_rub = _plan_rub(tier, term_key)
+    payload = json.dumps({"k": "sub", "tier": tier, "months": months})
     title = f"Подписка {tier.upper()} • {months} мес"
-    payload = f"plan:{tier}:{months}"
     return payload, amount_rub, title
 
-def _calc_oneoff_price_rub(engine: str, need_usd: float) -> int:
-    usd = float(max(0.0, need_usd))
-    markup = ONEOFF_MARKUP_DEFAULT
-    if engine == "runway":
-        markup = ONEOFF_MARKUP_RUNWAY
-    rub = int(round(usd * USD_RUB * (1.0 + markup)))
-    return max(MIN_RUB_FOR_INVOICE, rub)
+def _plan_mechanics_text() -> str:
+    return (
+        "ℹ️ Механика подписки:\n"
+        "• FREE — 5 текстов/день, мини-бюджеты на Luma/Images.\n"
+        "• START — больше текстов, небольшой бюджет Luma/Images.\n"
+        "• PRO — высокий лимит текстов, Luma + Runway, бюджет выше.\n"
+        "• ULTIMATE — максимум лимитов и приоритет в очередях.\n"
+        "• Разовый перерасход: списывается из «🧾 Баланса» (USD) или через разовую оплату в ₽."
+    )
 
-async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
-    if not PROVIDER_TOKEN:
-        await update.effective_message.reply_text("Платёж через ЮKassa не настроен (нет PROVIDER_TOKEN_YOOKASSA).")
-        return False
-    prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub) * 100)]
+async def _send_invoice_rub(title: str, description: str, amount_rub: int, payload: str, update: Update) -> bool:
     try:
-        bot = update.get_bot()
-        await bot.send_invoice(
-            chat_id=update.effective_chat.id,
-            title=title[:32],
-            description=(desc or title)[:255],
-            payload=payload,
+        if not PROVIDER_TOKEN:
+            await update.effective_message.reply_text("ЮKassa не настроена (нет PROVIDER_TOKEN_YOOKASSA).")
+            return False
+        prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub)*100)]
+        await update.effective_message.reply_invoice(
+            title=title,
+            description=description,
             provider_token=PROVIDER_TOKEN,
             currency=CURRENCY,
             prices=prices,
-            need_name=False, need_phone_number=False, need_email=False, need_shipping_address=False,
+            payload=payload,
+            need_name=False,
+            need_phone_number=False,
+            need_email=False,
+            need_shipping_address=False,
             is_flexible=False,
+            start_parameter="gpt5pro_sub",
         )
         return True
     except TelegramError as e:
-        log.exception("send_invoice failed: %s", e)
+        log.exception("send invoice rub failed: %s", e)
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text("Не удалось выставить счёт через ЮKassa.")
         return False
 
-async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Разрешаем все валидные счета
-    q = update.pre_checkout_query
-    with contextlib.suppress(Exception):
+async def on_precheckout_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        q = update.pre_checkout_query
         await q.answer(ok=True)
+    except Exception as e:
+        log.exception("precheckout error: %s", e)
 
 async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sp = update.effective_message.successful_payment
-    payload = (sp.invoice_payload or "").strip()
-    user_id = update.effective_user.id
-    if payload.startswith("plan:"):
-        # plan:<tier>:<months>
-        try:
-            _, tier, months_s = payload.split(":")
-            months = int(months_s)
-        except Exception:
-            tier, months = "pro", 1
-        until = activate_subscription_with_tier(user_id, tier, months)
-        await update.effective_message.reply_text(
-            f"✅ Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}."
-        )
-        return
-    # пополнение баланса (RUB → USD)
     try:
-        rub = sp.total_amount / 100.0
-    except Exception:
-        rub = 0.0
-    usd = max(0.0, rub / max(1e-9, USD_RUB))
-    _wallet_total_add(user_id, usd)
-    await update.effective_message.reply_text(
-        f"💳 Баланс пополнен на ≈ ${usd:.2f}. Используйте Luma/Runway/Images без задержек."
-    )
+        sp = update.message.successful_payment
+        if not sp:
+            return
+        payload = {}
+        with contextlib.suppress(Exception):
+            payload = json.loads(sp.invoice_payload or "{}")
+        user_id = update.effective_user.id
 
-async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    w = _wallet_get(update.effective_user.id)
-    tot = _wallet_total_get(update.effective_user.id)
-    y = _usage_row(update.effective_user.id)
-    tier = get_subscription_tier(update.effective_user.id)
-    await update.effective_message.reply_text(
-        "🧾 Баланс и лимиты:\n"
-        f"• Подписка: {tier.upper()}\n"
-        f"• Единый кошелёк (USD): {tot:.2f}\n"
-        f"• Сегодня потрачено — Luma: ${y['luma_usd']:.2f}, Runway: ${y['runway_usd']:.2f}, Images: ${y['img_usd']:.2f}",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Пополнить (RUB)", callback_data="topup")],
-            [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))]
-        ])
-    )
+        if payload.get("k") == "sub":
+            tier = (payload.get("tier") or "pro").lower()
+            months = int(payload.get("months") or 1)
+            until = activate_subscription_with_tier(user_id, tier, months)
+            await update.effective_message.reply_text(
+                f"✅ Оплата получена. Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}."
+            )
+        elif payload.get("k") == "oneoff":
+            engine = payload.get("engine") or "img"
+            usd = float(payload.get("usd") or 0.0)
+            if usd > 0:
+                _register_engine_spend(user_id, engine, usd)
+                await update.effective_message.reply_text("✅ Разовая покупка проведена. Запускаю задачу…")
+                # выполнить отложенную задачу, если мы что-то положили в context.user_data
+                job = context.user_data.pop("pending_job", None)
+                if callable(job):
+                    await job()
+            else:
+                await update.effective_message.reply_text("Счёт оплачен.")
+        else:
+            await update.effective_message.reply_text("✅ Оплата получена.")
+    except Exception as e:
+        log.exception("on_success_payment error: %s", e)
 
-async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Пополнить 300 ₽", callback_data="topup:rub:300"),
-         InlineKeyboardButton("600 ₽",           callback_data="topup:rub:600"),
-         InlineKeyboardButton("1500 ₽",          callback_data="topup:rub:1500")],
-        [InlineKeyboardButton("CryptoBot $5",  callback_data="topup:crypto:5"),
-         InlineKeyboardButton("$10",           callback_data="topup:crypto:10"),
-         InlineKeyboardButton("$25",           callback_data="topup:crypto:25")]
-    ])
-    await update.effective_message.reply_text("Выберите способ пополнения:", reply_markup=kb)
-
-
-# ───────── Лимиты: учёт текста/движков и офферы оплаты ─────────
-def check_text_and_inc(user_id: int, username: str) -> tuple[bool, int, str]:
-    tier = get_subscription_tier(user_id)
+def _can_spend_or_offer(user_id: int, username: str, engine: str, est_cost_usd: float) -> tuple[bool, str|None]:
+    """
+    Возвращает (ok, None) если можно списать/использовать бюджет,
+    иначе (False, 'ASK_SUBSCRIBE'|f'NEED_TOPUP:{usd}')
+    """
     if is_unlimited(user_id, username):
-        _usage_update(user_id, text_count=1)
-        return True, 10**9, "ultimate"
+        return True, None
+    tier = get_subscription_tier(user_id)
     lim = LIMITS.get(tier, LIMITS["free"])
-    row = _usage_row(user_id)
-    if row["text_count"] < lim["text_per_day"]:
-        _usage_update(user_id, text_count=1)
-        return True, lim["text_per_day"] - (row["text_count"] + 1), tier
-    return False, 0, tier
+    # бюджет по движку
+    col = {"luma": "luma_usd", "runway": "runway_usd", "img": "img_uc"}  # img_uc — псевдоключ
+    if engine in ("luma", "runway", "img"):
+        # сколько уже израсходовано сегодня
+        today = _usage_row(user_id)
+        spent = {
+            "luma":   float(today["luma_usd"]),
+            "runway": float(today["runway_usd"]),
+            "img":    float(today["img_usd"]),
+        }[engine]
+        cap = float(lim.get(f"{engine}_budget_usd", 0.0))
+        if spent + est_cost_usd <= cap + 1e-9:
+            return True, None
+        # пробуем единый USD-кошелёк
+        wallet = _wallet_total_get(user_id)
+        if wallet + 1e-9 >= est_cost_usd:
+            return True, None
+        # нет бюджета — предложим подписку/пополнение
+        if tier == "free":
+            return False, "ASK_SUBSCRIBE"
+        return False, f"NEED_TOPUP:{max(0.0, est_cost_usd - wallet):.2f}"
+    return True, None
 
 def _register_engine_spend(user_id: int, engine: str, usd: float):
-    usd = float(max(0.0, usd))
-    if engine == "luma":
-        _usage_update(user_id, luma_usd=usd)
-    elif engine == "runway":
-        _usage_update(user_id, runway_usd=usd)
-    elif engine == "img":
-        _usage_update(user_id, img_usd=usd)
-
-def _can_spend_or_offer(user_id: int, username: str, engine: str, est_cost_usd: float) -> tuple[bool, str | None]:
-    if is_unlimited(user_id, username):
-        return True, None
-    tier = get_subscription_tier(user_id)
-    lim = LIMITS.get(tier, LIMITS["free"])
-    y = _usage_row(user_id)
-    need = float(est_cost_usd)
-    # бюджет тарифа
-    budget_left = 0.0
-    if engine == "luma":
-        budget_left = max(0.0, lim["luma_budget_usd"] - y["luma_usd"])
-    elif engine == "runway":
-        budget_left = max(0.0, lim["runway_budget_usd"] - y["runway_usd"])
-    elif engine == "img":
-        budget_left = max(0.0, lim["img_budget_usd"] - y["img_usd"])
-    if budget_left + 1e-9 >= need:
-        return True, None
-    # пробуем единый кошелёк
-    tot = _wallet_total_get(user_id)
-    if tot + 1e-9 >= need:
-        return True, None
-    # нет денег — оффер
-    if tier == "free":
-        return False, "ASK_SUBSCRIBE"
-    return False, f"NEED_USD:{max(0.0, need - max(budget_left, 0.0) - max(tot, 0.0)):.2f}"
+    if engine in ("luma", "runway", "img"):
+        _usage_update(user_id, **{f"{engine}_usd": float(usd)})
+        # если списывали из единого кошелька — учтём
+        if not _wallet_take(user_id, engine if engine != "img" else "img", 0):  # no-op, бюджетный трекинг выше
+            pass
 
 async def _try_pay_then_do(
     update: Update,
@@ -1835,501 +1810,269 @@ async def _try_pay_then_do(
     user_id: int,
     engine: str,
     est_cost_usd: float,
-    coro_callable,
-    remember_kind: str = "",
+    coro_start_callable,  # async def () -> None
+    remember_kind: str | None = None,
     remember_payload: dict | None = None,
 ):
     username = (update.effective_user.username or "")
     ok, offer = _can_spend_or_offer(user_id, username, engine, est_cost_usd)
-    if ok:
-        # Если не хватает тарифа — сперва списываем из кошелька (при необходимости)
-        tot = _wallet_total_get(user_id)
-        need = float(est_cost_usd)
-        if tot + 1e-9 >= need:
-            if _wallet_total_take(user_id, need):
-                pass
-        await coro_callable()
+    if ok or is_unlimited(user_id, username):
+        # списать из единого кошелька при необходимости
+        if not is_unlimited(user_id, username):
+            # сначала пробуем списать из дневного бюджета (учтём расход)
+            lim = LIMITS.get(get_subscription_tier(user_id), LIMITS["free"])
+            cap = float(lim.get(f"{engine}_budget_usd", 0.0))
+            spent = _usage_row(user_id)[f"{engine}_usd"] if engine != "img" else _usage_row(user_id)["img_usd"]
+            if spent + est_cost_usd > cap + 1e-9:
+                # уходим в кошелёк
+                if not _wallet_total_take(user_id, est_cost_usd):
+                    # баланс не хватает — предложим пополнить
+                    await _send_topup_menu(update, context, need_usd=est_cost_usd - _wallet_total_get(user_id))
+                    return
+            _register_engine_spend(user_id, engine, est_cost_usd)
+        await coro_start_callable()
         return
-    # Оффер тарифа/пополнения
+
+    # предложить подписку/пополнение
     if offer == "ASK_SUBSCRIBE":
         await update.effective_message.reply_text(
-            "Для этого действия нужна подписка или единый баланс.",
+            "Для запуска нужна подписка или пополнение «🧾 Баланса».",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
                  [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
             ),
         )
         return
-    # Предложение доплаты
+
+    # NEED_TOPUP:<usd>
     try:
-        need_usd = float(offer.split(":", 1)[-1])
+        need = float(str(offer).split(":", 1)[-1])
     except Exception:
-        need_usd = est_cost_usd
-    amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    await update.effective_message.reply_text(
-        f"Не хватает бюджета/баланса. Разовая доплата ≈ {amount_rub} ₽ или пополните через CryptoBot.",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("💳 Оплатить (RUB)", callback_data="topup")],
-            [InlineKeyboardButton("💠 CryptoBot $10", callback_data="topup:crypto:10")]
-        ])
-    )
+        need = est_cost_usd
+    await _send_topup_menu(update, context, need_usd=need)
+    # сохраним отложенную функцию, чтобы дернуть после оплаты
+    context.user_data["pending_job"] = coro_start_callable
 
-
-# ───────── CryptoBot API ─────────
-CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
-CRYPTO_BASE_URL = "https://pay.crypt.bot/api"
-TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "6.0"))
-
-def _crypto_headers():
-    return {"Content-Type": "application/json", "Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
-
-async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "Payment"):
-    if not CRYPTO_PAY_API_TOKEN:
-        return None, None, 0.0, asset
-    payload = {
-        "asset": (asset or "USDT").upper(),
-        "amount": f"{float(usd_amount):.2f}",
-        "description": description[:1024],
-        "allow_comments": False,
-        "allow_anonymous": True
-    }
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(f"{CRYPTO_BASE_URL}/createInvoice", headers=_crypto_headers(), json=payload)
-            r.raise_for_status()
-            j = r.json() or {}
-            res = j.get("result") or {}
-            invoice_id = res.get("invoice_id")
-            pay_url = res.get("pay_url")
-            amount = float(res.get("amount", payload["amount"]))
-            asset  = res.get("asset", asset)
-            return invoice_id, pay_url, amount, asset
-    except Exception as e:
-        log.exception("Crypto createInvoice error: %s", e)
-        return None, None, 0.0, asset
-
-async def _crypto_get_invoice(invoice_id: str) -> dict | None:
-    if not CRYPTO_PAY_API_TOKEN:
-        return None
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.get(f"{CRYPTO_BASE_URL}/getInvoices?invoice_ids={invoice_id}", headers=_crypto_headers())
-            r.raise_for_status()
-            j = r.json() or {}
-            arr = j.get("result") or []
-            for it in arr:
-                if str(it.get("invoice_id")) == str(invoice_id):
-                    return it
-            return None
-    except Exception as e:
-        log.exception("Crypto getInvoices error: %s", e)
-        return None
-
-
-# ───────── Регистрация хэндлеров и запуск ─────────
-def main():
-    # HTTP stub для Render/healthz
-    _start_http_stub()
-
-    # DB
-    db_init()
-    db_init_usage()
-    _db_init_prefs()
-    _db_init_crypto()
-
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    # Команды
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help",  cmd_help))
-    app.add_handler(CommandHandler("plans", cmd_plans))
-    app.add_handler(CommandHandler("balance", cmd_balance))
-    app.add_handler(CommandHandler("img",   cmd_img))
-    app.add_handler(CommandHandler("what_image", cmd_what_image))
-    app.add_handler(CommandHandler("voice_on",  cmd_voice_on))
-    app.add_handler(CommandHandler("voice_off", cmd_voice_off))
-
-    # Платежи
-    app.add_handler(PreCheckoutQueryHandler(on_precheckout))
-    app.add_handler(MessageHandler(filters.StatusUpdate.SUCCESSFUL_PAYMENT, on_success_payment))
-
-    # Callback-кнопки
-    app.add_handler(CallbackQueryHandler(on_cb))
-
-    # Текст
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-
-    # Запуск: webhook или polling
-    if USE_WEBHOOK:
-        # Настраиваем вебхук
-        url = f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}"
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            secret_token=(WEBHOOK_SECRET or None),
-            webhook_url=url,
-            drop_pending_updates=True,
-        )
-    else:
-        app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
-
-
-if __name__ == "__main__":
-    main()    return None
-
-# ───────── Дополнительные утилиты и тексты ─────────
-
-def _format_rub(amount: int | float) -> str:
-    return f"{int(round(float(amount))):,}".replace(",", " ") + " ₽"
-
-def _plan_rub(tier: str, term_key: str) -> int:
-    tier = (tier or "pro").lower()
-    return int(PLAN_PRICE_TABLE.get(tier, PLAN_PRICE_TABLE["pro"])[term_key])
-
-def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
-    term_key = {1: "month", 3: "quarter", 12: "year"}[months]
-    amount_rub = _plan_rub(tier, term_key)
-    title = f"Подписка {tier.upper()} • {('месяц' if months==1 else 'квартал' if months==3 else 'год')}"
-    payload = f"sub:{tier}:{months}"
-    return payload, amount_rub, title
-
-def _plan_mechanics_text() -> str:
-    return (
-        "Механика тарифов:\n"
-        "• FREE — 5 текстов/день, Luma до $0.40/день, Images до $0.05/день\n"
-        "• START — +больше лимитов, Luma/MJ; без Runway\n"
-        "• PRO — Luma + Runway + Images, высокий дневной бюджет\n"
-        "• ULTIMATE — максимум лимитов и приоритетная очередь\n"
-        "Можно оплачивать ЮKassa (RUB) или через CryptoBot (USDT/TON)."
-    )
-
-# ───────── RUB-инвойс через Telegram Payments (ЮKassa) ─────────
-
-async def _send_invoice_rub(title: str, description: str, amount_rub: int, payload: str, update: Update) -> bool:
-    if not PROVIDER_TOKEN:
-        await update.effective_message.reply_text("ЮKassa не настроена. Укажите PROVIDER_TOKEN_YOOKASSA.")
-        return False
-    prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub * 100))]
-    try:
-        await update.effective_message.reply_invoice(
-            title=title,
-            description=description,
-            payload=payload,
-            provider_token=PROVIDER_TOKEN,
-            currency=CURRENCY,
-            prices=prices,
-            need_name=False,
-            need_email=False,
-            need_phone_number=False,
-            need_shipping_address=False,
-            is_flexible=False,
-        )
-        return True
-    except TelegramError as e:
-        log.exception("send_invoice_rub error: %s", e)
-        await update.effective_message.reply_text("Не удалось выставить счёт ЮKassa.")
-        return False
-
-async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.pre_checkout_query
-    try:
-        await q.answer(ok=True)
-    except Exception as e:
-        log.exception("precheckout answer error: %s", e)
-
-async def on_success_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Обработка успешного платежа Telegram Payments (ЮKassa).
-    По payload решаем, это подписка или пополнение единого кошелька.
-    """
-    sp = update.message.successful_payment
-    payload = (sp.invoice_payload or "").strip()
-    user_id = update.effective_user.id
-
-    try:
-        if payload.startswith("sub:"):
-            _, tier, months_s = payload.split(":", 2)
-            months = int(months_s)
-            until = activate_subscription_with_tier(user_id, tier, months)
-            await update.message.reply_text(f"✅ Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}.")
-        elif payload.startswith("t="):
-            # t=3 — это наш метка «пополнение баланса» (пример)
-            rub = sp.total_amount / 100.0
-            usd = float(rub) / max(1e-9, USD_RUB)
-            _wallet_total_add(user_id, usd)
-            await update.message.reply_text(f"✅ Баланс пополнен на ≈ ${usd:.2f}. Спасибо!")
-        else:
-            await update.message.reply_text("✅ Платёж получен.")
-    except Exception as e:
-        log.exception("on_success_payment error: %s", e)
-        await update.message.reply_text("Платёж получен, но возникла ошибка при активации. Напишите /help.")
-
-# ───────── CryptoBot (USDT/TON) ─────────
-
-CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
-CRYPTO_PAY_BASE = "https://pay.crypt.bot/api"
-TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "2.0"))  # приблизительно, используется лишь для подсказки баланса
-
-async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str | None, str | None, float, str]:
-    """
-    Возвращает: (invoice_id, pay_url, final_amount_in_asset, asset)
-    Crypto Pay принимает amount в валюте asset. Для TON пересчитываем через TON_USD_RATE.
-    """
-    if not CRYPTO_PAY_API_TOKEN:
-        return None, None, 0.0, asset
-    asset = (asset or "USDT").upper()
-    amount_asset = float(usd_amount) if asset == "USDT" else round(float(usd_amount) / max(1e-9, TON_USD_RATE), 6)
-    payload = {
-        "asset": asset,
-        "amount": str(amount_asset),
-        "description": description or "Payment",
-        "allow_comments": False,
-        "allow_anonymous": True,
-    }
-    headers = {"Content-Type": "application/json", "Accept": "application/json", "Crypto-Pay-API-Token": CRYPTO_PAY_TOKEN if (CRYPTO_PAY_TOKEN := CRYPTO_PAY_API_TOKEN) else ""}
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.post(f"{CRYPTO_PAY_BASE}/createInvoice", headers=headers, json=payload)
-            r.raise_for_status()
-            j = r.json()
-            ok = j.get("ok")
-            res = j.get("result") or {}
-            if ok and res.get("status") in ("active", "pending"):
-                return str(res.get("invoice_id")), res.get("pay_url"), float(res.get("amount")), res.get("asset")
-            else:
-                log.error("createInvoice failed: %s", j)
-                return None, None, 0.0, asset
-    except Exception as e:
-        log.exception("crypto createInvoice error: %s", e)
-        return None, None, 0.0, asset
-
-async def _crypto_get_invoice(invoice_id: str) -> dict | None:
-    if not CRYPTO_PAY_API_TOKEN:
-        return None
-    headers = {"Content-Type": "application/json", "Accept": "application/json", "Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.post(f"{CRYPTO_PAY_BASE}/getInvoices", headers=headers, json={"invoice_ids": [int(invoice_id)]})
-            r.raise_for_status()
-            j = r.json()
-            if j.get("ok") and (arr := j.get("result")):
-                return arr[0]
-            return None
-    except Exception as e:
-        log.exception("crypto getInvoices error: %s", e)
-        return None
-
-# ───────── Разовые списания и лимиты ─────────
-
-def _register_engine_spend(user_id: int, engine: str, usd: float):
-    # списываем из дневного бюджета движка (usage_daily) и/или кошелька
-    _usage_update(user_id, **{f"{engine}_usd": float(usd)})
-
-def _can_spend_or_offer(user_id: int, username: str, engine: str, usd: float) -> tuple[bool, str | None]:
-    """
-    Возвращает (ok, offer)
-    ok=True — можно списать; False — нельзя и вернуть предложение:
-      - "ASK_SUBSCRIBE" если нет активной подписки
-      - "ONEOFF:<usd_needed>" если подписка есть, но дневной бюджет движка исчерпан
-    """
-    if is_unlimited(user_id, username):
-        return True, None
-    tier = get_subscription_tier(user_id)
-    lim = LIMITS.get(tier, LIMITS["free"])
-    row = _usage_row(user_id)
-    # проверка дневного бюджета по конкретному движку
-    key = {"luma": "luma_usd", "runway": "runway_usd", "img": "img_usd"}.get(engine, "luma_usd")
-    remain = max(0.0, float(lim[key]) - float(row[key]))
-    if usd <= remain:
-        return True, None
-    # бюджет кончился
-    if tier == "free":
-        return False, "ASK_SUBSCRIBE"
-    need = max(0.0, usd - remain)
-    return False, f"ONEOFF:{need:.2f}"
-
-def _calc_oneoff_price_rub(engine: str, usd_needed: float) -> int:
-    base = float(usd_needed) * USD_RUB
-    if engine == "runway":
-        return int(round(base * (ONEOFF_MARKUP_RUNWAY or 1.0)))
-    return int(round(base * (ONEOFF_MARKUP_DEFAULT or 1.0)))
-
-async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Пополнить RUB (ЮKassa) — 300 ₽", callback_data="topup:rub:300"),
-         InlineKeyboardButton("500 ₽", callback_data="topup:rub:500"),
-         InlineKeyboardButton("1000 ₽", callback_data="topup:rub:1000")],
-        [InlineKeyboardButton("Пополнить CryptoBot — $3 USDT",  callback_data="topup:crypto:3"),
-         InlineKeyboardButton("$5", callback_data="topup:crypto:5"),
-         InlineKeyboardButton("$10", callback_data="topup:crypto:10")],
-    ])
+async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, need_usd: float | None = None):
     bal = _wallet_total_get(update.effective_user.id)
+    need_txt = f"\nНужно пополнить ещё ≈ ${need_usd:.2f}." if (need_usd and need_usd > 0) else ""
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Пополнить 300 ₽ (ЮKassa)",  callback_data="topup:rub:300"),
+         InlineKeyboardButton("500 ₽",                     callback_data="topup:rub:500"),
+         InlineKeyboardButton("1000 ₽",                    callback_data="topup:rub:1000")],
+        [InlineKeyboardButton("CryptoBot +$5",             callback_data="topup:crypto:5"),
+         InlineKeyboardButton("+$10",                      callback_data="topup:crypto:10"),
+         InlineKeyboardButton("+$20",                      callback_data="topup:crypto:20")],
+    ])
     await update.effective_message.reply_text(
-        f"🧾 Баланс (USD): ${bal:.2f}\nВыберите способ пополнения:",
+        f"Ваш баланс «🧾 USD-кошелька»: ${bal:.2f}.{need_txt}\nВыберите способ пополнения:",
         reply_markup=kb
     )
 
-async def _try_pay_then_do(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    user_id: int,
-    engine: str,
-    usd_cost: float,
-    coro_start_action,
-    remember_kind: str = "",
-    remember_payload: dict | None = None,
-):
-    """
-    Пытаемся списать из дневного бюджета + кошелька; если не хватает — предлагаем /plans или пополнение.
-    """
-    username = (update.effective_user.username or "")
-    # сначала проверяем дневной лимит тарифа
-    ok, offer = _can_spend_or_offer(user_id, username, engine, usd_cost)
-    if ok:
-        await coro_start_action()
-        return
+# ───────── CryptoBot API helpers ─────────
+CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
+CRYPTO_PAY_BASE = "https://pay.crypt.bot/api/"
+TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "6.0") or "6.0")
 
-    if offer == "ASK_SUBSCRIBE":
-        await update.effective_message.reply_text(
-            "Для запуска этой задачи нужна активная подписка или пополнение единого кошелька.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                 [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
-            ),
-        )
-        return
-
-    # offer = ONEOFF:<need_usd>
+async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str|None, str|None, float, str]:
+    """
+    Возвращает (invoice_id, pay_url, normalized_amount_usd, asset)
+    """
+    if not CRYPTO_PAY_API_TOKEN:
+        return None, None, 0.0, asset
+    url = CRYPTO_PAY_BASE + "createInvoice"
+    payload = {"asset": asset, "amount": float(usd_amount), "description": (description or "Payment")}
+    headers = {"Content-Type": "application/json", "Accept": "application/json", "Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
     try:
-        need_usd = float(offer.split(":", 1)[-1])
-    except Exception:
-        need_usd = usd_cost
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(url, headers=headers, json=payload)
+            j = r.json()
+            ok = j.get("ok")
+            if not ok:
+                log.error("CryptoBot createInvoice error: %s", j)
+                return None, None, 0.0, asset
+            data = j.get("result") or {}
+            return (str(data.get("invoice_id") or ""),
+                    data.get("pay_url"),
+                    float(data.get("amount") or usd_amount),
+                    str(data.get("asset") or asset))
+    except Exception as e:
+        log.exception("crypto create invoice error: %s", e)
+        return None, None, 0.0, asset
 
-    # пробуем списать из общего кошелька
-    if _wallet_total_take(user_id, need_usd):
-        _register_engine_spend(user_id, engine, usd_cost)
-        await coro_start_action()
-        return
+async def _crypto_get_invoice(invoice_id: str) -> dict | None:
+    if not CRYPTO_PAY_API_TOKEN:
+        return None
+    url = CRYPTO_PAY_BASE + "getInvoices"
+    headers = {"Content-Type": "application/json", "Accept": "application/json", "Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(url, headers=headers, json={"invoice_ids": [str(invoice_id)]})
+            j = r.json()
+            if not j.get("ok"):
+                return None
+            items = j.get("result", {}).get("items") or []
+            return items[0] if items else None
+    except Exception as e:
+        log.exception("crypto get invoice error: %s", e)
+        return None
 
-    # не хватает — предложим пополнение/подписку
-    amount_rub = _calc_oneoff_price_rub(engine, need_usd)
-    await update.effective_message.reply_text(
-        f"Недостаточно лимита. Нужно ≈ ${need_usd:.2f} ({_format_rub(amount_rub)}). "
-        f"Пополните «🧾 Баланс» или оформите подписку.",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-             [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
-        ),
-    )
+# ───────── Текстовые лимиты (инкремент) ─────────
+def check_text_and_inc(user_id: int, username: str | None) -> tuple[bool, int, str]:
+    if is_unlimited(user_id, username or ""):
+        return True, 10_000, "ultimate"
+    tier = get_subscription_tier(user_id)
+    lim = LIMITS.get(tier, LIMITS["free"])
+    row = _usage_row(user_id)
+    left = int(max(0, lim["text_per_day"] - int(row["text_count"] or 0)))
+    if left <= 0:
+        return False, 0, tier
+    _usage_update(user_id, text_count=1)
+    return True, left - 1, tier
 
-# ───────── Команды и обработчики сообщений ─────────
-
+# ───────── Команды и роутеры сообщений ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if BANNER_URL:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(BANNER_URL)
-    await update.effective_message.reply_text(START_TEXT, disable_web_page_preview=True)
-    await maybe_tts_reply(update, context, START_TEXT[:TTS_MAX_CHARS])
+    await update.effective_message.reply_text(
+        START_TEXT,
+        reply_markup=ReplyKeyboardMarkup(
+            [
+                [KeyboardButton("🧾 Баланс"), KeyboardButton("⭐ /plans")],
+                [KeyboardButton("🎬 Сделай видео 9 секунд 9:16")],
+                [KeyboardButton("🖼 /img кот в очках")],
+            ],
+            resize_keyboard=True
+        ),
+        disable_web_page_preview=True
+    )
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
 
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args).strip()
+    prompt = (update.message.text or "").split(" ", 1)
+    prompt = prompt[1].strip() if len(prompt) > 1 else ""
     if not prompt:
-        await update.effective_message.reply_text("Использование: `/img описание кадра`", parse_mode="Markdown")
+        await update.effective_message.reply_text("Пример: `/img неоновый город в дождь, 1024x1024`", parse_mode="Markdown")
         return
     user_id = update.effective_user.id
-    username = (update.effective_user.username or "")
-    ok, _, tier = check_text_and_inc(user_id, username)  # подвинем счётчик текстов
-    if tier == "free" and "images" not in LIMITS["free"]["allow_engines"]:
-        await update.effective_message.reply_text("Генерация изображений доступна в подписке. Открой /plans.")
-        return
+    uname = (update.effective_user.username or "")
     async def _go():
         await _do_img_generate(update, context, prompt)
         _register_engine_spend(user_id, "img", IMG_COST_USD)
-    await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go,
-                           remember_kind="img_generate", remember_payload={"prompt": prompt})
-
-async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    bal = _wallet_total_get(update.effective_user.id)
-    await update.effective_message.reply_text(
-        f"🧾 Баланс (USD): ${bal:.2f}",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить", callback_data="topup")]])
-    )
+    await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go, remember_kind="img_generate", remember_payload={"prompt": prompt})
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (update.effective_message.text or "").strip()
-    # ловим спец-фразы из распознавания
-    special = _maybe_special_image_intents(text)
-    if special:
-        await update.effective_message.reply_text(special)
-        await maybe_tts_reply(update, context, special[:TTS_MAX_CHARS])
+    text = (update.message.text or "").strip()
+    # быстрые кнопки
+    if text == "🧾 Баланс":
+        bal = _wallet_total_get(update.effective_user.id)
+        tier = get_subscription_tier(update.effective_user.id)
+        lim = LIMITS.get(tier, LIMITS["free"])
+        today = _usage_row(update.effective_user.id)
+        msg = (
+            f"Тариф: {tier.upper()}\n"
+            f"Баланс USD-кошелька: ${bal:.2f}\n\n"
+            f"Сегодня израсходовано:\n"
+            f"• Тексты: {today['text_count']}/{lim['text_per_day']}\n"
+            f"• Luma: ${today['luma_usd']:.2f}/{lim['luma_budget_usd']}\n"
+            f"• Runway: ${today['runway_usd']:.2f}/{lim['runway_budget_usd']}\n"
+            f"• Images: ${today['img_usd']:.2f}/{lim['img_budget_usd']}\n"
+        )
+        await update.effective_message.reply_text(msg, reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+            [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]
+        ]))
         return
+
+    # спец-подсказки для распознанной речи
+    sp = _maybe_special_image_intents(text)
+    if sp:
+        await update.effective_message.reply_text(sp)
+        await maybe_tts_reply(update, context, sp[:TTS_MAX_CHARS])
+        return
+
     await _process_text(update, context, text)
 
-# ───────── Лимиты по тексту и подсчёт ─────────
+async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Базовая обработка фото: сохраняем и, если есть подпись, пробуем понять задачу.
+    (Редактирование/оживление можно разруливать дальше по caption.)
+    """
+    caption = (update.message.caption or "").strip()
+    if not caption:
+        await update.effective_message.reply_text("Принял фото ✅\nДобавь подпись, что сделать (например: «замени фон на белый», «оживи фото 9с 9:16»).")
+        return
+    # Пока: просто отвечаем гайдом, логика редактирования может быть добавлена позже
+    sp = _maybe_special_image_intents(caption)
+    if sp:
+        await update.effective_message.reply_text(sp)
+        return
+    await update.effective_message.reply_text("Фото получено. Понимаю задачу: " + caption + "\nСкоро добавлю обработку inpaint/outpaint.")
 
-def check_text_and_inc(user_id: int, username: str | None) -> tuple[bool, int, str]:
-    if is_unlimited(user_id, username or ""):
-        return True, 999999, "ultimate"
-    tier = get_subscription_tier(user_id)
-    limits = LIMITS.get(tier, LIMITS["free"])
-    row = _usage_row(user_id)
-    used = int(row["text_count"])
-    allowed = int(limits["text_per_day"])
-    if used >= allowed:
-        return False, used, tier
-    _usage_update(user_id, text_count=1)
-    return True, used + 1, tier
+# ───────── Регистрация команды «что умею делать с изображениями» ─────────
+# (функция cmd_what_image уже определена выше)
 
-# ───────── Webhook/Polling и регистрация хэндлеров ─────────
+# ───────── Маршрутизатор webhook / polling ─────────
+def _build_app() -> "ApplicationBuilder":
+    return ApplicationBuilder().token(BOT_TOKEN)
 
-def main():
-    # Инициализация БД и вспомогательных таблиц
+async def _run_webhook(app):
+    # Устанавливаем webhook
+    url = f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}"
+    await app.bot.set_webhook(url=url, secret_token=(WEBHOOK_SECRET or None), drop_pending_updates=True)
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=WEBHOOK_PATH,
+        secret_token=(WEBHOOK_SECRET or None)
+    )
+
+# ───────── main() ─────────
+async def main():
+    # init
     db_init()
     db_init_usage()
     _db_init_prefs()
     _db_init_crypto()
-
     _start_http_stub()
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = _build_app().build()
 
     # Команды
     app.add_handler(CommandHandler("start",     cmd_start))
     app.add_handler(CommandHandler("help",      cmd_help))
     app.add_handler(CommandHandler("plans",     cmd_plans))
     app.add_handler(CommandHandler("img",       cmd_img))
-    app.add_handler(CommandHandler("what_image",cmd_what_image))
-    app.add_handler(CommandHandler("balance",   cmd_balance))
+    app.add_handler(CommandHandler("what_image", cmd_what_image))
     app.add_handler(CommandHandler("voice_on",  cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
 
-    # CallbackQuery (кнопки)
+    # Callback-кнопки
     app.add_handler(CallbackQueryHandler(on_cb))
 
-    # Telegram Payments (ЮKassa)
-    app.add_handler(PreCheckoutQueryHandler(on_precheckout))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))  # ✅ фикс: без StatusUpdate
+    # Оплаты ЮKassa
+    app.add_handler(PreCheckoutQueryHandler(on_precheckout_query))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
 
-    # Текстовые сообщения
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    # Сообщения
+    app.add_handler(MessageHandler(filters.PHOTO & (~filters.COMMAND), on_photo))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND),  on_text))
 
-    # Старт
     if USE_WEBHOOK:
-        webhook_url = f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}"
-        log.info("Starting webhook at %s", webhook_url)
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=WEBHOOK_PATH,
-            webhook_url=webhook_url,
-            secret_token=WEBHOOK_SECRET or None,
-        )
+        await _run_webhook(app)
     else:
-        log.info("Starting polling…")
-        app.run_polling(allowed_updates=Update.ALL_TYPES)
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        log.info("Bot started with polling")
+        await app.updater.idle()
 
+# ───────── entrypoint ─────────
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
