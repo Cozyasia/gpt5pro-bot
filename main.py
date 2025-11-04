@@ -1602,6 +1602,161 @@ def run_by_mode(app):
             drop_pending_updates=True,
         )
 
+# ───────── UI тексты и клавиатуры ─────────
+START_TEXT = (
+    "Привет! Я GPT-бот: отвечаю на вопросы, умею генерировать и редактировать картинки, "
+    "оживлять фото в видео (Luma/Runway), распознавать голос и файлы. "
+    "Команды: /help /plans /modes /examples /balance /voice_on /voice_off"
+)
+
+HELP_TEXT = (
+    "Команды:\n"
+    "• /start — приветствие и меню\n"
+    "• /plans — тарифы и оплата подписки\n"
+    "• /modes — доступные движки (GPT, Images, Luma, Runway)\n"
+    "• /examples — примеры запросов\n"
+    "• /balance — бюджеты/лимиты/кошелёк\n"
+    "• /voice_on /voice_off — включить/выключить озвучку ответов\n\n"
+    "Отправь текст, фото (с подписью, если есть) или голос — я всё пойму."
+)
+
+EXAMPLES_TEXT = (
+    "Примеры:\n"
+    "• Сделай картинку: «логотип кофейни, минимализм»\n"
+    "• Оживи фото: «сделай короткое видео 9с 9:16»\n"
+    "• Распознай голос и ответь по сути\n"
+    "• «Сводка новости про …» — при необходимости я поищу краткий контекст."
+)
+
+MODES_TEXT = "Движки: GPT тексты, OpenAI Images, Luma (Dream Machine), Runway Gen-3."
+
+def _main_kb():
+    return ReplyKeyboardMarkup(
+        [
+            ["⭐ Подписка", "🎛 Движки"],
+            ["🧾 Баланс", "ℹ️ Помощь"],
+        ],
+        resize_keyboard=True
+    )
+
+main_kb = _main_kb()
+
+# ───────── Примитивные /start /help /… ─────────
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if BANNER_URL:
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_photo(BANNER_URL)
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
+
+async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(MODES_TEXT)
+
+async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(EXAMPLES_TEXT)
+
+async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    lim = _limits_for(uid); row = _usage_row(uid)
+    txt = (
+        f"Тариф: {lim['tier']}\n"
+        f"Тексты: {row['text_count']}/{lim['text_per_day']} сегодня\n"
+        f"IMG бюджет: {row['img_usd']:.2f}/{lim['img_budget_usd']:.2f} USD\n"
+        f"LUMA бюджет: {row['luma_usd']:.2f}/{lim['luma_budget_usd']:.2f} USD\n"
+        f"RUNWAY бюджет: {row['runway_usd']:.2f}/{lim['runway_budget_usd']:.2f} USD\n"
+        f"Единый кошелёк: ${_wallet_total_get(uid):.2f}"
+    )
+    await update.effective_message.reply_text(txt)
+
+# Заглушки для welcome (если они зовутся в main)
+async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text("Ок. (Настройка приветствия пока не реализована в этой сборке.)")
+
+async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb)
+
+# ───────── Минимальный STT (OpenAI Whisper, если ключ задан) ─────────
+async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str | None:
+    try:
+        if not oai_stt:
+            return None
+        buf.seek(0)
+        # OpenAI v1: audio.transcriptions.create
+        tr = oai_stt.audio.transcriptions.create(
+            model=TRANSCRIBE_MODEL,
+            file=(filename_hint, buf)
+        )
+        text = getattr(tr, "text", None)
+        if not text and isinstance(tr, dict):
+            text = tr.get("text")
+        return (text or "").strip() or None
+    except Exception as e:
+        log.warning("STT error: %s", e)
+        return None
+
+# ───────── Простая генерация изображения по промпту ─────────
+async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    try:
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+    except Exception:
+        pass
+    try:
+        resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
+        b64 = resp.data[0].b64_json
+        img = base64.b64decode(b64)
+        await update.effective_message.reply_photo(photo=img, caption=_safe_caption(f"Готово ✅\nЗапрос: {prompt}"))
+    except Exception as e:
+        log.exception("IMG generate failed: %s", e)
+        await update.effective_message.reply_text("Не удалось сгенерировать изображение.")
+
+# ───────── Поддержка выбора движка видео через callback ─────────
+_pending_actions: dict[str, dict] = {}
+
+def _new_aid() -> str:
+    return uuid.uuid4().hex
+
+async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = (q.data or "")
+    await q.answer()
+    if data.startswith("choose:"):
+        # choose:<engine>:<aid>
+        _, engine, aid = data.split(":", 2)
+        meta = _pending_actions.pop(aid, None) or {}
+        prompt = meta.get("prompt", "")
+        duration = int(meta.get("duration", 5))
+        aspect = meta.get("aspect", "16:9")
+        if engine == "luma":
+            await _run_luma_video(update, context, prompt, duration, aspect)
+            return
+        if engine == "runway":
+            await _run_runway_video(update, context, prompt, duration, aspect)
+            return
+        await update.effective_message.reply_text("Неизвестный движок.")
+
+# ───────── HTTP health stub, который вызывает run_by_mode() ─────────
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        try:
+            if self.path in ("/", "/health", "/hc"):
+                self.send_response(200); self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers(); self.wfile.write(b"ok")
+            else:
+                self.send_response(404); self.end_headers()
+        except Exception:
+            pass
+
+def _start_http_stub():
+    def _run():
+        try:
+            srv = HTTPServer(("0.0.0.0", PORT), _HealthHandler)
+            srv.serve_forever()
+        except Exception as e:
+            log.warning("HTTP stub stopped: %s", e)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
 
 # ───────── main(): регистрация всех обработчиков и запуск ─────────
 def main():
