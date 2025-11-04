@@ -888,6 +888,41 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
     final_prompt = ("Объедини тезисы по фрагментам в цельное резюме документа: 1) 5–10 главных пунктов; "
                     "2) ключевые цифры/сроки; 3) вывод/рекомендации. Русский язык.\n\n" + combined)
     return await ask_openai_text(final_prompt)
+    # ======= Анализ документов (PDF/EPUB/DOCX/FB2/TXT) =======
+async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обрабатывает документ, извлекает текст и делает конспект.
+    Поддержка: PDF, EPUB, DOCX, FB2, TXT (+ пытаемся для MOBI/AZW).
+    Цель анализа можно передать подписью к файлу.
+    """
+    try:
+        if not update.message or not update.message.document:
+            return
+
+        doc = update.message.document
+        tg_file = await doc.get_file()
+        data = await tg_file.download_as_bytearray()
+
+        text, kind = extract_text_from_document(bytes(data), doc.file_name or "file")
+        if not text.strip():
+            await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
+            return
+
+        goal = (update.message.caption or "").strip() or None
+        await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
+
+        summary = await summarize_long_text(text, query=goal)
+        summary = summary or "Готово."
+
+        await update.effective_message.reply_text(summary)
+        await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
+
+    except Exception as e:
+        log.exception("on_doc_analyze error: %s", e)
+        try:
+            await update.effective_message.reply_text("Ошибка при анализе документа.")
+        except Exception:
+            pass
 
 # ───────── Images ─────────
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
