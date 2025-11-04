@@ -1406,15 +1406,18 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                 await update.effective_message.reply_text("⏱️ Luma: таймаут ожидания видео.")
                 return
 
-            # download & send
-  vid = await httpx.AsyncClient().get(video_url, timeout=120.0)
-  vid.raise_for_status()
-  bio = BytesIO(vid.content); bio.name = "luma.mp4"
-  caption = _safe_caption(f"Luma • {duration_s}s • {aspect}\n\n{prompt}")
-  await update.effective_message.reply_video(video=bio, caption=caption)
-except Exception as e:
-  log.exception("Luma error: %s", e)
-  await update.effective_message.reply_text("Ошибка Luma при генерации видео.")
+                        # download & send
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as dl:
+                    resp = await dl.get(video_url)
+                    resp.raise_for_status()
+                    bio = BytesIO(resp.content)
+                    bio.name = "luma.mp4"
+                caption = _safe_caption(f"Luma • {duration_s}s • {aspect}\n\n{prompt}")
+                await update.effective_message.reply_video(video=bio, caption=caption)
+            except Exception as e:
+                log.exception("Luma download/send error: %s", e)
+                await update.effective_message.reply_text("Ошибка загрузки видео Luma.")
 
 # ───────── Runway: создание/поллинг/отправка ─────────
 def _runway_ratio_from_ar(ar: str) -> str:
@@ -1477,14 +1480,18 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await update.effective_message.reply_text("⏱️ Runway: таймаут ожидания видео.")
         return
 
-      vid = await httpx.AsyncClient().get(video_url, timeout=180.0)
-      vid.raise_for_status()
-      bio = BytesIO(vid.content); bio.name = "runway.mp4"
-      caption = _safe_caption(f"Runway • {duration_s}s • {aspect}\n\n{prompt}")
-      await update.effective_message.reply_video(video=bio, caption=caption)
-  except Exception as e:
-    log.exception("Runway error: %s", e)
-    await update.effective_message.reply_text("Ошибка Runway при генерации видео.")
+                  # download & send
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as dl:
+                    resp = await dl.get(video_url)
+                    resp.raise_for_status()
+                    bio = BytesIO(resp.content)
+                    bio.name = "runway.mp4"
+                caption = _safe_caption(f"Runway • {duration_s}s • {aspect}\n\n{prompt}")
+                await update.effective_message.reply_video(video=bio, caption=caption)
+            except Exception as e:
+                log.exception("Runway download/send error: %s", e)
+                await update.effective_message.reply_text("Ошибка загрузки видео Runway.")
 
 # ───────── Фото-коллбэки (rembg / edits / animate) ─────────
 async def _need_last_photo(update: Update) -> tuple[str|None, bytes|None]:
