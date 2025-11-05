@@ -450,10 +450,13 @@ async def _crypto_create_invoice(usd: float, asset: str = "USDT", description: s
                 headers={"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN},
                 json={"asset": asset, "amount": amount, "description": description}
             )
+            r.raise_for_status()
             js = r.json()
             if js.get("ok"):
                 inv = js["result"]
                 return inv["invoice_id"], inv["pay_url"], float(inv["amount"]), inv["asset"]
+    except httpx.HTTPStatusError as e:
+        log.exception("CryptoBot createInvoice HTTP %s: %s", getattr(e.response, "status_code", "?"), e)
     except Exception as e:
         log.exception("CryptoBot createInvoice error: %s", e)
     return None, None, 0.0, asset
@@ -466,9 +469,13 @@ async def _crypto_get_invoice(invoice_id: str):
                 headers={"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN},
                 params={"invoice_ids": invoice_id}
             )
+            r.raise_for_status()
             js = r.json()
-            if js.get("ok") and js.get("result", {}).get("items"):
-                return js["result"]["items"][0]
+            items = (js.get("result", {}) or {}).get("items") or []
+            if js.get("ok") and items:
+                return items[0]
+    except httpx.HTTPStatusError as e:
+        log.exception("CryptoBot getInvoice HTTP %s: %s", getattr(e.response, "status_code", "?"), e)
     except Exception as e:
         log.exception("CryptoBot getInvoice error: %s", e)
     return None
@@ -483,11 +490,15 @@ async def _poll_crypto_invoice(context, chat_id: int, msg_id: int, user_id: int,
                 amt *= TON_USD_RATE
             _wallet_total_add(user_id, amt)
             with contextlib.suppress(Exception):
-                await context.bot.edit_message_text("💳 Оплата получена. Баланс пополнен.", chat_id=chat_id, message_id=msg_id)
+                await context.bot.edit_message_text(
+                    "💳 Оплата получена. Баланс пополнен.", chat_id=chat_id, message_id=msg_id
+                )
             return
         await asyncio.sleep(5)
     with contextlib.suppress(Exception):
-        await context.bot.edit_message_text("⏱ Платёж не подтверждён. Нажмите «Проверить оплату».", chat_id=chat_id, message_id=msg_id)
+        await context.bot.edit_message_text(
+            "⏱ Платёж не подтверждён. Нажмите «Проверить оплату».", chat_id=chat_id, message_id=msg_id
+        )
 
 # ───────── Лимиты/цены ─────────
 USD_RUB = float(os.environ.get("USD_RUB", "100"))
