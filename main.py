@@ -1352,7 +1352,7 @@ def _safe_caption(s: str, limit: int = 850) -> str:
     return s[:limit-3] + "…"
 
 # ───────── Luma: создание/поллинг/отправка ─────────
-async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str, init_image_b64: str | None = None, init_mime: str | None = None):
+async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
     if not LUMA_API_KEY:
         await update.effective_message.reply_text("Luma не настроен.")
         return
@@ -1366,27 +1366,24 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                 "aspect_ratio": aspect,
                 "duration": f"{int(duration_s)}s"
             }
-            # пробуем передать начальный кадр
-            if init_image_b64 and init_mime:
-                payload["image"] = f"data:{init_mime};base64,{init_image_b64}"
             headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Content-Type": "application/json"}
+
             r = await client.post(create_url, headers=headers, json=payload)
-            if r.status_code == 400 and init_image_b64:
-                # если сервер не принимает image — повтор без него
-                payload.pop("image", None)
-                r = await client.post(create_url, headers=headers, json=payload)
             r.raise_for_status()
             resp = r.json()
+
             gen_id = resp.get("id") or resp.get("generation_id") or resp.get("data", {}).get("id")
             if not gen_id:
                 await update.effective_message.reply_text("Luma: не получил id задачи.")
                 return
+
             await update.effective_message.reply_text("🎬 Luma: рендер запущен, подожди…")
 
             # poll
             status_url = f"{base}{LUMA_STATUS_PATH.format(id=gen_id)}"
             started = time.time()
             video_url = None
+
             while time.time() - started < LUMA_MAX_WAIT_S:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code == 404:
@@ -1395,103 +1392,119 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                 rs.raise_for_status()
                 js = rs.json()
                 st = (js.get("status") or js.get("state") or "").lower()
-                if st in ("completed","finished","succeeded","success","done"):
-                    video_url = js.get("video") or js.get("video_url") or (js.get("assets", {}) or {}).get("video")
+
+                if st in ("completed", "finished", "succeeded", "success", "done"):
+                    video_url = (
+                        js.get("video")
+                        or js.get("video_url")
+                        or (js.get("assets", {}) or {}).get("video")
+                    )
                     break
-                if st in ("failed","error","canceled","cancelled"):
+
+                if st in ("failed", "error", "canceled", "cancelled"):
                     await update.effective_message.reply_text(f"❌ Luma ошибка: {st}")
                     return
+
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
             if not video_url:
                 await update.effective_message.reply_text("⏱️ Luma: таймаут ожидания видео.")
                 return
 
-                        # download & send
-            try:
-                async with httpx.AsyncClient(timeout=120.0) as dl:
-                    resp = await dl.get(video_url)
-                    resp.raise_for_status()
-                    bio = BytesIO(resp.content)
-                    bio.name = "luma.mp4"
-                caption = _safe_caption(f"Luma • {duration_s}s • {aspect}\n\n{prompt}")
-                await update.effective_message.reply_video(video=bio, caption=caption)
-            except Exception as e:
-                log.exception("Luma download/send error: %s", e)
-                await update.effective_message.reply_text("Ошибка загрузки видео Luma.")
+            # download & send
+            async with httpx.AsyncClient(timeout=180.0) as dl:
+                vid = await dl.get(video_url)
+                vid.raise_for_status()
+                bio = BytesIO(vid.content)
+                bio.name = "luma.mp4"
+
+            caption = _safe_caption(f"Luma • {duration_s}s • {aspect}\n\n{prompt}")
+            await update.effective_message.reply_video(video=bio, caption=caption)
+
+    except Exception as e:
+        log.exception("Luma error: %s", e)
+        await update.effective_message.reply_text("Ошибка Luma при генерации видео.")
+
+# ───────── Runway: helper ─────────
+def _runway_ratio_from_ar(ar: str) -> str:
+    if ar == "9:16":
+        return "720:1280"
+    if ar == "16:9":
+        return "1280:720"
+    if ar == "1:1":
+        return "1024:1024"
+    return RUNWAY_RATIO
 
 # ───────── Runway: создание/поллинг/отправка ─────────
-def _runway_ratio_from_ar(ar: str) -> str:
-  if ar == "9:16":  return "720:1280"
-  if ar == "16:9":  return "1280:720"
-  if ar == "1:1":   return "1024:1024"
-  return RUNWAY_RATIO
-
-async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str, init_image_b64: str | None = None, init_mime: str | None = None):
-  if not RUNWAY_API_KEY:
-    await update.effective_message.reply_text("Runway не настроен.")
-    return
-  try:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-      create_url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
-      input_obj = {
-        "prompt": prompt,
-        "duration": int(duration_s),
-        "ratio": _runway_ratio_from_ar(aspect)
-      }
-      if init_image_b64 and init_mime:
-        # разные версии API: попробуем init_image, иначе image
-        input_obj["init_image"] = f"data:{init_mime};base64,{init_image_b64}"
-      payload = {"model": RUNWAY_MODEL, "input": input_obj}
-      headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
-      r = await client.post(create_url, headers=headers, json=payload)
-      if r.status_code == 400 and "init_image" in input_obj:
-        input_obj.pop("init_image", None)
-        input_obj["image"] = f"data:{init_mime};base64,{init_image_b64}"
-        payload["input"] = input_obj
-        r = await client.post(create_url, headers=headers, json=payload)
-      r.raise_for_status()
-      js = r.json()
-      task_id = js.get("id") or js.get("task", {}).get("id") or js.get("data", {}).get("id")
-      if not task_id:
-        await update.effective_message.reply_text("Runway: не получил id задачи.")
+async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
+    if not RUNWAY_API_KEY:
+        await update.effective_message.reply_text("Runway не настроен.")
         return
-      await update.effective_message.reply_text("🎥 Runway: рендер запущен, подожди…")
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            create_url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
+            payload = {
+                "model": RUNWAY_MODEL,
+                "input": {
+                    "prompt": prompt,
+                    "duration": int(duration_s),
+                    "ratio": _runway_ratio_from_ar(aspect)
+                }
+            }
+            headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
 
-      status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
-      started = time.time()
-      video_url = None
-      while time.time() - started < RUNWAY_MAX_WAIT_S:
-        rs = await client.get(status_url, headers=headers)
-        rs.raise_for_status()
-        st_js = rs.json()
-        st = (st_js.get("status") or st_js.get("state") or "").upper()
-        if st in ("SUCCEEDED","COMPLETED","FINISHED","SUCCESS"):
-          video_url = (
-            st_js.get("output", {}).get("video") or
-            st_js.get("output", {}).get("url") or
-            (st_js.get("assets", [{}])[0].get("url") if isinstance(st_js.get("assets"), list) else None)
-          )
-          break
-        if st in ("FAILED","ERROR","CANCELED","CANCELLED"):
-          await update.effective_message.reply_text(f"❌ Runway ошибка: {st}")
-          return
-        await asyncio.sleep(VIDEO_POLL_DELAY_S)
-      if not video_url:
-        await update.effective_message.reply_text("⏱️ Runway: таймаут ожидания видео.")
-        return
+            r = await client.post(create_url, headers=headers, json=payload)
+            r.raise_for_status()
+            js = r.json()
 
-                  # download & send
-            try:
-                async with httpx.AsyncClient(timeout=180.0) as dl:
-                    resp = await dl.get(video_url)
-                    resp.raise_for_status()
-                    bio = BytesIO(resp.content)
-                    bio.name = "runway.mp4"
-                caption = _safe_caption(f"Runway • {duration_s}s • {aspect}\n\n{prompt}")
-                await update.effective_message.reply_video(video=bio, caption=caption)
-            except Exception as e:
-                log.exception("Runway download/send error: %s", e)
-                await update.effective_message.reply_text("Ошибка загрузки видео Runway.")
+            task_id = js.get("id") or js.get("task", {}).get("id") or js.get("data", {}).get("id")
+            if not task_id:
+                await update.effective_message.reply_text("Runway: не получил id задачи.")
+                return
+
+            await update.effective_message.reply_text("🎥 Runway: рендер запущен, подожди…")
+
+            status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
+            started = time.time()
+            video_url = None
+
+            while time.time() - started < RUNWAY_MAX_WAIT_S:
+                rs = await client.get(status_url, headers=headers)
+                rs.raise_for_status()
+                st_js = rs.json()
+                st = (st_js.get("status") or st_js.get("state") or "").upper()
+
+                if st in ("SUCCEEDED", "COMPLETED", "FINISHED", "SUCCESS"):
+                    video_url = (
+                        (st_js.get("output") or {}).get("video")
+                        or (st_js.get("output") or {}).get("url")
+                        or (st_js.get("assets", [{}])[0].get("url") if isinstance(st_js.get("assets"), list) else None)
+                    )
+                    break
+
+                if st in ("FAILED", "ERROR", "CANCELED", "CANCELLED"):
+                    await update.effective_message.reply_text(f"❌ Runway ошибка: {st}")
+                    return
+
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
+            if not video_url:
+                await update.effective_message.reply_text("⏱️ Runway: таймаут ожидания видео.")
+                return
+
+            # download & send
+            async with httpx.AsyncClient(timeout=180.0) as dl:
+                vid = await dl.get(video_url)
+                vid.raise_for_status()
+                bio = BytesIO(vid.content)
+                bio.name = "runway.mp4"
+
+            caption = _safe_caption(f"Runway • {duration_s}s • {aspect}\n\n{prompt}")
+            await update.effective_message.reply_video(video=bio, caption=caption)
+
+    except Exception as e:
+        log.exception("Runway error: %s", e)
+        await update.effective_message.reply_text("Ошибка Runway при генерации видео.")
 
 # ───────── Фото-коллбэки (rembg / edits / animate) ─────────
 async def _need_last_photo(update: Update) -> tuple[str|None, bytes|None]:
