@@ -1661,17 +1661,32 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
             }
             headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Content-Type": "application/json"}
 
-            r = await client.post(create_url, headers=headers, json=payload)
-if r.status_code >= 400:
-    try:
-        detail = r.text[:400]
-    except Exception:
-        detail = str(r.status_code)
-    await update.effective_message.reply_text(f"❌ Luma create {r.status_code}: {detail}")
-    return
-            resp = r.json()
+            # >>> HOTFIX try/except start  (заменяет строки 1664–1672)
+url = create_url
+payload = {
+    "prompt": prompt,
+    "aspect_ratio": aspect,
+    "duration": f"{int(duration)}"
+}
 
-            gen_id = resp.get("id") or resp.get("generation_id") or resp.get("data", {}).get("id")
+try:
+    r = await client.post(url, headers=headers, json=payload, timeout=20.0)
+    if r.status_code >= 400:
+        detail = (r.text or "")[:400]
+        log.error("Runway create HTTP %s | %s", r.status_code, detail)
+        await update.effective_message.reply_text(f"⚠️ Runway ответил {r.status_code}: {detail}")
+        return
+
+    js = r.json()
+
+except Exception as e:
+    log.exception("Runway create request error: %s", e)
+    await update.effective_message.reply_text("⚠️ Ошибка сети при обращении к Runway. Попробуйте ещё раз.")
+    return
+# <<< HOTFIX end
+
+            resp = js
+gen_id = resp.get("id") or resp.get("data", {}).get("id")
             if not gen_id:
                 await update.effective_message.reply_text("Luma: не получил id задачи.")
                 return
