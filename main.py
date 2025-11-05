@@ -993,6 +993,27 @@ def main_keyboard():
 
 main_kb = main_keyboard()
 
+# ---- Нормализация текста кнопок и единый обработчик ----
+_EMOJI_FE0F = "\uFE0F"
+
+def _norm_btn_text(s: str) -> str:
+    # убираем вариантные селекторы и прочие символы кроме букв/цифр/пробелов
+    s = (s or "").replace(_EMOJI_FE0F, "")
+    s = re.sub(r"[^\w\sА-Яа-яЁё]", " ", s)  # оставим буквы/цифры/пробелы
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
+
+async def on_main_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    t = _norm_btn_text(update.message.text)
+    if t.endswith("движки"):
+        await cmd_modes(update, context); return
+    if t.endswith("подписка"):
+        await cmd_plans(update, context); return
+    if t.endswith("баланс"):
+        await cmd_balance(update, context); return
+    if t.endswith("помощь"):
+        await cmd_help(update, context); return
+
 # ───────── Меню фото ─────────
 def photo_menu_kb():
     return InlineKeyboardMarkup([
@@ -2232,11 +2253,8 @@ def main():
   # Перехват «ожидаем промпт для редактирования фото»
   app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: on_text_awaiting_edit(u, c)))
 
-  # Кнопки главного меню
-  app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*⭐\s*Подписка\s*$"), cmd_plans))
-  app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🎛\s*Движки\s*$"), cmd_modes))
-  app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*🧾\s*Баланс\s*$"), cmd_balance))
-  app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*ℹ️\s*Помощь\s*$"), cmd_help))
+  # Кнопки главного меню (устойчиво к эмодзи и пробелам)
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons))
 
   # Обычный текст — последним
   app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
