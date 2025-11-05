@@ -1756,6 +1756,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if not RUNWAY_API_KEY:
         await update.effective_message.reply_text("Runway не настроен.")
         return
+
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
@@ -1764,14 +1765,34 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 "input": {
                     "prompt": prompt,
                     "duration": int(duration_s),
-                    "ratio": _runway_ratio_from_ar(aspect)
-                }
+                    "ratio": _runway_ratio_from_ar(aspect),
+                },
             }
-            headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
+            headers = {
+                "Authorization": f"Bearer {RUNWAY_API_KEY}",
+                "Content-Type": "application/json",
+            }
 
-            r = await client.post(create_url, headers=headers, json=payload)
-            r.raise_for_status()
-            js = r.json()
+            # --- Runway create: safe request wrapper ---
+            try:
+                url = create_url
+                r = await client.post(url, headers=headers, json=payload, timeout=20.0)
+
+                if r.status_code >= 400:
+                    detail = (r.text or "")[:400]
+                    log.error("Runway create HTTP %s | %s", r.status_code, detail)
+                    await update.effective_message.reply_text(
+                        f"⚠️ Ошибка запроса Runway ({r.status_code}).\n{detail}"
+                    )
+                    return
+
+                js = r.json()  # важно: дальше код ожидает js
+
+            except Exception as e:
+                log.exception("Runway create request error: %s", e)
+                await update.effective_message.reply_text("⚠️ Не удалось создать задание в Runway.")
+                return
+            # --- end wrapper ---
 
             task_id = js.get("id") or js.get("task", {}).get("id") or js.get("data", {}).get("id")
             if not task_id:
@@ -1794,7 +1815,11 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     video_url = (
                         (st_js.get("output") or {}).get("video")
                         or (st_js.get("output") or {}).get("url")
-                        or (st_js.get("assets", [{}])[0].get("url") if isinstance(st_js.get("assets"), list) else None)
+                        or (
+                            (st_js.get("assets", [{}])[0].get("url"))
+                            if isinstance(st_js.get("assets"), list)
+                            else None
+                        )
                     )
                     break
 
