@@ -85,6 +85,10 @@ LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dre
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
 
+# CryptoBot
+CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
+TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "6.0"))
+
 # Фолбэки Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
@@ -437,6 +441,54 @@ def _wallet_total_take(user_id: int, usd: float) -> bool:
     con.commit(); con.close()
     return True
 
+async def _crypto_create_invoice(usd: float, asset: str = "USDT", description: str = "Top-up"):
+    try:
+        amount = round(float(usd), 2)
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(
+                "https://pay.crypt.bot/api/createInvoice",
+                headers={"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN},
+                json={"asset": asset, "amount": amount, "description": description}
+            )
+            js = r.json()
+            if js.get("ok"):
+                inv = js["result"]
+                return inv["invoice_id"], inv["pay_url"], float(inv["amount"]), inv["asset"]
+    except Exception as e:
+        log.exception("CryptoBot createInvoice error: %s", e)
+    return None, None, 0.0, asset
+
+async def _crypto_get_invoice(invoice_id: str):
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get(
+                "https://pay.crypt.bot/api/getInvoices",
+                headers={"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN},
+                params={"invoice_ids": invoice_id}
+            )
+            js = r.json()
+            if js.get("ok") and js.get("result", {}).get("items"):
+                return js["result"]["items"][0]
+    except Exception as e:
+        log.exception("CryptoBot getInvoice error: %s", e)
+    return None
+
+async def _poll_crypto_invoice(context, chat_id: int, msg_id: int, user_id: int, inv_id: str, usd_amount: float):
+    deadline = time.time() + 120  # 2 минуты
+    while time.time() < deadline:
+        inv = await _crypto_get_invoice(inv_id)
+        if inv and (inv.get("status") or "").lower() == "paid":
+            amt = float(inv.get("amount", 0.0))
+            if (inv.get("asset") or "").upper() == "TON":
+                amt *= TON_USD_RATE
+            _wallet_total_add(user_id, amt)
+            with contextlib.suppress(Exception):
+                await context.bot.edit_message_text("💳 Оплата получена. Баланс пополнен.", chat_id=chat_id, message_id=msg_id)
+            return
+        await asyncio.sleep(5)
+    with contextlib.suppress(Exception):
+        await context.bot.edit_message_text("⏱ Платёж не подтверждён. Нажмите «Проверить оплату».", chat_id=chat_id, message_id=msg_id)
+
 # ───────── Лимиты/цены ─────────
 USD_RUB = float(os.environ.get("USD_RUB", "100"))
 ONEOFF_MARKUP_DEFAULT = float(os.environ.get("ONEOFF_MARKUP_DEFAULT", "1.0"))
@@ -634,13 +686,15 @@ def _tts_bytes_sync(text: str) -> bytes | None:
             "model": OPENAI_TTS_MODEL,
             "voice": OPENAI_TTS_VOICE,
             "input": text,
-            "format": "opus"
+            "response_format": "opus"
         }
         headers = {
             "Authorization": f"Bearer {OPENAI_TTS_KEY}",
             "Content-Type": "application/json"
         }
         r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
+        if r.status_code in (401, 403):
+            log.error("TTS auth error %s: проверь OPENAI_TTS_KEY и базу %s", r.status_code, OPENAI_TTS_BASE_URL)
         r.raise_for_status()
         return r.content if r.content else None
     except Exception as e:
@@ -1212,13 +1266,20 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     w = _wallet_get(uid)
     total = _wallet_total_get(uid)
     lines = [
-        "🧾 Баланс:",
-        f"• Единый USD: ${total:.2f}",
-        f"• Luma (учёт за сутки): ${w['luma_usd']:.2f}",
-        f"• Runway (учёт за сутки): ${w['runway_usd']:.2f}",
-        f"• Images (учёт за сутки): ${w['img_usd']:.2f}",
+        "🧾 *Баланс и списания*",
+        "",
+        f"• Единый USD-баланс: *${total:.2f}*",
+        "  Из него списываются разовые операции (Luma/Runway/Images),",
+        "  а также он используется, если дневные бюджеты тарифа исчерпаны.",
+        "",
+        "• Учёт за *сегодня*:",
+        f"  – Luma: ${w['luma_usd']:.2f}",
+        f"  – Runway: ${w['runway_usd']:.2f}",
+        f"  – Images: ${w['img_usd']:.2f}",
+        "",
+        "Пополните баланс или выберите тариф:",
     ]
-    await update.effective_message.reply_text("\n".join(lines))
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="Markdown")
     await _send_topup_menu(update, context)
 
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1307,11 +1368,21 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = await file.download_as_bytearray()
         mime = sniff_image_mime(bytes(data))
         b64 = base64.b64encode(bytes(data)).decode("ascii")
-        _save_last_photo(user_id, mime, b64)  # запоминаем последнее фото
+        _save_last_photo(user_id, mime, b64)
+
         user_text = (update.message.caption or "").strip()
         ans = await ask_openai_vision(user_text, b64, mime)
-        await update.effective_message.reply_text((ans or "Готово.") + "\n\n➡️ Для работы с этим фото: /photo")
-        await maybe_tts_reply(update, context, (ans or "")[:TTS_MAX_CHARS])
+        # укоротим ответ
+        short = (ans or "Готово.").strip()
+        if len(short) > 320:
+            short = short[:317] + "…"
+
+        await update.effective_message.reply_text(short)
+        await update.effective_message.reply_text(
+            "Что сделать с этим фото?",
+            reply_markup=photo_menu_kb()
+        )
+        await maybe_tts_reply(update, context, short[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("Photo handler error: %s", e)
         await update.effective_message.reply_text("Не удалось обработать изображение.")
@@ -1565,7 +1636,13 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
             headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Content-Type": "application/json"}
 
             r = await client.post(create_url, headers=headers, json=payload)
-            r.raise_for_status()
+if r.status_code >= 400:
+    try:
+        detail = r.text[:400]
+    except Exception:
+        detail = str(r.status_code)
+    await update.effective_message.reply_text(f"❌ Luma create {r.status_code}: {detail}")
+    return
             resp = r.json()
 
             gen_id = resp.get("id") or resp.get("generation_id") or resp.get("data", {}).get("id")
@@ -1585,8 +1662,10 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                 if rs.status_code == 404:
                     await asyncio.sleep(VIDEO_POLL_DELAY_S)
                     continue
-                rs.raise_for_status()
-                js = rs.json()
+                if rs.status_code >= 400:
+    await update.effective_message.reply_text(f"❌ Luma status {rs.status_code}: {rs.text[:400]}")
+    return
+js = rs.json()
                 st = (js.get("status") or js.get("state") or "").lower()
 
                 if st in ("completed", "finished", "succeeded", "success", "done"):
@@ -1803,10 +1882,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # TOPUP CRYPTO
     if data.startswith("topup:crypto:"):
-      await q.answer()
-      if not CRYPTO_PAY_API_TOKEN:
-        await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
-        return
+  await q.answer()
+  if not CRYPTO_PAY_API_TOKEN:
+    try:
+      await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
+    except Exception:
+      await update.effective_message.reply_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
+    return
       try:
         usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
       except Exception:
@@ -2308,8 +2390,8 @@ def main():
     # Роутинг текстов по группам:
     # 0 — ждём промпт для редактирования фото
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: on_text_awaiting_edit(u, c)), group=0)
-    # 1 — реагируем на кнопки «Движки/Подписка/Баланс/Помощь»
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons), group=1)
+    # 1 — реагируем на кнопки «Движки/Подписка/Баланс/Помощь» и БЛОКИРУЕМ дальнейшие хендлеры. 
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons, block=True), group=1)
     # 2 — обычный текст в модель
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text), group=2)
 
