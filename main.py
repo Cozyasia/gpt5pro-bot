@@ -2257,7 +2257,14 @@ def main():
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons))
 
   # Обычный текст — последним
-  app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+  # Перехват «ожидаем промпт для редактирования фото» — первым
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: on_text_awaiting_edit(u, c)), group=0)
+
+# Главные кнопки («Движки», «Подписка», «Баланс», «Помощь») — вторым
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons), group=1)
+
+# Обычный текст — последним
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text), group=2)
 
   # Общий error handler
   app.add_error_handler(on_error)
