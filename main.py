@@ -470,7 +470,7 @@ async def _crypto_create_invoice(usd: float, asset: str = "USDT", description: s
         log.exception("CryptoBot createInvoice error: %s", e)
     return None, None, 0.0, asset
 
-async def _crypto_get_invoice(invoice_id: string):
+async def _crypto_get_invoice(invoice_id: str):
     """Получить инвойс по id. Возвращает dict или None."""
     if not CRYPTO_PAY_API_TOKEN:
         return None
@@ -1646,74 +1646,84 @@ def _safe_caption(s: str, limit: int = 850) -> str:
 
 # ───────── Luma: создание/поллинг/отправка ─────────
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str, **kwargs):
+    """
+    Текст→видео (и анимация фото, если переданы init_image_b64/init_mime в kwargs)
+    """
     if not LUMA_API_KEY:
         await update.effective_message.reply_text("Luma не настроен.")
         return
+
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             base = await _pick_luma_base(client)
             create_url = f"{base}{LUMA_CREATE_PATH}"
-            payload = {
+
+            # поддержка init-кадра (оживление фото)
+            input_payload = {
                 "model": LUMA_MODEL,
                 "prompt": prompt,
                 "aspect_ratio": aspect,
                 "duration": f"{int(duration_s)}s"
             }
+            init_b64 = kwargs.get("init_image_b64")
+            init_mime = kwargs.get("init_mime")
+            if init_b64 and init_mime:
+                input_payload["image"] = f"data:{init_mime};base64,{init_b64}"
+
             headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Content-Type": "application/json"}
 
-            # >>> HOTFIX try/except start  (заменяет строки 1664–1672)
-url = create_url
-payload = {
-    "prompt": prompt,
-    "aspect_ratio": aspect,
-    "duration": f"{int(duration)}"
-}
+            # создание задачи
+            try:
+                r = await client.post(create_url, headers=headers, json=input_payload, timeout=20.0)
+            except Exception as e:
+                log.exception("Luma create request error: %s", e)
+                await update.effective_message.reply_text("⚠️ Не удалось создать задание в Luma.")
+                return
 
-try:
-    r = await client.post(url, headers=headers, json=payload, timeout=20.0)
-    if r.status_code >= 400:
-        detail = (r.text or "")[:400]
-        log.error("Runway create HTTP %s | %s", r.status_code, detail)
-        await update.effective_message.reply_text(f"⚠️ Runway ответил {r.status_code}: {detail}")
-        return
+            if r.status_code >= 400:
+                detail = (r.text or "")[:400]
+                log.error("Luma create HTTP %s | %s", r.status_code, detail)
+                await update.effective_message.reply_text(f"⚠️ Ошибка запроса Luma ({r.status_code}).\n{detail}")
+                return
 
-    js = r.json()
-
-except Exception as e:
-    log.exception("Runway create request error: %s", e)
-    await update.effective_message.reply_text("⚠️ Ошибка сети при обращении к Runway. Попробуйте ещё раз.")
-    return
-# <<< HOTFIX end
-
-            resp = js
-gen_id = resp.get("id") or resp.get("data", {}).get("id")
+            js = r.json() if r.content else {}
+            gen_id = js.get("id") or js.get("data", {}).get("id") or js.get("generation_id")
             if not gen_id:
                 await update.effective_message.reply_text("Luma: не получил id задачи.")
                 return
 
             await update.effective_message.reply_text("🎬 Luma: рендер запущен, подожди…")
 
-            # poll
+            # поллинг
             status_url = f"{base}{LUMA_STATUS_PATH.format(id=gen_id)}"
             started = time.time()
             video_url = None
 
             while time.time() - started < LUMA_MAX_WAIT_S:
-                rs = await client.get(status_url, headers=headers)
+                try:
+                    rs = await client.get(status_url, headers=headers, timeout=20.0)
+                except Exception as e:
+                    log.warning("Luma status request error: %s", e)
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    continue
+
                 if rs.status_code == 404:
                     await asyncio.sleep(VIDEO_POLL_DELAY_S)
                     continue
                 if rs.status_code >= 400:
-    await update.effective_message.reply_text(f"❌ Luma status {rs.status_code}: {rs.text[:400]}")
-    return
-js = rs.json()
-                st = (js.get("status") or js.get("state") or "").lower()
+                    detail = (rs.text or "")[:300]
+                    log.error("Luma status HTTP %s | %s", rs.status_code, detail)
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    continue
+
+                st_js = rs.json() if rs.content else {}
+                st = (st_js.get("status") or st_js.get("state") or "").lower()
 
                 if st in ("completed", "finished", "succeeded", "success", "done"):
                     video_url = (
-                        js.get("video")
-                        or js.get("video_url")
-                        or (js.get("assets", {}) or {}).get("video")
+                        st_js.get("video")
+                        or st_js.get("video_url")
+                        or (st_js.get("assets", {}) or {}).get("video")
                     )
                     break
 
@@ -1727,13 +1737,17 @@ js = rs.json()
                 await update.effective_message.reply_text("⏱️ Luma: таймаут ожидания видео.")
                 return
 
-            # download & send
-            async with httpx.AsyncClient(timeout=180.0) as dl:
-                vid = await dl.get(video_url)
-                vid.raise_for_status()
-                bio = BytesIO(vid.content)
-                bio.name = "luma.mp4"
+            # скачивание и отправка
+            try:
+                dl = await client.get(video_url, timeout=180.0)
+                dl.raise_for_status()
+            except Exception as e:
+                log.exception("Luma download error: %s", e)
+                await update.effective_message.reply_text("⚠️ Не удалось скачать видео Luma.")
+                return
 
+            bio = BytesIO(dl.content)
+            bio.name = "luma.mp4"
             caption = _safe_caption(f"Luma • {duration_s}s • {aspect}\n\n{prompt}")
             await update.effective_message.reply_video(video=bio, caption=caption)
 
@@ -1972,37 +1986,40 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
       await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
       return
 
-    # TOPUP CRYPTO
+        # TOPUP CRYPTO
     if data.startswith("topup:crypto:"):
-  await q.answer()
-  if not CRYPTO_PAY_API_TOKEN:
-    try:
-      await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
-    except Exception:
-      await update.effective_message.reply_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
-    return
-      try:
-        usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
-      except Exception:
-        usd = 0.0
-      if usd <= 0.0:
-        await q.edit_message_text("Неверная сумма.")
+        await q.answer()
+        if not CRYPTO_PAY_API_TOKEN:
+            try:
+                await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
+            except Exception:
+                await update.effective_message.reply_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
+            return
+
+        try:
+            usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
+        except Exception:
+            usd = 0.0
+        if usd <= 0.0:
+            await q.edit_message_text("Неверная сумма.")
+            return
+
+        inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT", description="Wallet top-up")
+        if not inv_id or not pay_url:
+            await q.edit_message_text("Не удалось создать счёт в CryptoBot. Попробуйте позже.")
+            return
+
+        msg = await update.effective_message.reply_text(
+            f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\nПосле оплаты баланс пополнится автоматически.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
+                [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
+            ])
+        )
+        context.application.create_task(_poll_crypto_invoice(
+            context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
+        ))
         return
-      inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT", description="Wallet top-up")
-      if not inv_id or not pay_url:
-        await q.edit_message_text("Не удалось создать счёт в CryptoBot. Попробуйте позже.")
-        return
-      msg = await update.effective_message.reply_text(
-        f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\nПосле оплаты баланс пополнится автоматически.",
-        reply_markup=InlineKeyboardMarkup([
-          [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
-          [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
-        ])
-      )
-      context.application.create_task(_poll_crypto_invoice(
-        context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
-      ))
-      return
 
     if data.startswith("crypto:check:"):
       await q.answer()
