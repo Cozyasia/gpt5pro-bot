@@ -1763,23 +1763,30 @@ def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # ── безопасная регистрация, чтобы деплой не падал если какой-то def отсутствует
+    def _safe_add_cmd(cmd_name: str, func):
+        if callable(func):
+            app.add_handler(CommandHandler(cmd_name, func))
+        else:
+            log.warning("Skip command /%s: handler not defined", cmd_name)
+
     # Команды
-    app.add_handler(CommandHandler("start",       cmd_start))
-    app.add_handler(CommandHandler("help",        cmd_help))
-    app.add_handler(CommandHandler("plans",       cmd_plans))
-    app.add_handler(CommandHandler("modes",       cmd_modes))
-    app.add_handler(CommandHandler("examples",    cmd_examples))
-    app.add_handler(CommandHandler("balance",     cmd_balance))
-    app.add_handler(CommandHandler("img",         cmd_img))
-    app.add_handler(CommandHandler("photo",       cmd_photo))
-    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
-    app.add_handler(CommandHandler("diag_stt",    cmd_diag_stt))
-    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
-    app.add_handler(CommandHandler("diag_video",  cmd_diag_video))
-    app.add_handler(CommandHandler("voice_on",    cmd_voice_on))
-    app.add_handler(CommandHandler("voice_off",   cmd_voice_off))
-    app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
-    app.add_handler(CommandHandler("welcome",     cmd_show_welcome))
+    _safe_add_cmd("start",        globals().get("cmd_start"))
+    _safe_add_cmd("help",         globals().get("cmd_help"))
+    _safe_add_cmd("plans",        globals().get("cmd_plans"))
+    _safe_add_cmd("modes",        globals().get("cmd_modes"))
+    _safe_add_cmd("examples",     globals().get("cmd_examples"))
+    _safe_add_cmd("balance",      globals().get("cmd_balance"))
+    _safe_add_cmd("img",          globals().get("cmd_img"))
+    _safe_add_cmd("photo",        globals().get("cmd_photo"))
+    _safe_add_cmd("diag_images",  globals().get("cmd_diag_images"))
+    _safe_add_cmd("diag_stt",     globals().get("cmd_diag_stt"))
+    _safe_add_cmd("diag_limits",  globals().get("cmd_diag_limits"))
+    _safe_add_cmd("diag_video",   globals().get("cmd_diag_video"))
+    _safe_add_cmd("voice_on",     globals().get("cmd_voice_on"))
+    _safe_add_cmd("voice_off",    globals().get("cmd_voice_off"))
+    _safe_add_cmd("set_welcome",  globals().get("cmd_set_welcome"))
+    _safe_add_cmd("welcome",      globals().get("cmd_show_welcome"))
 
     # WebApp
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
@@ -1827,15 +1834,16 @@ def main():
     app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
 
     # Текстовый роутинг (порядок групп важен!)
-    # 0 — ожидаем промпт для редактирования фото (блокируем остальное)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: on_text_awaiting_edit(u, c)), group=0)
+    # 0 — ожидаем промпт для редактирования фото (жёстко блокируем остальное)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_awaiting_edit), group=0, block=True)
     # 1 — главные кнопки «Движки/Подписка» (жёсткая обработка, дальше не пускаем)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons, block=True), group=1)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons), group=1, block=True)
     # 2 — любой прочий текст → общий обработчик
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text), group=2)
 
     app.add_error_handler(on_error)
     run_by_mode(app)
+
 
 if __name__ == "__main__":
     main()
