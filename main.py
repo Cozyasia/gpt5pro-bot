@@ -2180,96 +2180,143 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
     log.exception("on_error failed: %s", e)
 
 # ───────── Инициализация бота ─────────
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        err = getattr(context, "error", None)
+        chat_id = None
+        try:
+            if hasattr(update, "effective_chat") and update.effective_chat:
+                chat_id = update.effective_chat.id
+            elif hasattr(update, "message") and update.message:
+                chat_id = update.message.chat_id
+        except Exception:
+            pass
+        log.exception("Unhandled exception in handler: %s", err)
+        if chat_id:
+            with contextlib.suppress(Exception):
+                await context.bot.send_message(chat_id, "⚠️ Произошла внутренняя ошибка. Уже разбираюсь, попробуй ещё раз.")
+    except Exception as e:
+        log.exception("on_error failed: %s", e)
+
+def run_by_mode(app):
+    try:
+        asyncio.get_running_loop()
+        _have_running_loop = True
+    except RuntimeError:
+        _have_running_loop = False
+    if not _have_running_loop:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    async def _cleanup_webhook():
+        with contextlib.suppress(Exception):
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            log.info("Webhook cleanup done (drop_pending_updates=True)")
+
+    try:
+        asyncio.get_event_loop().run_until_complete(_cleanup_webhook())
+    except Exception:
+        pass
+
+    if USE_WEBHOOK:
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=WEBHOOK_PATH,
+            webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
+            secret_token=(WEBHOOK_SECRET or None),
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        _start_http_stub()
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+        )
+
 def main():
-  db_init()
-  db_init_usage()
-  _db_init_prefs()
+    db_init()
+    db_init_usage()
+    _db_init_prefs()
 
-  app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-  # Команды
-  app.add_handler(CommandHandler("start", cmd_start))
-  app.add_handler(CommandHandler("help", cmd_help))
-  app.add_handler(CommandHandler("plans", cmd_plans))
-  app.add_handler(CommandHandler("modes", cmd_modes))
-  app.add_handler(CommandHandler("examples", cmd_examples))
-  app.add_handler(CommandHandler("balance", cmd_balance))
-  app.add_handler(CommandHandler("img", cmd_img))
-  app.add_handler(CommandHandler("diag_images", cmd_diag_images))
-  app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
-  app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
-  app.add_handler(CommandHandler("diag_video", cmd_diag_video))
-  app.add_handler(CommandHandler("voice_on", cmd_voice_on))
-  app.add_handler(CommandHandler("voice_off", cmd_voice_off))
-  app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
-  app.add_handler(CommandHandler("welcome", cmd_show_welcome))
-  app.add_handler(CommandHandler("photo", cmd_photo))
+    # Команды
+    app.add_handler(CommandHandler("start",       cmd_start))
+    app.add_handler(CommandHandler("help",        cmd_help))
+    app.add_handler(CommandHandler("plans",       cmd_plans))
+    app.add_handler(CommandHandler("modes",       cmd_modes))
+    app.add_handler(CommandHandler("examples",    cmd_examples))
+    app.add_handler(CommandHandler("balance",     cmd_balance))
+    app.add_handler(CommandHandler("img",         cmd_img))
+    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
+    app.add_handler(CommandHandler("diag_stt",    cmd_diag_stt))
+    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
+    app.add_handler(CommandHandler("diag_video",  cmd_diag_video))
+    app.add_handler(CommandHandler("voice_on",    cmd_voice_on))
+    app.add_handler(CommandHandler("voice_off",   cmd_voice_off))
+    app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
+    app.add_handler(CommandHandler("welcome",     cmd_show_welcome))
+    app.add_handler(CommandHandler("photo",       cmd_photo))
 
-  # WebApp data
-  app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+    # WebApp data
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
-  # Коллбэки/платежи
-  app.add_handler(CallbackQueryHandler(on_cb))
-  app.add_handler(PreCheckoutQueryHandler(on_precheckout))
-  app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
+    # Коллбэки/платежи
+    app.add_handler(CallbackQueryHandler(on_cb))
+    app.add_handler(PreCheckoutQueryHandler(on_precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_success_payment))
 
-  # Фото/визион
-  app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+    # Фото/визион
+    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
 
-  # Голос/аудио
-  app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
+    # Голос/аудио
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
 
-  # Аудио как документ
-  audio_doc_filter = (
-    filters.Document.MimeType("audio/mpeg")
-    | filters.Document.MimeType("audio/ogg")
-    | filters.Document.MimeType("audio/oga")
-    | filters.Document.MimeType("audio/mp4")
-    | filters.Document.MimeType("audio/x-m4a")
-    | filters.Document.MimeType("audio/webm")
-    | filters.Document.MimeType("audio/wav")
-    | filters.Document.FileExtension("mp3")
-    | filters.Document.FileExtension("m4a")
-    | filters.Document.FileExtension("wav")
-    | filters.Document.FileExtension("ogg")
-    | filters.Document.FileExtension("oga")
-    | filters.Document.FileExtension("webm")
-  )
-  app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
+    # Аудио как документ
+    audio_doc_filter = (
+        filters.Document.MimeType("audio/mpeg")
+        | filters.Document.MimeType("audio/ogg")
+        | filters.Document.MimeType("audio/oga")
+        | filters.Document.MimeType("audio/mp4")
+        | filters.Document.MimeType("audio/x-m4a")
+        | filters.Document.MimeType("audio/webm")
+        | filters.Document.MimeType("audio/wav")
+        | filters.Document.FileExtension("mp3")
+        | filters.Document.FileExtension("m4a")
+        | filters.Document.FileExtension("wav")
+        | filters.Document.FileExtension("ogg")
+        | filters.Document.FileExtension("oga")
+        | filters.Document.FileExtension("webm")
+    )
+    app.add_handler(MessageHandler(audio_doc_filter, on_audio_document))
 
-  # Документы для анализа
-  docs_filter = (
-    filters.Document.FileExtension("pdf")
-    | filters.Document.FileExtension("epub")
-    | filters.Document.FileExtension("docx")
-    | filters.Document.FileExtension("fb2")
-    | filters.Document.FileExtension("txt")
-    | filters.Document.FileExtension("mobi")
-    | filters.Document.FileExtension("azw")
-    | filters.Document.FileExtension("azw3")
-  )
-  app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
+    # Документы для анализа
+    docs_filter = (
+        filters.Document.FileExtension("pdf")
+        | filters.Document.FileExtension("epub")
+        | filters.Document.FileExtension("docx")
+        | filters.Document.FileExtension("fb2")
+        | filters.Document.FileExtension("txt")
+        | filters.Document.FileExtension("mobi")
+        | filters.Document.FileExtension("azw")
+        | filters.Document.FileExtension("azw3")
+    )
+    app.add_handler(MessageHandler(docs_filter, on_doc_analyze))
 
-  # Перехват «ожидаем промпт для редактирования фото»
-  app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: on_text_awaiting_edit(u, c)))
+    # Роутинг текстов по группам:
+    # 0 — ждём промпт для редактирования фото
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: on_text_awaiting_edit(u, c)), group=0)
+    # 1 — реагируем на кнопки «Движки/Подписка/Баланс/Помощь»
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons), group=1)
+    # 2 — обычный текст в модель
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text), group=2)
 
-  # Кнопки главного меню (устойчиво к эмодзи и пробелам)
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons))
+    # Общий error handler
+    app.add_error_handler(on_error)
 
-  # Обычный текст — последним
-  # Перехват «ожидаем промпт для редактирования фото» — первым
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: on_text_awaiting_edit(u, c)), group=0)
-
-# Главные кнопки («Движки», «Подписка», «Баланс», «Помощь») — вторым
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_main_buttons), group=1)
-
-# Обычный текст — последним
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text), group=2)
-
-  # Общий error handler
-  app.add_error_handler(on_error)
-
-  run_by_mode(app)
+    run_by_mode(app)
 
 if __name__ == "__main__":
-  main()
+    main()
