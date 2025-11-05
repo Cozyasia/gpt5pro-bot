@@ -1765,12 +1765,12 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 "input": {
                     "prompt": prompt,
                     "duration": int(duration_s),
-                    "ratio": _runway_ratio_from_ar(aspect),
-                },
+                    "ratio": _runway_ratio_from_ar(aspect)
+                }
             }
             headers = {
                 "Authorization": f"Bearer {RUNWAY_API_KEY}",
-                "Content-Type": "application/json",
+                "Content-Type": "application/json"
             }
 
             # --- Runway create: safe request wrapper ---
@@ -1786,7 +1786,8 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     )
                     return
 
-                js = r.json()  # важно: дальше код ожидает js
+                # важно: дальше код ожидает js
+                js = r.json()
 
             except Exception as e:
                 log.exception("Runway create request error: %s", e)
@@ -1815,11 +1816,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     video_url = (
                         (st_js.get("output") or {}).get("video")
                         or (st_js.get("output") or {}).get("url")
-                        or (
-                            (st_js.get("assets", [{}])[0].get("url"))
-                            if isinstance(st_js.get("assets"), list)
-                            else None
-                        )
+                        or (st_js.get("assets", [{}])[0].get("url") if isinstance(st_js.get("assets"), list) else None)
                     )
                     break
 
