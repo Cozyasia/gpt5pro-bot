@@ -1752,63 +1752,82 @@ def _runway_ratio_from_ar(ar: str) -> str:
     return RUNWAY_RATIO
 
 # ───────── Runway: создание/поллинг/отправка ─────────
-async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str, **kwargs):
+async def _run_runway_video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    duration_s: int,
+    aspect: str,
+    **kwargs,
+):
     if not RUNWAY_API_KEY:
         await update.effective_message.reply_text("Runway не настроен.")
         return
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
+            # 1) Создание задания
             create_url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
             payload = {
                 "model": RUNWAY_MODEL,
                 "input": {
                     "prompt": prompt,
                     "duration": int(duration_s),
-                    "ratio": _runway_ratio_from_ar(aspect)
-                }
+                    "ratio": _runway_ratio_from_ar(aspect),
+                },
             }
             headers = {
                 "Authorization": f"Bearer {RUNWAY_API_KEY}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
 
-            # --- Runway create: safe request wrapper ---
+            # Безопасный запрос на создание
             try:
-                url = create_url
-                r = await client.post(url, headers=headers, json=payload, timeout=20.0)
-
-                if r.status_code >= 400:
-                    detail = (r.text or "")[:400]
-                    log.error("Runway create HTTP %s | %s", r.status_code, detail)
-                    await update.effective_message.reply_text(
-                        f"⚠️ Ошибка запроса Runway ({r.status_code}).\n{detail}"
-                    )
-                    return
-
-                # важно: дальше код ожидает js
-                js = r.json()
-
+                r = await client.post(create_url, headers=headers, json=payload, timeout=20.0)
             except Exception as e:
                 log.exception("Runway create request error: %s", e)
                 await update.effective_message.reply_text("⚠️ Не удалось создать задание в Runway.")
                 return
-            # --- end wrapper ---
 
-            task_id = js.get("id") or js.get("task", {}).get("id") or js.get("data", {}).get("id")
+            if r.status_code >= 400:
+                detail = (r.text or "")[:400]
+                log.error("Runway create HTTP %s | %s", r.status_code, detail)
+                await update.effective_message.reply_text(
+                    f"⚠️ Ошибка запроса Runway ({r.status_code}).\n{detail}"
+                )
+                return
+
+            js = r.json()
+            task_id = (
+                js.get("id")
+                or js.get("task", {}).get("id")
+                or js.get("data", {}).get("id")
+            )
             if not task_id:
                 await update.effective_message.reply_text("Runway: не получил id задачи.")
                 return
 
             await update.effective_message.reply_text("🎥 Runway: рендер запущен, подожди…")
 
+            # 2) Поллинг статуса
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
             started = time.time()
             video_url = None
 
             while time.time() - started < RUNWAY_MAX_WAIT_S:
-                rs = await client.get(status_url, headers=headers)
-                rs.raise_for_status()
+                try:
+                    rs = await client.get(status_url, headers=headers, timeout=20.0)
+                except Exception as e:
+                    log.warning("Runway status request error: %s", e)
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    continue
+
+                if rs.status_code >= 400:
+                    detail = (rs.text or "")[:300]
+                    log.error("Runway status HTTP %s | %s", rs.status_code, detail)
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    continue
+
                 st_js = rs.json()
                 st = (st_js.get("status") or st_js.get("state") or "").upper()
 
@@ -1816,7 +1835,11 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     video_url = (
                         (st_js.get("output") or {}).get("video")
                         or (st_js.get("output") or {}).get("url")
-                        or (st_js.get("assets", [{}])[0].get("url") if isinstance(st_js.get("assets"), list) else None)
+                        or (
+                            st_js.get("assets", [{}])[0].get("url")
+                            if isinstance(st_js.get("assets"), list)
+                            else None
+                        )
                     )
                     break
 
@@ -1830,13 +1853,18 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 await update.effective_message.reply_text("⏱️ Runway: таймаут ожидания видео.")
                 return
 
-            # download & send
-            async with httpx.AsyncClient(timeout=180.0) as dl:
-                vid = await dl.get(video_url)
-                vid.raise_for_status()
-                bio = BytesIO(vid.content)
-                bio.name = "runway.mp4"
+            # 3) Загрузка и отправка
+            try:
+                dl = await client.get(video_url, timeout=180.0)
+                if dl.status_code >= 400:
+                    raise RuntimeError(f"HTTP {dl.status_code}")
+            except Exception as e:
+                log.exception("Runway download error: %s", e)
+                await update.effective_message.reply_text("⚠️ Не удалось скачать видео Runway.")
+                return
 
+            bio = BytesIO(dl.content)
+            bio.name = "runway.mp4"
             caption = _safe_caption(f"Runway • {duration_s}s • {aspect}\n\n{prompt}")
             await update.effective_message.reply_video(video=bio, caption=caption)
 
@@ -1845,6 +1873,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await update.effective_message.reply_text("Ошибка Runway при генерации видео.")
 
 # ───────── Фото-коллбэки (rembg / edits / animate) ─────────
+
 async def _need_last_photo(update: Update) -> tuple[str|None, bytes|None]:
   mime, data = _load_last_photo(update.effective_user.id)
   if not data:
