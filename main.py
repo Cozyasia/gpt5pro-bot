@@ -50,13 +50,16 @@ from pdfminer.high_level import extract_text as pdf_extract_text
 from docx import Document as DocxDocument
 from ebooklib import epub
 
-# Image tools (safe)
+# --- Image tools (safe import) ---
 try:
     from rembg import remove as rembg_remove
-    HAS_REMBG = True
-except Exception as _e:
-    HAS_REMBG = False
+except Exception:
     rembg_remove = None
+
+def remove_bg(image_bytes: bytes) -> bytes:
+    if not rembg_remove:
+        raise RuntimeError("rembg недоступен (не установлен). Проверь requirements и деплой.")
+    return rembg_remove(image_bytes)
 
 # OpenAI
 from openai import OpenAI
