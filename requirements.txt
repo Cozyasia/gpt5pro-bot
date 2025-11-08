@@ -4,7 +4,7 @@ httpx>=0.27.0
 Pillow>=10.4.0
 
 # фото-инструменты
-rembg==2.0.56
+rembg==2.0.67
 onnxruntime==1.18.1
 numpy<2.0
 
