@@ -28,13 +28,22 @@ from io import BytesIO
 
 # Telegram
 from telegram import (
-    Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton,
-    InputFile, ChatAction
+    Update,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    InputFile,
 )
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, CallbackQueryHandler, filters
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    CallbackQueryHandler,
+    filters,
 )
-from telegram.constants import ParseMode
+from telegram.constants import ChatAction  # ✅ верный путь в v21
 
 # Docs
 from pdfminer.high_level import extract_text as pdf_extract_text
