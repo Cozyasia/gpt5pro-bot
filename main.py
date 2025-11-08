@@ -3,28 +3,28 @@
 BOT GPT-5 • Luma • Runway • Midjourney • Deepgram
 Единый ИИ: тексты, изображения, видео, озвучка, анализ документов.
 
-Совместим: python-telegram-bot==21.6, Python 3.12.x
+Совместимость:
+- Python: 3.12.x (runtime.txt: python-3.12.6)
+- python-telegram-bot==21.6
 """
 
 import os
 import re
 import io
-import sys
 import json
-import time
 import uuid
 import base64
 import asyncio
 import logging
 import sqlite3
 import contextlib
-from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
+from datetime import datetime
 
 import httpx
 from PIL import Image
-from io import BytesIO
 
 # Telegram
 from telegram import (
@@ -43,22 +43,28 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
-from telegram.constants import ChatAction  # ✅ верный путь в v21
+from telegram.constants import ChatAction
 
 # Docs
 from pdfminer.high_level import extract_text as pdf_extract_text
 from docx import Document as DocxDocument
 from ebooklib import epub
 
-# Image tools
-from rembg import remove as rembg_remove
+# Image tools (safe)
+try:
+    from rembg import remove as rembg_remove
+    HAS_REMBG = True
+except Exception as _e:
+    HAS_REMBG = False
+    rembg_remove = None
 
 # OpenAI
 from openai import OpenAI
 
-# Optional fact-check
+# Fact-check (optional)
 with contextlib.suppress(Exception):
     from tavily import TavilyClient
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -69,6 +75,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 log = logging.getLogger("gpt5-bot")
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ENV
@@ -99,6 +106,7 @@ TAVILY_API_KEY = (os.getenv("TAVILY_API_KEY") or "").strip()
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID") or "0")
 
 DB_PATH = (os.getenv("DB_PATH") or str(Path(__file__).with_name("bot.db"))).strip()
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DB
@@ -174,8 +182,23 @@ def add_credits(user_id: int, amount: int):
         conn.execute("UPDATE users SET credits=credits+? WHERE user_id=?", (amount, user_id))
         conn.commit()
 
+def _enqueue_job(user_id: int, kind: str, engine: str, payload: dict) -> str:
+    jid = str(uuid.uuid4())
+    with db() as conn:
+        conn.execute("INSERT INTO jobs(id, user_id, kind, engine, status, payload) VALUES(?,?,?,?,?,?)",
+                     (jid, user_id, kind, engine, "queued", json.dumps(payload, ensure_ascii=False)))
+        conn.commit()
+    return jid
+
+def _update_job(jid: str, status: str, result: Optional[dict] = None):
+    with db() as conn:
+        conn.execute("UPDATE jobs SET status=?, result=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                     (status, json.dumps(result or {}, ensure_ascii=False), jid))
+        conn.commit()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Helpers
+# Helpers & UI
 # ──────────────────────────────────────────────────────────────────────────────
 
 def chat_action(action: ChatAction):
@@ -202,12 +225,8 @@ def parse_duration_and_ratio(txt: str) -> Tuple[int, str]:
     return dur, ar
 
 def bytes_to_inputfile(data: bytes, name: str) -> InputFile:
-    bio = BytesIO(data); bio.name = name
+    bio = BytesIO(); bio.name = name
     return InputFile(bio, filename=name)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# UI текст/кнопки
-# ──────────────────────────────────────────────────────────────────────────────
 
 def main_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
@@ -221,8 +240,8 @@ def main_kb() -> ReplyKeyboardMarkup:
 
 def engines_kb() -> InlineKeyboardMarkup:
     btns = []
-    btns.append([InlineKeyboardButton("🎬 Luma", callback_data="engine_luma")]) if LUMA_API_KEY else None
-    btns.append([InlineKeyboardButton("🎥 Runway", callback_data="engine_runway")]) if RUNWAY_API_KEY else None
+    if LUMA_API_KEY:   btns.append([InlineKeyboardButton("🎬 Luma", callback_data="engine_luma")])
+    if RUNWAY_API_KEY: btns.append([InlineKeyboardButton("🎥 Runway", callback_data="engine_runway")])
     if not btns:
         btns = [[InlineKeyboardButton("ℹ️ Движков нет (задайте ключи)", callback_data="noop")]]
     return InlineKeyboardMarkup(btns)
@@ -298,6 +317,7 @@ PLANS_TEXT = (
     "Пополнение: /topup (CryptoBot)\n"
 )
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # OpenAI helpers (chat, TTS, STT, image edit)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -314,7 +334,8 @@ async def ai_chat(messages: List[Dict[str, str]], model: Optional[str] = None) -
         resp = await asyncio.to_thread(client.chat.completions.create, model=model, messages=messages)
         return resp.choices[0].message.content.strip()
     except Exception as e:
-        log.exception("OpenAI chat error"); return f"❌ Ошибка OpenAI: {e}"
+        log.exception("OpenAI chat error")
+        return f"❌ Ошибка OpenAI: {e}"
 
 async def ai_tts_ogg(text: str, voice: str) -> bytes:
     client = get_openai()
@@ -327,10 +348,12 @@ async def ai_tts_ogg(text: str, voice: str) -> bytes:
             format="opus",
         )
         out = io.BytesIO()
-        with resp as s: s.stream_to_file(out)
+        with resp as s:
+            s.stream_to_file(out)
         return out.getvalue()
     except Exception:
-        log.exception("TTS error"); return b""
+        log.exception("TTS error")
+        return b""
 
 async def ai_stt_ogg(data: bytes, model: Optional[str] = None) -> str:
     model = model or OPENAI_STT_MODEL
@@ -343,13 +366,15 @@ async def ai_stt_ogg(data: bytes, model: Optional[str] = None) -> str:
         text = getattr(resp, "text", None) or (resp.get("text") if isinstance(resp, dict) else "")
         return (text or "").strip()
     except Exception:
-        log.exception("STT error"); return ""
+        log.exception("STT error")
+        return ""
 
 async def ai_image_edit(image_bytes: bytes, prompt: str, mask_bytes: Optional[bytes] = None) -> bytes:
-    """OpenAI image edit (best-effort route)."""
+    """OpenAI image edit. Если mask_bytes не передан — правка по тексту."""
     try:
         files = {"image": ("image.png", image_bytes, "image/png")}
-        if mask_bytes: files["mask"] = ("mask.png", mask_bytes, "image/png")
+        if mask_bytes:
+            files["mask"] = ("mask.png", mask_bytes, "image/png")
         data = {"prompt": prompt, "size": "1024x1024"}
         async with httpx.AsyncClient(timeout=120) as http:
             r = await http.post(
@@ -364,6 +389,7 @@ async def ai_image_edit(image_bytes: bytes, prompt: str, mask_bytes: Optional[by
         log.exception("image edit error")
         raise
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Local image ops
 # ──────────────────────────────────────────────────────────────────────────────
@@ -375,9 +401,11 @@ def img_to_png_bytes(im: Image.Image) -> bytes:
     bio = BytesIO(); im.save(bio, format="PNG"); return bio.getvalue()
 
 def remove_bg(image_bytes: bytes) -> bytes:
+    if not HAS_REMBG:
+        raise RuntimeError("rembg/onnxruntime не установлены на сервере")
     return rembg_remove(image_bytes)
 
-def replace_bg(image_bytes: bytes, color=(255,255,255)) -> bytes:
+def replace_bg(image_bytes: bytes, color=(255, 255, 255)) -> bytes:
     fg = img_from_bytes(image_bytes)
     bg = Image.new("RGBA", fg.size, color + (255,))
     out = Image.alpha_composite(bg, fg)
@@ -385,11 +413,12 @@ def replace_bg(image_bytes: bytes, color=(255,255,255)) -> bytes:
 
 def upscale_x2(image_bytes: bytes) -> bytes:
     im = img_from_bytes(image_bytes)
-    im = im.resize((im.width*2, im.height*2), Image.LANCZOS)
+    im = im.resize((im.width * 2, im.height * 2), Image.LANCZOS)
     return img_to_png_bytes(im.convert("RGB"))
 
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Luma / Runway (best-effort, правь эндпоинты под свои ключи/аккаунты)
+# Luma / Runway
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def luma_text2video(prompt: str, duration_s=5, aspect_ratio="16:9") -> dict:
@@ -476,19 +505,6 @@ async def poll_and_send_video(update: Update, context: ContextTypes.DEFAULT_TYPE
         await context.bot.send_message(chat_id, f"❌ Ошибка при получении результата: {e}")
         _update_job(job_db_id, "failed", {"error": str(e)})
 
-def _enqueue_job(user_id: int, kind: str, engine: str, payload: dict) -> str:
-    jid = str(uuid.uuid4())
-    with db() as conn:
-        conn.execute("INSERT INTO jobs(id, user_id, kind, engine, status, payload) VALUES(?,?,?,?,?,?)",
-                     (jid, user_id, kind, engine, "queued", json.dumps(payload, ensure_ascii=False)))
-        conn.commit()
-    return jid
-
-def _update_job(jid: str, status: str, result: Optional[dict] = None):
-    with db() as conn:
-        conn.execute("UPDATE jobs SET status=?, result=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                     (status, json.dumps(result or {}, ensure_ascii=False), jid))
-        conn.commit()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CryptoBot
@@ -514,6 +530,7 @@ async def cryptobot_get_invoices() -> list:
         r = await http.post(url, headers=headers, json={}); r.raise_for_status()
         js = r.json(); return js.get("result", [])
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Интенты
 # ──────────────────────────────────────────────────────────────────────────────
@@ -533,10 +550,11 @@ def looks_like_image2video(msg: str) -> bool:
     return ("ожив" in m) or ("image2video" in m) or ("сделай видео из фото" in m)
 
 def pick_engine_for(user: dict) -> str:
-    if user and user.get("default_engine") in ("luma","runway"):
+    if user and user.get("default_engine") in ("luma", "runway"):
         if user["default_engine"] == "luma" and LUMA_API_KEY: return "luma"
         if user["default_engine"] == "runway" and RUNWAY_API_KEY: return "runway"
     return "luma" if LUMA_API_KEY else ("runway" if RUNWAY_API_KEY else "none")
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Команды
@@ -616,13 +634,13 @@ async def cmd_check_invoices(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         log.exception("invoices error"); await update.message.reply_text(f"Ошибка проверки счетов: {e}")
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Текст, голос, фото, документы
 # ──────────────────────────────────────────────────────────────────────────────
 
 @chat_action(ChatAction.TYPING)
 async def on_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # если ждём описания для инпейнтинга
     if context.user_data.get("await_inpaint_prompt"):
         await on_inpaint_prompt(update, context); return
     await on_text(update, context)
@@ -633,32 +651,34 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (update.message.text or "").strip()
     user = get_user(update.effective_user.id)
 
-    if txt.lower() in ("движки", "🎛 движки"):
+    low = txt.lower()
+    if low in ("движки", "🎛 движки"):
         await cmd_engines(update, context); return
-    if txt.lower() in ("начать","🚀 начать работу"):
+    if low in ("начать", "🚀 начать работу"):
         await update.message.reply_text("Пришли текст/голос/фото/документ — подскажу, что могу сделать.", reply_markup=main_kb()); return
-    if txt.lower() in ("🗂 возможности","возможности"):
+    if low in ("🗂 возможности","возможности"):
         await update.message.reply_text(HYPE_TEXT); return
-    if txt.lower() in ("🔊 озвучка вкл/выкл",):
+    if low in ("🔊 озвучка вкл/выкл",):
         if user.get("voice_on"): await cmd_voice_off(update, context)
         else: await cmd_voice_on(update, context)
         return
 
     # факт-чек
-    if txt.lower().startswith("проверь") or "факт" in txt.lower():
+    if low.startswith("проверь") or "факт" in low:
         ans = await fact_check(txt); await update.message.reply_text(ans); return
 
     # text→video
-    if ("сделай видео" in txt.lower()) or (" видео " in f" {txt.lower()} ") and any(r in txt for r in ("9:16","16:9","1:1")):
+    if ("сделай видео" in low) or (" видео " in f" {low} ") and any(r in txt for r in ("9:16","16:9","1:1")):
         dur, ar = parse_duration_and_ratio(txt)
         await update.message.reply_text(f"Видео {dur}s • {ar}\nВыберите движок:", reply_markup=engines_kb())
         context.user_data["pending_text2video"] = {"prompt": txt, "dur": dur, "ar": ar}
         return
 
-    # позитивный ответ на «можешь ли ты … с фото?»
-    if any(k in txt.lower() for k in ["можешь","умеешь","можно ли","сможешь"]) and any(p in txt.lower() for p in PHOTO_POSITIVE_PATTERNS):
+    # позитивный ответ на «что можешь с фото?»
+    if any(k in low for k in ["можешь","умеешь","можно ли","сможешь"]) and any(p in low for p in PHOTO_POSITIVE_PATTERNS):
         await update.message.reply_text(
-            "Да, поддерживаю это 👍\nПришли фото — и я предложу быстрые действия: оживить (Image→Video), удалить/заменить фон, добавить/удалить объект, ретушь/апскейл, аватар/логотип."
+            "Да, поддерживаю это 👍\nПришли фото — и я предложу быстрые действия: "
+            "оживить (Image→Video), удалить/заменить фон, добавить/удалить объект, ретушь/апскейл, аватар/логотип."
         )
         return
 
@@ -720,30 +740,31 @@ async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = ""
     try:
         if name.endswith(".pdf"):
-            p = "/tmp/in.pdf"; open(p,"wb").write(data); text = pdf_extract_text(p) or ""
+            p = "/tmp/in.pdf"; open(p, "wb").write(data); text = pdf_extract_text(p) or ""
         elif name.endswith(".docx"):
-            p = "/tmp/in.docx"; open(p,"wb").write(data); d=DocxDocument(p); text="\n".join([p.text for p in d.paragraphs if p.text.strip()])
+            p = "/tmp/in.docx"; open(p, "wb").write(data); d = DocxDocument(p); text = "\n".join([pp.text for pp in d.paragraphs if pp.text.strip()])
         elif name.endswith(".epub"):
-            p = "/tmp/in.epub"; open(p,"wb").write(data); book = epub.read_epub(p)
-            chunks=[]; 
+            p = "/tmp/in.epub"; open(p, "wb").write(data); book = epub.read_epub(p)
+            chunks = []
             for item in book.get_items():
-                if item.get_type()==epub.ITEM_DOCUMENT:
+                if item.get_type() == epub.ITEM_DOCUMENT:
                     with contextlib.suppress(Exception):
-                        chunks.append(item.get_content().decode("utf-8","ignore"))
+                        chunks.append(item.get_content().decode("utf-8", "ignore"))
             import re as _re
-            text = _re.sub(r"<[^>]+>","", "\n".join(chunks))
+            text = _re.sub(r"<[^>]+>", "", "\n".join(chunks))
         else:
             await update.message.reply_text("Поддерживаю PDF, DOCX, EPUB."); return
     except Exception:
         log.exception("doc parse"); await update.message.reply_text("Не удалось извлечь текст."); return
 
-    if not text.strip(): await update.message.reply_text("Пустой документ или не распознался."); return
+    if not text.strip(): await update.message.reply_text("Пустой документ или не распознан."); return
 
     reply = await ai_chat([
-        {"role":"system","content":"Суммируй документ кратко и структурно в 10 пунктов, выдели факты и цифры."},
-        {"role":"user","content":text[:12000]},
+        {"role": "system", "content": "Суммируй документ кратко и структурно в 10 пунктов, выдели факты и цифры."},
+        {"role": "user", "content": text[:12000]},
     ])
     await update.message.reply_text("Тезисы:\n" + reply)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CallbackQuery (движки, действия с фото, выбор VR)
@@ -757,7 +778,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(q.from_user.id)
 
     # Выбор движка для text→video
-    if data in ("engine_luma","engine_runway"):
+    if data in ("engine_luma", "engine_runway"):
         engine = "luma" if data == "engine_luma" else "runway"
         pending = context.user_data.get("pending_text2video")
         if not pending:
@@ -768,7 +789,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             if engine == "luma": js = await luma_text2video(prompt, dur, ar)
             else: js = await runway_text2video(prompt, dur, ar)
-            jid = _enqueue_job(q.from_user.id, "text2video", engine, {"prompt":prompt,"dur":dur,"ar":ar})
+            jid = _enqueue_job(q.from_user.id, "text2video", engine, {"prompt": prompt, "dur": dur, "ar": ar})
             _update_job(jid, "running", {"provider_job": js})
             asyncio.create_task(poll_and_send_video(update, context, engine, js, jid))
         except Exception:
@@ -780,7 +801,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("vr_"):
         _, d, ar = data.split("_")
         d = int(d)
-        ar = ar.replace("16x9","16:9").replace("9x16","9:16").replace("1x1","1:1")
+        ar = ar.replace("16x9", "16:9").replace("9x16", "9:16").replace("1x1", "1:1")
         context.user_data["vr"] = {"dur": d, "ar": ar}
         await q.edit_message_text(f"Видео {d}s • {ar}\nВыберите движок:", reply_markup=engines_kb())
         context.user_data["await_engine_for_image2video"] = True
@@ -794,13 +815,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             out = remove_bg(img)
             await context.bot.send_photo(q.message.chat_id, bytes_to_inputfile(out, "no_bg.png"), caption="Фон удалён.")
         except Exception as e:
-            await context.bot.send_message(q.message.chat_id, f"Ошибка удаления фона: {e}")
+            await context.bot.send_message(q.message.chat_id, f"⚠️ Не удалось удалить фон: {e}")
         return
 
     if data == "act_bg_replace":
         img = context.user_data.get("last_photo")
         if not img: await q.edit_message_text("Сначала пришли фото."); return
-        out = replace_bg(img, (255,255,255))
+        out = replace_bg(img, (255, 255, 255))
         await context.bot.send_photo(q.message.chat_id, bytes_to_inputfile(out, "white_bg.png"), caption="Фон заменён на белый.")
         return
 
@@ -811,7 +832,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(q.message.chat_id, bytes_to_inputfile(out, "upscaled.png"), caption="Апскейл ×2 выполнен.")
         return
 
-    if data in ("act_add_object","act_remove_object","act_avatar"):
+    if data in ("act_add_object", "act_remove_object", "act_avatar"):
         await q.edit_message_text("Опиши, что добавить/удалить (и где). Я применю инпейтинг и пришлю результат.")
         context.user_data["await_inpaint_prompt"] = data
         return
@@ -819,6 +840,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "act_image2video":
         await q.edit_message_text("Выбери длительность и соотношение сторон:", reply_markup=vr_kb())
         return
+
 
 @chat_action(ChatAction.TYPING)
 async def on_inpaint_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -831,12 +853,13 @@ async def on_inpaint_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["await_inpaint_prompt"] = None
         return
     try:
-        edited = await ai_image_edit(img, prompt, None)  # без маски — на текстовой подсказке
-        await update.message.reply_photo(bytes_to_inputfile(edited,"edited.png"), caption="Готово.")
+        edited = await ai_image_edit(img, prompt, None)  # без маски — правка по тексту
+        await update.message.reply_photo(bytes_to_inputfile(edited, "edited.png"), caption="Готово.")
     except Exception as e:
         await update.message.reply_text(f"Не удалось выполнить правку: {e}")
     finally:
         context.user_data["await_inpaint_prompt"] = None
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Факт-чек
@@ -855,7 +878,9 @@ async def fact_check(question: str) -> str:
             bullets.append(f"• {title} — {url}")
         return "Источники:\n" + ("\n".join(bullets) if bullets else "ничего не найдено")
     except Exception as e:
-        log.exception("tavily"); return f"Ошибка поиска: {e}"
+        log.exception("tavily")
+        return f"Ошибка поиска: {e}"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Сборка и запуск
@@ -893,7 +918,7 @@ def main():
     log.info("Starting bot…")
     db_init()
     app = build_app()
-    # polling, на Render как worker
+    # polling (Render worker)
     with contextlib.suppress(Exception):
         asyncio.get_event_loop().run_until_complete(app.bot.delete_webhook(drop_pending_updates=False))
     app.run_polling(close_loop=False)
