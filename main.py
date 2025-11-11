@@ -854,6 +854,11 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
 
 # ======= Анализ документов (PDF/EPUB/DOCX/FB2/TXT) =======
 async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Получает документ, извлекает из него текст и делает конспект.
+    Поддержка: PDF, EPUB, DOCX, FB2, TXT (+ частично MOBI/AZW).
+    Можно в подписи к файлу указать цель анализа — сориентирую конспект.
+    """
     try:
         if not update.message or not update.message.document:
             return
@@ -877,7 +882,8 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-# ───────── OpenAI Images ─────────
+
+# ───────── OpenAI Images (генерация картинок) ─────────
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
@@ -889,29 +895,55 @@ async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         log.exception("IMG gen error: %s", e)
         await update.effective_message.reply_text("Не удалось создать изображение.")
 
+
 # ───────── UI / тексты ─────────
 START_TEXT = (
-    "Привет! Я твой мультирежимный GPT-бот.\n\n"
-    "Что умею прямо сейчас:\n"
-    "• 💬 GPT: текст, фото-визион, конспекты из PDF/DOCX/EPUB/FB2/TXT\n"
-    "• 🖼 Images (OpenAI): /img <описание>\n"
-    "• 🎬 Luma / 🎥 Runway: короткие видео по описанию\n"
-    "• 🗣 Речь↔текст (STT) и озвучка ответов (TTS)\n"
-    "• ⭐ Подписка, 💳 ЮKassa, 💠 CryptoBot, единый USD-кошелёк\n\n"
+    "Привет! Я GPT-5 ProBot — мультирежимный бот для учёбы, работы и развлечений.\n\n"
+    "Вот чем я уже полезен:\n"
+    "• 💬 GPT: ответ на вопросы, разбор идей, планирование.\n"
+    "• 👁 Фото/визион: анализ картинок, чтение текста на фото.\n"
+    "• 📚 Конспекты из PDF/DOCX/EPUB/FB2/TXT — пришлите файл, в подписи можно указать цель.\n"
+    "• 🖼 Изображения: /img <описание> (OpenAI Images).\n"
+    "• 🎬 Видео по описанию: Luma/Runway (короткие клипы под Reels/Shorts).\n"
+    "• 🗣 Речь↔текст (STT) и озвучка ответов (TTS) — команды /voice_on /voice_off.\n"
+    "• ⭐ Подписка, 💳 ЮKassa, 💠 CryptoBot, единый USD-кошелёк.\n\n"
     "Главные режимы:\n"
-    "• Учёба — объяснения, задачи, эссе/реферат/доклад, экзамен-квиз\n"
-    "• Работа — письма/документы, аналитика, ToDo/план, генерация идей\n"
-    "• Развлечения — фото-мастерская, видео-идеи, квизы/мемы\n\n"
-    "Выбери режим кнопкой ниже. Для точного выбора движка открой «🧠 Движки»."
+    "• 🎓 Учёба — объяснения с примерами, решение задач пошагово, эссе/реферат/доклад, мини-квизы.\n"
+    "  Также: разбор учебных PDF/электронных книг, подготовка шпаргалок и конспектов, разработка тестов; "
+    "  могу делать тайм-коды по аудиокнигам/лекциям и краткие выжимки.\n"
+    "• 💼 Работа — письма/брифы/документы, аналитика и резюме материалов, ToDo/планы, генерация идей.\n"
+    "  Для архитектора/дизайнера/проектировщика: структурирование ТЗ, чек-листы стадий, названия/описания листов, "
+    "  сводные таблицы из текстов, оформление пояснительных записок, рутину по заявкам/переписке.\n"
+    "• 🔥 Развлечения — фото-мастерская (удаление/замена фона, outpaint, раскадровка), оживление старых фото, "
+    "  видео по тексту/голосу, идеи и форматы для Reels/Shorts, авто-нарезка из длинного видео (сценарий/тайм-коды), "
+    "  мемы/квизы.\n\n"
+    "Выберите режим кнопкой ниже — или просто напишите запрос. Кнопка «🧠 Движки» — для точного выбора Luma/Runway/Images."
 )
 
 HELP_TEXT = (
     "Подсказки:\n"
-    "• /img кот в очках — сгенерирует изображение\n"
-    "• «сделай видео … 9 секунд 9:16» — запущу Luma/Runway\n"
-    "• Пришли PDF/EPUB/DOCX/FB2/TXT — извлеку текст и сделаю конспект\n"
-    "• /voice_on и /voice_off — озвучка ответов\n"
-    "• «🧾 Баланс» — кошелёк и пополнение (RUB/USDT/TON)\n"
+    "• /img «кот в очках в стиле киберпанк» — сгенерирую картинку.\n"
+    "• «сделай видео ретро-авто на 9 секунд 9:16» — предложу Luma/Runway.\n"
+    "• Пришлите PDF/EPUB/DOCX/FB2/TXT — извлеку текст и сделаю конспект; цель можно указать в подписи к файлу.\n"
+    "• Озвучка ответов: /voice_on и /voice_off (OGG/Opus голосом выбранного пресета).\n"
+    "• «🧾 Баланс» — кошелёк и пополнение (RUB/USDT/TON); /plans — тарифы.\n"
+)
+
+EXAMPLES_TEXT = (
+    "Примеры:\n\n"
+    "🎓 Учёба\n"
+    "• Объясни метод Тейлора простыми словами, 2 примера.\n"
+    "• Реши задачу по физике: брусок массой …\n"
+    "• Составь мини-квиз по теме «ВОВ»: 10 вопросов A–D.\n"
+    "• Извлеки и законспектируй главу 3 из PDF (цель: подготовка к экзамену).\n\n"
+    "💼 Работа\n"
+    "• Подготовь бриф для клиента на интерьер кухни, 8 пунктов.\n"
+    "• Сверстай ToDo-план запуска проекта на 2 недели.\n"
+    "• Из переписки вытяни задачи и дедлайны (дам файл).\n\n"
+    "🔥 Развлечения\n"
+    "• Удали фон с фото и сделай outpaint.\n"
+    "• Сгенерируй видео «неоновый дождь над городом», 9с, 9:16.\n"
+    "• Придумай сценарий Reels и тайм-коды для авто-нарезки из 15-мин ролика.\n"
 )
 
 def engines_kb():
@@ -925,7 +957,6 @@ def engines_kb():
     ])
 
 def main_keyboard():
-    # 6 кнопок, без лишних предложений и с постоянной раскладкой
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton("Учёба"), KeyboardButton("Работа"), KeyboardButton("Развлечения")],
@@ -938,6 +969,7 @@ def main_keyboard():
     )
 
 main_kb = main_keyboard()
+
 
 # ───────── сохранение выбранного режима/подрежима (SQLite kv) ─────────
 def _mode_set(user_id: int, mode: str):
@@ -952,13 +984,14 @@ def _mode_track_set(user_id: int, track: str):
 def _mode_track_get(user_id: int) -> str:
     return kv_get(f"mode_track:{user_id}", "") or ""
 
-# Подменю режимов (без «…или выбери движок»)
+
+# ───────── Подменю режимов ─────────
 def _school_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔎 Объяснение",            callback_data="school:explain"),
-         InlineKeyboardButton("🧮 Задачи",                callback_data="school:tasks")],
-        [InlineKeyboardButton("✍️ Эссе/реферат/доклад",   callback_data="school:essay"),
-         InlineKeyboardButton("📝 Экзамен/квиз",          callback_data="school:quiz")],
+        [InlineKeyboardButton("🔎 Объяснение",          callback_data="school:explain"),
+         InlineKeyboardButton("🧮 Задачи",              callback_data="school:tasks")],
+        [InlineKeyboardButton("✍️ Эссе/реферат/доклад", callback_data="school:essay"),
+         InlineKeyboardButton("📝 Экзамен/квиз",        callback_data="school:quiz")],
     ])
 
 def _work_kb():
@@ -977,23 +1010,38 @@ def _fun_kb():
          InlineKeyboardButton("😆 Мемы/шутки",      callback_data="fun:meme")],
     ])
 
-# Команды/кнопки режимов
+
+# ───────── Команды/кнопки режимов ─────────
 async def cmd_mode_school(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_set(update.effective_user.id, "Учёба")
     _mode_track_set(update.effective_user.id, "")
-    await update.effective_message.reply_text("Учёба → выбери тип задачи и напиши тему/условие.", reply_markup=_school_kb())
+    await update.effective_message.reply_text(
+        "🎓 Учёба → выберите тип задачи или сразу напишите тему/условие.\n"
+        "Могу: объяснения, решение задач, эссе/доклады, квизы.\n"
+        "Работаю с файлами: конспект учебных PDF/EPUB/DOCX/FB2/TXT, выжимки и т.д.",
+        reply_markup=_school_kb()
+    )
 
 async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_set(update.effective_user.id, "Работа")
     _mode_track_set(update.effective_user.id, "")
-    await update.effective_message.reply_text("Работа → выбери тип и опиши задачу.", reply_markup=_work_kb())
+    await update.effective_message.reply_text(
+        "💼 Работа → выберите тип или опишите задачу.\n"
+        "Письма/брифы/ToDo/аналитика, для архитектора/дизайнера/проектировщика — ТЗ, чек-листы, своды из текстов.",
+        reply_markup=_work_kb()
+    )
 
 async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_set(update.effective_user.id, "Развлечения")
     _mode_track_set(update.effective_user.id, "")
-    await update.effective_message.reply_text("Развлечения → выбери направление и дай вводные.", reply_markup=_fun_kb())
+    await update.effective_message.reply_text(
+        "🔥 Развлечения → выберите направление и дайте вводные.\n"
+        "Фото-мастерская (удаление/замена фона, outpaint), видео-идеи, Reels/Shorts, мемы/квизы.",
+        reply_markup=_fun_kb()
+    )
 
-# Коллбэки подрежимов (запоминаем подпоток, никаких подсказок про движки)
+
+# ───────── Коллбэки подрежимов ─────────
 async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "")
@@ -1002,13 +1050,14 @@ async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _, track = data.split(":", 1)
             _mode_track_set(update.effective_user.id, track)
             mode = _mode_get(update.effective_user.id)
-            await q.edit_message_text(f"{mode} → {track}. Напиши задание/тему — сделаю.")
+            await q.edit_message_text(f"{mode} → {track}. Напишите задание/тему — сделаю.")
             return
     finally:
         with contextlib.suppress(Exception):
             await q.answer()
 
-# Старт и «Движки»
+
+# ───────── Старт / Движки / Помощь ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
@@ -1016,17 +1065,39 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_photo(welcome_url)
     await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
 
-async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("Выбери движок:", reply_markup=engines_kb())
+async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text("Выберите движок:", reply_markup=engines_kb())
 
-# Кнопка «Подписка · Помощь»
 async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Открыть тарифы (WebApp)", web_app=WebAppInfo(url=TARIFF_URL))],
         [InlineKeyboardButton("Оформить PRO на месяц (ЮKassa)", callback_data="buyinv:pro:1")],
     ])
     await update.effective_message.reply_text("⭐ Тарифы и помощь.\n\n" + HELP_TEXT, reply_markup=kb, disable_web_page_preview=True)
-    
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
+
+async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
+
+
+# ───────── Диагностика/лимиты ─────────
+async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    tier = get_subscription_tier(user_id)
+    lim = _limits_for(user_id)
+    row = _usage_row(user_id, _today_ymd())
+    lines = [
+        f"👤 Тариф: {tier}",
+        f"• Тексты сегодня: {row['text_count']} / {lim['text_per_day']}",
+        f"• Luma $: {row['luma_usd']:.2f} / {lim['luma_budget_usd']:.2f}",
+        f"• Runway $: {row['runway_usd']:.2f} / {lim['runway_budget_usd']:.2f}",
+        f"• Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
+    ]
+    await update.effective_message.reply_text("\n".join(lines))
+
+
 # ───────── Capability Q&A ─────────
 _CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
 _CAP_EBOOK = re.compile(r"(ebook|e-?book|электронн(ая|ые)\s+книг|epub|fb2|docx|txt|mobi|azw)", re.I)
@@ -1042,52 +1113,31 @@ def capability_answer(text: str) -> str | None:
         r"(чита(ешь|ете)|читать|анализиру(ешь|ете)|анализировать|распозна(ешь|ете)|распознавать)", tl
     ):
         return (
-            "Да. Пришли файл — я извлеку текст и сделаю краткий конспект/ответ по цели.\n"
-            "Поддержка: PDF, EPUB, DOCX, FB2, TXT (MOBI/AZW — по возможности). "
-            "Можно добавить подпись к файлу с целью анализа."
+            "Да. Пришлите файл — извлеку текст и сделаю конспект/ответ по вашей цели.\n"
+            "Поддержка: PDF, EPUB, DOCX, FB2, TXT (MOBI/AZW — по возможности)."
         )
     if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшиф|транскриб|понима|распозна)", tl)) or "аудио" in tl:
         return (
-            "Да. Пришли аудио (voice/audio/документ): OGG/OGA, MP3, M4A/MP4, WAV, WEBM. "
+            "Да. Пришлите аудио (voice/audio/документ): OGG/MP3/M4A/WAV/WEBM. "
             "Распознаю речь (Deepgram/Whisper) и сделаю конспект, тезисы, тайм-коды, Q&A."
         )
     if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
-        return "Да. Пришли фото/картинку с подписью — опишу содержимое, текст на изображении, объекты и детали."
+        return "Да. Пришлите фото/картинку с подписью — опишу содержимое, текст на изображении, детали."
     if _CAP_IMAGE.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|генерир)", tl):
-        return (
-            "Да, могу создавать изображения. Запусти через /img <описание> "
-            "или фразой: «Сгенерируй изображение неонового города под дождём»."
-        )
+        return "Да, могу создавать изображения. Запустите: /img <описание>."
     if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
-        return (
-            "Да, могу запускать генерацию коротких видео. Напиши: "
-            "«сделай видео … на 9 секунд 9:16». После запроса предложу выбрать Luma или Runway."
-        )
+        return "Да, могу запустить генерацию коротких видео. Напишите: «сделай видео … 9 секунд 9:16»."
     return None
 
-# ───────── Диагностика ─────────
-async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    tier = get_subscription_tier(user_id)
-    lim = _limits_for(user_id)
-    row = _usage_row(user_id, _today_ymd())
-    lines = [
-        f"👤 Тариф: {tier}",
-        f"• Тексты сегодня: {row['text_count']} / {lim['text_per_day']}",
-        f"• Luma $: {row['luma_usd']:.2f} / {lim['luma_budget_usd']:.2f}",
-        f"• Runway $: {row['runway_usd']:.2f} / {lim['runway_budget_usd']:.2f}",
-        f"• Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
-    ]
-    await update.effective_message.reply_text("\n".join(lines))
 
-# ───────── МОДЫ/ДВИЖКИ (режимы) ─────────
+# ───────── Моды/движки для study ─────────
 def _uk(user_id: int, name: str) -> str: return f"user:{user_id}:{name}"
-def mode_set(user_id: int, mode: str): kv_set(_uk(user_id,"mode"), (mode or "default"))
-def mode_get(user_id: int) -> str:     return kv_get(_uk(user_id,"mode"), "default") or "default"
-def engine_set(user_id: int, engine: str): kv_set(_uk(user_id,"engine"), (engine or "gpt"))
-def engine_get(user_id: int) -> str:       return kv_get(_uk(user_id,"engine"), "gpt") or "gpt"
-def study_sub_set(user_id: int, sub: str): kv_set(_uk(user_id,"study_sub"), (sub or "explain"))
-def study_sub_get(user_id: int) -> str:    return kv_get(_uk(user_id,"study_sub"), "explain") or "explain"
+def mode_set(user_id: int, mode: str):     kv_set(_uk(user_id, "mode"), (mode or "default"))
+def mode_get(user_id: int) -> str:         return kv_get(_uk(user_id, "mode"), "default") or "default"
+def engine_set(user_id: int, engine: str): kv_set(_uk(user_id, "engine"), (engine or "gpt"))
+def engine_get(user_id: int) -> str:       return kv_get(_uk(user_id, "engine"), "gpt") or "gpt"
+def study_sub_set(user_id: int, sub: str): kv_set(_uk(user_id, "study_sub"), (sub or "explain"))
+def study_sub_get(user_id: int) -> str:    return kv_get(_uk(user_id, "study_sub"), "explain") or "explain"
 
 def modes_kb():
     return InlineKeyboardMarkup([
@@ -1100,20 +1150,16 @@ def modes_kb():
 
 def study_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Объяснение",              callback_data="study:set:explain"),
-         InlineKeyboardButton("🧮 Задачи",                  callback_data="study:set:tasks")],
-        [InlineKeyboardButton("✍️ Эссе/реферат/доклад",     callback_data="study:set:essay")],
-        [InlineKeyboardButton("📝 Экзамен/квиз",            callback_data="study:set:quiz")]
+        [InlineKeyboardButton("🔍 Объяснение",          callback_data="study:set:explain"),
+         InlineKeyboardButton("🧮 Задачи",              callback_data="study:set:tasks")],
+        [InlineKeyboardButton("✍️ Эссе/реферат/доклад", callback_data="study:set:essay")],
+        [InlineKeyboardButton("📝 Экзамен/квиз",        callback_data="study:set:quiz")]
     ])
-
-async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("Выбери режим:", reply_markup=modes_kb())
-    await update.effective_message.reply_text("…или выбери движок:", reply_markup=engines_kb())
 
 async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     sub = study_sub_get(update.effective_user.id)
     if sub == "explain":
-        prompt = f"Объясни простыми словами, с 2–3 примерами и мини-итогом:\n\n{ text }"
+        prompt = f"Объясни простыми словами, с 2–3 примерами и мини-итогом:\n\n{text}"
     elif sub == "tasks":
         prompt = ("Реши задачу(и) пошагово: формулы, пояснения, итоговый ответ. "
                   "Если не хватает данных — уточняющие вопросы в конце.\n\n" + text)
@@ -1129,7 +1175,8 @@ async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE,
     await update.effective_message.reply_text(ans)
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
 
-# ───────── Приветствие / меню ─────────
+
+# ───────── Кнопка приветственной картинки ─────────
 async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         await update.effective_message.reply_text("Команда доступна только владельцу.")
@@ -1139,7 +1186,7 @@ async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     url = " ".join(context.args).strip()
     kv_set("welcome_url", url)
-    await update.effective_message.reply_text("Картинка приветствия обновлена. Отправь /start для проверки.")
+    await update.effective_message.reply_text("Картинка приветствия обновлена. Отправьте /start для проверки.")
 
 async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = kv_get("welcome_url", BANNER_URL)
@@ -1148,23 +1195,11 @@ async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.effective_message.reply_text("Картинка приветствия не задана.")
 
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_url = kv_get("welcome_url", BANNER_URL)
-    if welcome_url:
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_photo(welcome_url)
-    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
-
-async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
-
-async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
 
 # ───────── Баланс / пополнение ─────────
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    w = _wallet_get(user_id)
+    w = _wallet_get(user_id)  # детальные кошельки движков (на будущее)
     total = _wallet_total_get(user_id)
     row = _usage_row(user_id)
     lim = _limits_for(user_id)
@@ -1180,27 +1215,33 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
+
 # ───────── Команда /img ─────────
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args) if context.args else (update.message.text.split(" ", 1)[-1] if " " in update.message.text else "")
+    prompt = " ".join(context.args) if context.args else (
+        update.message.text.split(" ", 1)[-1] if " " in update.message.text else ""
+    )
     prompt = prompt.strip()
     if not prompt:
         await update.effective_message.reply_text("Формат: /img <описание>")
         return
+
     async def _go():
         await _do_img_generate(update, context, prompt)
+
     user_id = update.effective_user.id
     await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go,
                            remember_kind="img_generate", remember_payload={"prompt": prompt})
 
+
 # ───────── Photo quick actions ─────────
 def photo_quick_actions_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧼 RemoveBG", callback_data="pedit:removebg"),
+        [InlineKeyboardButton("🧼 RemoveBG",  callback_data="pedit:removebg"),
          InlineKeyboardButton("🖼 ReplaceBG", callback_data="pedit:replacebg")],
-        [InlineKeyboardButton("🧭 Outpaint",  callback_data="pedit:outpaint"),
+        [InlineKeyboardButton("🧭 Outpaint",   callback_data="pedit:outpaint"),
          InlineKeyboardButton("📽 Storyboard", callback_data="pedit:story")],
-        [InlineKeyboardButton("👁 Vision", callback_data="pedit:vision")]
+        [InlineKeyboardButton("👁 Vision",     callback_data="pedit:vision")]
     ])
 
 _photo_cache = {}  # user_id -> bytes
@@ -1233,7 +1274,7 @@ async def _pedit_replacebg(update: Update, context: ContextTypes.DEFAULT_TYPE, i
     try:
         im = Image.open(BytesIO(img_bytes)).convert("RGBA")
         bg = im.convert("RGB").filter(ImageFilter.GaussianBlur(radius=22)) if ImageFilter else im.convert("RGB")
-        bio = BytesIO(); bg.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name="bg_blur.jpg"
+        bio = BytesIO(); bg.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name = "bg_blur.jpg"
         await update.effective_message.reply_photo(InputFile(bio), caption="Заменил фон на размытый вариант.")
     except Exception as e:
         log.exception("replacebg error: %s", e)
@@ -1248,8 +1289,8 @@ async def _pedit_outpaint(update: Update, context: ContextTypes.DEFAULT_TYPE, im
         pad = max(64, min(256, max(im.size)//6))
         big = Image.new("RGB", (im.width + 2*pad, im.height + 2*pad))
         bg = im.resize(big.size, Image.LANCZOS).filter(ImageFilter.GaussianBlur(radius=24)) if ImageFilter else im.resize(big.size)
-        big.paste(bg, (0,0)); big.paste(im, (pad,pad))
-        bio = BytesIO(); big.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name="outpaint.jpg"
+        big.paste(bg, (0, 0)); big.paste(im, (pad, pad))
+        bio = BytesIO(); big.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name = "outpaint.jpg"
         await update.effective_message.reply_photo(InputFile(bio), caption="Простой outpaint: расширил полотно с мягкими краями.")
     except Exception as e:
         log.exception("outpaint error: %s", e)
@@ -1261,11 +1302,13 @@ async def _pedit_storyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         desc = await ask_openai_vision("Опиши ключевые элементы кадра очень кратко.", b64, sniff_image_mime(img_bytes))
         plan = await ask_openai_text(
             "Сделай раскадровку (6 кадров) под 6–10 секундный клип. "
-            "Каждый кадр — 1 строка: кадр/действие/ракурс/свет. Основа:\n" + (desc or ""))
+            "Каждый кадр — 1 строка: кадр/действие/ракурс/свет. Основа:\n" + (desc or "")
+        )
         await update.effective_message.reply_text("Раскадровка:\n" + plan)
     except Exception as e:
         log.exception("storyboard error: %s", e)
         await update.effective_message.reply_text("Не удалось построить раскадровку.")
+
 
 # ───────── WebApp data (тарифы/пополнения) ─────────
 async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1278,11 +1321,11 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             for part in (raw or "").split("&"):
                 if "=" in part:
-                    k, v = part.split("=", 1); data[k]=v
+                    k, v = part.split("=", 1); data[k] = v
 
         typ = (data.get("type") or data.get("action") or "").lower()
 
-        if typ in ("subscribe","buy","buy_sub","sub"):
+        if typ in ("subscribe", "buy", "buy_sub", "sub"):
             tier = (data.get("tier") or "pro").lower()
             months = int(data.get("months") or 1)
             desc = f"Оформление подписки {tier.upper()} на {months} мес."
@@ -1295,7 +1338,7 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        if typ in ("topup_rub","rub_topup"):
+        if typ in ("topup_rub", "rub_topup"):
             amount_rub = int(data.get("amount") or 0)
             if amount_rub < MIN_RUB_FOR_INVOICE:
                 await update.effective_message.reply_text(f"Минимальная сумма: {MIN_RUB_FOR_INVOICE} ₽")
@@ -1303,7 +1346,7 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _send_invoice_rub("Пополнение баланса", "Единый кошелёк", amount_rub, "t=3", update)
             return
 
-        if typ in ("topup_crypto","crypto_topup"):
+        if typ in ("topup_crypto", "crypto_topup"):
             if not CRYPTO_PAY_API_TOKEN:
                 await update.effective_message.reply_text("CryptoBot не настроен.")
                 return
@@ -1329,7 +1372,8 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("on_webapp_data error: %s", e)
         await update.effective_message.reply_text("Ошибка обработки данных мини-приложения.")
 
-# ───────── CallbackQuery ─────────
+
+# ───────── CallbackQuery (всё остальное) ─────────
 _pending_actions = {}
 
 def _new_aid() -> str:
@@ -1423,7 +1467,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Подписка через ЮKassa (через инвойс Telegram)
+        # Подписка через ЮKassa
         if data.startswith("buyinv:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
@@ -1463,13 +1507,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if is_unlimited(update.effective_user.id, username):
                 await q.edit_message_text(
                     f"✅ Движок «{engine}» доступен без ограничений.\n"
-                    f"Отправь задачу, например: «сделай видео ретро-авто, 9 секунд, 9:16»."
+                    f"Отправьте задачу, например: «сделай видео ретро-авто, 9 секунд, 9:16»."
                 )
                 return
 
             if engine in ("gpt", "stt_tts", "midjourney"):
                 await q.edit_message_text(
-                    f"✅ Выбран «{engine}». Отправь запрос текстом/фото. "
+                    f"✅ Выбран «{engine}». Отправьте запрос текстом/фото. "
                     f"Для Luma/Runway/Images действуют дневные бюджеты тарифа."
                 )
                 return
@@ -1480,9 +1524,9 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if ok:
                 await q.edit_message_text(
-                    "✅ Доступно. "
-                    + ("Запусти: /img кот в очках" if engine == "images"
-                       else "Напиши: «сделай видео … 9 секунд 9:16» — предложу Luma/Runway.")
+                    "✅ Доступно. " +
+                    ("Запустите: /img кот в очках" if engine == "images"
+                     else "Напишите: «сделай видео … 9 секунд 9:16» — предложу Luma/Runway.")
                 )
                 return
 
@@ -1525,13 +1569,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mode_set(update.effective_user.id, mode)
             if mode == "study":
                 study_sub_set(update.effective_user.id, "explain")
-                await q.edit_message_text("Режим «Учёба» включён. Выбери подрежим:", reply_markup=study_kb())
+                await q.edit_message_text("Режим «Учёба» включён. Выберите подрежим:", reply_markup=study_kb())
             elif mode == "photo":
-                await q.edit_message_text("Режим «Фото» включён. Пришли изображение — будут быстрые кнопки.", reply_markup=photo_quick_actions_kb())
+                await q.edit_message_text("Режим «Фото» включён. Пришлите изображение — появятся быстрые кнопки.", reply_markup=photo_quick_actions_kb())
             elif mode == "docs":
-                await q.edit_message_text("Режим «Документы». Пришли PDF/DOCX/EPUB/TXT — сделаю конспект.")
+                await q.edit_message_text("Режим «Документы». Пришлите PDF/DOCX/EPUB/TXT — сделаю конспект.")
             elif mode == "voice":
-                await q.edit_message_text("Режим «Голос». Отправь voice/audio. Озвучка ответов: /voice_on")
+                await q.edit_message_text("Режим «Голос». Отправьте voice/audio. Озвучка ответов: /voice_on")
             else:
                 await q.edit_message_text(f"Режим «{mode}» активирован.")
             return
@@ -1540,7 +1584,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer()
             sub = data.split(":")[-1]
             study_sub_set(update.effective_user.id, sub)
-            await q.edit_message_text(f"Учёба → {sub}. Напиши тему/задание.", reply_markup=study_kb())
+            await q.edit_message_text(f"Учёба → {sub}. Напишите тему/задание.", reply_markup=study_kb())
             return
 
         # Photo edits require cached image
@@ -1605,14 +1649,15 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
 
+
 # ───────── STT ─────────
 def _mime_from_filename(fn: str) -> str:
     fnl = (fn or "").lower()
-    if fnl.endswith((".ogg",".oga")): return "audio/ogg"
-    if fnl.endswith(".mp3"):          return "audio/mpeg"
-    if fnl.endswith((".m4a",".mp4")): return "audio/mp4"
-    if fnl.endswith(".wav"):          return "audio/wav"
-    if fnl.endswith(".webm"):         return "audio/webm"
+    if fnl.endswith((".ogg", ".oga")): return "audio/ogg"
+    if fnl.endswith(".mp3"):           return "audio/mpeg"
+    if fnl.endswith((".m4a", ".mp4")): return "audio/mp4"
+    if fnl.endswith(".wav"):           return "audio/wav"
+    if fnl.endswith(".webm"):          return "audio/webm"
     return "application/octet-stream"
 
 async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
@@ -1625,7 +1670,7 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
                 r = await client.post("https://api.deepgram.com/v1/listen", params=params, headers=headers, content=data)
                 r.raise_for_status()
                 dg = r.json()
-                text = (dg.get("results",{}).get("channels",[{}])[0].get("alternatives",[{}])[0].get("transcript","")).strip()
+                text = (dg.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")).strip()
                 if text: return text
         except Exception as e:
             log.exception("Deepgram STT error: %s", e)
@@ -1637,6 +1682,7 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
         except Exception as e:
             log.exception("Whisper STT error: %s", e)
     return ""
+
 
 # ───────── Диагностика движков ─────────
 async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1671,9 +1717,10 @@ async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"  model={LUMA_MODEL}  allowed_durations=['5s','9s','10s']  aspect=['16:9','9:16','1:1']",
         f"• Runway key: {'✅' if bool(RUNWAY_API_KEY) else '❌'}  base={RUNWAY_BASE_URL}",
         f"  create={RUNWAY_CREATE_PATH}  status={RUNWAY_STATUS_PATH}",
-                f"• Поллинг каждые {VIDEO_POLL_DELAY_S:.1f} c",
+        f"• Поллинг каждые {VIDEO_POLL_DELAY_S:.1f} c",
     ]
     await update.effective_message.reply_text("\n".join(lines))
+
 
 # ───────── MIME для изображений ─────────
 def sniff_image_mime(data: bytes) -> str:
@@ -1688,15 +1735,16 @@ def sniff_image_mime(data: bytes) -> str:
         return "image/webp"
     return "application/octet-stream"
 
+
 # ───────── Парс опций видео ─────────
-_ASPECTS = {"9:16","16:9","1:1","4:5","3:4","4:3"}
+_ASPECTS = {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"}
 
 def parse_video_opts(text: str) -> tuple[int, str]:
     tl = (text or "").lower()
     # длительность
     m = re.search(r"(\d+)\s*(?:сек|с)\b", tl)
     duration = int(m.group(1)) if m else LUMA_DURATION_S
-    duration = max(3, min(20, duration))  # безопасные рамки
+    duration = max(3, min(20, duration))
     # аспект
     asp = None
     for a in _ASPECTS:
@@ -1704,6 +1752,7 @@ def parse_video_opts(text: str) -> tuple[int, str]:
             asp = a; break
     aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
     return duration, aspect
+
 
 # ───────── Luma video ─────────
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
@@ -1738,8 +1787,7 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                 try: js = rs.json()
                 except Exception: pass
                 st = (js.get("state") or js.get("status") or "").lower()
-                if st in ("completed","succeeded","finished","ready"):
-                    # Luma обычно возвращает assets[0].url или output_url
+                if st in ("completed", "succeeded", "finished", "ready"):
                     url = js.get("assets", [{}])[0].get("url") or js.get("output_url")
                     if not url:
                         await update.effective_message.reply_text("⚠️ Готово, но нет ссылки на видео.")
@@ -1750,10 +1798,9 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                         bio = BytesIO(v.content); bio.name = "luma.mp4"
                         await update.effective_message.reply_video(InputFile(bio), caption="🎬 Luma: готово ✅")
                     except Exception:
-                        # если прямое скачивание не сработало — отдадим ссылку
                         await update.effective_message.reply_text(f"🎬 Luma: готово ✅\n{url}")
                     return
-                if st in ("failed","error","canceled","cancelled"):
+                if st in ("failed", "error", "canceled", "cancelled"):
                     await update.effective_message.reply_text("❌ Luma: ошибка рендера.")
                     return
                 if time.time() - started > LUMA_MAX_WAIT_S:
@@ -1763,6 +1810,7 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
     except Exception as e:
         log.exception("Luma error: %s", e)
         await update.effective_message.reply_text("❌ Luma: не удалось запустить/получить видео.")
+
 
 # ───────── Runway video ─────────
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
@@ -1798,7 +1846,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 try: js = rs.json()
                 except Exception: pass
                 st = (js.get("status") or js.get("state") or "").lower()
-                if st in ("completed","succeeded","finished","ready"):
+                if st in ("completed", "succeeded", "finished", "ready"):
                     assets = js.get("output", {}) if isinstance(js.get("output"), dict) else (js.get("assets") or {})
                     url = (assets.get("video") if isinstance(assets, dict) else None) or js.get("video_url") or js.get("output_url")
                     if not url:
@@ -1812,7 +1860,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     except Exception:
                         await update.effective_message.reply_text(f"🎥 Runway: готово ✅\n{url}")
                     return
-                if st in ("failed","error","canceled","cancelled"):
+                if st in ("failed", "error", "canceled", "cancelled"):
                     await update.effective_message.reply_text("❌ Runway: ошибка рендера.")
                     return
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
@@ -1822,6 +1870,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     except Exception as e:
         log.exception("Runway error: %s", e)
         await update.effective_message.reply_text("❌ Runway: не удалось запустить/получить видео.")
+
 
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
@@ -1886,23 +1935,23 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.")
             return
 
-        # любые иные payload трактуем как пополнение единого кошелька
+        # Любое иное payload — пополнение единого кошелька
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
         await update.effective_message.reply_text(f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый баланс.")
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
 
+
 # ───────── CryptoBot ─────────
-CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN","").strip()
+CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
 CRYPTO_BASE = "https://pay.crypt.bot/api"
-TON_USD_RATE = float(os.environ.get("TON_USD_RATE","5.0") or "5.0")  # запасной курс
+TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # запасной курс
 
 async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str|None, str|None, float, str]:
     if not CRYPTO_PAY_API_TOKEN:
         return None, None, 0.0, asset
     try:
-        # Попросим в USD — если не поддерживается, клиент всё равно покажет эквивалент
         payload = {"asset": asset, "amount": round(float(usd_amount), 2), "description": description or "Top-up"}
         headers = {"Authorization": f"Bearer {CRYPTO_PAY_API_TOKEN}"}
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -1927,7 +1976,7 @@ async def _crypto_get_invoice(invoice_id: str) -> dict | None:
             j = r.json()
             if not j.get("ok"):
                 return None
-            items = (j.get("result",{}) or {}).get("items", [])
+            items = (j.get("result", {}) or {}).get("items", [])
             return items[0] if items else None
     except Exception as e:
         log.exception("crypto get error: %s", e)
@@ -1937,14 +1986,14 @@ async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
     try:
         for _ in range(120):  # ~12 минут при 6с задержке
             inv = await _crypto_get_invoice(invoice_id)
-            st = (inv or {}).get("status","").lower() if inv else ""
+            st = (inv or {}).get("status", "").lower() if inv else ""
             if st == "paid":
                 _wallet_total_add(user_id, float(usd_amount))
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                         text=f"✅ CryptoBot: платёж подтверждён. Баланс пополнен на ${float(usd_amount):.2f}.")
                 return
-            if st in ("expired","cancelled","canceled","failed"):
+            if st in ("expired", "cancelled", "canceled", "failed"):
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                         text=f"❌ CryptoBot: платёж не завершён (статус: {st}).")
@@ -1956,10 +2005,11 @@ async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
     except Exception as e:
         log.exception("crypto poll error: %s", e)
 
+
 # ───────── Предложение пополнения ─────────
 async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("500 ₽", callback_data="topup:rub:500"),
+        [InlineKeyboardButton("500 ₽",  callback_data="topup:rub:500"),
          InlineKeyboardButton("1000 ₽", callback_data="topup:rub:1000"),
          InlineKeyboardButton("2000 ₽", callback_data="topup:rub:2000")],
         [InlineKeyboardButton("Crypto $5",  callback_data="topup:crypto:5"),
@@ -1967,6 +2017,7 @@ async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("Crypto $20", callback_data="topup:crypto:20")],
     ])
     await update.effective_message.reply_text("Выберите сумму пополнения:", reply_markup=kb)
+
 
 # ───────── Попытка оплатить → выполнить ─────────
 async def _try_pay_then_do(
@@ -1994,7 +2045,7 @@ async def _try_pay_then_do(
         )
         return
     try:
-        need_usd = float(offer.split(":",1)[-1])
+        need_usd = float(offer.split(":", 1)[-1])
     except Exception:
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
@@ -2008,6 +2059,7 @@ async def _try_pay_then_do(
         ),
     )
 
+
 # ───────── /plans ─────────
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы:"]
@@ -2015,33 +2067,23 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"— {tier.upper()}: "
                      f"{terms['month']}₽/мес • {terms['quarter']}₽/квартал • {terms['year']}₽/год")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Купить START (1 мес)",   callback_data="buy:start:1"),
-         InlineKeyboardButton("Купить PRO (1 мес)",     callback_data="buy:pro:1")],
-        [InlineKeyboardButton("Купить ULTIMATE (1 мес)",callback_data="buy:ultimate:1")],
-        [InlineKeyboardButton("Открыть мини-витрину", web_app=WebAppInfo(url=TARIFF_URL))]
+        [InlineKeyboardButton("Купить START (1 мес)",    callback_data="buy:start:1"),
+         InlineKeyboardButton("Купить PRO (1 мес)",      callback_data="buy:pro:1")],
+        [InlineKeyboardButton("Купить ULTIMATE (1 мес)", callback_data="buy:ultimate:1")],
+        [InlineKeyboardButton("Открыть мини-витрину",    web_app=WebAppInfo(url=TARIFF_URL))]
     ])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
+
 
 # ───────── Текстовый вход ─────────
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
 
-        # Кнопки главного меню
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*Уч(?:е|ё)ба\s*$"), cmd_mode_school))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*Работа\s*$"), cmd_mode_work))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*Развлечени[яе]\s*$"), cmd_mode_fun))
-
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"Движки"), cmd_modes))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"Подписка.*Помощ"), cmd_subs_help))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"Баланс"), cmd_balance))
-
-    # Коллбэки подрежимов (Учёба/Работа/Развлечения)
-    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school|work|fun):"))
-
     # Вопросы о возможностях
     cap = capability_answer(text)
     if cap:
-        await update.effective_message.reply_text(cap); return
+        await update.effective_message.reply_text(cap)
+        return
 
     # Намёк на видео/картинку
     mtype, rest = detect_media_intent(text)
@@ -2049,15 +2091,15 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         duration, aspect = parse_video_opts(text)
         prompt = rest or re.sub(r"\b(\d+\s*(?:сек|с)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))", "", text, flags=re.I).strip(" ,.")
         if not prompt:
-            await update.effective_message.reply_text("Опиши, что именно снять, напр.: «ретро-авто на берегу, закат».")
+            await update.effective_message.reply_text("Опишите, что именно снять, напр.: «ретро-авто на берегу, закат».")
             return
         aid = _new_aid()
         _pending_actions[aid] = {"prompt": prompt, "duration": duration, "aspect": aspect}
         est_luma = 0.40
         est_runway = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",   callback_data=f"choose:luma:{aid}")],
-            [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")],
+            [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",     callback_data=f"choose:luma:{aid}")],
+            [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})",  callback_data=f"choose:runway:{aid}")],
         ])
         await update.effective_message.reply_text(
             f"Что использовать?\nДлительность: {duration} c • Аспект: {aspect}\nЗапрос: «{prompt}»",
@@ -2067,13 +2109,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if mtype == "image":
         prompt = rest or re.sub(r"^(img|image|picture)\s*[:\-]\s*", "", text, flags=re.I).strip()
         if not prompt:
-            await update.effective_message.reply_text("Формат: /img <описание изображения>"); return
+            await update.effective_message.reply_text("Формат: /img <описание изображения>")
+            return
+
         async def _go():
             await _do_img_generate(update, context, prompt)
+
         await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go)
         return
 
-    # Обычный текст → GPT
+    # Обычный текст → GPT (с учётом режима)
     ok, _, _ = check_text_and_inc(update.effective_user.id, update.effective_user.username or "")
     if not ok:
         await update.effective_message.reply_text(
@@ -2081,21 +2126,26 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ── добавляем контекст выбранного режима к запросу ──
     user_id = update.effective_user.id
     try:
-        mode  = _mode_get(user_id)          # 'study' | 'work' | 'fun' | 'none'
+        mode  = _mode_get(user_id)          # 'Учёба' | 'Работа' | 'Развлечения' | 'none'
         track = _mode_track_get(user_id)    # подпоток внутри режима (может быть пустым)
     except NameError:
-        # если хелперы ещё не добавлены — не ломаемся
         mode, track = "none", ""
-    if mode and mode != "none":
-        text = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
-    # ───────────────────────────────────────────────────
 
-    reply = await ask_openai_text(text)
+    text_for_llm = text
+    if mode and mode != "none":
+        text_for_llm = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
+
+    # Для режима «Учёба» — спец-логика сабрежимов
+    if mode == "Учёба" and track:
+        await study_process_text(update, context, text)
+        return
+
+    reply = await ask_openai_text(text_for_llm)
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
+
 
 # ───────── Фото / Документы / Голос ─────────
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2107,121 +2157,171 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("Фото получено. Что сделать?", reply_markup=photo_quick_actions_kb())
     except Exception as e:
         log.exception("on_photo error: %s", e)
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text("Не смог обработать фото.")
 
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # если это изображение в Документах — обрабатываем как фото
+    """Документы: если картинка — как фото; иначе извлекаем текст и даём конспект."""
     try:
+        if not update.message or not update.message.document:
+            return
         doc = update.message.document
-        if not doc:
-            return
         mt = (doc.mime_type or "").lower()
+        tg_file = await doc.get_file()
+        data = await tg_file.download_as_bytearray()
+        raw = bytes(data)
+
+        # Если это изображение, ведём себя как on_photo
         if mt.startswith("image/"):
-            tg_file = await doc.get_file()
-            data = await tg_file.download_as_bytearray()
-            _cache_photo(update.effective_user.id, bytes(data))
-            await update.effective_message.reply_text("Изображение получено (как документ). Действия:", reply_markup=photo_quick_actions_kb())
+            _cache_photo(update.effective_user.id, raw)
+            await update.effective_message.reply_text("Изображение получено как документ. Что сделать?", reply_markup=photo_quick_actions_kb())
             return
-        # иначе анализ документов
-        await on_doc_analyze(update, context)
+
+        # Иначе — анализ документа
+        text, kind = extract_text_from_document(raw, doc.file_name or "file")
+        if not (text or "").strip():
+            await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
+            return
+
+        goal = (update.message.caption or "").strip() or None
+        await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
+        summary = await summarize_long_text(text, query=goal)
+        summary = summary or "Готово."
+        await update.effective_message.reply_text(summary)
+        await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc error: %s", e)
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text("Ошибка при обработке документа.")
 
-async def on_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Голосовые сообщения (voice) → STT → дальше как текст."""
     try:
-        file = None; fname = "audio.ogg"
-        if update.message.voice:
-            file = await update.message.voice.get_file()
-            fname = "voice.ogg"
-        elif update.message.audio:
-            file = await update.message.audio.get_file()
-            fname = update.message.audio.file_name or "audio.mp3"
-        elif update.message.video_note:
-            file = await update.message.video_note.get_file()
-            fname = "video_note.mp4"
-        if not file:
+        if not update.message or not update.message.voice:
             return
-        bio = BytesIO(await file.download_as_bytearray()); bio.seek(0)
-        text = await transcribe_audio(bio, filename_hint=fname)
+        vf = await update.message.voice.get_file()
+        bio = BytesIO(await vf.download_as_bytearray())
+        bio.seek(0)
+        setattr(bio, "name", f"voice.ogg")
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        text = await transcribe_audio(bio, "voice.ogg")
         if not text:
             await update.effective_message.reply_text("Не удалось распознать речь.")
             return
-        # переиспользуем on_text-пайплайн
+        # Переиспользуем текстовый пайплайн
         update.message.text = text
         await on_text(update, context)
     except Exception as e:
-        log.exception("on_voice_or_audio error: %s", e)
+        log.exception("on_voice error: %s", e)
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text("Ошибка при обработке voice.")
 
-# ───────── Версия/сервис ─────────
-async def cmd_ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = [
-        "GPT-5 ProBot • версия сервиса",
-        f"PTB: 21.6 | Python: {os.sys.version.split()[0]}",
-        f"Text model: {OPENAI_MODEL}",
-        f"Images: {IMAGES_MODEL} @ {IMAGES_BASE_URL}",
-        f"Luma: {LUMA_MODEL} @ {LUMA_BASE_URL}",
-        f"Runway: {RUNWAY_MODEL} @ {RUNWAY_BASE_URL}",
-    ]
-    await update.effective_message.reply_text("\n".join(lines))
+async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обычные аудиофайлы → STT → как текст."""
+    try:
+        if not update.message or not update.message.audio:
+            return
+        af = await update.message.audio.get_file()
+        filename = update.message.audio.file_name or "audio.mp3"
+        bio = BytesIO(await af.download_as_bytearray())
+        bio.seek(0)
+        setattr(bio, "name", filename)
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        text = await transcribe_audio(bio, filename)
+        if not text:
+            await update.effective_message.reply_text("Не удалось распознать речь из аудио.")
+            return
+        update.message.text = text
+        await on_text(update, context)
+    except Exception as e:
+        log.exception("on_audio error: %s", e)
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text("Ошибка при обработке аудио.")
 
-# ───────── MAIN / запуск ─────────
-def build_app():
-    db_init(); db_init_usage(); _db_init_prefs()
+# ───────── Переключатели TTS (если не были объявлены выше) ─────────
+# Предполагается, что у вас уже есть kv_set/kv_get и maybe_tts_reply использует ключ f"tts:{user_id}:on"
+# Если ранее команды уже реализованы — этот блок можно удалить.
+async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        kv_set(f"tts:{update.effective_user.id}:on", "1")
+        await update.effective_message.reply_text("🔊 Озвучка ответов включена. Команда: /voice_off — чтобы выключить.")
+    except Exception as e:
+        log.exception("voice_on error: %s", e)
+
+async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        kv_set(f"tts:{update.effective_user.id}:on", "0")
+        await update.effective_message.reply_text("🔇 Озвучка ответов выключена. Команда: /voice_on — чтобы включить.")
+    except Exception as e:
+        log.exception("voice_off error: %s", e)
+
+# ───────── Обработчик ошибок PTB ─────────
+async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
+    log.exception("Unhandled error: %s", context_.error)
+    # Старайся не падать молча
+    try:
+        if isinstance(update, Update) and update.effective_message:
+            await update.effective_message.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
+    except Exception:
+        pass
+
+# ───────── Регистрация хендлеров и запуск ─────────
+def build_application() -> "Application":
+    if not BOT_TOKEN:
+        raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Команды
-    app.add_handler(CommandHandler("start",    cmd_start))
-    app.add_handler(CommandHandler("help",     cmd_help))
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("examples", cmd_examples))
-    app.add_handler(CommandHandler("modes",    cmd_modes))
-    app.add_handler(CommandHandler("plans",    cmd_plans))
-    app.add_handler(CommandHandler("balance",  cmd_balance))
-    app.add_handler(CommandHandler("img",      cmd_img))
-    app.add_handler(CommandHandler("voice_on", cmd_voice_on))
-    app.add_handler(CommandHandler("voice_off",cmd_voice_off))
-    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
-    app.add_handler(CommandHandler("diag_stt",    cmd_diag_stt))
-    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
-    app.add_handler(CommandHandler("diag_video",  cmd_diag_video))
-    app.add_handler(CommandHandler("ver",         cmd_ver))
+    app.add_handler(CommandHandler("engines", cmd_engines))
+    app.add_handler(CommandHandler("plans", cmd_plans))
+    app.add_handler(CommandHandler("balance", cmd_balance))
     app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
-    app.add_handler(CommandHandler("show_welcome",cmd_show_welcome))
+    app.add_handler(CommandHandler("show_welcome", cmd_show_welcome))
+    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
+    app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
+    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
+    app.add_handler(CommandHandler("diag_video", cmd_diag_video))
+    app.add_handler(CommandHandler("img", cmd_img))
+    app.add_handler(CommandHandler("voice_on", cmd_voice_on))
+    app.add_handler(CommandHandler("voice_off", cmd_voice_off))
 
-    # Оплата
+    # Платежи
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
-    # Callback
-    app.add_handler(CallbackQueryHandler(on_cb))
+    # Callback-кнопки
+    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
+    app.add_handler(CallbackQueryHandler(on_cb))  # прочие callback'и
 
-    # WebApp data (мини-приложение)
-    try:
-        from telegram.ext import filters as _flt
-        app.add_handler(MessageHandler(_flt.StatusUpdate.WEB_APP_DATA, on_webapp_data))
-    except Exception:
-        # на случай несовпадения версии — просто проигнорируем
-        pass
+    # WebApp data из мини-приложения
+    with contextlib.suppress(Exception):
+        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
     # Медиа
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, on_doc))
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO | filters.VIDEO_NOTE, on_voice_or_audio))
+    app.add_handler(MessageHandler(filters.VOICE, on_voice))
+    app.add_handler(MessageHandler(filters.AUDIO, on_audio))
 
-    # Текст
+    # Текст (в самом конце, чтобы не перехватывать команды)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+
+    # Ошибки
+    app.add_error_handler(on_error)
+
     return app
 
+def main():
+    app = build_application()
+    log.info("✅ GPT-5 ProBot is up. Running polling…")
+    # На всякий случай снимаем вебхук перед пуллингом
+    with contextlib.suppress(Exception):
+        asyncio.get_event_loop().run_until_complete(app.bot.delete_webhook(drop_pending_updates=True))
+    app.run_polling(close_loop=False, allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
+
 if __name__ == "__main__":
-    application = build_app()
-    if USE_WEBHOOK:
-        # Webhook
-        path = WEBHOOK_PATH.lstrip("/") or "tg"
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=path,
-            webhook_url=f"{PUBLIC_URL.rstrip('/')}/{path}",
-            secret_token=WEBHOOK_SECRET or None,
-        )
-    else:
-        # Polling
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    main()
