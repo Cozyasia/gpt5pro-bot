@@ -891,30 +891,27 @@ async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, p
 
 # ───────── UI / тексты ─────────
 START_TEXT = (
-    "Привет! Я GPT-бот с тарифами, квотами и разовыми пополнениями.\n\n"
-    "Что умею:\n"
-    "• 💬 Текст/фото (GPT)\n"
-    "• 🎬 Видео Luma (5/9/10 c, 9:16/16:9)\n"
-    "• 🎥 Видео Runway (PRO)\n"
-    "• 🖼 Картинки — команда /img <промпт>\n"
-    "• 📄 Анализ PDF/EPUB/DOCX/FB2/TXT — просто пришли файл.\n\n"
-    "Открой «🎛 Движки», чтобы выбрать, и «⭐ Подписка» — для тарифов."
+    "Привет! Я твой мультирежимный GPT-бот.\n\n"
+    "Что умею прямо сейчас:\n"
+    "• 💬 GPT: текст, фото-визион, конспекты из PDF/DOCX/EPUB/FB2/TXT\n"
+    "• 🖼 Images (OpenAI): /img <описание>\n"
+    "• 🎬 Luma / 🎥 Runway: короткие видео по описанию\n"
+    "• 🗣 Речь↔текст (STT) и озвучка ответов (TTS)\n"
+    "• ⭐ Подписка, 💳 ЮKassa, 💠 CryptoBot, единый USD-кошелёк\n\n"
+    "Главные режимы:\n"
+    "• Учёба — объяснения, задачи, эссе/реферат/доклад, экзамен-квиз\n"
+    "• Работа — письма/документы, аналитика, ToDo/план, генерация идей\n"
+    "• Развлечения — фото-мастерская, видео-идеи, квизы/мемы\n\n"
+    "Выбери режим кнопкой ниже. Для точного выбора движка открой «🧠 Движки»."
 )
+
 HELP_TEXT = (
     "Подсказки:\n"
-    "• /plans — тарифы и оплата подписки (через чат или мини-приложение)\n"
-    "• /img кот с очками — сгенерирует картинку\n"
-    "• «сделай видео … 9 секунд 9:16» — Luma/Runway\n"
-    "• «🎛 Движки» — выбрать GPT / Luma / Runway / Midjourney / Images / Docs\n"
-    "• «🧾 Баланс» — кошелёк и пополнение (RUB или CryptoBot USDT/TON)\n"
-    "• /voice_on и /voice_off — озвучка ответов."
-)
-EXAMPLES_TEXT = (
-    "Примеры:\n"
-    "• сделай видео ретро-авто на берегу, 9 секунд, 9:16\n"
-    "• опиши текст на фото (пришли фото + подпись)\n"
-    "• /img неоновый город в дождь, реализм\n"
-    "• пришли PDF — сделаю тезисы и выводы"
+    "• /img кот в очках — сгенерирует изображение\n"
+    "• «сделай видео … 9 секунд 9:16» — запущу Luma/Runway\n"
+    "• Пришли PDF/EPUB/DOCX/FB2/TXT — извлеку текст и сделаю конспект\n"
+    "• /voice_on и /voice_off — озвучка ответов\n"
+    "• «🧾 Баланс» — кошелёк и пополнение (RUB/USDT/TON)\n"
 )
 
 def engines_kb():
@@ -928,19 +925,108 @@ def engines_kb():
     ])
 
 def main_keyboard():
+    # 6 кнопок, без лишних предложений и с постоянной раскладкой
     return ReplyKeyboardMarkup(
         [
-            [KeyboardButton("🎛 Движки"), KeyboardButton("⭐ Подписка")],
-            [KeyboardButton("🧾 Баланс"), KeyboardButton("ℹ️ Помощь")],
+            [KeyboardButton("Учёба"), KeyboardButton("Работа"), KeyboardButton("Развлечения")],
+            [KeyboardButton("🧠 Движки"), KeyboardButton("⭐ Подписка · Помощь"), KeyboardButton("🧾 Баланс")],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
         selective=False,
-        input_field_placeholder="Напишите запрос или выберите пункт меню",
+        input_field_placeholder="Выберите режим или напишите запрос…",
     )
 
 main_kb = main_keyboard()
 
+# ───────── сохранение выбранного режима/подрежима (SQLite kv) ─────────
+def _mode_set(user_id: int, mode: str):
+    kv_set(f"mode:{user_id}", mode)
+
+def _mode_get(user_id: int) -> str:
+    return (kv_get(f"mode:{user_id}", "none") or "none")
+
+def _mode_track_set(user_id: int, track: str):
+    kv_set(f"mode_track:{user_id}", track)
+
+def _mode_track_get(user_id: int) -> str:
+    return kv_get(f"mode_track:{user_id}", "") or ""
+
+# Подменю режимов (без «…или выбери движок»)
+def _school_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔎 Объяснение",            callback_data="school:explain"),
+         InlineKeyboardButton("🧮 Задачи",                callback_data="school:tasks")],
+        [InlineKeyboardButton("✍️ Эссе/реферат/доклад",   callback_data="school:essay"),
+         InlineKeyboardButton("📝 Экзамен/квиз",          callback_data="school:quiz")],
+    ])
+
+def _work_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📧 Письмо/документ",  callback_data="work:doc"),
+         InlineKeyboardButton("📊 Аналитика/сводка", callback_data="work:report")],
+        [InlineKeyboardButton("🗂 План/ToDo",        callback_data="work:plan"),
+         InlineKeyboardButton("💡 Идеи/бриф",       callback_data="work:idea")],
+    ])
+
+def _fun_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🖼 Фото-мастерская", callback_data="fun:photo"),
+         InlineKeyboardButton("🎬 Видео-идеи",      callback_data="fun:video")],
+        [InlineKeyboardButton("🎲 Квизы/игры",      callback_data="fun:quiz"),
+         InlineKeyboardButton("😆 Мемы/шутки",      callback_data="fun:meme")],
+    ])
+
+# Команды/кнопки режимов
+async def cmd_mode_school(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _mode_set(update.effective_user.id, "Учёба")
+    _mode_track_set(update.effective_user.id, "")
+    await update.effective_message.reply_text("Учёба → выбери тип задачи и напиши тему/условие.", reply_markup=_school_kb())
+
+async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _mode_set(update.effective_user.id, "Работа")
+    _mode_track_set(update.effective_user.id, "")
+    await update.effective_message.reply_text("Работа → выбери тип и опиши задачу.", reply_markup=_work_kb())
+
+async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _mode_set(update.effective_user.id, "Развлечения")
+    _mode_track_set(update.effective_user.id, "")
+    await update.effective_message.reply_text("Развлечения → выбери направление и дай вводные.", reply_markup=_fun_kb())
+
+# Коллбэки подрежимов (запоминаем подпоток, никаких подсказок про движки)
+async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = (q.data or "")
+    try:
+        if any(data.startswith(p) for p in ("school:", "work:", "fun:")):
+            _, track = data.split(":", 1)
+            _mode_track_set(update.effective_user.id, track)
+            mode = _mode_get(update.effective_user.id)
+            await q.edit_message_text(f"{mode} → {track}. Напиши задание/тему — сделаю.")
+            return
+    finally:
+        with contextlib.suppress(Exception):
+            await q.answer()
+
+# Старт и «Движки»
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome_url = kv_get("welcome_url", BANNER_URL)
+    if welcome_url:
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_photo(welcome_url)
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
+
+async def cmd_modes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text("Выбери движок:", reply_markup=engines_kb())
+
+# Кнопка «Подписка · Помощь»
+async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Открыть тарифы (WebApp)", web_app=WebAppInfo(url=TARIFF_URL))],
+        [InlineKeyboardButton("Оформить PRO на месяц (ЮKassa)", callback_data="buyinv:pro:1")],
+    ])
+    await update.effective_message.reply_text("⭐ Тарифы и помощь.\n\n" + HELP_TEXT, reply_markup=kb, disable_web_page_preview=True)
+    
 # ───────── Capability Q&A ─────────
 _CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
 _CAP_EBOOK = re.compile(r"(ebook|e-?book|электронн(ая|ые)\s+книг|epub|fb2|docx|txt|mobi|azw)", re.I)
@@ -1940,15 +2026,17 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
 
-    # Кнопки главного меню
-    if text == "🎛 Движки":
-        await cmd_modes(update, context); return
-    if text == "⭐ Подписка":
-        await cmd_plans(update, context); return
-    if text == "🧾 Баланс":
-        await cmd_balance(update, context); return
-    if text == "ℹ️ Помощь":
-        await cmd_help(update, context); return
+        # Кнопки главного меню
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*Уч(?:е|ё)ба\s*$"), cmd_mode_school))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*Работа\s*$"), cmd_mode_work))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\s*Развлечени[яе]\s*$"), cmd_mode_fun))
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"Движки"), cmd_modes))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"Подписка.*Помощ"), cmd_subs_help))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"Баланс"), cmd_balance))
+
+    # Коллбэки подрежимов (Учёба/Работа/Развлечения)
+    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school|work|fun):"))
 
     # Вопросы о возможностях
     cap = capability_answer(text)
@@ -1992,6 +2080,19 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Лимит текстовых запросов на сегодня исчерпан. Оформите ⭐ подписку или попробуйте завтра."
         )
         return
+
+    # ── добавляем контекст выбранного режима к запросу ──
+    user_id = update.effective_user.id
+    try:
+        mode  = _mode_get(user_id)          # 'study' | 'work' | 'fun' | 'none'
+        track = _mode_track_get(user_id)    # подпоток внутри режима (может быть пустым)
+    except NameError:
+        # если хелперы ещё не добавлены — не ломаемся
+        mode, track = "none", ""
+    if mode and mode != "none":
+        text = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
+    # ───────────────────────────────────────────────────
+
     reply = await ask_openai_text(text)
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
