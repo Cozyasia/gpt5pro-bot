@@ -27,7 +27,6 @@ from telegram.constants import ChatAction
 from telegram.error import TelegramError
 # ───────── TTS imports ─────────
 import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
-# Ничего больше импортировать не нужно — TTS работает по HTTP (httpx уже импортирован)
 
 # Optional PIL / rembg for photo tools
 try:
@@ -609,7 +608,6 @@ def _oai_text_client():
     return oai_llm
 
 def _pick_vision_model() -> str:
-    # Если определена спец-модель для vision — используем её; иначе — общий OPENAI_MODEL
     try:
         mv = globals().get("OPENAI_VISION_MODEL")
         return (mv or OPENAI_MODEL).strip()
@@ -617,9 +615,6 @@ def _pick_vision_model() -> str:
         return OPENAI_MODEL
 
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
-    """
-    Универсальный текстовый запрос к OpenAI/OpenRouter с 3 попытками и экспон. бэкоффом.
-    """
     user_text = (user_text or "").strip()
     if not user_text:
         return "Пустой запрос."
@@ -648,10 +643,6 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     return "⚠️ Сейчас не получилось получить ответ от модели. Я на связи — попробуй переформулировать запрос или повторить чуть позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
-    """
-    Vision-запрос к той же клиентской инстанции. По возможности берёт OPENAI_VISION_MODEL,
-    иначе — OPENAI_MODEL. Работает с data:URL (base64).
-    """
     try:
         prompt = (user_text or "Опиши, что на изображении и какой там текст.").strip()
         model = _pick_vision_model()
@@ -684,7 +675,6 @@ def _db_init_prefs():
     con.commit(); con.close()
 
 def _tts_get(user_id: int) -> bool:
-    # лениво убеждаемся, что таблица есть
     try:
         _db_init_prefs()
     except Exception:
@@ -697,7 +687,6 @@ def _tts_get(user_id: int) -> bool:
     return bool(row and row[0])
 
 def _tts_set(user_id: int, on: bool):
-    # лениво убеждаемся, что таблица есть
     try:
         _db_init_prefs()
     except Exception:
@@ -713,12 +702,15 @@ def _tts_bytes_sync(text: str) -> bytes | None:
     try:
         if not OPENAI_TTS_KEY:
             return None
+        if OPENAI_TTS_KEY.startswith("sk-or-"):
+            log.error("TTS key looks like OpenRouter (sk-or-...). Provide a real OpenAI key in OPENAI_TTS_KEY.")
+            return None
         url = f"{OPENAI_TTS_BASE_URL.rstrip('/')}/audio/speech"
         payload = {
             "model": OPENAI_TTS_MODEL,
             "voice": OPENAI_TTS_VOICE,
             "input": text,
-            "format": "ogg"  # важно: OGG-контейнер с Opus для Telegram voice
+            "format": "ogg"  # OGG/Opus для Telegram voice
         }
         headers = {
             "Authorization": f"Bearer {OPENAI_TTS_KEY}",
@@ -735,10 +727,6 @@ def _tts_bytes_sync(text: str) -> bytes | None:
         return None
 
 async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
-    """
-    Если у пользователя включён TTS и есть ключ, синтезируем и отправляем голос.
-    Сообщение-подпись повторяет текст (укороченный до лимита).
-    """
     user_id = update.effective_user.id
     if not _tts_get(user_id):
         return
@@ -775,39 +763,25 @@ async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("🔈 Озвучка выключена.")
 
 # ───────── Speech-to-Text (STT) • OpenAI Whisper/4o-mini-transcribe ─────────
-# Требует: from io import BytesIO, import os, import asyncio, import logging
-# и уже объявленные: log, ask_openai_text, maybe_tts_reply
-
 from openai import OpenAI as _OpenAI_STT
 
-# Env/константы с дефолтами: можно переопределить в окружении
 OPENAI_STT_MODEL    = (os.getenv("OPENAI_STT_MODEL") or "whisper-1").strip()
 OPENAI_STT_KEY      = (os.getenv("OPENAI_STT_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
 OPENAI_STT_BASE_URL = (os.getenv("OPENAI_STT_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
 
 def _oai_stt_client():
-    """
-    Отдельный клиент на официальный STT-эндпоинт.
-    Даже если чат идёт через OpenRouter, STT должен идти сюда.
-    """
     return _OpenAI_STT(api_key=OPENAI_STT_KEY, base_url=OPENAI_STT_BASE_URL)
 
 async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
-    """
-    Надёжная обёртка над OpenAI STT. filename ОБЯЗАТЕЛЕН с расширением!
-    Допустимы .ogg/.webm/.mp3/.wav и т.п.
-    """
     last_err = None
     for attempt in range(3):
         try:
             bio = BytesIO(raw)
-            bio.name = filename  # критично для корректного определения формата
+            bio.name = filename
             bio.seek(0)
             resp = _oai_stt_client().audio.transcriptions.create(
-                model=OPENAI_STT_MODEL,  # "whisper-1" или "gpt-4o-mini-transcribe"
+                model=OPENAI_STT_MODEL,
                 file=bio,
-                # при желании можно подсказать язык:
-                # language="ru"
             )
             text = (getattr(resp, "text", "") or "").strip()
             if text:
@@ -842,7 +816,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await tg_file.download_to_memory(out=buf)
         raw = buf.getvalue()
         mime = (getattr(media, "mime_type", "") or "").lower()
-        # Телеграм voice = OGG/Opus; подберём расширение
         if "ogg" in mime or "opus" in mime:
             filename = "voice.ogg"
         elif "webm" in mime:
@@ -852,7 +825,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif "mp3" in mime or "mpeg" in mime or "mpga" in mime:
             filename = "voice.mp3"
         else:
-            # по умолчанию большинство голосовых — ogg/opus
             filename = "voice.ogg"
     except Exception as e:
         log.exception("TG download error: %s", e)
@@ -865,11 +837,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Ошибка при обработке voice.")
         return
 
-    # Покажем, что распознано
     with contextlib.suppress(Exception):
         await msg.reply_text(f"🗣️ Распознал: {text}")
 
-    # Отвечаем как на обычный текст
     answer = await ask_openai_text(text)
     await msg.reply_text(answer)
     await maybe_tts_reply(update, context, answer)
@@ -884,7 +854,6 @@ def _safe_decode_txt(b: bytes) -> str:
     return b.decode("utf-8", errors="ignore")
 
 def _extract_pdf_text(data: bytes) -> str:
-    # PyPDF2 — сначала
     try:
         import PyPDF2
         rd = PyPDF2.PdfReader(BytesIO(data))
@@ -899,9 +868,8 @@ def _extract_pdf_text(data: bytes) -> str:
             return t
     except Exception:
         pass
-    # pdfminer.six — корректный импорт
     try:
-        from pdfminer.high_level import extract_text as pdfminer_extract_text  # type: ignore
+        from pdfminer_high_level import extract_text as pdfminer_extract_text  # may not exist
     except Exception:
         pdfminer_extract_text = None  # type: ignore
     if pdfminer_extract_text:
@@ -909,7 +877,6 @@ def _extract_pdf_text(data: bytes) -> str:
             return (pdfminer_extract_text(BytesIO(data)) or "").strip()
         except Exception:
             pass
-    # PyMuPDF (fitz) — если установлен
     try:
         import fitz
         doc = fitz.open(stream=data, filetype="pdf")
@@ -1002,11 +969,6 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
 
 # ======= Анализ документов (PDF/EPUB/DOCX/FB2/TXT) =======
 async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Получает документ, извлекает из него текст и делает конспект.
-    Поддержка: PDF, EPUB, DOCX, FB2, TXT (+ частично MOBI/AZW).
-    Можно в подписи к файлу указать цель анализа — сориентирую конспект.
-    """
     try:
         if not update.message or not update.message.document:
             return
@@ -1025,10 +987,7 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc_analyze error: %s", e)
-        try:
-            await update.effective_message.reply_text("Ошибка при анализе документа.")
-        except Exception:
-            pass
+    # ничего не бросаем наружу
 
 # ───────── OpenAI Images (генерация картинок) ─────────
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
@@ -1149,7 +1108,16 @@ def _work_kb():
          InlineKeyboardButton("💡 Идеи/бриф",       callback_data="work:idea")],
     ])
 
+def _fun_quick_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Оживить фото (анимация)", callback_data="fun:revive")],
+        [InlineKeyboardButton("Клип из текста/голоса",    callback_data="fun:clip")],
+        [InlineKeyboardButton("Сгенерировать изображение /img", callback_data="fun:img")],
+        [InlineKeyboardButton("Раскадровка под Reels",    callback_data="fun:storyboard")],
+    ])
+
 def _fun_kb():
+    # оставим и старое подменю — не используется сейчас
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🖼 Фото-мастерская", callback_data="fun:photo"),
          InlineKeyboardButton("🎬 Видео-идеи",      callback_data="fun:video")],
@@ -1182,9 +1150,8 @@ async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_set(update.effective_user.id, "Развлечения")
     _mode_track_set(update.effective_user.id, "")
     await update.effective_message.reply_text(
-        "🔥 Развлечения → выберите направление и дайте вводные.\n"
-        "Фото-мастерская (удаление/замена фона, outpaint), видео-идеи, Reels/Shorts, мемы/квизы.",
-        reply_markup=_fun_kb()
+        "🔥 Развлечения — быстрые действия:",
+        reply_markup=_fun_quick_kb()
     )
 
 
@@ -1194,6 +1161,10 @@ async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = (q.data or "")
     try:
         if any(data.startswith(p) for p in ("school:", "work:", "fun:")):
+            # базовый трекинг старых веток (photo/video/quiz/meme)
+            if data in ("fun:revive","fun:clip","fun:img","fun:storyboard"):
+                # эти обрабатываются отдельным хендлером on_cb_fun
+                return
             _, track = data.split(":", 1)
             _mode_track_set(update.effective_user.id, track)
             mode = _mode_get(update.effective_user.id)
@@ -1203,6 +1174,19 @@ async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
 
+# быстрые действия «Развлечения»
+async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    data = q.data or ""
+    if data == "fun:img":
+        return await q.edit_message_text("Пришли промпт или используй команду /img <описание> — сгенерирую изображение.")
+    if data == "fun:revive":
+        return await q.edit_message_text("Загрузи фото (как картинку) и напиши, что оживить/как двигаться. Сделаю анимацию.")
+    if data == "fun:clip":
+        return await q.edit_message_text("Пришли текст/голос и формат (Reels/Shorts), музыку/стиль — соберу клип (Luma/Runway).")
+    if data == "fun:storyboard":
+        return await q.edit_message_text("Пришли фото или опиши идею ролика — верну раскадровку под Reels с тайм-кодами.")
 
 # ───────── Старт / Движки / Помощь ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1346,7 +1330,7 @@ async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── Баланс / пополнение ─────────
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    w = _wallet_get(user_id)  # детальные кошельки движков (на будущее)
+    w = _wallet_get(user_id)
     total = _wallet_total_get(user_id)
     row = _usage_row(user_id)
     lim = _limits_for(user_id)
@@ -1365,7 +1349,6 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Команда /img ─────────
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Берём только args; если их нет — показываем подсказку (не пытаемся выкусить /img из текста)
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
         await update.effective_message.reply_text("Формат: /img <описание>")
@@ -1380,13 +1363,6 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "img", IMG_COST_USD, _go,
         remember_kind="img_generate", remember_payload={"prompt": prompt}
     )
-
-    async def _go():
-        await _do_img_generate(update, context, prompt)
-
-    user_id = update.effective_user.id
-    await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go,
-                           remember_kind="img_generate", remember_payload={"prompt": prompt})
 
 
 # ───────── Photo quick actions ─────────
@@ -1459,7 +1435,7 @@ async def _pedit_storyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             "Сделай раскадровку (6 кадров) под 6–10 секундный клип. "
             "Каждый кадр — 1 строка: кадр/действие/ракурс/свет. Основа:\n" + (desc or "")
         )
-        await update.effective_message.reply_text("Раскадровка:\n" + plan)
+        await update.effective_message.reply_text("Раскадровка:\н" + plan)
     except Exception as e:
         log.exception("storyboard error: %s", e)
         await update.effective_message.reply_text("Не удалось построить раскадровку.")
@@ -1896,11 +1872,9 @@ _ASPECTS = {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"}
 
 def parse_video_opts(text: str) -> tuple[int, str]:
     tl = (text or "").lower()
-    # длительность
     m = re.search(r"(\d+)\s*(?:сек|с)\b", tl)
     duration = int(m.group(1)) if m else LUMA_DURATION_S
     duration = max(3, min(20, duration))
-    # аспект
     asp = None
     for a in _ASPECTS:
         if a in tl:
@@ -2108,7 +2082,7 @@ async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", descrip
         return None, None, 0.0, asset
     try:
         payload = {"asset": asset, "amount": round(float(usd_amount), 2), "description": description or "Top-up"}
-        headers = {"Authorization": f"Bearer {CRYPTO_PAY_API_TOKEN}"}
+        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.post(f"{CRYPTO_BASE}/createInvoice", headers=headers, json=payload)
             j = r.json()
@@ -2125,7 +2099,7 @@ async def _crypto_get_invoice(invoice_id: str) -> dict | None:
     if not CRYPTO_PAY_API_TOKEN:
         return None
     try:
-        headers = {"Authorization": f"Bearer {CRYPTO_PAY_API_TOKEN}"}
+        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
         async with httpx.AsyncClient(timeout=20.0) as client:
             r = await client.get(f"{CRYPTO_BASE}/getInvoices?invoice_ids={invoice_id}", headers=headers)
             j = r.json()
@@ -2273,7 +2247,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go)
         return
 
-    # Обычный текст → GPT (с учётом режима)
+    # Обычный текст → GPT
     ok, _, _ = check_text_and_inc(update.effective_user.id, update.effective_user.username or "")
     if not ok:
         await update.effective_message.reply_text(
@@ -2283,8 +2257,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     try:
-        mode  = _mode_get(user_id)          # 'Учёба' | 'Работа' | 'Развлечения' | 'none'
-        track = _mode_track_get(user_id)    # подпоток внутри режима (может быть пустым)
+        mode  = _mode_get(user_id)
+        track = _mode_track_get(user_id)
     except NameError:
         mode, track = "none", ""
 
@@ -2292,7 +2266,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if mode and mode != "none":
         text_for_llm = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
 
-    # Для режима «Учёба» — спец-логика сабрежимов
     if mode == "Учёба" and track:
         await study_process_text(update, context, text)
         return
@@ -2305,7 +2278,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── Фото / Документы / Голос ─────────
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        ph = update.message.photo[-1]  # самое большое
+        ph = update.message.photo[-1]
         f = await ph.get_file()
         data = await f.download_as_bytearray()
         _cache_photo(update.effective_user.id, bytes(data))
@@ -2316,7 +2289,6 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("Не смог обработать фото.")
 
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Документы: если картинка — как фото; иначе извлекаем текст и даём конспект."""
     try:
         if not update.message or not update.message.document:
             return
@@ -2326,13 +2298,11 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = await tg_file.download_as_bytearray()
         raw = bytes(data)
 
-        # Если это изображение, ведём себя как on_photo
         if mt.startswith("image/"):
             _cache_photo(update.effective_user.id, raw)
             await update.effective_message.reply_text("Изображение получено как документ. Что сделать?", reply_markup=photo_quick_actions_kb())
             return
 
-        # Иначе — анализ документа
         text, kind = extract_text_from_document(raw, doc.file_name or "file")
         if not (text or "").strip():
             await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
@@ -2350,7 +2320,6 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("Ошибка при обработке документа.")
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Голосовые сообщения (voice) → STT → дальше как текст."""
     try:
         if not update.message or not update.message.voice:
             return
@@ -2363,7 +2332,6 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not text:
             await update.effective_message.reply_text("Не удалось распознать речь.")
             return
-        # Переиспользуем текстовый пайплайн
         update.message.text = text
         await on_text(update, context)
     except Exception as e:
@@ -2372,7 +2340,6 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("Ошибка при обработке voice.")
 
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обычные аудиофайлы → STT → как текст."""
     try:
         if not update.message or not update.message.audio:
             return
@@ -2393,27 +2360,10 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Ошибка при обработке аудио.")
 
-# ───────── Переключатели TTS (если не были объявлены выше) ─────────
-# Предполагается, что у вас уже есть kv_set/kv_get и maybe_tts_reply использует ключ f"tts:{user_id}:on"
-# Если ранее команды уже реализованы — этот блок можно удалить.
-async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        kv_set(f"tts:{update.effective_user.id}:on", "1")
-        await update.effective_message.reply_text("🔊 Озвучка ответов включена. Команда: /voice_off — чтобы выключить.")
-    except Exception as e:
-        log.exception("voice_on error: %s", e)
-
-async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        kv_set(f"tts:{update.effective_user.id}:on", "0")
-        await update.effective_message.reply_text("🔇 Озвучка ответов выключена. Команда: /voice_on — чтобы включить.")
-    except Exception as e:
-        log.exception("voice_off error: %s", e)
 
 # ───────── Обработчик ошибок PTB ─────────
 async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
     log.exception("Unhandled error: %s", context_.error)
-    # Старайся не падать молча
     try:
         if isinstance(update, Update) and update.effective_message:
             await update.effective_message.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
@@ -2423,15 +2373,12 @@ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Роутеры для текстовых кнопок/режимов ─────────
 async def on_btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # открыть экран выбора движков (твой существующий обработчик команд)
     return await cmd_engines(update, context)
 
 async def on_btn_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # показать реальный баланс + кнопки пополнения (реализовано в твоём cmd_balance)
     return await cmd_balance(update, context)
 
 async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # показать реальные планы/лимиты + кнопки покупки (реализовано в твоём cmd_plans)
     return await cmd_plans(update, context)
 
 async def on_mode_school_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2467,18 +2414,13 @@ async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, оживление старых фото.\n"
         "Видео: Luma/Runway — клипы под Reels/Shorts; авто-нарезка длинного видео (сценарий/тайм-коды). "
         "Мемы/квизы.\n\n"
-        "_Быстрые действия:_\n"
-        "• Оживить фото (анимация)\n"
-        "• Сделать клип из текста/голоса\n"
-        "• /img — сгенерировать изображение\n"
-        "• Раскадровка под Reels"
+        "Выбери действие ниже:"
     )
-    await update.effective_message.reply_text(txt, parse_mode="Markdown")
+    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
 
 # ───────── Вспомогательное: взять первую объявленную функцию по имени ─────────
 def _pick_first_defined(*names):
-    """Вернёт первую существующую функцию из перечисленных имён или None."""
     for n in names:
         fn = globals().get(n)
         if callable(fn):
@@ -2514,13 +2456,16 @@ def build_application() -> "Application":
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
-    # Callback-кнопки
+    # Быстрые действия «Развлечения» — первыми
+    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:(?:revive|clip|img|storyboard)$"))
+    # Подрежимы (school/work/fun:…)
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
-    app.add_handler(CallbackQueryHandler(on_cb))  # прочие callback'и
+    # Прочие callback'и
+    app.add_handler(CallbackQueryHandler(on_cb))
 
     # Данные из мини-приложения (WebApp)
     with contextlib.suppress(Exception):
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+                app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
     # ── Голос/аудио первым по приоритету ───────────────────────────────────────
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
