@@ -2434,6 +2434,14 @@ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
         pass
 
 # ───────── Регистрация хендлеров и запуск ─────────
+def _pick_first_defined(*names):
+    """Вернёт первую существующую функцию из перечисленных имён или None."""
+    for n in names:
+        fn = globals().get(n)
+        if callable(fn):
+            return fn
+    return None
+
 def build_application() -> "Application":
     if not BOT_TOKEN:
         raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
@@ -2465,31 +2473,46 @@ def build_application() -> "Application":
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
     app.add_handler(CallbackQueryHandler(on_cb))  # прочие callback'и
 
-    # WebApp data из мини-приложения (если используется)
+    # Данные из мини-приложения (WebApp)
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
-    # --- Медиа ---
-    # Голос/аудио: СТАВИМ ПЕРЕД фото/доками и общим текстом
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
+    # ── Медиа (сначала голос, затем остальное) ──────────────────────────────────
+    voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
+    if voice_fn:
+        app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
 
-    # Фото/документы/видео/гиф
-    app.add_handler(MessageHandler(filters.PHOTO,            handle_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL,     handle_doc))
-    app.add_handler(MessageHandler(filters.VIDEO,            handle_video))
-    app.add_handler(MessageHandler(filters.ANIMATION,        handle_gif))
+    photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
+    if photo_fn:
+        app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
 
-    # Текст (в самом конце, чтобы не перехватывать всё)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    doc_fn = _pick_first_defined("handle_doc", "on_document", "handle_document", "doc_handler")
+    if doc_fn:
+        app.add_handler(MessageHandler(filters.Document.ALL, doc_fn))
+
+    video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
+    if video_fn:
+        app.add_handler(MessageHandler(filters.VIDEO, video_fn))
+
+    gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
+    if gif_fn:
+        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn))
+
+    # Текст (регистрируем в самом конце, чтобы не перехватывать медиа)
+    text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
+    if text_fn:
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
 
     # Ошибки
-    app.add_error_handler(on_error)
+    err_fn = _pick_first_defined("on_error", "handle_error")
+    if err_fn:
+        app.add_error_handler(err_fn)
 
     return app
 
 
 def main():
-    # ИНИЦИАЛИЗАЦИЯ БД (важно!)
+    # ИНИЦИАЛИЗАЦИЯ БД
     db_init()
     db_init_usage()
     _db_init_prefs()
@@ -2497,21 +2520,18 @@ def main():
     app = build_application()
 
     if USE_WEBHOOK:
-        # WEBHOOK-режим для Render Web Service
-        log.info(
-            "🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s",
-            PUBLIC_URL, WEBHOOK_PATH, PORT
-        )
+        # WEBHOOK-режим (Render Web Service)
+        log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
         app.run_webhook(
             listen="0.0.0.0",
-            port=PORT,  # Render передаст свой $PORT
+            port=PORT,
             url_path=WEBHOOK_PATH.lstrip("/"),
             webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
             secret_token=(WEBHOOK_SECRET or None),
             allowed_updates=Update.ALL_TYPES,
         )
     else:
-        # POLLING-режим для Background Worker
+        # POLLING-режим (Background Worker)
         log.info("🚀 POLLING mode.")
         with contextlib.suppress(Exception):
             asyncio.get_event_loop().run_until_complete(
