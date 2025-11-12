@@ -2441,21 +2441,21 @@ def build_application() -> "Application":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Команды
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("examples", cmd_examples))
-    app.add_handler(CommandHandler("engines", cmd_engines))
-    app.add_handler(CommandHandler("plans", cmd_plans))
-    app.add_handler(CommandHandler("balance", cmd_balance))
-    app.add_handler(CommandHandler("set_welcome", cmd_set_welcome))
+    app.add_handler(CommandHandler("start",        cmd_start))
+    app.add_handler(CommandHandler("help",         cmd_help))
+    app.add_handler(CommandHandler("examples",     cmd_examples))
+    app.add_handler(CommandHandler("engines",      cmd_engines))
+    app.add_handler(CommandHandler("plans",        cmd_plans))
+    app.add_handler(CommandHandler("balance",      cmd_balance))
+    app.add_handler(CommandHandler("set_welcome",  cmd_set_welcome))
     app.add_handler(CommandHandler("show_welcome", cmd_show_welcome))
-    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
-    app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
-    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
-    app.add_handler(CommandHandler("diag_video", cmd_diag_video))
-    app.add_handler(CommandHandler("img", cmd_img))
-    app.add_handler(CommandHandler("voice_on", cmd_voice_on))
-    app.add_handler(CommandHandler("voice_off", cmd_voice_off))
+    app.add_handler(CommandHandler("diag_limits",  cmd_diag_limits))
+    app.add_handler(CommandHandler("diag_stt",     cmd_diag_stt))
+    app.add_handler(CommandHandler("diag_images",  cmd_diag_images))
+    app.add_handler(CommandHandler("diag_video",   cmd_diag_video))
+    app.add_handler(CommandHandler("img",          cmd_img))
+    app.add_handler(CommandHandler("voice_on",     cmd_voice_on))
+    app.add_handler(CommandHandler("voice_off",    cmd_voice_off))
 
     # Платежи
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
@@ -2469,23 +2469,24 @@ def build_application() -> "Application":
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
-    # Медиа
-# --- голос/аудио (должен идти раньше фото/доков и раньше общего текстового) ---
-app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
+    # ───────── Медиа ─────────
+    # Голос/аудио — идёт раньше фото/доков и раньше общего текста
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
 
-# дальше твои уже существующие медиа-хендлеры:
-app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-app.add_handler(MessageHandler(filters.Document.ALL, handle_doc))
-app.add_handler(MessageHandler(filters.VIDEO, handle_video))
-app.add_handler(MessageHandler(filters.ANIMATION, handle_gif))
+    # Фото/документы/видео/гиф
+    app.add_handler(MessageHandler(filters.PHOTO,            handle_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL,     handle_doc))
+    app.add_handler(MessageHandler(filters.VIDEO,            handle_video))
+    app.add_handler(MessageHandler(filters.ANIMATION,        handle_gif))
 
-# Текст (в самом конце, чтобы не перехватывать всё раньше времени)
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    # ───────── Текст (в самом конце, чтобы не перехватывать) ─────────
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-# Ошибки
-app.add_error_handler(on_error)
+    # Ошибки
+    app.add_error_handler(on_error)
 
-return app
+    return app
+
 
 def main():
     # ИНИЦИАЛИЗАЦИЯ БД (важно!)
@@ -2499,10 +2500,9 @@ def main():
         # WEBHOOK-режим для Render Web Service (обязателен открытый порт)
         log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s",
                  PUBLIC_URL, WEBHOOK_PATH, PORT)
-        # НИЧЕГО не удаляем — вебхук должен быть установлен
         app.run_webhook(
             listen="0.0.0.0",
-            port=PORT,                               # Render передаст свой $PORT
+            port=PORT,  # Render передаст свой $PORT
             url_path=WEBHOOK_PATH.lstrip("/"),
             webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
             secret_token=(WEBHOOK_SECRET or None),
@@ -2516,10 +2516,10 @@ def main():
                 app.bot.delete_webhook(drop_pending_updates=True)
             )
         app.run_polling(
-            close_loop=False,
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=False
+            drop_pending_updates=False,
         )
+
 
 if __name__ == "__main__":
     main()
