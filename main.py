@@ -48,7 +48,7 @@ logging.basicConfig(
 log = logging.getLogger("gpt-bot")
 
 # ───────── ENV ─────────
-BOT_TOKEN        = os.environ.get("BOT_TOKEN", "").strip()
+BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
 BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
@@ -2333,6 +2333,11 @@ def build_application() -> "Application":
     return app
 
 def main():
+    # ИНИЦИАЛИЗАЦИЯ БД (важно!)
+    db_init()
+    db_init_usage()
+    _db_init_prefs()
+
     app = build_application()
 
     if USE_WEBHOOK:
