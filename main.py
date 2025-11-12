@@ -1279,13 +1279,21 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Команда /img ─────────
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args) if context.args else (
-        update.message.text.split(" ", 1)[-1] if " " in update.message.text else ""
-    )
-    prompt = prompt.strip()
+    # Берём только args; если их нет — показываем подсказку (не пытаемся выкусить /img из текста)
+    prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
         await update.effective_message.reply_text("Формат: /img <описание>")
         return
+
+    async def _go():
+        await _do_img_generate(update, context, prompt)
+
+    user_id = update.effective_user.id
+    await _try_pay_then_do(
+        update, context, user_id,
+        "img", IMG_COST_USD, _go,
+        remember_kind="img_generate", remember_payload={"prompt": prompt}
+    )
 
     async def _go():
         await _do_img_generate(update, context, prompt)
