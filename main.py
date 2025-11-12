@@ -887,16 +887,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.reply_text(answer)
     await maybe_tts_reply(update, context, answer)
 
-# ───────── Регистрация хендлера (добавьте в место, где вы настраиваете application) ─────────
-# сначала голос:
-application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
-
-# потом уже фото/документы/прочие (если есть)
-# ...
-
-# и только затем общий текстовый:
-# application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
 # ───────── Извлечение текста из документов ─────────
 def _safe_decode_txt(b: bytes) -> str:
     for enc in ("utf-8","cp1251","latin-1"):
@@ -2480,18 +2470,22 @@ def build_application() -> "Application":
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
     # Медиа
-    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL, on_doc))
-    app.add_handler(MessageHandler(filters.VOICE, on_voice))
-    app.add_handler(MessageHandler(filters.AUDIO, on_audio))
+# --- голос/аудио (должен идти раньше фото/доков и раньше общего текстового) ---
+app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
 
-    # Текст (в самом конце, чтобы не перехватывать команды)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+# дальше твои уже существующие медиа-хендлеры:
+app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+app.add_handler(MessageHandler(filters.Document.ALL, handle_doc))
+app.add_handler(MessageHandler(filters.VIDEO, handle_video))
+app.add_handler(MessageHandler(filters.ANIMATION, handle_gif))
 
-    # Ошибки
-    app.add_error_handler(on_error)
+# Текст (в самом конце, чтобы не перехватывать всё раньше времени)
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    return app
+# Ошибки
+app.add_error_handler(on_error)
+
+return app
 
 def main():
     # ИНИЦИАЛИЗАЦИЯ БД (важно!)
