@@ -608,7 +608,22 @@ def detect_media_intent(text: str):
 def _oai_text_client():
     return oai_llm
 
+def _pick_vision_model() -> str:
+    # Если определена спец-модель для vision — используем её; иначе — общий OPENAI_MODEL
+    try:
+        mv = globals().get("OPENAI_VISION_MODEL")
+        return (mv or OPENAI_MODEL).strip()
+    except Exception:
+        return OPENAI_MODEL
+
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
+    """
+    Универсальный текстовый запрос к OpenAI/OpenRouter с 3 попытками и экспон. бэкоффом.
+    """
+    user_text = (user_text or "").strip()
+    if not user_text:
+        return "Пустой запрос."
+
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
         messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
@@ -618,26 +633,34 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     for attempt in range(3):
         try:
             resp = _oai_text_client().chat.completions.create(
-                model=OPENAI_MODEL, messages=messages, temperature=0.6
+                model=OPENAI_MODEL,
+                messages=messages,
+                temperature=0.6,
             )
             txt = (resp.choices[0].message.content or "").strip()
             if txt:
                 return txt
         except Exception as e:
             last_err = e
-            log.warning("OpenAI/OpenRouter chat attempt %d failed: %s", attempt+1, e)
+            log.warning("OpenAI/OpenRouter chat attempt %d failed: %s", attempt + 1, e)
             await asyncio.sleep(0.8 * (attempt + 1))
     log.error("ask_openai_text failed: %s", last_err)
     return "⚠️ Сейчас не получилось получить ответ от модели. Я на связи — попробуй переформулировать запрос или повторить чуть позже."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
+    """
+    Vision-запрос к той же клиентской инстанции. По возможности берёт OPENAI_VISION_MODEL,
+    иначе — OPENAI_MODEL. Работает с data:URL (base64).
+    """
     try:
+        prompt = (user_text or "Опиши, что на изображении и какой там текст.").strip()
+        model = _pick_vision_model()
         resp = _oai_text_client().chat.completions.create(
-            model=OPENAI_MODEL,
+            model=model,
             messages=[
                 {"role": "system", "content": VISION_SYSTEM_PROMPT},
                 {"role": "user", "content": [
-                    {"type": "text", "text": user_text or "Опиши, что на изображении и какой там текст."},
+                    {"type": "text", "text": prompt},
                     {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}}
                 ]}
             ],
@@ -686,32 +709,53 @@ def _tts_set(user_id: int, on: bool):
 
 
 # ───────── Надёжный TTS через REST (OGG/Opus) ─────────
+def _sanitize_tts_text(text: str) -> str:
+    # компактный текст для озвучки
+    t = (text or "").strip()
+    # сжимаем повторяющиеся пробелы/переводы строк
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t
+
 def _tts_bytes_sync(text: str) -> bytes | None:
-    try:
-        if not OPENAI_TTS_KEY:
-            return None
-        url = f"{OPENAI_TTS_BASE_URL.rstrip('/')}/audio/speech"
-        payload = {
-            "model": OPENAI_TTS_MODEL,
-            "voice": OPENAI_TTS_VOICE,
-            "input": text,
-            "format": "opus"
-        }
-        headers = {
-            "Authorization": f"Bearer {OPENAI_TTS_KEY}",
-            "Content-Type": "application/json"
-        }
-        r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
-        r.raise_for_status()
-        return r.content if r.content else None
-    except Exception as e:
-        log.exception("TTS HTTP error: %s", e)
+    """
+    Синхронный вызов REST-TTS с небольшим ретраем.
+    Возвращает байты OGG/Opus либо None.
+    """
+    if not OPENAI_TTS_KEY:
         return None
+    url = f"{OPENAI_TTS_BASE_URL.rstrip('/')}/audio/speech"
+    payload = {
+        "model": OPENAI_TTS_MODEL,
+        "voice": OPENAI_TTS_VOICE,
+        "input": _sanitize_tts_text(text),
+        "format": "opus"
+    }
+    headers = {
+        "Authorization": f"Bearer {OPENAI_TTS_KEY}",
+        "Content-Type": "application/json"
+    }
+    last_err = None
+    for attempt in range(2):
+        try:
+            r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
+            r.raise_for_status()
+            return r.content if r.content else None
+        except Exception as e:
+            last_err = e
+            time.sleep(0.4 * (attempt + 1))
+    log.warning("TTS HTTP error: %s", last_err)
+    return None
 
 async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    """
+    Если у пользователя включён TTS и есть ключ, синтезируем и отправляем голос.
+    Сообщение-подпись повторяет текст (укороченный до лимита).
+    """
     user_id = update.effective_user.id
     if not _tts_get(user_id):
         return
+    text = (text or "").strip()
     if not text:
         return
     if len(text) > TTS_MAX_CHARS:
@@ -730,7 +774,7 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
             with contextlib.suppress(Exception):
                 await update.effective_message.reply_text("🔇 Не удалось синтезировать голос.")
             return
-        bio = BytesIO(audio); bio.name = "say.ogg"
+        bio = BytesIO(audio); bio.seek(0); bio.name = "say.ogg"
         await update.effective_message.reply_voice(voice=InputFile(bio), caption=text)
     except Exception as e:
         log.exception("maybe_tts_reply error: %s", e)
