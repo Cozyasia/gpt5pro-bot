@@ -25,6 +25,9 @@ from telegram.ext import (
 )
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
+# ───────── TTS imports ─────────
+import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
+# Ничего больше импортировать не нужно — TTS работает по HTTP (httpx уже импортирован)
 
 # Optional PIL / rembg for photo tools
 try:
@@ -669,6 +672,64 @@ def _tts_set(user_id: int, on: bool):
     cur.execute("INSERT OR IGNORE INTO user_prefs(user_id, tts_on) VALUES (?,?)", (user_id, 1 if on else 0))
     cur.execute("UPDATE user_prefs SET tts_on=? WHERE user_id=?", (1 if on else 0, user_id))
     con.commit(); con.close()
+
+# ───────── Надёжный TTS через REST (OGG/Opus) ─────────
+def _tts_bytes_sync(text: str) -> bytes | None:
+    try:
+        if not OPENAI_TTS_KEY:
+            return None
+        url = f"{OPENAI_TTS_BASE_URL.rstrip('/')}/audio/speech"
+        payload = {
+            "model": OPENAI_TTS_MODEL,
+            "voice": OPENAI_TTS_VOICE,
+            "input": text,
+            "format": "opus"
+        }
+        headers = {
+            "Authorization": f"Bearer {OPENAI_TTS_KEY}",
+            "Content-Type": "application/json"
+        }
+        r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
+        r.raise_for_status()
+        return r.content if r.content else None
+    except Exception as e:
+        log.exception("TTS HTTP error: %s", e)
+        return None
+
+async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    user_id = update.effective_user.id
+    if not _tts_get(user_id):
+        return
+    if not text:
+        return
+    if len(text) > TTS_MAX_CHARS:
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text(
+                f"🔇 Озвучка выключена для этого сообщения: текст длиннее {TTS_MAX_CHARS} символов."
+            )
+        return
+    if not OPENAI_TTS_KEY:
+        return
+    try:
+        with contextlib.suppress(Exception):
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VOICE)
+        audio = await asyncio.to_thread(_tts_bytes_sync, text)
+        if not audio:
+            with contextlib.suppress(Exception):
+                await update.effective_message.reply_text("🔇 Не удалось синтезировать голос.")
+            return
+        bio = BytesIO(audio); bio.name = "say.ogg"
+        await update.effective_message.reply_voice(voice=InputFile(bio), caption=text)
+    except Exception as e:
+        log.exception("maybe_tts_reply error: %s", e)
+
+async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _tts_set(update.effective_user.id, True)
+    await update.effective_message.reply_text(f"🔊 Озвучка включена. Лимит {TTS_MAX_CHARS} символов на ответ.")
+
+async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _tts_set(update.effective_user.id, False)
+    await update.effective_message.reply_text("🔈 Озвучка выключена.")
 
 # ───────── Надёжный TTS через REST (OGG/Opus) ─────────
 def _tts_bytes_sync(text: str) -> bytes | None:
