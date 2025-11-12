@@ -787,6 +787,115 @@ async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, False)
     await update.effective_message.reply_text("🔈 Озвучка выключена.")
 
+# ───────── Speech-to-Text (STT) • OpenAI Whisper/4o-mini-transcribe ─────────
+# Требует: from io import BytesIO, import os, import asyncio, import logging
+# и уже объявленные: log, ask_openai_text, maybe_tts_reply
+
+from openai import OpenAI as _OpenAI_STT
+
+# Env/константы с дефолтами: можно переопределить в окружении
+OPENAI_STT_MODEL    = (os.getenv("OPENAI_STT_MODEL") or "whisper-1").strip()
+OPENAI_STT_KEY      = (os.getenv("OPENAI_STT_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+OPENAI_STT_BASE_URL = (os.getenv("OPENAI_STT_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+
+def _oai_stt_client():
+    """
+    Отдельный клиент на официальный STT-эндпоинт.
+    Даже если чат идёт через OpenRouter, STT должен идти сюда.
+    """
+    return _OpenAI_STT(api_key=OPENAI_STT_KEY, base_url=OPENAI_STT_BASE_URL)
+
+async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
+    """
+    Надёжная обёртка над OpenAI STT. filename ОБЯЗАТЕЛЕН с расширением!
+    Допустимы .ogg/.webm/.mp3/.wav и т.п.
+    """
+    last_err = None
+    for attempt in range(3):
+        try:
+            bio = BytesIO(raw)
+            bio.name = filename  # критично для корректного определения формата
+            bio.seek(0)
+            resp = _oai_stt_client().audio.transcriptions.create(
+                model=OPENAI_STT_MODEL,  # "whisper-1" или "gpt-4o-mini-transcribe"
+                file=bio,
+                # при желании можно подсказать язык:
+                # language="ru"
+            )
+            text = (getattr(resp, "text", "") or "").strip()
+            if text:
+                return text
+        except Exception as e:
+            last_err = e
+            log.warning("STT attempt %d failed: %s", attempt+1, e)
+            await asyncio.sleep(0.8 * (attempt + 1))
+    log.error("STT failed: %s", last_err)
+    return ""
+
+# ───────── Хендлер голосовых/аудио ─────────
+from telegram import Update
+from telegram.ext import ContextTypes, MessageHandler, filters
+from telegram.constants import ChatAction
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    voice = getattr(msg, "voice", None)
+    audio = getattr(msg, "audio", None)
+    media = voice or audio
+    if not media:
+        await msg.reply_text("Не нашёл голосовой файл.")
+        return
+
+    # Скачиваем файл из Telegram
+    try:
+        with contextlib.suppress(Exception):
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        tg_file = await context.bot.get_file(media.file_id)
+        buf = BytesIO()
+        await tg_file.download_to_memory(out=buf)
+        raw = buf.getvalue()
+        mime = (getattr(media, "mime_type", "") or "").lower()
+        # Телеграм voice = OGG/Opus; подберём расширение
+        if "ogg" in mime or "opus" in mime:
+            filename = "voice.ogg"
+        elif "webm" in mime:
+            filename = "voice.webm"
+        elif "wav" in mime:
+            filename = "voice.wav"
+        elif "mp3" in mime or "mpeg" in mime or "mpga" in mime:
+            filename = "voice.mp3"
+        else:
+            # по умолчанию большинство голосовых — ogg/opus
+            filename = "voice.ogg"
+    except Exception as e:
+        log.exception("TG download error: %s", e)
+        await msg.reply_text("Не удалось скачать голосовое сообщение.")
+        return
+
+    # Транскрибируем
+    text = await _stt_transcribe_bytes(filename, raw)
+    if not text:
+        await msg.reply_text("Ошибка при обработке voice.")
+        return
+
+    # Покажем, что распознано
+    with contextlib.suppress(Exception):
+        await msg.reply_text(f"🗣️ Распознал: {text}")
+
+    # Отвечаем как на обычный текст
+    answer = await ask_openai_text(text)
+    await msg.reply_text(answer)
+    await maybe_tts_reply(update, context, answer)
+
+# ───────── Регистрация хендлера (добавьте в место, где вы настраиваете application) ─────────
+# сначала голос:
+application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
+
+# потом уже фото/документы/прочие (если есть)
+# ...
+
+# и только затем общий текстовый:
+# application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
 # ───────── Извлечение текста из документов ─────────
 def _safe_decode_txt(b: bytes) -> str:
