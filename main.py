@@ -2434,17 +2434,13 @@ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
         pass
 
 # ───────── Регистрация хендлеров и запуск ─────────
-from telegram import Update
-from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler
-from telegram.ext import ContextTypes, filters
-
-def build_application() -> Application:
+def build_application() -> "Application":
     if not BOT_TOKEN:
         raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # ----- Команды -----
+    # Команды
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
@@ -2461,32 +2457,32 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("voice_on",     cmd_voice_on))
     app.add_handler(CommandHandler("voice_off",    cmd_voice_off))
 
-    # ----- Платежи -----
+    # Платежи
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
-    # ----- Callback-кнопки -----
+    # Callback-кнопки
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
     app.add_handler(CallbackQueryHandler(on_cb))  # прочие callback'и
 
-    # ----- WebApp data из мини-приложения -----
+    # WebApp data из мини-приложения (если используется)
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
-    # ----- Медиа -----
-    # Голос/аудио ставим раньше фото/доков и текста
+    # --- Медиа ---
+    # Голос/аудио: СТАВИМ ПЕРЕД фото/доками и общим текстом
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
 
-    # Фото / документы / видео / гиф
-    app.add_handler(MessageHandler(filters.PHOTO,          handle_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL,   handle_doc))
-    app.add_handler(MessageHandler(filters.VIDEO,          handle_video))
-    app.add_handler(MessageHandler(filters.ANIMATION,      handle_gif))
+    # Фото/документы/видео/гиф
+    app.add_handler(MessageHandler(filters.PHOTO,            handle_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL,     handle_doc))
+    app.add_handler(MessageHandler(filters.VIDEO,            handle_video))
+    app.add_handler(MessageHandler(filters.ANIMATION,        handle_gif))
 
-    # ----- Текст (в самом конце, чтобы ничего не перехватывать раньше) -----
+    # Текст (в самом конце, чтобы не перехватывать всё)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    # ----- Ошибки -----
+    # Ошибки
     app.add_error_handler(on_error)
 
     return app
@@ -2501,21 +2497,21 @@ def main():
     app = build_application()
 
     if USE_WEBHOOK:
-        # WEBHOOK для Render Web Service
+        # WEBHOOK-режим для Render Web Service
         log.info(
             "🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s",
             PUBLIC_URL, WEBHOOK_PATH, PORT
         )
         app.run_webhook(
             listen="0.0.0.0",
-            port=PORT,                             # Render передаст свой $PORT
+            port=PORT,  # Render передаст свой $PORT
             url_path=WEBHOOK_PATH.lstrip("/"),
             webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
             secret_token=(WEBHOOK_SECRET or None),
             allowed_updates=Update.ALL_TYPES,
         )
     else:
-        # POLLING для Background Worker
+        # POLLING-режим для Background Worker
         log.info("🚀 POLLING mode.")
         with contextlib.suppress(Exception):
             asyncio.get_event_loop().run_until_complete(
