@@ -2378,11 +2378,32 @@ def build_application() -> "Application":
 
 def main():
     app = build_application()
-    log.info("✅ GPT-5 ProBot is up. Running polling…")
-    # На всякий случай снимаем вебхук перед пуллингом
-    with contextlib.suppress(Exception):
-        asyncio.get_event_loop().run_until_complete(app.bot.delete_webhook(drop_pending_updates=True))
-    app.run_polling(close_loop=False, allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
+
+    if USE_WEBHOOK:
+        # WEBHOOK-режим для Render Web Service (обязателен открытый порт)
+        log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s",
+                 PUBLIC_URL, WEBHOOK_PATH, PORT)
+        # НИЧЕГО не удаляем — вебхук должен быть установлен
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,                               # Render передаст свой $PORT
+            url_path=WEBHOOK_PATH.lstrip("/"),
+            webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
+            secret_token=(WEBHOOK_SECRET or None),
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        # POLLING-режим для Background Worker (порт не нужен)
+        log.info("🚀 POLLING mode.")
+        with contextlib.suppress(Exception):
+            asyncio.get_event_loop().run_until_complete(
+                app.bot.delete_webhook(drop_pending_updates=True)
+            )
+        app.run_polling(
+            close_loop=False,
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=False
+        )
 
 if __name__ == "__main__":
     main()
