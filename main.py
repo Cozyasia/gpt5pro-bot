@@ -2421,7 +2421,62 @@ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
         pass
 
 
-# ───────── Вспомогательные «шлюзы» для кнопок и безопасная обёртка ─────────
+# ───────── Роутеры для текстовых кнопок/режимов ─────────
+async def on_btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # открыть экран выбора движков (твой существующий обработчик команд)
+    return await cmd_engines(update, context)
+
+async def on_btn_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # показать реальный баланс + кнопки пополнения (реализовано в твоём cmd_balance)
+    return await cmd_balance(update, context)
+
+async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # показать реальные планы/лимиты + кнопки покупки (реализовано в твоём cmd_plans)
+    return await cmd_plans(update, context)
+
+async def on_mode_school_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txt = (
+        "🎓 *Учёба*\n"
+        "Помогу: конспекты из PDF/EPUB/DOCX/TXT, разбор задач пошагово, эссе/рефераты, мини-квизы.\n\n"
+        "_Быстрые действия:_\n"
+        "• Разобрать PDF → конспект\n"
+        "• Сократить в шпаргалку\n"
+        "• Объяснить тему с примерами\n"
+        "• План ответа / презентации"
+    )
+    await update.effective_message.reply_text(txt, parse_mode="Markdown")
+
+async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txt = (
+        "💼 *Работа*\n"
+        "Письма/брифы/резюме/аналитика, ToDo/планы, сводные таблицы из документов.\n"
+        "Для архитектора/дизайнера/проектировщика — структурирование ТЗ, чек-листы стадий, "
+        "сводные таблицы листов, пояснительные записки.\n\n"
+        "_Гибриды:_ GPT-5 (текст/логика) + Images (иллюстрации) + Luma/Runway (клипы/мокапы).\n\n"
+        "_Быстрые действия:_\n"
+        "• Сформировать бриф/ТЗ\n"
+        "• Свести требования в таблицу\n"
+        "• Сгенерировать письмо/резюме\n"
+        "• Черновик презентации"
+    )
+    await update.effective_message.reply_text(txt, parse_mode="Markdown")
+
+async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txt = (
+        "🔥 *Развлечения*\n"
+        "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, оживление старых фото.\n"
+        "Видео: Luma/Runway — клипы под Reels/Shorts; авто-нарезка длинного видео (сценарий/тайм-коды). "
+        "Мемы/квизы.\n\n"
+        "_Быстрые действия:_\n"
+        "• Оживить фото (анимация)\n"
+        "• Сделать клип из текста/голоса\n"
+        "• /img — сгенерировать изображение\n"
+        "• Раскадровка под Reels"
+    )
+    await update.effective_message.reply_text(txt, parse_mode="Markdown")
+
+
+# ───────── Вспомогательное: взять первую объявленную функцию по имени ─────────
 def _pick_first_defined(*names):
     """Вернёт первую существующую функцию из перечисленных имён или None."""
     for n in names:
@@ -2429,73 +2484,6 @@ def _pick_first_defined(*names):
         if callable(fn):
             return fn
     return None
-
-def _regex(s: str):
-    """Кейс-инсенситивный regex на точное совпадение фразы."""
-    return re.compile(rf"^{s}$", re.IGNORECASE)
-
-def _wrap_voice(handler):
-    """Безопасная обёртка вокруг твоего обработчика voice."""
-    async def _inner(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        try:
-            return await handler(update, context)
-        except Exception as e:
-            log.exception("voice handler failed: %s", e)
-            with contextlib.suppress(Exception):
-                await update.effective_message.reply_text("Ошибка при обработке voice.")
-    return _inner
-
-# — Кнопки для режимов (шлём понятные callback_data под on_cb_mode: ^(school:|work:|fun:))
-async def _btn_school(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [
-        [InlineKeyboardButton("PDF → конспект",       callback_data="school:notes")],
-        [InlineKeyboardButton("Сократить в шпаргалку", callback_data="school:cheatsheet")],
-        [InlineKeyboardButton("Объяснить с примерами", callback_data="school:explain")],
-        [InlineKeyboardButton("План ответа / презентация", callback_data="school:plan")],
-    ]
-    txt = ("🎓 Учёба\n"
-           "Помогу: конспекты из PDF/EPUB/DOCX/TXT, разбор задач пошагово, эссе/рефераты, мини-квизы.\n\n"
-           "Быстрые действия:")
-    await update.effective_message.reply_text(txt, reply_markup=InlineKeyboardMarkup(kb))
-
-async def _btn_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [
-        [InlineKeyboardButton("Бриф / ТЗ",                callback_data="work:brief")],
-        [InlineKeyboardButton("Требования → таблица",     callback_data="work:table")],
-        [InlineKeyboardButton("Письмо / резюме",          callback_data="work:letter")],
-        [InlineKeyboardButton("Черновик презентации",     callback_data="work:pitch")],
-    ]
-    txt = ("🧰 Работа\n"
-           "Письма/брифы/резюме/аналитика, ToDo/планы, сводные таблицы из документов.\n"
-           "Гибриды: GPT-5 (текст/логика) + Images (иллюстрации) + Luma/Runway (клипы/мокапы).\n\n"
-           "Быстрые действия:")
-    await update.effective_message.reply_text(txt, reply_markup=InlineKeyboardMarkup(kb))
-
-async def _btn_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [
-        [InlineKeyboardButton("Оживить фото (анимация)",   callback_data="fun:animate_photo")],
-        [InlineKeyboardButton("Клип из текста/голоса",     callback_data="fun:clip_from_text")],
-        [InlineKeyboardButton("Сгенерировать изображение", callback_data="fun:img")],
-        [InlineKeyboardButton("Раскадровка под Reels",     callback_data="fun:storyboard")],
-    ]
-    txt = ("🔥 Развлечения\n"
-           "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, оживление старых фото.\n"
-           "Видео: Luma/Runway — клипы под Reels/Shorts; авто-нарезка длинного видео (сценарий/тайм-коды). Мемы/квизы.\n\n"
-           "Быстрые действия:")
-    await update.effective_message.reply_text(txt, reply_markup=InlineKeyboardMarkup(kb))
-
-# Текстовые кнопки панели -> соответствующие команды
-async def _btn_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Проксируем в твою команду баланса (покажет кошелёк + топ-ап)
-    return await cmd_balance(update, context)
-
-async def _btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Проксируем в твою команду выбора движков
-    return await cmd_engines(update, context)
-
-async def _btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Проксируем в команду планов/подписки
-    return await cmd_plans(update, context)
 
 
 # ───────── Регистрация хендлеров и запуск ─────────
@@ -2534,11 +2522,20 @@ def build_application() -> "Application":
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
-    # ── Медиа (сначала голос, затем остальное) ──────────────────────────────────
+    # ── Голос/аудио первым по приоритету ───────────────────────────────────────
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
-        app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, _wrap_voice(voice_fn)))
+        app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
 
+    # ── Текстовые кнопки/ярлыки (зарегистрировать ДО общего текстового!) ──────
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:⭐️)?\s*Подписка(?:\s*·\s*Помощь)?$"), on_btn_plans))
+    app.add_handler(MessageHandler(filters.Regex(r"^Уч[её]ба$"), on_mode_school_text))
+    app.add_handler(MessageHandler(filters.Regex(r"^Работа$"), on_mode_work_text))
+    app.add_handler(MessageHandler(filters.Regex(r"^Развлечения$"), on_mode_fun_text))
+
+    # ── Медиа ──────────────────────────────────────────────────────────────────
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
     if photo_fn:
         app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
@@ -2555,15 +2552,7 @@ def build_application() -> "Application":
     if gif_fn:
         app.add_handler(MessageHandler(filters.ANIMATION, gif_fn))
 
-    # ── Текстовые кнопки панели (идут ПЕРЕД общим текстовым, чтобы срабатывали первыми) ──
-    app.add_handler(MessageHandler(filters.Regex(_regex("Уч[её]ба")), _btn_school))
-    app.add_handler(MessageHandler(filters.Regex(_regex("Работа")),   _btn_work))
-    app.add_handler(MessageHandler(filters.Regex(_regex("Развлечения")), _btn_fun))
-    app.add_handler(MessageHandler(filters.Regex(_regex("Баланс")),   _btn_balance))
-    app.add_handler(MessageHandler(filters.Regex(_regex("Движки")),   _btn_engines))
-    app.add_handler(MessageHandler(filters.Regex(_regex(r"Подписка\s*·\s*Помощь")), _btn_plans))
-
-    # Текст (регистрируем в самом конце, чтобы не перехватывать медиа)
+    # ── Текст (в самом конце, чтобы не перехватывать медиа и кнопки) ──────────
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
