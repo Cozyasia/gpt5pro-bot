@@ -648,6 +648,7 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         log.exception("Vision error: %s", e)
         return "Не удалось проанализировать изображение."
 
+
 # ───────── Пользовательские настройки (TTS) ─────────
 def _db_init_prefs():
     con = sqlite3.connect(DB_PATH)
@@ -660,6 +661,11 @@ def _db_init_prefs():
     con.commit(); con.close()
 
 def _tts_get(user_id: int) -> bool:
+    # лениво убеждаемся, что таблица есть
+    try:
+        _db_init_prefs()
+    except Exception:
+        pass
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR IGNORE INTO user_prefs(user_id, tts_on) VALUES (?,0)", (user_id,))
     con.commit()
@@ -668,68 +674,16 @@ def _tts_get(user_id: int) -> bool:
     return bool(row and row[0])
 
 def _tts_set(user_id: int, on: bool):
+    # лениво убеждаемся, что таблица есть
+    try:
+        _db_init_prefs()
+    except Exception:
+        pass
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR IGNORE INTO user_prefs(user_id, tts_on) VALUES (?,?)", (user_id, 1 if on else 0))
     cur.execute("UPDATE user_prefs SET tts_on=? WHERE user_id=?", (1 if on else 0, user_id))
     con.commit(); con.close()
 
-# ───────── Надёжный TTS через REST (OGG/Opus) ─────────
-def _tts_bytes_sync(text: str) -> bytes | None:
-    try:
-        if not OPENAI_TTS_KEY:
-            return None
-        url = f"{OPENAI_TTS_BASE_URL.rstrip('/')}/audio/speech"
-        payload = {
-            "model": OPENAI_TTS_MODEL,
-            "voice": OPENAI_TTS_VOICE,
-            "input": text,
-            "format": "opus"
-        }
-        headers = {
-            "Authorization": f"Bearer {OPENAI_TTS_KEY}",
-            "Content-Type": "application/json"
-        }
-        r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
-        r.raise_for_status()
-        return r.content if r.content else None
-    except Exception as e:
-        log.exception("TTS HTTP error: %s", e)
-        return None
-
-async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
-    user_id = update.effective_user.id
-    if not _tts_get(user_id):
-        return
-    if not text:
-        return
-    if len(text) > TTS_MAX_CHARS:
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text(
-                f"🔇 Озвучка выключена для этого сообщения: текст длиннее {TTS_MAX_CHARS} символов."
-            )
-        return
-    if not OPENAI_TTS_KEY:
-        return
-    try:
-        with contextlib.suppress(Exception):
-            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_VOICE)
-        audio = await asyncio.to_thread(_tts_bytes_sync, text)
-        if not audio:
-            with contextlib.suppress(Exception):
-                await update.effective_message.reply_text("🔇 Не удалось синтезировать голос.")
-            return
-        bio = BytesIO(audio); bio.name = "say.ogg"
-        await update.effective_message.reply_voice(voice=InputFile(bio), caption=text)
-    except Exception as e:
-        log.exception("maybe_tts_reply error: %s", e)
-
-async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _tts_set(update.effective_user.id, True)
-    await update.effective_message.reply_text(f"🔊 Озвучка включена. Лимит {TTS_MAX_CHARS} символов на ответ.")
-
-async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _tts_set(update.effective_user.id, False)
-    await update.effective_message.reply_text("🔈 Озвучка выключена.")
 
 # ───────── Надёжный TTS через REST (OGG/Opus) ─────────
 def _tts_bytes_sync(text: str) -> bytes | None:
@@ -788,6 +742,7 @@ async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, False)
     await update.effective_message.reply_text("🔈 Озвучка выключена.")
+
 
 # ───────── Извлечение текста из документов ─────────
 def _safe_decode_txt(b: bytes) -> str:
@@ -799,6 +754,7 @@ def _safe_decode_txt(b: bytes) -> str:
     return b.decode("utf-8", errors="ignore")
 
 def _extract_pdf_text(data: bytes) -> str:
+    # PyPDF2 — сначала
     try:
         import PyPDF2
         rd = PyPDF2.PdfReader(BytesIO(data))
@@ -813,18 +769,17 @@ def _extract_pdf_text(data: bytes) -> str:
             return t
     except Exception:
         pass
+    # pdfminer.six — корректный импорт
     try:
-        from pdfminer_high_level import extract_text  # type: ignore
+        from pdfminer.high_level import extract_text as pdfminer_extract_text  # type: ignore
     except Exception:
+        pdfminer_extract_text = None  # type: ignore
+    if pdfminer_extract_text:
         try:
-            from pdfminer.high_level import extract_text  # fallback
-        except Exception:
-            extract_text = None  # type: ignore
-    if extract_text:
-        try:
-            return (extract_text(BytesIO(data)) or "").strip()
+            return (pdfminer_extract_text(BytesIO(data)) or "").strip()
         except Exception:
             pass
+    # PyMuPDF (fitz) — если установлен
     try:
         import fitz
         doc = fitz.open(stream=data, filetype="pdf")
@@ -846,7 +801,7 @@ def _extract_epub_text(data: bytes) -> str:
         book = epub.read_epub(BytesIO(data))
         chunks = []
         for item in book.get_items():
-            if item.get_type() == 9:
+            if item.get_type() == 9:  # DOCUMENT
                 try:
                     soup = BeautifulSoup(item.get_content(), "html.parser")
                     txt = soup.get_text(separator=" ", strip=True)
@@ -889,6 +844,7 @@ def extract_text_from_document(data: bytes, filename: str) -> tuple[str, str]:
     decoded = _safe_decode_txt(data)
     return decoded if decoded else "", "UNKNOWN"
 
+
 # ───────── Суммаризация длинных текстов ─────────
 async def _summarize_chunk(text: str, query: str | None = None) -> str:
     prefix = "Суммируй кратко по пунктам основное из фрагмента документа на русском:\n"
@@ -912,6 +868,7 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
     final_prompt = ("Объедини тезисы по фрагментам в цельное резюме документа: 1) 5–10 главных пунктов; "
                     "2) ключевые цифры/сроки; 3) вывод/рекомендации. Русский язык.\n\n" + combined)
     return await ask_openai_text(final_prompt)
+
 
 # ======= Анализ документов (PDF/EPUB/DOCX/FB2/TXT) =======
 async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -942,7 +899,6 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("Ошибка при анализе документа.")
         except Exception:
             pass
-
 
 # ───────── OpenAI Images (генерация картинок) ─────────
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
