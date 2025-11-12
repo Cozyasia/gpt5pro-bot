@@ -2463,16 +2463,34 @@ def build_application() -> "Application":
     # Прочие callback'и
     app.add_handler(CallbackQueryHandler(on_cb))
 
+      # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
+
     # Данные из мини-приложения (WebApp)
     with contextlib.suppress(Exception):
-                app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+    with contextlib.suppress(Exception):
+        # Совместимость с вариантами PTB, где WEB_APP_DATA доступен напрямую
+        if hasattr(filters, "WEB_APP_DATA"):
+            app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # ── Голос/аудио первым по приоритету ───────────────────────────────────────
+    # ── Платежи (оставляем как есть выше в файле, тут ничего не добавляем) ──
+    #  PreCheckoutQueryHandler(on_precheckout) и SUCCESSFUL_PAYMENT уже зарегистрированы выше
+
+    # Быстрые действия «Развлечения» — регистрируем первыми
+    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:(?:revive|clip|img|storyboard)$"))
+
+    # Подрежимы (school/work/fun:…)
+    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
+
+    # Прочие callback'и
+    app.add_handler(CallbackQueryHandler(on_cb))
+
+    # ── Голос/аудио первыми по приоритету ────────────────────────────────────
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
         app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
 
-    # ── Текстовые кнопки/ярлыки (зарегистрировать ДО общего текстового!) ──────
+    # ── Текстовые кнопки/ярлыки (регистрируем ДО общего текстового) ─────────
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:⭐️)?\s*Подписка(?:\s*·\s*Помощь)?$"), on_btn_plans))
@@ -2480,7 +2498,7 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(r"^Работа$"), on_mode_work_text))
     app.add_handler(MessageHandler(filters.Regex(r"^Развлечения$"), on_mode_fun_text))
 
-    # ── Медиа ──────────────────────────────────────────────────────────────────
+    # ── Медиа ────────────────────────────────────────────────────────────────
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
     if photo_fn:
         app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
@@ -2496,6 +2514,8 @@ def build_application() -> "Application":
     gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
     if gif_fn:
         app.add_handler(MessageHandler(filters.ANIMATION, gif_fn))
+
+    # >>> PATCH END <<<
 
     # ── Текст (в самом конце, чтобы не перехватывать медиа и кнопки) ──────────
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
