@@ -25,8 +25,6 @@ from telegram.ext import (
 )
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
-# ───────── TTS imports ─────────
-import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
 
 # Optional PIL / rembg for photo tools
 try:
@@ -97,9 +95,6 @@ LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
 LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
-# Luma Images (опционально: если нет — используем OpenAI Images как фолбэк)
-LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
-LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
 
 # Фолбэки Luma
 _fallbacks_raw = ",".join([
@@ -665,7 +660,6 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         log.exception("Vision error: %s", e)
         return "Не удалось проанализировать изображение."
 
-
 # ───────── Пользовательские настройки (TTS) ─────────
 def _db_init_prefs():
     con = sqlite3.connect(DB_PATH)
@@ -698,7 +692,6 @@ def _tts_set(user_id: int, on: bool):
     cur.execute("INSERT OR IGNORE INTO user_prefs(user_id, tts_on) VALUES (?,?)", (user_id, 1 if on else 0))
     cur.execute("UPDATE user_prefs SET tts_on=? WHERE user_id=?", (1 if on else 0, user_id))
     con.commit(); con.close()
-
 
 # ───────── Надёжный TTS через REST (OGG/Opus) ─────────
 def _tts_bytes_sync(text: str) -> bytes | None:
@@ -797,10 +790,6 @@ async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
     return ""
 
 # ───────── Хендлер голосовых/аудио ─────────
-from telegram import Update
-from telegram.ext import ContextTypes, MessageHandler, filters
-from telegram.constants import ChatAction
-
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     voice = getattr(msg, "voice", None)
@@ -872,7 +861,7 @@ def _extract_pdf_text(data: bytes) -> str:
     except Exception:
         pass
     try:
-        from pdfminer_high_level import extract_text as pdfminer_extract_text  # may not exist
+        from pdfminer.high_level import extract_text as pdfminer_extract_text  # ← исправленный импорт
     except Exception:
         pdfminer_extract_text = None  # type: ignore
     if pdfminer_extract_text:
@@ -944,7 +933,6 @@ def extract_text_from_document(data: bytes, filename: str) -> tuple[str, str]:
     decoded = _safe_decode_txt(data)
     return decoded if decoded else "", "UNKNOWN"
 
-
 # ───────── Суммаризация длинных текстов ─────────
 async def _summarize_chunk(text: str, query: str | None = None) -> str:
     prefix = "Суммируй кратко по пунктам основное из фрагмента документа на русском:\n"
@@ -969,7 +957,6 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
                     "2) ключевые цифры/сроки; 3) вывод/рекомендации. Русский язык.\n\n" + combined)
     return await ask_openai_text(final_prompt)
 
-
 # ======= Анализ документов (PDF/EPUB/DOCX/FB2/TXT) =======
 async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -990,7 +977,6 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc_analyze error: %s", e)
-    # ничего не бросаем наружу
 
 # ───────── OpenAI Images (генерация картинок) ─────────
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
@@ -1003,42 +989,6 @@ async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, p
     except Exception as e:
         log.exception("IMG gen error: %s", e)
         await update.effective_message.reply_text("Не удалось создать изображение.")
-
-async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
-    if not LUMA_IMG_BASE_URL or not LUMA_API_KEY:
-        # фолбэк: OpenAI Images
-        try:
-            resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
-            return base64.b64decode(resp.data[0].b64_json)
-        except Exception as e:
-            log.exception("OpenAI images fallback error: %s", e)
-            return None
-    try:
-        # Примерный эндпоинт; если у тебя другой — замени path/поля под свой аккаунт.
-        url = f"{LUMA_IMG_BASE_URL}/v1/images"
-        headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"}
-        payload = {"model": LUMA_IMG_MODEL, "prompt": prompt, "size": "1024x1024"}
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(url, headers=headers, json=payload)
-            if r.status_code >= 400:
-                return None
-            j = r.json() or {}
-            b64 = (j.get("data") or [{}])[0].get("b64_json") or j.get("image_base64")
-            return base64.b64decode(b64) if b64 else None
-    except Exception as e:
-        log.exception("Luma image gen error: %s", e)
-        return None
-
-async def _start_luma_img(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
-    async def _go():
-        img = await _luma_generate_image_bytes(prompt)
-        if not img:
-            await update.effective_message.reply_text("Не удалось создать изображение.")
-            return
-        await update.effective_message.reply_photo(photo=img, caption=f"🖌 Готово ✅\nЗапрос: {prompt}")
-    await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go,
-                           remember_kind="luma_img", remember_payload={"prompt": prompt})
-
 
 # ───────── UI / тексты ─────────
 START_TEXT = (
@@ -1057,11 +1007,37 @@ START_TEXT = (
     "  могу делать тайм-коды по аудиокнигам/лекциям и краткие выжимки.\n"
     "• 💼 Работа — письма/брифы/документы, аналитика и резюме материалов, ToDo/планы, генерация идей.\n"
     "  Для архитектора/дизайнера/проектировщика: структурирование ТЗ, чек-листы стадий, названия/описания листов, "
-    "  сводные таблицы из текстов, оформление пояснительных записок, рутина по заявкам/переписке.\n"
+    "  сводные таблицы из текстов, оформление пояснительных записок, рутину по заявкам/переписке.\n"
     "• 🔥 Развлечения — фото-мастерская (удаление/замена фона, outpaint, раскадровка), оживление старых фото, "
     "  видео по тексту/голосу, идеи и форматы для Reels/Shorts, авто-нарезка из длинного видео (сценарий/тайм-коды), "
     "  мемы/квизы.\n\n"
     "Выберите режим кнопкой ниже — или просто напишите запрос. Кнопка «🧠 Движки» — для точного выбора Luma/Runway/Images."
+)
+
+HELP_TEXT = (
+    "Подсказки:\n"
+    "• /img «кот в очках в стиле киберпанк» — сгенерирую картинку.\n"
+    "• «сделай видео ретро-авто на 9 секунд 9:16» — предложу Luma/Runway.\n"
+    "• Пришлите PDF/EPUB/DOCX/FB2/TXT — извлеку текст и сделаю конспект; цель можно указать в подписи к файлу.\n"
+    "• Озвучка ответов: /voice_on и /voice_off (OGG/Opus голосом выбранного пресета).\n"
+    "• «🧾 Баланс» — кошелёк и пополнение (RUB/USDT/TON); /plans — тарифы.\n"
+)
+
+EXAMPLES_TEXT = (
+    "Примеры:\n\n"
+    "🎓 Учёба\n"
+    "• Объясни метод Тейлора простыми словами, 2 примера.\n"
+    "• Реши задачу по физике: брусок массой …\n"
+    "• Составь мини-квиз по теме «ВОВ»: 10 вопросов A–D.\n"
+    "• Извлеки и законспектируй главу 3 из PDF (цель: подготовка к экзамену).\n\n"
+    "💼 Работа\n"
+    "• Подготовь бриф для клиента на интерьер кухни, 8 пунктов.\n"
+    "• Сверстай ToDo-план запуска проекта на 2 недели.\n"
+    "• Из переписки вытяни задачи и дедлайны (дам файл).\n\n"
+    "🔥 Развлечения\n"
+    "• Удали фон с фото и сделай outpaint.\n"
+    "• Сгенерируй видео «неоновый дождь над городом», 9с, 9:16.\n"
+    "• Придумай сценарий Reels и тайм-коды для авто-нарезки из 15-мин ролика.\n"
 )
 
 def engines_kb():
@@ -1088,7 +1064,6 @@ def main_keyboard():
 
 main_kb = main_keyboard()
 
-
 # ───────── сохранение выбранного режима/подрежима (SQLite kv) ─────────
 def _mode_set(user_id: int, mode: str):
     kv_set(f"mode:{user_id}", mode)
@@ -1101,7 +1076,6 @@ def _mode_track_set(user_id: int, track: str):
 
 def _mode_track_get(user_id: int) -> str:
     return kv_get(f"mode_track:{user_id}", "") or ""
-
 
 # ───────── Подменю режимов ─────────
 def _school_kb():
@@ -1129,14 +1103,12 @@ def _fun_quick_kb():
     ])
 
 def _fun_kb():
-    # оставим и старое подменю — не используется сейчас
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🖼 Фото-мастерская", callback_data="fun:photo"),
          InlineKeyboardButton("🎬 Видео-идеи",      callback_data="fun:video")],
         [InlineKeyboardButton("🎲 Квизы/игры",      callback_data="fun:quiz"),
          InlineKeyboardButton("😆 Мемы/шутки",      callback_data="fun:meme")],
     ])
-
 
 # ───────── Команды/кнопки режимов ─────────
 async def cmd_mode_school(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1154,7 +1126,7 @@ async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_track_set(update.effective_user.id, "")
     await update.effective_message.reply_text(
         "💼 Работа → выберите тип или опишите задачу.\n"
-        "Письма/брифы/ToDo/аналитика, для архитектора/дизайнера/проектировщика — ТЗ, чек-листы, своды из текстов.",
+        "Письма/брифы/ToDo/аналитика, для архитектора/дизайнера/проектировщика — ТЗ, чек-листы, своды.",
         reply_markup=_work_kb()
     )
 
@@ -1166,16 +1138,13 @@ async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=_fun_quick_kb()
     )
 
-
 # ───────── Коллбэки подрежимов ─────────
 async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "")
     try:
         if any(data.startswith(p) for p in ("school:", "work:", "fun:")):
-            # базовый трекинг старых веток (photo/video/quiz/meme)
             if data in ("fun:revive","fun:clip","fun:img","fun:storyboard"):
-                # эти обрабатываются отдельным хендлером on_cb_fun
                 return
             _, track = data.split(":", 1)
             _mode_track_set(update.effective_user.id, track)
@@ -1224,7 +1193,6 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
 
-
 # ───────── Диагностика/лимиты ─────────
 async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1239,7 +1207,6 @@ async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
     ]
     await update.effective_message.reply_text("\n".join(lines))
-
 
 # ───────── Capability Q&A ─────────
 _CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
@@ -1271,7 +1238,6 @@ def capability_answer(text: str) -> str | None:
     if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
         return "Да, могу запустить генерацию коротких видео. Напишите: «сделай видео … 9 секунд 9:16»."
     return None
-
 
 # ───────── Моды/движки для study ─────────
 def _uk(user_id: int, name: str) -> str: return f"user:{user_id}:{name}"
@@ -1318,7 +1284,6 @@ async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE,
     await update.effective_message.reply_text(ans)
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
 
-
 # ───────── Кнопка приветственной картинки ─────────
 async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
@@ -1337,7 +1302,6 @@ async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_photo(url, caption="Текущая картинка приветствия")
     else:
         await update.effective_message.reply_text("Картинка приветствия не задана.")
-
 
 # ───────── Баланс / пополнение ─────────
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1358,7 +1322,6 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
-
 # ───────── Команда /img ─────────
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
@@ -1376,17 +1339,14 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
         remember_kind="img_generate", remember_payload={"prompt": prompt}
     )
 
-
 # ───────── Photo quick actions ─────────
 def photo_quick_actions_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Оживить фото (Runway)", callback_data="pedit:revive")],
-        [InlineKeyboardButton("🧼 Удалить фон",  callback_data="pedit:removebg"),
-         InlineKeyboardButton("🖼 Заменить фон", callback_data="pedit:replacebg")],
-        [InlineKeyboardButton("🧭 Расширить кадр (outpaint)", callback_data="pedit:outpaint"),
-         InlineKeyboardButton("📽 Раскадровка", callback_data="pedit:story")],
-        [InlineKeyboardButton("🖌 Картинка по описанию (Luma)", callback_data="pedit:lumaimg")],
-        [InlineKeyboardButton("👁 Анализ фото", callback_data="pedit:vision")],
+        [InlineKeyboardButton("🧼 RemoveBG",  callback_data="pedit:removebg"),
+         InlineKeyboardButton("🖼 ReplaceBG", callback_data="pedit:replacebg")],
+        [InlineKeyboardButton("🧭 Outpaint",   callback_data="pedit:outpaint"),
+         InlineKeyboardButton("📽 Storyboard", callback_data="pedit:story")],
+        [InlineKeyboardButton("👁 Vision",     callback_data="pedit:vision")]
     ])
 
 _photo_cache = {}  # user_id -> bytes
@@ -1449,11 +1409,10 @@ async def _pedit_storyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             "Сделай раскадровку (6 кадров) под 6–10 секундный клип. "
             "Каждый кадр — 1 строка: кадр/действие/ракурс/свет. Основа:\n" + (desc or "")
         )
-        await update.effective_message.reply_text("Раскадровка:\н" + plan)
+        await update.effective_message.reply_text("Раскадровка:\n" + plan)
     except Exception as e:
         log.exception("storyboard error: %s", e)
         await update.effective_message.reply_text("Не удалось построить раскадровку.")
-
 
 # ───────── WebApp data (тарифы/пополнения) ─────────
 async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1515,8 +1474,10 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("Получены данные из мини-приложения, но команда не распознана.")
     except Exception as e:
         log.exception("on_webapp_data error: %s", e)
-        await update.effective_message.reply_text("Ошибка обработки данных мини-приложения.")
-
+   	finally:
+        with contextlib.suppress(Exception):
+            if update and update.effective_chat:
+                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
 
 # ───────── CallbackQuery (всё остальное) ─────────
 _pending_actions = {}
@@ -1747,24 +1708,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _pedit_outpaint(update, context, img); return
             if data == "pedit:story":
                 await _pedit_storyboard(update, context, img); return
-            if data == "pedit:revive":
-                img = _get_cached_photo(update.effective_user.id)
-                if not img:
-                    await q.edit_message_text("Сначала пришлите фото, затем нажмите «Оживить фото».")
-                    return
-                dur, asp = parse_video_opts("")  # дефолт из ENV
-                async def _go():
-                    await _run_runway_animate_photo(update, context, img, prompt="", duration_s=dur, aspect=asp)
-                await _try_pay_then_do(update, context, update.effective_user.id, "runway",
-                                       max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
-                                       _go, remember_kind="revive_photo_btn",
-                                       remember_payload={"duration": dur, "aspect": asp})
-                return
-
-            if data == "pedit:lumaimg":
-                _mode_track_set(update.effective_user.id, "lumaimg_wait_text")
-                await q.edit_message_text("Напишите одно предложение — что сгенерировать. Я сделаю картинку (Luma / фолбэк OpenAI).")
-                return
             if data == "pedit:vision":
                 b64 = base64.b64encode(img).decode("ascii")
                 mime = sniff_image_mime(img)
@@ -1812,8 +1755,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
 
-
-# ───────── STT ─────────
+# ───────── STT вспомогательное ─────────
 def _mime_from_filename(fn: str) -> str:
     fnl = (fn or "").lower()
     if fnl.endswith((".ogg", ".oga")): return "audio/ogg"
@@ -1845,7 +1787,6 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
         except Exception as e:
             log.exception("Whisper STT error: %s", e)
     return ""
-
 
 # ───────── Диагностика движков ─────────
 async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1884,7 +1825,6 @@ async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.effective_message.reply_text("\n".join(lines))
 
-
 # ───────── MIME для изображений ─────────
 def sniff_image_mime(data: bytes) -> str:
     if not data or len(data) < 12:
@@ -1897,7 +1837,6 @@ def sniff_image_mime(data: bytes) -> str:
     if b[0:4] == b"RIFF" and b[8:12] == b"WEBP":
         return "image/webp"
     return "application/octet-stream"
-
 
 # ───────── Парс опций видео ─────────
 _ASPECTS = {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"}
@@ -1913,7 +1852,6 @@ def parse_video_opts(text: str) -> tuple[int, str]:
             asp = a; break
     aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
     return duration, aspect
-
 
 # ───────── Luma video ─────────
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
@@ -1971,7 +1909,6 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
     except Exception as e:
         log.exception("Luma error: %s", e)
         await update.effective_message.reply_text("❌ Luma: не удалось запустить/получить видео.")
-
 
 # ───────── Runway video ─────────
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
@@ -2031,69 +1968,6 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     except Exception as e:
         log.exception("Runway error: %s", e)
         await update.effective_message.reply_text("❌ Runway: не удалось запустить/получить видео.")
-
-# ───────── Runway: анимация загруженного фото (image→video) ─────────
-async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    try:
-        b64 = base64.b64encode(img_bytes).decode("ascii")
-        ratio = aspect.replace(":", "/") if ":" in aspect else RUNWAY_RATIO
-        payload = {
-            "model": RUNWAY_MODEL,
-            "input": {
-                "prompt": (prompt or "animate the input photo with subtle camera motion, lifelike micro-movements").strip(),
-                "duration": duration_s,
-                "ratio": ratio,
-                # ключи init_image / image_data поддерживаются актуальными версиями API
-                # если у тебя другой формат — скорректируй поля ниже под свой аккаунт:
-                "init_image": f"data:{sniff_image_mime(img_bytes)};base64,{b64}"
-            }
-        }
-        headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Accept": "application/json"}
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}", headers=headers, json=payload)
-            if r.status_code >= 400:
-                await update.effective_message.reply_text(f"⚠️ Runway отклонил задачу ({r.status_code}).")
-                return
-            rid = (r.json() or {}).get("id") or (r.json() or {}).get("task_id")
-            if not rid:
-                await update.effective_message.reply_text("⚠️ Runway не вернул id задачи.")
-                return
-
-            await update.effective_message.reply_text("⏳ Оживляю фото в Runway… Сообщу, когда будет готово.")
-
-            status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=rid)
-            started = time.time()
-            while True:
-                rs = await client.get(status_url, headers=headers)
-                js = {}
-                try: js = rs.json()
-                except Exception: pass
-                st = (js.get("status") or js.get("state") or "").lower()
-                if st in ("completed", "succeeded", "finished", "ready"):
-                    assets = js.get("output", {}) if isinstance(js.get("output"), dict) else (js.get("assets") or {})
-                    url = (assets.get("video") if isinstance(assets, dict) else None) or js.get("video_url") or js.get("output_url")
-                    if not url:
-                        await update.effective_message.reply_text("⚠️ Готово, но нет ссылки на видео.")
-                        return
-                    try:
-                        v = await client.get(url, timeout=180.0)
-                        v.raise_for_status()
-                        bio = BytesIO(v.content); bio.name = "revive.mp4"
-                        await update.effective_message.reply_video(InputFile(bio), caption="✨ Оживил фото (Runway) ✅")
-                    except Exception:
-                        await update.effective_message.reply_text(f"✨ Оживил фото (Runway) ✅\n{url}")
-                    return
-                if st in ("failed", "error", "canceled", "cancelled"):
-                    await update.effective_message.reply_text("❌ Runway: ошибка рендера.")
-                    return
-                if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await update.effective_message.reply_text("⌛ Runway: время ожидания вышло.")
-                    return
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
-    except Exception as e:
-        log.exception("Runway revive error: %s", e)
-        await update.effective_message.reply_text("❌ Не удалось анимировать фото в Runway.")
 
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
@@ -2165,7 +2039,6 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
 
-
 # ───────── CryptoBot ─────────
 CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
 CRYPTO_BASE = "https://pay.crypt.bot/api"
@@ -2228,7 +2101,6 @@ async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
     except Exception as e:
         log.exception("crypto poll error: %s", e)
 
-
 # ───────── Предложение пополнения ─────────
 async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
@@ -2240,7 +2112,6 @@ async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("Crypto $20", callback_data="topup:crypto:20")],
     ])
     await update.effective_message.reply_text("Выберите сумму пополнения:", reply_markup=kb)
-
 
 # ───────── Попытка оплатить → выполнить ─────────
 async def _try_pay_then_do(
@@ -2282,7 +2153,6 @@ async def _try_pay_then_do(
         ),
     )
 
-
 # ───────── /plans ─────────
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⭐ Тарифы:"]
@@ -2296,7 +2166,6 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Открыть мини-витрину",    web_app=WebAppInfo(url=TARIFF_URL))]
     ])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
-
 
 # ───────── Текстовый вход ─────────
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2368,54 +2237,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
 
-
 # ───────── Фото / Документы / Голос ─────────
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ph = update.message.photo[-1]
         f = await ph.get_file()
         data = await f.download_as_bytearray()
-        img = bytes(data)
-        _cache_photo(update.effective_user.id, img)
-
-        caption = (update.message.caption or "").strip()
-        if caption:
-            tl = caption.lower()
-            # оживить фото → Runway по умолчанию
-            if any(k in tl for k in ("оживи", "анимиру", "сделай видео", "revive", "animate")):
-                dur, asp = parse_video_opts(caption)
-                prompt = re.sub(r"\b(оживи|оживить|анимируй|анимировать|сделай видео|revive|animate)\b", "", caption, flags=re.I).strip(" ,.")
-                async def _go():
-                    await _run_runway_animate_photo(update, context, img, prompt, dur, asp)
-                await _try_pay_then_do(update, context, update.effective_user.id, "runway",
-                                       max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
-                                       _go, remember_kind="revive_photo",
-                                       remember_payload={"duration": dur, "aspect": asp, "prompt": prompt})
-                return
-
-            # удалить фон
-            if any(k in tl for k in ("удали фон", "removebg", "убрать фон")):
-                await _pedit_removebg(update, context, img); return
-
-            # заменить фон
-            if any(k in tl for k in ("замени фон", "replacebg", "размытый фон", "blur")):
-                await _pedit_replacebg(update, context, img); return
-
-            # outpaint
-            if "outpaint" in tl or "расшир" in tl:
-                await _pedit_outpaint(update, context, img); return
-
-            # раскадровка
-            if "раскадров" in tl or "storyboard" in tl:
-                await _pedit_storyboard(update, context, img); return
-
-            # картинка по описанию (Luma / фолбэк OpenAI)
-            if any(k in tl for k in ("картин", "изображен", "image", "img")) and any(k in tl for k in ("сгенериру", "созда", "сделай")):
-                await _start_luma_img(update, context, caption); return
-
-        # если явной команды в подписи нет — показываем быстрые кнопки
-        await update.effective_message.reply_text("Фото получено. Что сделать?",
-                                                  reply_markup=photo_quick_actions_kb())
+        _cache_photo(update.effective_user.id, bytes(data))
+        await update.effective_message.reply_text("Фото получено. Что сделать?", reply_markup=photo_quick_actions_kb())
     except Exception as e:
         log.exception("on_photo error: %s", e)
         with contextlib.suppress(Exception):
@@ -2493,7 +2322,6 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Ошибка при обработке аудио.")
 
-
 # ───────── Обработчик ошибок PTB ─────────
 async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
     log.exception("Unhandled error: %s", context_.error)
@@ -2502,7 +2330,6 @@ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
     except Exception:
         pass
-
 
 # ───────── Роутеры для текстовых кнопок/режимов ─────────
 async def on_btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2551,7 +2378,6 @@ async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-
 # ───────── Вспомогательное: взять первую объявленную функцию по имени ─────────
 def _pick_first_defined(*names):
     for n in names:
@@ -2559,7 +2385,6 @@ def _pick_first_defined(*names):
         if callable(fn):
             return fn
     return None
-
 
 # ───────── Регистрация хендлеров и запуск ─────────
 def build_application() -> "Application":
@@ -2589,6 +2414,13 @@ def build_application() -> "Application":
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
+    # Данные из мини-приложения (WebApp)
+    with contextlib.suppress(Exception):
+        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+    with contextlib.suppress(Exception):
+        if hasattr(filters, "WEB_APP_DATA"):
+            app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
+
     # Быстрые действия «Развлечения» — первыми
     app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:(?:revive|clip|img|storyboard)$"))
     # Подрежимы (school/work/fun:…)
@@ -2596,34 +2428,12 @@ def build_application() -> "Application":
     # Прочие callback'и
     app.add_handler(CallbackQueryHandler(on_cb))
 
-      # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
-
-    # Данные из мини-приложения (WebApp)
-    with contextlib.suppress(Exception):
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
-    with contextlib.suppress(Exception):
-        # Совместимость с вариантами PTB, где WEB_APP_DATA доступен напрямую
-        if hasattr(filters, "WEB_APP_DATA"):
-            app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
-
-    # ── Платежи (оставляем как есть выше в файле, тут ничего не добавляем) ──
-    #  PreCheckoutQueryHandler(on_precheckout) и SUCCESSFUL_PAYMENT уже зарегистрированы выше
-
-    # Быстрые действия «Развлечения» — регистрируем первыми
-    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:(?:revive|clip|img|storyboard)$"))
-
-    # Подрежимы (school/work/fun:…)
-    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
-
-    # Прочие callback'и
-    app.add_handler(CallbackQueryHandler(on_cb))
-
-    # ── Голос/аудио первыми по приоритету ────────────────────────────────────
+    # Голос/аудио первыми по приоритету
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
         app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
 
-    # ── Текстовые кнопки/ярлыки (регистрируем ДО общего текстового) ─────────
+    # Текстовые кнопки/ярлыки (регистрируем ДО общего текстового)
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:⭐️)?\s*Подписка(?:\s*·\s*Помощь)?$"), on_btn_plans))
@@ -2631,7 +2441,7 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(r"^Работа$"), on_mode_work_text))
     app.add_handler(MessageHandler(filters.Regex(r"^Развлечения$"), on_mode_fun_text))
 
-    # ── Медиа ────────────────────────────────────────────────────────────────
+    # Медиа
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
     if photo_fn:
         app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
@@ -2640,17 +2450,7 @@ def build_application() -> "Application":
     if doc_fn:
         app.add_handler(MessageHandler(filters.Document.ALL, doc_fn))
 
-    video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
-    if video_fn:
-        app.add_handler(MessageHandler(filters.VIDEO, video_fn))
-
-    gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
-    if gif_fn:
-        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn))
-
-    # >>> PATCH END <<<
-
-    # ── Текст (в самом конце, чтобы не перехватывать медиа и кнопки) ──────────
+    # Текст (в самом конце, чтобы не перехватывать медиа и кнопки)
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
@@ -2661,7 +2461,6 @@ def build_application() -> "Application":
         app.add_error_handler(err_fn)
 
     return app
-
 
 def main():
     # ИНИЦИАЛИЗАЦИЯ БД
@@ -2694,7 +2493,6 @@ def main():
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=False,
         )
-
 
 if __name__ == "__main__":
     main()
