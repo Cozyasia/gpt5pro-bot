@@ -1925,11 +1925,13 @@ async def cmd_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── Запуск бота ─────────
 
 def main() -> None:
-    # используем уже созданный выше глобальный app
+    # здесь используем глобальный app, созданный выше:
+    # app = ApplicationBuilder().token(BOT_TOKEN)... и т.д.
     global app
 
     if USE_WEBHOOK:
         if not RENDER_EXTERNAL_URL:
+            # если вдруг локальный запуск без URL
             log.error("WEBHOOK режим включён, но RENDER_EXTERNAL_URL не задан")
             raise RuntimeError("RENDER_EXTERNAL_URL is required for webhook mode")
 
