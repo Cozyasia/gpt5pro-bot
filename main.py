@@ -1927,7 +1927,7 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
     log.exception("Telegram update error: %s", context.error)
 
 
-def main() -> None:
+async def main() -> None:
     db_init()
     _db_init_prefs()
 
@@ -1938,42 +1938,57 @@ def main() -> None:
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
     app.add_handler(CommandHandler("balance", cmd_balance))
-    app.add_handler(CommandHandler("engines", cmd
-
     app.add_handler(CommandHandler("engines", cmd_engines))
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("video", cmd_video))
     app.add_handler(CommandHandler("voice_on", cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
-
-    # Платежи
-    app.add_handler(PreCheckoutQueryHandler(precheckout_handler))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
-
-    # Callback-кнопки
-    app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^(plans:|plan:)"))
-    app.add_handler(CallbackQueryHandler(callback_pay_handler, pattern=r"^pay:"))
-    app.add_handler(CallbackQueryHandler(callback_engine_handler, pattern=r"^engine:"))
-    app.add_handler(CallbackQueryHandler(callback_photo_handler, pattern=r"^photo:"))
-
-    # Сообщения
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_handler))
-    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
-    app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
-
-    # Диагностика
     app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
     app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
     app.add_handler(CommandHandler("diag_video", cmd_diag_video))
 
-    # Ошибки
+    # Платежи
+    app.add_handler(PreCheckoutQueryHandler(precheckout_handler))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
+
+    # Callback-и
+    app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^plans:|^plan:"))
+    app.add_handler(CallbackQueryHandler(callback_pay_handler, pattern=r"^pay:"))
+    app.add_handler(CallbackQueryHandler(callback_engine_handler, pattern=r"^engine:"))
+    app.add_handler(CallbackQueryHandler(callback_photo_handler, pattern=r"^photo:"))
+
+    # Медиа
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
+
+    # Текст (последний)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
+
     app.add_error_handler(on_error)
 
-    log.info("Bot starting with polling...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Удаляем старый вебхук на всякий
+    try:
+        await app.bot.delete_webhook(drop_pending_updates=True)
+    except Exception as e:
+        log.warning("delete_webhook error: %s", e)
+
+    if USE_WEBHOOK:
+        log.info("Starting via webhook on port %s, path %s", PORT, WEBHOOK_PATH)
+        await app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=WEBHOOK_PATH,
+            webhook_url=PUBLIC_URL.rstrip("/") + WEBHOOK_PATH,
+            secret_token=WEBHOOK_SECRET or None,
+        )
+    else:
+        log.info("Starting via polling")
+        await app.run_polling()
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio as _asyncio
+
+    _asyncio.run(main())
