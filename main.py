@@ -533,6 +533,7 @@ def _db_init_prefs():
     con.commit()
     con.close()
 
+
 def _tts_get(uid: int) -> bool:
     try:
         _db_init_prefs()
@@ -546,6 +547,7 @@ def _tts_get(uid: int) -> bool:
     row = cur.fetchone()
     con.close()
     return bool(row and row[0])
+
 
 def _tts_set(uid: int, on: bool):
     try:
@@ -562,8 +564,9 @@ def _tts_set(uid: int, on: bool):
     con.commit()
     con.close()
 
+
 # ───── Надёжный TTS REST → OGG ─────
-def _tts_bytes_sync(text: str) -> bytes|None:
+def _tts_bytes_sync(text: str) -> bytes | None:
     try:
         if not OPENAI_TTS_KEY:
             return None
@@ -584,6 +587,7 @@ def _tts_bytes_sync(text: str) -> bytes|None:
     except Exception as e:
         log.exception("TTS error: %s", e)
         return None
+
 
 async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     uid = update.effective_user.id
@@ -619,15 +623,18 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
     except Exception as e:
         log.exception("maybe_tts_reply error: %s", e)
 
+
 async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, True)
     await update.effective_message.reply_text(
         f"🔊 Озвучка включена. Лимит {TTS_MAX_CHARS} символов."
     )
 
+
 async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, False)
     await update.effective_message.reply_text("🔈 Озвучка выключена.")
+
 
 # ───── STT ─────
 def _mime_from_filename(fn: str) -> str:
@@ -662,7 +669,6 @@ async def stt_deepgram(audio: bytes, filename: str) -> str:
             r = await client.post(url, headers=headers, content=audio)
             r.raise_for_status()
             data = r.json()
-        # типичный путь к транскрипции
         text = (
             data.get("results", {})
             .get("channels", [{}])[0]
@@ -684,7 +690,6 @@ async def stt_openai(audio: bytes, filename: str) -> str:
     try:
         client = _oai_stt_client()
         mime = _mime_from_filename(filename)
-        # новый openai клиент (>=1.0)
         t = client.audio.transcriptions.create(
             model=OPENAI_STT_MODEL,
             file=("audio", audio, mime),
@@ -700,7 +705,6 @@ async def stt_recognize(audio: bytes, filename: str) -> str:
     """
     Сначала пытаемся Deepgram, потом OpenAI.
     """
-    # Deepgram → OpenAI
     txt = await stt_deepgram(audio, filename)
     if txt:
         return txt
@@ -762,7 +766,7 @@ async def parse_epub_bytes(data: bytes) -> str:
         with BytesIO(data) as bio:
             book = epub.read_epub(bio)
         texts = []
-        from bs4 import BeautifulSoup  # если нет — будет ошибка, но это редкий кейс
+        from bs4 import BeautifulSoup
         for item in book.get_items():
             if item.get_type() == epub.ITEM_DOCUMENT:
                 soup = BeautifulSoup(item.get_body_content(), "html.parser")
@@ -774,16 +778,13 @@ async def parse_epub_bytes(data: bytes) -> str:
 
 
 async def parse_fb2_bytes(data: bytes) -> str:
-    # FB2 — обычный zip/xml
     try:
         import xml.etree.ElementTree as ET
     except Exception:
         return "Не удалось подключить xml-парсер для FB2."
     try:
-        # если fb2.zip
         if zipfile and zipfile.is_zipfile(BytesIO(data)):
             with zipfile.ZipFile(BytesIO(data)) as z:
-                # берём первый .fb2
                 name = next((n for n in z.namelist() if n.lower().endswith(".fb2")), None)
                 if not name:
                     return "В архиве FB2 не найден основной файл."
@@ -887,7 +888,8 @@ async def handle_openai_image_from_text(
             return
 
     try:
-        await update.effective_message.reply_chat_action(ChatAction.UPLOAD_PHOTO)
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_chat_action(ChatAction.UPLOAD_PHOTO)
     except Exception:
         pass
 
@@ -959,7 +961,6 @@ async def luma_wait_result(generation_id: str) -> str:
                 data = r.json()
                 status = str(data.get("status") or data.get("state") or "").lower()
                 if status in ("completed", "succeeded", "success"):
-                    # Пытаемся достать URL
                     assets = data.get("assets") or data.get("output") or {}
                     vid = (
                         assets.get("video")
@@ -1024,7 +1025,6 @@ async def runway_wait_result(task_id: str) -> str:
                     or ""
                 ).lower()
                 if status in ("succeeded", "completed", "success"):
-                    # Берём asset_url
                     out = data.get("output") or data.get("task", {}).get("output") or {}
                     vid = (
                         out.get("video")
@@ -1051,7 +1051,7 @@ async def start_video_generation(
     """
     uid = update.effective_user.id
     uname = update.effective_user.username or ""
-    est_cost = RUNWAY_UNIT_COST_USD if engine == "runway" else 1.0  # оценка для лимита
+    est_cost = RUNWAY_UNIT_COST_USD if engine == "runway" else 1.0
 
     ok, reason = _can_spend_or_offer(uid, uname, "runway" if engine == "runway" else "luma", est_cost)
     if not ok:
@@ -1109,7 +1109,6 @@ async def start_video_generation(
 
 
 # ───── Баланс / Пополнения / Подписки ─────
-
 def _pretty_until(dt: datetime | None) -> str:
     if not dt:
         return "нет активной подписки"
@@ -1180,7 +1179,6 @@ async def send_oneoff_offer(
 
 
 # ───── Тарифы ─────
-
 PLAN_HUMAN_NAMES = {
     "start": "START",
     "pro": "PRO",
@@ -1273,13 +1271,12 @@ async def handle_plans_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if not data.startswith("plan:"):
         return
 
-    # plan:start:month
     _, plan, term = data.split(":", 2)
     if term == "month":
         term_key = "month"
         months = 1
     elif term == "halfyear":
-        term_key = "year"   # 6 месяцев по цене половины года
+        term_key = "year"
         months = 6
     else:
         term_key = "month"
@@ -1335,7 +1332,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     uid = update.effective_user.id
 
     if payload.startswith("sub:"):
-        # sub:plan:months
         _, plan, months_s = payload.split(":", 2)
         months = int(months_s or "1")
         until = activate_subscription_with_tier(uid, plan, months)
@@ -1347,7 +1343,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         return
 
     if payload.startswith("wallet:"):
-        # wallet:amount_usd
         _, usd_s = payload.split(":", 1)
         usd = float(usd_s or "0")
         _wallet_total_add(uid, usd)
@@ -1357,7 +1352,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         return
 
     if payload.startswith("oneoff:"):
-        # oneoff:engine:usd
         _, engine, usd_s = payload.split(":", 2)
         usd = float(usd_s or "0")
         _wallet_total_add(uid, usd)
@@ -1374,10 +1368,8 @@ async def callback_pay_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     data = query.data or ""
-    uid = query.from_user.id
 
     if data == "pay:wallet":
-        # Пополнение общего кошелька вручную (выбор суммы)
         kb = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("500 ₽", callback_data="pay:wallet_amount:500"),
@@ -1418,7 +1410,6 @@ async def callback_pay_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     if data.startswith("pay:oneoff:"):
-        # pay:oneoff:engine:rub:need_usd
         parts = data.split(":")
         if len(parts) != 5:
             return
@@ -1497,7 +1488,6 @@ def set_engine(uid: int, engine: str):
 
 def engines_keyboard() -> InlineKeyboardMarkup:
     rows = []
-    # В один столбец, как ты просил
     for key in ("gpt", "fast", "vision", "code", "tools"):
         rows.append(
             [InlineKeyboardButton(ENGINE_LABELS[key], callback_data=f"engine:{key}")]
@@ -1707,9 +1697,6 @@ def _photo_positive_trigger(text: str) -> bool:
 
 
 async def text_entrypoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Главный текстовый хендлер (после команд и спец-кнопок).
-    """
     msg = update.effective_message
     text = msg.text or msg.caption or ""
     text = text.strip()
@@ -1739,12 +1726,10 @@ async def text_entrypoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_mode_button(update, context, "fun")
         return
 
-    # запрос про возможности бота
     if _should_show_capabilities(text):
         await send_capabilities(update, context)
         return
 
-    # позитивный ответ про фото/видео-возможности
     if _photo_positive_trigger(text):
         ans = (
             "Да, я умею работать с фотографиями:\n\n"
@@ -1758,7 +1743,6 @@ async def text_entrypoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await maybe_tts_reply(update, context, ans)
         return
 
-    # учёт лимитов по тексту
     ok, left, tier = check_text_and_inc(uid, uname)
     if not ok:
         await send_subscribe_offer(
@@ -1768,7 +1752,6 @@ async def text_entrypoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # контекст режима / движка
     mode = get_mode(uid)
     engine = get_engine(uid)
     prefix = ""
@@ -1806,9 +1789,6 @@ async def text_entrypoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Принимаем voice/audio, распознаём, отправляем в text_entrypoint.
-    """
     msg = update.effective_message
     voice = msg.voice or msg.audio
     if not voice:
@@ -1823,16 +1803,10 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Не получилось распознать голос. Попробуй ещё раз.")
             return
         await msg.reply_text(f"🗣 Я услышал:\n\n{text}")
-        # Прокидываем как будто это обычный текст
-        fake_update = Update(
-            update.update_id,
-            message=msg  # тот же message с текстом нам не нужен, используем text отдельно
-        )
-        # Аккуратно: просто временно подменим text в объекте
         old_text = msg.text
         msg.text = text
         try:
-            await text_entrypoint(fake_update, context)
+            await text_entrypoint(update, context)
         finally:
             msg.text = old_text
     except Exception as e:
@@ -1848,7 +1822,6 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_id = photo.file_id
     uid = update.effective_user.id
 
-    # запоминаем последнее фото пользователя
     kv_set(f"photo:{uid}", file_id)
 
     kb = InlineKeyboardMarkup([
@@ -1875,7 +1848,6 @@ async def callback_photo_handler(update: Update, context: ContextTypes.DEFAULT_T
     if data == "photo:vision":
         fake_update = Update(update.update_id, message=query.message)
         fake_update.effective_message = query.message
-        # просто используем последний message как базу ответа
         await handle_vision_for_photo(fake_update, context, file_id)
         return
 
@@ -1886,7 +1858,6 @@ async def callback_photo_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     if data == "photo:animate":
-        # Запускаем генерацию видео на основе текстового описания
         await query.message.reply_text(
             "Напиши текстом, как именно нужно оживить это фото (движения, стиль, длительность), "
             "и я запущу генерацию видео через Runway/Luma."
@@ -1947,7 +1918,6 @@ async def cmd_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/video динамичный ролик про виллу на Самуи, 5 секунд, вертикальный формат"
         )
         return
-    # по умолчанию используем Runway, если доступен, иначе Luma
     engine = "runway" if RUNWAY_API_KEY else "luma"
     await start_video_generation(update, context, engine, prompt)
 
@@ -1957,7 +1927,7 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
     log.exception("Telegram update error: %s", context.error)
 
 
-async def main() -> None:
+def main() -> None:
     db_init()
     _db_init_prefs()
 
@@ -1968,57 +1938,42 @@ async def main() -> None:
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
     app.add_handler(CommandHandler("balance", cmd_balance))
+    app.add_handler(CommandHandler("engines", cmd
+
     app.add_handler(CommandHandler("engines", cmd_engines))
     app.add_handler(CommandHandler("img", cmd_img))
     app.add_handler(CommandHandler("video", cmd_video))
     app.add_handler(CommandHandler("voice_on", cmd_voice_on))
     app.add_handler(CommandHandler("voice_off", cmd_voice_off))
-    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
-    app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
-    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
-    app.add_handler(CommandHandler("diag_video", cmd_diag_video))
 
     # Платежи
     app.add_handler(PreCheckoutQueryHandler(precheckout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
-    # Callback-и
-    app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^plans:|^plan:"))
+    # Callback-кнопки
+    app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^(plans:|plan:)"))
     app.add_handler(CallbackQueryHandler(callback_pay_handler, pattern=r"^pay:"))
     app.add_handler(CallbackQueryHandler(callback_engine_handler, pattern=r"^engine:"))
     app.add_handler(CallbackQueryHandler(callback_photo_handler, pattern=r"^photo:"))
 
-    # Медиа
+    # Сообщения
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_handler))
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
 
-    # Текст (последний)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
+    # Диагностика
+    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
+    app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
+    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
+    app.add_handler(CommandHandler("diag_video", cmd_diag_video))
 
+    # Ошибки
     app.add_error_handler(on_error)
 
-    # Удаляем старый вебхук на всякий
-    try:
-        await app.bot.delete_webhook(drop_pending_updates=True)
-    except Exception as e:
-        log.warning("delete_webhook error: %s", e)
-
-    if USE_WEBHOOK:
-        log.info("Starting via webhook on port %s, path %s", PORT, WEBHOOK_PATH)
-        await app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=WEBHOOK_PATH,
-            webhook_url=PUBLIC_URL.rstrip("/") + WEBHOOK_PATH,
-            secret_token=WEBHOOK_SECRET or None,
-        )
-    else:
-        log.info("Starting via polling")
-        await app.run_polling()
+    log.info("Bot starting with polling...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
-    import asyncio as _asyncio
-
-    _asyncio.run(main())
+    main()
