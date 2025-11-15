@@ -176,10 +176,11 @@ FORCE_OWNER_UNLIM= os.getenv("FORCE_OWNER_UNLIM","1").lower() not in ("0","false
 # ───── Валидация базовых переменных ─────
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
-if not PUBLIC_URL or not PUBLIC_URL.startswith("https://"):
-    raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
+# PUBLIC_URL обязателен только при вебхуках
+if USE_WEBHOOK and (not RENDER_EXTERNAL_URL or not RENDER_EXTERNAL_URL.startswith("https://")):
+    raise RuntimeError("For webhook mode set RENDER_EXTERNAL_URL=https://... (or PUBLIC_URL)")
 
 # ───── Утилиты ─────
 def _utcnow(): return datetime.now(timezone.utc)
@@ -226,9 +227,7 @@ except TypeError:
 
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url=IMAGES_BASE_URL)
 
-from openai import OpenAI as _OpenAI_STT
-def _oai_stt_client():
-    return _OpenAI_STT(api_key=OPENAI_STT_KEY, base_url=OPENAI_STT_BASE_URL)
+from openai import OpenAI as _OpenAI_STT  # оставляем импорт, хотя ниже используем httpx-вариант
 
 # ───── База данных ─────
 def db_init():
@@ -691,19 +690,23 @@ async def stt_deepgram(audio: bytes, filename: str) -> str:
 
 async def stt_openai(audio: bytes, filename: str) -> str:
     """
-    Распознавание через OpenAI Whisper (если есть OPENAI_STT_KEY).
+    Надёжный HTTP(X) вариант распознавания через OpenAI Whisper-API.
+    Работает и с кастомным OPENAI_STT_BASE_URL.
     """
     if not OPENAI_STT_KEY:
         return ""
     try:
-        client = _oai_stt_client()
         mime = _mime_from_filename(filename)
-        t = client.audio.transcriptions.create(
-            model=OPENAI_STT_MODEL,
-            file=("audio", audio, mime),
-        )
-        text = getattr(t, "text", "") or ""
-        return text.strip()
+        url = f"{OPENAI_STT_BASE_URL}/audio/transcriptions"
+        headers = {"Authorization": f"Bearer {OPENAI_STT_KEY}"}
+        data = {"model": OPENAI_STT_MODEL}
+        files = {"file": (filename or "audio.ogg", audio, mime)}
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            r = await client.post(url, headers=headers, data=data, files=files)
+            r.raise_for_status()
+            js = r.json()
+        text = (js.get("text") or js.get("result") or "").strip()
+        return text
     except Exception as e:
         log.exception("stt_openai error: %s", e)
         return ""
@@ -897,7 +900,7 @@ async def handle_openai_image_from_text(
 
     try:
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_chat_action(ChatAction.UPLOAD_PHOTO)
+            await update.effective_chat.send_action(ChatAction.UPLOAD_PHOTO)  # фикс: без reply_chat_action
     except Exception:
         pass
 
@@ -2085,6 +2088,9 @@ def build_app() -> "Application":
 
 # ───────── Запуск бота ─────────
 def main() -> None:
+    # Инициализация БД на старте
+    db_init()
+
     global app
     app = build_app()
 
@@ -2093,16 +2099,19 @@ def main() -> None:
             log.error("WEBHOOK режим включён, но RENDER_EXTERNAL_URL не задан")
             raise RuntimeError("RENDER_EXTERNAL_URL is required for webhook mode")
 
+        path = WEBHOOK_PATH.strip("/")
+
         log.info(
-            "Starting via webhook on port %s, path /tg, url=%s/tg",
+            "Starting via webhook on port %s, path /%s, url=%s/%s",
             PORT,
+            path,
             RENDER_EXTERNAL_URL,
         )
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
-            url_path="tg",
-            webhook_url=f"{RENDER_EXTERNAL_URL}/tg",
+            url_path=path,
+            webhook_url=f"{RENDER_EXTERNAL_URL}/{path}",
             secret_token=WEBHOOK_SECRET or None,
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
