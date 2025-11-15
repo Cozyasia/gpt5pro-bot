@@ -59,21 +59,29 @@ logging.basicConfig(
 )
 log = logging.getLogger("gpt5pro")
 
-# ───── ENV ─────
-BOT_TOKEN   = (os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-BOT_USERNAME= (os.getenv("BOT_USERNAME") or "").strip().lstrip("@")
-PUBLIC_URL  = (os.getenv("PUBLIC_URL") or "").strip()
-WEBAPP_URL  = (os.getenv("WEBAPP_URL") or "").strip()
-USE_WEBHOOK = (os.getenv("USE_WEBHOOK","1").lower() in ("1","true","yes","on"))
-WEBHOOK_PATH= (os.getenv("WEBHOOK_PATH") or "/tg").strip()
+# ───── ENV / настройки ─────
+BOT_TOKEN    = (os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+BOT_USERNAME = (os.getenv("BOT_USERNAME") or "").strip().lstrip("@")
+
+# Базовые URL
+PUBLIC_URL   = (os.getenv("PUBLIC_URL") or "").strip()
+WEBAPP_URL   = (os.getenv("WEBAPP_URL") or "").strip()
+
+# Внешний URL сервиса на Render (то, что мы дальше используем для вебхука)
+# Если RENDER_EXTERNAL_URL не задан, используем PUBLIC_URL как запасной вариант
+RENDER_EXTERNAL_URL = (os.getenv("RENDER_EXTERNAL_URL") or PUBLIC_URL).strip().rstrip("/")
+
+# Webhook / Polling
+USE_WEBHOOK    = os.getenv("USE_WEBHOOK", "1").lower() in ("1", "true", "yes", "on")
+WEBHOOK_PATH   = (os.getenv("WEBHOOK_PATH") or "/tg").strip()
 WEBHOOK_SECRET = (os.getenv("TELEGRAM_WEBHOOK_SECRET") or "").strip()
-PORT        = int(os.getenv("PORT","10000"))
+PORT           = int(os.getenv("PORT", "10000"))
 
 # OpenAI (текст/визион)
 from openai import OpenAI
-OPENAI_API_KEY  = (os.getenv("OPENAI_API_KEY") or "").strip()
-OPENAI_BASE_URL = (os.getenv("OPENAI_BASE_URL") or "").strip()
-OPENAI_MODEL    = (os.getenv("OPENAI_MODEL") or "openai/gpt-4o-mini").strip()
+OPENAI_API_KEY      = (os.getenv("OPENAI_API_KEY") or "").strip()
+OPENAI_BASE_URL     = (os.getenv("OPENAI_BASE_URL") or "").strip()
+OPENAI_MODEL        = (os.getenv("OPENAI_MODEL") or "openai/gpt-4o-mini").strip()
 OPENROUTER_SITE_URL = (os.getenv("OPENROUTER_SITE_URL") or "").strip()
 OPENROUTER_APP_NAME = (os.getenv("OPENROUTER_APP_NAME") or "").strip()
 
