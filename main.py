@@ -1445,6 +1445,114 @@ async def callback_pay_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
 
+# ───────── WebApp data (тарифы/пополнения из мини-приложения) ─────────
+async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Приходит сообщение с message.web_app_data от мини-приложения (WebApp).
+    Ожидаем JSON вида {"type":"subscribe"|"topup_rub"|"topup_crypto", ...}
+    """
+    try:
+        msg = update.effective_message
+        wad = getattr(msg, "web_app_data", None)
+        raw = wad.data if wad else ""
+        data = {}
+
+        # 1) JSON → dict, 2) иначе парсим querystring "k=v&..."
+        try:
+            data = json.loads(raw) if raw else {}
+        except Exception:
+            for part in (raw or "").split("&"):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    data[k] = v
+
+        typ = (data.get("type") or data.get("action") or "").lower()
+
+        # — подписка из мини-приложения
+        if typ in ("subscribe", "buy", "buy_sub", "sub"):
+            tier = (data.get("tier") or "pro").lower()
+            months = int(data.get("months") or 1)
+            title = f"Подписка {PLAN_HUMAN_NAMES.get(tier, tier.upper())} ({months} мес)"
+
+            if not PROVIDER_TOKEN:
+                await msg.reply_text("Провайдер ЮKassa не настроен (нет PROVIDER_TOKEN_YOOKASSA).")
+                return
+
+            amount_rub = PLAN_PRICE_TABLE.get(tier, PLAN_PRICE_TABLE["pro"])["month"]
+            if months == 6:  # полгода = «year//2» как в /plans
+                amount_rub = PLAN_PRICE_TABLE.get(tier, PLAN_PRICE_TABLE["pro"])["year"] // 2
+
+            prices_tg = [LabeledPrice(label=_ascii_label(title), amount=amount_rub * 100)]
+            payload = f"sub:{tier}:{months}"
+            await context.bot.send_invoice(
+                chat_id=msg.chat_id,
+                title=title,
+                description="Подписка на GPT-5 ProBot",
+                provider_token=PROVIDER_TOKEN,
+                currency=CURRENCY,
+                prices=prices_tg,
+                payload=payload,
+            )
+            return
+
+        # — пополнение кошелька в RUB с суммой из WebApp
+        if typ in ("topup_rub", "rub_topup"):
+            amount_rub = int(float(data.get("amount") or 0))
+            if amount_rub < MIN_RUB_FOR_INVOICE:
+                await msg.reply_text(f"Минимальная сумма пополнения: {MIN_RUB_FOR_INVOICE} ₽")
+                return
+            if not PROVIDER_TOKEN:
+                await msg.reply_text("Провайдер ЮKassa не настроен (нет PROVIDER_TOKEN_YOOKASSA).")
+                return
+            usd = amount_rub / max(1.0, USD_RUB)
+            title = f"Пополнение кошелька {amount_rub} ₽ (~{usd:.2f} USD)"
+            prices_tg = [LabeledPrice(label=_ascii_label(title), amount=amount_rub * 100)]
+            payload = f"wallet:{usd:.2f}"
+            await context.bot.send_invoice(
+                chat_id=msg.chat_id,
+                title=title,
+                description="Пополнение виртуального USD-кошелька бота.",
+                provider_token=PROVIDER_TOKEN,
+                currency=CURRENCY,
+                prices=prices_tg,
+                payload=payload,
+            )
+            return
+
+        # — пополнение через CryptoBot из WebApp (покажем аккуратный фолбэк)
+        if typ in ("topup_crypto", "crypto_topup"):
+            if not CRYPTO_PAY_API_TOKEN:
+                await msg.reply_text("CryptoBot не настроен у администратора бота.")
+                return
+            # Здесь можно расширить до полноценного createInvoice.
+            await msg.reply_text(
+                "Поддержка CryptoBot будет включена администратором позже.\n"
+                "Пока что воспользуйся пополнением в рублях через Telegram."
+            )
+            return
+
+        await msg.reply_text("Получены данные из мини-приложения, но команда не распознана.")
+    except Exception as e:
+        log.exception("on_webapp_data error: %s", e)
+    finally:
+        with contextlib.suppress(Exception):
+            if update and update.effective_chat:
+                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+
+
+def _is_webapp_message(update: Update) -> bool:
+    """Быстрый фильтр: есть ли web_app_data в сообщении."""
+    try:
+        return bool(getattr(update.effective_message, "web_app_data", None))
+    except Exception:
+        return False
+
+
+async def webapp_data_entrypoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Роутер: пропускаем дальше все, кроме web_app_data — их отдаём в on_webapp_data."""
+    if _is_webapp_message(update):
+        await on_webapp_data(update, context)
+
 # ───── Режимы: Учёба / Работа / Развлечения ─────
 MODE_LABELS = {
     "study": "🎓 Учёба",
@@ -1930,16 +2038,58 @@ async def cmd_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start_video_generation(update, context, engine, prompt)
 
 
-# ───────── Запуск бота ─────────
+# ───────── Создание app и регистрация хендлеров ─────────
+def build_app() -> "Application":
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Команды
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("plans", cmd_plans))
+    app.add_handler(CommandHandler("balance", cmd_balance))
+    app.add_handler(CommandHandler("engines", cmd_engines))
+    app.add_handler(CommandHandler("img", cmd_img))
+    app.add_handler(CommandHandler("video", cmd_video))
+    app.add_handler(CommandHandler("voice_on", cmd_voice_on))
+    app.add_handler(CommandHandler("voice_off", cmd_voice_off))
+
+    # Диагностика
+    app.add_handler(CommandHandler("diag_limits", cmd_diag_limits))
+    app.add_handler(CommandHandler("diag_stt", cmd_diag_stt))
+    app.add_handler(CommandHandler("diag_images", cmd_diag_images))
+    app.add_handler(CommandHandler("diag_video", cmd_diag_video))
+
+    # WebApp data — ставим РАНО, чтобы отлавливать до текстового хендлера
+    app.add_handler(MessageHandler(filters.ALL, webapp_data_entrypoint))
+
+    # Callback-кнопки: планы / оплата / фото / движки
+    app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^(plans:|plan:)"))
+    app.add_handler(CallbackQueryHandler(callback_pay_handler, pattern=r"^pay:"))
+    app.add_handler(CallbackQueryHandler(callback_photo_handler, pattern=r"^photo:"))
+    app.add_handler(CallbackQueryHandler(callback_engine_handler, pattern=r"^engine:"))
+
+    # Платежи (ЮKassa)
+    app.add_handler(PreCheckoutQueryHandler(precheckout_handler))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
+
+    # Медиа
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
+
+    # Текст (последним, чтобы не перехватывать webapp/медиа/платежи)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
+
+    return app
+
+
+# ───────── Запуск бота ─────────
 def main() -> None:
-    # здесь используем глобальный app, созданный выше:
-    # app = ApplicationBuilder().token(BOT_TOKEN)... и т.д.
     global app
+    app = build_app()
 
     if USE_WEBHOOK:
         if not RENDER_EXTERNAL_URL:
-            # если вдруг локальный запуск без URL
             log.error("WEBHOOK режим включён, но RENDER_EXTERNAL_URL не задан")
             raise RuntimeError("RENDER_EXTERNAL_URL is required for webhook mode")
 
@@ -1948,7 +2098,6 @@ def main() -> None:
             PORT,
             RENDER_EXTERNAL_URL,
         )
-
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
