@@ -1925,12 +1925,8 @@ async def cmd_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── Запуск бота ─────────
 
 def main() -> None:
-    """
-    Точка входа. Создаём приложение и запускаем либо через webhook, либо через polling.
-    """
-    # ВАЖНО: здесь должно быть то же имя функции, которая у тебя создаёт Application.
-    # Если выше она называется, например, build_app(), то замени create_app() на build_app().
-    app = create_app()
+    # используем уже созданный выше глобальный app
+    global app
 
     if USE_WEBHOOK:
         if not RENDER_EXTERNAL_URL:
