@@ -2069,10 +2069,8 @@ def build_app() -> "Application":
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
     app.add_handler(CommandHandler("diag_video", cmd_diag_video))
 
-    # WebApp data — фильтруем ТОЛЬКО web_app_data и не блокируем другие хендлеры
-app.add_handler(
-    MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data, block=False)
-)
+    # WebApp data — ловим только web_app_data (не все сообщения)
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
 
     # Callback-кнопки: планы / оплата / фото / движки
     app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^(plans:|plan:)"))
