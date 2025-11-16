@@ -1703,37 +1703,38 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if lot_id:
         kv_set(f"lot:{uid}", lot_id)
 
-    tier = get_subscription_tier(uid)
+    tier  = get_subscription_tier(uid)
     until = get_subscription_until(uid)
 
-    lines = [
-        f"👋 Привет, *{user.first_name or 'друг'}!*",
-        "Я — *GPT-5 ProBot* 🤖 — твой мультиинструмент для учёбы, работы и творчества.",
-        "",
-        "✨ Что я умею:",
-        "• 💬 Тексты, идеи, переводы, структура и код",
-        "• 👁 Анализ фото, удаление фона, генерация изображений через /img",
-        "• 📚 Краткие выжимки из PDF/DOCX/EPUB/FB2/TXT",
-        "• 🗣 Голос ↔ текст (Deepgram/Whisper), озвучка ответов — /voice_on",
-        "• 🎬 Короткие ролики через Luma / Runway",
-        "• 💳 Подписки и единый USD-кошелёк",
-    ]
-    if lot_id:
-        lines.append(f"\n📎 Зафиксировал номер лота: *{lot_id}* — добавлю его в заявку автоматически.")
-    lines.append("")
-    lines.append(f"Текущий тариф: *{tier.upper()}*, до: *{_pretty_until(until)}*")
-    lines.append(
-        "\nНажимай кнопки ниже, чтобы выбрать режим, посмотреть баланс и оформить подписку."
+    parts = []
+    parts.append(f"👋 Привет, *{user.first_name or 'друг'}!* Я — **GPT-5 ProBot**  \n"
+                 f"твой многофункциональный ассистент для учёбы, работы и творчества.")
+
+    parts.append(
+        "✨ *Что я умею:*\n"
+        "• 💬 Отвечаю на вопросы, пишу тексты и код\n"
+        "• 🧠 Анализирую фото и 📚 документы (PDF/DOCX/EPUB/FB2/TXT)\n"
+        "• 🗣 Голос ↔ текст и 🎙 озвучка ответов (/voice_on | /voice_off)\n"
+        "• 🖼 Генерация картинок (/img) и 🎬 короткие видео (Luma/Runway)\n"
+        "• 💳 Подписка и внутренний USD-кошелёк для доп. действий"
     )
-    txt = "\n".join(lines)
+
+    stat = f"🪪 *Тариф*: **{tier.upper()}**  •  ⏳ *до*: **{_pretty_until(until)}**"
+    parts.append(stat)
+
+    if lot_id:
+        parts.append(f"🏷 Зафиксировал *номер лота*: **{lot_id}** — добавлю в заявку автоматически.")
+
+    parts.append("👇 Выбирай режим, смотри баланс или тарифы с нижней клавиатуры.")
+
+    txt = "\n\n".join(parts)
 
     await update.effective_message.reply_text(
         txt,
         parse_mode="Markdown",
         reply_markup=main_reply_keyboard(),
     )
-
-
+    
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
         "/start — перезапустить приветствие\n"
@@ -2052,7 +2053,7 @@ async def cmd_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def build_app() -> "Application":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Команды
+      # Команды
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
@@ -2069,13 +2070,13 @@ def build_app() -> "Application":
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
     app.add_handler(CommandHandler("diag_video", cmd_diag_video))
 
-    # WebApp data — ловим только web_app_data (не все сообщения)
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+    # WebApp data — только события web_app_data и не блокируем другие хендлеры
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_entrypoint, block=False))
 
-    # Callback-кнопки: планы / оплата / фото / движки
-    app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^(plans:|plan:)"))
-    app.add_handler(CallbackQueryHandler(callback_pay_handler, pattern=r"^pay:"))
-    app.add_handler(CallbackQueryHandler(callback_photo_handler, pattern=r"^photo:"))
+    # Callback-кнопки
+    app.add_handler(CallbackQueryHandler(handle_plans_callback,   pattern=r"^(plans:|plan:)"))
+    app.add_handler(CallbackQueryHandler(callback_pay_handler,    pattern=r"^pay:"))
+    app.add_handler(CallbackQueryHandler(callback_photo_handler,  pattern=r"^photo:"))
     app.add_handler(CallbackQueryHandler(callback_engine_handler, pattern=r"^engine:"))
 
     # Платежи (ЮKassa)
@@ -2087,10 +2088,8 @@ def build_app() -> "Application":
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
 
-    # Текст (последним, чтобы не перехватывать webapp/медиа/платежи)
+    # Текст — последним
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
-
-    return app
 
 
 # ───────── Запуск бота ─────────
@@ -2106,25 +2105,24 @@ def main() -> None:
             log.error("WEBHOOK режим включён, но RENDER_EXTERNAL_URL не задан")
             raise RuntimeError("RENDER_EXTERNAL_URL is required for webhook mode")
 
-        path = WEBHOOK_PATH.strip("/")
+        # аккуратная сборка пути и полного URL
+        _path = (WEBHOOK_PATH or "tg").lstrip("/")
+        _url  = f"{RENDER_EXTERNAL_URL.rstrip('/')}/{_path}"
 
-        log.info(
-            "Starting via webhook on port %s, path /%s, url=%s/%s",
-            PORT,
-            path,
-            RENDER_EXTERNAL_URL,
-        )
+        # корректный форматтер: строка + аргументы
+        log.info("Starting via webhook on port %s, path /%s, url=%s", PORT, _path, _url)
+
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
-            url_path=path,
-            webhook_url=f"{RENDER_EXTERNAL_URL}/{path}",
+            url_path=_path,
+            webhook_url=_url,
             secret_token=WEBHOOK_SECRET or None,
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
     else:
-        log.info("Starting via polling (no RENDER_EXTERNAL_URL)")
+        log.info("Starting via polling (no webhook)")
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
@@ -2132,4 +2130,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        log.exception("Fatal error on startup")
+        raise
