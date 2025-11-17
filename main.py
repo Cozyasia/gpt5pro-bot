@@ -176,11 +176,10 @@ FORCE_OWNER_UNLIM= os.getenv("FORCE_OWNER_UNLIM","1").lower() not in ("0","false
 # ───── Валидация базовых переменных ─────
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
+if not PUBLIC_URL or not PUBLIC_URL.startswith("https://"):
+    raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
-# PUBLIC_URL обязателен только при вебхуках
-if USE_WEBHOOK and (not RENDER_EXTERNAL_URL or not RENDER_EXTERNAL_URL.startswith("https://")):
-    raise RuntimeError("For webhook mode set RENDER_EXTERNAL_URL=https://... (or PUBLIC_URL)")
 
 # ───── Утилиты ─────
 def _utcnow(): return datetime.now(timezone.utc)
@@ -227,7 +226,9 @@ except TypeError:
 
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url=IMAGES_BASE_URL)
 
-from openai import OpenAI as _OpenAI_STT  # оставляем импорт, хотя ниже используем httpx-вариант
+from openai import OpenAI as _OpenAI_STT
+def _oai_stt_client():
+    return _OpenAI_STT(api_key=OPENAI_STT_KEY, base_url=OPENAI_STT_BASE_URL)
 
 # ───── База данных ─────
 def db_init():
@@ -690,23 +691,19 @@ async def stt_deepgram(audio: bytes, filename: str) -> str:
 
 async def stt_openai(audio: bytes, filename: str) -> str:
     """
-    Надёжный HTTP(X) вариант распознавания через OpenAI Whisper-API.
-    Работает и с кастомным OPENAI_STT_BASE_URL.
+    Распознавание через OpenAI Whisper (если есть OPENAI_STT_KEY).
     """
     if not OPENAI_STT_KEY:
         return ""
     try:
+        client = _oai_stt_client()
         mime = _mime_from_filename(filename)
-        url = f"{OPENAI_STT_BASE_URL}/audio/transcriptions"
-        headers = {"Authorization": f"Bearer {OPENAI_STT_KEY}"}
-        data = {"model": OPENAI_STT_MODEL}
-        files = {"file": (filename or "audio.ogg", audio, mime)}
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            r = await client.post(url, headers=headers, data=data, files=files)
-            r.raise_for_status()
-            js = r.json()
-        text = (js.get("text") or js.get("result") or "").strip()
-        return text
+        t = client.audio.transcriptions.create(
+            model=OPENAI_STT_MODEL,
+            file=("audio", audio, mime),
+        )
+        text = getattr(t, "text", "") or ""
+        return text.strip()
     except Exception as e:
         log.exception("stt_openai error: %s", e)
         return ""
@@ -900,7 +897,7 @@ async def handle_openai_image_from_text(
 
     try:
         with contextlib.suppress(Exception):
-            await update.effective_chat.send_action(ChatAction.UPLOAD_PHOTO)  # фикс: без reply_chat_action
+            await update.effective_message.reply_chat_action(ChatAction.UPLOAD_PHOTO)
     except Exception:
         pass
 
@@ -1703,38 +1700,30 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if lot_id:
         kv_set(f"lot:{uid}", lot_id)
 
-    tier  = get_subscription_tier(uid)
+    tier = get_subscription_tier(uid)
     until = get_subscription_until(uid)
 
-    parts = []
-    parts.append(f"👋 Привет, *{user.first_name or 'друг'}!* Я — **GPT-5 ProBot**  \n"
-                 f"твой многофункциональный ассистент для учёбы, работы и творчества.")
-
-    parts.append(
-        "✨ *Что я умею:*\n"
-        "• 💬 Отвечаю на вопросы, пишу тексты и код\n"
-        "• 🧠 Анализирую фото и 📚 документы (PDF/DOCX/EPUB/FB2/TXT)\n"
-        "• 🗣 Голос ↔ текст и 🎙 озвучка ответов (/voice_on | /voice_off)\n"
-        "• 🖼 Генерация картинок (/img) и 🎬 короткие видео (Luma/Runway)\n"
-        "• 💳 Подписка и внутренний USD-кошелёк для доп. действий"
+    txt = (
+        f"Привет, {user.first_name or 'друг'}! Я *GPT-5 ProBot* — твой мультифункциональный ассистент.\n\n"
+        "Я умею:\n"
+        "• Помогать в учёбе, работе и для развлечения\n"
+        "• Анализировать фото и документы\n"
+        "• Делать голос ↔ текст, озвучивать ответы\n"
+        "• Генерировать картинки и запускать видео через нейросети\n\n"
+        f"Твой текущий тариф: *{tier.upper()}*, до: *{_pretty_until(until)}*\n"
     )
-
-    stat = f"🪪 *Тариф*: **{tier.upper()}**  •  ⏳ *до*: **{_pretty_until(until)}**"
-    parts.append(stat)
-
     if lot_id:
-        parts.append(f"🏷 Зафиксировал *номер лота*: **{lot_id}** — добавлю в заявку автоматически.")
+        txt += f"\nЯ зафиксировал номер лота: *{lot_id}* — он попадёт в заявку автоматически.\n"
 
-    parts.append("👇 Выбирай режим, смотри баланс или тарифы с нижней клавиатуры.")
-
-    txt = "\n\n".join(parts)
+    txt += "\nИспользуй кнопки ниже, чтобы переключать режимы, смотреть баланс и подписку."
 
     await update.effective_message.reply_text(
         txt,
         parse_mode="Markdown",
         reply_markup=main_reply_keyboard(),
     )
-    
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
         "/start — перезапустить приветствие\n"
@@ -2070,16 +2059,16 @@ def build_app() -> "Application":
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
     app.add_handler(CommandHandler("diag_video", cmd_diag_video))
 
-    # WebApp data
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_entrypoint, block=False))
+    # WebApp data — ставим РАНО, чтобы отлавливать до текстового хендлера
+    app.add_handler(MessageHandler(filters.ALL, webapp_data_entrypoint))
 
-    # Callback-кнопки
-    app.add_handler(CallbackQueryHandler(handle_plans_callback,   pattern=r"^(plans:|plan:)"))
-    app.add_handler(CallbackQueryHandler(callback_pay_handler,    pattern=r"^pay:"))
-    app.add_handler(CallbackQueryHandler(callback_photo_handler,  pattern=r"^photo:"))
+    # Callback-кнопки: планы / оплата / фото / движки
+    app.add_handler(CallbackQueryHandler(handle_plans_callback, pattern=r"^(plans:|plan:)"))
+    app.add_handler(CallbackQueryHandler(callback_pay_handler, pattern=r"^pay:"))
+    app.add_handler(CallbackQueryHandler(callback_photo_handler, pattern=r"^photo:"))
     app.add_handler(CallbackQueryHandler(callback_engine_handler, pattern=r"^engine:"))
 
-    # Платежи
+    # Платежи (ЮKassa)
     app.add_handler(PreCheckoutQueryHandler(precheckout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
@@ -2088,37 +2077,33 @@ def build_app() -> "Application":
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
 
-    # Текст — последним
+    # Текст (последним, чтобы не перехватывать webapp/медиа/платежи)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
 
-    return app  # <- ЭТО ВАЖНО
+    return app
 
 
 # ───────── Запуск бота ─────────
 def main() -> None:
-    db_init()
-
     global app
     app = build_app()
-
-    if app is None:
-        raise RuntimeError("build_app() returned None — check your return statement or handlers")
 
     if USE_WEBHOOK:
         if not RENDER_EXTERNAL_URL:
             log.error("WEBHOOK режим включён, но RENDER_EXTERNAL_URL не задан")
             raise RuntimeError("RENDER_EXTERNAL_URL is required for webhook mode")
 
-        path = WEBHOOK_PATH.strip("/")
-        log.info("Starting via webhook on port %s, path /%s, url=%s/%s",
-                 PORT, path, RENDER_EXTERNAL_URL, path)
-
+        log.info(
+            "Starting via webhook on port %s, path /tg, url=%s/tg",
+            PORT,
+            RENDER_EXTERNAL_URL,
+        )
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
-            url_path=path,
-            webhook_url=f"{RENDER_EXTERNAL_URL}/{path}",
-            secret_token=(WEBHOOK_SECRET or None),
+            url_path="tg",
+            webhook_url=f"{RENDER_EXTERNAL_URL}/tg",
+            secret_token=WEBHOOK_SECRET or None,
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
@@ -2128,6 +2113,7 @@ def main() -> None:
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
+
 
 if __name__ == "__main__":
     main()
