@@ -2593,14 +2593,7 @@ def build_application() -> "Application":
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
-    # Быстрые действия «Развлечения» — первыми
-    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:(?:revive|clip|img|storyboard)$"))
-    # Подрежимы (school/work/fun:…)
-    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
-    # Прочие callback'и
-    app.add_handler(CallbackQueryHandler(on_cb))
-
-      # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
+    # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
 
     # Данные из мини-приложения (WebApp)
     with contextlib.suppress(Exception):
