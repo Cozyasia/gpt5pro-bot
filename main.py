@@ -1368,7 +1368,348 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
+# ───────── Подписка / тарифы — UI и оплаты (PATCH) ─────────
+# Зависимости окружения:
+#  - YOOKASSA_PROVIDER_TOKEN  (платёжный токен Telegram Payments от ЮKassa)
+#  - YOOKASSA_CURRENCY        (по умолчанию "RUB")
+#  - CRYPTO_PAY_API_TOKEN     (https://pay.crypt.bot — токен продавца)
+#  - CRYPTO_ASSET             (например "USDT", по умолчанию "USDT")
+#  - PRICE_START_RUB, PRICE_PRO_RUB, PRICE_ULT_RUB  (целое число, ₽)
+#  - PRICE_START_USD, PRICE_PRO_USD, PRICE_ULT_USD  (число с точкой, $)
+#
+# Хранилище подписки и кошелька используется на kv_*:
+#   sub:tier:{user_id}   -> "start" | "pro" | "ultimate"
+#   sub:until:{user_id}  -> ISO-строка даты окончания
+#   wallet:usd:{user_id} -> баланс в USD (float)
 
+YOOKASSA_PROVIDER_TOKEN = os.environ.get("YOOKASSA_PROVIDER_TOKEN", "").strip()
+YOOKASSA_CURRENCY = (os.environ.get("YOOKASSA_CURRENCY") or "RUB").upper()
+
+CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
+CRYPTO_ASSET = (os.environ.get("CRYPTO_ASSET") or "USDT").upper()
+
+# === COMPAT with existing vars/DB in your main.py ===
+# 1) ЮKassa: если уже есть PROVIDER_TOKEN (из PROVIDER_TOKEN_YOOKASSA), используем его:
+if not YOOKASSA_PROVIDER_TOKEN and 'PROVIDER_TOKEN' in globals() and PROVIDER_TOKEN:
+    YOOKASSA_PROVIDER_TOKEN = PROVIDER_TOKEN
+
+# 2) Кошелёк: используем твой единый USD-кошелёк (wallet table) вместо kv:
+def _user_balance_get(user_id: int) -> float:
+    return _wallet_total_get(user_id)
+
+def _user_balance_add(user_id: int, delta: float) -> float:
+    if delta > 0:
+        _wallet_total_add(user_id, delta)
+    elif delta < 0:
+        _wallet_total_take(user_id, -delta)
+    return _wallet_total_get(user_id)
+
+def _user_balance_debit(user_id: int, amount: float) -> bool:
+    return _wallet_total_take(user_id, amount)
+
+# 3) Подписка: активируем через твои функции с БД, а не kv:
+def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
+    dt = activate_subscription_with_tier(user_id, tier_key, months)
+    return dt.isoformat()
+
+def _sub_info_text(user_id: int) -> str:
+    tier = get_subscription_tier(user_id)
+    dt = get_subscription_until(user_id)
+    human_until = dt.strftime("%d.%m.%Y") if dt else ""
+    bal = _user_balance_get(user_id)
+    line_until = f"\n⏳ Активна до: {human_until}" if tier != "free" and human_until else ""
+    return f"🧾 Текущая подписка: {tier.upper() if tier!='free' else 'нет'}{line_until}\n💵 Баланс: ${bal:.2f}"
+
+# Цены — из env с осмысленными дефолтами
+PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "299"))
+PRICE_PRO_RUB = int(os.environ.get("PRICE_PRO_RUB", "899"))
+PRICE_ULT_RUB = int(os.environ.get("PRICE_ULT_RUB", "1990"))
+
+PRICE_START_USD = float(os.environ.get("PRICE_START_USD", "3.49"))
+PRICE_PRO_USD = float(os.environ.get("PRICE_PRO_USD", "9.99"))
+PRICE_ULT_USD = float(os.environ.get("PRICE_ULT_USD", "19.99"))
+
+SUBS_TIERS = {
+    "start": {
+        "title": "START",
+        "rub": PRICE_START_RUB,
+        "usd": PRICE_START_USD,
+        "features": [
+            "💬 GPT-чат и документы (базовые лимиты)",
+            "🖼 Фото-мастерская: фон, лёгкая дорисовка",
+            "🎧 Озвучка ответов (TTS)",
+        ],
+    },
+    "pro": {
+        "title": "PRO",
+        "rub": PRICE_PRO_RUB,
+        "usd": PRICE_PRO_USD,
+        "features": [
+            "📚 Глубокий разбор PDF/DOCX/EPUB",
+            "🎬 Reels/Shorts по смыслу, видео из фото",
+            "🖼 Outpaint и «оживление» старых фото",
+        ],
+    },
+    "ultimate": {
+        "title": "ULTIMATE",
+        "rub": PRICE_ULT_RUB,
+        "usd": PRICE_ULT_USD,
+        "features": [
+            "🚀 Runway/Luma — премиум-рендеры",
+            "🧠 Расширенные лимиты и приоритетная очередь",
+            "🛠 PRO-инструменты (архитектура/дизайн)",
+        ],
+    },
+}
+
+def _money_fmt_rub(v: int) -> str:
+    return f"{v:,}".replace(",", " ") + " ₽"
+
+def _money_fmt_usd(v: float) -> str:
+    return f"${v:.2f}"
+
+def _user_balance_get(user_id: int) -> float:
+    # Пытаемся взять из твоего кошелька, если есть, иначе — kv
+    get_fn = _pick_first_defined("wallet_get_balance", "get_balance", "balance_get")
+    if get_fn:
+        try:
+            return float(get_fn(user_id))
+        except Exception:
+            pass
+    try:
+        return float(kv_get(f"wallet:usd:{user_id}", "0") or 0)
+    except Exception:
+        return 0.0
+
+def _user_balance_add(user_id: int, delta: float) -> float:
+    set_fn = _pick_first_defined("wallet_change_balance", "wallet_add_delta")
+    if set_fn:
+        try:
+            return float(set_fn(user_id, delta))
+        except Exception:
+            pass
+    cur = _user_balance_get(user_id)
+    newv = round(cur + float(delta), 4)
+    kv_set(f"wallet:usd:{user_id}", str(newv))
+    return newv
+
+def _user_balance_debit(user_id: int, amount: float) -> bool:
+    if amount <= 0:
+        return True
+    bal = _user_balance_get(user_id)
+    if bal + 1e-9 < amount:
+        return False
+    _user_balance_add(user_id, -amount)
+    return True
+
+def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
+    until = (datetime.now(timezone.utc) + timedelta(days=30 * months)).isoformat()
+    kv_set(f"sub:tier:{user_id}", tier_key)
+    kv_set(f"sub:until:{user_id}", until)
+    return until
+
+def _sub_info_text(user_id: int) -> str:
+    tier = kv_get(f"sub:tier:{user_id}", "") or "нет"
+    until = kv_get(f"sub:until:{user_id}", "")
+    human_until = ""
+    if until:
+        try:
+            d = datetime.fromisoformat(until)
+            human_until = d.strftime("%d.%m.%Y")
+        except Exception:
+            human_until = until
+    bal = _user_balance_get(user_id)
+    line_until = f"\n⏳ Активна до: {human_until}" if tier != "нет" and human_until else ""
+    return f"🧾 Текущая подписка: {tier.upper() if tier!='нет' else 'нет'}{line_until}\n💵 Баланс: {_money_fmt_usd(bal)}"
+
+def _plan_card_text(key: str) -> str:
+    p = SUBS_TIERS[key]
+    fs = "\n".join("• " + f for f in p["features"])
+    return (
+        f"⭐ Тариф {p['title']}\n"
+        f"Цена: {_money_fmt_rub(p['rub'])} / {_money_fmt_usd(p['usd'])} в мес.\n\n"
+        f"{fs}\n"
+    )
+
+def _plans_overview_text(user_id: int) -> str:
+    parts = [
+        "⭐ Подписка и тарифы",
+        "Выбери подходящий уровень — доступ откроется сразу после оплаты.",
+        _sub_info_text(user_id),
+        "— — —",
+        _plan_card_text("start"),
+        _plan_card_text("pro"),
+        _plan_card_text("ultimate"),
+        "Выберите тариф кнопкой ниже.",
+    ]
+    return "\n".join(parts)
+
+def plans_root_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("⭐ START",    callback_data="plan:start"),
+            InlineKeyboardButton("🚀 PRO",      callback_data="plan:pro"),
+            InlineKeyboardButton("👑 ULTIMATE", callback_data="plan:ultimate"),
+        ]
+    ])
+
+def plan_pay_kb(plan_key: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("💳 Оплатить — ЮKassa", callback_data=f"pay:yookassa:{plan_key}"),
+        ],
+        [
+            InlineKeyboardButton("💠 Оплатить — CryptoBot", callback_data=f"pay:cryptobot:{plan_key}"),
+        ],
+        [
+            InlineKeyboardButton("🧾 Списать с баланса", callback_data=f"pay:balance:{plan_key}"),
+        ],
+        [
+            InlineKeyboardButton("⬅️ К тарифам", callback_data="plan:root"),
+        ]
+    ])
+
+# Кнопка «⭐ Подписка · Помощь»
+async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = _plans_overview_text(user_id)
+    await update.effective_chat.send_message(text, reply_markup=plans_root_kb())
+
+# Обработчик наших колбэков по подписке/оплатам (зарегистрировать ДО общего on_cb!)
+async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = q.data or ""
+    user_id = q.from_user.id
+    chat_id = q.message.chat_id
+
+    # Навигация между тарифами
+    if data.startswith("plan:"):
+        _, arg = data.split(":", 1)
+        if arg == "root":
+            await q.edit_message_text(_plans_overview_text(user_id), reply_markup=plans_root_kb())
+            await q.answer()
+            return
+        if arg in SUBS_TIERS:
+            await q.edit_message_text(_plan_card_text(arg) + "\nВыберите способ оплаты:", reply_markup=plan_pay_kb(arg))
+            await q.answer()
+            return
+
+    # Платежи
+    if data.startswith("pay:"):
+        _, method, plan_key = data.split(":", 2)
+        plan = SUBS_TIERS.get(plan_key)
+        if not plan:
+            await q.answer("Неизвестный тариф.", show_alert=True)
+            return
+
+        # ЮKassa через Telegram Payments
+        if method == "yookassa":
+            if not YOOKASSA_PROVIDER_TOKEN:
+                await q.answer("ЮKassa не подключена (нет YOOKASSA_PROVIDER_TOKEN).", show_alert=True)
+                return
+            title = f"Подписка {plan['title']} • 1 месяц"
+            desc = "Доступ к функциям бота согласно выбранному тарифу. Подписка активируется сразу после оплаты."
+            payload = json.dumps({"tier": plan_key, "months": 1})
+            # Telegram ожидает сумму в минорных единицах валюты (копейки)
+            total_minor = plan["rub"] * 100 if YOOKASSA_CURRENCY == "RUB" else int(round(plan["usd"] * 100))
+            prices = [LabeledPrice(label=f"{plan['title']} 1 мес.", amount=total_minor)]
+            await context.bot.send_invoice(
+                chat_id=chat_id,
+                title=title,
+                description=desc,
+                payload=payload,
+                provider_token=YOOKASSA_PROVIDER_TOKEN,
+                currency=YOOKASSA_CURRENCY,
+                prices=prices,
+                need_email=True,
+                is_flexible=False,
+            )
+            await q.answer("Счёт выставлен ✅")
+            return
+
+        # CryptoBot (Crypto Pay API: создаём инвойс и отдаём ссылку)
+        if method == "cryptobot":
+            if not CRYPTO_PAY_API_TOKEN:
+                await q.answer("CryptoBot не подключён (нет CRYPTO_PAY_API_TOKEN).", show_alert=True)
+                return
+            try:
+                amount = plan["usd"]  # крипта — в USD-номинале
+                async with httpx.AsyncClient(timeout=20) as client:
+                    r = await client.post(
+                        "https://pay.crypt.bot/api/createInvoice",
+                        headers={"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN},
+                        json={
+                            "asset": CRYPTO_ASSET,
+                            "amount": f"{amount:.2f}",
+                            "description": f"Subscription {plan['title']} • 1 month",
+                            "paid_btn_name": "callback",
+                            "allow_comments": False,
+                            "allow_anonymous": True,
+                        },
+                    )
+                    data = r.json()
+                    if not data.get("ok"):
+                        raise RuntimeError(str(data))
+                    pay_url = data["result"]["pay_url"]
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💠 Оплатить в CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("⬅️ К тарифу", callback_data=f"plan:{plan_key}")],
+                ])
+                await q.edit_message_text(_plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:", reply_markup=kb)
+                await q.answer()
+            except Exception as e:
+                await q.answer("Не удалось создать счёт в CryptoBot.", show_alert=True)
+                log.exception("CryptoBot invoice error: %s", e)
+            return
+
+        # Списание с внутреннего баланса (USD)
+        if method == "balance":
+            price_usd = float(plan["usd"])
+            if not _user_balance_debit(user_id, price_usd):
+                await q.answer("Недостаточно средств на внутреннем балансе.", show_alert=True)
+                return
+            until = _sub_activate(user_id, plan_key, months=1)
+            await q.edit_message_text(
+                f"✅ Подписка {plan['title']} активирована до {until[:10]}.\n"
+                f"💵 Списано: {_money_fmt_usd(price_usd)}. Текущий баланс: {_money_fmt_usd(_user_balance_get(user_id))}",
+                reply_markup=plans_root_kb(),
+            )
+            await q.answer()
+            return
+
+    # Если колбэк не наш — пропускаем дальше
+    await q.answer()
+    return
+
+# Если у тебя уже есть on_precheckout / on_successful_payment — оставь их.
+# Если нет, можешь использовать эти простые реализации:
+
+async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.pre_checkout_query
+    # Всегда подтверждаем, а проверку payload делаем в on_successful_payment
+    await query.answer(ok=True)
+
+async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sp = update.message.successful_payment
+    try:
+        payload = json.loads(sp.invoice_payload or "{}")
+    except Exception:
+        payload = {}
+    tier = payload.get("tier") or "start"
+    months = int(payload.get("months") or 1)
+    user_id = update.effective_user.id
+    until = _sub_activate(user_id, tier, months)
+    txt = (
+        "🎉 Оплата прошла успешно!\n"
+        f"✅ Подписка {SUBS_TIERS[tier]['title']} активна до {until[:10]}.\n"
+        f"Спасибо за поддержку — приятной работы! ✨"
+    )
+    try:
+        await update.effective_chat.send_message(txt, reply_markup=plans_root_kb())
+    except Exception:
+        log.exception("Failed to send success message after payment")
+# ───────── Конец PATCH ─────────
+        
 # ───────── Команда /img ─────────
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
@@ -2522,7 +2863,9 @@ async def on_btn_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await cmd_balance(update, context)
 
 async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await cmd_plans(update, context)
+    user_id = update.effective_user.id
+    text = _plans_overview_text(user_id)
+    await update.effective_message.reply_text(text, reply_markup=plans_root_kb())
 
 async def on_mode_school_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
@@ -2617,6 +2960,7 @@ def build_application() -> "Application":
 
     # Подрежимы (school/work/fun:…)
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
+    app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)"))
 
     # Прочие callback'и
     app.add_handler(CallbackQueryHandler(on_cb))
