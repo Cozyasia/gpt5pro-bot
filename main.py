@@ -2973,7 +2973,7 @@ def build_application() -> "Application":
     # ── Текстовые кнопки/ярлыки (регистрируем ДО общего текстового) ─────────
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:⭐️)?\s*Подписка(?:\s*·\s*Помощь)?$"), on_btn_plans))
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),on_btn_plans))
     app.add_handler(MessageHandler(filters.Regex(r"^Уч[её]ба$"), on_mode_school_text))
     app.add_handler(MessageHandler(filters.Regex(r"^Работа$"), on_mode_work_text))
     app.add_handler(MessageHandler(filters.Regex(r"^Развлечения$"), on_mode_fun_text))
