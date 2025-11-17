@@ -2094,44 +2094,38 @@ def build_app() -> "Application":
 
 # ───────── Запуск бота ─────────
 def main() -> None:
-    # Инициализация БД на старте
     db_init()
 
     global app
     app = build_app()
+
+    if app is None:
+        raise RuntimeError("build_app() returned None — check your return statement or handlers")
 
     if USE_WEBHOOK:
         if not RENDER_EXTERNAL_URL:
             log.error("WEBHOOK режим включён, но RENDER_EXTERNAL_URL не задан")
             raise RuntimeError("RENDER_EXTERNAL_URL is required for webhook mode")
 
-        # аккуратная сборка пути и полного URL
-        _path = (WEBHOOK_PATH or "tg").lstrip("/")
-        _url  = f"{RENDER_EXTERNAL_URL.rstrip('/')}/{_path}"
-
-        # корректный форматтер: строка + аргументы
-        log.info("Starting via webhook on port %s, path /%s, url=%s", PORT, _path, _url)
+        path = WEBHOOK_PATH.strip("/")
+        log.info("Starting via webhook on port %s, path /%s, url=%s/%s",
+                 PORT, path, RENDER_EXTERNAL_URL, path)
 
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
-            url_path=_path,
-            webhook_url=_url,
-            secret_token=WEBHOOK_SECRET or None,
+            url_path=path,
+            webhook_url=f"{RENDER_EXTERNAL_URL}/{path}",
+            secret_token=(WEBHOOK_SECRET or None),
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
     else:
-        log.info("Starting via polling (no webhook)")
+        log.info("Starting via polling (no RENDER_EXTERNAL_URL)")
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
         )
 
-
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        log.exception("Fatal error on startup")
-        raise
+    main()
