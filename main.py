@@ -2053,7 +2053,7 @@ async def cmd_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def build_app() -> "Application":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-      # Команды
+    # Команды
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
@@ -2070,7 +2070,7 @@ def build_app() -> "Application":
     app.add_handler(CommandHandler("diag_images", cmd_diag_images))
     app.add_handler(CommandHandler("diag_video", cmd_diag_video))
 
-    # WebApp data — только события web_app_data и не блокируем другие хендлеры
+    # WebApp data
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_entrypoint, block=False))
 
     # Callback-кнопки
@@ -2079,7 +2079,7 @@ def build_app() -> "Application":
     app.add_handler(CallbackQueryHandler(callback_photo_handler,  pattern=r"^photo:"))
     app.add_handler(CallbackQueryHandler(callback_engine_handler, pattern=r"^engine:"))
 
-    # Платежи (ЮKassa)
+    # Платежи
     app.add_handler(PreCheckoutQueryHandler(precheckout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
@@ -2090,6 +2090,8 @@ def build_app() -> "Application":
 
     # Текст — последним
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_entrypoint))
+
+    return app  # <- ЭТО ВАЖНО
 
 
 # ───────── Запуск бота ─────────
