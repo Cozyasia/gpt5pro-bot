@@ -1580,7 +1580,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data or ""
     user_id = q.from_user.id
-    chat_id = q.message.chat_id
+    chat_id = q.message.chat.id  # FIX: корректное поле в PTB v21+
 
     # Навигация между тарифами
     if data.startswith("plan:"):
@@ -1590,13 +1590,22 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer()
             return
         if arg in SUBS_TIERS:
-            await q.edit_message_text(_plan_card_text(arg) + "\nВыберите способ оплаты:", reply_markup=plan_pay_kb(arg))
+            await q.edit_message_text(
+                _plan_card_text(arg) + "\nВыберите способ оплаты:",
+                reply_markup=plan_pay_kb(arg)
+            )
             await q.answer()
             return
 
     # Платежи
     if data.startswith("pay:"):
-        _, method, plan_key = data.split(":", 2)
+        # безопасный парсинг
+        try:
+            _, method, plan_key = data.split(":", 2)
+        except ValueError:
+            await q.answer("Некорректные данные кнопки.", show_alert=True)
+            return
+
         plan = SUBS_TIERS.get(plan_key)
         if not plan:
             await q.answer("Неизвестный тариф.", show_alert=True)
@@ -1607,11 +1616,17 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not YOOKASSA_PROVIDER_TOKEN:
                 await q.answer("ЮKassa не подключена (нет YOOKASSA_PROVIDER_TOKEN).", show_alert=True)
                 return
+
             title = f"Подписка {plan['title']} • 1 месяц"
             desc = "Доступ к функциям бота согласно выбранному тарифу. Подписка активируется сразу после оплаты."
             payload = json.dumps({"tier": plan_key, "months": 1})
-            # Telegram ожидает сумму в минорных единицах валюты (копейки)
-            total_minor = plan["rub"] * 100 if YOOKASSA_CURRENCY == "RUB" else int(round(plan["usd"] * 100))
+
+            # Telegram ожидает сумму в минорных единицах (копейки/центы)
+            if YOOKASSA_CURRENCY == "RUB":
+                total_minor = int(round(float(plan["rub"]) * 100))
+            else:
+                total_minor = int(round(float(plan["usd"]) * 100))
+
             prices = [LabeledPrice(label=f"{plan['title']} 1 мес.", amount=total_minor)]
             await context.bot.send_invoice(
                 chat_id=chat_id,
@@ -1628,7 +1643,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # CryptoBot (Crypto Pay API: создаём инвойс и отдаём ссылку)
-                if method == "cryptobot":
+        if method == "cryptobot":  # FIX: выровнен отступ
             if not CRYPTO_PAY_API_TOKEN:
                 await q.answer("CryptoBot не подключён (нет CRYPTO_PAY_API_TOKEN).", show_alert=True)
                 return
@@ -1661,9 +1676,9 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     _plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:",
                     reply_markup=kb
                 )
-                # автопул статуса именно для ПОДПИСКИ:
+                # автопул статуса именно для ПОДПИСКИ
                 context.application.create_task(_poll_crypto_sub_invoice(
-                    context, msg.chat_id, msg.message_id, user_id, inv_id, plan_key, 1
+                    context, msg.chat.id, msg.message_id, user_id, inv_id, plan_key, 1  # FIX: msg.chat.id
                 ))
                 await q.answer()
             except Exception as e:
@@ -1680,7 +1695,8 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             until = _sub_activate(user_id, plan_key, months=1)
             await q.edit_message_text(
                 f"✅ Подписка {plan['title']} активирована до {until[:10]}.\n"
-                f"💵 Списано: {_money_fmt_usd(price_usd)}. Текущий баланс: {_money_fmt_usd(_user_balance_get(user_id))}",
+                f"💵 Списано: {_money_fmt_usd(price_usd)}. "
+                f"Текущий баланс: {_money_fmt_usd(_user_balance_get(user_id))}",
                 reply_markup=plans_root_kb(),
             )
             await q.answer()
@@ -1690,13 +1706,15 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     return
 
+
 # Если у тебя уже есть on_precheckout / on_successful_payment — оставь их.
 # Если нет, можешь использовать эти простые реализации:
 
 async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.pre_checkout_query
-    # Всегда подтверждаем, а проверку payload делаем в on_successful_payment
-    await query.answer(ok=True)
+    try:
+        await update.pre_checkout_query.answer(ok=True)
+    except Exception as e:
+        log.exception("precheckout error: %s", e)
 
 async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
