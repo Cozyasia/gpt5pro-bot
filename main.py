@@ -3242,6 +3242,25 @@ async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
+# ───────── Роутеры‑кнопки режимов (единая точка входа) ─────────
+async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    fn = globals().get("_send_mode_menu")
+    if callable(fn):
+        return await fn(update, context, "study")
+    return await on_mode_school_text(update, context)
+
+async def on_btn_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    fn = globals().get("_send_mode_menu")
+    if callable(fn):
+        return await fn(update, context, "work")
+    return await on_mode_work_text(update, context)
+
+async def on_btn_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    fn = globals().get("_send_mode_menu")
+    if callable(fn):
+        return await fn(update, context, "fun")
+    return await on_mode_fun_text(update, context)
+
 
 # ───────── Вспомогательное: взять первую объявленную функцию по имени ─────────
 def _pick_first_defined(*names):
@@ -3311,10 +3330,16 @@ def build_application() -> "Application":
     # ── Текстовые кнопки/ярлыки (регистрируем ДО общего текстового) ─────────
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),on_btn_plans))
-    app.add_handler(MessageHandler(filters.Regex(r"^Уч[её]ба$"), on_mode_school_text))
-    app.add_handler(MessageHandler(filters.Regex(r"^Работа$"), on_mode_work_text))
-    app.add_handler(MessageHandler(filters.Regex(r"^Развлечения$"), on_mode_fun_text))
+    app.add_handler(MessageHandler(
+        filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),
+        on_btn_plans
+    ))
+
+    # 🔽 Заменили прямые on_mode_*_text на унифицированные on_btn_*,
+    # чтобы в будущем легко переключиться на _send_mode_menu(...)
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),         on_btn_study))
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),          on_btn_work))
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"),     on_btn_fun))
 
     # ── Медиа ────────────────────────────────────────────────────────────────
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
