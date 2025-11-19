@@ -1628,12 +1628,12 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # CryptoBot (Crypto Pay API: создаём инвойс и отдаём ссылку)
-        if method == "cryptobot":
+                if method == "cryptobot":
             if not CRYPTO_PAY_API_TOKEN:
                 await q.answer("CryptoBot не подключён (нет CRYPTO_PAY_API_TOKEN).", show_alert=True)
                 return
             try:
-                amount = plan["usd"]  # крипта — в USD-номинале
+                amount = float(plan["usd"])
                 async with httpx.AsyncClient(timeout=20) as client:
                     r = await client.post(
                         "https://pay.crypt.bot/api/createInvoice",
@@ -1642,7 +1642,6 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "asset": CRYPTO_ASSET,
                             "amount": f"{amount:.2f}",
                             "description": f"Subscription {plan['title']} • 1 month",
-                            "paid_btn_name": "callback",
                             "allow_comments": False,
                             "allow_anonymous": True,
                         },
@@ -1650,12 +1649,22 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     data = r.json()
                     if not data.get("ok"):
                         raise RuntimeError(str(data))
-                    pay_url = data["result"]["pay_url"]
+                    res = data["result"]
+                    pay_url = res["pay_url"]
+                    inv_id = str(res["invoice_id"])
+
                 kb = InlineKeyboardMarkup([
                     [InlineKeyboardButton("💠 Оплатить в CryptoBot", url=pay_url)],
                     [InlineKeyboardButton("⬅️ К тарифу", callback_data=f"plan:{plan_key}")],
                 ])
-                await q.edit_message_text(_plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:", reply_markup=kb)
+                msg = await q.edit_message_text(
+                    _plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:",
+                    reply_markup=kb
+                )
+                # автопул статуса именно для ПОДПИСКИ:
+                context.application.create_task(_poll_crypto_sub_invoice(
+                    context, msg.chat_id, msg.message_id, user_id, inv_id, plan_key, 1
+                ))
                 await q.answer()
             except Exception as e:
                 await q.answer("Не удалось создать счёт в CryptoBot.", show_alert=True)
@@ -1690,24 +1699,58 @@ async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer(ok=True)
 
 async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sp = update.message.successful_payment
+    """
+    Универсальный обработчик Telegram Payments:
+    - Поддерживает payload в двух форматах:
+        1) JSON: {"tier":"pro","months":1}
+        2) Строка: "sub:pro:1"
+    - Иначе трактует как пополнение единого USD-кошелька.
+    """
     try:
-        payload = json.loads(sp.invoice_payload or "{}")
-    except Exception:
-        payload = {}
-    tier = payload.get("tier") or "start"
-    months = int(payload.get("months") or 1)
-    user_id = update.effective_user.id
-    until = _sub_activate(user_id, tier, months)
-    txt = (
-        "🎉 Оплата прошла успешно!\n"
-        f"✅ Подписка {SUBS_TIERS[tier]['title']} активна до {until[:10]}.\n"
-        f"Спасибо за поддержку — приятной работы! ✨"
-    )
-    try:
-        await update.effective_chat.send_message(txt, reply_markup=plans_root_kb())
-    except Exception:
-        log.exception("Failed to send success message after payment")
+        sp = update.message.successful_payment
+        payload_raw = sp.invoice_payload or ""
+        total_minor = sp.total_amount or 0
+        rub = total_minor / 100.0
+        uid = update.effective_user.id
+
+        # 1) Пытаемся распарсить JSON
+        tier, months = None, None
+        try:
+            if payload_raw.strip().startswith("{"):
+                obj = json.loads(payload_raw)
+                tier = (obj.get("tier") or "").strip().lower() or None
+                months = int(obj.get("months") or 1)
+        except Exception:
+            pass
+
+        # 2) Пытаемся распарсить строковый формат "sub:tier:months"
+        if not tier and payload_raw.startswith("sub:"):
+            try:
+                _, t, m = payload_raw.split(":", 2)
+                tier = (t or "pro").strip().lower()
+                months = int(m or 1)
+            except Exception:
+                tier, months = None, None
+
+        if tier and months:
+            until = activate_subscription_with_tier(uid, tier, months)
+            await update.effective_message.reply_text(
+                f"🎉 Оплата прошла успешно!\n"
+                f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}."
+            )
+            return
+
+        # Иначе считаем, что это пополнение кошелька в рублях
+        usd = rub / max(1e-9, USD_RUB)
+        _wallet_total_add(uid, usd)
+        await update.effective_message.reply_text(
+            f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый баланс."
+        )
+
+    except Exception as e:
+        log.exception("successful_payment handler error: %s", e)
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text("⚠️ Ошибка обработки платежа. Если деньги списались — напишите в поддержку.")
 # ───────── Конец PATCH ─────────
         
 # ───────── Команда /img ─────────
@@ -2579,6 +2622,46 @@ async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
     except Exception as e:
         log.exception("crypto poll error: %s", e)
 
+async def _poll_crypto_sub_invoice(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+    invoice_id: str,
+    tier: str,
+    months: int
+):
+    try:
+        for _ in range(120):  # ~12 минут при задержке 6с
+            inv = await _crypto_get_invoice(invoice_id)
+            st = (inv or {}).get("status", "").lower() if inv else ""
+            if st == "paid":
+                until = activate_subscription_with_tier(user_id, tier, months)
+                with contextlib.suppress(Exception):
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id, message_id=message_id,
+                        text=f"✅ CryptoBot: платёж подтверждён.\n"
+                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}."
+                    )
+                return
+            if st in ("expired", "cancelled", "canceled", "failed"):
+                with contextlib.suppress(Exception):
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id, message_id=message_id,
+                        text=f"❌ CryptoBot: оплата не завершена (статус: {st})."
+                    )
+                return
+            await asyncio.sleep(6.0)
+
+        # Таймаут
+        with contextlib.suppress(Exception):
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id,
+                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» или оплатите заново."
+            )
+    except Exception as e:
+        log.exception("crypto poll (subscription) error: %s", e)
+
 
 # ───────── Предложение пополнения ─────────
 async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3010,11 +3093,15 @@ def build_application() -> "Application":
     return app
 
 
+# === PATCH 3 · main() с безопасной инициализацией БД ===
 def main():
-    # ИНИЦИАЛИЗАЦИЯ БД
-    db_init()
-    db_init_usage()
-    _db_init_prefs()
+    # Безопасная инициализация БД/таблиц (не падаем при ошибках)
+    with contextlib.suppress(Exception):
+        db_init()
+    with contextlib.suppress(Exception):
+        db_init_usage()
+    with contextlib.suppress(Exception):
+        _db_init_prefs()
 
     app = build_application()
 
@@ -3032,10 +3119,14 @@ def main():
     else:
         # POLLING-режим (Background Worker)
         log.info("🚀 POLLING mode.")
-        with contextlib.suppress(Exception):
+        # На всякий случай очистим вебхук, чтобы не ловить 409 Conflict
+        try:
             asyncio.get_event_loop().run_until_complete(
                 app.bot.delete_webhook(drop_pending_updates=True)
             )
+        except Exception:
+            pass
+
         app.run_polling(
             close_loop=False,
             allowed_updates=Update.ALL_TYPES,
@@ -3045,3 +3136,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+# === END PATCH 3 ===
