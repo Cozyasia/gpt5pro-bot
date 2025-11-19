@@ -843,6 +843,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Ошибка при обработке voice.")
         return
     transcript = transcript.strip()
+    # 🔎 Быстрый ответ на вопросы вида «ты умеешь X?» (PDF/EPUB/DOCX, аудио, фото, видео и т.п.)
+cap = capability_answer(transcript)
+if cap:
+    await msg.reply_text(cap)
+    return
 
     # ⤵️ ПОСЛЕ расшифровки — быстрый позитивный ответ на вопросы «умеешь ли…»
     # (PDF/EPUB/DOCX/TXT, изображения/фото, видео, аудиокниги и т.п.)
@@ -2775,16 +2780,22 @@ def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
 
 async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
     try:
-        if not PROVIDER_TOKEN:
-            await update.effective_message.reply_text("⚠️ ЮKassa не настроена (PROVIDER_TOKEN отсутствует).")
+        # берём токен и валюту из двух источников (старый PROVIDER_TOKEN ИЛИ новый YOOKASSA_PROVIDER_TOKEN)
+        token = (PROVIDER_TOKEN or YOOKASSA_PROVIDER_TOKEN)
+        curr  = (CURRENCY if (CURRENCY and CURRENCY != "RUB") else YOOKASSA_CURRENCY) or "RUB"
+
+        if not token:
+            await update.effective_message.reply_text("⚠️ ЮKassa не настроена (нет токена).")
             return False
+
         prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub) * 100)]
+
         await update.effective_message.reply_invoice(
             title=title,
             description=desc[:255],
             payload=payload,
-            provider_token=PROVIDER_TOKEN,
-            currency=CURRENCY,
+            provider_token=token,
+            currency=curr,
             prices=prices,
             need_email=False,
             need_name=False,
@@ -2793,6 +2804,7 @@ async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str
             is_flexible=False
         )
         return True
+
     except Exception as e:
         log.exception("send_invoice error: %s", e)
         try:
