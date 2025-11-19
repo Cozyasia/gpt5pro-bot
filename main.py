@@ -837,27 +837,18 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не удалось скачать голосовое сообщение.")
         return
 
-    # Транскрибируем
+        # Транскрибируем
     transcript = await _stt_transcribe_bytes(filename, raw)
     if not transcript:
         await msg.reply_text("Ошибка при обработке voice.")
         return
     transcript = transcript.strip()
-    # 🔎 Быстрый ответ на вопросы вида «ты умеешь X?» (PDF/EPUB/DOCX, аудио, фото, видео и т.п.)
-cap = capability_answer(transcript)
-if cap:
-    await msg.reply_text(cap)
-    return
 
-    # ⤵️ ПОСЛЕ расшифровки — быстрый позитивный ответ на вопросы «умеешь ли…»
-    # (PDF/EPUB/DOCX/TXT, изображения/фото, видео, аудиокниги и т.п.)
-    try:
-        if re.search(_CAPS_PATTERN, transcript or "", flags=re.IGNORECASE | re.DOTALL):
-            await on_capabilities_qa(update, context)
-            return
-    except Exception:
-        # если паттерн/функция ещё не подключены — не валим обработчик
-        pass
+    # 🔎 Быстрый ответ на «ты умеешь X?»
+    cap = capability_answer(transcript)
+    if cap:
+        await msg.reply_text(cap)
+        return
 
     # Подтверждаем распознавание (для UX/отладки)
     with contextlib.suppress(Exception):
