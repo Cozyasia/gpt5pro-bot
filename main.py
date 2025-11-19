@@ -3232,17 +3232,82 @@ async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown")
 
+# === PATCH FUN-UI START ======================================================
 async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
         "🔥 *Развлечения*\n"
-        "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, оживление старых фото.\n"
-        "Видео: Luma/Runway — клипы под Reels/Shorts; авто-нарезка длинного видео (сценарий/тайм-коды). "
+        "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, *оживление старых фото*.\n"
+        "Видео: Luma/Runway — клипы под Reels/Shorts; *авто-нарезка длинного видео по смыслу* (сценарий/тайм-коды).\n"
         "Мемы/квизы.\n\n"
         "Выбери действие ниже:"
     )
-    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
+    # расширенная клавиатура с новыми экшенами
+    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb_ext())
 
-# ───────── Роутеры‑кнопки режимов (единая точка входа) ─────────
+def _fun_quick_kb_ext() -> InlineKeyboardMarkup:
+    """
+    Расширяет существующую _fun_quick_kb() (если есть),
+    добавляя перед строкой «Назад» две кнопки:
+    🪄 Оживить старое фото   → fun:revive_old
+    📽 Рилс из длинного видео → fun:auto_reels
+    """
+    try:
+        base: InlineKeyboardMarkup = _fun_quick_kb()  # существующая клавиатура проекта
+        rows = list(getattr(base, "inline_keyboard", []))
+    except NameError:
+        rows = []
+
+    btn_revive = InlineKeyboardButton("🪄 Оживить старое фото", callback_data="fun:revive_old")
+    btn_reels  = InlineKeyboardButton("📽 Рилс из длинного видео", callback_data="fun:auto_reels")
+
+    inserted = False
+    for i, row in enumerate(rows):
+        try:
+            if any(getattr(b, "callback_data", "") == "fun:back" for b in row):
+                rows.insert(i, [btn_revive])
+                rows.insert(i + 1, [btn_reels])
+                inserted = True
+                break
+        except Exception:
+            continue
+
+    if not inserted:
+        rows.append([btn_revive])
+        rows.append([btn_reels])
+
+    return InlineKeyboardMarkup(rows or [[InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")]])
+
+async def on_cb_fun_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Инструкции для новых быстрых действий раздела «Развлечения»."""
+    q = update.callback_query
+    data = (q.data or "")
+    await q.answer()
+
+    if data == "fun:revive_old":
+        context.user_data["fun_expect"] = "revive_old"
+        msg = (
+            "🪄 *Оживление старых фото*\n"
+            "Пришлите фото (лучше портрет). Я очищу артефакты, при желании — колоризую, "
+            "и попробую сделать лёгкую анимацию лица.\n\n"
+            "_Подсказка:_ лучше скан без бликов, до 10–15 МБ."
+        )
+        await q.message.reply_text(msg, parse_mode="Markdown")
+        return
+
+    if data == "fun:auto_reels":
+        context.user_data["fun_expect"] = "auto_reels"
+        msg = (
+            "📽 *Reels из длинного видео*\n"
+            "Загрузите исходник. Сделаю авто-нарезку ключевых моментов «по смыслу» "
+            "с вертикалью 9:16 и коротким хуком.\n\n"
+            "По умолчанию: 20–35 сек, авто-саб, хук в первые 3 сек.\n"
+            "Нужно иначе — напишите длительность/язык субтитров/тему."
+        )
+        await q.message.reply_text(msg, parse_mode="Markdown")
+        return
+# === PATCH FUN-UI END ======================================================
+
+# ───────── Роутеры-кнопки режимов (единая точка входа) ─────────
 async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fn = globals().get("_send_mode_menu")
     if callable(fn):
@@ -3305,14 +3370,13 @@ def build_application() -> "Application":
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     with contextlib.suppress(Exception):
-        # Совместимость с вариантами PTB, где WEB_APP_DATA доступен напрямую
         if hasattr(filters, "WEB_APP_DATA"):
             app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # ── Платежи (оставляем как есть выше в файле, тут ничего не добавляем) ──
-    #  PreCheckoutQueryHandler(on_precheckout) и SUCCESSFUL_PAYMENT уже зарегистрированы выше
+    # Новые быстрые действия «Развлечения»
+    app.add_handler(CallbackQueryHandler(on_cb_fun_new, pattern=r"^fun:(?:revive_old|auto_reels)$"))
 
-    # Быстрые действия «Развлечения» — регистрируем первыми
+    # Старые быстрые действия «Развлечения» (как было)
     app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:(?:revive|clip|img|storyboard)$"))
 
     # Подрежимы (school/work/fun:…)
@@ -3335,11 +3399,10 @@ def build_application() -> "Application":
         on_btn_plans
     ))
 
-    # 🔽 Заменили прямые on_mode_*_text на унифицированные on_btn_*,
-    # чтобы в будущем легко переключиться на _send_mode_menu(...)
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),         on_btn_study))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),          on_btn_work))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"),     on_btn_fun))
+    # 🔽 Единые роутеры режимов — можно легко переключить на _send_mode_menu(...)
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),     on_btn_study))
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),      on_btn_work))
+    app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"), on_btn_fun))
 
     # ── Медиа ────────────────────────────────────────────────────────────────
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
