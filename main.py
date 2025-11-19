@@ -1077,6 +1077,243 @@ def engines_kb():
         [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
     ])
 
+# ───────── MODES (Учёба / Работа / Развлечения) ─────────
+
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import CallbackQueryHandler, MessageHandler, filters
+
+# Текст корневого меню режимов
+def _modes_root_text() -> str:
+    return (
+        "Выберите режим работы. В каждом режиме бот использует гибрид движков:\n"
+        "• GPT-5 (текст/логика) + Vision (фото) + STT/TTS (голос)\n"
+        "• Luma/Runway — видео, Midjourney — изображения\n\n"
+        "Можете также просто написать свободный запрос — бот поймёт."
+    )
+
+def modes_root_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🎓 Учёба", callback_data="mode:study"),
+            InlineKeyboardButton("💼 Работа", callback_data="mode:work"),
+            InlineKeyboardButton("🔥 Развлечения", callback_data="mode:fun"),
+        ],
+    ])
+
+# ── Описание и подменю по режимам
+def _mode_desc(key: str) -> str:
+    if key == "study":
+        return (
+            "🎓 *Учёба*\n"
+            "Гибрид: GPT-5 для объяснений/конспектов, Vision для фото-задач, "
+            "STT/TTS для голосовых, + Midjourney (иллюстрации) и Luma/Runway (учебные ролики).\n\n"
+            "Быстрые действия ниже. Можно написать свободный запрос (например: "
+            "«сделай конспект из PDF», «объясни интегралы с примерами»)."
+        )
+    if key == "work":
+        return (
+            "💼 *Работа*\n"
+            "Гибрид: GPT-5 (резюме/письма/аналитика), Vision (таблицы/скрины), "
+            "STT/TTS (диктовка/озвучка), + Midjourney (визуалы), Luma/Runway (презентационные ролики).\n\n"
+            "Быстрые действия ниже. Можно написать свободный запрос (например: "
+            "«адаптируй резюме под вакансию PM», «написать коммерческое предложение»)."
+        )
+    if key == "fun":
+        return (
+            "🔥 *Развлечения*\n"
+            "Гибрид: GPT-5 (идеи, сценарии), Midjourney (картинки), Luma/Runway (шорты/риелсы), "
+            "STT/TTS (озвучка). Всё для быстрых творческих штук.\n\n"
+            "Быстрые действия ниже. Можно написать свободный запрос (например: "
+            "«сделай сценарий 30-сек шорта про кота-бариста»)."
+        )
+    return "Режим не найден."
+
+def _mode_kb(key: str) -> InlineKeyboardMarkup:
+    if key == "study":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📚 Конспект из PDF", callback_data="act:study:pdf_summary")],
+            [InlineKeyboardButton("🧠 Объяснить тему", callback_data="act:study:explain")],
+            [InlineKeyboardButton("📝 План подготовки к экзамену", callback_data="act:study:exam_plan")],
+            [
+                InlineKeyboardButton("🎬 Runway", callback_data="act:open:runway"),
+                InlineKeyboardButton("🎨 Midjourney", callback_data="act:open:mj"),
+                InlineKeyboardButton("🗣 STT/TTS", callback_data="act:open:voice"),
+            ],
+            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+        ])
+    if key == "work":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📄 Резюме/правки", callback_data="act:work:cv")],
+            [InlineKeyboardButton("✉️ Сопроводительное письмо", callback_data="act:work:cover")],
+            [InlineKeyboardButton("📊 Питч/коммерческое предложение", callback_data="act:work:pitch")],
+            [
+                InlineKeyboardButton("🎬 Runway", callback_data="act:open:runway"),
+                InlineKeyboardButton("🎨 Midjourney", callback_data="act:open:mj"),
+                InlineKeyboardButton("🗣 STT/TTS", callback_data="act:open:voice"),
+            ],
+            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+        ])
+    if key == "fun":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="act:fun:ideas")],
+            [InlineKeyboardButton("🎬 Сценарий шорта", callback_data="act:fun:shorts")],
+            [InlineKeyboardButton("🎮 Игры/квиз", callback_data="act:fun:games")],
+            [
+                InlineKeyboardButton("🎬 Runway", callback_data="act:open:runway"),
+                InlineKeyboardButton("🎨 Midjourney", callback_data="act:open:mj"),
+                InlineKeyboardButton("🗣 STT/TTS", callback_data="act:open:voice"),
+            ],
+            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+        ])
+    return modes_root_kb()
+
+# Показать выбранный режим (используется и для callback, и для текста)
+async def _send_mode_menu(update, context, key: str):
+    text = _mode_desc(key)
+    kb = _mode_kb(key)
+    # Если пришли из callback — редактируем; если текстом — шлём новым сообщением
+    if getattr(update, "callback_query", None):
+        q = update.callback_query
+        await q.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+        await q.answer()
+    else:
+        await update.effective_message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+
+# Обработчик callback по режимам
+async def on_mode_cb(update, context):
+    q = update.callback_query
+    data = (q.data or "").strip()
+
+    # Навигация
+    if data == "mode:root":
+        await q.edit_message_text(_modes_root_text(), reply_markup=modes_root_kb())
+        await q.answer()
+        return
+    if data.startswith("mode:"):
+        _, key = data.split(":", 1)
+        await _send_mode_menu(update, context, key)
+        return
+
+    # Быстрые действия
+    if data == "act:free":
+        await q.answer()
+        await q.edit_message_text(
+            "📝 Напишите свободный запрос ниже текстом или голосом — я подстроюсь.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+
+    # Учёба
+    if data == "act:study:pdf_summary":
+        await q.answer()
+        await q.edit_message_text(
+            "📚 Пришлите PDF/EPUB/DOCX — сделаю структурированный конспект с тезисами.\n"
+            "Подсказка: можно добавить «коротко/подробно» и язык результата.",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+    if data == "act:study:explain":
+        await q.answer()
+        await q.edit_message_text(
+            "🧠 Напишите тему, уровень (школа/вуз/профи) и желаемый формат пояснения.",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+    if data == "act:study:exam_plan":
+        await q.answer()
+        await q.edit_message_text(
+            "📝 Укажите предмет, дату экзамена и текущее состояние. Составлю план с контрольными вехами.",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
+    # Работа
+    if data == "act:work:cv":
+        await q.answer()
+        await q.edit_message_text(
+            "📄 Пришлите резюме (PDF/DOCX/текст) и ссылку на вакансию — адаптирую под требования ATS.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+    if data == "act:work:cover":
+        await q.answer()
+        await q.edit_message_text(
+            "✉️ Название компании, вакансия, 3 факта о вас — подготовлю сопроводительное.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+    if data == "act:work:pitch":
+        await q.answer()
+        await q.edit_message_text(
+            "📊 Опишите продукт/услугу, ЦА и оффер — соберу короткий питч/коммерческое предложение.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    # Развлечения
+    if data == "act:fun:ideas":
+        await q.answer()
+        await q.edit_message_text(
+            "🔥 Выберем формат: дом/улица/город/в поездке. Напишите бюджет/настроение.",
+            reply_markup=_mode_kb("fun"),
+        )
+        return
+    if data == "act:fun:shorts":
+        await q.answer()
+        await q.edit_message_text(
+            "🎬 Тема, длительность (15–30 сек), стиль — сделаю сценарий шорта + подсказки для озвучки.",
+            reply_markup=_mode_kb("fun"),
+        )
+        return
+    if data == "act:fun:games":
+        await q.answer()
+        await q.edit_message_text(
+            "🎮 Тематика квиза/игры? Могу сгенерировать быструю викторину или мини-игру в чате.",
+            reply_markup=_mode_kb("fun"),
+        )
+        return
+
+    # Модули
+    if data == "act:open:runway":
+        await q.answer()
+        await q.edit_message_text(
+            "🎬 Модуль Runway: пришлите идею/референс — подготовлю промпт и бюджет.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+    if data == "act:open:mj":
+        await q.answer()
+        await q.edit_message_text(
+            "🎨 Модуль Midjourney: опишите картинку — предложу 3 промпта и сетку стилей.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+    if data == "act:open:voice":
+        await q.answer()
+        await q.edit_message_text(
+            "🗣 Голос: /voice_on — озвучка ответов, /voice_off — выключить. "
+            "Можете прислать голосовое — распознаю и отвечу.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+
+    await q.answer()
+
+# Fallback — если пользователь нажмёт «Учёба/Работа/Развлечения» обычной кнопкой/текстом
+async def on_mode_text(update, context):
+    text = (update.effective_message.text or "").strip().lower()
+    mapping = {
+        "учёба": "study", "учеба": "study",
+        "работа": "work",
+        "развлечения": "fun", "развлечение": "fun",
+    }
+    key = mapping.get(text)
+    if key:
+        await _send_mode_menu(update, context, key)
+        
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
