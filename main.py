@@ -797,8 +797,11 @@ async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
     return ""
 
 # ───────── Хендлер голосовых/аудио ─────────
+import re
+import contextlib
+from io import BytesIO
 from telegram import Update
-from telegram.ext import ContextTypes, MessageHandler, filters
+from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -835,15 +838,28 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Транскрибируем
-    text = await _stt_transcribe_bytes(filename, raw)
-    if not text:
+    transcript = await _stt_transcribe_bytes(filename, raw)
+    if not transcript:
         await msg.reply_text("Ошибка при обработке voice.")
         return
+    transcript = transcript.strip()
 
+    # ⤵️ ПОСЛЕ расшифровки — быстрый позитивный ответ на вопросы «умеешь ли…»
+    # (PDF/EPUB/DOCX/TXT, изображения/фото, видео, аудиокниги и т.п.)
+    try:
+        if re.search(_CAPS_PATTERN, transcript or "", flags=re.IGNORECASE | re.DOTALL):
+            await on_capabilities_qa(update, context)
+            return
+    except Exception:
+        # если паттерн/функция ещё не подключены — не валим обработчик
+        pass
+
+    # Подтверждаем распознавание (для UX/отладки)
     with contextlib.suppress(Exception):
-        await msg.reply_text(f"🗣️ Распознал: {text}")
+        await msg.reply_text(f"🗣️ Распознал: {transcript}")
 
-    answer = await ask_openai_text(text)
+    # Основной ответ модели
+    answer = await ask_openai_text(transcript)
     await msg.reply_text(answer)
     await maybe_tts_reply(update, context, answer)
 
@@ -3232,80 +3248,112 @@ async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown")
 
-# === PATCH FUN-UI START ======================================================
 async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
         "🔥 *Развлечения*\n"
-        "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, *оживление старых фото*.\n"
-        "Видео: Luma/Runway — клипы под Reels/Shorts; *авто-нарезка длинного видео по смыслу* (сценарий/тайм-коды).\n"
-        "Мемы/квизы.\n\n"
+        "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, "
+        "*оживление старых фото*.\n"
+        "Видео: Luma/Runway — клипы под Reels/Shorts; *Reels по смыслу из цельного видео* "
+        "(умная нарезка), авто-таймкоды. Мемы/квизы.\n\n"
         "Выбери действие ниже:"
     )
-    # расширенная клавиатура с новыми экшенами
-    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb_ext())
+    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-def _fun_quick_kb_ext() -> InlineKeyboardMarkup:
-    """
-    Расширяет существующую _fun_quick_kb() (если есть),
-    добавляя перед строкой «Назад» две кнопки:
-    🪄 Оживить старое фото   → fun:revive_old
-    📽 Рилс из длинного видео → fun:auto_reels
-    """
-    try:
-        base: InlineKeyboardMarkup = _fun_quick_kb()  # существующая клавиатура проекта
-        rows = list(getattr(base, "inline_keyboard", []))
-    except NameError:
-        rows = []
+# ───── Клавиатура «Развлечения» с новыми кнопками ─────
+def _fun_quick_kb() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="fun:ideas")],
+        [InlineKeyboardButton("🎬 Сценарий шорта", callback_data="fun:storyboard")],
+        [InlineKeyboardButton("🎮 Игры/квиз",       callback_data="fun:quiz")],
+        # Новые ключевые кнопки
+        [
+            InlineKeyboardButton("🪄 Оживить старое фото", callback_data="fun:revive"),
+            InlineKeyboardButton("🎬 Reels из длинного видео", callback_data="fun:smartreels"),
+        ],
+        [
+            InlineKeyboardButton("🎥 Runway",      callback_data="fun:clip"),
+            InlineKeyboardButton("🎨 Midjourney",  callback_data="fun:img"),
+            InlineKeyboardButton("🔊 STT/TTS",     callback_data="fun:speech"),
+        ],
+        [InlineKeyboardButton("📝 Свободный запрос", callback_data="fun:free")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")],
+    ]
+    return InlineKeyboardMarkup(rows)
 
-    btn_revive = InlineKeyboardButton("🪄 Оживить старое фото", callback_data="fun:revive_old")
-    btn_reels  = InlineKeyboardButton("📽 Рилс из длинного видео", callback_data="fun:auto_reels")
-
-    inserted = False
-    for i, row in enumerate(rows):
-        try:
-            if any(getattr(b, "callback_data", "") == "fun:back" for b in row):
-                rows.insert(i, [btn_revive])
-                rows.insert(i + 1, [btn_reels])
-                inserted = True
-                break
-        except Exception:
-            continue
-
-    if not inserted:
-        rows.append([btn_revive])
-        rows.append([btn_reels])
-
-    return InlineKeyboardMarkup(rows or [[InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")]])
-
-async def on_cb_fun_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Инструкции для новых быстрых действий раздела «Развлечения»."""
+# ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
+async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    data = (q.data or "")
+    data = (q.data or "").strip()
+    action = data.split(":", 1)[1] if ":" in data else ""
+
+    # Помощники: если в проекте объявлены конкретные реализации — вызываем их.
+    async def _try_call(*fn_names, **kwargs):
+        fn = _pick_first_defined(*fn_names)
+        if callable(fn):
+            return await fn(update, context, **kwargs)
+        return None
+
+    if action == "revive":
+        # Пытаемся дернуть твой реальный пайплайн для оживления фото (если есть)
+        if await _try_call("revive_old_photo_flow", "do_revive_photo"):
+            return
+        # Fallback: инструкция
+        await q.answer("Оживление фото")
+        await q.edit_message_text(
+            "🪄 *Оживление старого фото*\n"
+            "Пришли/перешли сюда фото и коротко опиши, что нужно оживить "
+            "(мигание глаз, лёгкая улыбка, движение фона и т.п.). "
+            "Я подготовлю анимацию и верну превью/видео.",
+            parse_mode="Markdown",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
+    if action == "smartreels":
+        if await _try_call("smart_reels_from_video", "video_sense_reels"):
+            return
+        await q.answer("Reels из длинного видео")
+        await q.edit_message_text(
+            "🎬 *Reels из длинного видео*\n"
+            "Пришли длинное видео (или ссылку) + тему/ЦА. "
+            "Сделаю умную нарезку (hook → value → CTA), субтитры и таймкоды. "
+            "Скажи формат: 9:16 или 1:1.",
+            parse_mode="Markdown",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
+    if action == "clip":
+        if await _try_call("start_runway_flow", "luma_make_clip", "runway_make_clip"):
+            return
+        await q.answer()
+        await q.edit_message_text("Запусти /diag_video чтобы проверить ключи Luma/Runway.", reply_markup=_fun_quick_kb())
+        return
+
+    if action == "img":
+        # /img или твой кастом
+        if await _try_call("cmd_img", "midjourney_flow", "images_make"):
+            return
+        await q.answer()
+        await q.edit_message_text("Введи /img и тему картинки, или пришли рефы.", reply_markup=_fun_quick_kb())
+        return
+
+    if action == "storyboard":
+        if await _try_call("start_storyboard", "storyboard_make"):
+            return
+        await q.answer()
+        await q.edit_message_text("Напиши тему шорта — накидаю структуру и раскадровку.", reply_markup=_fun_quick_kb())
+        return
+
+    if action in {"ideas", "quiz", "speech", "free", "back"}:
+        await q.answer()
+        await q.edit_message_text(
+            "Готов! Напиши задачу или выбери кнопку выше.",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
     await q.answer()
-
-    if data == "fun:revive_old":
-        context.user_data["fun_expect"] = "revive_old"
-        msg = (
-            "🪄 *Оживление старых фото*\n"
-            "Пришлите фото (лучше портрет). Я очищу артефакты, при желании — колоризую, "
-            "и попробую сделать лёгкую анимацию лица.\n\n"
-            "_Подсказка:_ лучше скан без бликов, до 10–15 МБ."
-        )
-        await q.message.reply_text(msg, parse_mode="Markdown")
-        return
-
-    if data == "fun:auto_reels":
-        context.user_data["fun_expect"] = "auto_reels"
-        msg = (
-            "📽 *Reels из длинного видео*\n"
-            "Загрузите исходник. Сделаю авто-нарезку ключевых моментов «по смыслу» "
-            "с вертикалью 9:16 и коротким хуком.\n\n"
-            "По умолчанию: 20–35 сек, авто-саб, хук в первые 3 сек.\n"
-            "Нужно иначе — напишите длительность/язык субтитров/тему."
-        )
-        await q.message.reply_text(msg, parse_mode="Markdown")
-        return
-# === PATCH FUN-UI END ======================================================
 
 # ───────── Роутеры-кнопки режимов (единая точка входа) ─────────
 async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3326,6 +3374,24 @@ async def on_btn_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await fn(update, context, "fun")
     return await on_mode_fun_text(update, context)
 
+# ───────── Позитивный авто-ответ про возможности (текст/голос) ─────────
+_CAPS_PATTERN = (
+    r"(?is)(умеешь|можешь|делаешь|анализируешь|работаешь|поддерживаешь|умеет ли|может ли)"
+    r".{0,120}"
+    r"(pdf|epub|fb2|docx|txt|книг|книга|изображен|фото|картин|image|jpeg|png|video|видео|mp4|mov|аудио|audio|mp3|wav)"
+)
+
+async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = (
+        "Да, умею работать с файлами и медиа:\n"
+        "• 📄 Документы: PDF/EPUB/FB2/DOCX/TXT — конспект, резюме, извлечение таблиц, проверка фактов.\n"
+        "• 🖼 Изображения: анализ/описание, улучшение, фон, разметка, мемы, outpaint.\n"
+        "• 🎞 Видео: разбор смысла, таймкоды, *Reels из длинного видео*, идеи/скрипт, субтитры.\n"
+        "• 🎧 Аудио/книги: транскрипция, тезисы, план.\n\n"
+        "_Подсказки:_ просто загрузите файл или пришлите ссылку + короткое ТЗ. "
+        "Для фото — можно нажать «🪄 Оживить старое фото», для видео — «🎬 Reels из длинного видео»."
+    )
+    await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
 # ───────── Вспомогательное: взять первую объявленную функцию по имени ─────────
 def _pick_first_defined(*names):
@@ -3334,7 +3400,6 @@ def _pick_first_defined(*names):
         if callable(fn):
             return fn
     return None
-
 
 # ───────── Регистрация хендлеров и запуск ─────────
 def build_application() -> "Application":
@@ -3373,38 +3438,37 @@ def build_application() -> "Application":
         if hasattr(filters, "WEB_APP_DATA"):
             app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # Новые быстрые действия «Развлечения»
-    app.add_handler(CallbackQueryHandler(on_cb_fun_new, pattern=r"^fun:(?:revive_old|auto_reels)$"))
-
-    # Старые быстрые действия «Развлечения» (как было)
-    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:(?:revive|clip|img|storyboard)$"))
+    # Быстрые действия «Развлечения»
+    # (расширили шаблон, чтобы ловить любые fun:* без правки кода при добавлениях)
+    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:[a-z_]+$"))
 
     # Подрежимы (school/work/fun:…)
-    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(school:|work:|fun:)"))
+    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(school:|work:|fun:)"))
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)"))
 
     # Прочие callback'и
     app.add_handler(CallbackQueryHandler(on_cb))
 
-    # ── Голос/аудио первыми по приоритету ────────────────────────────────────
+    # Голос/аудио
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
         app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
 
-    # ── Текстовые кнопки/ярлыки (регистрируем ДО общего текстового) ─────────
+    # Текстовые кнопки/ярлыки
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
     app.add_handler(MessageHandler(
         filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),
         on_btn_plans
     ))
-
-    # 🔽 Единые роутеры режимов — можно легко переключить на _send_mode_menu(...)
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),     on_btn_study))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),      on_btn_work))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"), on_btn_fun))
 
-    # ── Медиа ────────────────────────────────────────────────────────────────
+    # ➕ Позитивный авто-ответ на вопросы о возможностях (ставим ДО общего текстового)
+    app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa))
+
+    # Медиа
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
     if photo_fn:
         app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
@@ -3423,7 +3487,7 @@ def build_application() -> "Application":
 
     # >>> PATCH END <<<
 
-    # ── Текст (в самом конце, чтобы не перехватывать медиа и кнопки) ──────────
+    # Текст (в самом конце)
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
@@ -3438,7 +3502,6 @@ def build_application() -> "Application":
 
 # === PATCH 3 · main() с безопасной инициализацией БД ===
 def main():
-    # Безопасная инициализация БД/таблиц (не падаем при ошибках)
     with contextlib.suppress(Exception):
         db_init()
     with contextlib.suppress(Exception):
@@ -3449,7 +3512,6 @@ def main():
     app = build_application()
 
     if USE_WEBHOOK:
-        # WEBHOOK-режим (Render Web Service)
         log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
         app.run_webhook(
             listen="0.0.0.0",
@@ -3460,9 +3522,7 @@ def main():
             allowed_updates=Update.ALL_TYPES,
         )
     else:
-        # POLLING-режим (Background Worker)
         log.info("🚀 POLLING mode.")
-        # На всякий случай очистим вебхук, чтобы не ловить 409 Conflict
         try:
             asyncio.get_event_loop().run_until_complete(
                 app.bot.delete_webhook(drop_pending_updates=True)
