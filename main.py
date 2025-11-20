@@ -1143,43 +1143,49 @@ def _mode_desc(key: str) -> str:
 def _mode_kb(key: str) -> InlineKeyboardMarkup:
     if key == "study":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("📚 Конспект из PDF", callback_data="act:study:pdf_summary")],
-            [InlineKeyboardButton("🧠 Объяснить тему", callback_data="act:study:explain")],
-            [InlineKeyboardButton("📝 План подготовки к экзамену", callback_data="act:study:exam_plan")],
+            [InlineKeyboardButton("📚 Конспект из PDF/EPUB/DOCX", callback_data="act:study:pdf_summary")],
+            [InlineKeyboardButton("🔍 Объяснение темы",            callback_data="act:study:explain"),
+             InlineKeyboardButton("🧮 Решение задач",              callback_data="act:study:tasks")],
+            [InlineKeyboardButton("✍️ Эссе/реферат/доклад",       callback_data="act:study:essay"),
+             InlineKeyboardButton("📝 План к экзамену",           callback_data="act:study:exam_plan")],
             [
-                InlineKeyboardButton("🎬 Runway", callback_data="act:open:runway"),
-                InlineKeyboardButton("🎨 Midjourney", callback_data="act:open:mj"),
-                InlineKeyboardButton("🗣 STT/TTS", callback_data="act:open:voice"),
+                InlineKeyboardButton("🎬 Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
             ],
             [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
         ])
+
     if key == "work":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("📄 Резюме/правки", callback_data="act:work:cv")],
-            [InlineKeyboardButton("✉️ Сопроводительное письмо", callback_data="act:work:cover")],
-            [InlineKeyboardButton("📊 Питч/коммерческое предложение", callback_data="act:work:pitch")],
+            [InlineKeyboardButton("📄 Письмо/документ",            callback_data="act:work:doc"),
+             InlineKeyboardButton("📊 Аналитика/сводка",           callback_data="act:work:report")],
+            [InlineKeyboardButton("🗂 План/ToDo",                  callback_data="act:work:plan"),
+             InlineKeyboardButton("💡 Идеи/бриф",                 callback_data="act:work:idea")],
             [
-                InlineKeyboardButton("🎬 Runway", callback_data="act:open:runway"),
-                InlineKeyboardButton("🎨 Midjourney", callback_data="act:open:mj"),
-                InlineKeyboardButton("🗣 STT/TTS", callback_data="act:open:voice"),
+                InlineKeyboardButton("🎬 Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
             ],
             [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
         ])
+
     if key == "fun":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="act:fun:ideas")],
-            [InlineKeyboardButton("🎬 Сценарий шорта", callback_data="act:fun:shorts")],
-            [InlineKeyboardButton("🎮 Игры/квиз", callback_data="act:fun:games")],
+            [InlineKeyboardButton("🎭 Идеи для досуга",             callback_data="act:fun:ideas")],
+            [InlineKeyboardButton("🎬 Сценарий шорта",              callback_data="act:fun:shorts")],
+            [InlineKeyboardButton("🎮 Игры/квиз",                   callback_data="act:fun:games")],
             [
-                InlineKeyboardButton("🎬 Runway", callback_data="act:open:runway"),
-                InlineKeyboardButton("🎨 Midjourney", callback_data="act:open:mj"),
-                InlineKeyboardButton("🗣 STT/TTS", callback_data="act:open:voice"),
+                InlineKeyboardButton("🎬 Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
             ],
             [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
         ])
+
     return modes_root_kb()
 
 # Показать выбранный режим (используется и для callback, и для текста)
@@ -1198,18 +1204,19 @@ async def _send_mode_menu(update, context, key: str):
 async def on_mode_cb(update, context):
     q = update.callback_query
     data = (q.data or "").strip()
+    uid = q.from_user.id
 
     # Навигация
     if data == "mode:root":
         await q.edit_message_text(_modes_root_text(), reply_markup=modes_root_kb())
-        await q.answer()
-        return
+        await q.answer(); return
+
     if data.startswith("mode:"):
         _, key = data.split(":", 1)
         await _send_mode_menu(update, context, key)
         return
 
-    # Быстрые действия
+    # Свободный ввод из подменю
     if data == "act:free":
         await q.answer()
         await q.edit_message_text(
@@ -1218,54 +1225,95 @@ async def on_mode_cb(update, context):
         )
         return
 
-    # Учёба
+    # === Учёба
     if data == "act:study:pdf_summary":
         await q.answer()
+        _mode_track_set(uid, "pdf_summary")
         await q.edit_message_text(
-            "📚 Пришлите PDF/EPUB/DOCX — сделаю структурированный конспект с тезисами.\n"
-            "Подсказка: можно добавить «коротко/подробно» и язык результата.",
+            "📚 Пришлите PDF/EPUB/DOCX/FB2/TXT — сделаю структурированный конспект.\n"
+            "Можно в подписи указать цель (коротко/подробно, язык и т.п.).",
             reply_markup=_mode_kb("study"),
         )
         return
+
     if data == "act:study:explain":
         await q.answer()
+        study_sub_set(uid, "explain")
+        _mode_track_set(uid, "explain")
         await q.edit_message_text(
-            "🧠 Напишите тему, уровень (школа/вуз/профи) и желаемый формат пояснения.",
+            "🔍 Напишите тему + уровень (школа/вуз/профи). Будет объяснение с примерами.",
             reply_markup=_mode_kb("study"),
         )
         return
+
+    if data == "act:study:tasks":
+        await q.answer()
+        study_sub_set(uid, "tasks")
+        _mode_track_set(uid, "tasks")
+        await q.edit_message_text(
+            "🧮 Пришлите условие(я) — решу пошагово (формулы, пояснения, итог).",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
+    if data == "act:study:essay":
+        await q.answer()
+        study_sub_set(uid, "essay")
+        _mode_track_set(uid, "essay")
+        await q.edit_message_text(
+            "✍️ Тема + требования (объём/стиль/язык) — подготовлю эссе/реферат.",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
     if data == "act:study:exam_plan":
         await q.answer()
+        study_sub_set(uid, "quiz")
+        _mode_track_set(uid, "exam_plan")
         await q.edit_message_text(
-            "📝 Укажите предмет, дату экзамена и текущее состояние. Составлю план с контрольными вехами.",
+            "📝 Укажите предмет и дату экзамена — составлю план подготовки с вехами.",
             reply_markup=_mode_kb("study"),
         )
         return
 
-    # Работа
-    if data == "act:work:cv":
+    # === Работа
+    if data == "act:work:doc":
         await q.answer()
+        _mode_track_set(uid, "work_doc")
         await q.edit_message_text(
-            "📄 Пришлите резюме (PDF/DOCX/текст) и ссылку на вакансию — адаптирую под требования ATS.",
-            reply_markup=_mode_kb("work"),
-        )
-        return
-    if data == "act:work:cover":
-        await q.answer()
-        await q.edit_message_text(
-            "✉️ Название компании, вакансия, 3 факта о вас — подготовлю сопроводительное.",
-            reply_markup=_mode_kb("work"),
-        )
-        return
-    if data == "act:work:pitch":
-        await q.answer()
-        await q.edit_message_text(
-            "📊 Опишите продукт/услугу, ЦА и оффер — соберу короткий питч/коммерческое предложение.",
+            "📄 Что за документ/адресат/контекст? Сформирую черновик письма/документа.",
             reply_markup=_mode_kb("work"),
         )
         return
 
-    # Развлечения
+    if data == "act:work:report":
+        await q.answer()
+        _mode_track_set(uid, "work_report")
+        await q.edit_message_text(
+            "📊 Пришлите текст/файл/ссылку — сделаю аналитическую выжимку.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    if data == "act:work:plan":
+        await q.answer()
+        _mode_track_set(uid, "work_plan")
+        await q.edit_message_text(
+            "🗂 Опишите задачу/сроки — соберу ToDo/план со сроками и приоритетами.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    if data == "act:work:idea":
+        await q.answer()
+        _mode_track_set(uid, "work_idea")
+        await q.edit_message_text(
+            "💡 Расскажите продукт/ЦА/каналы — подготовлю бриф/идеи.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    # === Развлечения (как было)
     if data == "act:fun:ideas":
         await q.answer()
         await q.edit_message_text(
@@ -1283,12 +1331,12 @@ async def on_mode_cb(update, context):
     if data == "act:fun:games":
         await q.answer()
         await q.edit_message_text(
-            "🎮 Тематика квиза/игры? Могу сгенерировать быструю викторину или мини-игру в чате.",
+            "🎮 Тематика квиза/игры? Сгенерирую быструю викторину или мини-игру в чате.",
             reply_markup=_mode_kb("fun"),
         )
         return
 
-    # Модули
+    # === Модули (как было)
     if data == "act:open:runway":
         await q.answer()
         await q.edit_message_text(
@@ -1401,21 +1449,14 @@ def _fun_kb():
 async def cmd_mode_school(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_set(update.effective_user.id, "Учёба")
     _mode_track_set(update.effective_user.id, "")
-    await update.effective_message.reply_text(
-        "🎓 Учёба → выберите тип задачи или сразу напишите тему/условие.\n"
-        "Могу: объяснения, решение задач, эссе/доклады, квизы.\n"
-        "Работаю с файлами: конспект учебных PDF/EPUB/DOCX/FB2/TXT, выжимки и т.д.",
-        reply_markup=_school_kb()
-    )
+    # показываем НОВОЕ подменю «Учёба»
+    await _send_mode_menu(update, context, "study")
 
 async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_set(update.effective_user.id, "Работа")
     _mode_track_set(update.effective_user.id, "")
-    await update.effective_message.reply_text(
-        "💼 Работа → выберите тип или опишите задачу.\n"
-        "Письма/брифы/ToDo/аналитика, для архитектора/дизайнера/проектировщика — ТЗ, чек-листы, своды из текстов.",
-        reply_markup=_work_kb()
-    )
+    # показываем НОВОЕ подменю «Работа»
+    await _send_mode_menu(update, context, "work")
 
 async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _mode_set(update.effective_user.id, "Развлечения")
@@ -3441,15 +3482,17 @@ def build_application() -> "Application":
         if hasattr(filters, "WEB_APP_DATA"):
             app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # Быстрые действия «Развлечения»
-    # (расширили шаблон, чтобы ловить любые fun:* без правки кода при добавлениях)
-    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:[a-z_]+$"))
+    # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
+    # 1) Подписка/оплаты
+    app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
-    # Подрежимы (school/work/fun:…)
-    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(school:|work:|fun:)"))
-    app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)"))
+    # 2) Режимы/подменю (поддержим и старые, и новые префиксы)
+    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:|fun:)"))
 
-    # Прочие callback'и
+    # 3) Быстрые развлечения (любые fun:...)
+    app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
+
+    # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
     app.add_handler(CallbackQueryHandler(on_cb))
 
     # Голос/аудио
@@ -3457,18 +3500,30 @@ def build_application() -> "Application":
     if voice_fn:
         app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
 
-    # Текстовые кнопки/ярлыки
+    # === ПАТЧ 3: Текстовый выбор «Учёба / Работа / Развлечения» через on_mode_text ===
+    # СТАВИМ ДО остальных текстовых кнопок и ДО общего текстового хендлера
+    app.add_handler(MessageHandler(
+        filters.TEXT & (
+            filters.Regex(r"^🎓 Учёба$") |
+            filters.Regex(r"^💼 Работа$") |
+            filters.Regex(r"^🔥 Развлечения$")
+        ),
+        on_mode_text
+    ))
+
+    # Текстовые кнопки/ярлыки (остальные)
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
     app.add_handler(MessageHandler(
         filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),
         on_btn_plans
     ))
+    # Оставляем совместимость с альтернативными подписями режимов (если у тебя они где-то генерятся без эмодзи/с вариациями)
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),     on_btn_study))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),      on_btn_work))
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"), on_btn_fun))
 
-    # ➕ Позитивный авто-ответ на вопросы о возможностях (ставим ДО общего текстового)
+    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa))
 
     # Медиа
@@ -3490,7 +3545,7 @@ def build_application() -> "Application":
 
     # >>> PATCH END <<<
 
-    # Текст (в самом конце)
+    # Общий текст — в самом конце
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
@@ -3503,7 +3558,7 @@ def build_application() -> "Application":
     return app
 
 
-# === PATCH 3 · main() с безопасной инициализацией БД ===
+# === main() с безопасной инициализацией БД (без изменений по сути) ===
 def main():
     with contextlib.suppress(Exception):
         db_init()
@@ -3526,13 +3581,10 @@ def main():
         )
     else:
         log.info("🚀 POLLING mode.")
-        try:
+        with contextlib.suppress(Exception):
             asyncio.get_event_loop().run_until_complete(
                 app.bot.delete_webhook(drop_pending_updates=True)
             )
-        except Exception:
-            pass
-
         app.run_polling(
             close_loop=False,
             allowed_updates=Update.ALL_TYPES,
@@ -3542,4 +3594,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-# === END PATCH 3 ===
+# === END PATCH ===
