@@ -1363,16 +1363,18 @@ async def on_mode_cb(update, context):
     await q.answer()
 
 # Fallback — если пользователь нажмёт «Учёба/Работа/Развлечения» обычной кнопкой/текстом
+import re
+
 async def on_mode_text(update, context):
-    text = (update.effective_message.text or "").strip().lower()
-    mapping = {
-        "учёба": "study", "учеба": "study",
-        "работа": "work",
-        "развлечения": "fun", "развлечение": "fun",
-    }
-    key = mapping.get(text)
-    if key:
-        await _send_mode_menu(update, context, key)
+    raw = (update.effective_message.text or "").strip()
+    tl = re.sub(r"[^\w\sёЁа-яА-Я]", " ", raw.lower())  # выкидываем эмодзи/знаки
+    if "учеб" in tl or "учёб" in tl:
+        return await _send_mode_menu(update, context, "study")
+    if "работ" in tl:
+        return await _send_mode_menu(update, context, "work")
+    if "развлеч" in tl or "fun" in tl:
+        return await _send_mode_menu(update, context, "fun")
+    # иначе ничего не делаем — апдейт поймают другие хендлеры
         
 def main_keyboard():
     return ReplyKeyboardMarkup(
@@ -3486,11 +3488,11 @@ def build_application() -> "Application":
     # 1) Подписка/оплаты
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
-    # 2) Режимы/подменю (поддержим и старые, и новые префиксы)
-    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:|fun:)"))
-
-    # 3) Быстрые развлечения (любые fun:...)
+    # 2) Быстрые развлечения (любые fun:...)
     app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
+
+    # 3) Режимы/подменю (поддержим и старые, и новые префиксы)
+    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:|fun:)"))
 
     # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
     app.add_handler(CallbackQueryHandler(on_cb))
@@ -3502,14 +3504,6 @@ def build_application() -> "Application":
 
     # === ПАТЧ 3: Текстовый выбор «Учёба / Работа / Развлечения» через on_mode_text ===
     # СТАВИМ ДО остальных текстовых кнопок и ДО общего текстового хендлера
-    app.add_handler(MessageHandler(
-        filters.TEXT & (
-            filters.Regex(r"^🎓 Учёба$") |
-            filters.Regex(r"^💼 Работа$") |
-            filters.Regex(r"^🔥 Развлечения$")
-        ),
-        on_mode_text
-    ))
 
     # Текстовые кнопки/ярлыки (остальные)
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
