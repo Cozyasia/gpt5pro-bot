@@ -171,10 +171,15 @@ PORT = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
     raise RuntimeError("ENV BOT_TOKEN is required")
-if not PUBLIC_URL or not PUBLIC_URL.startswith("https://"):
-    raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
+
+# Если хотим вебхук, но PUBLIC_URL некорректный — не валимся, просто уходим в polling
+if USE_WEBHOOK and (not PUBLIC_URL or not PUBLIC_URL.startswith("https://")):
+    log.warning("PUBLIC_URL отсутствует/не https — форсирую USE_WEBHOOK=False (polling).")
+    USE_WEBHOOK = False  # fallback
+
+# Без ключа тексты работать не будут, но не роняем процесс
 if not OPENAI_API_KEY:
-    raise RuntimeError("ENV OPENAI_API_KEY is missing")
+    log.warning("OPENAI_API_KEY не задан — текстовые функции будут недоступны до установки ключа.")
 
 # ── Безлимит ──
 def _parse_ids_csv(s: str) -> set[int]:
@@ -888,7 +893,7 @@ def _extract_pdf_text(data: bytes) -> str:
     except Exception:
         pass
     try:
-        from pdfminer_high_level import extract_text as pdfminer_extract_text  # may not exist
+from pdfminer.high_level import extract_text as pdfminer_extract_text  # may not exist
     except Exception:
         pdfminer_extract_text = None  # type: ignore
     if pdfminer_extract_text:
@@ -1400,6 +1405,19 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         START_TEXT,
         reply_markup=main_kb,
         disable_web_page_preview=True,
+    )
+
+if "HELP_TEXT" not in globals():
+    HELP_TEXT = (
+        "Команды: /engines — выбор движка, /plans — тарифы, /balance — кошелёк, "
+        "/voice_on /voice_off — озвучка ответов. Задавайте запросы просто текстом или голосом."
+    )
+if "EXAMPLES_TEXT" not in globals():
+    EXAMPLES_TEXT = (
+        "Примеры:\n"
+        "• Сделай конспект из PDF\n"
+        "• Сценарий Reels на 9 сек про кофейню\n"
+        "• /img логотип в стиле минимализма"
     )
 
 # ───────── сохранение выбранного режима/подрежима (SQLite kv) ─────────
@@ -1969,13 +1987,12 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("⬅️ К тарифу", callback_data=f"plan:{plan_key}")],
                 ])
                 msg = await q.edit_message_text(
-                    _plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:",
-                    reply_markup=kb
-                )
-                # автопул статуса именно для ПОДПИСКИ
-                context.application.create_task(_poll_crypto_sub_invoice(
-                    context, msg.chat.id, msg.message_id, user_id, inv_id, plan_key, 1  # FIX: msg.chat.id
-                ))
+    _plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:",
+    reply_markup=kb
+)
+context.application.create_task(_poll_crypto_sub_invoice(
+    context, q.message.chat_id, msg.message_id, user_id, inv_id, plan_key, 1
+))
                 await q.answer()
             except Exception as e:
                 await q.answer("Не удалось создать счёт в CryptoBot.", show_alert=True)
@@ -2157,7 +2174,7 @@ async def _pedit_storyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             "Сделай раскадровку (6 кадров) под 6–10 секундный клип. "
             "Каждый кадр — 1 строка: кадр/действие/ракурс/свет. Основа:\n" + (desc or "")
         )
-        await update.effective_message.reply_text("Раскадровка:\н" + plan)
+        await update.effective_message.reply_text("Раскадровка:\n" + plan)
     except Exception as e:
         log.exception("storyboard error: %s", e)
         await update.effective_message.reply_text("Не удалось построить раскадровку.")
