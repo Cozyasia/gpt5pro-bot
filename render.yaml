@@ -2,16 +2,38 @@ services:
   - type: worker
     name: cozyasia-telegram-gpt-consultant
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
+    autoDeploy: true
+
+    buildCommand: |
+      pip install -r requirements.txt
+      # Если есть патчер — запускаем его (ошибки не фатальны)
+      if [ -f patch_main.py ]; then
+        python patch_main.py || echo "patch_main.py failed (non-fatal)"
+        # Если патчер создал main.fixed.py — подменяем основной файл
+        if [ -f main.fixed.py ]; then
+          mv -f main.fixed.py main.py
+          echo "Replaced main.py with patched version"
+        fi
+      fi
+
+    startCommand: |
+      # Предпочитаем патченный файл, если он есть; иначе — обычный main.py
+      if [ -f main.fixed.py ]; then
+        python -u main.fixed.py
+      else
+        python -u main.py
+      fi
+
     envVars:
-      - key: PYTHON_VERSION         # принудительно сообщаем Render использовать 3.12.6
+      - key: PYTHON_VERSION
         value: 3.12.6
-      - key: BOT_TOKEN              # совпадает с кодом
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: BOT_TOKEN
         sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
-      - key: PUBLIC_URL             # https://<твой-сервис>.onrender.com
+      - key: PUBLIC_URL
         sync: false
