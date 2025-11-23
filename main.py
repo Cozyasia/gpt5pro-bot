@@ -676,38 +676,36 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
 
 
 # ───────── Пользовательские настройки (TTS) ─────────
-def _db_init_prefs():
+# Храним флаг в отдельной таблице tts_flags в общей БД (DB_PATH).
+# Ключевые моменты:
+#  - читаем ровно первый столбец (row[0]), а не весь кортеж
+#  - ON CONFLICT делает UPSERT по user_id
+
+def _db_conn_tts():
     con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS user_prefs (
-        user_id INTEGER PRIMARY KEY,
-        tts_on  INTEGER DEFAULT 0
-    )""")
-    con.commit(); con.close()
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS tts_flags (
+            user_id INTEGER PRIMARY KEY,
+            enabled INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    return con
 
 def _tts_get(user_id: int) -> bool:
-    try:
-        _db_init_prefs()
-    except Exception:
-        pass
-    con = sqlite3.connect(DB_PATH); cur = con.cursor()
-    cur.execute("INSERT OR IGNORE INTO user_prefs(user_id, tts_on) VALUES (?,0)", (user_id,))
+    con = _db_conn_tts()
+    row = con.execute("SELECT enabled FROM tts_flags WHERE user_id=?", (user_id,)).fetchone()
+    con.close()
+    return bool(row and row[0])  # читаем именно первый столбец
+
+def _tts_set(user_id: int, enabled: bool) -> None:
+    con = _db_conn_tts()
+    con.execute("""
+        INSERT INTO tts_flags (user_id, enabled)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled
+    """, (user_id, 1 if enabled else 0))
     con.commit()
-    cur.execute("SELECT tts_on FROM user_prefs WHERE user_id=?", (user_id,))
-    row = cur.fetchone(); con.close()
-    return bool(row and row[0])
-
-def _tts_set(user_id: int, on: bool):
-    try:
-        _db_init_prefs()
-    except Exception:
-        pass
-    con = sqlite3.connect(DB_PATH); cur = con.cursor()
-    cur.execute("INSERT OR IGNORE INTO user_prefs(user_id, tts_on) VALUES (?,?)", (user_id, 1 if on else 0))
-    cur.execute("UPDATE user_prefs SET tts_on=? WHERE user_id=?", (1 if on else 0, user_id))
-    con.commit(); con.close()
-
+    con.close()
 
 # ───────── Надёжный TTS через REST (OGG/Opus) ─────────
 def _tts_bytes_sync(text: str) -> bytes | None:
@@ -879,16 +877,20 @@ def _safe_decode_txt(b: bytes) -> str:
 
 ### BEGIN PATCH: PDF_EXTRACT
 # ВАЖНО: не удаляйте отступы внутри try/except — иначе будет IndentationError.
-def _extract_pdf_text(data: bytes) -> str:
+
+# Опциональные импорты (если модулей нет — используем безопасные заглушки)
 try:
     from PyPDF2 import PdfReader as _PdfReader
 except Exception:
     _PdfReader = None
 
 try:
-    from pdfminer.high_level import extract_text as pdfminer_extract_text
+    from pdfminer_high_level import extract_text as pdfminer_extract_text  # возможен альтернативный namespace
 except Exception:
-    pdfminer_extract_text = None  # будет None, если pdfminer не установлен
+    try:
+        from pdfminer.high_level import extract_text as pdfminer_extract_text
+    except Exception:
+        pdfminer_extract_text = None  # будет None, если pdfminer не установлен
 
 try:
     from docx import Document as DocxDocument
@@ -899,6 +901,55 @@ try:
     from ebooklib import epub as _epub
 except Exception:
     _epub = None
+
+
+def _extract_pdf_text(data: bytes) -> str:
+    """
+    Извлекает текст из PDF.
+    1) Пытается PyPDF2 (быстро, без OCR).
+    2) Фолбэк — pdfminer.six (медленнее, но иногда вынимает больше).
+    """
+    # ---- Попытка 1: PyPDF2 ----
+    reader_cls = _PdfReader
+    if reader_cls is None:
+        try:
+            from PyPDF2 import PdfReader as reader_cls
+        except Exception:
+            reader_cls = None
+
+    if reader_cls is not None:
+        try:
+            pdf = reader_cls(BytesIO(data))
+            texts = []
+            for page in getattr(pdf, "pages", []):
+                try:
+                    t = page.extract_text() or ""
+                    if t.strip():
+                        texts.append(t)
+                except Exception:
+                    continue
+            if texts:
+                return "\n".join(texts)
+        except Exception:
+            pass
+
+    # ---- Попытка 2: pdfminer.six ----
+    extractor = pdfminer_extract_text
+    if extractor is None:
+        try:
+            from pdfminer.high_level import extract_text as extractor
+        except Exception:
+            extractor = None
+
+    if extractor is not None:
+        try:
+            # pdfminer принимает путь к файлу или file-like объект
+            return (extractor(BytesIO(data)) or "").strip()
+        except Exception:
+            pass
+
+    # Если ничего не получилось — возвращаем пустую строку
+    return ""
 ### END PATCH: PDF_EXTRACT
 
 def _extract_epub_text(data: bytes) -> str:
