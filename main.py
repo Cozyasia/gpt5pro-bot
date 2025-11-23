@@ -876,79 +876,60 @@ def _safe_decode_txt(b: bytes) -> str:
     return b.decode("utf-8", errors="ignore")
 
 ### BEGIN PATCH: PDF_EXTRACT
-# ВАЖНО: не удаляйте отступы внутри try/except — иначе будет IndentationError.
+# ВАЖНО: этот блок полностью заменяет предыдущий, включая "мягкие" импорты.
 
-# Опциональные импорты (если модулей нет — используем безопасные заглушки)
+# Мягкие импорты: библиотек может не быть в окружении — тогда переменные станут None.
 try:
     from PyPDF2 import PdfReader as _PdfReader
 except Exception:
     _PdfReader = None
 
 try:
-    from pdfminer_high_level import extract_text as pdfminer_extract_text  # возможен альтернативный namespace
+    from pdfminer.high_level import extract_text as pdfminer_extract_text
 except Exception:
-    try:
-        from pdfminer.high_level import extract_text as pdfminer_extract_text
-    except Exception:
-        pdfminer_extract_text = None  # будет None, если pdfminer не установлен
+    pdfminer_extract_text = None  # будет None, если pdfminer.six не установлен
 
 try:
     from docx import Document as DocxDocument
 except Exception:
-    DocxDocument = None
+    DocxDocument = None  # пригодится в других частях кода
 
 try:
     from ebooklib import epub as _epub
 except Exception:
-    _epub = None
-
+    _epub = None  # пригодится в других частях кода
 
 def _extract_pdf_text(data: bytes) -> str:
-    """
-    Извлекает текст из PDF.
-    1) Пытается PyPDF2 (быстро, без OCR).
-    2) Фолбэк — pdfminer.six (медленнее, но иногда вынимает больше).
-    """
-    # ---- Попытка 1: PyPDF2 ----
-    reader_cls = _PdfReader
-    if reader_cls is None:
-        try:
-            from PyPDF2 import PdfReader as reader_cls
-        except Exception:
-            reader_cls = None
+    """Извлекает текст из PDF. Сначала PyPDF2, затем pdfminer.six. Возвращает '' если не удалось."""
+    from io import BytesIO
 
-    if reader_cls is not None:
+    # 1) PyPDF2 — быстро и без внешних бинарников
+    if _PdfReader is not None:
         try:
-            pdf = reader_cls(BytesIO(data))
+            pdf = _PdfReader(BytesIO(data))
             texts = []
-            for page in getattr(pdf, "pages", []):
+            for page in pdf.pages:
                 try:
                     t = page.extract_text() or ""
                     if t.strip():
                         texts.append(t)
                 except Exception:
+                    # Пропускаем проблемные страницы, чтобы не падать на всём файле
                     continue
             if texts:
                 return "\n".join(texts)
         except Exception:
+            # Переходим к fallback
             pass
 
-    # ---- Попытка 2: pdfminer.six ----
-    extractor = pdfminer_extract_text
-    if extractor is None:
+    # 2) Fallback: pdfminer.six — точнее на "тяжёлых" PDF
+    if pdfminer_extract_text is not None:
         try:
-            from pdfminer.high_level import extract_text as extractor
-        except Exception:
-            extractor = None
-
-    if extractor is not None:
-        try:
-            # pdfminer принимает путь к файлу или file-like объект
-            return (extractor(BytesIO(data)) or "").strip()
+            return (pdfminer_extract_text(BytesIO(data)) or "").strip()
         except Exception:
             pass
 
-    # Если ничего не получилось — возвращаем пустую строку
+    # 3) Совсем ничего не вышло
     return ""
 ### END PATCH: PDF_EXTRACT
 
