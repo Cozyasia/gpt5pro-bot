@@ -880,41 +880,25 @@ def _safe_decode_txt(b: bytes) -> str:
 ### BEGIN PATCH: PDF_EXTRACT
 # ВАЖНО: не удаляйте отступы внутри try/except — иначе будет IndentationError.
 def _extract_pdf_text(data: bytes) -> str:
-    try:
-        import PyPDF2
-        rd = PyPDF2.PdfReader(BytesIO(data))
-        parts = []
-        for p in rd.pages:
-            try:
-                parts.append(p.extract_text() or "")
-            except Exception:
-                continue
-        t = "\n".join(parts).strip()
-        if t:
-            return t
-    except Exception:
-        pass
+try:
+    from PyPDF2 import PdfReader as _PdfReader
+except Exception:
+    _PdfReader = None
 
-    try:
-        from pdfminer.high_level import extract_text as pdfminer_extract_text  # pdfminer.six
-        return (pdfminer_extract_text(BytesIO(data)) or "").strip()
-    except Exception:
-        pass
+try:
+    from pdfminer.high_level import extract_text as pdfminer_extract_text
+except Exception:
+    pdfminer_extract_text = None  # будет None, если pdfminer не установлен
 
-    try:
-        import fitz  # PyMuPDF
-        doc = fitz.open(stream=data, filetype="pdf")
-        txt = []
-        for page in doc:
-            try:
-                txt.append(page.get_text("text"))
-            except Exception:
-                continue
-        return "\n".join(txt)
-    except Exception:
-        pass
+try:
+    from docx import Document as DocxDocument
+except Exception:
+    DocxDocument = None
 
-    return ""
+try:
+    from ebooklib import epub as _epub
+except Exception:
+    _epub = None
 ### END PATCH: PDF_EXTRACT
 
 def _extract_epub_text(data: bytes) -> str:
@@ -2084,8 +2068,76 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
         log.exception("successful_payment handler error: %s", e)
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("⚠️ Ошибка обработки платежа. Если деньги списались — напишите в поддержку.")
-# ───────── Конец PATCH ─────────
-        
+
+# ---------- Background jobs (фоновые задачи платежей) ----------
+from telegram.ext import Application
+import asyncio
+
+_BG_TASKS: list[asyncio.Task] = []
+
+async def _poll_crypto_sub_invoice(application: Application):
+    """Фоновый опрос крипто-инвойсов (пример бесконечного цикла)."""
+    log.info("BG[poll_crypto]: start")
+    while True:
+        try:
+            # TODO: тут твоя реальная логика опроса CryptoBot/TON и продления подписок
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            log.info("BG[poll_crypto]: cancelled")
+            raise
+        except Exception as e:
+            log.exception("poll crypto invoice error: %s", e)
+            await asyncio.sleep(5)
+
+async def _poll_yookassa_invoices(application: Application):
+    """Фоновый опрос инвойсов YooKassa (если используется)."""
+    log.info("BG[poll_yookassa]: start")
+    while True:
+        try:
+            # TODO: тут твоя реальная логика опроса YooKassa
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            log.info("BG[poll_yookassa]: cancelled")
+            raise
+        except Exception as e:
+            log.exception("poll yookassa error: %s", e)
+            await asyncio.sleep(5)
+
+def _create_bg_task(application: Application, coro: asyncio.coroutines, name: str):
+    """Безопасное создание фоновой задачи в PTB (через app.create_task)."""
+    try:
+        t = application.create_task(coro)
+        try:
+            t.set_name(name)  # доступно в 3.8+
+        except Exception:
+            pass
+        _BG_TASKS.append(t)
+        log.info("BG: scheduled %s", name)
+    except Exception as e:
+        log.exception("BG: failed to schedule %s: %s", name, e)
+
+def _start_background_jobs(application: Application) -> None:
+    """Регистрируем все фоновые задачи (вызывается из _post_init)."""
+    _create_bg_task(application, _poll_crypto_sub_invoice(application), "poll_crypto")
+    _create_bg_task(application, _poll_yookassa_invoices(application), "poll_yookassa")
+
+async def _post_init(app: Application):
+    """Вызывается PTB после инициализации приложения — именно тут стартуем фоновые задачи."""
+    _start_background_jobs(app)
+# ---------------------------------------------------------------
+
+# ⚙️ ВНИМАНИЕ: при создании Application добавь .post_init(_post_init)
+# пример:
+# application = (
+#     ApplicationBuilder()
+#     .token(BOT_TOKEN)
+#     .post_init(_post_init)   # ← вот это важно
+#     .build()
+# )
+# И не забудь зарегистрировать хендлеры оплаты:
+# application.add_handler(PreCheckoutQueryHandler(on_precheckout))
+# application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
+
 # ───────── Команда /img ─────────
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
