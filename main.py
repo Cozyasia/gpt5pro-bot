@@ -877,6 +877,8 @@ def _safe_decode_txt(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
+### BEGIN PATCH: PDF_EXTRACT
+# ВАЖНО: не удаляйте отступы внутри try/except — иначе будет IndentationError.
 def _extract_pdf_text(data: bytes) -> str:
     try:
         import PyPDF2
@@ -892,17 +894,15 @@ def _extract_pdf_text(data: bytes) -> str:
             return t
     except Exception:
         pass
+
     try:
-from pdfminer.high_level import extract_text as pdfminer_extract_text  # may not exist
+        from pdfminer.high_level import extract_text as pdfminer_extract_text  # pdfminer.six
+        return (pdfminer_extract_text(BytesIO(data)) or "").strip()
     except Exception:
-        pdfminer_extract_text = None  # type: ignore
-    if pdfminer_extract_text:
-        try:
-            return (pdfminer_extract_text(BytesIO(data)) or "").strip()
-        except Exception:
-            pass
+        pass
+
     try:
-        import fitz
+        import fitz  # PyMuPDF
         doc = fitz.open(stream=data, filetype="pdf")
         txt = []
         for page in doc:
@@ -913,7 +913,9 @@ from pdfminer.high_level import extract_text as pdfminer_extract_text  # may not
         return "\n".join(txt)
     except Exception:
         pass
+
     return ""
+### END PATCH: PDF_EXTRACT
 
 def _extract_epub_text(data: bytes) -> str:
     try:
