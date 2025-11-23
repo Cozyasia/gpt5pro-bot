@@ -876,9 +876,9 @@ def _safe_decode_txt(b: bytes) -> str:
     return b.decode("utf-8", errors="ignore")
 
 ### BEGIN PATCH: PDF_EXTRACT
-# ВАЖНО: этот блок полностью заменяет предыдущий, включая "мягкие" импорты.
+# ВАЖНО: не удаляйте отступы внутри try/except — иначе будет IndentationError.
 
-# Мягкие импорты: библиотек может не быть в окружении — тогда переменные станут None.
+# Мягкие импорты: если библиотеки нет — переменная станет None, и мы аккуратно обойдёмся без неё.
 try:
     from PyPDF2 import PdfReader as _PdfReader
 except Exception:
@@ -887,23 +887,29 @@ except Exception:
 try:
     from pdfminer.high_level import extract_text as pdfminer_extract_text
 except Exception:
-    pdfminer_extract_text = None  # будет None, если pdfminer.six не установлен
+    pdfminer_extract_text = None  # будет None, если pdfminer не установлен
 
 try:
     from docx import Document as DocxDocument
 except Exception:
-    DocxDocument = None  # пригодится в других частях кода
+    DocxDocument = None
 
 try:
     from ebooklib import epub as _epub
 except Exception:
-    _epub = None  # пригодится в других частях кода
+    _epub = None
+
+from io import BytesIO
+
 
 def _extract_pdf_text(data: bytes) -> str:
-    """Извлекает текст из PDF. Сначала PyPDF2, затем pdfminer.six. Возвращает '' если не удалось."""
-    from io import BytesIO
-
-    # 1) PyPDF2 — быстро и без внешних бинарников
+    """
+    Пытаемся достать текст из PDF:
+    1) PyPDF2 (быстро, но не всегда полно)
+    2) pdfminer (медленнее, но более надёжно)
+    Возвращает строку (может быть пустой).
+    """
+    # Сначала PyPDF2
     if _PdfReader is not None:
         try:
             pdf = _PdfReader(BytesIO(data))
@@ -911,25 +917,25 @@ def _extract_pdf_text(data: bytes) -> str:
             for page in pdf.pages:
                 try:
                     t = page.extract_text() or ""
-                    if t.strip():
-                        texts.append(t)
                 except Exception:
-                    # Пропускаем проблемные страницы, чтобы не падать на всём файле
-                    continue
+                    t = ""
+                if t.strip():
+                    texts.append(t)
             if texts:
                 return "\n".join(texts)
         except Exception:
-            # Переходим к fallback
+            # Падаем в fallback
             pass
 
-    # 2) Fallback: pdfminer.six — точнее на "тяжёлых" PDF
+    # Затем pdfminer
     if pdfminer_extract_text is not None:
         try:
-            return (pdfminer_extract_text(BytesIO(data)) or "").strip()
+            txt = pdfminer_extract_text(BytesIO(data)) or ""
+            return txt.strip()
         except Exception:
             pass
 
-    # 3) Совсем ничего не вышло
+    # Совсем ничего не вышло
     return ""
 ### END PATCH: PDF_EXTRACT
 
