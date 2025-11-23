@@ -2,21 +2,64 @@ services:
   - type: web
     name: gpt5pro-bot
     env: python
-    autoDeploy: true
     plan: starter
+    autoDeploy: true
+
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
-      python patch_main.py || echo "patch_main skipped"
-    startCommand: bash -lc "python patch_main.py || true; [ -f main.fixed.py ] && exec python -u main.fixed.py || exec python -u main.py"
+
+    startCommand: bash -lc "python -u main.py"
+
+    # Персистентное хранилище для SQLite, логов, кэша
+    disk:
+      name: bot-data
+      mountPath: /data
+      sizeGB: 1
+
     envVars:
-      - key: PYTHON_VERSION
+      # Базовые
+      - key: PYTHON_VERSION           # версия Python на Render
         value: 3.12.6
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TZ                       # чтобы совпадали даты/время в логах
+        value: Asia/Bangkok
+
+      # Telegram Bot
       - key: BOT_TOKEN
         sync: false
+      - key: PUBLIC_URL               # твой внешний URL (если используешь вебхук)
+        sync: false
+
+      # OpenAI (чат/vision/tts/images)
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
-      - key: PUBLIC_URL
+      - key: DEFAULT_VOICE            # голос TTS по умолчанию
+        value: alloy
+
+      # STT
+      - key: DEEPGRAM_API_KEY
         sync: false
+
+      # Видео-модули
+      - key: LUMA_API_KEY
+        sync: false
+      - key: RUNWAY_API_KEY
+        sync: false
+
+      # Платежи
+      - key: TELEGRAM_PROVIDER_TOKEN  # провайдер для /pay (ЮKassa/др.)
+        sync: false
+      - key: YOOKASSA_SHOP_ID
+        sync: false
+      - key: YOOKASSA_SECRET_KEY
+        sync: false
+      - key: CRYPTOBOT_TOKEN          # если используешь CryptoBot API
+        sync: false
+
+      # База/файлы
+      - key: DATABASE_URL             # SQLite в персистентном диске
+        value: sqlite:////data/bot.db
