@@ -55,6 +55,10 @@ WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
+# ==== RUNWAY CONFIG ====
+RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY", "")
+RUNWAY_BASE = "https://api.runwayml.com/v1"  # именно api.runwayml.com
+# ==== /RUNWAY CONFIG ====
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
 OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
@@ -2676,6 +2680,51 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
         log.exception("Luma error: %s", e)
         await update.effective_message.reply_text("❌ Luma: не удалось запустить/получить видео.")
 
+# ==== LUMA CLIENT (PATCH B) ====
+import httpx, asyncio
+
+LUMA_API_KEY = os.getenv("LUMA_API_KEY", "")
+
+LUMA_BASE = "https://api.lumalabs.ai/dream-machine/v1"
+
+async def luma_text2video(prompt: str, duration_s: int = 5, aspect_ratio: str = "16:9") -> dict:
+    if not LUMA_API_KEY:
+        raise RuntimeError("LUMA_API_KEY пустой")
+
+    headers = {
+        "Authorization": f"Bearer {LUMA_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    payload = {
+        "prompt": prompt,
+        "duration": duration_s,
+        "aspect_ratio": aspect_ratio
+    }
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        r = await client.post(f"{LUMA_BASE}/generations", headers=headers, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        gen_id = data.get("id")
+        if not gen_id:
+            raise RuntimeError(f"Luma: не пришёл id генерации: {data}")
+
+        for _ in range(120):  # до ~10 минут
+            rr = await client.get(f"{LUMA_BASE}/generations/{gen_id}", headers=headers)
+            rr.raise_for_status()
+            info = rr.json()
+            status = info.get("state") or info.get("status")
+            if status in ("completed", "succeeded", "complete"):
+                return info
+            if status in ("failed", "error", "rejected"):
+                raise RuntimeError(f"Luma: ошибка/отклонено: {info}")
+            await asyncio.sleep(5)
+
+        raise TimeoutError("Luma: не дождались результата")
+# ==== /LUMA CLIENT (PATCH B) ====
+
 
 # ───────── Runway video ─────────
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
@@ -2798,6 +2847,56 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
     except Exception as e:
         log.exception("Runway revive error: %s", e)
         await update.effective_message.reply_text("❌ Не удалось анимировать фото в Runway.")
+
+# ==== RUNWAY CLIENT (PATCH A) ====
+async def runway_text2video(prompt: str, duration_s: int = 5, aspect_ratio: str = "16:9") -> dict:
+    """
+    Создаёт t2v-генерацию и возвращает финальный объект с ссылкой на видео.
+    Поллинг до готовности. Бросает исключение при 4xx/5xx.
+    """
+    if not RUNWAY_API_KEY:
+        raise RuntimeError("RUNWAY_API_KEY пустой")
+
+    headers = {
+        "Authorization": f"Bearer {RUNWAY_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    payload = {
+        "mode": "text_to_video",
+        "prompt": prompt,
+        "duration": duration_s,
+        "aspect_ratio": aspect_ratio
+    }
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        # старт
+        r = await client.post(f"{RUNWAY_BASE}/generations", headers=headers, json=payload)
+        if r.status_code == 401:
+            raise RuntimeError(f"Runway 401 Unauthorized. Проверь ключ и заголовок Authorization. Ответ: {r.text}")
+        r.raise_for_status()
+        data = r.json()
+        gen_id = data.get("id")
+        if not gen_id:
+            raise RuntimeError(f"Runway: не пришёл id генерации: {data}")
+
+        # поллинг
+        for _ in range(120):  # до ~10 минут
+            rr = await client.get(f"{RUNWAY_BASE}/generations/{gen_id}", headers=headers)
+            if rr.status_code == 401:
+                raise RuntimeError(f"Runway 401 при поллинге. Ответ: {rr.text}")
+            rr.raise_for_status()
+            info = rr.json()
+            status = info.get("status")
+            if status in ("completed", "succeeded"):
+                return info
+            if status in ("failed", "canceled", "rejected"):
+                raise RuntimeError(f"Runway: задача отклонена/ошибка: {info}")
+            await asyncio.sleep(5)
+
+        raise TimeoutError("Runway: не дождались результата")
+# ==== /RUNWAY CLIENT (PATCH A) ====
 
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
@@ -3172,6 +3271,46 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Не смог обработать фото.")
 
+# ==== PHOTO RECEIVED (PATCH E) ====
+async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file_id = update.message.photo[-1].file_id
+    context.user_data["last_photo_id"] = file_id
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Оживить фото", callback_data="photo_anim_picker")],
+        [InlineKeyboardButton("🧽 Удалить фон", callback_data="photo_bg_remove"),
+         InlineKeyboardButton("🖼 Заменить фон", callback_data="photo_bg_replace")],
+        [InlineKeyboardButton("🧭 Расширить кадр", callback_data="photo_outpaint"),
+         InlineKeyboardButton("🎬 Раскадровка", callback_data="photo_storyboard")],
+        [InlineKeyboardButton("🖌 Картинка по описанию (Luma)", callback_data="img_luma"),
+         InlineKeyboardButton("👁 Анализ фото", callback_data="img_analyze")]
+    ])
+
+    await update.message.reply_text("Фото получено. Что сделать?", reply_markup=kb)
+
+# в cb_router:
+    if data == "photo_anim_picker":
+        return await show_photo_animate_picker(update.effective_chat.id, context)
+    if data == "photo_anim_runway":
+        # тут твой image->video на Runway с polling + проверка last_photo_id
+        return await q.message.reply_text("Ок, анимация фото на Runway: запускаю…")
+# ==== /PHOTO RECEIVED (PATCH E) ====
+# ==== IMAGE HELP (PATCH F) ====
+IMAGE_TRIGGERS = re.compile(r"(фото|изображени|картинк|picture|image)", re.IGNORECASE)
+
+async def maybe_image_help(chat_id, text, context):
+    if IMAGE_TRIGGERS.search(text):
+        msg = (
+            "Да, я умею работать с изображениями: оживлять фото (image→video), "
+            "удалять/заменять фон, добавлять/удалять объекты, расширять кадр, делать раскадровку.\n\n"
+            "Пришли фото или опиши задачу. Для видео предложу выбрать движок: Runway или Luma (Kling — скоро)."
+        )
+        await context.bot.send_message(chat_id, msg)
+        return True
+    return False
+# вызови maybe_image_help(...) в начале smart_router_text
+# ==== /IMAGE HELP (PATCH F) ====
+
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.document:
@@ -3222,6 +3361,69 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("on_voice error: %s", e)
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Ошибка при обработке voice.")
+
+# ==== INTENT ROUTER (PATCH D) ====
+import re
+
+VIDEO_TRIGGERS = re.compile(r"(сделай|создай|сгенерируй).*(видео|ролик)|animate|video", re.IGNORECASE)
+PHOTO_ANIMATE_TRIGGERS = re.compile(r"(оживи|оживить|анимируй|оживление).*(фото|фотографию|изображение)", re.IGNORECASE)
+
+async def smart_router_text(chat_id, text, context):
+    # 1) Видео генерация
+    if VIDEO_TRIGGERS.search(text):
+        return await show_video_engine_picker(chat_id, context, text)
+
+    # 2) Оживление фото
+    if PHOTO_ANIMATE_TRIGGERS.search(text):
+        return await show_photo_animate_picker(chat_id, context)
+
+    # 3) иначе — обычный GPT-ответ
+    return await gpt_reply(chat_id, text, context)
+
+async def show_video_engine_picker(chat_id, context, user_prompt: str):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Runway (t2v)", callback_data=f"v_runway::{user_prompt}")],
+        [InlineKeyboardButton("🎥 Luma (t2v)", callback_data=f"v_luma::{user_prompt}")]
+    ])
+    await context.bot.send_message(chat_id, "Что использовать для видео?", reply_markup=kb)
+
+async def show_photo_animate_picker(chat_id, context):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Оживить фото (Runway)", callback_data="photo_anim_runway")],
+        [InlineKeyboardButton("🛰 Kling (скоро)", callback_data="photo_anim_kling_disabled")]
+    ])
+    await context.bot.send_message(chat_id, "Окей! Выбери движок для анимации фото:", reply_markup=kb)
+
+async def show_engine_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str):
+    await update.effective_chat.send_message(
+        f"Отлично, {engine.title()} готов. Напиши описание сцены (или пришли фото для image→video)."
+    )
+
+# в CallbackQueryHandler (см. PATCH C) добавь обработку v_runway:: и v_luma::
+async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = q.data
+    await q.answer()
+    if data.startswith("v_runway::"):
+        prompt = data.split("::", 1)[1]
+        try:
+            info = await runway_text2video(prompt, 5, "16:9")
+            url = (info.get("output", {}) or {}).get("video_url") or info.get("assets", {}).get("video")
+            return await q.message.reply_text(f"Готово! Видео (Runway): {url}")
+        except Exception as e:
+            return await q.message.reply_text(f"⚠️ Runway: {e}")
+
+    if data.startswith("v_luma::"):
+        prompt = data.split("::", 1)[1]
+        try:
+            info = await luma_text2video(prompt, 5, "16:9")
+            url = (info.get("assets", {}) or {}).get("video") or info.get("output", {}).get("video_url")
+            return await q.message.reply_text(f"Готово! Видео (Luma): {url}")
+        except Exception as e:
+            return await q.message.reply_text(f"⚠️ Luma: {e}")
+
+    # ... остальная часть как в PATCH C
+# ==== /INTENT ROUTER (PATCH D) ====
 
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -3474,6 +3676,90 @@ def build_application() -> "Application":
     # Платежи
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
+
+# ==== MODES HANDLERS (PATCH C) ====
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import CallbackQueryHandler
+
+def mode_keyboard(mode: str) -> InlineKeyboardMarkup:
+    if mode == "work":
+        rows = [
+            [InlineKeyboardButton("📄 Письмо/документ", callback_data="work_doc"),
+             InlineKeyboardButton("📊 Аналитика/сводка", callback_data="work_report")],
+            [InlineKeyboardButton("📝 План/ToDo", callback_data="work_plan"),
+             InlineKeyboardButton("💡 Идеи/бриф", callback_data="work_brief")],
+            [InlineKeyboardButton("🎬 Runway", callback_data="engine_runway"),
+             InlineKeyboardButton("🎥 Luma", callback_data="engine_luma")],
+            [InlineKeyboardButton("↩️ Назад", callback_data="back_home")]
+        ]
+    elif mode == "study":
+        rows = [
+            [InlineKeyboardButton("📚 Объяснить тему", callback_data="study_explain"),
+             InlineKeyboardButton("🧪 Подготовка к тесту", callback_data="study_quiz")],
+            [InlineKeyboardButton("📝 Конспект PDF/скрин", callback_data="study_notes")],
+            [InlineKeyboardButton("↩️ Назад", callback_data="back_home")]
+        ]
+    else:  # fun
+        rows = [
+            [InlineKeyboardButton("🎨 Midjourney (описание)", callback_data="fun_mj")],
+            [InlineKeyboardButton("🎬 Runway", callback_data="engine_runway"),
+             InlineKeyboardButton("🎥 Luma", callback_data="engine_luma")],
+            [InlineKeyboardButton("↩️ Назад", callback_data="back_home")]
+        ]
+    return InlineKeyboardMarkup(rows)
+
+async def open_mode(update: Update, context: ContextTypes.DEFAULT_TYPE, mode: str):
+    context.user_data["mode"] = mode
+    text = {
+        "work": "💼 Режим «Работа». Напиши задачу или выбери опцию ниже.",
+        "study": "🎓 Режим «Учёба». Напиши тему/задачу или выбери опцию.",
+        "fun": "🔥 Режим «Развлечения». Можно сделать визуалы/видео и т.д."
+    }[mode]
+    await update.effective_chat.send_message(text, reply_markup=mode_keyboard(mode))
+
+async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = q.data
+    await q.answer()
+    if data in ("mode_work", "mode_study", "mode_fun"):
+        return await open_mode(update, context, data.split("_")[1])
+    if data == "engine_runway":
+        return await show_engine_confirm(update, context, "runway")
+    if data == "engine_luma":
+        return await show_engine_confirm(update, context, "luma")
+    if data == "back_home":
+        context.user_data.pop("mode", None)
+        return await update.effective_chat.send_message("Выбери режим ниже…")
+
+def register_mode_handlers(app):
+    app.add_handler(CallbackQueryHandler(cb_router))
+# ==== /MODES HANDLERS (PATCH C) ====
+
+    # ==== TEST: /t2v <prompt> ====
+from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+
+async def t2v_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = " ".join(context.args) or "retro car driving at night, neon lights"
+    try:
+        info = await runway_text2video(prompt, duration_s=5, aspect_ratio="16:9")
+        # В разных версиях API поле может отличаться, покажем самое вероятное:
+        video_url = (
+            (info.get("assets") or {}).get("video")
+            or (info.get("output") or {}).get("video")
+            or (info.get("result") or {}).get("video")
+        )
+        if video_url:
+            await update.message.reply_video(video_url)
+        else:
+            await update.message.reply_text(f"Runway OK, но не нашёл ссылку в payload:\n{json.dumps(info, ensure_ascii=False)[:2000]}")
+    except Exception as e:
+        await update.message.reply_text(f"Runway error: {e}")
+
+# регистрация
+application.add_handler(CommandHandler("t2v", t2v_cmd))
+# ==== /TEST ====
 
     # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
 
