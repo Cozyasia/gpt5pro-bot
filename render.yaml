@@ -5,61 +5,65 @@ services:
     plan: starter
     autoDeploy: true
 
+    # Сборка
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
 
+    # Запуск (без патчера — сразу main.py)
     startCommand: bash -lc "python -u main.py"
 
-    # Персистентное хранилище для SQLite, логов, кэша
+    # Персистентное хранилище (SQLite, логи, кэш)
     disk:
       name: bot-data
       mountPath: /data
       sizeGB: 1
 
     envVars:
-      # Базовые
-      - key: PYTHON_VERSION           # версия Python на Render
+      # ── Базовые ────────────────────────────────────────────────────────────────
+      - key: PYTHON_VERSION          # версия Python на Render
         value: 3.12.6
+      - key: PYTHONUNBUFFERED        # всегда буфер выключен (дублирует -u)
+        value: "1"
       - key: LOG_LEVEL
         value: INFO
-      - key: TZ                       # чтобы совпадали даты/время в логах
+      - key: TZ                      # локаль времени для логов/планировок
         value: Asia/Bangkok
 
-      # Telegram Bot
-      - key: BOT_TOKEN
+      # ── Telegram Bot ──────────────────────────────────────────────────────────
+      - key: BOT_TOKEN               # токен бота
         sync: false
-      - key: PUBLIC_URL               # твой внешний URL (если используешь вебхук)
+      - key: PUBLIC_URL              # внешний URL (если используешь вебхук)
         sync: false
 
-      # OpenAI (чат/vision/tts/images)
+      # ── OpenAI: чат/vision/tts/images ────────────────────────────────────────
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
-      - key: DEFAULT_VOICE            # голос TTS по умолчанию
+      - key: DEFAULT_VOICE           # голос TTS по умолчанию (если используешь)
         value: alloy
 
-      # STT
+      # ── STT ──────────────────────────────────────────────────────────────────
       - key: DEEPGRAM_API_KEY
         sync: false
 
-      # Видео-модули
+      # ── Видео-движки ─────────────────────────────────────────────────────────
       - key: LUMA_API_KEY
         sync: false
       - key: RUNWAY_API_KEY
         sync: false
 
-      # Платежи
-      - key: TELEGRAM_PROVIDER_TOKEN  # провайдер для /pay (ЮKassa/др.)
+      # ── Платежи ──────────────────────────────────────────────────────────────
+      - key: TELEGRAM_PROVIDER_TOKEN # провайдер для /pay (ЮKassa/др.)
         sync: false
       - key: YOOKASSA_SHOP_ID
         sync: false
       - key: YOOKASSA_SECRET_KEY
         sync: false
-      - key: CRYPTOBOT_TOKEN          # если используешь CryptoBot API
+      - key: CRYPTOBOT_TOKEN         # если используешь CryptoBot API
         sync: false
 
-      # База/файлы
-      - key: DATABASE_URL             # SQLite в персистентном диске
+      # ── База/файлы ───────────────────────────────────────────────────────────
+      - key: DATABASE_URL            # путь к SQLite на персистентном диске
         value: sqlite:////data/bot.db
