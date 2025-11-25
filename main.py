@@ -1918,7 +1918,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data or ""
     user_id = q.from_user.id
-    chat_id = q.message.chat.id  # FIX: корректное поле в PTB v21+
+    chat_id = q.message.chat.id  # PTB v21+
 
     # Навигация между тарифами
     if data.startswith("plan:"):
@@ -1930,7 +1930,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if arg in SUBS_TIERS:
             await q.edit_message_text(
                 _plan_card_text(arg) + "\nВыберите способ оплаты:",
-                reply_markup=plan_pay_kb(arg)
+                reply_markup=plan_pay_kb(arg),
             )
             await q.answer()
             return
@@ -1981,7 +1981,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # CryptoBot (Crypto Pay API: создаём инвойс и отдаём ссылку)
-        if method == "cryptobot":  # FIX: выровнен отступ
+        if method == "cryptobot":
             if not CRYPTO_PAY_API_TOKEN:
                 await q.answer("CryptoBot не подключён (нет CRYPTO_PAY_API_TOKEN).", show_alert=True)
                 return
@@ -1999,24 +1999,27 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "allow_anonymous": True,
                         },
                     )
-                    data = r.json()
-                    if not data.get("ok"):
-                        raise RuntimeError(str(data))
-                    res = data["result"]
-                    pay_url = res["pay_url"]
-                    inv_id = str(res["invoice_id"])
+                data_j = r.json()
+                if not data_j.get("ok"):
+                    raise RuntimeError(str(data_j))
+                res = data_j["result"]
+                pay_url = res["pay_url"]
+                inv_id = str(res["invoice_id"])
 
                 kb = InlineKeyboardMarkup([
                     [InlineKeyboardButton("💠 Оплатить в CryptoBot", url=pay_url)],
                     [InlineKeyboardButton("⬅️ К тарифу", callback_data=f"plan:{plan_key}")],
                 ])
+
                 msg = await q.edit_message_text(
-    _plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:",
-    reply_markup=kb
-)
-context.application.create_task(_poll_crypto_sub_invoice(
-    context, q.message.chat_id, msg.message_id, user_id, inv_id, plan_key, 1
-))
+                    _plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:",
+                    reply_markup=kb,
+                )
+
+                # фоновый опрос конкретного инвойса до оплаты/отмены
+                context.application.create_task(_poll_crypto_sub_invoice(
+                    context, chat_id, msg.message_id, user_id, inv_id, plan_key, 1
+                ))
                 await q.answer()
             except Exception as e:
                 await q.answer("Не удалось создать счёт в CryptoBot.", show_alert=True)
@@ -3844,16 +3847,24 @@ def register_mode_handlers(app):
     app.add_handler(CallbackQueryHandler(cb_router))
 # ==== /MODES HANDLERS (PATCH C) ====
 
-    # ==== TEST: /t2v <prompt> ====
-from telegram.ext import CommandHandler
+# ==== TEST: /t2v <prompt> ====
+import json
+import contextlib
+import asyncio
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import (
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 
 async def t2v_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args) or "retro car driving at night, neon lights"
     try:
         info = await runway_text2video(prompt, duration_s=5, aspect_ratio="16:9")
-        # В разных версиях API поле может отличаться, покажем самое вероятное:
+        # В разных версиях API поле может отличаться, покажем самые вероятные:
         video_url = (
             (info.get("assets") or {}).get("video")
             or (info.get("output") or {}).get("video")
@@ -3862,89 +3873,92 @@ async def t2v_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if video_url:
             await update.message.reply_video(video_url)
         else:
-            await update.message.reply_text(f"Runway OK, но не нашёл ссылку в payload:\n{json.dumps(info, ensure_ascii=False)[:2000]}")
+            await update.message.reply_text(
+                "Runway OK, но не нашёл ссылку в payload:\n"
+                f"{json.dumps(info, ensure_ascii=False)[:2000]}"
+            )
     except Exception as e:
         await update.message.reply_text(f"Runway error: {e}")
 
-# регистрация
-application.add_handler(CommandHandler("t2v", t2v_cmd))
+# регистрация тест-команды
+app.add_handler(CommandHandler("t2v", t2v_cmd))
 # ==== /TEST ====
 
-    # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
 
-    # Данные из мини-приложения (WebApp)
-    with contextlib.suppress(Exception):
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
-    with contextlib.suppress(Exception):
-        if hasattr(filters, "WEB_APP_DATA"):
-            app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
+# >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
 
-    # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
-    # 1) Подписка/оплаты
-    app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
+# Данные из мини-приложения (WebApp)
+with contextlib.suppress(Exception):
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+with contextlib.suppress(Exception):
+    # На случай альтернативного фильтра в сборке
+    if hasattr(filters, "WEB_APP_DATA"):
+        app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # 2) Быстрые развлечения (любые fun:...)
-    app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
+# === Порядок callback-хендлеров (узкие → общие) ===
+# 1) Подписка/оплаты (plan:/pay:) — сперва, чтобы ловить свои колбэки раньше catch-all
+app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:).+"))
 
-    # 3) Режимы/подменю (поддержим и старые, и новые префиксы)
-    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:|fun:)"))
+# 2) Быстрые развлечения (любые fun:...)
+app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:[a-z_]+$"))
 
-    # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
-    app.add_handler(CallbackQueryHandler(on_cb))
+# 3) Режимы/подменю (поддержим и старые, и новые префиксы)
+app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:mode:|act:|school:|work:|fun:)"))
 
-    # Голос/аудио
-    voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
-    if voice_fn:
-        app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
+# 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
+app.add_handler(CallbackQueryHandler(on_cb))
 
-    # === ПАТЧ 3: Текстовый выбор «Учёба / Работа / Развлечения» через on_mode_text ===
-    # СТАВИМ ДО остальных текстовых кнопок и ДО общего текстового хендлера
+# Голос/аудио
+voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
+if voice_fn:
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
 
-    # Текстовые кнопки/ярлыки (остальные)
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
-    app.add_handler(MessageHandler(
-        filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),
-        on_btn_plans
-    ))
-    # Оставляем совместимость с альтернативными подписями режимов (если у тебя они где-то генерятся без эмодзи/с вариациями)
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),     on_btn_study))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),      on_btn_work))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"), on_btn_fun))
+# === Текстовые ярлыки ===
+# (Ставим ДО остальных текстовых и ДО общего текстового обработчика)
+app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
+app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
+app.add_handler(MessageHandler(
+    filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),
+    on_btn_plans
+))
+# Совместимость с вариациями подписи режимов
+app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),     on_btn_study))
+app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),      on_btn_work))
+app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"), on_btn_fun))
 
-    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста
-    app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa))
+# ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста
+app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa))
 
-    # Медиа
-    photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
-    if photo_fn:
-        app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
+# Медиа
+photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
+if photo_fn:
+    app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
 
-    doc_fn = _pick_first_defined("handle_doc", "on_document", "handle_document", "doc_handler")
-    if doc_fn:
-        app.add_handler(MessageHandler(filters.Document.ALL, doc_fn))
+doc_fn = _pick_first_defined("handle_doc", "on_document", "handle_document", "doc_handler")
+if doc_fn:
+    app.add_handler(MessageHandler(filters.Document.ALL, doc_fn))
 
-    video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
-    if video_fn:
-        app.add_handler(MessageHandler(filters.VIDEO, video_fn))
+video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
+if video_fn:
+    app.add_handler(MessageHandler(filters.VIDEO, video_fn))
 
-    gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
-    if gif_fn:
-        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn))
+gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
+if gif_fn:
+    app.add_handler(MessageHandler(filters.ANIMATION, gif_fn))
 
-    # >>> PATCH END <<<
+# >>> PATCH END <<<
 
-    # Общий текст — в самом конце
-    text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
-    if text_fn:
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
+# Общий текст — в самом конце
+text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
+if text_fn:
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
 
-    # Ошибки
-    err_fn = _pick_first_defined("on_error", "handle_error")
-    if err_fn:
-        app.add_error_handler(err_fn)
+# Ошибки
+err_fn = _pick_first_defined("on_error", "handle_error")
+if err_fn:
+    app.add_error_handler(err_fn)
 
-    return app
+return app
 
 
 # === main() с безопасной инициализацией БД (без изменений по сути) ===
@@ -3959,7 +3973,10 @@ def main():
     app = build_application()
 
     if USE_WEBHOOK:
-        log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
+        log.info(
+            "🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s",
+            PUBLIC_URL, WEBHOOK_PATH, PORT
+        )
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -3971,9 +3988,7 @@ def main():
     else:
         log.info("🚀 POLLING mode.")
         with contextlib.suppress(Exception):
-            asyncio.get_event_loop().run_until_complete(
-                app.bot.delete_webhook(drop_pending_updates=True)
-            )
+            asyncio.run(app.bot.delete_webhook(drop_pending_updates=True))
         app.run_polling(
             close_loop=False,
             allowed_updates=Update.ALL_TYPES,
