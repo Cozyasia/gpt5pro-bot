@@ -1408,7 +1408,7 @@ async def on_mode_text(update, context):
     if "развлеч" in tl or "fun" in tl:
         return await _send_mode_menu(update, context, "fun")
     # иначе ничего не делаем — апдейт поймают другие хендлеры
-        
+
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -1423,13 +1423,7 @@ def main_keyboard():
 
 main_kb = main_keyboard()
 
-# ───────── /start ─────────
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_chat.send_message(
-        START_TEXT,
-        reply_markup=main_kb,
-        disable_web_page_preview=True,
-    )
+# ВНИМАНИЕ: /start определён в единственном месте ниже по файлу. Здесь ранний дубль удалён.
 
 if "HELP_TEXT" not in globals():
     HELP_TEXT = (
@@ -1456,7 +1450,6 @@ def _mode_track_set(user_id: int, track: str):
 
 def _mode_track_get(user_id: int) -> str:
     return kv_get(f"mode_track:{user_id}", "") or ""
-
 
 # ───────── Подменю режимов ─────────
 def _school_kb():
@@ -1715,23 +1708,19 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #  - PRICE_START_RUB, PRICE_PRO_RUB, PRICE_ULT_RUB  (целое число, ₽)
 #  - PRICE_START_USD, PRICE_PRO_USD, PRICE_ULT_USD  (число с точкой, $)
 #
-# Хранилище подписки и кошелька используется на kv_*:
-#   sub:tier:{user_id}   -> "start" | "pro" | "ultimate"
-#   sub:until:{user_id}  -> ISO-строка даты окончания
-#   wallet:usd:{user_id} -> баланс в USD (float)
+# Хранилище подписки и кошелька: ИСКЛЮЧИТЕЛЬНО ваша SQLite-БД через
+# _wallet_total_get/_wallet_total_add/_wallet_total_take и activate_subscription_with_tier
 
 YOOKASSA_PROVIDER_TOKEN = os.environ.get("YOOKASSA_PROVIDER_TOKEN", "").strip()
 YOOKASSA_CURRENCY = (os.environ.get("YOOKASSA_CURRENCY") or "RUB").upper()
 
-CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
-CRYPTO_ASSET = (os.environ.get("CRYPTO_ASSET") or "USDT").upper()
 
 # === COMPAT with existing vars/DB in your main.py ===
 # 1) ЮKassa: если уже есть PROVIDER_TOKEN (из PROVIDER_TOKEN_YOOKASSA), используем его:
 if not YOOKASSA_PROVIDER_TOKEN and 'PROVIDER_TOKEN' in globals() and PROVIDER_TOKEN:
     YOOKASSA_PROVIDER_TOKEN = PROVIDER_TOKEN
 
-# 2) Кошелёк: используем твой единый USD-кошелёк (wallet table) вместо kv:
+# 2) Кошелёк: используем ЕДИНЫЙ USD-кошелёк из вашей БД
 def _user_balance_get(user_id: int) -> float:
     return _wallet_total_get(user_id)
 
@@ -1745,7 +1734,7 @@ def _user_balance_add(user_id: int, delta: float) -> float:
 def _user_balance_debit(user_id: int, amount: float) -> bool:
     return _wallet_total_take(user_id, amount)
 
-# 3) Подписка: активируем через твои функции с БД, а не kv:
+# 3) Подписка: активируем через функции с БД
 def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
     dt = activate_subscription_with_tier(user_id, tier_key, months)
     return dt.isoformat()
@@ -1805,60 +1794,6 @@ def _money_fmt_rub(v: int) -> str:
 
 def _money_fmt_usd(v: float) -> str:
     return f"${v:.2f}"
-
-def _user_balance_get(user_id: int) -> float:
-    # Пытаемся взять из твоего кошелька, если есть, иначе — kv
-    get_fn = _pick_first_defined("wallet_get_balance", "get_balance", "balance_get")
-    if get_fn:
-        try:
-            return float(get_fn(user_id))
-        except Exception:
-            pass
-    try:
-        return float(kv_get(f"wallet:usd:{user_id}", "0") or 0)
-    except Exception:
-        return 0.0
-
-def _user_balance_add(user_id: int, delta: float) -> float:
-    set_fn = _pick_first_defined("wallet_change_balance", "wallet_add_delta")
-    if set_fn:
-        try:
-            return float(set_fn(user_id, delta))
-        except Exception:
-            pass
-    cur = _user_balance_get(user_id)
-    newv = round(cur + float(delta), 4)
-    kv_set(f"wallet:usd:{user_id}", str(newv))
-    return newv
-
-def _user_balance_debit(user_id: int, amount: float) -> bool:
-    if amount <= 0:
-        return True
-    bal = _user_balance_get(user_id)
-    if bal + 1e-9 < amount:
-        return False
-    _user_balance_add(user_id, -amount)
-    return True
-
-def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
-    until = (datetime.now(timezone.utc) + timedelta(days=30 * months)).isoformat()
-    kv_set(f"sub:tier:{user_id}", tier_key)
-    kv_set(f"sub:until:{user_id}", until)
-    return until
-
-def _sub_info_text(user_id: int) -> str:
-    tier = kv_get(f"sub:tier:{user_id}", "") or "нет"
-    until = kv_get(f"sub:until:{user_id}", "")
-    human_until = ""
-    if until:
-        try:
-            d = datetime.fromisoformat(until)
-            human_until = d.strftime("%d.%m.%Y")
-        except Exception:
-            human_until = until
-    bal = _user_balance_get(user_id)
-    line_until = f"\n⏳ Активна до: {human_until}" if tier != "нет" and human_until else ""
-    return f"🧾 Текущая подписка: {tier.upper() if tier!='нет' else 'нет'}{line_until}\n💵 Баланс: {_money_fmt_usd(bal)}"
 
 def _plan_card_text(key: str) -> str:
     p = SUBS_TIERS[key]
@@ -2112,58 +2047,54 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
 
 # ---------- Background jobs (фоновые задачи платежей) ----------
 from telegram.ext import Application
+from typing import Coroutine, Any
 import asyncio
 
 _BG_TASKS: list[asyncio.Task] = []
 
-async def _poll_crypto_sub_invoice(application: Application):
-    """Фоновый опрос крипто-инвойсов (пример бесконечного цикла)."""
-    log.info("BG[poll_crypto]: start")
+async def _crypto_daemon(application: Application):
+    """Фоновый опрос крипто/подписок (пример бесконечного цикла)."""
+    log.info("BG[crypto_daemon]: start")
     while True:
         try:
-            # TODO: тут твоя реальная логика опроса CryptoBot/TON и продления подписок
+            # TODO: здесь твоя периодическая логика (если понадобится)
             await asyncio.sleep(10)
         except asyncio.CancelledError:
-            log.info("BG[poll_crypto]: cancelled")
+            log.info("BG[crypto_daemon]: cancelled")
             raise
         except Exception as e:
-            log.exception("poll crypto invoice error: %s", e)
+            log.exception("crypto_daemon error: %s", e)
             await asyncio.sleep(5)
 
-async def _poll_yookassa_invoices(application: Application):
+async def _yookassa_daemon(application: Application):
     """Фоновый опрос инвойсов YooKassa (если используется)."""
-    log.info("BG[poll_yookassa]: start")
+    log.info("BG[yookassa_daemon]: start")
     while True:
         try:
-            # TODO: тут твоя реальная логика опроса YooKassa
             await asyncio.sleep(10)
         except asyncio.CancelledError:
-            log.info("BG[poll_yookassa]: cancelled")
+            log.info("BG[yookassa_daemon]: cancelled")
             raise
         except Exception as e:
-            log.exception("poll yookassa error: %s", e)
+            log.exception("yookassa_daemon error: %s", e)
             await asyncio.sleep(5)
 
-def _create_bg_task(application: Application, coro: asyncio.coroutines, name: str):
-    """Безопасное создание фоновой задачи в PTB (через app.create_task)."""
+def _create_bg_task(application: Application, coro: Coroutine[Any, Any, Any], name: str):
+    """Безопасное создание фоновой задачи в PTB."""
+    t = application.create_task(coro)
     try:
-        t = application.create_task(coro)
-        try:
-            t.set_name(name)  # доступно в 3.8+
-        except Exception:
-            pass
-        _BG_TASKS.append(t)
-        log.info("BG: scheduled %s", name)
-    except Exception as e:
-        log.exception("BG: failed to schedule %s: %s", name, e)
+        t.set_name(name)
+    except Exception:
+        pass
+    _BG_TASKS.append(t)
+    log.info("BG: scheduled %s", name)
 
 def _start_background_jobs(application: Application) -> None:
     """Регистрируем все фоновые задачи (вызывается из _post_init)."""
-    _create_bg_task(application, _poll_crypto_sub_invoice(application), "poll_crypto")
-    _create_bg_task(application, _poll_yookassa_invoices(application), "poll_yookassa")
+    _create_bg_task(application, _crypto_daemon(application),   "crypto_daemon")
+    _create_bg_task(application, _yookassa_daemon(application), "yookassa_daemon")
 
 async def _post_init(app: Application):
-    """Вызывается PTB после инициализации приложения — именно тут стартуем фоновые задачи."""
     _start_background_jobs(app)
 # ---------------------------------------------------------------
 
@@ -3025,9 +2956,9 @@ def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
 
 async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
     try:
-        # берём токен и валюту из двух источников (старый PROVIDER_TOKEN ИЛИ новый YOOKASSA_PROVIDER_TOKEN)
-        token = (PROVIDER_TOKEN or YOOKASSA_PROVIDER_TOKEN)
-        curr  = (CURRENCY if (CURRENCY and CURRENCY != "RUB") else YOOKASSA_CURRENCY) or "RUB"
+        # Предпочитаем новый токен ЮKassa, иначе — старый
+        token = (YOOKASSA_PROVIDER_TOKEN or PROVIDER_TOKEN)
+        curr  = (YOOKASSA_CURRENCY or CURRENCY or "RUB")
 
         if not token:
             await update.effective_message.reply_text("⚠️ ЮKassa не настроена (нет токена).")
@@ -3046,18 +2977,17 @@ async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str
             need_name=False,
             need_phone_number=False,
             need_shipping_address=False,
-            is_flexible=False
+            is_flexible=False,
         )
         return True
 
     except Exception as e:
         log.exception("send_invoice error: %s", e)
-        try:
+        with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Не удалось выставить счёт.")
-        except Exception:
-            pass
         return False
 
+# ——— Telegram Payments handlers (единственные валидные определения) ———
 async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         q = update.pre_checkout_query
@@ -3077,23 +3007,26 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             _, tier, months = payload.split(":", 2)
             months = int(months)
             until = activate_subscription_with_tier(uid, tier, months)
-            await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.")
+            await update.effective_message.reply_text(
+                f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}."
+            )
             return
 
-        # Любое иное payload — пополнение единого кошелька
+        # Иное payload — пополнение единого USD-кошелька по текущему курсу
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
-        await update.effective_message.reply_text(f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый баланс.")
+        await update.effective_message.reply_text(
+            f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый баланс."
+        )
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
-
 
 # ───────── CryptoBot ─────────
 CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
 CRYPTO_BASE = "https://pay.crypt.bot/api"
 TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # запасной курс
 
-async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str|None, str|None, float, str]:
+async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str | None, str | None, float, str]:
     if not CRYPTO_PAY_API_TOKEN:
         return None, None, 0.0, asset
     try:
@@ -3105,8 +3038,8 @@ async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", descrip
             ok = j.get("ok") is True
             if not ok:
                 return None, None, 0.0, asset
-            res = j.get("result", {})
-            return str(res.get("invoice_id")), res.get("pay_url"), float(res.get("amount", usd_amount)), res.get("asset") or asset
+            res = j.get("result", {}) or {}
+            return str(res.get("invoice_id")), res.get("pay_url"), float(res.get("amount", usd_amount)), (res.get("asset") or asset)
     except Exception as e:
         log.exception("crypto create error: %s", e)
         return None, None, 0.0, asset
@@ -3127,7 +3060,14 @@ async def _crypto_get_invoice(invoice_id: str) -> dict | None:
         log.exception("crypto get error: %s", e)
         return None
 
-async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, user_id: int, invoice_id: str, usd_amount: float):
+async def _poll_crypto_invoice(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+    invoice_id: str,
+    usd_amount: float,
+):
     try:
         for _ in range(120):  # ~12 минут при 6с задержке
             inv = await _crypto_get_invoice(invoice_id)
@@ -3135,18 +3075,28 @@ async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
             if st == "paid":
                 _wallet_total_add(user_id, float(usd_amount))
                 with contextlib.suppress(Exception):
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"✅ CryptoBot: платёж подтверждён. Баланс пополнен на ${float(usd_amount):.2f}.")
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=f"✅ CryptoBot: платёж подтверждён. Баланс пополнен на ${float(usd_amount):.2f}.",
+                    )
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
                 with contextlib.suppress(Exception):
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"❌ CryptoBot: платёж не завершён (статус: {st}).")
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=f"❌ CryptoBot: платёж не завершён (статус: {st}).",
+                    )
                 return
             await asyncio.sleep(6.0)
+
         with contextlib.suppress(Exception):
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» позже.")
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» позже.",
+            )
     except Exception as e:
         log.exception("crypto poll error: %s", e)
 
@@ -3157,7 +3107,7 @@ async def _poll_crypto_sub_invoice(
     user_id: int,
     invoice_id: str,
     tier: str,
-    months: int
+    months: int,
 ):
     try:
         for _ in range(120):  # ~12 минут при задержке 6с
@@ -3167,16 +3117,20 @@ async def _poll_crypto_sub_invoice(
                 until = activate_subscription_with_tier(user_id, tier, months)
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(
-                        chat_id=chat_id, message_id=message_id,
-                        text=f"✅ CryptoBot: платёж подтверждён.\n"
-                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}."
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=(
+                            "✅ CryptoBot: платёж подтверждён.\n"
+                            f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}."
+                        ),
                     )
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(
-                        chat_id=chat_id, message_id=message_id,
-                        text=f"❌ CryptoBot: оплата не завершена (статус: {st})."
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=f"❌ CryptoBot: оплата не завершена (статус: {st}).",
                     )
                 return
             await asyncio.sleep(6.0)
@@ -3184,12 +3138,12 @@ async def _poll_crypto_sub_invoice(
         # Таймаут
         with contextlib.suppress(Exception):
             await context.bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id,
-                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» или оплатите заново."
+                chat_id=chat_id,
+                message_id=message_id,
+                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» или оплатите заново.",
             )
     except Exception as e:
         log.exception("crypto poll (subscription) error: %s", e)
-
 
 # ───────── Предложение пополнения ─────────
 async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
