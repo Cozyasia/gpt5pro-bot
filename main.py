@@ -4116,7 +4116,19 @@ def build_application() -> "Application":
 
 
 # ==== main() ==================================================================
+def _ensure_event_loop():
+    """
+    Python 3.12: asyncio.get_event_loop() требует уже установленный loop.
+    На воркерах Render его нет — создаём и устанавливаем вручную.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
 def main():
+    # Инициализация БД/таблиц — не падаем, если модулей нет
     with contextlib.suppress(Exception):
         db_init()  # type: ignore[name-defined]
     with contextlib.suppress(Exception):
@@ -4126,14 +4138,18 @@ def main():
 
     app = build_application()
 
-    USE_WEBHOOK   = bool(int(os.environ.get("USE_WEBHOOK", "0")))
-    PUBLIC_URL    = os.environ.get("PUBLIC_URL", "")
-    WEBHOOK_PATH  = os.environ.get("WEBHOOK_PATH", "/webhook")
-    WEBHOOK_SECRET= os.environ.get("WEBHOOK_SECRET", "")
-    PORT          = int(os.environ.get("PORT", "8080"))
+    USE_WEBHOOK    = bool(int(os.environ.get("USE_WEBHOOK", "0")))
+    PUBLIC_URL     = os.environ.get("PUBLIC_URL", "")
+    WEBHOOK_PATH   = os.environ.get("WEBHOOK_PATH", "/webhook")
+    WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+    PORT           = int(os.environ.get("PORT", "8080"))
 
     if USE_WEBHOOK and PUBLIC_URL:
         log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
+
+        # На всякий случай обеспечим наличие event loop и в webhook-режиме
+        _ensure_event_loop()
+
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -4144,12 +4160,15 @@ def main():
         )
     else:
         log.info("🚀 POLLING mode.")
-        with contextlib.suppress(Exception):
-            asyncio.run(app.bot.delete_webhook(drop_pending_updates=True))
+
+        # ВАЖНО: не дергаем asyncio.run(delete_webhook(...)) — это создаёт/закрывает отдельный loop
+        # и ломает дальнейший запуск. Дадим PTB самому всё сделать через drop_pending_updates.
+        _ensure_event_loop()
+
         app.run_polling(
-            close_loop=False,
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=False,
+            drop_pending_updates=True,   # PTB сам удалит webhook и очистит очередь
+            # close_loop оставляем по умолчанию (True), чтобы PTB корректно управлял циклом
         )
 
 
