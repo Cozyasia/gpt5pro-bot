@@ -817,10 +817,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         with contextlib.suppress(Exception):
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+
         tg_file = await context.bot.get_file(media.file_id)
         buf = BytesIO()
         await tg_file.download_to_memory(out=buf)
         raw = buf.getvalue()
+
         mime = (getattr(media, "mime_type", "") or "").lower()
         if "ogg" in mime or "opus" in mime:
             filename = "voice.ogg"
@@ -832,32 +834,32 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             filename = "voice.mp3"
         else:
             filename = "voice.ogg"
+
     except Exception as e:
-        log.exception("TG download error: %s", e)
+        try:
+            log.exception("TG download error: %s", e)  # если log определён выше
+        except Exception:
+            pass
         await msg.reply_text("Не удалось скачать голосовое сообщение.")
         return
 
-        # Транскрибируем
+    # Транскрибируем
     transcript = await _stt_transcribe_bytes(filename, raw)
     if not transcript:
-        await msg.reply_text("Ошибка при обработке voice.")
+        await msg.reply_text("Ошибка при распознавании речи.")
         return
+
     transcript = transcript.strip()
 
-    # 🔎 Быстрый ответ на «ты умеешь X?»
-    cap = capability_answer(transcript)
-    if cap:
-        await msg.reply_text(cap)
-        return
-
-    # Подтверждаем распознавание (для UX/отладки)
+    # (опционально) подтвердим распознавание для UX/отладки
     with contextlib.suppress(Exception):
-        await msg.reply_text(f"🗣️ Распознал: {transcript}")
+        if transcript:
+            await msg.reply_text(f"🗣️ Распознал: {transcript}")
 
-    # Основной ответ модели
-    answer = await ask_openai_text(transcript)
-    await msg.reply_text(answer)
-    await maybe_tts_reply(update, context, answer)
+    # Пробрасываем как обычный текст — дальше сработает on_text со всей твоей маршрутизацией
+    # (detect_media_intent, выбор Luma/Runway, /img и т.д.)
+    update.message.text = transcript
+    await on_text(update, context)
 
 # ───────── Извлечение текста из документов ─────────
 def _safe_decode_txt(b: bytes) -> str:
@@ -3487,20 +3489,22 @@ def build_application() -> "Application":
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
     # 2) Режимы/подменю (поддержим и старые, и новые префиксы)
-    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:|fun:)"))
+    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:)"))
 
     # 3) Быстрые развлечения (любые fun:...)
     app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
 
     # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
-    app.add_handler(CallbackQueryHandler(on_cb))
+    # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
+    app.add_handler(CallbackQueryHandler(on_cb), group=0)
 
-    # Голос/аудио
+    # Голос/аудио — относим к медиагруппе (идёт раньше общего текстового хендлера)
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
-        app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn))
+        app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn), group=1)
 
     # === ПАТЧ 3: Текстовый выбор «Учёба / Работа / Развлечения» через on_mode_text ===
+    # УДАЛЕНО как дубль: текстовые варианты уже покрыты BTN_STUDY/BTN_WORK/BTN_FUN выше.
     # СТАВИМ ДО остальных текстовых кнопок и ДО общего текстового хендлера
     app.add_handler(MessageHandler(
         filters.TEXT & (
@@ -3511,44 +3515,51 @@ def build_application() -> "Application":
         on_mode_text
     ))
 
-    # Текстовые кнопки/ярлыки (остальные)
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:💳|🧾)?\s*Баланс$"), on_btn_balance))
-    app.add_handler(MessageHandler(
-        filters.Regex(r"^(?:⭐️?\s*)?Подписка(?:\s*[·•]\s*Помощь)?$"),
-        on_btn_plans
-    ))
-    # Оставляем совместимость с альтернативными подписями режимов (если у тебя они где-то генерятся без эмодзи/с вариациями)
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🎓\s*)?Уч[её]ба$"),     on_btn_study))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:💼\s*)?Работа$"),      on_btn_work))
-    app.add_handler(MessageHandler(filters.Regex(r"^(?:🔥\s*)?Развлечения$"), on_btn_fun))
+    # Текстовые кнопки/ярлыки (остальные) — ЧИСТО без дублей
+    import re
 
-    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста
-    app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa))
+    # Строгие паттерны: одно название = один хендлер (эмодзи допускаем, лишние пробелы — тоже)
+    BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
+    BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
+    BTN_PLANS   = re.compile(r"^\s*Подписка(?:\s*[·•]\s*Помощь)?\s*$")
+    BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
+    BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Работа\s*$")
+    BTN_FUN     = re.compile(r"^\s*(?:🔥\s*)?Развлечения\s*$")
 
-    # Медиа
+    # Кнопки в приоритетной группе (0), чтобы они срабатывали раньше любых общих обработчиков
+    app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
+    app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
+    app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
+    app.add_handler(MessageHandler(filters.Regex(BTN_STUDY),   on_btn_study),   group=0)
+    app.add_handler(MessageHandler(filters.Regex(BTN_WORK),    on_btn_work),    group=0)
+    app.add_handler(MessageHandler(filters.Regex(BTN_FUN),     on_btn_fun),     group=0)
+
+    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
+    app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
+
+    # Медиа (фото/доки/видео/гиф) — тоже перед общим текстом
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
     if photo_fn:
-        app.add_handler(MessageHandler(filters.PHOTO, photo_fn))
+        app.add_handler(MessageHandler(filters.PHOTO, photo_fn), group=1)
 
     doc_fn = _pick_first_defined("handle_doc", "on_document", "handle_document", "doc_handler")
     if doc_fn:
-        app.add_handler(MessageHandler(filters.Document.ALL, doc_fn))
+        app.add_handler(MessageHandler(filters.Document.ALL, doc_fn), group=1)
 
     video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
     if video_fn:
-        app.add_handler(MessageHandler(filters.VIDEO, video_fn))
+        app.add_handler(MessageHandler(filters.VIDEO, video_fn), group=1)
 
     gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
     if gif_fn:
-        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn))
+        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn), group=1)
 
     # >>> PATCH END <<<
 
-    # Общий текст — в самом конце
+    # Общий текст — САМЫЙ последний (ниже всех частных кейсов)
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn), group=2)
 
     # Ошибки
     err_fn = _pick_first_defined("on_error", "handle_error")
