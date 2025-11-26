@@ -3777,7 +3777,6 @@ async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await cmd_plans(update, context)
 
 async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # сначала пробуем единое меню режимов, далее фоллбек на текст
     fn = globals().get("_send_mode_menu")
     if callable(fn):
         return await fn(update, context, "study")
@@ -3824,28 +3823,11 @@ async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 0) Режимы
     if data in ("mode_work", "mode_study", "mode_fun"):
-        mode = data.split("_", 1)[1]
-        # Пытаемся открыть полноценный экран режима, иначе — показать локальное меню
-        open_mode_fn = globals().get("open_mode")
-        send_mode_menu_fn = globals().get("_send_mode_menu")
-        if callable(open_mode_fn):
-            return await open_mode_fn(update, context, mode)
-        if callable(send_mode_menu_fn):
-            return await send_mode_menu_fn(update, context, mode)
-        return await q.message.reply_text("Выбери режим ниже…")
-
-    # 0.1) Движки
+        return await open_mode(update, context, data.split("_")[1])
     if data == "engine_runway":
-        fn = globals().get("show_engine_confirm")
-        if callable(fn):
-            return await fn(update, context, "runway")
-        return await q.message.reply_text("Модуль подтверждения Runway не подключён.")
+        return await show_engine_confirm(update, context, "runway")
     if data == "engine_luma":
-        fn = globals().get("show_engine_confirm")
-        if callable(fn):
-            return await fn(update, context, "luma")
-        return await q.message.reply_text("Модуль подтверждения Luma не подключён.")
-
+        return await show_engine_confirm(update, context, "luma")
     if data == "back_home":
         context.user_data.pop("mode", None)
         return await update.effective_chat.send_message("Выбери режим ниже…")
@@ -3857,9 +3839,7 @@ async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _, tier, months_s = data.split(":", 2)
             months = int(months_s)
             payload, amount, title = _plan_payload_and_amount(tier, months)
-            ok = await _send_invoice_rub(
-                title, f"Оплата тарифа {tier.upper()} на {months} мес.", amount, payload, update
-            )
+            ok = await _send_invoice_rub(title, f"Оплата тарифа {tier.upper()} на {months} мес.", amount, payload, update)
             if not ok:
                 await q.message.reply_text("Не удалось выставить счёт по тарифу.")
         except Exception as e:
@@ -3874,9 +3854,7 @@ async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("topup:rub:"):
         try:
             rub = int(data.split(":", 2)[-1])
-            await _send_invoice_rub(
-                "Пополнение баланса", "Единый баланс (RUB→USD)", rub, f"topup:rub:{rub}", update
-            )
+            await _send_invoice_rub("Пополнение баланса", "Единый баланс (RUB→USD)", rub, f"topup:rub:{rub}", update)
         except Exception:
             await q.message.reply_text("Некорректная сумма пополнения.")
         return
@@ -3886,20 +3864,14 @@ async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
             usd = float(data.split(":", 2)[-1])
         except Exception:
             usd = 5.0
-        inv_id, pay_url, amt, asset = await _crypto_create_invoice(
-            usd, asset="USDT", description="Top-up"
-        )
+        inv_id, pay_url, amt, asset = await _crypto_create_invoice(usd, asset="USDT", description="Top-up")
         if not inv_id or not pay_url:
             return await q.message.reply_text("Не удалось создать CryptoBot-инвойс.")
         msg = await q.message.reply_text(
             f"💠 CryptoBot: {asset} ${amt:.2f}\nОплатить: {pay_url}\n\nПосле оплаты я проверю статус автоматически."
         )
         # стартуем опрос
-        context.application.create_task(
-            _poll_crypto_invoice(
-                context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, amt
-            )
-        )
+        context.application.create_task(_poll_crypto_invoice(context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, amt))
         return
 
     # 3) Фото-меню
@@ -3958,15 +3930,10 @@ async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("v_runway::"):
         prompt = data.split("::", 1)[1]
         try:
-            fn = globals().get("runway_text2video")
-            if not callable(fn):
-                return await q.message.reply_text("Runway t2v не подключён.")
-            info = await fn(prompt, 5, "16:9")
-            url = (
-                (info.get("assets") or {}).get("video")
-                or (info.get("output") or {}).get("video")
-                or (info.get("result") or {}).get("video")
-            )
+            info = await globals()["runway_text2video"](prompt, 5, "16:9")  # type: ignore[index]
+            url = ((info.get("assets") or {}).get("video")
+                   or (info.get("output") or {}).get("video")
+                   or (info.get("result") or {}).get("video"))
             return await q.message.reply_text(f"Готово! Видео (Runway): {url or 'нет ссылки в payload'}")
         except Exception as e:
             return await q.message.reply_text(f"⚠️ Runway: {e}")
@@ -3974,14 +3941,9 @@ async def cb_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("v_luma::"):
         prompt = data.split("::", 1)[1]
         try:
-            fn = globals().get("luma_text2video")
-            if not callable(fn):
-                return await q.message.reply_text("Luma t2v не подключён.")
-            info = await fn(prompt, 5, "16:9")
-            url = (
-                (info.get("assets") or {}).get("video")
-                or (info.get("output") or {}).get("video_url")
-            )
+            info = await globals()["luma_text2video"](prompt, 5, "16:9")  # type: ignore[index]
+            url = ((info.get("assets") or {}).get("video")
+                   or (info.get("output") or {}).get("video_url"))
             return await q.message.reply_text(f"Готово! Видео (Luma): {url or 'нет ссылки в payload'}")
         except Exception as e:
             return await q.message.reply_text(f"⚠️ Luma: {e}")
@@ -4004,10 +3966,7 @@ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
 async def t2v_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args) or "retro car driving at night, neon lights"
     try:
-        fn = globals().get("runway_text2video")
-        if not callable(fn):
-            return await update.message.reply_text("Runway t2v не подключён.")  # type: ignore[union-attr]
-        info = await fn(prompt, duration_s=5, aspect_ratio="16:9")
+        info = await globals()["runway_text2video"](prompt, duration_s=5, aspect_ratio="16:9")  # type: ignore[index]
         video_url = (
             (info.get("assets") or {}).get("video")
             or (info.get("output") or {}).get("video")
@@ -4016,9 +3975,7 @@ async def t2v_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if video_url:
             await update.message.reply_video(video_url)  # type: ignore[union-attr]
         else:
-            await update.message.reply_text(  # type: ignore[union-attr]
-                "Runway OK, но не нашёл ссылку в payload:\n" + json.dumps(info, ensure_ascii=False)[:2000]
-            )
+            await update.message.reply_text("Runway OK, но не нашёл ссылку в payload:\n" + json.dumps(info, ensure_ascii=False)[:2000])  # type: ignore[union-attr]
     except Exception as e:
         await update.message.reply_text(f"Runway error: {e}")  # type: ignore[union-attr]
 
@@ -4057,12 +4014,9 @@ def build_application() -> "Application":
     ]:
         _maybe_cmd(cmd, fn)
 
-    # Платежи — добавляем обработчики только если функции объявлены
-    with contextlib.suppress(Exception):
-        if callable(globals().get("on_precheckout")):
-            app.add_handler(PreCheckoutQueryHandler(globals()["on_precheckout"]))  # type: ignore[index]
-        if callable(globals().get("on_successful_payment")):
-            app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, globals()["on_successful_payment"]))  # type: ignore[index]
+    # Платежи
+    app.add_handler(PreCheckoutQueryHandler(on_precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
     # WebApp data
     with contextlib.suppress(Exception):
@@ -4072,17 +4026,12 @@ def build_application() -> "Application":
             app.add_handler(MessageHandler(filters.WEB_APP_DATA, globals()["on_webapp_data"]))  # type: ignore[index]
 
     # CallbackQuery: сначала узкие, затем catch-all
-    with contextlib.suppress(Exception):
-        if callable(globals().get("on_cb_fun")):
-            app.add_handler(CallbackQueryHandler(globals()["on_cb_fun"], pattern=r"^fun:[a-z_]+$"))  # type: ignore[index]
+    app.add_handler(CallbackQueryHandler(on_cb_fun, pattern=r"^fun:[a-z_]+$"))
     app.add_handler(CallbackQueryHandler(cb_router))  # единый роутер
 
     # Голос/аудио
-    with contextlib.suppress(Exception):
-        if callable(globals().get("on_voice")):
-            app.add_handler(MessageHandler(filters.VOICE, globals()["on_voice"]))  # type: ignore[index]
-        if callable(globals().get("on_audio")):
-            app.add_handler(MessageHandler(filters.AUDIO, globals()["on_audio"]))  # type: ignore[index]
+    app.add_handler(MessageHandler(filters.VOICE, on_voice))
+    app.add_handler(MessageHandler(filters.AUDIO, on_audio))
 
     # Текстовые ярлыки (ставим ДО общего текста)
     app.add_handler(MessageHandler(filters.Regex(r"^(?:🧠\s*)?Движки$"), on_btn_engines))
@@ -4096,18 +4045,12 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa))
 
     # Медиа
-    with contextlib.suppress(Exception):
-        if callable(globals().get("on_photo")):
-            app.add_handler(MessageHandler(filters.PHOTO, globals()["on_photo"]))  # type: ignore[index]
-        if callable(globals().get("on_doc")):
-            app.add_handler(MessageHandler(filters.Document.ALL, globals()["on_doc"]))  # type: ignore[index]
-
+    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, on_doc))
     # видео/гифы — если нужны, добавьте свои обработчики
 
     # Общий текст — в самом конце
-    with contextlib.suppress(Exception):
-        if callable(globals().get("on_text")):
-            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, globals()["on_text"]))  # type: ignore[index]
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
     # Ошибки
     app.add_error_handler(on_error)
@@ -4116,19 +4059,7 @@ def build_application() -> "Application":
 
 
 # ==== main() ==================================================================
-def _ensure_event_loop():
-    """
-    Python 3.12: asyncio.get_event_loop() требует уже установленный loop.
-    На воркерах Render его нет — создаём и устанавливаем вручную.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
 def main():
-    # Инициализация БД/таблиц — не падаем, если модулей нет
     with contextlib.suppress(Exception):
         db_init()  # type: ignore[name-defined]
     with contextlib.suppress(Exception):
@@ -4138,18 +4069,14 @@ def main():
 
     app = build_application()
 
-    USE_WEBHOOK    = bool(int(os.environ.get("USE_WEBHOOK", "0")))
-    PUBLIC_URL     = os.environ.get("PUBLIC_URL", "")
-    WEBHOOK_PATH   = os.environ.get("WEBHOOK_PATH", "/webhook")
-    WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
-    PORT           = int(os.environ.get("PORT", "8080"))
+    USE_WEBHOOK   = bool(int(os.environ.get("USE_WEBHOOK", "0")))
+    PUBLIC_URL    = os.environ.get("PUBLIC_URL", "")
+    WEBHOOK_PATH  = os.environ.get("WEBHOOK_PATH", "/webhook")
+    WEBHOOK_SECRET= os.environ.get("WEBHOOK_SECRET", "")
+    PORT          = int(os.environ.get("PORT", "8080"))
 
     if USE_WEBHOOK and PUBLIC_URL:
         log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
-
-        # На всякий случай обеспечим наличие event loop и в webhook-режиме
-        _ensure_event_loop()
-
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -4160,15 +4087,13 @@ def main():
         )
     else:
         log.info("🚀 POLLING mode.")
-
-        # ВАЖНО: не дергаем asyncio.run(delete_webhook(...)) — это создаёт/закрывает отдельный loop
-        # и ломает дальнейший запуск. Дадим PTB самому всё сделать через drop_pending_updates.
-        _ensure_event_loop()
-
+        # Удаляем webhook перед polling (без влияния на цикл событий)
+        with contextlib.suppress(Exception):
+            asyncio.run(app.bot.delete_webhook(drop_pending_updates=True))
+        # ВАЖНО: не передаём close_loop=False — иначе на Py3.12 нет текущего event loop
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,   # PTB сам удалит webhook и очистит очередь
-            # close_loop оставляем по умолчанию (True), чтобы PTB корректно управлял циклом
+            drop_pending_updates=False,
         )
 
 
