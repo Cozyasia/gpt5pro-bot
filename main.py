@@ -25,8 +25,8 @@ from telegram.ext import (
 )
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
-# ───────── TTS imports ─────────
-import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ TTS imports в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+import contextlib  # СѓР¶Рµ Сѓ С‚РµР±СЏ РІС‹С€Рµ РµСЃС‚СЊ, РґСѓР±Р»РёСЂРѕРІР°С‚СЊ РќР• РЅР°РґРѕ, РµСЃР»Рё РёРјРїРѕСЂС‚ СЃС‚РѕРёС‚
 
 # Optional PIL / rembg for photo tools
 try:
@@ -39,21 +39,36 @@ try:
 except Exception:
     rembg_remove = None
 
-# ───────── LOGGING ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ LOGGING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 log = logging.getLogger("gpt-bot")
 
-# ───────── ENV ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ ENV в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+
+def _env_float(name: str, default: float) -> float:
+    """
+    Р‘РµР·РѕРїР°СЃРЅРѕРµ С‡С‚РµРЅРёРµ float РёР· ENV:
+    - РїРѕРґРґРµСЂР¶РёРІР°РµС‚ Рё '4,99', Рё '4.99'
+    - РїСЂРё РѕС€РёР±РєРµ РІРѕР·РІСЂР°С‰Р°РµС‚ default
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return float(default)
+    raw = raw.replace(",", ".").strip()
+    try:
+        return float(raw)
+    except Exception:
+        return float(default)
 BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
 BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
 
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter РёР»Рё СЃРІРѕР№ РїСЂРѕРєСЃРё РґР»СЏ С‚РµРєСЃС‚Р°
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
@@ -97,11 +112,11 @@ LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
 LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
-# Luma Images (опционально: если нет — используем OpenAI Images как фолбэк)
+# Luma Images (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ: РµСЃР»Рё РЅРµС‚ вЂ” РёСЃРїРѕР»СЊР·СѓРµРј OpenAI Images РєР°Рє С„РѕР»Р±СЌРє)
 LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
 LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
 
-# Фолбэки Luma
+# Р¤РѕР»Р±СЌРєРё Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
     os.environ.get("LUMA_FALLBACK_BASE_URL", "")
@@ -118,36 +133,13 @@ RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.co
 RUNWAY_CREATE_PATH = "/v1/tasks"
 RUNWAY_STATUS_PATH = "/v1/tasks/{id}"
 
-def _env_float(name: str, default: float) -> float:
-    """
-    Безопасное чтение float из ENV:
-    - понимает и '4,99', и '4.99'
-    - при ошибке возвращает default
-    """
-    raw = os.environ.get(name)
-    if not raw:
-        return float(default)
-    raw = raw.replace(",", ".").strip()
-    try:
-        return float(raw)
-    except Exception:
-        return float(default)
-
-# Kling (через внешний провайдер; заголовки/пути настраиваются через ENV)
-KLING_API_KEY      = os.environ.get("KLING_API_KEY", "").strip()
-KLING_BASE_URL     = (os.environ.get("KLING_BASE_URL", "").strip().rstrip("/"))
-KLING_CREATE_PATH  = os.environ.get("KLING_CREATE_PATH", "/v1/video").strip()
-KLING_STATUS_PATH  = os.environ.get("KLING_STATUS_PATH", "/v1/video/status").strip()
-KLING_UNIT_COST_USD = _env_float("KLING_UNIT_COST_USD", 0.35)
-KLING_MAX_WAIT_S    = int((os.environ.get("KLING_MAX_WAIT_S") or "900").strip() or 900)
-
-# Таймауты
+# РўР°Р№РјР°СѓС‚С‹
 LUMA_MAX_WAIT_S     = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
 RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or 1200)
 VIDEO_POLL_DELAY_S  = float((os.environ.get("VIDEO_POLL_DELAY_S") or "6.0").strip() or 6.0)
 
-# ───────── UTILS ---------
-_LUMA_ACTIVE_BASE = None  # кэш последнего живого базового URL
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ UTILS ---------
+_LUMA_ACTIVE_BASE = None  # РєСЌС€ РїРѕСЃР»РµРґРЅРµРіРѕ Р¶РёРІРѕРіРѕ Р±Р°Р·РѕРІРѕРіРѕ URL
 
 async def _pick_luma_base(client: httpx.AsyncClient) -> str:
     global _LUMA_ACTIVE_BASE
@@ -195,7 +187,7 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("https://"):
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
 
-# ── Безлимит ──
+# в”Ђв”Ђ Р‘РµР·Р»РёРјРёС‚ в”Ђв”Ђ
 def _parse_ids_csv(s: str) -> set[int]:
     return set(int(x) for x in s.split(",") if x.strip().isdigit())
 
@@ -215,7 +207,7 @@ def is_unlimited(user_id: int, username: str | None = None) -> bool:
         return True
     return False
 
-# ── Premium page URL ──
+# в”Ђв”Ђ Premium page URL в”Ђв”Ђ
 def _make_tariff_url(src: str = "subscribe") -> str:
     base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/premium.html").strip()
     if src:
@@ -227,7 +219,7 @@ def _make_tariff_url(src: str = "subscribe") -> str:
     return base
 TARIFF_URL = _make_tariff_url("subscribe")
 
-# ── OpenAI clients ──
+# в”Ђв”Ђ OpenAI clients в”Ђв”Ђ
 from openai import OpenAI
 
 def _ascii_or_none(s: str | None):
@@ -269,7 +261,7 @@ except TypeError:
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url=IMAGES_BASE_URL)
 
-# Tavily (опционально)
+# Tavily (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
 try:
     if TAVILY_API_KEY:
         from tavily import TavilyClient
@@ -279,7 +271,7 @@ try:
 except Exception:
     tavily = None
 
-# ───────── DB: subscriptions / usage / wallet / kv ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ DB: subscriptions / usage / wallet / kv в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def db_init():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -368,7 +360,7 @@ def db_init_usage():
     )""")
     # kv store
     cur.execute("""CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)""")
-    # миграции
+    # РјРёРіСЂР°С†РёРё
     try:
         cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
     except Exception:
@@ -445,7 +437,7 @@ def _wallet_take(user_id: int, engine: str, usd: float) -> bool:
     con.commit(); con.close()
     return True
 
-# === ЕДИНЫЙ КОШЕЛЁК (USD) ===
+# === Р•Р”РРќР«Р™ РљРћРЁР•Р›РЃРљ (USD) ===
 def _wallet_total_get(user_id: int) -> float:
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (user_id,))
@@ -470,7 +462,7 @@ def _wallet_total_take(user_id: int, usd: float) -> bool:
     con.commit(); con.close()
     return True
 
-# ───────── Лимиты/цены ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р›РёРјРёС‚С‹/С†РµРЅС‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 USD_RUB = float(os.environ.get("USD_RUB", "100"))
 ONEOFF_MARKUP_DEFAULT = float(os.environ.get("ONEOFF_MARKUP_DEFAULT", "1.0"))
 ONEOFF_MARKUP_RUNWAY  = float(os.environ.get("ONEOFF_MARKUP_RUNWAY",  "0.5"))
@@ -478,7 +470,7 @@ LUMA_RES_HINT = os.environ.get("LUMA_RES", "720p").lower()
 RUNWAY_UNIT_COST_USD = float(os.environ.get("RUNWAY_UNIT_COST_USD", "7.0"))
 IMG_COST_USD = float(os.environ.get("IMG_COST_USD", "0.05"))
 
-# DEMO: free даёт попробовать ключевые движки
+# DEMO: free РґР°С‘С‚ РїРѕРїСЂРѕР±РѕРІР°С‚СЊ РєР»СЋС‡РµРІС‹Рµ РґРІРёР¶РєРё
 LIMITS = {
     "free":      {"text_per_day": 5,    "luma_budget_usd": 0.40, "runway_budget_usd": 0.0,  "img_budget_usd": 0.05, "allow_engines": ["gpt","luma","images"]},
     "start":     {"text_per_day": 200,  "luma_budget_usd": 0.8,  "runway_budget_usd": 0.0,  "img_budget_usd": 0.2,  "allow_engines": ["gpt","luma","midjourney","images"]},
@@ -526,7 +518,7 @@ def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cos
         _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
         return True, ""
 
-    # Попытка покрыть из единого кошелька
+    # РџРѕРїС‹С‚РєР° РїРѕРєСЂС‹С‚СЊ РёР· РµРґРёРЅРѕРіРѕ РєРѕС€РµР»СЊРєР°
     need = max(0.0, spent + est_cost_usd - budget)
     if need > 0:
         if _wallet_total_take(user_id, need):
@@ -538,29 +530,27 @@ def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cos
     return True, ""
 
 def _register_engine_spend(user_id: int, engine: str, usd: float):
-    # Kling учитываем по бюджету Luma, чтобы не ломать существующую схему
-    mapped = {"kling": "luma"}.get(engine, engine)
-    if mapped in ("luma", "runway", "img"):
-        _usage_update(user_id, **{f"{mapped}_usd": float(usd)})
+    if engine in ("luma","runway","img"):
+        _usage_update(user_id, **{f"{engine}_usd": float(usd)})
 
-# ───────── Prompts ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Prompts в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 SYSTEM_PROMPT = (
-    "Ты дружелюбный и лаконичный ассистент на русском. "
-    "Отвечай по сути, структурируй списками/шагами, не выдумывай факты. "
-    "Если ссылаешься на источники — в конце дай короткий список ссылок."
+    "РўС‹ РґСЂСѓР¶РµР»СЋР±РЅС‹Р№ Рё Р»Р°РєРѕРЅРёС‡РЅС‹Р№ Р°СЃСЃРёСЃС‚РµРЅС‚ РЅР° СЂСѓСЃСЃРєРѕРј. "
+    "РћС‚РІРµС‡Р°Р№ РїРѕ СЃСѓС‚Рё, СЃС‚СЂСѓРєС‚СѓСЂРёСЂСѓР№ СЃРїРёСЃРєР°РјРё/С€Р°РіР°РјРё, РЅРµ РІС‹РґСѓРјС‹РІР°Р№ С„Р°РєС‚С‹. "
+    "Р•СЃР»Рё СЃСЃС‹Р»Р°РµС€СЊСЃСЏ РЅР° РёСЃС‚РѕС‡РЅРёРєРё вЂ” РІ РєРѕРЅС†Рµ РґР°Р№ РєРѕСЂРѕС‚РєРёР№ СЃРїРёСЃРѕРє СЃСЃС‹Р»РѕРє."
 )
 VISION_SYSTEM_PROMPT = (
-    "Ты чётко описываешь содержимое изображений: объекты, текст, схемы, графики. "
-    "Не идентифицируй личности людей и не пиши имена, если они не напечатаны на изображении."
+    "РўС‹ С‡С‘С‚РєРѕ РѕРїРёСЃС‹РІР°РµС€СЊ СЃРѕРґРµСЂР¶РёРјРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёР№: РѕР±СЉРµРєС‚С‹, С‚РµРєСЃС‚, СЃС…РµРјС‹, РіСЂР°С„РёРєРё. "
+    "РќРµ РёРґРµРЅС‚РёС„РёС†РёСЂСѓР№ Р»РёС‡РЅРѕСЃС‚Рё Р»СЋРґРµР№ Рё РЅРµ РїРёС€Рё РёРјРµРЅР°, РµСЃР»Рё РѕРЅРё РЅРµ РЅР°РїРµС‡Р°С‚Р°РЅС‹ РЅР° РёР·РѕР±СЂР°Р¶РµРЅРёРё."
 )
 
-# ───────── Heuristics / intent ─────────
-_SMALLTALK_RE = re.compile(r"^(привет|здравствуй|добрый\s*(день|вечер|утро)|хи|hi|hello|как дела|спасибо|пока)\b", re.I)
-_NEWSY_RE     = re.compile(r"(когда|дата|выйдет|релиз|новост|курс|цена|прогноз|найди|официал|погода|сегодня|тренд|адрес|телефон)", re.I)
-_CAPABILITY_RE= re.compile(r"(мож(ешь|но|ете).{0,16}(анализ|распозн|читать|созда(ва)?т|дела(ть)?).{0,24}(фото|картинк|изображен|pdf|docx|epub|fb2|аудио|книг))", re.I)
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Heuristics / intent в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+_SMALLTALK_RE = re.compile(r"^(РїСЂРёРІРµС‚|Р·РґСЂР°РІСЃС‚РІСѓР№|РґРѕР±СЂС‹Р№\s*(РґРµРЅСЊ|РІРµС‡РµСЂ|СѓС‚СЂРѕ)|С…Рё|hi|hello|РєР°Рє РґРµР»Р°|СЃРїР°СЃРёР±Рѕ|РїРѕРєР°)\b", re.I)
+_NEWSY_RE     = re.compile(r"(РєРѕРіРґР°|РґР°С‚Р°|РІС‹Р№РґРµС‚|СЂРµР»РёР·|РЅРѕРІРѕСЃС‚|РєСѓСЂСЃ|С†РµРЅР°|РїСЂРѕРіРЅРѕР·|РЅР°Р№РґРё|РѕС„РёС†РёР°Р»|РїРѕРіРѕРґР°|СЃРµРіРѕРґРЅСЏ|С‚СЂРµРЅРґ|Р°РґСЂРµСЃ|С‚РµР»РµС„РѕРЅ)", re.I)
+_CAPABILITY_RE= re.compile(r"(РјРѕР¶(РµС€СЊ|РЅРѕ|РµС‚Рµ).{0,16}(Р°РЅР°Р»РёР·|СЂР°СЃРїРѕР·РЅ|С‡РёС‚Р°С‚СЊ|СЃРѕР·РґР°(РІР°)?С‚|РґРµР»Р°(С‚СЊ)?).{0,24}(С„РѕС‚Рѕ|РєР°СЂС‚РёРЅРє|РёР·РѕР±СЂР°Р¶РµРЅ|pdf|docx|epub|fb2|Р°СѓРґРёРѕ|РєРЅРёРі))", re.I)
 
-_IMG_WORDS = r"(картин\w+|изображен\w+|фото\w*|рисунк\w+|image|picture|img\b|logo|banner|poster)"
-_VID_WORDS = r"(видео|ролик\w*|анимаци\w*|shorts?|reels?|clip|video|vid\b)"
+_IMG_WORDS = r"(РєР°СЂС‚РёРЅ\w+|РёР·РѕР±СЂР°Р¶РµРЅ\w+|С„РѕС‚Рѕ\w*|СЂРёСЃСѓРЅРє\w+|image|picture|img\b|logo|banner|poster)"
+_VID_WORDS = r"(РІРёРґРµРѕ|СЂРѕР»РёРє\w*|Р°РЅРёРјР°С†Рё\w*|shorts?|reels?|clip|video|vid\b)"
 
 def is_smalltalk(text: str) -> bool:
     t = (text or "").strip().lower()
@@ -574,12 +564,12 @@ def should_browse(text: str) -> bool:
         return False
     return bool(_NEWSY_RE.search(t)) and not is_smalltalk(t)
 
-_CREATE_CMD = r"(сдела(й|йте)|созда(й|йте)|сгенериру(й|йте)|нарису(й|йте)|render|generate|create|make)"
-_PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+видео", r"^video\b", r"^reels?\b", r"^shorts?\b"]
-_PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:картин\w+|изображен\w+|фото\w+|рисунк\w+)", r"^image\b", r"^picture\b", r"^img\b"]
+_CREATE_CMD = r"(СЃРґРµР»Р°(Р№|Р№С‚Рµ)|СЃРѕР·РґР°(Р№|Р№С‚Рµ)|СЃРіРµРЅРµСЂРёСЂСѓ(Р№|Р№С‚Рµ)|РЅР°СЂРёСЃСѓ(Р№|Р№С‚Рµ)|render|generate|create|make)"
+_PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+РІРёРґРµРѕ", r"^video\b", r"^reels?\b", r"^shorts?\b"]
+_PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:РєР°СЂС‚РёРЅ\w+|РёР·РѕР±СЂР°Р¶РµРЅ\w+|С„РѕС‚Рѕ\w+|СЂРёСЃСѓРЅРє\w+)", r"^image\b", r"^picture\b", r"^img\b"]
 
 def _strip_leading(s: str) -> str:
-    return s.strip(" \n\t:—–-\"“”'«»,.()[]")
+    return s.strip(" \n\t:вЂ”вЂ“-\"вЂњвЂќ'В«В»,.()[]")
 
 def _after_match(text: str, match) -> str:
     return _strip_leading(text[match.end():])
@@ -588,7 +578,7 @@ def _looks_like_capability_question(tl: str) -> bool:
     if "?" in tl and re.search(_CAPABILITY_RE, tl):
         if not re.search(_CREATE_CMD, tl, re.I):
             return True
-    m = re.search(r"\b(ты|вы)?\s*мож(ешь|но|ете)\b", tl)
+    m = re.search(r"\b(С‚С‹|РІС‹)?\s*РјРѕР¶(РµС€СЊ|РЅРѕ|РµС‚Рµ)\b", tl)
     if m and re.search(_CAPABILITY_RE, tl) and not re.search(_CREATE_CMD, tl, re.I):
         return True
     return False
@@ -631,7 +621,7 @@ def detect_media_intent(text: str):
 
     return (None, "")
 
-# ───────── OpenAI helpers ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ OpenAI helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _oai_text_client():
     return oai_llm
 
@@ -645,11 +635,11 @@ def _pick_vision_model() -> str:
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     user_text = (user_text or "").strip()
     if not user_text:
-        return "Пустой запрос."
+        return "РџСѓСЃС‚РѕР№ Р·Р°РїСЂРѕСЃ."
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
-        messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
+        messages.append({"role": "system", "content": f"РљРѕРЅС‚РµРєСЃС‚ РёР· РІРµР±-РїРѕРёСЃРєР°:\n{web_ctx}"})
     messages.append({"role": "user", "content": user_text})
 
     last_err = None
@@ -668,11 +658,11 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
             log.warning("OpenAI/OpenRouter chat attempt %d failed: %s", attempt + 1, e)
             await asyncio.sleep(0.8 * (attempt + 1))
     log.error("ask_openai_text failed: %s", last_err)
-    return "⚠️ Сейчас не получилось получить ответ от модели. Я на связи — попробуй переформулировать запрос или повторить чуть позже."
+    return "вљ пёЏ РЎРµР№С‡Р°СЃ РЅРµ РїРѕР»СѓС‡РёР»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РѕС‚РІРµС‚ РѕС‚ РјРѕРґРµР»Рё. РЇ РЅР° СЃРІСЏР·Рё вЂ” РїРѕРїСЂРѕР±СѓР№ РїРµСЂРµС„РѕСЂРјСѓР»РёСЂРѕРІР°С‚СЊ Р·Р°РїСЂРѕСЃ РёР»Рё РїРѕРІС‚РѕСЂРёС‚СЊ С‡СѓС‚СЊ РїРѕР·Р¶Рµ."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
-        prompt = (user_text or "Опиши, что на изображении и какой там текст.").strip()
+        prompt = (user_text or "РћРїРёС€Рё, С‡С‚Рѕ РЅР° РёР·РѕР±СЂР°Р¶РµРЅРёРё Рё РєР°РєРѕР№ С‚Р°Рј С‚РµРєСЃС‚.").strip()
         model = _pick_vision_model()
         resp = _oai_text_client().chat.completions.create(
             model=model,
@@ -688,10 +678,10 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("Vision error: %s", e)
-        return "Не удалось проанализировать изображение."
+        return "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ."
 
 
-# ───────── Пользовательские настройки (TTS) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёРµ РЅР°СЃС‚СЂРѕР№РєРё (TTS) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _db_init_prefs():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -725,7 +715,7 @@ def _tts_set(user_id: int, on: bool):
     con.commit(); con.close()
 
 
-# ───────── Надёжный TTS через REST (OGG/Opus) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РќР°РґС‘Р¶РЅС‹Р№ TTS С‡РµСЂРµР· REST (OGG/Opus) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _tts_bytes_sync(text: str) -> bytes | None:
     try:
         if not OPENAI_TTS_KEY:
@@ -738,7 +728,7 @@ def _tts_bytes_sync(text: str) -> bytes | None:
             "model": OPENAI_TTS_MODEL,
             "voice": OPENAI_TTS_VOICE,
             "input": text,
-            "format": "ogg"  # OGG/Opus для Telegram voice
+            "format": "ogg"  # OGG/Opus РґР»СЏ Telegram voice
         }
         headers = {
             "Authorization": f"Bearer {OPENAI_TTS_KEY}",
@@ -764,7 +754,7 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
     if len(text) > TTS_MAX_CHARS:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text(
-                f"🔇 Озвучка выключена для этого сообщения: текст длиннее {TTS_MAX_CHARS} символов."
+                f"рџ”‡ РћР·РІСѓС‡РєР° РІС‹РєР»СЋС‡РµРЅР° РґР»СЏ СЌС‚РѕРіРѕ СЃРѕРѕР±С‰РµРЅРёСЏ: С‚РµРєСЃС‚ РґР»РёРЅРЅРµРµ {TTS_MAX_CHARS} СЃРёРјРІРѕР»РѕРІ."
             )
         return
     if not OPENAI_TTS_KEY:
@@ -775,7 +765,7 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
         audio = await asyncio.to_thread(_tts_bytes_sync, text)
         if not audio:
             with contextlib.suppress(Exception):
-                await update.effective_message.reply_text("🔇 Не удалось синтезировать голос.")
+                await update.effective_message.reply_text("рџ”‡ РќРµ СѓРґР°Р»РѕСЃСЊ СЃРёРЅС‚РµР·РёСЂРѕРІР°С‚СЊ РіРѕР»РѕСЃ.")
             return
         bio = BytesIO(audio); bio.seek(0); bio.name = "say.ogg"
         await update.effective_message.reply_voice(voice=InputFile(bio), caption=text)
@@ -784,13 +774,13 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
 
 async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, True)
-    await update.effective_message.reply_text(f"🔊 Озвучка включена. Лимит {TTS_MAX_CHARS} символов на ответ.")
+    await update.effective_message.reply_text(f"рџ”Љ РћР·РІСѓС‡РєР° РІРєР»СЋС‡РµРЅР°. Р›РёРјРёС‚ {TTS_MAX_CHARS} СЃРёРјРІРѕР»РѕРІ РЅР° РѕС‚РІРµС‚.")
 
 async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, False)
-    await update.effective_message.reply_text("🔈 Озвучка выключена.")
+    await update.effective_message.reply_text("рџ”€ РћР·РІСѓС‡РєР° РІС‹РєР»СЋС‡РµРЅР°.")
 
-# ───────── Speech-to-Text (STT) • OpenAI Whisper/4o-mini-transcribe ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Speech-to-Text (STT) вЂў OpenAI Whisper/4o-mini-transcribe в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 from openai import OpenAI as _OpenAI_STT
 
 OPENAI_STT_MODEL    = (os.getenv("OPENAI_STT_MODEL") or "whisper-1").strip()
@@ -821,7 +811,7 @@ async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
     log.error("STT failed: %s", last_err)
     return ""
 
-# ───────── Хендлер голосовых/аудио ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РҐРµРЅРґР»РµСЂ РіРѕР»РѕСЃРѕРІС‹С…/Р°СѓРґРёРѕ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 import re
 import contextlib
 from io import BytesIO
@@ -835,10 +825,10 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     audio = getattr(msg, "audio", None)
     media = voice or audio
     if not media:
-        await msg.reply_text("Не нашёл голосовой файл.")
+        await msg.reply_text("РќРµ РЅР°С€С‘Р» РіРѕР»РѕСЃРѕРІРѕР№ С„Р°Р№Р».")
         return
 
-    # Скачиваем файл из Telegram
+    # РЎРєР°С‡РёРІР°РµРј С„Р°Р№Р» РёР· Telegram
     try:
         with contextlib.suppress(Exception):
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
@@ -862,31 +852,31 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         try:
-            log.exception("TG download error: %s", e)  # если log определён выше
+            log.exception("TG download error: %s", e)  # РµСЃР»Рё log РѕРїСЂРµРґРµР»С‘РЅ РІС‹С€Рµ
         except Exception:
             pass
-        await msg.reply_text("Не удалось скачать голосовое сообщение.")
+        await msg.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ РіРѕР»РѕСЃРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ.")
         return
 
-    # Транскрибируем
+    # РўСЂР°РЅСЃРєСЂРёР±РёСЂСѓРµРј
     transcript = await _stt_transcribe_bytes(filename, raw)
     if not transcript:
-        await msg.reply_text("Ошибка при распознавании речи.")
+        await msg.reply_text("РћС€РёР±РєР° РїСЂРё СЂР°СЃРїРѕР·РЅР°РІР°РЅРёРё СЂРµС‡Рё.")
         return
 
     transcript = transcript.strip()
 
-    # (опционально) подтвердим распознавание для UX/отладки
+    # (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ) РїРѕРґС‚РІРµСЂРґРёРј СЂР°СЃРїРѕР·РЅР°РІР°РЅРёРµ РґР»СЏ UX/РѕС‚Р»Р°РґРєРё
     with contextlib.suppress(Exception):
         if transcript:
-            await msg.reply_text(f"🗣️ Распознал: {transcript}")
+            await msg.reply_text(f"рџ—ЈпёЏ Р Р°СЃРїРѕР·РЅР°Р»: {transcript}")
 
-    # Пробрасываем как обычный текст — дальше сработает on_text со всей твоей маршрутизацией
-    # (detect_media_intent, выбор Luma/Runway, /img и т.д.)
+    # РџСЂРѕР±СЂР°СЃС‹РІР°РµРј РєР°Рє РѕР±С‹С‡РЅС‹Р№ С‚РµРєСЃС‚ вЂ” РґР°Р»СЊС€Рµ СЃСЂР°Р±РѕС‚Р°РµС‚ on_text СЃРѕ РІСЃРµР№ С‚РІРѕРµР№ РјР°СЂС€СЂСѓС‚РёР·Р°С†РёРµР№
+    # (detect_media_intent, РІС‹Р±РѕСЂ Luma/Runway, /img Рё С‚.Рґ.)
     update.message.text = transcript
     await on_text(update, context)
 
-# ───────── Извлечение текста из документов ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РР·РІР»РµС‡РµРЅРёРµ С‚РµРєСЃС‚Р° РёР· РґРѕРєСѓРјРµРЅС‚РѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _safe_decode_txt(b: bytes) -> str:
     for enc in ("utf-8","cp1251","latin-1"):
         try:
@@ -984,12 +974,12 @@ def extract_text_from_document(data: bytes, filename: str) -> tuple[str, str]:
     return decoded if decoded else "", "UNKNOWN"
 
 
-# ───────── Суммаризация длинных текстов ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РЎСѓРјРјР°СЂРёР·Р°С†РёСЏ РґР»РёРЅРЅС‹С… С‚РµРєСЃС‚РѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def _summarize_chunk(text: str, query: str | None = None) -> str:
-    prefix = "Суммируй кратко по пунктам основное из фрагмента документа на русском:\n"
+    prefix = "РЎСѓРјРјРёСЂСѓР№ РєСЂР°С‚РєРѕ РїРѕ РїСѓРЅРєС‚Р°Рј РѕСЃРЅРѕРІРЅРѕРµ РёР· С„СЂР°РіРјРµРЅС‚Р° РґРѕРєСѓРјРµРЅС‚Р° РЅР° СЂСѓСЃСЃРєРѕРј:\n"
     if query:
-        prefix = (f"Суммируй фрагмент с учётом цели: {query}\n"
-                  f"Дай основные тезисы, факты, цифры. Русский язык.\n")
+        prefix = (f"РЎСѓРјРјРёСЂСѓР№ С„СЂР°РіРјРµРЅС‚ СЃ СѓС‡С‘С‚РѕРј С†РµР»Рё: {query}\n"
+                  f"Р”Р°Р№ РѕСЃРЅРѕРІРЅС‹Рµ С‚РµР·РёСЃС‹, С„Р°РєС‚С‹, С†РёС„СЂС‹. Р СѓСЃСЃРєРёР№ СЏР·С‹Рє.\n")
     prompt = prefix + text
     return await ask_openai_text(prompt)
 
@@ -1003,13 +993,13 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
     while i < len(text) and len(parts) < 8:
         parts.append(text[i:i+max_chunk]); i += max_chunk
     partials = [await _summarize_chunk(p, query=query) for p in parts]
-    combined = "\n\n".join(f"- Фрагмент {idx+1}:\n{s}" for idx, s in enumerate(partials))
-    final_prompt = ("Объедини тезисы по фрагментам в цельное резюме документа: 1) 5–10 главных пунктов; "
-                    "2) ключевые цифры/сроки; 3) вывод/рекомендации. Русский язык.\n\n" + combined)
+    combined = "\n\n".join(f"- Р¤СЂР°РіРјРµРЅС‚ {idx+1}:\n{s}" for idx, s in enumerate(partials))
+    final_prompt = ("РћР±СЉРµРґРёРЅРё С‚РµР·РёСЃС‹ РїРѕ С„СЂР°РіРјРµРЅС‚Р°Рј РІ С†РµР»СЊРЅРѕРµ СЂРµР·СЋРјРµ РґРѕРєСѓРјРµРЅС‚Р°: 1) 5вЂ“10 РіР»Р°РІРЅС‹С… РїСѓРЅРєС‚РѕРІ; "
+                    "2) РєР»СЋС‡РµРІС‹Рµ С†РёС„СЂС‹/СЃСЂРѕРєРё; 3) РІС‹РІРѕРґ/СЂРµРєРѕРјРµРЅРґР°С†РёРё. Р СѓСЃСЃРєРёР№ СЏР·С‹Рє.\n\n" + combined)
     return await ask_openai_text(final_prompt)
 
 
-# ======= Анализ документов (PDF/EPUB/DOCX/FB2/TXT) =======
+# ======= РђРЅР°Р»РёР· РґРѕРєСѓРјРµРЅС‚РѕРІ (PDF/EPUB/DOCX/FB2/TXT) =======
 async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.document:
@@ -1019,33 +1009,33 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = await tg_file.download_as_bytearray()
         text, kind = extract_text_from_document(bytes(data), doc.file_name or "file")
         if not text.strip():
-            await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
+            await update.effective_message.reply_text(f"РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РІР»РµС‡СЊ С‚РµРєСЃС‚ РёР· {kind}.")
             return
         goal = (update.message.caption or "").strip() or None
-        await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
+        await update.effective_message.reply_text(f"рџ“„ РР·РІР»РµРєР°СЋ С‚РµРєСЃС‚ ({kind}), РіРѕС‚РѕРІР»СЋ РєРѕРЅСЃРїРµРєС‚вЂ¦")
         summary = await summarize_long_text(text, query=goal)
-        summary = summary or "Готово."
+        summary = summary or "Р“РѕС‚РѕРІРѕ."
         await update.effective_message.reply_text(summary)
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc_analyze error: %s", e)
-    # ничего не бросаем наружу
+    # РЅРёС‡РµРіРѕ РЅРµ Р±СЂРѕСЃР°РµРј РЅР°СЂСѓР¶Сѓ
 
-# ───────── OpenAI Images (генерация картинок) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ OpenAI Images (РіРµРЅРµСЂР°С†РёСЏ РєР°СЂС‚РёРЅРѕРє) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
         resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
         b64 = resp.data[0].b64_json
         img_bytes = base64.b64decode(b64)
-        await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
+        await update.effective_message.reply_photo(photo=img_bytes, caption=f"Р“РѕС‚РѕРІРѕ вњ…\nР—Р°РїСЂРѕСЃ: {prompt}")
     except Exception as e:
         log.exception("IMG gen error: %s", e)
-        await update.effective_message.reply_text("Не удалось создать изображение.")
+        await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.")
 
 async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
     if not LUMA_IMG_BASE_URL or not LUMA_API_KEY:
-        # фолбэк: OpenAI Images
+        # С„РѕР»Р±СЌРє: OpenAI Images
         try:
             resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
             return base64.b64decode(resp.data[0].b64_json)
@@ -1053,7 +1043,7 @@ async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
             log.exception("OpenAI images fallback error: %s", e)
             return None
     try:
-        # Примерный эндпоинт; если у тебя другой — замени path/поля под свой аккаунт.
+        # РџСЂРёРјРµСЂРЅС‹Р№ СЌРЅРґРїРѕРёРЅС‚; РµСЃР»Рё Сѓ С‚РµР±СЏ РґСЂСѓРіРѕР№ вЂ” Р·Р°РјРµРЅРё path/РїРѕР»СЏ РїРѕРґ СЃРІРѕР№ Р°РєРєР°СѓРЅС‚.
         url = f"{LUMA_IMG_BASE_URL}/v1/images"
         headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"}
         payload = {"model": LUMA_IMG_MODEL, "prompt": prompt, "size": "1024x1024"}
@@ -1072,154 +1062,154 @@ async def _start_luma_img(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
     async def _go():
         img = await _luma_generate_image_bytes(prompt)
         if not img:
-            await update.effective_message.reply_text("Не удалось создать изображение.")
+            await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.")
             return
-        await update.effective_message.reply_photo(photo=img, caption=f"🖌 Готово ✅\nЗапрос: {prompt}")
+        await update.effective_message.reply_photo(photo=img, caption=f"рџ–Њ Р“РѕС‚РѕРІРѕ вњ…\nР—Р°РїСЂРѕСЃ: {prompt}")
     await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go,
                            remember_kind="luma_img", remember_payload={"prompt": prompt})
 
 
-# ───────── UI / тексты ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ UI / С‚РµРєСЃС‚С‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 START_TEXT = (
-    "Привет! Я Нейро-Bot — ⚡️ мультирежимный бот из 7 нейросетей для 🎓 учёбы, 💼 работы и 🔥 развлечений.\n"
-    "Я умею работать гибридно: могу сам выбрать лучший движок под задачу или дать тебе выбрать вручную. 🤝🧠\n"
+    "РџСЂРёРІРµС‚! РЇ РќРµР№СЂРѕ-Bot вЂ” вљЎпёЏ РјСѓР»СЊС‚РёСЂРµР¶РёРјРЅС‹Р№ Р±РѕС‚ РёР· 7 РЅРµР№СЂРѕСЃРµС‚РµР№ РґР»СЏ рџЋ“ СѓС‡С‘Р±С‹, рџ’ј СЂР°Р±РѕС‚С‹ Рё рџ”Ґ СЂР°Р·РІР»РµС‡РµРЅРёР№.\n"
+    "РЇ СѓРјРµСЋ СЂР°Р±РѕС‚Р°С‚СЊ РіРёР±СЂРёРґРЅРѕ: РјРѕРіСѓ СЃР°Рј РІС‹Р±СЂР°С‚СЊ Р»СѓС‡С€РёР№ РґРІРёР¶РѕРє РїРѕРґ Р·Р°РґР°С‡Сѓ РёР»Рё РґР°С‚СЊ С‚РµР±Рµ РІС‹Р±СЂР°С‚СЊ РІСЂСѓС‡РЅСѓСЋ. рџ¤ќрџ§ \n"
     "\n"
-    "✨ Главные режимы:\n"
+    "вњЁ Р“Р»Р°РІРЅС‹Рµ СЂРµР¶РёРјС‹:\n"
     "\n"
     "\n"
-    "• 🎓 Учёба — объяснения с примерами, пошаговые решения задач, эссе/реферат/доклад, мини-квизы.\n"
-    "📚 Также: разбор учебных PDF/электронных книг, шпаргалки и конспекты, конструктор тестов;\n"
-    "🎧 тайм-коды по аудиокнигам/лекциям и краткие выжимки. 🧩\n"
+    "вЂў рџЋ“ РЈС‡С‘Р±Р° вЂ” РѕР±СЉСЏСЃРЅРµРЅРёСЏ СЃ РїСЂРёРјРµСЂР°РјРё, РїРѕС€Р°РіРѕРІС‹Рµ СЂРµС€РµРЅРёСЏ Р·Р°РґР°С‡, СЌСЃСЃРµ/СЂРµС„РµСЂР°С‚/РґРѕРєР»Р°Рґ, РјРёРЅРё-РєРІРёР·С‹.\n"
+    "рџ“љ РўР°РєР¶Рµ: СЂР°Р·Р±РѕСЂ СѓС‡РµР±РЅС‹С… PDF/СЌР»РµРєС‚СЂРѕРЅРЅС‹С… РєРЅРёРі, С€РїР°СЂРіР°Р»РєРё Рё РєРѕРЅСЃРїРµРєС‚С‹, РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ С‚РµСЃС‚РѕРІ;\n"
+    "рџЋ§ С‚Р°Р№Рј-РєРѕРґС‹ РїРѕ Р°СѓРґРёРѕРєРЅРёРіР°Рј/Р»РµРєС†РёСЏРј Рё РєСЂР°С‚РєРёРµ РІС‹Р¶РёРјРєРё. рџ§©\n"
     "\n"
-    "• 💼 Работа — письма/брифы/документы, аналитика и резюме материалов, ToDo/планы, генератор идей.\n"
-    "🛠️ Для архитектора/дизайнера/проектировщика: структурирование ТЗ, чек-листы стадий,\n"
-    "🗂️ названия/описания листов, сводные таблицы из текстов, оформление пояснительных записок. 📊\n"
+    "вЂў рџ’ј Р Р°Р±РѕС‚Р° вЂ” РїРёСЃСЊРјР°/Р±СЂРёС„С‹/РґРѕРєСѓРјРµРЅС‚С‹, Р°РЅР°Р»РёС‚РёРєР° Рё СЂРµР·СЋРјРµ РјР°С‚РµСЂРёР°Р»РѕРІ, ToDo/РїР»Р°РЅС‹, РіРµРЅРµСЂР°С‚РѕСЂ РёРґРµР№.\n"
+    "рџ› пёЏ Р”Р»СЏ Р°СЂС…РёС‚РµРєС‚РѕСЂР°/РґРёР·Р°Р№РЅРµСЂР°/РїСЂРѕРµРєС‚РёСЂРѕРІС‰РёРєР°: СЃС‚СЂСѓРєС‚СѓСЂРёСЂРѕРІР°РЅРёРµ РўР—, С‡РµРє-Р»РёСЃС‚С‹ СЃС‚Р°РґРёР№,\n"
+    "рџ—‚пёЏ РЅР°Р·РІР°РЅРёСЏ/РѕРїРёСЃР°РЅРёСЏ Р»РёСЃС‚РѕРІ, СЃРІРѕРґРЅС‹Рµ С‚Р°Р±Р»РёС†С‹ РёР· С‚РµРєСЃС‚РѕРІ, РѕС„РѕСЂРјР»РµРЅРёРµ РїРѕСЏСЃРЅРёС‚РµР»СЊРЅС‹С… Р·Р°РїРёСЃРѕРє. рџ“Љ\n"
     "\n"
-    "• 🔥 Развлечения — фото-мастерская (удаление/замена фона, дорисовка, outpaint), оживление старых фото,\n"
-    "🎬 видео по тексту/голосу, идеи и форматы для Reels/Shorts, авто-нарезка из длинных видео\n"
-    "(сценарий/тайм-коды), мемы/квизы. 🖼️🪄\n"
+    "вЂў рџ”Ґ Р Р°Р·РІР»РµС‡РµРЅРёСЏ вЂ” С„РѕС‚Рѕ-РјР°СЃС‚РµСЂСЃРєР°СЏ (СѓРґР°Р»РµРЅРёРµ/Р·Р°РјРµРЅР° С„РѕРЅР°, РґРѕСЂРёСЃРѕРІРєР°, outpaint), РѕР¶РёРІР»РµРЅРёРµ СЃС‚Р°СЂС‹С… С„РѕС‚Рѕ,\n"
+    "рџЋ¬ РІРёРґРµРѕ РїРѕ С‚РµРєСЃС‚Сѓ/РіРѕР»РѕСЃСѓ, РёРґРµРё Рё С„РѕСЂРјР°С‚С‹ РґР»СЏ Reels/Shorts, Р°РІС‚Рѕ-РЅР°СЂРµР·РєР° РёР· РґР»РёРЅРЅС‹С… РІРёРґРµРѕ\n"
+    "(СЃС†РµРЅР°СЂРёР№/С‚Р°Р№Рј-РєРѕРґС‹), РјРµРјС‹/РєРІРёР·С‹. рџ–јпёЏрџЄ„\n"
     "\n"
-    "🧭 Как пользоваться:\n"
-    "просто выбери режим кнопкой ниже или напиши запрос — я сам определю задачу и предложу варианты. ✍️✨\n"
+    "рџ§­ РљР°Рє РїРѕР»СЊР·РѕРІР°С‚СЊСЃСЏ:\n"
+    "РїСЂРѕСЃС‚Рѕ РІС‹Р±РµСЂРё СЂРµР¶РёРј РєРЅРѕРїРєРѕР№ РЅРёР¶Рµ РёР»Рё РЅР°РїРёС€Рё Р·Р°РїСЂРѕСЃ вЂ” СЏ СЃР°Рј РѕРїСЂРµРґРµР»СЋ Р·Р°РґР°С‡Сѓ Рё РїСЂРµРґР»РѕР¶Сѓ РІР°СЂРёР°РЅС‚С‹. вњЌпёЏвњЁ\n"
     "\n"
-    "🧠 Кнопка «Движки»:\n"
-    "для точного выбора, какую нейросеть использовать принудительно. 🎯🤖"
+    "рџ§  РљРЅРѕРїРєР° В«Р”РІРёР¶РєРёВ»:\n"
+    "РґР»СЏ С‚РѕС‡РЅРѕРіРѕ РІС‹Р±РѕСЂР°, РєР°РєСѓСЋ РЅРµР№СЂРѕСЃРµС‚СЊ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕ. рџЋЇрџ¤–"
 )
 
 def engines_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💬 GPT (текст/фото/документы)", callback_data="engine:gpt")],
-        [InlineKeyboardButton("🖼 Images (OpenAI)",             callback_data="engine:images")],
-        [InlineKeyboardButton("🎬 Luma — короткие видео",       callback_data="engine:luma")],
-        [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
-        [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
-        [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
+        [InlineKeyboardButton("рџ’¬ GPT (С‚РµРєСЃС‚/С„РѕС‚Рѕ/РґРѕРєСѓРјРµРЅС‚С‹)", callback_data="engine:gpt")],
+        [InlineKeyboardButton("рџ–ј Images (OpenAI)",             callback_data="engine:images")],
+        [InlineKeyboardButton("рџЋ¬ Luma вЂ” РєРѕСЂРѕС‚РєРёРµ РІРёРґРµРѕ",       callback_data="engine:luma")],
+        [InlineKeyboardButton("рџЋҐ Runway вЂ” РїСЂРµРјРёСѓРј-РІРёРґРµРѕ",      callback_data="engine:runway")],
+        [InlineKeyboardButton("рџЋЁ Midjourney (РёР·РѕР±СЂР°Р¶РµРЅРёСЏ)",    callback_data="engine:midjourney")],
+        [InlineKeyboardButton("рџ—Ј STT/TTS вЂ” СЂРµС‡СЊв†”С‚РµРєСЃС‚",        callback_data="engine:stt_tts")],
     ])
 
-# ───────── MODES (Учёба / Работа / Развлечения) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ MODES (РЈС‡С‘Р±Р° / Р Р°Р±РѕС‚Р° / Р Р°Р·РІР»РµС‡РµРЅРёСЏ) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 
-# Текст корневого меню режимов
+# РўРµРєСЃС‚ РєРѕСЂРЅРµРІРѕРіРѕ РјРµРЅСЋ СЂРµР¶РёРјРѕРІ
 def _modes_root_text() -> str:
     return (
-        "Выберите режим работы. В каждом режиме бот использует гибрид движков:\n"
-        "• GPT-5 (текст/логика) + Vision (фото) + STT/TTS (голос)\n"
-        "• Luma/Runway — видео, Midjourney — изображения\n\n"
-        "Можете также просто написать свободный запрос — бот поймёт."
+        "Р’С‹Р±РµСЂРёС‚Рµ СЂРµР¶РёРј СЂР°Р±РѕС‚С‹. Р’ РєР°Р¶РґРѕРј СЂРµР¶РёРјРµ Р±РѕС‚ РёСЃРїРѕР»СЊР·СѓРµС‚ РіРёР±СЂРёРґ РґРІРёР¶РєРѕРІ:\n"
+        "вЂў GPT-5 (С‚РµРєСЃС‚/Р»РѕРіРёРєР°) + Vision (С„РѕС‚Рѕ) + STT/TTS (РіРѕР»РѕСЃ)\n"
+        "вЂў Luma/Runway вЂ” РІРёРґРµРѕ, Midjourney вЂ” РёР·РѕР±СЂР°Р¶РµРЅРёСЏ\n\n"
+        "РњРѕР¶РµС‚Рµ С‚Р°РєР¶Рµ РїСЂРѕСЃС‚Рѕ РЅР°РїРёСЃР°С‚СЊ СЃРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ вЂ” Р±РѕС‚ РїРѕР№РјС‘С‚."
     )
 
 def modes_root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🎓 Учёба", callback_data="mode:study"),
-            InlineKeyboardButton("💼 Работа", callback_data="mode:work"),
-            InlineKeyboardButton("🔥 Развлечения", callback_data="mode:fun"),
+            InlineKeyboardButton("рџЋ“ РЈС‡С‘Р±Р°", callback_data="mode:study"),
+            InlineKeyboardButton("рџ’ј Р Р°Р±РѕС‚Р°", callback_data="mode:work"),
+            InlineKeyboardButton("рџ”Ґ Р Р°Р·РІР»РµС‡РµРЅРёСЏ", callback_data="mode:fun"),
         ],
     ])
 
-# ── Описание и подменю по режимам
+# в”Ђв”Ђ РћРїРёСЃР°РЅРёРµ Рё РїРѕРґРјРµРЅСЋ РїРѕ СЂРµР¶РёРјР°Рј
 def _mode_desc(key: str) -> str:
     if key == "study":
         return (
-            "🎓 *Учёба*\n"
-            "Гибрид: GPT-5 для объяснений/конспектов, Vision для фото-задач, "
-            "STT/TTS для голосовых, + Midjourney (иллюстрации) и Luma/Runway (учебные ролики).\n\n"
-            "Быстрые действия ниже. Можно написать свободный запрос (например: "
-            "«сделай конспект из PDF», «объясни интегралы с примерами»)."
+            "рџЋ“ *РЈС‡С‘Р±Р°*\n"
+            "Р“РёР±СЂРёРґ: GPT-5 РґР»СЏ РѕР±СЉСЏСЃРЅРµРЅРёР№/РєРѕРЅСЃРїРµРєС‚РѕРІ, Vision РґР»СЏ С„РѕС‚Рѕ-Р·Р°РґР°С‡, "
+            "STT/TTS РґР»СЏ РіРѕР»РѕСЃРѕРІС‹С…, + Midjourney (РёР»Р»СЋСЃС‚СЂР°С†РёРё) Рё Luma/Runway (СѓС‡РµР±РЅС‹Рµ СЂРѕР»РёРєРё).\n\n"
+            "Р‘С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ РЅРёР¶Рµ. РњРѕР¶РЅРѕ РЅР°РїРёСЃР°С‚СЊ СЃРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ (РЅР°РїСЂРёРјРµСЂ: "
+            "В«СЃРґРµР»Р°Р№ РєРѕРЅСЃРїРµРєС‚ РёР· PDFВ», В«РѕР±СЉСЏСЃРЅРё РёРЅС‚РµРіСЂР°Р»С‹ СЃ РїСЂРёРјРµСЂР°РјРёВ»)."
         )
     if key == "work":
         return (
-            "💼 *Работа*\n"
-            "Гибрид: GPT-5 (резюме/письма/аналитика), Vision (таблицы/скрины), "
-            "STT/TTS (диктовка/озвучка), + Midjourney (визуалы), Luma/Runway (презентационные ролики).\n\n"
-            "Быстрые действия ниже. Можно написать свободный запрос (например: "
-            "«адаптируй резюме под вакансию PM», «написать коммерческое предложение»)."
+            "рџ’ј *Р Р°Р±РѕС‚Р°*\n"
+            "Р“РёР±СЂРёРґ: GPT-5 (СЂРµР·СЋРјРµ/РїРёСЃСЊРјР°/Р°РЅР°Р»РёС‚РёРєР°), Vision (С‚Р°Р±Р»РёС†С‹/СЃРєСЂРёРЅС‹), "
+            "STT/TTS (РґРёРєС‚РѕРІРєР°/РѕР·РІСѓС‡РєР°), + Midjourney (РІРёР·СѓР°Р»С‹), Luma/Runway (РїСЂРµР·РµРЅС‚Р°С†РёРѕРЅРЅС‹Рµ СЂРѕР»РёРєРё).\n\n"
+            "Р‘С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ РЅРёР¶Рµ. РњРѕР¶РЅРѕ РЅР°РїРёСЃР°С‚СЊ СЃРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ (РЅР°РїСЂРёРјРµСЂ: "
+            "В«Р°РґР°РїС‚РёСЂСѓР№ СЂРµР·СЋРјРµ РїРѕРґ РІР°РєР°РЅСЃРёСЋ PMВ», В«РЅР°РїРёСЃР°С‚СЊ РєРѕРјРјРµСЂС‡РµСЃРєРѕРµ РїСЂРµРґР»РѕР¶РµРЅРёРµВ»)."
         )
     if key == "fun":
         return (
-            "🔥 *Развлечения*\n"
-            "Гибрид: GPT-5 (идеи, сценарии), Midjourney (картинки), Luma/Runway (шорты/риелсы), "
-            "STT/TTS (озвучка). Всё для быстрых творческих штук.\n\n"
-            "Быстрые действия ниже. Можно написать свободный запрос (например: "
-            "«сделай сценарий 30-сек шорта про кота-бариста»)."
+            "рџ”Ґ *Р Р°Р·РІР»РµС‡РµРЅРёСЏ*\n"
+            "Р“РёР±СЂРёРґ: GPT-5 (РёРґРµРё, СЃС†РµРЅР°СЂРёРё), Midjourney (РєР°СЂС‚РёРЅРєРё), Luma/Runway (С€РѕСЂС‚С‹/СЂРёРµР»СЃС‹), "
+            "STT/TTS (РѕР·РІСѓС‡РєР°). Р’СЃС‘ РґР»СЏ Р±С‹СЃС‚СЂС‹С… С‚РІРѕСЂС‡РµСЃРєРёС… С€С‚СѓРє.\n\n"
+            "Р‘С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ РЅРёР¶Рµ. РњРѕР¶РЅРѕ РЅР°РїРёСЃР°С‚СЊ СЃРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ (РЅР°РїСЂРёРјРµСЂ: "
+            "В«СЃРґРµР»Р°Р№ СЃС†РµРЅР°СЂРёР№ 30-СЃРµРє С€РѕСЂС‚Р° РїСЂРѕ РєРѕС‚Р°-Р±Р°СЂРёСЃС‚Р°В»)."
         )
-    return "Режим не найден."
+    return "Р РµР¶РёРј РЅРµ РЅР°Р№РґРµРЅ."
 
 def _mode_kb(key: str) -> InlineKeyboardMarkup:
     if key == "study":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("📚 Конспект из PDF/EPUB/DOCX", callback_data="act:study:pdf_summary")],
-            [InlineKeyboardButton("🔍 Объяснение темы",            callback_data="act:study:explain"),
-             InlineKeyboardButton("🧮 Решение задач",              callback_data="act:study:tasks")],
-            [InlineKeyboardButton("✍️ Эссе/реферат/доклад",       callback_data="act:study:essay"),
-             InlineKeyboardButton("📝 План к экзамену",           callback_data="act:study:exam_plan")],
+            [InlineKeyboardButton("рџ“љ РљРѕРЅСЃРїРµРєС‚ РёР· PDF/EPUB/DOCX", callback_data="act:study:pdf_summary")],
+            [InlineKeyboardButton("рџ”Ќ РћР±СЉСЏСЃРЅРµРЅРёРµ С‚РµРјС‹",            callback_data="act:study:explain"),
+             InlineKeyboardButton("рџ§® Р РµС€РµРЅРёРµ Р·Р°РґР°С‡",              callback_data="act:study:tasks")],
+            [InlineKeyboardButton("вњЌпёЏ Р­СЃСЃРµ/СЂРµС„РµСЂР°С‚/РґРѕРєР»Р°Рґ",       callback_data="act:study:essay"),
+             InlineKeyboardButton("рџ“ќ РџР»Р°РЅ Рє СЌРєР·Р°РјРµРЅСѓ",           callback_data="act:study:exam_plan")],
             [
-                InlineKeyboardButton("🎬 Runway",       callback_data="act:open:runway"),
-                InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
-                InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
+                InlineKeyboardButton("рџЋ¬ Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("рџЋЁ Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("рџ—Ј STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+            [InlineKeyboardButton("рџ“ќ РЎРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ", callback_data="act:free")],
+            [InlineKeyboardButton("в¬…пёЏ РќР°Р·Р°Рґ", callback_data="mode:root")],
         ])
 
     if key == "work":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("📄 Письмо/документ",            callback_data="act:work:doc"),
-             InlineKeyboardButton("📊 Аналитика/сводка",           callback_data="act:work:report")],
-            [InlineKeyboardButton("🗂 План/ToDo",                  callback_data="act:work:plan"),
-             InlineKeyboardButton("💡 Идеи/бриф",                 callback_data="act:work:idea")],
+            [InlineKeyboardButton("рџ“„ РџРёСЃСЊРјРѕ/РґРѕРєСѓРјРµРЅС‚",            callback_data="act:work:doc"),
+             InlineKeyboardButton("рџ“Љ РђРЅР°Р»РёС‚РёРєР°/СЃРІРѕРґРєР°",           callback_data="act:work:report")],
+            [InlineKeyboardButton("рџ—‚ РџР»Р°РЅ/ToDo",                  callback_data="act:work:plan"),
+             InlineKeyboardButton("рџ’Ў РРґРµРё/Р±СЂРёС„",                 callback_data="act:work:idea")],
             [
-                InlineKeyboardButton("🎬 Runway",       callback_data="act:open:runway"),
-                InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
-                InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
+                InlineKeyboardButton("рџЋ¬ Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("рџЋЁ Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("рџ—Ј STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+            [InlineKeyboardButton("рџ“ќ РЎРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ", callback_data="act:free")],
+            [InlineKeyboardButton("в¬…пёЏ РќР°Р·Р°Рґ", callback_data="mode:root")],
         ])
 
     if key == "fun":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎭 Идеи для досуга",             callback_data="act:fun:ideas")],
-            [InlineKeyboardButton("🎬 Сценарий шорта",              callback_data="act:fun:shorts")],
-            [InlineKeyboardButton("🎮 Игры/квиз",                   callback_data="act:fun:games")],
+            [InlineKeyboardButton("рџЋ­ РРґРµРё РґР»СЏ РґРѕСЃСѓРіР°",             callback_data="act:fun:ideas")],
+            [InlineKeyboardButton("рџЋ¬ РЎС†РµРЅР°СЂРёР№ С€РѕСЂС‚Р°",              callback_data="act:fun:shorts")],
+            [InlineKeyboardButton("рџЋ® РРіСЂС‹/РєРІРёР·",                   callback_data="act:fun:games")],
             [
-                InlineKeyboardButton("🎬 Runway",       callback_data="act:open:runway"),
-                InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
-                InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
+                InlineKeyboardButton("рџЋ¬ Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("рџЋЁ Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("рџ—Ј STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+            [InlineKeyboardButton("рџ“ќ РЎРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ", callback_data="act:free")],
+            [InlineKeyboardButton("в¬…пёЏ РќР°Р·Р°Рґ", callback_data="mode:root")],
         ])
 
     return modes_root_kb()
 
-# Показать выбранный режим (используется и для callback, и для текста)
+# РџРѕРєР°Р·Р°С‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ СЂРµР¶РёРј (РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Рё РґР»СЏ callback, Рё РґР»СЏ С‚РµРєСЃС‚Р°)
 async def _send_mode_menu(update, context, key: str):
     text = _mode_desc(key)
     kb = _mode_kb(key)
-    # Если пришли из callback — редактируем; если текстом — шлём новым сообщением
+    # Р•СЃР»Рё РїСЂРёС€Р»Рё РёР· callback вЂ” СЂРµРґР°РєС‚РёСЂСѓРµРј; РµСЃР»Рё С‚РµРєСЃС‚РѕРј вЂ” С€Р»С‘Рј РЅРѕРІС‹Рј СЃРѕРѕР±С‰РµРЅРёРµРј
     if getattr(update, "callback_query", None):
         q = update.callback_query
         await q.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
@@ -1227,13 +1217,13 @@ async def _send_mode_menu(update, context, key: str):
     else:
         await update.effective_message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
-# Обработчик callback по режимам
+# РћР±СЂР°Р±РѕС‚С‡РёРє callback РїРѕ СЂРµР¶РёРјР°Рј
 async def on_mode_cb(update, context):
     q = update.callback_query
     data = (q.data or "").strip()
     uid = q.from_user.id
 
-    # Навигация
+    # РќР°РІРёРіР°С†РёСЏ
     if data == "mode:root":
         await q.edit_message_text(_modes_root_text(), reply_markup=modes_root_kb())
         await q.answer(); return
@@ -1243,22 +1233,22 @@ async def on_mode_cb(update, context):
         await _send_mode_menu(update, context, key)
         return
 
-    # Свободный ввод из подменю
+    # РЎРІРѕР±РѕРґРЅС‹Р№ РІРІРѕРґ РёР· РїРѕРґРјРµРЅСЋ
     if data == "act:free":
         await q.answer()
         await q.edit_message_text(
-            "📝 Напишите свободный запрос ниже текстом или голосом — я подстроюсь.",
+            "рџ“ќ РќР°РїРёС€РёС‚Рµ СЃРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ РЅРёР¶Рµ С‚РµРєСЃС‚РѕРј РёР»Рё РіРѕР»РѕСЃРѕРј вЂ” СЏ РїРѕРґСЃС‚СЂРѕСЋСЃСЊ.",
             reply_markup=modes_root_kb(),
         )
         return
 
-    # === Учёба
+    # === РЈС‡С‘Р±Р°
     if data == "act:study:pdf_summary":
         await q.answer()
         _mode_track_set(uid, "pdf_summary")
         await q.edit_message_text(
-            "📚 Пришлите PDF/EPUB/DOCX/FB2/TXT — сделаю структурированный конспект.\n"
-            "Можно в подписи указать цель (коротко/подробно, язык и т.п.).",
+            "рџ“љ РџСЂРёС€Р»РёС‚Рµ PDF/EPUB/DOCX/FB2/TXT вЂ” СЃРґРµР»Р°СЋ СЃС‚СЂСѓРєС‚СѓСЂРёСЂРѕРІР°РЅРЅС‹Р№ РєРѕРЅСЃРїРµРєС‚.\n"
+            "РњРѕР¶РЅРѕ РІ РїРѕРґРїРёСЃРё СѓРєР°Р·Р°С‚СЊ С†РµР»СЊ (РєРѕСЂРѕС‚РєРѕ/РїРѕРґСЂРѕР±РЅРѕ, СЏР·С‹Рє Рё С‚.Рї.).",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1268,7 +1258,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "explain")
         _mode_track_set(uid, "explain")
         await q.edit_message_text(
-            "🔍 Напишите тему + уровень (школа/вуз/профи). Будет объяснение с примерами.",
+            "рџ”Ќ РќР°РїРёС€РёС‚Рµ С‚РµРјСѓ + СѓСЂРѕРІРµРЅСЊ (С€РєРѕР»Р°/РІСѓР·/РїСЂРѕС„Рё). Р‘СѓРґРµС‚ РѕР±СЉСЏСЃРЅРµРЅРёРµ СЃ РїСЂРёРјРµСЂР°РјРё.",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1278,7 +1268,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "tasks")
         _mode_track_set(uid, "tasks")
         await q.edit_message_text(
-            "🧮 Пришлите условие(я) — решу пошагово (формулы, пояснения, итог).",
+            "рџ§® РџСЂРёС€Р»РёС‚Рµ СѓСЃР»РѕРІРёРµ(СЏ) вЂ” СЂРµС€Сѓ РїРѕС€Р°РіРѕРІРѕ (С„РѕСЂРјСѓР»С‹, РїРѕСЏСЃРЅРµРЅРёСЏ, РёС‚РѕРі).",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1288,7 +1278,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "essay")
         _mode_track_set(uid, "essay")
         await q.edit_message_text(
-            "✍️ Тема + требования (объём/стиль/язык) — подготовлю эссе/реферат.",
+            "вњЌпёЏ РўРµРјР° + С‚СЂРµР±РѕРІР°РЅРёСЏ (РѕР±СЉС‘Рј/СЃС‚РёР»СЊ/СЏР·С‹Рє) вЂ” РїРѕРґРіРѕС‚РѕРІР»СЋ СЌСЃСЃРµ/СЂРµС„РµСЂР°С‚.",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1298,17 +1288,17 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "quiz")
         _mode_track_set(uid, "exam_plan")
         await q.edit_message_text(
-            "📝 Укажите предмет и дату экзамена — составлю план подготовки с вехами.",
+            "рџ“ќ РЈРєР°Р¶РёС‚Рµ РїСЂРµРґРјРµС‚ Рё РґР°С‚Сѓ СЌРєР·Р°РјРµРЅР° вЂ” СЃРѕСЃС‚Р°РІР»СЋ РїР»Р°РЅ РїРѕРґРіРѕС‚РѕРІРєРё СЃ РІРµС…Р°РјРё.",
             reply_markup=_mode_kb("study"),
         )
         return
 
-    # === Работа
+    # === Р Р°Р±РѕС‚Р°
     if data == "act:work:doc":
         await q.answer()
         _mode_track_set(uid, "work_doc")
         await q.edit_message_text(
-            "📄 Что за документ/адресат/контекст? Сформирую черновик письма/документа.",
+            "рџ“„ Р§С‚Рѕ Р·Р° РґРѕРєСѓРјРµРЅС‚/Р°РґСЂРµСЃР°С‚/РєРѕРЅС‚РµРєСЃС‚? РЎС„РѕСЂРјРёСЂСѓСЋ С‡РµСЂРЅРѕРІРёРє РїРёСЃСЊРјР°/РґРѕРєСѓРјРµРЅС‚Р°.",
             reply_markup=_mode_kb("work"),
         )
         return
@@ -1317,7 +1307,7 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_report")
         await q.edit_message_text(
-            "📊 Пришлите текст/файл/ссылку — сделаю аналитическую выжимку.",
+            "рџ“Љ РџСЂРёС€Р»РёС‚Рµ С‚РµРєСЃС‚/С„Р°Р№Р»/СЃСЃС‹Р»РєСѓ вЂ” СЃРґРµР»Р°СЋ Р°РЅР°Р»РёС‚РёС‡РµСЃРєСѓСЋ РІС‹Р¶РёРјРєСѓ.",
             reply_markup=_mode_kb("work"),
         )
         return
@@ -1326,7 +1316,7 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_plan")
         await q.edit_message_text(
-            "🗂 Опишите задачу/сроки — соберу ToDo/план со сроками и приоритетами.",
+            "рџ—‚ РћРїРёС€РёС‚Рµ Р·Р°РґР°С‡Сѓ/СЃСЂРѕРєРё вЂ” СЃРѕР±РµСЂСѓ ToDo/РїР»Р°РЅ СЃРѕ СЃСЂРѕРєР°РјРё Рё РїСЂРёРѕСЂРёС‚РµС‚Р°РјРё.",
             reply_markup=_mode_kb("work"),
         )
         return
@@ -1335,89 +1325,87 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_idea")
         await q.edit_message_text(
-            "💡 Расскажите продукт/ЦА/каналы — подготовлю бриф/идеи.",
+            "рџ’Ў Р Р°СЃСЃРєР°Р¶РёС‚Рµ РїСЂРѕРґСѓРєС‚/Р¦Рђ/РєР°РЅР°Р»С‹ вЂ” РїРѕРґРіРѕС‚РѕРІР»СЋ Р±СЂРёС„/РёРґРµРё.",
             reply_markup=_mode_kb("work"),
         )
         return
 
-    # === Развлечения (как было)
+    # === Р Р°Р·РІР»РµС‡РµРЅРёСЏ (РєР°Рє Р±С‹Р»Рѕ)
     if data == "act:fun:ideas":
         await q.answer()
         await q.edit_message_text(
-            "🔥 Выберем формат: дом/улица/город/в поездке. Напишите бюджет/настроение.",
+            "рџ”Ґ Р’С‹Р±РµСЂРµРј С„РѕСЂРјР°С‚: РґРѕРј/СѓР»РёС†Р°/РіРѕСЂРѕРґ/РІ РїРѕРµР·РґРєРµ. РќР°РїРёС€РёС‚Рµ Р±СЋРґР¶РµС‚/РЅР°СЃС‚СЂРѕРµРЅРёРµ.",
             reply_markup=_mode_kb("fun"),
         )
         return
     if data == "act:fun:shorts":
         await q.answer()
         await q.edit_message_text(
-            "🎬 Тема, длительность (15–30 сек), стиль — сделаю сценарий шорта + подсказки для озвучки.",
+            "рџЋ¬ РўРµРјР°, РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ (15вЂ“30 СЃРµРє), СЃС‚РёР»СЊ вЂ” СЃРґРµР»Р°СЋ СЃС†РµРЅР°СЂРёР№ С€РѕСЂС‚Р° + РїРѕРґСЃРєР°Р·РєРё РґР»СЏ РѕР·РІСѓС‡РєРё.",
             reply_markup=_mode_kb("fun"),
         )
         return
     if data == "act:fun:games":
         await q.answer()
         await q.edit_message_text(
-            "🎮 Тематика квиза/игры? Сгенерирую быструю викторину или мини-игру в чате.",
+            "рџЋ® РўРµРјР°С‚РёРєР° РєРІРёР·Р°/РёРіСЂС‹? РЎРіРµРЅРµСЂРёСЂСѓСЋ Р±С‹СЃС‚СЂСѓСЋ РІРёРєС‚РѕСЂРёРЅСѓ РёР»Рё РјРёРЅРё-РёРіСЂСѓ РІ С‡Р°С‚Рµ.",
             reply_markup=_mode_kb("fun"),
         )
         return
 
-    # === Модули (как было)
+    # === РњРѕРґСѓР»Рё (РєР°Рє Р±С‹Р»Рѕ)
     if data == "act:open:runway":
         await q.answer()
         await q.edit_message_text(
-            "🎬 Модуль Runway: пришлите идею/референс — подготовлю промпт и бюджет.",
+            "рџЋ¬ РњРѕРґСѓР»СЊ Runway: РїСЂРёС€Р»РёС‚Рµ РёРґРµСЋ/СЂРµС„РµСЂРµРЅСЃ вЂ” РїРѕРґРіРѕС‚РѕРІР»СЋ РїСЂРѕРјРїС‚ Рё Р±СЋРґР¶РµС‚.",
             reply_markup=modes_root_kb(),
         )
         return
     if data == "act:open:mj":
         await q.answer()
         await q.edit_message_text(
-            "🎨 Модуль Midjourney: опишите картинку — предложу 3 промпта и сетку стилей.",
+            "рџЋЁ РњРѕРґСѓР»СЊ Midjourney: РѕРїРёС€РёС‚Рµ РєР°СЂС‚РёРЅРєСѓ вЂ” РїСЂРµРґР»РѕР¶Сѓ 3 РїСЂРѕРјРїС‚Р° Рё СЃРµС‚РєСѓ СЃС‚РёР»РµР№.",
             reply_markup=modes_root_kb(),
         )
         return
     if data == "act:open:voice":
         await q.answer()
         await q.edit_message_text(
-            "🗣 Голос: /voice_on — озвучка ответов, /voice_off — выключить. "
-            "Можете прислать голосовое — распознаю и отвечу.",
+            "рџ—Ј Р“РѕР»РѕСЃ: /voice_on вЂ” РѕР·РІСѓС‡РєР° РѕС‚РІРµС‚РѕРІ, /voice_off вЂ” РІС‹РєР»СЋС‡РёС‚СЊ. "
+            "РњРѕР¶РµС‚Рµ РїСЂРёСЃР»Р°С‚СЊ РіРѕР»РѕСЃРѕРІРѕРµ вЂ” СЂР°СЃРїРѕР·РЅР°СЋ Рё РѕС‚РІРµС‡Сѓ.",
             reply_markup=modes_root_kb(),
         )
         return
 
     await q.answer()
 
-# Fallback — если пользователь нажмёт «Учёба/Работа/Развлечения» обычной кнопкой/текстом
+# Fallback вЂ” РµСЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅР°Р¶РјС‘С‚ В«РЈС‡С‘Р±Р°/Р Р°Р±РѕС‚Р°/Р Р°Р·РІР»РµС‡РµРЅРёСЏВ» РѕР±С‹С‡РЅРѕР№ РєРЅРѕРїРєРѕР№/С‚РµРєСЃС‚РѕРј
 async def on_mode_text(update, context):
-    raw = (update.effective_message.text or "").strip()
-    tl = raw.lower()
-    # убираем ведущие эмодзи и прочие символы, чтобы '🎓 Учёба' превратить в 'учёба'
-    tl = re.sub(r"^[^\wё]+", "", tl).strip()
+    text = (update.effective_message.text or "").strip().lower()
     mapping = {
-        "учёба": "study", "учеба": "study",
-        "работа": "work",
-        "развлечения": "fun", "развлечение": "fun",
+        "СѓС‡С‘Р±Р°": "study", "СѓС‡РµР±Р°": "study",
+        "СЂР°Р±РѕС‚Р°": "work",
+        "СЂР°Р·РІР»РµС‡РµРЅРёСЏ": "fun", "СЂР°Р·РІР»РµС‡РµРЅРёРµ": "fun",
     }
-    key = mapping.get(tl)
+    key = mapping.get(text)
     if key:
         await _send_mode_menu(update, context, key)
+        
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
-            [KeyboardButton("🎓 Учёба"), KeyboardButton("💼 Работа"), KeyboardButton("🔥 Развлечения")],
-            [KeyboardButton("🧠 Движки"), KeyboardButton("⭐ Подписка · Помощь"), KeyboardButton("🧾 Баланс")],
+            [KeyboardButton("рџЋ“ РЈС‡С‘Р±Р°"), KeyboardButton("рџ’ј Р Р°Р±РѕС‚Р°"), KeyboardButton("рџ”Ґ Р Р°Р·РІР»РµС‡РµРЅРёСЏ")],
+            [KeyboardButton("рџ§  Р”РІРёР¶РєРё"), KeyboardButton("в­ђ РџРѕРґРїРёСЃРєР° В· РџРѕРјРѕС‰СЊ"), KeyboardButton("рџ§ѕ Р‘Р°Р»Р°РЅСЃ")],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
         selective=False,
-        input_field_placeholder="Выберите режим или напишите запрос…",
+        input_field_placeholder="Р’С‹Р±РµСЂРёС‚Рµ СЂРµР¶РёРј РёР»Рё РЅР°РїРёС€РёС‚Рµ Р·Р°РїСЂРѕСЃвЂ¦",
     )
 
 main_kb = main_keyboard()
 
-# ───────── /start ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ /start в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_chat.send_message(
         START_TEXT,
@@ -1425,7 +1413,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         disable_web_page_preview=True,
     )
 
-# ───────── сохранение выбранного режима/подрежима (SQLite kv) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ СЃРѕС…СЂР°РЅРµРЅРёРµ РІС‹Р±СЂР°РЅРЅРѕРіРѕ СЂРµР¶РёРјР°/РїРѕРґСЂРµР¶РёРјР° (SQLite kv) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _mode_set(user_id: int, mode: str):
     kv_set(f"mode:{user_id}", mode)
 
@@ -1439,97 +1427,97 @@ def _mode_track_get(user_id: int) -> str:
     return kv_get(f"mode_track:{user_id}", "") or ""
 
 
-# ───────── Подменю режимов ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџРѕРґРјРµРЅСЋ СЂРµР¶РёРјРѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _school_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔎 Объяснение",          callback_data="school:explain"),
-         InlineKeyboardButton("🧮 Задачи",              callback_data="school:tasks")],
-        [InlineKeyboardButton("✍️ Эссе/реферат/доклад", callback_data="school:essay"),
-         InlineKeyboardButton("📝 Экзамен/квиз",        callback_data="school:quiz")],
+        [InlineKeyboardButton("рџ”Ћ РћР±СЉСЏСЃРЅРµРЅРёРµ",          callback_data="school:explain"),
+         InlineKeyboardButton("рџ§® Р—Р°РґР°С‡Рё",              callback_data="school:tasks")],
+        [InlineKeyboardButton("вњЌпёЏ Р­СЃСЃРµ/СЂРµС„РµСЂР°С‚/РґРѕРєР»Р°Рґ", callback_data="school:essay"),
+         InlineKeyboardButton("рџ“ќ Р­РєР·Р°РјРµРЅ/РєРІРёР·",        callback_data="school:quiz")],
     ])
 
 def _work_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📧 Письмо/документ",  callback_data="work:doc"),
-         InlineKeyboardButton("📊 Аналитика/сводка", callback_data="work:report")],
-        [InlineKeyboardButton("🗂 План/ToDo",        callback_data="work:plan"),
-         InlineKeyboardButton("💡 Идеи/бриф",       callback_data="work:idea")],
+        [InlineKeyboardButton("рџ“§ РџРёСЃСЊРјРѕ/РґРѕРєСѓРјРµРЅС‚",  callback_data="work:doc"),
+         InlineKeyboardButton("рџ“Љ РђРЅР°Р»РёС‚РёРєР°/СЃРІРѕРґРєР°", callback_data="work:report")],
+        [InlineKeyboardButton("рџ—‚ РџР»Р°РЅ/ToDo",        callback_data="work:plan"),
+         InlineKeyboardButton("рџ’Ў РРґРµРё/Р±СЂРёС„",       callback_data="work:idea")],
     ])
 
 def _fun_quick_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Оживить фото (анимация)", callback_data="fun:revive")],
-        [InlineKeyboardButton("Клип из текста/голоса",    callback_data="fun:clip")],
-        [InlineKeyboardButton("Сгенерировать изображение /img", callback_data="fun:img")],
-        [InlineKeyboardButton("Раскадровка под Reels",    callback_data="fun:storyboard")],
+        [InlineKeyboardButton("РћР¶РёРІРёС‚СЊ С„РѕС‚Рѕ (Р°РЅРёРјР°С†РёСЏ)", callback_data="fun:revive")],
+        [InlineKeyboardButton("РљР»РёРї РёР· С‚РµРєСЃС‚Р°/РіРѕР»РѕСЃР°",    callback_data="fun:clip")],
+        [InlineKeyboardButton("РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ /img", callback_data="fun:img")],
+        [InlineKeyboardButton("Р Р°СЃРєР°РґСЂРѕРІРєР° РїРѕРґ Reels",    callback_data="fun:storyboard")],
     ])
 
 def _fun_kb():
-    # оставим и старое подменю — не используется сейчас
+    # РѕСЃС‚Р°РІРёРј Рё СЃС‚Р°СЂРѕРµ РїРѕРґРјРµРЅСЋ вЂ” РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ СЃРµР№С‡Р°СЃ
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🖼 Фото-мастерская", callback_data="fun:photo"),
-         InlineKeyboardButton("🎬 Видео-идеи",      callback_data="fun:video")],
-        [InlineKeyboardButton("🎲 Квизы/игры",      callback_data="fun:quiz"),
-         InlineKeyboardButton("😆 Мемы/шутки",      callback_data="fun:meme")],
+        [InlineKeyboardButton("рџ–ј Р¤РѕС‚Рѕ-РјР°СЃС‚РµСЂСЃРєР°СЏ", callback_data="fun:photo"),
+         InlineKeyboardButton("рџЋ¬ Р’РёРґРµРѕ-РёРґРµРё",      callback_data="fun:video")],
+        [InlineKeyboardButton("рџЋІ РљРІРёР·С‹/РёРіСЂС‹",      callback_data="fun:quiz"),
+         InlineKeyboardButton("рџ† РњРµРјС‹/С€СѓС‚РєРё",      callback_data="fun:meme")],
     ])
 
 
-# ───────── Команды/кнопки режимов ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РљРѕРјР°РЅРґС‹/РєРЅРѕРїРєРё СЂРµР¶РёРјРѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_mode_school(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _mode_set(update.effective_user.id, "Учёба")
+    _mode_set(update.effective_user.id, "РЈС‡С‘Р±Р°")
     _mode_track_set(update.effective_user.id, "")
-    # показываем НОВОЕ подменю «Учёба»
+    # РїРѕРєР°Р·С‹РІР°РµРј РќРћР’РћР• РїРѕРґРјРµРЅСЋ В«РЈС‡С‘Р±Р°В»
     await _send_mode_menu(update, context, "study")
 
 async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _mode_set(update.effective_user.id, "Работа")
+    _mode_set(update.effective_user.id, "Р Р°Р±РѕС‚Р°")
     _mode_track_set(update.effective_user.id, "")
-    # показываем НОВОЕ подменю «Работа»
+    # РїРѕРєР°Р·С‹РІР°РµРј РќРћР’РћР• РїРѕРґРјРµРЅСЋ В«Р Р°Р±РѕС‚Р°В»
     await _send_mode_menu(update, context, "work")
 
 async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _mode_set(update.effective_user.id, "Развлечения")
+    _mode_set(update.effective_user.id, "Р Р°Р·РІР»РµС‡РµРЅРёСЏ")
     _mode_track_set(update.effective_user.id, "")
     await update.effective_message.reply_text(
-        "🔥 Развлечения — быстрые действия:",
+        "рџ”Ґ Р Р°Р·РІР»РµС‡РµРЅРёСЏ вЂ” Р±С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ:",
         reply_markup=_fun_quick_kb()
     )
 
 
-# ───────── Коллбэки подрежимов ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РљРѕР»Р»Р±СЌРєРё РїРѕРґСЂРµР¶РёРјРѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "")
     try:
         if any(data.startswith(p) for p in ("school:", "work:", "fun:")):
-            # базовый трекинг старых веток (photo/video/quiz/meme)
+            # Р±Р°Р·РѕРІС‹Р№ С‚СЂРµРєРёРЅРі СЃС‚Р°СЂС‹С… РІРµС‚РѕРє (photo/video/quiz/meme)
             if data in ("fun:revive","fun:clip","fun:img","fun:storyboard"):
-                # эти обрабатываются отдельным хендлером on_cb_fun
+                # СЌС‚Рё РѕР±СЂР°Р±Р°С‚С‹РІР°СЋС‚СЃСЏ РѕС‚РґРµР»СЊРЅС‹Рј С…РµРЅРґР»РµСЂРѕРј on_cb_fun
                 return
             _, track = data.split(":", 1)
             _mode_track_set(update.effective_user.id, track)
             mode = _mode_get(update.effective_user.id)
-            await q.edit_message_text(f"{mode} → {track}. Напишите задание/тему — сделаю.")
+            await q.edit_message_text(f"{mode} в†’ {track}. РќР°РїРёС€РёС‚Рµ Р·Р°РґР°РЅРёРµ/С‚РµРјСѓ вЂ” СЃРґРµР»Р°СЋ.")
             return
     finally:
         with contextlib.suppress(Exception):
             await q.answer()
 
-# быстрые действия «Развлечения»
+# Р±С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ В«Р Р°Р·РІР»РµС‡РµРЅРёСЏВ»
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     data = q.data or ""
     if data == "fun:img":
-        return await q.edit_message_text("Пришли промпт или используй команду /img <описание> — сгенерирую изображение.")
+        return await q.edit_message_text("РџСЂРёС€Р»Рё РїСЂРѕРјРїС‚ РёР»Рё РёСЃРїРѕР»СЊР·СѓР№ РєРѕРјР°РЅРґСѓ /img <РѕРїРёСЃР°РЅРёРµ> вЂ” СЃРіРµРЅРµСЂРёСЂСѓСЋ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.")
     if data == "fun:revive":
-        return await q.edit_message_text("Загрузи фото (как картинку) и напиши, что оживить/как двигаться. Сделаю анимацию.")
+        return await q.edit_message_text("Р—Р°РіСЂСѓР·Рё С„РѕС‚Рѕ (РєР°Рє РєР°СЂС‚РёРЅРєСѓ) Рё РЅР°РїРёС€Рё, С‡С‚Рѕ РѕР¶РёРІРёС‚СЊ/РєР°Рє РґРІРёРіР°С‚СЊСЃСЏ. РЎРґРµР»Р°СЋ Р°РЅРёРјР°С†РёСЋ.")
     if data == "fun:clip":
-        return await q.edit_message_text("Пришли текст/голос и формат (Reels/Shorts), музыку/стиль — соберу клип (Luma/Runway).")
+        return await q.edit_message_text("РџСЂРёС€Р»Рё С‚РµРєСЃС‚/РіРѕР»РѕСЃ Рё С„РѕСЂРјР°С‚ (Reels/Shorts), РјСѓР·С‹РєСѓ/СЃС‚РёР»СЊ вЂ” СЃРѕР±РµСЂСѓ РєР»РёРї (Luma/Runway).")
     if data == "fun:storyboard":
-        return await q.edit_message_text("Пришли фото или опиши идею ролика — верну раскадровку под Reels с тайм-кодами.")
+        return await q.edit_message_text("РџСЂРёС€Р»Рё С„РѕС‚Рѕ РёР»Рё РѕРїРёС€Рё РёРґРµСЋ СЂРѕР»РёРєР° вЂ” РІРµСЂРЅСѓ СЂР°СЃРєР°РґСЂРѕРІРєСѓ РїРѕРґ Reels СЃ С‚Р°Р№Рј-РєРѕРґР°РјРё.")
 
-# ───────── Старт / Движки / Помощь ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РЎС‚Р°СЂС‚ / Р”РІРёР¶РєРё / РџРѕРјРѕС‰СЊ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
@@ -1538,14 +1526,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
 
 async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("Выберите движок:", reply_markup=engines_kb())
+    await update.effective_message.reply_text("Р’С‹Р±РµСЂРёС‚Рµ РґРІРёР¶РѕРє:", reply_markup=engines_kb())
 
 async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Открыть тарифы (WebApp)", web_app=WebAppInfo(url=TARIFF_URL))],
-        [InlineKeyboardButton("Оформить PRO на месяц (ЮKassa)", callback_data="buyinv:pro:1")],
+        [InlineKeyboardButton("РћС‚РєСЂС‹С‚СЊ С‚Р°СЂРёС„С‹ (WebApp)", web_app=WebAppInfo(url=TARIFF_URL))],
+        [InlineKeyboardButton("РћС„РѕСЂРјРёС‚СЊ PRO РЅР° РјРµСЃСЏС† (Р®Kassa)", callback_data="buyinv:pro:1")],
     ])
-    await update.effective_message.reply_text("⭐ Тарифы и помощь.\n\n" + HELP_TEXT, reply_markup=kb, disable_web_page_preview=True)
+    await update.effective_message.reply_text("в­ђ РўР°СЂРёС„С‹ Рё РїРѕРјРѕС‰СЊ.\n\n" + HELP_TEXT, reply_markup=kb, disable_web_page_preview=True)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
@@ -1554,55 +1542,55 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
 
 
-# ───────── Диагностика/лимиты ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р”РёР°РіРЅРѕСЃС‚РёРєР°/Р»РёРјРёС‚С‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     tier = get_subscription_tier(user_id)
     lim = _limits_for(user_id)
     row = _usage_row(user_id, _today_ymd())
     lines = [
-        f"👤 Тариф: {tier}",
-        f"• Тексты сегодня: {row['text_count']} / {lim['text_per_day']}",
-        f"• Luma $: {row['luma_usd']:.2f} / {lim['luma_budget_usd']:.2f}",
-        f"• Runway $: {row['runway_usd']:.2f} / {lim['runway_budget_usd']:.2f}",
-        f"• Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
+        f"рџ‘¤ РўР°СЂРёС„: {tier}",
+        f"вЂў РўРµРєСЃС‚С‹ СЃРµРіРѕРґРЅСЏ: {row['text_count']} / {lim['text_per_day']}",
+        f"вЂў Luma $: {row['luma_usd']:.2f} / {lim['luma_budget_usd']:.2f}",
+        f"вЂў Runway $: {row['runway_usd']:.2f} / {lim['runway_budget_usd']:.2f}",
+        f"вЂў Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
     ]
     await update.effective_message.reply_text("\n".join(lines))
 
 
-# ───────── Capability Q&A ─────────
-_CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
-_CAP_EBOOK = re.compile(r"(ebook|e-?book|электронн(ая|ые)\s+книг|epub|fb2|docx|txt|mobi|azw)", re.I)
-_CAP_AUDIO = re.compile(r"(аудио ?книг|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
-_CAP_IMAGE = re.compile(r"(изображен|картинк|фото|image|picture|img)", re.I)
-_CAP_VIDEO = re.compile(r"(видео|ролик|shorts?|reels?|clip)", re.I)
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Capability Q&A в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+_CAP_PDF   = re.compile(r"(pdf|РґРѕРєСѓРјРµРЅС‚(С‹)?|С„Р°Р№Р»(С‹)?)", re.I)
+_CAP_EBOOK = re.compile(r"(ebook|e-?book|СЌР»РµРєС‚СЂРѕРЅРЅ(Р°СЏ|С‹Рµ)\s+РєРЅРёРі|epub|fb2|docx|txt|mobi|azw)", re.I)
+_CAP_AUDIO = re.compile(r"(Р°СѓРґРёРѕ ?РєРЅРёРі|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
+_CAP_IMAGE = re.compile(r"(РёР·РѕР±СЂР°Р¶РµРЅ|РєР°СЂС‚РёРЅРє|С„РѕС‚Рѕ|image|picture|img)", re.I)
+_CAP_VIDEO = re.compile(r"(РІРёРґРµРѕ|СЂРѕР»РёРє|shorts?|reels?|clip)", re.I)
 
 def capability_answer(text: str) -> str | None:
     tl = (text or "").strip().lower()
     if not tl:
         return None
     if (_CAP_PDF.search(tl) or _CAP_EBOOK.search(tl)) and re.search(
-        r"(чита(ешь|ете)|читать|анализиру(ешь|ете)|анализировать|распозна(ешь|ете)|распознавать)", tl
+        r"(С‡РёС‚Р°(РµС€СЊ|РµС‚Рµ)|С‡РёС‚Р°С‚СЊ|Р°РЅР°Р»РёР·РёСЂСѓ(РµС€СЊ|РµС‚Рµ)|Р°РЅР°Р»РёР·РёСЂРѕРІР°С‚СЊ|СЂР°СЃРїРѕР·РЅР°(РµС€СЊ|РµС‚Рµ)|СЂР°СЃРїРѕР·РЅР°РІР°С‚СЊ)", tl
     ):
         return (
-            "Да. Пришлите файл — извлеку текст и сделаю конспект/ответ по вашей цели.\n"
-            "Поддержка: PDF, EPUB, DOCX, FB2, TXT (MOBI/AZW — по возможности)."
+            "Р”Р°. РџСЂРёС€Р»РёС‚Рµ С„Р°Р№Р» вЂ” РёР·РІР»РµРєСѓ С‚РµРєСЃС‚ Рё СЃРґРµР»Р°СЋ РєРѕРЅСЃРїРµРєС‚/РѕС‚РІРµС‚ РїРѕ РІР°С€РµР№ С†РµР»Рё.\n"
+            "РџРѕРґРґРµСЂР¶РєР°: PDF, EPUB, DOCX, FB2, TXT (MOBI/AZW вЂ” РїРѕ РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё)."
         )
-    if (_CAP_AUDIO.search(tl) and re.search(r"(чита|анализ|расшиф|транскриб|понима|распозна)", tl)) or "аудио" in tl:
+    if (_CAP_AUDIO.search(tl) and re.search(r"(С‡РёС‚Р°|Р°РЅР°Р»РёР·|СЂР°СЃС€РёС„|С‚СЂР°РЅСЃРєСЂРёР±|РїРѕРЅРёРјР°|СЂР°СЃРїРѕР·РЅР°)", tl)) or "Р°СѓРґРёРѕ" in tl:
         return (
-            "Да. Пришлите аудио (voice/audio/документ): OGG/MP3/M4A/WAV/WEBM. "
-            "Распознаю речь (Deepgram/Whisper) и сделаю конспект, тезисы, тайм-коды, Q&A."
+            "Р”Р°. РџСЂРёС€Р»РёС‚Рµ Р°СѓРґРёРѕ (voice/audio/РґРѕРєСѓРјРµРЅС‚): OGG/MP3/M4A/WAV/WEBM. "
+            "Р Р°СЃРїРѕР·РЅР°СЋ СЂРµС‡СЊ (Deepgram/Whisper) Рё СЃРґРµР»Р°СЋ РєРѕРЅСЃРїРµРєС‚, С‚РµР·РёСЃС‹, С‚Р°Р№Рј-РєРѕРґС‹, Q&A."
         )
-    if _CAP_IMAGE.search(tl) and re.search(r"(чита|анализ|понима|видишь)", tl):
-        return "Да. Пришлите фото/картинку с подписью — опишу содержимое, текст на изображении, детали."
-    if _CAP_IMAGE.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|генерир)", tl):
-        return "Да, могу создавать изображения. Запустите: /img <описание>."
-    if _CAP_VIDEO.search(tl) and re.search(r"(мож(ешь|ете)|созда(ва)?т|дела(ть)?|сгенерир)", tl):
-        return "Да, могу запустить генерацию коротких видео. Напишите: «сделай видео … 9 секунд 9:16»."
+    if _CAP_IMAGE.search(tl) and re.search(r"(С‡РёС‚Р°|Р°РЅР°Р»РёР·|РїРѕРЅРёРјР°|РІРёРґРёС€СЊ)", tl):
+        return "Р”Р°. РџСЂРёС€Р»РёС‚Рµ С„РѕС‚Рѕ/РєР°СЂС‚РёРЅРєСѓ СЃ РїРѕРґРїРёСЃСЊСЋ вЂ” РѕРїРёС€Сѓ СЃРѕРґРµСЂР¶РёРјРѕРµ, С‚РµРєСЃС‚ РЅР° РёР·РѕР±СЂР°Р¶РµРЅРёРё, РґРµС‚Р°Р»Рё."
+    if _CAP_IMAGE.search(tl) and re.search(r"(РјРѕР¶(РµС€СЊ|РµС‚Рµ)|СЃРѕР·РґР°(РІР°)?С‚|РґРµР»Р°(С‚СЊ)?|РіРµРЅРµСЂРёСЂ)", tl):
+        return "Р”Р°, РјРѕРіСѓ СЃРѕР·РґР°РІР°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ. Р—Р°РїСѓСЃС‚РёС‚Рµ: /img <РѕРїРёСЃР°РЅРёРµ>."
+    if _CAP_VIDEO.search(tl) and re.search(r"(РјРѕР¶(РµС€СЊ|РµС‚Рµ)|СЃРѕР·РґР°(РІР°)?С‚|РґРµР»Р°(С‚СЊ)?|СЃРіРµРЅРµСЂРёСЂ)", tl):
+        return "Р”Р°, РјРѕРіСѓ Р·Р°РїСѓСЃС‚РёС‚СЊ РіРµРЅРµСЂР°С†РёСЋ РєРѕСЂРѕС‚РєРёС… РІРёРґРµРѕ. РќР°РїРёС€РёС‚Рµ: В«СЃРґРµР»Р°Р№ РІРёРґРµРѕ вЂ¦ 9 СЃРµРєСѓРЅРґ 9:16В»."
     return None
 
 
-# ───────── Моды/движки для study ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РњРѕРґС‹/РґРІРёР¶РєРё РґР»СЏ study в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _uk(user_id: int, name: str) -> str: return f"user:{user_id}:{name}"
 def mode_set(user_id: int, mode: str):     kv_set(_uk(user_id, "mode"), (mode or "default"))
 def mode_get(user_id: int) -> str:         return kv_get(_uk(user_id, "mode"), "default") or "default"
@@ -1613,34 +1601,34 @@ def study_sub_get(user_id: int) -> str:    return kv_get(_uk(user_id, "study_sub
 
 def modes_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎓 Учёба", callback_data="mode:set:study"),
-         InlineKeyboardButton("🖼 Фото",  callback_data="mode:set:photo")],
-        [InlineKeyboardButton("📄 Документы", callback_data="mode:set:docs"),
-         InlineKeyboardButton("🎙 Голос",     callback_data="mode:set:voice")],
-        [InlineKeyboardButton("🧠 Движки", callback_data="mode:engines")]
+        [InlineKeyboardButton("рџЋ“ РЈС‡С‘Р±Р°", callback_data="mode:set:study"),
+         InlineKeyboardButton("рџ–ј Р¤РѕС‚Рѕ",  callback_data="mode:set:photo")],
+        [InlineKeyboardButton("рџ“„ Р”РѕРєСѓРјРµРЅС‚С‹", callback_data="mode:set:docs"),
+         InlineKeyboardButton("рџЋ™ Р“РѕР»РѕСЃ",     callback_data="mode:set:voice")],
+        [InlineKeyboardButton("рџ§  Р”РІРёР¶РєРё", callback_data="mode:engines")]
     ])
 
 def study_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Объяснение",          callback_data="study:set:explain"),
-         InlineKeyboardButton("🧮 Задачи",              callback_data="study:set:tasks")],
-        [InlineKeyboardButton("✍️ Эссе/реферат/доклад", callback_data="study:set:essay")],
-        [InlineKeyboardButton("📝 Экзамен/квиз",        callback_data="study:set:quiz")]
+        [InlineKeyboardButton("рџ”Ќ РћР±СЉСЏСЃРЅРµРЅРёРµ",          callback_data="study:set:explain"),
+         InlineKeyboardButton("рџ§® Р—Р°РґР°С‡Рё",              callback_data="study:set:tasks")],
+        [InlineKeyboardButton("вњЌпёЏ Р­СЃСЃРµ/СЂРµС„РµСЂР°С‚/РґРѕРєР»Р°Рґ", callback_data="study:set:essay")],
+        [InlineKeyboardButton("рџ“ќ Р­РєР·Р°РјРµРЅ/РєРІРёР·",        callback_data="study:set:quiz")]
     ])
 
 async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     sub = study_sub_get(update.effective_user.id)
     if sub == "explain":
-        prompt = f"Объясни простыми словами, с 2–3 примерами и мини-итогом:\n\n{text}"
+        prompt = f"РћР±СЉСЏСЃРЅРё РїСЂРѕСЃС‚С‹РјРё СЃР»РѕРІР°РјРё, СЃ 2вЂ“3 РїСЂРёРјРµСЂР°РјРё Рё РјРёРЅРё-РёС‚РѕРіРѕРј:\n\n{text}"
     elif sub == "tasks":
-        prompt = ("Реши задачу(и) пошагово: формулы, пояснения, итоговый ответ. "
-                  "Если не хватает данных — уточняющие вопросы в конце.\n\n" + text)
+        prompt = ("Р РµС€Рё Р·Р°РґР°С‡Сѓ(Рё) РїРѕС€Р°РіРѕРІРѕ: С„РѕСЂРјСѓР»С‹, РїРѕСЏСЃРЅРµРЅРёСЏ, РёС‚РѕРіРѕРІС‹Р№ РѕС‚РІРµС‚. "
+                  "Р•СЃР»Рё РЅРµ С…РІР°С‚Р°РµС‚ РґР°РЅРЅС‹С… вЂ” СѓС‚РѕС‡РЅСЏСЋС‰РёРµ РІРѕРїСЂРѕСЃС‹ РІ РєРѕРЅС†Рµ.\n\n" + text)
     elif sub == "essay":
-        prompt = ("Напиши структурированный текст 400–600 слов (эссе/реферат/доклад): "
-                  "введение, 3–5 тезисов с фактами, вывод, список из 3 источников (если уместно).\n\nТема:\n" + text)
+        prompt = ("РќР°РїРёС€Рё СЃС‚СЂСѓРєС‚СѓСЂРёСЂРѕРІР°РЅРЅС‹Р№ С‚РµРєСЃС‚ 400вЂ“600 СЃР»РѕРІ (СЌСЃСЃРµ/СЂРµС„РµСЂР°С‚/РґРѕРєР»Р°Рґ): "
+                  "РІРІРµРґРµРЅРёРµ, 3вЂ“5 С‚РµР·РёСЃРѕРІ СЃ С„Р°РєС‚Р°РјРё, РІС‹РІРѕРґ, СЃРїРёСЃРѕРє РёР· 3 РёСЃС‚РѕС‡РЅРёРєРѕРІ (РµСЃР»Рё СѓРјРµСЃС‚РЅРѕ).\n\nРўРµРјР°:\n" + text)
     elif sub == "quiz":
-        prompt = ("Составь мини-квиз по теме: 10 вопросов, у каждого 4 варианта A–D; "
-                  "в конце дай ключ ответов (номер→буква). Тема:\n\n" + text)
+        prompt = ("РЎРѕСЃС‚Р°РІСЊ РјРёРЅРё-РєРІРёР· РїРѕ С‚РµРјРµ: 10 РІРѕРїСЂРѕСЃРѕРІ, Сѓ РєР°Р¶РґРѕРіРѕ 4 РІР°СЂРёР°РЅС‚Р° AвЂ“D; "
+                  "РІ РєРѕРЅС†Рµ РґР°Р№ РєР»СЋС‡ РѕС‚РІРµС‚РѕРІ (РЅРѕРјРµСЂв†’Р±СѓРєРІР°). РўРµРјР°:\n\n" + text)
     else:
         prompt = text
     ans = await ask_openai_text(prompt)
@@ -1648,27 +1636,27 @@ async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE,
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
 
 
-# ───────── Кнопка приветственной картинки ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РљРЅРѕРїРєР° РїСЂРёРІРµС‚СЃС‚РІРµРЅРЅРѕР№ РєР°СЂС‚РёРЅРєРё в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
-        await update.effective_message.reply_text("Команда доступна только владельцу.")
+        await update.effective_message.reply_text("РљРѕРјР°РЅРґР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІР»Р°РґРµР»СЊС†Сѓ.")
         return
     if not context.args:
-        await update.effective_message.reply_text("Формат: /set_welcome <url_картинки>")
+        await update.effective_message.reply_text("Р¤РѕСЂРјР°С‚: /set_welcome <url_РєР°СЂС‚РёРЅРєРё>")
         return
     url = " ".join(context.args).strip()
     kv_set("welcome_url", url)
-    await update.effective_message.reply_text("Картинка приветствия обновлена. Отправьте /start для проверки.")
+    await update.effective_message.reply_text("РљР°СЂС‚РёРЅРєР° РїСЂРёРІРµС‚СЃС‚РІРёСЏ РѕР±РЅРѕРІР»РµРЅР°. РћС‚РїСЂР°РІСЊС‚Рµ /start РґР»СЏ РїСЂРѕРІРµСЂРєРё.")
 
 async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = kv_get("welcome_url", BANNER_URL)
     if url:
-        await update.effective_message.reply_photo(url, caption="Текущая картинка приветствия")
+        await update.effective_message.reply_photo(url, caption="РўРµРєСѓС‰Р°СЏ РєР°СЂС‚РёРЅРєР° РїСЂРёРІРµС‚СЃС‚РІРёСЏ")
     else:
-        await update.effective_message.reply_text("Картинка приветствия не задана.")
+        await update.effective_message.reply_text("РљР°СЂС‚РёРЅРєР° РїСЂРёРІРµС‚СЃС‚РІРёСЏ РЅРµ Р·Р°РґР°РЅР°.")
 
 
-# ───────── Баланс / пополнение ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р‘Р°Р»Р°РЅСЃ / РїРѕРїРѕР»РЅРµРЅРёРµ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     w = _wallet_get(user_id)
@@ -1676,30 +1664,30 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     row = _usage_row(user_id)
     lim = _limits_for(user_id)
     msg = (
-        "🧾 Кошелёк:\n"
-        f"• Единый баланс: ${total:.2f}\n"
-        "  (расходуется на перерасход по Luma/Runway/Images)\n\n"
-        "Детализация сегодня / лимиты тарифа:\n"
-        f"• Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
-        f"• Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
-        f"• Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
+        "рџ§ѕ РљРѕС€РµР»С‘Рє:\n"
+        f"вЂў Р•РґРёРЅС‹Р№ Р±Р°Р»Р°РЅСЃ: ${total:.2f}\n"
+        "  (СЂР°СЃС…РѕРґСѓРµС‚СЃСЏ РЅР° РїРµСЂРµСЂР°СЃС…РѕРґ РїРѕ Luma/Runway/Images)\n\n"
+        "Р”РµС‚Р°Р»РёР·Р°С†РёСЏ СЃРµРіРѕРґРЅСЏ / Р»РёРјРёС‚С‹ С‚Р°СЂРёС„Р°:\n"
+        f"вЂў Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
+        f"вЂў Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
+        f"вЂў Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
     )
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("вћ• РџРѕРїРѕР»РЅРёС‚СЊ Р±Р°Р»Р°РЅСЃ", callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
-# ───────── Подписка / тарифы — UI и оплаты (PATCH) ─────────
-# Зависимости окружения:
-#  - YOOKASSA_PROVIDER_TOKEN  (платёжный токен Telegram Payments от ЮKassa)
-#  - YOOKASSA_CURRENCY        (по умолчанию "RUB")
-#  - CRYPTO_PAY_API_TOKEN     (https://pay.crypt.bot — токен продавца)
-#  - CRYPTO_ASSET             (например "USDT", по умолчанию "USDT")
-#  - PRICE_START_RUB, PRICE_PRO_RUB, PRICE_ULT_RUB  (целое число, ₽)
-#  - PRICE_START_USD, PRICE_PRO_USD, PRICE_ULT_USD  (число с точкой, $)
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџРѕРґРїРёСЃРєР° / С‚Р°СЂРёС„С‹ вЂ” UI Рё РѕРїР»Р°С‚С‹ (PATCH) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+# Р—Р°РІРёСЃРёРјРѕСЃС‚Рё РѕРєСЂСѓР¶РµРЅРёСЏ:
+#  - YOOKASSA_PROVIDER_TOKEN  (РїР»Р°С‚С‘Р¶РЅС‹Р№ С‚РѕРєРµРЅ Telegram Payments РѕС‚ Р®Kassa)
+#  - YOOKASSA_CURRENCY        (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ "RUB")
+#  - CRYPTO_PAY_API_TOKEN     (https://pay.crypt.bot вЂ” С‚РѕРєРµРЅ РїСЂРѕРґР°РІС†Р°)
+#  - CRYPTO_ASSET             (РЅР°РїСЂРёРјРµСЂ "USDT", РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ "USDT")
+#  - PRICE_START_RUB, PRICE_PRO_RUB, PRICE_ULT_RUB  (С†РµР»РѕРµ С‡РёСЃР»Рѕ, в‚Ѕ)
+#  - PRICE_START_USD, PRICE_PRO_USD, PRICE_ULT_USD  (С‡РёСЃР»Рѕ СЃ С‚РѕС‡РєРѕР№, $)
 #
-# Хранилище подписки и кошелька используется на kv_*:
+# РҐСЂР°РЅРёР»РёС‰Рµ РїРѕРґРїРёСЃРєРё Рё РєРѕС€РµР»СЊРєР° РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РЅР° kv_*:
 #   sub:tier:{user_id}   -> "start" | "pro" | "ultimate"
-#   sub:until:{user_id}  -> ISO-строка даты окончания
-#   wallet:usd:{user_id} -> баланс в USD (float)
+#   sub:until:{user_id}  -> ISO-СЃС‚СЂРѕРєР° РґР°С‚С‹ РѕРєРѕРЅС‡Р°РЅРёСЏ
+#   wallet:usd:{user_id} -> Р±Р°Р»Р°РЅСЃ РІ USD (float)
 
 YOOKASSA_PROVIDER_TOKEN = os.environ.get("YOOKASSA_PROVIDER_TOKEN", "").strip()
 YOOKASSA_CURRENCY = (os.environ.get("YOOKASSA_CURRENCY") or "RUB").upper()
@@ -1708,11 +1696,11 @@ CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
 CRYPTO_ASSET = (os.environ.get("CRYPTO_ASSET") or "USDT").upper()
 
 # === COMPAT with existing vars/DB in your main.py ===
-# 1) ЮKassa: если уже есть PROVIDER_TOKEN (из PROVIDER_TOKEN_YOOKASSA), используем его:
+# 1) Р®Kassa: РµСЃР»Рё СѓР¶Рµ РµСЃС‚СЊ PROVIDER_TOKEN (РёР· PROVIDER_TOKEN_YOOKASSA), РёСЃРїРѕР»СЊР·СѓРµРј РµРіРѕ:
 if not YOOKASSA_PROVIDER_TOKEN and 'PROVIDER_TOKEN' in globals() and PROVIDER_TOKEN:
     YOOKASSA_PROVIDER_TOKEN = PROVIDER_TOKEN
 
-# 2) Кошелёк: используем твой единый USD-кошелёк (wallet table) вместо kv:
+# 2) РљРѕС€РµР»С‘Рє: РёСЃРїРѕР»СЊР·СѓРµРј С‚РІРѕР№ РµРґРёРЅС‹Р№ USD-РєРѕС€РµР»С‘Рє (wallet table) РІРјРµСЃС‚Рѕ kv:
 def _user_balance_get(user_id: int) -> float:
     return _wallet_total_get(user_id)
 
@@ -1726,7 +1714,7 @@ def _user_balance_add(user_id: int, delta: float) -> float:
 def _user_balance_debit(user_id: int, amount: float) -> bool:
     return _wallet_total_take(user_id, amount)
 
-# 3) Подписка: активируем через твои функции с БД, а не kv:
+# 3) РџРѕРґРїРёСЃРєР°: Р°РєС‚РёРІРёСЂСѓРµРј С‡РµСЂРµР· С‚РІРѕРё С„СѓРЅРєС†РёРё СЃ Р‘Р”, Р° РЅРµ kv:
 def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
     dt = activate_subscription_with_tier(user_id, tier_key, months)
     return dt.isoformat()
@@ -1736,34 +1724,17 @@ def _sub_info_text(user_id: int) -> str:
     dt = get_subscription_until(user_id)
     human_until = dt.strftime("%d.%m.%Y") if dt else ""
     bal = _user_balance_get(user_id)
-    line_until = f"\n⏳ Активна до: {human_until}" if tier != "free" and human_until else ""
-    return f"🧾 Текущая подписка: {tier.upper() if tier!='free' else 'нет'}{line_until}\n💵 Баланс: ${bal:.2f}"
+    line_until = f"\nвЏі РђРєС‚РёРІРЅР° РґРѕ: {human_until}" if tier != "free" and human_until else ""
+    return f"рџ§ѕ РўРµРєСѓС‰Р°СЏ РїРѕРґРїРёСЃРєР°: {tier.upper() if tier!='free' else 'РЅРµС‚'}{line_until}\nрџ’µ Р‘Р°Р»Р°РЅСЃ: ${bal:.2f}"
 
-# Цены — из env с осмысленными дефолтами
-
-def _env_float(name: str, default: float) -> float:
-    """
-    Безопасное чтение float из ENV:
-    - поддерживает и "4,99", и "4.99"
-    - при ошибке возвращает default
-    """
-    raw = os.environ.get(name, str(default))
-    if raw is None:
-        return float(default)
-    raw = str(raw).replace(",", ".").strip()
-    try:
-        return float(raw)
-    except Exception:
-        return float(default)
-
-# Цены — из env с осмысленными дефолтами
+# Р¦РµРЅС‹ вЂ” РёР· env СЃ РѕСЃРјС‹СЃР»РµРЅРЅС‹РјРё РґРµС„РѕР»С‚Р°РјРё
 PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "499"))
-PRICE_PRO_RUB   = int(os.environ.get("PRICE_PRO_RUB", "1299"))
-PRICE_ULT_RUB   = int(os.environ.get("PRICE_ULT_RUB", "2990"))
+PRICE_PRO_RUB = int(os.environ.get("PRICE_PRO_RUB", "1299"))
+PRICE_ULT_RUB = int(os.environ.get("PRICE_ULT_RUB", "2990"))
 
 PRICE_START_USD = _env_float("PRICE_START_USD", 4.99)
-PRICE_PRO_USD   = _env_float("PRICE_PRO_USD",   12.99)
-PRICE_ULT_USD   = _env_float("PRICE_ULT_USD",   29.90)
+PRICE_PRO_USD   = _env_float("PRICE_PRO_USD", 12.99)
+PRICE_ULT_USD   = _env_float("PRICE_ULT_USD", 29.90)
 
 SUBS_TIERS = {
     "start": {
@@ -1771,9 +1742,9 @@ SUBS_TIERS = {
         "rub": PRICE_START_RUB,
         "usd": PRICE_START_USD,
         "features": [
-            "💬 GPT-чат и документы (базовые лимиты)",
-            "🖼 Фото-мастерская: фон, лёгкая дорисовка",
-            "🎧 Озвучка ответов (TTS)",
+            "рџ’¬ GPT-С‡Р°С‚ Рё РґРѕРєСѓРјРµРЅС‚С‹ (Р±Р°Р·РѕРІС‹Рµ Р»РёРјРёС‚С‹)",
+            "рџ–ј Р¤РѕС‚Рѕ-РјР°СЃС‚РµСЂСЃРєР°СЏ: С„РѕРЅ, Р»С‘РіРєР°СЏ РґРѕСЂРёСЃРѕРІРєР°",
+            "рџЋ§ РћР·РІСѓС‡РєР° РѕС‚РІРµС‚РѕРІ (TTS)",
         ],
     },
     "pro": {
@@ -1781,9 +1752,9 @@ SUBS_TIERS = {
         "rub": PRICE_PRO_RUB,
         "usd": PRICE_PRO_USD,
         "features": [
-            "📚 Глубокий разбор PDF/DOCX/EPUB",
-            "🎬 Reels/Shorts по смыслу, видео из фото",
-            "🖼 Outpaint и «оживление» старых фото",
+            "рџ“љ Р“Р»СѓР±РѕРєРёР№ СЂР°Р·Р±РѕСЂ PDF/DOCX/EPUB",
+            "рџЋ¬ Reels/Shorts РїРѕ СЃРјС‹СЃР»Сѓ, РІРёРґРµРѕ РёР· С„РѕС‚Рѕ",
+            "рџ–ј Outpaint Рё В«РѕР¶РёРІР»РµРЅРёРµВ» СЃС‚Р°СЂС‹С… С„РѕС‚Рѕ",
         ],
     },
     "ultimate": {
@@ -1791,21 +1762,21 @@ SUBS_TIERS = {
         "rub": PRICE_ULT_RUB,
         "usd": PRICE_ULT_USD,
         "features": [
-            "🚀 Runway/Luma — премиум-рендеры",
-            "🧠 Расширенные лимиты и приоритетная очередь",
-            "🛠 PRO-инструменты (архитектура/дизайн)",
+            "рџљЂ Runway/Luma вЂ” РїСЂРµРјРёСѓРј-СЂРµРЅРґРµСЂС‹",
+            "рџ§  Р Р°СЃС€РёСЂРµРЅРЅС‹Рµ Р»РёРјРёС‚С‹ Рё РїСЂРёРѕСЂРёС‚РµС‚РЅР°СЏ РѕС‡РµСЂРµРґСЊ",
+            "рџ›  PRO-РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹ (Р°СЂС…РёС‚РµРєС‚СѓСЂР°/РґРёР·Р°Р№РЅ)",
         ],
     },
 }
 
 def _money_fmt_rub(v: int) -> str:
-    return f"{v:,}".replace(",", " ") + " ₽"
+    return f"{v:,}".replace(",", " ") + " в‚Ѕ"
 
 def _money_fmt_usd(v: float) -> str:
     return f"${v:.2f}"
 
 def _user_balance_get(user_id: int) -> float:
-    # Пытаемся взять из твоего кошелька, если есть, иначе — kv
+    # РџС‹С‚Р°РµРјСЃСЏ РІР·СЏС‚СЊ РёР· С‚РІРѕРµРіРѕ РєРѕС€РµР»СЊРєР°, РµСЃР»Рё РµСЃС‚СЊ, РёРЅР°С‡Рµ вЂ” kv
     get_fn = _pick_first_defined("wallet_get_balance", "get_balance", "balance_get")
     if get_fn:
         try:
@@ -1845,7 +1816,7 @@ def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
     return until
 
 def _sub_info_text(user_id: int) -> str:
-    tier = kv_get(f"sub:tier:{user_id}", "") or "нет"
+    tier = kv_get(f"sub:tier:{user_id}", "") or "РЅРµС‚"
     until = kv_get(f"sub:until:{user_id}", "")
     human_until = ""
     if until:
@@ -1855,70 +1826,70 @@ def _sub_info_text(user_id: int) -> str:
         except Exception:
             human_until = until
     bal = _user_balance_get(user_id)
-    line_until = f"\n⏳ Активна до: {human_until}" if tier != "нет" and human_until else ""
-    return f"🧾 Текущая подписка: {tier.upper() if tier!='нет' else 'нет'}{line_until}\n💵 Баланс: {_money_fmt_usd(bal)}"
+    line_until = f"\nвЏі РђРєС‚РёРІРЅР° РґРѕ: {human_until}" if tier != "РЅРµС‚" and human_until else ""
+    return f"рџ§ѕ РўРµРєСѓС‰Р°СЏ РїРѕРґРїРёСЃРєР°: {tier.upper() if tier!='РЅРµС‚' else 'РЅРµС‚'}{line_until}\nрџ’µ Р‘Р°Р»Р°РЅСЃ: {_money_fmt_usd(bal)}"
 
 def _plan_card_text(key: str) -> str:
     p = SUBS_TIERS[key]
-    fs = "\n".join("• " + f for f in p["features"])
+    fs = "\n".join("вЂў " + f for f in p["features"])
     return (
-        f"⭐ Тариф {p['title']}\n"
-        f"Цена: {_money_fmt_rub(p['rub'])} / {_money_fmt_usd(p['usd'])} в мес.\n\n"
+        f"в­ђ РўР°СЂРёС„ {p['title']}\n"
+        f"Р¦РµРЅР°: {_money_fmt_rub(p['rub'])} / {_money_fmt_usd(p['usd'])} РІ РјРµСЃ.\n\n"
         f"{fs}\n"
     )
 
 def _plans_overview_text(user_id: int) -> str:
     parts = [
-        "⭐ Подписка и тарифы",
-        "Выбери подходящий уровень — доступ откроется сразу после оплаты.",
+        "в­ђ РџРѕРґРїРёСЃРєР° Рё С‚Р°СЂРёС„С‹",
+        "Р’С‹Р±РµСЂРё РїРѕРґС…РѕРґСЏС‰РёР№ СѓСЂРѕРІРµРЅСЊ вЂ” РґРѕСЃС‚СѓРї РѕС‚РєСЂРѕРµС‚СЃСЏ СЃСЂР°Р·Сѓ РїРѕСЃР»Рµ РѕРїР»Р°С‚С‹.",
         _sub_info_text(user_id),
-        "— — —",
+        "вЂ” вЂ” вЂ”",
         _plan_card_text("start"),
         _plan_card_text("pro"),
         _plan_card_text("ultimate"),
-        "Выберите тариф кнопкой ниже.",
+        "Р’С‹Р±РµСЂРёС‚Рµ С‚Р°СЂРёС„ РєРЅРѕРїРєРѕР№ РЅРёР¶Рµ.",
     ]
     return "\n".join(parts)
 
 def plans_root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("⭐ START",    callback_data="plan:start"),
-            InlineKeyboardButton("🚀 PRO",      callback_data="plan:pro"),
-            InlineKeyboardButton("👑 ULTIMATE", callback_data="plan:ultimate"),
+            InlineKeyboardButton("в­ђ START",    callback_data="plan:start"),
+            InlineKeyboardButton("рџљЂ PRO",      callback_data="plan:pro"),
+            InlineKeyboardButton("рџ‘‘ ULTIMATE", callback_data="plan:ultimate"),
         ]
     ])
 
 def plan_pay_kb(plan_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("💳 Оплатить — ЮKassa", callback_data=f"pay:yookassa:{plan_key}"),
+            InlineKeyboardButton("рџ’і РћРїР»Р°С‚РёС‚СЊ вЂ” Р®Kassa", callback_data=f"pay:yookassa:{plan_key}"),
         ],
         [
-            InlineKeyboardButton("💠 Оплатить — CryptoBot", callback_data=f"pay:cryptobot:{plan_key}"),
+            InlineKeyboardButton("рџ’  РћРїР»Р°С‚РёС‚СЊ вЂ” CryptoBot", callback_data=f"pay:cryptobot:{plan_key}"),
         ],
         [
-            InlineKeyboardButton("🧾 Списать с баланса", callback_data=f"pay:balance:{plan_key}"),
+            InlineKeyboardButton("рџ§ѕ РЎРїРёСЃР°С‚СЊ СЃ Р±Р°Р»Р°РЅСЃР°", callback_data=f"pay:balance:{plan_key}"),
         ],
         [
-            InlineKeyboardButton("⬅️ К тарифам", callback_data="plan:root"),
+            InlineKeyboardButton("в¬…пёЏ Рљ С‚Р°СЂРёС„Р°Рј", callback_data="plan:root"),
         ]
     ])
 
-# Кнопка «⭐ Подписка · Помощь»
+# РљРЅРѕРїРєР° В«в­ђ РџРѕРґРїРёСЃРєР° В· РџРѕРјРѕС‰СЊВ»
 async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = _plans_overview_text(user_id)
     await update.effective_chat.send_message(text, reply_markup=plans_root_kb())
 
-# Обработчик наших колбэков по подписке/оплатам (зарегистрировать ДО общего on_cb!)
+# РћР±СЂР°Р±РѕС‚С‡РёРє РЅР°С€РёС… РєРѕР»Р±СЌРєРѕРІ РїРѕ РїРѕРґРїРёСЃРєРµ/РѕРїР»Р°С‚Р°Рј (Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊ Р”Рћ РѕР±С‰РµРіРѕ on_cb!)
 async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data or ""
     user_id = q.from_user.id
-    chat_id = q.message.chat.id  # FIX: корректное поле в PTB v21+
+    chat_id = q.message.chat.id  # FIX: РєРѕСЂСЂРµРєС‚РЅРѕРµ РїРѕР»Рµ РІ PTB v21+
 
-    # Навигация между тарифами
+    # РќР°РІРёРіР°С†РёСЏ РјРµР¶РґСѓ С‚Р°СЂРёС„Р°РјРё
     if data.startswith("plan:"):
         _, arg = data.split(":", 1)
         if arg == "root":
@@ -1927,43 +1898,43 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if arg in SUBS_TIERS:
             await q.edit_message_text(
-                _plan_card_text(arg) + "\nВыберите способ оплаты:",
+                _plan_card_text(arg) + "\nР’С‹Р±РµСЂРёС‚Рµ СЃРїРѕСЃРѕР± РѕРїР»Р°С‚С‹:",
                 reply_markup=plan_pay_kb(arg)
             )
             await q.answer()
             return
 
-    # Платежи
+    # РџР»Р°С‚РµР¶Рё
     if data.startswith("pay:"):
-        # безопасный парсинг
+        # Р±РµР·РѕРїР°СЃРЅС‹Р№ РїР°СЂСЃРёРЅРі
         try:
             _, method, plan_key = data.split(":", 2)
         except ValueError:
-            await q.answer("Некорректные данные кнопки.", show_alert=True)
+            await q.answer("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РґР°РЅРЅС‹Рµ РєРЅРѕРїРєРё.", show_alert=True)
             return
 
         plan = SUBS_TIERS.get(plan_key)
         if not plan:
-            await q.answer("Неизвестный тариф.", show_alert=True)
+            await q.answer("РќРµРёР·РІРµСЃС‚РЅС‹Р№ С‚Р°СЂРёС„.", show_alert=True)
             return
 
-        # ЮKassa через Telegram Payments
+        # Р®Kassa С‡РµСЂРµР· Telegram Payments
         if method == "yookassa":
             if not YOOKASSA_PROVIDER_TOKEN:
-                await q.answer("ЮKassa не подключена (нет YOOKASSA_PROVIDER_TOKEN).", show_alert=True)
+                await q.answer("Р®Kassa РЅРµ РїРѕРґРєР»СЋС‡РµРЅР° (РЅРµС‚ YOOKASSA_PROVIDER_TOKEN).", show_alert=True)
                 return
 
-            title = f"Подписка {plan['title']} • 1 месяц"
-            desc = "Доступ к функциям бота согласно выбранному тарифу. Подписка активируется сразу после оплаты."
+            title = f"РџРѕРґРїРёСЃРєР° {plan['title']} вЂў 1 РјРµСЃСЏС†"
+            desc = "Р”РѕСЃС‚СѓРї Рє С„СѓРЅРєС†РёСЏРј Р±РѕС‚Р° СЃРѕРіР»Р°СЃРЅРѕ РІС‹Р±СЂР°РЅРЅРѕРјСѓ С‚Р°СЂРёС„Сѓ. РџРѕРґРїРёСЃРєР° Р°РєС‚РёРІРёСЂСѓРµС‚СЃСЏ СЃСЂР°Р·Сѓ РїРѕСЃР»Рµ РѕРїР»Р°С‚С‹."
             payload = json.dumps({"tier": plan_key, "months": 1})
 
-            # Telegram ожидает сумму в минорных единицах (копейки/центы)
+            # Telegram РѕР¶РёРґР°РµС‚ СЃСѓРјРјСѓ РІ РјРёРЅРѕСЂРЅС‹С… РµРґРёРЅРёС†Р°С… (РєРѕРїРµР№РєРё/С†РµРЅС‚С‹)
             if YOOKASSA_CURRENCY == "RUB":
                 total_minor = int(round(float(plan["rub"]) * 100))
             else:
                 total_minor = int(round(float(plan["usd"]) * 100))
 
-            prices = [LabeledPrice(label=f"{plan['title']} 1 мес.", amount=total_minor)]
+            prices = [LabeledPrice(label=f"{plan['title']} 1 РјРµСЃ.", amount=total_minor)]
             await context.bot.send_invoice(
                 chat_id=chat_id,
                 title=title,
@@ -1975,13 +1946,13 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 need_email=True,
                 is_flexible=False,
             )
-            await q.answer("Счёт выставлен ✅")
+            await q.answer("РЎС‡С‘С‚ РІС‹СЃС‚Р°РІР»РµРЅ вњ…")
             return
 
-        # CryptoBot (Crypto Pay API: создаём инвойс и отдаём ссылку)
-        if method == "cryptobot":  # FIX: выровнен отступ
+        # CryptoBot (Crypto Pay API: СЃРѕР·РґР°С‘Рј РёРЅРІРѕР№СЃ Рё РѕС‚РґР°С‘Рј СЃСЃС‹Р»РєСѓ)
+        if method == "cryptobot":  # FIX: РІС‹СЂРѕРІРЅРµРЅ РѕС‚СЃС‚СѓРї
             if not CRYPTO_PAY_API_TOKEN:
-                await q.answer("CryptoBot не подключён (нет CRYPTO_PAY_API_TOKEN).", show_alert=True)
+                await q.answer("CryptoBot РЅРµ РїРѕРґРєР»СЋС‡С‘РЅ (РЅРµС‚ CRYPTO_PAY_API_TOKEN).", show_alert=True)
                 return
             try:
                 amount = float(plan["usd"])
@@ -1992,7 +1963,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         json={
                             "asset": CRYPTO_ASSET,
                             "amount": f"{amount:.2f}",
-                            "description": f"Subscription {plan['title']} • 1 month",
+                            "description": f"Subscription {plan['title']} вЂў 1 month",
                             "allow_comments": False,
                             "allow_anonymous": True,
                         },
@@ -2005,46 +1976,46 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     inv_id = str(res["invoice_id"])
 
                 kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💠 Оплатить в CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("⬅️ К тарифу", callback_data=f"plan:{plan_key}")],
+                    [InlineKeyboardButton("рџ’  РћРїР»Р°С‚РёС‚СЊ РІ CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("в¬…пёЏ Рљ С‚Р°СЂРёС„Сѓ", callback_data=f"plan:{plan_key}")],
                 ])
                 msg = await q.edit_message_text(
-                    _plan_card_text(plan_key) + "\nОткройте ссылку для оплаты:",
+                    _plan_card_text(plan_key) + "\nРћС‚РєСЂРѕР№С‚Рµ СЃСЃС‹Р»РєСѓ РґР»СЏ РѕРїР»Р°С‚С‹:",
                     reply_markup=kb
                 )
-                # автопул статуса именно для ПОДПИСКИ
+                # Р°РІС‚РѕРїСѓР» СЃС‚Р°С‚СѓСЃР° РёРјРµРЅРЅРѕ РґР»СЏ РџРћР”РџРРЎРљР
                 context.application.create_task(_poll_crypto_sub_invoice(
                     context, msg.chat.id, msg.message_id, user_id, inv_id, plan_key, 1  # FIX: msg.chat.id
                 ))
                 await q.answer()
             except Exception as e:
-                await q.answer("Не удалось создать счёт в CryptoBot.", show_alert=True)
+                await q.answer("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СЃС‡С‘С‚ РІ CryptoBot.", show_alert=True)
                 log.exception("CryptoBot invoice error: %s", e)
             return
 
-        # Списание с внутреннего баланса (USD)
+        # РЎРїРёСЃР°РЅРёРµ СЃ РІРЅСѓС‚СЂРµРЅРЅРµРіРѕ Р±Р°Р»Р°РЅСЃР° (USD)
         if method == "balance":
             price_usd = float(plan["usd"])
             if not _user_balance_debit(user_id, price_usd):
-                await q.answer("Недостаточно средств на внутреннем балансе.", show_alert=True)
+                await q.answer("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ СЃСЂРµРґСЃС‚РІ РЅР° РІРЅСѓС‚СЂРµРЅРЅРµРј Р±Р°Р»Р°РЅСЃРµ.", show_alert=True)
                 return
             until = _sub_activate(user_id, plan_key, months=1)
             await q.edit_message_text(
-                f"✅ Подписка {plan['title']} активирована до {until[:10]}.\n"
-                f"💵 Списано: {_money_fmt_usd(price_usd)}. "
-                f"Текущий баланс: {_money_fmt_usd(_user_balance_get(user_id))}",
+                f"вњ… РџРѕРґРїРёСЃРєР° {plan['title']} Р°РєС‚РёРІРёСЂРѕРІР°РЅР° РґРѕ {until[:10]}.\n"
+                f"рџ’µ РЎРїРёСЃР°РЅРѕ: {_money_fmt_usd(price_usd)}. "
+                f"РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ: {_money_fmt_usd(_user_balance_get(user_id))}",
                 reply_markup=plans_root_kb(),
             )
             await q.answer()
             return
 
-    # Если колбэк не наш — пропускаем дальше
+    # Р•СЃР»Рё РєРѕР»Р±СЌРє РЅРµ РЅР°С€ вЂ” РїСЂРѕРїСѓСЃРєР°РµРј РґР°Р»СЊС€Рµ
     await q.answer()
     return
 
 
-# Если у тебя уже есть on_precheckout / on_successful_payment — оставь их.
-# Если нет, можешь использовать эти простые реализации:
+# Р•СЃР»Рё Сѓ С‚РµР±СЏ СѓР¶Рµ РµСЃС‚СЊ on_precheckout / on_successful_payment вЂ” РѕСЃС‚Р°РІСЊ РёС….
+# Р•СЃР»Рё РЅРµС‚, РјРѕР¶РµС€СЊ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ СЌС‚Рё РїСЂРѕСЃС‚С‹Рµ СЂРµР°Р»РёР·Р°С†РёРё:
 
 async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -2054,11 +2025,11 @@ async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Универсальный обработчик Telegram Payments:
-    - Поддерживает payload в двух форматах:
+    РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РѕР±СЂР°Р±РѕС‚С‡РёРє Telegram Payments:
+    - РџРѕРґРґРµСЂР¶РёРІР°РµС‚ payload РІ РґРІСѓС… С„РѕСЂРјР°С‚Р°С…:
         1) JSON: {"tier":"pro","months":1}
-        2) Строка: "sub:pro:1"
-    - Иначе трактует как пополнение единого USD-кошелька.
+        2) РЎС‚СЂРѕРєР°: "sub:pro:1"
+    - РРЅР°С‡Рµ С‚СЂР°РєС‚СѓРµС‚ РєР°Рє РїРѕРїРѕР»РЅРµРЅРёРµ РµРґРёРЅРѕРіРѕ USD-РєРѕС€РµР»СЊРєР°.
     """
     try:
         sp = update.message.successful_payment
@@ -2067,7 +2038,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
         rub = total_minor / 100.0
         uid = update.effective_user.id
 
-        # 1) Пытаемся распарсить JSON
+        # 1) РџС‹С‚Р°РµРјСЃСЏ СЂР°СЃРїР°СЂСЃРёС‚СЊ JSON
         tier, months = None, None
         try:
             if payload_raw.strip().startswith("{"):
@@ -2077,7 +2048,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
 
-        # 2) Пытаемся распарсить строковый формат "sub:tier:months"
+        # 2) РџС‹С‚Р°РµРјСЃСЏ СЂР°СЃРїР°СЂСЃРёС‚СЊ СЃС‚СЂРѕРєРѕРІС‹Р№ С„РѕСЂРјР°С‚ "sub:tier:months"
         if not tier and payload_raw.startswith("sub:"):
             try:
                 _, t, m = payload_raw.split(":", 2)
@@ -2089,29 +2060,29 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
         if tier and months:
             until = activate_subscription_with_tier(uid, tier, months)
             await update.effective_message.reply_text(
-                f"🎉 Оплата прошла успешно!\n"
-                f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}."
+                f"рџЋ‰ РћРїР»Р°С‚Р° РїСЂРѕС€Р»Р° СѓСЃРїРµС€РЅРѕ!\n"
+                f"вњ… РџРѕРґРїРёСЃРєР° {tier.upper()} Р°РєС‚РёРІРёСЂРѕРІР°РЅР° РґРѕ {until.strftime('%Y-%m-%d')}."
             )
             return
 
-        # Иначе считаем, что это пополнение кошелька в рублях
+        # РРЅР°С‡Рµ СЃС‡РёС‚Р°РµРј, С‡С‚Рѕ СЌС‚Рѕ РїРѕРїРѕР»РЅРµРЅРёРµ РєРѕС€РµР»СЊРєР° РІ СЂСѓР±Р»СЏС…
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
         await update.effective_message.reply_text(
-            f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый баланс."
+            f"рџ’і РџРѕРїРѕР»РЅРµРЅРёРµ: {rub:.0f} в‚Ѕ в‰€ ${usd:.2f} Р·Р°С‡РёСЃР»РµРЅРѕ РЅР° РµРґРёРЅС‹Р№ Р±Р°Р»Р°РЅСЃ."
         )
 
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("⚠️ Ошибка обработки платежа. Если деньги списались — напишите в поддержку.")
-# ───────── Конец PATCH ─────────
+            await update.effective_message.reply_text("вљ пёЏ РћС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё РїР»Р°С‚РµР¶Р°. Р•СЃР»Рё РґРµРЅСЊРіРё СЃРїРёСЃР°Р»РёСЃСЊ вЂ” РЅР°РїРёС€РёС‚Рµ РІ РїРѕРґРґРµСЂР¶РєСѓ.")
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РљРѕРЅРµС† PATCH в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
         
-# ───────── Команда /img ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РљРѕРјР°РЅРґР° /img в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
-        await update.effective_message.reply_text("Формат: /img <описание>")
+        await update.effective_message.reply_text("Р¤РѕСЂРјР°С‚: /img <РѕРїРёСЃР°РЅРёРµ>")
         return
 
     async def _go():
@@ -2125,16 +2096,16 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ───────── Photo quick actions ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Photo quick actions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def photo_quick_actions_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Оживить фото (Runway)", callback_data="pedit:revive")],
-        [InlineKeyboardButton("🧼 Удалить фон",  callback_data="pedit:removebg"),
-         InlineKeyboardButton("🖼 Заменить фон", callback_data="pedit:replacebg")],
-        [InlineKeyboardButton("🧭 Расширить кадр (outpaint)", callback_data="pedit:outpaint"),
-         InlineKeyboardButton("📽 Раскадровка", callback_data="pedit:story")],
-        [InlineKeyboardButton("🖌 Картинка по описанию (Luma)", callback_data="pedit:lumaimg")],
-        [InlineKeyboardButton("👁 Анализ фото", callback_data="pedit:vision")],
+        [InlineKeyboardButton("вњЁ РћР¶РёРІРёС‚СЊ С„РѕС‚Рѕ (Runway)", callback_data="pedit:revive")],
+        [InlineKeyboardButton("рџ§ј РЈРґР°Р»РёС‚СЊ С„РѕРЅ",  callback_data="pedit:removebg"),
+         InlineKeyboardButton("рџ–ј Р—Р°РјРµРЅРёС‚СЊ С„РѕРЅ", callback_data="pedit:replacebg")],
+        [InlineKeyboardButton("рџ§­ Р Р°СЃС€РёСЂРёС‚СЊ РєР°РґСЂ (outpaint)", callback_data="pedit:outpaint"),
+         InlineKeyboardButton("рџ“Ѕ Р Р°СЃРєР°РґСЂРѕРІРєР°", callback_data="pedit:story")],
+        [InlineKeyboardButton("рџ–Њ РљР°СЂС‚РёРЅРєР° РїРѕ РѕРїРёСЃР°РЅРёСЋ (Luma)", callback_data="pedit:lumaimg")],
+        [InlineKeyboardButton("рџ‘Ѓ РђРЅР°Р»РёР· С„РѕС‚Рѕ", callback_data="pedit:vision")],
     ])
 
 _photo_cache = {}  # user_id -> bytes
@@ -2150,32 +2121,32 @@ def _get_cached_photo(user_id: int) -> bytes | None:
 
 async def _pedit_removebg(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     if rembg_remove is None:
-        await update.effective_message.reply_text("rembg не установлен. Установите rembg/onnxruntime.")
+        await update.effective_message.reply_text("rembg РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ. РЈСЃС‚Р°РЅРѕРІРёС‚Рµ rembg/onnxruntime.")
         return
     try:
         out = rembg_remove(img_bytes)
         bio = BytesIO(out); bio.name = "no_bg.png"
-        await update.effective_message.reply_document(InputFile(bio), caption="Фон удалён ✅")
+        await update.effective_message.reply_document(InputFile(bio), caption="Р¤РѕРЅ СѓРґР°Р»С‘РЅ вњ…")
     except Exception as e:
         log.exception("removebg error: %s", e)
-        await update.effective_message.reply_text("Не удалось удалить фон.")
+        await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ С„РѕРЅ.")
 
 async def _pedit_replacebg(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     if Image is None:
-        await update.effective_message.reply_text("Pillow не установлен.")
+        await update.effective_message.reply_text("Pillow РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ.")
         return
     try:
         im = Image.open(BytesIO(img_bytes)).convert("RGBA")
         bg = im.convert("RGB").filter(ImageFilter.GaussianBlur(radius=22)) if ImageFilter else im.convert("RGB")
         bio = BytesIO(); bg.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name = "bg_blur.jpg"
-        await update.effective_message.reply_photo(InputFile(bio), caption="Заменил фон на размытый вариант.")
+        await update.effective_message.reply_photo(InputFile(bio), caption="Р—Р°РјРµРЅРёР» С„РѕРЅ РЅР° СЂР°Р·РјС‹С‚С‹Р№ РІР°СЂРёР°РЅС‚.")
     except Exception as e:
         log.exception("replacebg error: %s", e)
-        await update.effective_message.reply_text("Не удалось заменить фон.")
+        await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РјРµРЅРёС‚СЊ С„РѕРЅ.")
 
 async def _pedit_outpaint(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     if Image is None:
-        await update.effective_message.reply_text("Pillow не установлен.")
+        await update.effective_message.reply_text("Pillow РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ.")
         return
     try:
         im = Image.open(BytesIO(img_bytes)).convert("RGB")
@@ -2184,26 +2155,26 @@ async def _pedit_outpaint(update: Update, context: ContextTypes.DEFAULT_TYPE, im
         bg = im.resize(big.size, Image.LANCZOS).filter(ImageFilter.GaussianBlur(radius=24)) if ImageFilter else im.resize(big.size)
         big.paste(bg, (0, 0)); big.paste(im, (pad, pad))
         bio = BytesIO(); big.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name = "outpaint.jpg"
-        await update.effective_message.reply_photo(InputFile(bio), caption="Простой outpaint: расширил полотно с мягкими краями.")
+        await update.effective_message.reply_photo(InputFile(bio), caption="РџСЂРѕСЃС‚РѕР№ outpaint: СЂР°СЃС€РёСЂРёР» РїРѕР»РѕС‚РЅРѕ СЃ РјСЏРіРєРёРјРё РєСЂР°СЏРјРё.")
     except Exception as e:
         log.exception("outpaint error: %s", e)
-        await update.effective_message.reply_text("Не удалось сделать outpaint.")
+        await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРґРµР»Р°С‚СЊ outpaint.")
 
 async def _pedit_storyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     try:
         b64 = base64.b64encode(img_bytes).decode("ascii")
-        desc = await ask_openai_vision("Опиши ключевые элементы кадра очень кратко.", b64, sniff_image_mime(img_bytes))
+        desc = await ask_openai_vision("РћРїРёС€Рё РєР»СЋС‡РµРІС‹Рµ СЌР»РµРјРµРЅС‚С‹ РєР°РґСЂР° РѕС‡РµРЅСЊ РєСЂР°С‚РєРѕ.", b64, sniff_image_mime(img_bytes))
         plan = await ask_openai_text(
-            "Сделай раскадровку (6 кадров) под 6–10 секундный клип. "
-            "Каждый кадр — 1 строка: кадр/действие/ракурс/свет. Основа:\n" + (desc or "")
+            "РЎРґРµР»Р°Р№ СЂР°СЃРєР°РґСЂРѕРІРєСѓ (6 РєР°РґСЂРѕРІ) РїРѕРґ 6вЂ“10 СЃРµРєСѓРЅРґРЅС‹Р№ РєР»РёРї. "
+            "РљР°Р¶РґС‹Р№ РєР°РґСЂ вЂ” 1 СЃС‚СЂРѕРєР°: РєР°РґСЂ/РґРµР№СЃС‚РІРёРµ/СЂР°РєСѓСЂСЃ/СЃРІРµС‚. РћСЃРЅРѕРІР°:\n" + (desc or "")
         )
-        await update.effective_message.reply_text("Раскадровка:\н" + plan)
+        await update.effective_message.reply_text("Р Р°СЃРєР°РґСЂРѕРІРєР°:\РЅ" + plan)
     except Exception as e:
         log.exception("storyboard error: %s", e)
-        await update.effective_message.reply_text("Не удалось построить раскадровку.")
+        await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕСЃС‚СЂРѕРёС‚СЊ СЂР°СЃРєР°РґСЂРѕРІРєСѓ.")
 
 
-# ───────── WebApp data (тарифы/пополнения) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ WebApp data (С‚Р°СЂРёС„С‹/РїРѕРїРѕР»РЅРµРЅРёСЏ) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         wad = update.effective_message.web_app_data
@@ -2221,12 +2192,12 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if typ in ("subscribe", "buy", "buy_sub", "sub"):
             tier = (data.get("tier") or "pro").lower()
             months = int(data.get("months") or 1)
-            desc = f"Оформление подписки {tier.upper()} на {months} мес."
+            desc = f"РћС„РѕСЂРјР»РµРЅРёРµ РїРѕРґРїРёСЃРєРё {tier.upper()} РЅР° {months} РјРµСЃ."
             await update.effective_message.reply_text(
-                f"{desc}\nВыберите способ:",
+                f"{desc}\nР’С‹Р±РµСЂРёС‚Рµ СЃРїРѕСЃРѕР±:",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Оплатить картой (ЮKassa)", callback_data=f"buyinv:{tier}:{months}")],
-                    [InlineKeyboardButton("Списать с баланса (USD)",  callback_data=f"buywallet:{tier}:{months}")],
+                    [InlineKeyboardButton("РћРїР»Р°С‚РёС‚СЊ РєР°СЂС‚РѕР№ (Р®Kassa)", callback_data=f"buyinv:{tier}:{months}")],
+                    [InlineKeyboardButton("РЎРїРёСЃР°С‚СЊ СЃ Р±Р°Р»Р°РЅСЃР° (USD)",  callback_data=f"buywallet:{tier}:{months}")],
                 ])
             )
             return
@@ -2234,25 +2205,25 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if typ in ("topup_rub", "rub_topup"):
             amount_rub = int(data.get("amount") or 0)
             if amount_rub < MIN_RUB_FOR_INVOICE:
-                await update.effective_message.reply_text(f"Минимальная сумма: {MIN_RUB_FOR_INVOICE} ₽")
+                await update.effective_message.reply_text(f"РњРёРЅРёРјР°Р»СЊРЅР°СЏ СЃСѓРјРјР°: {MIN_RUB_FOR_INVOICE} в‚Ѕ")
                 return
-            await _send_invoice_rub("Пополнение баланса", "Единый кошелёк", amount_rub, "t=3", update)
+            await _send_invoice_rub("РџРѕРїРѕР»РЅРµРЅРёРµ Р±Р°Р»Р°РЅСЃР°", "Р•РґРёРЅС‹Р№ РєРѕС€РµР»С‘Рє", amount_rub, "t=3", update)
             return
 
         if typ in ("topup_crypto", "crypto_topup"):
             if not CRYPTO_PAY_API_TOKEN:
-                await update.effective_message.reply_text("CryptoBot не настроен.")
+                await update.effective_message.reply_text("CryptoBot РЅРµ РЅР°СЃС‚СЂРѕРµРЅ.")
                 return
             usd = float(data.get("usd") or 0)
             inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT")
             if not inv_id or not pay_url:
-                await update.effective_message.reply_text("Не удалось создать счёт в CryptoBot.")
+                await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СЃС‡С‘С‚ РІ CryptoBot.")
                 return
             msg = await update.effective_message.reply_text(
-                f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).",
+                f"РћРїР»Р°С‚РёС‚Рµ С‡РµСЂРµР· CryptoBot: в‰€ ${usd_amount:.2f} ({asset}).",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
+                    [InlineKeyboardButton("РћРїР»Р°С‚РёС‚СЊ РІ CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("РџСЂРѕРІРµСЂРёС‚СЊ РѕРїР»Р°С‚Сѓ", callback_data=f"crypto:check:{inv_id}")]
                 ])
             )
             context.application.create_task(_poll_crypto_invoice(
@@ -2260,13 +2231,13 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ))
             return
 
-        await update.effective_message.reply_text("Получены данные из мини-приложения, но команда не распознана.")
+        await update.effective_message.reply_text("РџРѕР»СѓС‡РµРЅС‹ РґР°РЅРЅС‹Рµ РёР· РјРёРЅРё-РїСЂРёР»РѕР¶РµРЅРёСЏ, РЅРѕ РєРѕРјР°РЅРґР° РЅРµ СЂР°СЃРїРѕР·РЅР°РЅР°.")
     except Exception as e:
         log.exception("on_webapp_data error: %s", e)
-        await update.effective_message.reply_text("Ошибка обработки данных мини-приложения.")
+        await update.effective_message.reply_text("РћС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё РґР°РЅРЅС‹С… РјРёРЅРё-РїСЂРёР»РѕР¶РµРЅРёСЏ.")
 
 
-# ───────── CallbackQuery (всё остальное) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ CallbackQuery (РІСЃС‘ РѕСЃС‚Р°Р»СЊРЅРѕРµ) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 _pending_actions = {}
 
 def _new_aid() -> str:
@@ -2276,7 +2247,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
     try:
-        # TOPUP меню
+        # TOPUP РјРµРЅСЋ
         if data == "topup":
             await q.answer()
             await _send_topup_menu(update, context)
@@ -2290,34 +2261,34 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 amount_rub = 0
             if amount_rub < MIN_RUB_FOR_INVOICE:
-                await q.edit_message_text(f"Минимальная сумма пополнения: {MIN_RUB_FOR_INVOICE} ₽")
+                await q.edit_message_text(f"РњРёРЅРёРјР°Р»СЊРЅР°СЏ СЃСѓРјРјР° РїРѕРїРѕР»РЅРµРЅРёСЏ: {MIN_RUB_FOR_INVOICE} в‚Ѕ")
                 return
-            ok = await _send_invoice_rub("Пополнение баланса", "Единый кошелёк для перерасходов.", amount_rub, "t=3", update)
-            await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
+            ok = await _send_invoice_rub("РџРѕРїРѕР»РЅРµРЅРёРµ Р±Р°Р»Р°РЅСЃР°", "Р•РґРёРЅС‹Р№ РєРѕС€РµР»С‘Рє РґР»СЏ РїРµСЂРµСЂР°СЃС…РѕРґРѕРІ.", amount_rub, "t=3", update)
+            await q.answer("Р’С‹СЃС‚Р°РІР»СЏСЋ СЃС‡С‘С‚вЂ¦" if ok else "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹СЃС‚Р°РІРёС‚СЊ СЃС‡С‘С‚", show_alert=not ok)
             return
 
         # TOPUP CRYPTO
         if data.startswith("topup:crypto:"):
             await q.answer()
             if not CRYPTO_PAY_API_TOKEN:
-                await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
+                await q.edit_message_text("РќР°СЃС‚СЂРѕР№С‚Рµ CRYPTO_PAY_API_TOKEN РґР»СЏ РѕРїР»Р°С‚С‹ С‡РµСЂРµР· CryptoBot.")
                 return
             try:
                 usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
             except Exception:
                 usd = 0.0
             if usd <= 0.0:
-                await q.edit_message_text("Неверная сумма.")
+                await q.edit_message_text("РќРµРІРµСЂРЅР°СЏ СЃСѓРјРјР°.")
                 return
             inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT", description="Wallet top-up")
             if not inv_id or not pay_url:
-                await q.edit_message_text("Не удалось создать счёт в CryptoBot. Попробуйте позже.")
+                await q.edit_message_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СЃС‡С‘С‚ РІ CryptoBot. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.")
                 return
             msg = await update.effective_message.reply_text(
-                f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\nПосле оплаты баланс пополнится автоматически.",
+                f"РћРїР»Р°С‚РёС‚Рµ С‡РµСЂРµР· CryptoBot: в‰€ ${usd_amount:.2f} ({asset}).\nРџРѕСЃР»Рµ РѕРїР»Р°С‚С‹ Р±Р°Р»Р°РЅСЃ РїРѕРїРѕР»РЅРёС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
+                    [InlineKeyboardButton("РћРїР»Р°С‚РёС‚СЊ РІ CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("РџСЂРѕРІРµСЂРёС‚СЊ РѕРїР»Р°С‚Сѓ", callback_data=f"crypto:check:{inv_id}")]
                 ])
             )
             context.application.create_task(_poll_crypto_invoice(
@@ -2330,7 +2301,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             inv_id = data.split(":", 2)[-1]
             inv = await _crypto_get_invoice(inv_id)
             if not inv:
-                await q.edit_message_text("Не нашёл счёт. Создайте новый.")
+                await q.edit_message_text("РќРµ РЅР°С€С‘Р» СЃС‡С‘С‚. РЎРѕР·РґР°Р№С‚Рµ РЅРѕРІС‹Р№.")
                 return
             st = (inv.get("status") or "").lower()
             if st == "paid":
@@ -2338,41 +2309,41 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if (inv.get("asset") or "").upper() == "TON":
                     usd_amount *= TON_USD_RATE
                 _wallet_total_add(update.effective_user.id, usd_amount)
-                await q.edit_message_text(f"💳 Оплата получена. Баланс пополнен на ≈ ${usd_amount:.2f}.")
+                await q.edit_message_text(f"рџ’і РћРїР»Р°С‚Р° РїРѕР»СѓС‡РµРЅР°. Р‘Р°Р»Р°РЅСЃ РїРѕРїРѕР»РЅРµРЅ РЅР° в‰€ ${usd_amount:.2f}.")
             elif st == "active":
-                await q.answer("Платёж ещё не подтверждён", show_alert=True)
+                await q.answer("РџР»Р°С‚С‘Р¶ РµС‰С‘ РЅРµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ", show_alert=True)
             else:
-                await q.edit_message_text(f"Статус счёта: {st}")
+                await q.edit_message_text(f"РЎС‚Р°С‚СѓСЃ СЃС‡С‘С‚Р°: {st}")
             return
 
-        # Подписка: выбор способа
+        # РџРѕРґРїРёСЃРєР°: РІС‹Р±РѕСЂ СЃРїРѕСЃРѕР±Р°
         if data.startswith("buy:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
             months = int(months)
-            desc = f"Подписка {tier.upper()} на {months} мес."
+            desc = f"РџРѕРґРїРёСЃРєР° {tier.upper()} РЅР° {months} РјРµСЃ."
             await q.edit_message_text(
-                f"{desc}\nВыберите способ оплаты:",
+                f"{desc}\nР’С‹Р±РµСЂРёС‚Рµ СЃРїРѕСЃРѕР± РѕРїР»Р°С‚С‹:",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Оплатить картой (ЮKassa)", callback_data=f"buyinv:{tier}:{months}")],
-                    [InlineKeyboardButton("Списать с баланса (USD)",  callback_data=f"buywallet:{tier}:{months}")],
+                    [InlineKeyboardButton("РћРїР»Р°С‚РёС‚СЊ РєР°СЂС‚РѕР№ (Р®Kassa)", callback_data=f"buyinv:{tier}:{months}")],
+                    [InlineKeyboardButton("РЎРїРёСЃР°С‚СЊ СЃ Р±Р°Р»Р°РЅСЃР° (USD)",  callback_data=f"buywallet:{tier}:{months}")],
                 ])
             )
             return
 
-        # Подписка через ЮKassa
+        # РџРѕРґРїРёСЃРєР° С‡РµСЂРµР· Р®Kassa
         if data.startswith("buyinv:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
             months = int(months)
             payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-            desc = f"Оформление подписки {tier.upper()} на {months} мес."
+            desc = f"РћС„РѕСЂРјР»РµРЅРёРµ РїРѕРґРїРёСЃРєРё {tier.upper()} РЅР° {months} РјРµСЃ."
             ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
             if not ok:
-                await q.answer("Не удалось выставить счёт", show_alert=True)
+                await q.answer("РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹СЃС‚Р°РІРёС‚СЊ СЃС‡С‘С‚", show_alert=True)
             return
 
-        # Подписка списанием из USD-баланса
+        # РџРѕРґРїРёСЃРєР° СЃРїРёСЃР°РЅРёРµРј РёР· USD-Р±Р°Р»Р°РЅСЃР°
         if data.startswith("buywallet:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
@@ -2382,32 +2353,32 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if _wallet_total_take(update.effective_user.id, need_usd):
                 until = activate_subscription_with_tier(update.effective_user.id, tier, months)
                 await q.edit_message_text(
-                    f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n"
-                    f"Списано с баланса: ~${need_usd:.2f}."
+                    f"вњ… РџРѕРґРїРёСЃРєР° {tier.upper()} Р°РєС‚РёРІРёСЂРѕРІР°РЅР° РґРѕ {until.strftime('%Y-%m-%d')}.\n"
+                    f"РЎРїРёСЃР°РЅРѕ СЃ Р±Р°Р»Р°РЅСЃР°: ~${need_usd:.2f}."
                 )
             else:
                 await q.edit_message_text(
-                    "Недостаточно средств на едином балансе.\nПополните баланс и повторите.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]])
+                    "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ СЃСЂРµРґСЃС‚РІ РЅР° РµРґРёРЅРѕРј Р±Р°Р»Р°РЅСЃРµ.\nРџРѕРїРѕР»РЅРёС‚Рµ Р±Р°Р»Р°РЅСЃ Рё РїРѕРІС‚РѕСЂРёС‚Рµ.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("вћ• РџРѕРїРѕР»РЅРёС‚СЊ Р±Р°Р»Р°РЅСЃ", callback_data="topup")]])
                 )
             return
 
-        # Выбор движка
+        # Р’С‹Р±РѕСЂ РґРІРёР¶РєР°
         if data.startswith("engine:"):
             await q.answer()
             engine = data.split(":", 1)[1]
             username = (update.effective_user.username or "")
             if is_unlimited(update.effective_user.id, username):
                 await q.edit_message_text(
-                    f"✅ Движок «{engine}» доступен без ограничений.\n"
-                    f"Отправьте задачу, например: «сделай видео ретро-авто, 9 секунд, 9:16»."
+                    f"вњ… Р”РІРёР¶РѕРє В«{engine}В» РґРѕСЃС‚СѓРїРµРЅ Р±РµР· РѕРіСЂР°РЅРёС‡РµРЅРёР№.\n"
+                    f"РћС‚РїСЂР°РІСЊС‚Рµ Р·Р°РґР°С‡Сѓ, РЅР°РїСЂРёРјРµСЂ: В«СЃРґРµР»Р°Р№ РІРёРґРµРѕ СЂРµС‚СЂРѕ-Р°РІС‚Рѕ, 9 СЃРµРєСѓРЅРґ, 9:16В»."
                 )
                 return
 
             if engine in ("gpt", "stt_tts", "midjourney"):
                 await q.edit_message_text(
-                    f"✅ Выбран «{engine}». Отправьте запрос текстом/фото. "
-                    f"Для Luma/Runway/Images действуют дневные бюджеты тарифа."
+                    f"вњ… Р’С‹Р±СЂР°РЅ В«{engine}В». РћС‚РїСЂР°РІСЊС‚Рµ Р·Р°РїСЂРѕСЃ С‚РµРєСЃС‚РѕРј/С„РѕС‚Рѕ. "
+                    f"Р”Р»СЏ Luma/Runway/Images РґРµР№СЃС‚РІСѓСЋС‚ РґРЅРµРІРЅС‹Рµ Р±СЋРґР¶РµС‚С‹ С‚Р°СЂРёС„Р°."
                 )
                 return
 
@@ -2417,18 +2388,18 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if ok:
                 await q.edit_message_text(
-                    "✅ Доступно. " +
-                    ("Запустите: /img кот в очках" if engine == "images"
-                     else "Напишите: «сделай видео … 9 секунд 9:16» — предложу Luma/Runway.")
+                    "вњ… Р”РѕСЃС‚СѓРїРЅРѕ. " +
+                    ("Р—Р°РїСѓСЃС‚РёС‚Рµ: /img РєРѕС‚ РІ РѕС‡РєР°С…" if engine == "images"
+                     else "РќР°РїРёС€РёС‚Рµ: В«СЃРґРµР»Р°Р№ РІРёРґРµРѕ вЂ¦ 9 СЃРµРєСѓРЅРґ 9:16В» вЂ” РїСЂРµРґР»РѕР¶Сѓ Luma/Runway.")
                 )
                 return
 
             if offer == "ASK_SUBSCRIBE":
                 await q.edit_message_text(
-                    "Для этого движка нужна активная подписка или единый баланс. Откройте /plans или пополните «🧾 Баланс».",
+                    "Р”Р»СЏ СЌС‚РѕРіРѕ РґРІРёР¶РєР° РЅСѓР¶РЅР° Р°РєС‚РёРІРЅР°СЏ РїРѕРґРїРёСЃРєР° РёР»Рё РµРґРёРЅС‹Р№ Р±Р°Р»Р°РЅСЃ. РћС‚РєСЂРѕР№С‚Рµ /plans РёР»Рё РїРѕРїРѕР»РЅРёС‚Рµ В«рџ§ѕ Р‘Р°Р»Р°РЅСЃВ».",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                         [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
+                        [[InlineKeyboardButton("в­ђ РўР°СЂРёС„С‹", web_app=WebAppInfo(url=TARIFF_URL))],
+                         [InlineKeyboardButton("вћ• РџРѕРїРѕР»РЅРёС‚СЊ Р±Р°Р»Р°РЅСЃ", callback_data="topup")]]
                     ),
                 )
                 return
@@ -2439,21 +2410,21 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 need_usd = est_cost
             amount_rub = _calc_oneoff_price_rub(map_engine, need_usd)
             await q.edit_message_text(
-                f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
-                f"или пополните баланс в «🧾 Баланс».",
+                f"Р’Р°С€ РґРЅРµРІРЅРѕР№ Р»РёРјРёС‚ РїРѕ В«{engine}В» РёСЃС‡РµСЂРїР°РЅ. Р Р°Р·РѕРІР°СЏ РїРѕРєСѓРїРєР° в‰€ {amount_rub} в‚Ѕ "
+                f"РёР»Рё РїРѕРїРѕР»РЅРёС‚Рµ Р±Р°Р»Р°РЅСЃ РІ В«рџ§ѕ Р‘Р°Р»Р°РЅСЃВ».",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                        [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
+                        [InlineKeyboardButton("в­ђ РўР°СЂРёС„С‹", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [InlineKeyboardButton("вћ• РџРѕРїРѕР»РЅРёС‚СЊ Р±Р°Р»Р°РЅСЃ", callback_data="topup")],
                     ]
                 ),
             )
             return
 
-        # Режимы / Движки
+        # Р РµР¶РёРјС‹ / Р”РІРёР¶РєРё
         if data == "mode:engines":
             await q.answer()
-            await q.edit_message_text("Движки:", reply_markup=engines_kb())
+            await q.edit_message_text("Р”РІРёР¶РєРё:", reply_markup=engines_kb())
             return
 
         if data.startswith("mode:set:"):
@@ -2462,22 +2433,22 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mode_set(update.effective_user.id, mode)
             if mode == "study":
                 study_sub_set(update.effective_user.id, "explain")
-                await q.edit_message_text("Режим «Учёба» включён. Выберите подрежим:", reply_markup=study_kb())
+                await q.edit_message_text("Р РµР¶РёРј В«РЈС‡С‘Р±Р°В» РІРєР»СЋС‡С‘РЅ. Р’С‹Р±РµСЂРёС‚Рµ РїРѕРґСЂРµР¶РёРј:", reply_markup=study_kb())
             elif mode == "photo":
-                await q.edit_message_text("Режим «Фото» включён. Пришлите изображение — появятся быстрые кнопки.", reply_markup=photo_quick_actions_kb())
+                await q.edit_message_text("Р РµР¶РёРј В«Р¤РѕС‚РѕВ» РІРєР»СЋС‡С‘РЅ. РџСЂРёС€Р»РёС‚Рµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ вЂ” РїРѕСЏРІСЏС‚СЃСЏ Р±С‹СЃС‚СЂС‹Рµ РєРЅРѕРїРєРё.", reply_markup=photo_quick_actions_kb())
             elif mode == "docs":
-                await q.edit_message_text("Режим «Документы». Пришлите PDF/DOCX/EPUB/TXT — сделаю конспект.")
+                await q.edit_message_text("Р РµР¶РёРј В«Р”РѕРєСѓРјРµРЅС‚С‹В». РџСЂРёС€Р»РёС‚Рµ PDF/DOCX/EPUB/TXT вЂ” СЃРґРµР»Р°СЋ РєРѕРЅСЃРїРµРєС‚.")
             elif mode == "voice":
-                await q.edit_message_text("Режим «Голос». Отправьте voice/audio. Озвучка ответов: /voice_on")
+                await q.edit_message_text("Р РµР¶РёРј В«Р“РѕР»РѕСЃВ». РћС‚РїСЂР°РІСЊС‚Рµ voice/audio. РћР·РІСѓС‡РєР° РѕС‚РІРµС‚РѕРІ: /voice_on")
             else:
-                await q.edit_message_text(f"Режим «{mode}» активирован.")
+                await q.edit_message_text(f"Р РµР¶РёРј В«{mode}В» Р°РєС‚РёРІРёСЂРѕРІР°РЅ.")
             return
 
         if data.startswith("study:set:"):
             await q.answer()
             sub = data.split(":")[-1]
             study_sub_set(update.effective_user.id, sub)
-            await q.edit_message_text(f"Учёба → {sub}. Напишите тему/задание.", reply_markup=study_kb())
+            await q.edit_message_text(f"РЈС‡С‘Р±Р° в†’ {sub}. РќР°РїРёС€РёС‚Рµ С‚РµРјСѓ/Р·Р°РґР°РЅРёРµ.", reply_markup=study_kb())
             return
 
         # Photo edits require cached image
@@ -2485,7 +2456,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer()
             img = _get_cached_photo(update.effective_user.id)
             if not img:
-                await q.edit_message_text("Сначала пришлите фото, затем выберите действие.", reply_markup=photo_quick_actions_kb())
+                await q.edit_message_text("РЎРЅР°С‡Р°Р»Р° РїСЂРёС€Р»РёС‚Рµ С„РѕС‚Рѕ, Р·Р°С‚РµРј РІС‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ.", reply_markup=photo_quick_actions_kb())
                 return
             if data == "pedit:removebg":
                 await _pedit_removebg(update, context, img); return
@@ -2498,9 +2469,9 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if data == "pedit:revive":
                 img = _get_cached_photo(update.effective_user.id)
                 if not img:
-                    await q.edit_message_text("Сначала пришлите фото, затем нажмите «Оживить фото».")
+                    await q.edit_message_text("РЎРЅР°С‡Р°Р»Р° РїСЂРёС€Р»РёС‚Рµ С„РѕС‚Рѕ, Р·Р°С‚РµРј РЅР°Р¶РјРёС‚Рµ В«РћР¶РёРІРёС‚СЊ С„РѕС‚РѕВ».")
                     return
-                dur, asp = parse_video_opts("")  # дефолт из ENV
+                dur, asp = parse_video_opts("")  # РґРµС„РѕР»С‚ РёР· ENV
                 async def _go():
                     await _run_runway_animate_photo(update, context, img, prompt="", duration_s=dur, aspect=asp)
                 await _try_pay_then_do(update, context, update.effective_user.id, "runway",
@@ -2511,45 +2482,33 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if data == "pedit:lumaimg":
                 _mode_track_set(update.effective_user.id, "lumaimg_wait_text")
-                await q.edit_message_text("Напишите одно предложение — что сгенерировать. Я сделаю картинку (Luma / фолбэк OpenAI).")
+                await q.edit_message_text("РќР°РїРёС€РёС‚Рµ РѕРґРЅРѕ РїСЂРµРґР»РѕР¶РµРЅРёРµ вЂ” С‡С‚Рѕ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ. РЇ СЃРґРµР»Р°СЋ РєР°СЂС‚РёРЅРєСѓ (Luma / С„РѕР»Р±СЌРє OpenAI).")
                 return
             if data == "pedit:vision":
                 b64 = base64.b64encode(img).decode("ascii")
                 mime = sniff_image_mime(img)
-                ans = await ask_openai_vision("Опиши фото и текст на нём кратко.", b64, mime)
-                await update.effective_message.reply_text(ans or "Готово.")
+                ans = await ask_openai_vision("РћРїРёС€Рё С„РѕС‚Рѕ Рё С‚РµРєСЃС‚ РЅР° РЅС‘Рј РєСЂР°С‚РєРѕ.", b64, mime)
+                await update.effective_message.reply_text(ans or "Р“РѕС‚РѕРІРѕ.")
                 return
 
-        # Подтверждение выбора движка для видео
+        # РџРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РІС‹Р±РѕСЂР° РґРІРёР¶РєР° РґР»СЏ РІРёРґРµРѕ
         if data.startswith("choose:"):
             await q.answer()
             _, engine, aid = data.split(":", 2)
             meta = _pending_actions.pop(aid, None)
             if not meta:
-                await q.answer("Задача устарела", show_alert=True)
+                await q.answer("Р—Р°РґР°С‡Р° СѓСЃС‚Р°СЂРµР»Р°", show_alert=True)
                 return
             prompt   = meta["prompt"]
             duration = meta["duration"]
             aspect   = meta["aspect"]
-
-            # оценка стоимости по выбранному движку
-            if engine == "luma":
-                est = 0.40
-                map_engine = "luma"
-            elif engine == "kling":
-                est = max(0.15, KLING_UNIT_COST_USD * (duration / 5.0))
-                map_engine = "luma"   # Kling считаем по бюджету Luma
-            else:
-                est = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-                map_engine = "runway"
+            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+            map_engine = "luma" if engine == "luma" else "runway"
 
             async def _start_real_render():
                 if engine == "luma":
                     await _run_luma_video(update, context, prompt, duration, aspect)
                     _register_engine_spend(update.effective_user.id, "luma", 0.40)
-                elif engine == "kling":
-                    await _run_kling_video(update, context, prompt, duration, aspect)
-                    _register_engine_spend(update.effective_user.id, "kling", est)
                 else:
                     await _run_runway_video(update, context, prompt, duration, aspect)
                     base = RUNWAY_UNIT_COST_USD or 7.0
@@ -2557,18 +2516,14 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     _register_engine_spend(update.effective_user.id, "runway", cost)
 
             await _try_pay_then_do(
-                update,
-                context,
-                update.effective_user.id,
-                map_engine,
-                est,
-                _start_real_render,
+                update, context, update.effective_user.id,
+                map_engine, est, _start_real_render,
                 remember_kind=f"video_{engine}",
                 remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
             )
             return
 
-        await q.answer("Неизвестная команда", show_alert=True)
+        await q.answer("РќРµРёР·РІРµСЃС‚РЅР°СЏ РєРѕРјР°РЅРґР°", show_alert=True)
 
     except Exception as e:
         log.exception("on_cb error: %s", e)
@@ -2577,7 +2532,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer()
 
 
-# ───────── STT ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ STT в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _mime_from_filename(fn: str) -> str:
     fnl = (fn or "").lower()
     if fnl.endswith((".ogg", ".oga")): return "audio/ogg"
@@ -2611,14 +2566,14 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
     return ""
 
 
-# ───────── Диагностика движков ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р”РёР°РіРЅРѕСЃС‚РёРєР° РґРІРёР¶РєРѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = []
-    lines.append("🔎 STT диагностика:")
-    lines.append(f"• Deepgram: {'✅ ключ найден' if DEEPGRAM_API_KEY else '❌ нет ключа'}")
-    lines.append(f"• OpenAI Whisper: {'✅ клиент активен' if oai_stt else '❌ недоступен'}")
-    lines.append(f"• Модель Whisper: {TRANSCRIBE_MODEL}")
-    lines.append("• Поддержка форматов: ogg/oga, mp3, m4a/mp4, wav, webm")
+    lines.append("рџ”Ћ STT РґРёР°РіРЅРѕСЃС‚РёРєР°:")
+    lines.append(f"вЂў Deepgram: {'вњ… РєР»СЋС‡ РЅР°Р№РґРµРЅ' if DEEPGRAM_API_KEY else 'вќЊ РЅРµС‚ РєР»СЋС‡Р°'}")
+    lines.append(f"вЂў OpenAI Whisper: {'вњ… РєР»РёРµРЅС‚ Р°РєС‚РёРІРµРЅ' if oai_stt else 'вќЊ РЅРµРґРѕСЃС‚СѓРїРµРЅ'}")
+    lines.append(f"вЂў РњРѕРґРµР»СЊ Whisper: {TRANSCRIBE_MODEL}")
+    lines.append("вЂў РџРѕРґРґРµСЂР¶РєР° С„РѕСЂРјР°С‚РѕРІ: ogg/oga, mp3, m4a/mp4, wav, webm")
     await update.effective_message.reply_text("\n".join(lines))
 
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2626,32 +2581,30 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key_used = key_env or OPENAI_API_KEY
     base     = IMAGES_BASE_URL
     lines = [
-        "🧪 Images (OpenAI) диагностика:",
-        f"• OPENAI_IMAGE_KEY: {'✅ найден' if key_used else '❌ нет'}",
-        f"• BASE_URL: {base}",
-        f"• MODEL: {IMAGES_MODEL}",
+        "рџ§Є Images (OpenAI) РґРёР°РіРЅРѕСЃС‚РёРєР°:",
+        f"вЂў OPENAI_IMAGE_KEY: {'вњ… РЅР°Р№РґРµРЅ' if key_used else 'вќЊ РЅРµС‚'}",
+        f"вЂў BASE_URL: {base}",
+        f"вЂў MODEL: {IMAGES_MODEL}",
     ]
     if "openrouter" in (base or "").lower():
-        lines.append("⚠️ BASE_URL указывает на OpenRouter — там нет gpt-image-1.")
-        lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
+        lines.append("вљ пёЏ BASE_URL СѓРєР°Р·С‹РІР°РµС‚ РЅР° OpenRouter вЂ” С‚Р°Рј РЅРµС‚ gpt-image-1.")
+        lines.append("   РЈРєР°Р¶Рё https://api.openai.com/v1 (РёР»Рё СЃРІРѕР№ РїСЂРѕРєСЃРё) РІ OPENAI_IMAGE_BASE_URL.")
     await update.effective_message.reply_text("\n".join(lines))
 
 async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [
-        "🎬 Видео-движки:",
-        f"• Luma key: {'✅' if bool(LUMA_API_KEY) else '❌'}  base={LUMA_BASE_URL}",
+        "рџЋ¬ Р’РёРґРµРѕ-РґРІРёР¶РєРё:",
+        f"вЂў Luma key: {'вњ…' if bool(LUMA_API_KEY) else 'вќЊ'}  base={LUMA_BASE_URL}",
         f"  create={LUMA_CREATE_PATH}  status={LUMA_STATUS_PATH}",
         f"  model={LUMA_MODEL}  allowed_durations=['5s','9s','10s']  aspect=['16:9','9:16','1:1']",
-        f"• Runway key: {'✅' if bool(RUNWAY_API_KEY) else '❌'}  base={RUNWAY_BASE_URL}",
+        f"вЂў Runway key: {'вњ…' if bool(RUNWAY_API_KEY) else 'вќЊ'}  base={RUNWAY_BASE_URL}",
         f"  create={RUNWAY_CREATE_PATH}  status={RUNWAY_STATUS_PATH}",
-        f"• Kling key: {'✅' if bool(KLING_API_KEY and KLING_BASE_URL) else '❌'}  base={KLING_BASE_URL or '-'}",
-        f"  create={KLING_CREATE_PATH}  status={KLING_STATUS_PATH}",
-        f"• Поллинг каждые {VIDEO_POLL_DELAY_S:.1f} c",
+        f"вЂў РџРѕР»Р»РёРЅРі РєР°Р¶РґС‹Рµ {VIDEO_POLL_DELAY_S:.1f} c",
     ]
     await update.effective_message.reply_text("\n".join(lines))
 
 
-# ───────── MIME для изображений ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ MIME РґР»СЏ РёР·РѕР±СЂР°Р¶РµРЅРёР№ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def sniff_image_mime(data: bytes) -> str:
     if not data or len(data) < 12:
         return "application/octet-stream"
@@ -2665,12 +2618,12 @@ def sniff_image_mime(data: bytes) -> str:
     return "application/octet-stream"
 
 
-# ───────── Парс опций видео ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџР°СЂСЃ РѕРїС†РёР№ РІРёРґРµРѕ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 _ASPECTS = {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"}
 
 def parse_video_opts(text: str) -> tuple[int, str]:
     tl = (text or "").lower()
-    m = re.search(r"(\d+)\s*(?:сек|с)\b", tl)
+    m = re.search(r"(\d+)\s*(?:СЃРµРє|СЃ)\b", tl)
     duration = int(m.group(1)) if m else LUMA_DURATION_S
     duration = max(3, min(20, duration))
     asp = None
@@ -2681,7 +2634,7 @@ def parse_video_opts(text: str) -> tuple[int, str]:
     return duration, aspect
 
 
-# ───────── Luma video ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Luma video в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
     try:
@@ -2697,14 +2650,14 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
             }
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
-                await update.effective_message.reply_text(f"⚠️ Luma отклонила задачу ({r.status_code}).")
+                await update.effective_message.reply_text(f"вљ пёЏ Luma РѕС‚РєР»РѕРЅРёР»Р° Р·Р°РґР°С‡Сѓ ({r.status_code}).")
                 return
             rid = (r.json() or {}).get("id") or (r.json() or {}).get("generation_id")
             if not rid:
-                await update.effective_message.reply_text("⚠️ Luma не вернула id генерации.")
+                await update.effective_message.reply_text("вљ пёЏ Luma РЅРµ РІРµСЂРЅСѓР»Р° id РіРµРЅРµСЂР°С†РёРё.")
                 return
 
-            await update.effective_message.reply_text("⏳ Luma рендерит… Я сообщу, когда видео будет готово.")
+            await update.effective_message.reply_text("вЏі Luma СЂРµРЅРґРµСЂРёС‚вЂ¦ РЇ СЃРѕРѕР±С‰Сѓ, РєРѕРіРґР° РІРёРґРµРѕ Р±СѓРґРµС‚ РіРѕС‚РѕРІРѕ.")
 
             status_url = f"{base}{LUMA_STATUS_PATH}".format(id=rid)
             started = time.time()
@@ -2717,29 +2670,29 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
                 if st in ("completed", "succeeded", "finished", "ready"):
                     url = js.get("assets", [{}])[0].get("url") or js.get("output_url")
                     if not url:
-                        await update.effective_message.reply_text("⚠️ Готово, но нет ссылки на видео.")
+                        await update.effective_message.reply_text("вљ пёЏ Р“РѕС‚РѕРІРѕ, РЅРѕ РЅРµС‚ СЃСЃС‹Р»РєРё РЅР° РІРёРґРµРѕ.")
                         return
                     try:
                         v = await client.get(url, timeout=120.0)
                         v.raise_for_status()
                         bio = BytesIO(v.content); bio.name = "luma.mp4"
-                        await update.effective_message.reply_video(InputFile(bio), caption="🎬 Luma: готово ✅")
+                        await update.effective_message.reply_video(InputFile(bio), caption="рџЋ¬ Luma: РіРѕС‚РѕРІРѕ вњ…")
                     except Exception:
-                        await update.effective_message.reply_text(f"🎬 Luma: готово ✅\n{url}")
+                        await update.effective_message.reply_text(f"рџЋ¬ Luma: РіРѕС‚РѕРІРѕ вњ…\n{url}")
                     return
                 if st in ("failed", "error", "canceled", "cancelled"):
-                    await update.effective_message.reply_text("❌ Luma: ошибка рендера.")
+                    await update.effective_message.reply_text("вќЊ Luma: РѕС€РёР±РєР° СЂРµРЅРґРµСЂР°.")
                     return
                 if time.time() - started > LUMA_MAX_WAIT_S:
-                    await update.effective_message.reply_text("⌛ Luma: время ожидания вышло.")
+                    await update.effective_message.reply_text("вЊ› Luma: РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РІС‹С€Р»Рѕ.")
                     return
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
     except Exception as e:
         log.exception("Luma error: %s", e)
-        await update.effective_message.reply_text("❌ Luma: не удалось запустить/получить видео.")
+        await update.effective_message.reply_text("вќЊ Luma: РЅРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ/РїРѕР»СѓС‡РёС‚СЊ РІРёРґРµРѕ.")
 
 
-# ───────── Runway video ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Runway video в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
     try:
@@ -2756,14 +2709,14 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             }
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
-                await update.effective_message.reply_text(f"⚠️ Runway отклонил задачу ({r.status_code}).")
+                await update.effective_message.reply_text(f"вљ пёЏ Runway РѕС‚РєР»РѕРЅРёР» Р·Р°РґР°С‡Сѓ ({r.status_code}).")
                 return
             rid = (r.json() or {}).get("id") or (r.json() or {}).get("task_id")
             if not rid:
-                await update.effective_message.reply_text("⚠️ Runway не вернул id задачи.")
+                await update.effective_message.reply_text("вљ пёЏ Runway РЅРµ РІРµСЂРЅСѓР» id Р·Р°РґР°С‡Рё.")
                 return
 
-            await update.effective_message.reply_text("⏳ Runway рендерит… Я сообщу, когда видео будет готово.")
+            await update.effective_message.reply_text("вЏі Runway СЂРµРЅРґРµСЂРёС‚вЂ¦ РЇ СЃРѕРѕР±С‰Сѓ, РєРѕРіРґР° РІРёРґРµРѕ Р±СѓРґРµС‚ РіРѕС‚РѕРІРѕ.")
 
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=rid)
             started = time.time()
@@ -2777,28 +2730,28 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     assets = js.get("output", {}) if isinstance(js.get("output"), dict) else (js.get("assets") or {})
                     url = (assets.get("video") if isinstance(assets, dict) else None) or js.get("video_url") or js.get("output_url")
                     if not url:
-                        await update.effective_message.reply_text("⚠️ Готово, но нет ссылки на видео.")
+                        await update.effective_message.reply_text("вљ пёЏ Р“РѕС‚РѕРІРѕ, РЅРѕ РЅРµС‚ СЃСЃС‹Р»РєРё РЅР° РІРёРґРµРѕ.")
                         return
                     try:
                         v = await client.get(url, timeout=180.0)
                         v.raise_for_status()
                         bio = BytesIO(v.content); bio.name = "runway.mp4"
-                        await update.effective_message.reply_video(InputFile(bio), caption="🎥 Runway: готово ✅")
+                        await update.effective_message.reply_video(InputFile(bio), caption="рџЋҐ Runway: РіРѕС‚РѕРІРѕ вњ…")
                     except Exception:
-                        await update.effective_message.reply_text(f"🎥 Runway: готово ✅\n{url}")
+                        await update.effective_message.reply_text(f"рџЋҐ Runway: РіРѕС‚РѕРІРѕ вњ…\n{url}")
                     return
                 if st in ("failed", "error", "canceled", "cancelled"):
-                    await update.effective_message.reply_text("❌ Runway: ошибка рендера.")
+                    await update.effective_message.reply_text("вќЊ Runway: РѕС€РёР±РєР° СЂРµРЅРґРµСЂР°.")
                     return
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await update.effective_message.reply_text("⌛ Runway: время ожидания вышло.")
+                    await update.effective_message.reply_text("вЊ› Runway: РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РІС‹С€Р»Рѕ.")
                     return
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
     except Exception as e:
         log.exception("Runway error: %s", e)
-        await update.effective_message.reply_text("❌ Runway: не удалось запустить/получить видео.")
+        await update.effective_message.reply_text("вќЊ Runway: РЅРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ/РїРѕР»СѓС‡РёС‚СЊ РІРёРґРµРѕ.")
 
-# ───────── Runway: анимация загруженного фото (image→video) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Runway: Р°РЅРёРјР°С†РёСЏ Р·Р°РіСЂСѓР¶РµРЅРЅРѕРіРѕ С„РѕС‚Рѕ (imageв†’video) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
     try:
@@ -2810,8 +2763,8 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
                 "prompt": (prompt or "animate the input photo with subtle camera motion, lifelike micro-movements").strip(),
                 "duration": duration_s,
                 "ratio": ratio,
-                # ключи init_image / image_data поддерживаются актуальными версиями API
-                # если у тебя другой формат — скорректируй поля ниже под свой аккаунт:
+                # РєР»СЋС‡Рё init_image / image_data РїРѕРґРґРµСЂР¶РёРІР°СЋС‚СЃСЏ Р°РєС‚СѓР°Р»СЊРЅС‹РјРё РІРµСЂСЃРёСЏРјРё API
+                # РµСЃР»Рё Сѓ С‚РµР±СЏ РґСЂСѓРіРѕР№ С„РѕСЂРјР°С‚ вЂ” СЃРєРѕСЂСЂРµРєС‚РёСЂСѓР№ РїРѕР»СЏ РЅРёР¶Рµ РїРѕРґ СЃРІРѕР№ Р°РєРєР°СѓРЅС‚:
                 "init_image": f"data:{sniff_image_mime(img_bytes)};base64,{b64}"
             }
         }
@@ -2819,14 +2772,14 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
         async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}", headers=headers, json=payload)
             if r.status_code >= 400:
-                await update.effective_message.reply_text(f"⚠️ Runway отклонил задачу ({r.status_code}).")
+                await update.effective_message.reply_text(f"вљ пёЏ Runway РѕС‚РєР»РѕРЅРёР» Р·Р°РґР°С‡Сѓ ({r.status_code}).")
                 return
             rid = (r.json() or {}).get("id") or (r.json() or {}).get("task_id")
             if not rid:
-                await update.effective_message.reply_text("⚠️ Runway не вернул id задачи.")
+                await update.effective_message.reply_text("вљ пёЏ Runway РЅРµ РІРµСЂРЅСѓР» id Р·Р°РґР°С‡Рё.")
                 return
 
-            await update.effective_message.reply_text("⏳ Оживляю фото в Runway… Сообщу, когда будет готово.")
+            await update.effective_message.reply_text("вЏі РћР¶РёРІР»СЏСЋ С„РѕС‚Рѕ РІ RunwayвЂ¦ РЎРѕРѕР±С‰Сѓ, РєРѕРіРґР° Р±СѓРґРµС‚ РіРѕС‚РѕРІРѕ.")
 
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=rid)
             started = time.time()
@@ -2840,117 +2793,28 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
                     assets = js.get("output", {}) if isinstance(js.get("output"), dict) else (js.get("assets") or {})
                     url = (assets.get("video") if isinstance(assets, dict) else None) or js.get("video_url") or js.get("output_url")
                     if not url:
-                        await update.effective_message.reply_text("⚠️ Готово, но нет ссылки на видео.")
+                        await update.effective_message.reply_text("вљ пёЏ Р“РѕС‚РѕРІРѕ, РЅРѕ РЅРµС‚ СЃСЃС‹Р»РєРё РЅР° РІРёРґРµРѕ.")
                         return
                     try:
                         v = await client.get(url, timeout=180.0)
                         v.raise_for_status()
                         bio = BytesIO(v.content); bio.name = "revive.mp4"
-                        await update.effective_message.reply_video(InputFile(bio), caption="✨ Оживил фото (Runway) ✅")
+                        await update.effective_message.reply_video(InputFile(bio), caption="вњЁ РћР¶РёРІРёР» С„РѕС‚Рѕ (Runway) вњ…")
                     except Exception:
-                        await update.effective_message.reply_text(f"✨ Оживил фото (Runway) ✅\n{url}")
+                        await update.effective_message.reply_text(f"вњЁ РћР¶РёРІРёР» С„РѕС‚Рѕ (Runway) вњ…\n{url}")
                     return
                 if st in ("failed", "error", "canceled", "cancelled"):
-                    await update.effective_message.reply_text("❌ Runway: ошибка рендера.")
+                    await update.effective_message.reply_text("вќЊ Runway: РѕС€РёР±РєР° СЂРµРЅРґРµСЂР°.")
                     return
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await update.effective_message.reply_text("⌛ Runway: время ожидания вышло.")
+                    await update.effective_message.reply_text("вЊ› Runway: РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РІС‹С€Р»Рѕ.")
                     return
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
     except Exception as e:
         log.exception("Runway revive error: %s", e)
-        await update.effective_message.reply_text("❌ Не удалось анимировать фото в Runway.")
+        await update.effective_message.reply_text("вќЊ РќРµ СѓРґР°Р»РѕСЃСЊ Р°РЅРёРјРёСЂРѕРІР°С‚СЊ С„РѕС‚Рѕ РІ Runway.")
 
-
-# ───────── Kling video (generic provider) ─────────
-async def _run_kling_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
-    """
-    Текст → видео через Kling.
-    Эндпоинты/заголовки должны быть настроены через ENV:
-      KLING_BASE_URL, KLING_CREATE_PATH, KLING_STATUS_PATH, KLING_API_KEY.
-    Код написан максимально универсально: при необходимости адаптируй payload/headers
-    под конкретного провайдера Kling.
-    """
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    if not (KLING_API_KEY and KLING_BASE_URL):
-        await update.effective_message.reply_text("⚠️ Kling не настроен (проверь KLING_API_KEY и KLING_BASE_URL).")
-        return
-
-    # ограничим длительность до разумных пределов
-    duration_s = max(3, min(int(duration_s or 5), 20))
-    aspect_ratio = aspect if aspect in ("16:9", "9:16", "1:1") else "16:9"
-
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            create_url = f"{KLING_BASE_URL}{KLING_CREATE_PATH}"
-            headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {KLING_API_KEY}",
-            }
-            payload = {
-                "prompt": prompt,
-                "duration": duration_s,
-                "aspect_ratio": aspect_ratio,
-            }
-            r = await client.post(create_url, headers=headers, json=payload)
-            if r.status_code >= 400:
-                await update.effective_message.reply_text(f"⚠️ Kling отклонил задачу ({r.status_code}).")
-                return
-            js = {}
-            try:
-                js = r.json()
-            except Exception:
-                pass
-
-            task_id = js.get("id") or js.get("task_id") or (js.get("data") or {}).get("task_id")
-            if not task_id:
-                await update.effective_message.reply_text("⚠️ Kling не вернул id задачи.")
-                return
-
-            await update.effective_message.reply_text("⏳ Kling рендерит видео… Сообщу, когда будет готово.")
-
-            status_url = f"{KLING_BASE_URL}{KLING_STATUS_PATH}"
-            started = time.time()
-            while True:
-                body = {"id": task_id, "task_id": task_id}
-                rs = await client.post(status_url, headers=headers, json=body)
-                js = {}
-                try:
-                    js = rs.json()
-                except Exception:
-                    pass
-
-                data = js.get("data") or js
-                st = (data.get("status") or data.get("task_status") or "").lower()
-                if st in ("completed", "succeed", "succeeded", "finished", "ready", "success"):
-                    url = data.get("video_url") or data.get("url") or (data.get("result") or {}).get("video_url")
-                    if not url:
-                        await update.effective_message.reply_text("⚠️ Kling: готово, но нет ссылки на видео.")
-                        return
-                    try:
-                        v = await client.get(url, timeout=180.0)
-                        v.raise_for_status()
-                        bio = BytesIO(v.content); bio.name = "kling.mp4"
-                        await update.effective_message.reply_video(InputFile(bio), caption="⚡ Kling: готово ✅")
-                    except Exception:
-                        await update.effective_message.reply_text(f"⚡ Kling: готово ✅\n{url}")
-                    return
-
-                if st in ("failed", "error", "canceled", "cancelled"):
-                    await update.effective_message.reply_text("❌ Kling: ошибка рендера.")
-                    return
-
-                if time.time() - started > KLING_MAX_WAIT_S:
-                    await update.effective_message.reply_text("⌛ Kling: время ожидания вышло.")
-                    return
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
-    except Exception as e:
-        log.exception("Kling error: %s", e)
-        await update.effective_message.reply_text("❌ Kling: не удалось запустить/получить видео.")
-
-# ───────── Покупки/инвойсы ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџРѕРєСѓРїРєРё/РёРЅРІРѕР№СЃС‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
     term = (term or "month").lower()
@@ -2959,18 +2823,18 @@ def _plan_rub(tier: str, term: str) -> int:
 def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
     term = {1: "month", 3: "quarter", 12: "year"}.get(months, "month")
     amount = _plan_rub(tier, term)
-    title = f"Подписка {tier.upper()} ({term})"
+    title = f"РџРѕРґРїРёСЃРєР° {tier.upper()} ({term})"
     payload = f"sub:{tier}:{months}"
     return payload, amount, title
 
 async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
     try:
-        # берём токен и валюту из двух источников (старый PROVIDER_TOKEN ИЛИ новый YOOKASSA_PROVIDER_TOKEN)
+        # Р±РµСЂС‘Рј С‚РѕРєРµРЅ Рё РІР°Р»СЋС‚Сѓ РёР· РґРІСѓС… РёСЃС‚РѕС‡РЅРёРєРѕРІ (СЃС‚Р°СЂС‹Р№ PROVIDER_TOKEN РР›Р РЅРѕРІС‹Р№ YOOKASSA_PROVIDER_TOKEN)
         token = (PROVIDER_TOKEN or YOOKASSA_PROVIDER_TOKEN)
         curr  = (CURRENCY if (CURRENCY and CURRENCY != "RUB") else YOOKASSA_CURRENCY) or "RUB"
 
         if not token:
-            await update.effective_message.reply_text("⚠️ ЮKassa не настроена (нет токена).")
+            await update.effective_message.reply_text("вљ пёЏ Р®Kassa РЅРµ РЅР°СЃС‚СЂРѕРµРЅР° (РЅРµС‚ С‚РѕРєРµРЅР°).")
             return False
 
         prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub) * 100)]
@@ -2993,7 +2857,7 @@ async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str
     except Exception as e:
         log.exception("send_invoice error: %s", e)
         try:
-            await update.effective_message.reply_text("Не удалось выставить счёт.")
+            await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹СЃС‚Р°РІРёС‚СЊ СЃС‡С‘С‚.")
         except Exception:
             pass
         return False
@@ -3017,21 +2881,21 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             _, tier, months = payload.split(":", 2)
             months = int(months)
             until = activate_subscription_with_tier(uid, tier, months)
-            await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.")
+            await update.effective_message.reply_text(f"вњ… РџРѕРґРїРёСЃРєР° {tier.upper()} Р°РєС‚РёРІРёСЂРѕРІР°РЅР° РґРѕ {until.strftime('%Y-%m-%d')}.")
             return
 
-        # Любое иное payload — пополнение единого кошелька
+        # Р›СЋР±РѕРµ РёРЅРѕРµ payload вЂ” РїРѕРїРѕР»РЅРµРЅРёРµ РµРґРёРЅРѕРіРѕ РєРѕС€РµР»СЊРєР°
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
-        await update.effective_message.reply_text(f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый баланс.")
+        await update.effective_message.reply_text(f"рџ’і РџРѕРїРѕР»РЅРµРЅРёРµ: {rub:.0f} в‚Ѕ в‰€ ${usd:.2f} Р·Р°С‡РёСЃР»РµРЅРѕ РЅР° РµРґРёРЅС‹Р№ Р±Р°Р»Р°РЅСЃ.")
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
 
 
-# ───────── CryptoBot ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ CryptoBot в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
 CRYPTO_BASE = "https://pay.crypt.bot/api"
-TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # запасной курс
+TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # Р·Р°РїР°СЃРЅРѕР№ РєСѓСЂСЃ
 
 async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str|None, str|None, float, str]:
     if not CRYPTO_PAY_API_TOKEN:
@@ -3069,24 +2933,24 @@ async def _crypto_get_invoice(invoice_id: str) -> dict | None:
 
 async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, user_id: int, invoice_id: str, usd_amount: float):
     try:
-        for _ in range(120):  # ~12 минут при 6с задержке
+        for _ in range(120):  # ~12 РјРёРЅСѓС‚ РїСЂРё 6СЃ Р·Р°РґРµСЂР¶РєРµ
             inv = await _crypto_get_invoice(invoice_id)
             st = (inv or {}).get("status", "").lower() if inv else ""
             if st == "paid":
                 _wallet_total_add(user_id, float(usd_amount))
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"✅ CryptoBot: платёж подтверждён. Баланс пополнен на ${float(usd_amount):.2f}.")
+                        text=f"вњ… CryptoBot: РїР»Р°С‚С‘Р¶ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ. Р‘Р°Р»Р°РЅСЃ РїРѕРїРѕР»РЅРµРЅ РЅР° ${float(usd_amount):.2f}.")
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"❌ CryptoBot: платёж не завершён (статус: {st}).")
+                        text=f"вќЊ CryptoBot: РїР»Р°С‚С‘Р¶ РЅРµ Р·Р°РІРµСЂС€С‘РЅ (СЃС‚Р°С‚СѓСЃ: {st}).")
                 return
             await asyncio.sleep(6.0)
         with contextlib.suppress(Exception):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» позже.")
+                text="вЊ› CryptoBot: РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РІС‹С€Р»Рѕ. РќР°Р¶РјРёС‚Рµ В«РџСЂРѕРІРµСЂРёС‚СЊ РѕРїР»Р°С‚СѓВ» РїРѕР·Р¶Рµ.")
     except Exception as e:
         log.exception("crypto poll error: %s", e)
 
@@ -3100,7 +2964,7 @@ async def _poll_crypto_sub_invoice(
     months: int
 ):
     try:
-        for _ in range(120):  # ~12 минут при задержке 6с
+        for _ in range(120):  # ~12 РјРёРЅСѓС‚ РїСЂРё Р·Р°РґРµСЂР¶РєРµ 6СЃ
             inv = await _crypto_get_invoice(invoice_id)
             st = (inv or {}).get("status", "").lower() if inv else ""
             if st == "paid":
@@ -3108,43 +2972,43 @@ async def _poll_crypto_sub_invoice(
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f"✅ CryptoBot: платёж подтверждён.\n"
-                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}."
+                        text=f"вњ… CryptoBot: РїР»Р°С‚С‘Р¶ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ.\n"
+                             f"РџРѕРґРїРёСЃРєР° {tier.upper()} Р°РєС‚РёРІРЅР° РґРѕ {until.strftime('%Y-%m-%d')}."
                     )
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f"❌ CryptoBot: оплата не завершена (статус: {st})."
+                        text=f"вќЊ CryptoBot: РѕРїР»Р°С‚Р° РЅРµ Р·Р°РІРµСЂС€РµРЅР° (СЃС‚Р°С‚СѓСЃ: {st})."
                     )
                 return
             await asyncio.sleep(6.0)
 
-        # Таймаут
+        # РўР°Р№РјР°СѓС‚
         with contextlib.suppress(Exception):
             await context.bot.edit_message_text(
                 chat_id=chat_id, message_id=message_id,
-                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» или оплатите заново."
+                text="вЊ› CryptoBot: РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РІС‹С€Р»Рѕ. РќР°Р¶РјРёС‚Рµ В«РџСЂРѕРІРµСЂРёС‚СЊ РѕРїР»Р°С‚СѓВ» РёР»Рё РѕРїР»Р°С‚РёС‚Рµ Р·Р°РЅРѕРІРѕ."
             )
     except Exception as e:
         log.exception("crypto poll (subscription) error: %s", e)
 
 
-# ───────── Предложение пополнения ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџСЂРµРґР»РѕР¶РµРЅРёРµ РїРѕРїРѕР»РЅРµРЅРёСЏ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("500 ₽",  callback_data="topup:rub:500"),
-         InlineKeyboardButton("1000 ₽", callback_data="topup:rub:1000"),
-         InlineKeyboardButton("2000 ₽", callback_data="topup:rub:2000")],
+        [InlineKeyboardButton("500 в‚Ѕ",  callback_data="topup:rub:500"),
+         InlineKeyboardButton("1000 в‚Ѕ", callback_data="topup:rub:1000"),
+         InlineKeyboardButton("2000 в‚Ѕ", callback_data="topup:rub:2000")],
         [InlineKeyboardButton("Crypto $5",  callback_data="topup:crypto:5"),
          InlineKeyboardButton("Crypto $10", callback_data="topup:crypto:10"),
          InlineKeyboardButton("Crypto $20", callback_data="topup:crypto:20")],
     ])
-    await update.effective_message.reply_text("Выберите сумму пополнения:", reply_markup=kb)
+    await update.effective_message.reply_text("Р’С‹Р±РµСЂРёС‚Рµ СЃСѓРјРјСѓ РїРѕРїРѕР»РЅРµРЅРёСЏ:", reply_markup=kb)
 
 
-# ───────── Попытка оплатить → выполнить ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџРѕРїС‹С‚РєР° РѕРїР»Р°С‚РёС‚СЊ в†’ РІС‹РїРѕР»РЅРёС‚СЊ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def _try_pay_then_do(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -3162,10 +3026,10 @@ async def _try_pay_then_do(
         return
     if offer == "ASK_SUBSCRIBE":
         await update.effective_message.reply_text(
-            "Для выполнения нужен тариф или единый баланс.",
+            "Р”Р»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РЅСѓР¶РµРЅ С‚Р°СЂРёС„ РёР»Рё РµРґРёРЅС‹Р№ Р±Р°Р»Р°РЅСЃ.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                 [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
+                [[InlineKeyboardButton("в­ђ РўР°СЂРёС„С‹", web_app=WebAppInfo(url=TARIFF_URL))],
+                 [InlineKeyboardButton("вћ• РџРѕРїРѕР»РЅРёС‚СЊ Р±Р°Р»Р°РЅСЃ", callback_data="topup")]]
             )
         )
         return
@@ -3175,102 +3039,66 @@ async def _try_pay_then_do(
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
     await update.effective_message.reply_text(
-        f"Недостаточно лимита. Разовая покупка ≈ {amount_rub} ₽ или пополните баланс:",
+        f"РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ Р»РёРјРёС‚Р°. Р Р°Р·РѕРІР°СЏ РїРѕРєСѓРїРєР° в‰€ {amount_rub} в‚Ѕ РёР»Рё РїРѕРїРѕР»РЅРёС‚Рµ Р±Р°Р»Р°РЅСЃ:",
         reply_markup=InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
+                [InlineKeyboardButton("в­ђ РўР°СЂРёС„С‹", web_app=WebAppInfo(url=TARIFF_URL))],
+                [InlineKeyboardButton("вћ• РџРѕРїРѕР»РЅРёС‚СЊ Р±Р°Р»Р°РЅСЃ", callback_data="topup")],
             ]
         ),
     )
 
 
-# ───────── /plans ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ /plans в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = ["⭐ Тарифы:"]
+    lines = ["в­ђ РўР°СЂРёС„С‹:"]
     for tier, terms in PLAN_PRICE_TABLE.items():
-        lines.append(f"— {tier.upper()}: "
-                     f"{terms['month']}₽/мес • {terms['quarter']}₽/квартал • {terms['year']}₽/год")
+        lines.append(f"вЂ” {tier.upper()}: "
+                     f"{terms['month']}в‚Ѕ/РјРµСЃ вЂў {terms['quarter']}в‚Ѕ/РєРІР°СЂС‚Р°Р» вЂў {terms['year']}в‚Ѕ/РіРѕРґ")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Купить START (1 мес)",    callback_data="buy:start:1"),
-         InlineKeyboardButton("Купить PRO (1 мес)",      callback_data="buy:pro:1")],
-        [InlineKeyboardButton("Купить ULTIMATE (1 мес)", callback_data="buy:ultimate:1")],
-        [InlineKeyboardButton("Открыть мини-витрину",    web_app=WebAppInfo(url=TARIFF_URL))]
+        [InlineKeyboardButton("РљСѓРїРёС‚СЊ START (1 РјРµСЃ)",    callback_data="buy:start:1"),
+         InlineKeyboardButton("РљСѓРїРёС‚СЊ PRO (1 РјРµСЃ)",      callback_data="buy:pro:1")],
+        [InlineKeyboardButton("РљСѓРїРёС‚СЊ ULTIMATE (1 РјРµСЃ)", callback_data="buy:ultimate:1")],
+        [InlineKeyboardButton("РћС‚РєСЂС‹С‚СЊ РјРёРЅРё-РІРёС‚СЂРёРЅСѓ",    web_app=WebAppInfo(url=TARIFF_URL))]
     ])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
 
 
-# ───────── Текстовый вход ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РўРµРєСЃС‚РѕРІС‹Р№ РІС…РѕРґ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
 
-    # Вопросы о возможностях
+    # Р’РѕРїСЂРѕСЃС‹ Рѕ РІРѕР·РјРѕР¶РЅРѕСЃС‚СЏС…
     cap = capability_answer(text)
     if cap:
         await update.effective_message.reply_text(cap)
         return
 
-    # Намёк на видео/картинку
+    # РќР°РјС‘Рє РЅР° РІРёРґРµРѕ/РєР°СЂС‚РёРЅРєСѓ
     mtype, rest = detect_media_intent(text)
     if mtype == "video":
         duration, aspect = parse_video_opts(text)
-        prompt = rest or re.sub(r"\b(\d+\s*(?:сек|с)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))", "", text, flags=re.I).strip(" ,.")
+        prompt = rest or re.sub(r"\b(\d+\s*(?:СЃРµРє|СЃ)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))", "", text, flags=re.I).strip(" ,.")
         if not prompt:
-            await update.effective_message.reply_text("Опишите, что именно снять, напр.: «ретро-авто на берегу, закат».")
+            await update.effective_message.reply_text("РћРїРёС€РёС‚Рµ, С‡С‚Рѕ РёРјРµРЅРЅРѕ СЃРЅСЏС‚СЊ, РЅР°РїСЂ.: В«СЂРµС‚СЂРѕ-Р°РІС‚Рѕ РЅР° Р±РµСЂРµРіСѓ, Р·Р°РєР°С‚В».")
             return
-
-        limits = _limits_for(update.effective_user.id)
-        tier = (limits.get("tier") or "free").lower()
-
         aid = _new_aid()
         _pending_actions[aid] = {"prompt": prompt, "duration": duration, "aspect": aspect}
-
-        # примерная оценка стоимости по движкам
-        est_luma   = 0.40
+        est_luma = 0.40
         est_runway = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-        est_kling  = max(0.15, KLING_UNIT_COST_USD * (duration / 5.0)) if KLING_API_KEY and KLING_BASE_URL else None
-
-        # Тариф START: если Kling настроен — сразу используем его без выбора (он дешевле)
-        if tier == "start" and est_kling is not None:
-            async def _go():
-                await _run_kling_video(update, context, prompt, duration, aspect)
-                _register_engine_spend(update.effective_user.id, "kling", est_kling)
-
-            await _try_pay_then_do(
-                update,
-                context,
-                update.effective_user.id,
-                "luma",  # Kling считаем по бюджету Luma
-                est_kling,
-                _go,
-                remember_kind="video_kling",
-                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
-            )
-            return
-
-        # PRO / ULTIMATE: при наличии Kling даём выбор из трёх движков
-        if tier in ("pro", "ultimate") and est_kling is not None:
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"⚡ Kling (~${est_kling:.2f})", callback_data=f"choose:kling:{aid}")],
-                [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",   callback_data=f"choose:luma:{aid}")],
-                [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")],
-            ])
-        else:
-            # free / start без Kling — как раньше: Luma/Runway
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",   callback_data=f"choose:luma:{aid}")],
-                [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")],
-            ])
-
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"рџЋ¬ Luma (~${est_luma:.2f})",     callback_data=f"choose:luma:{aid}")],
+            [InlineKeyboardButton(f"рџЋҐ Runway (~${est_runway:.2f})",  callback_data=f"choose:runway:{aid}")],
+        ])
         await update.effective_message.reply_text(
-            f"Что использовать?\nДлительность: {duration} c • Аспект: {aspect}\nЗапрос: «{prompt}»",
+            f"Р§С‚Рѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ?\nР”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ: {duration} c вЂў РђСЃРїРµРєС‚: {aspect}\nР—Р°РїСЂРѕСЃ: В«{prompt}В»",
             reply_markup=kb
         )
         return
     if mtype == "image":
         prompt = rest or re.sub(r"^(img|image|picture)\s*[:\-]\s*", "", text, flags=re.I).strip()
         if not prompt:
-            await update.effective_message.reply_text("Формат: /img <описание изображения>")
+            await update.effective_message.reply_text("Р¤РѕСЂРјР°С‚: /img <РѕРїРёСЃР°РЅРёРµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ>")
             return
 
         async def _go():
@@ -3279,11 +3107,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go)
         return
 
-    # Обычный текст → GPT
+    # РћР±С‹С‡РЅС‹Р№ С‚РµРєСЃС‚ в†’ GPT
     ok, _, _ = check_text_and_inc(update.effective_user.id, update.effective_user.username or "")
     if not ok:
         await update.effective_message.reply_text(
-            "Лимит текстовых запросов на сегодня исчерпан. Оформите ⭐ подписку или попробуйте завтра."
+            "Р›РёРјРёС‚ С‚РµРєСЃС‚РѕРІС‹С… Р·Р°РїСЂРѕСЃРѕРІ РЅР° СЃРµРіРѕРґРЅСЏ РёСЃС‡РµСЂРїР°РЅ. РћС„РѕСЂРјРёС‚Рµ в­ђ РїРѕРґРїРёСЃРєСѓ РёР»Рё РїРѕРїСЂРѕР±СѓР№С‚Рµ Р·Р°РІС‚СЂР°."
         )
         return
 
@@ -3296,9 +3124,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text_for_llm = text
     if mode and mode != "none":
-        text_for_llm = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
+        text_for_llm = f"[Р РµР¶РёРј: {mode}; РџРѕРґСЂРµР¶РёРј: {track or '-'}]\n{text}"
 
-    if mode == "Учёба" and track:
+    if mode == "РЈС‡С‘Р±Р°" and track:
         await study_process_text(update, context, text)
         return
 
@@ -3307,7 +3135,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
 
 
-# ───────── Фото / Документы / Голос ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р¤РѕС‚Рѕ / Р”РѕРєСѓРјРµРЅС‚С‹ / Р“РѕР»РѕСЃ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ph = update.message.photo[-1]
@@ -3319,10 +3147,10 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption = (update.message.caption or "").strip()
         if caption:
             tl = caption.lower()
-            # оживить фото → Runway по умолчанию
-            if any(k in tl for k in ("оживи", "анимиру", "сделай видео", "revive", "animate")):
+            # РѕР¶РёРІРёС‚СЊ С„РѕС‚Рѕ в†’ Runway РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
+            if any(k in tl for k in ("РѕР¶РёРІРё", "Р°РЅРёРјРёСЂСѓ", "СЃРґРµР»Р°Р№ РІРёРґРµРѕ", "revive", "animate")):
                 dur, asp = parse_video_opts(caption)
-                prompt = re.sub(r"\b(оживи|оживить|анимируй|анимировать|сделай видео|revive|animate)\b", "", caption, flags=re.I).strip(" ,.")
+                prompt = re.sub(r"\b(РѕР¶РёРІРё|РѕР¶РёРІРёС‚СЊ|Р°РЅРёРјРёСЂСѓР№|Р°РЅРёРјРёСЂРѕРІР°С‚СЊ|СЃРґРµР»Р°Р№ РІРёРґРµРѕ|revive|animate)\b", "", caption, flags=re.I).strip(" ,.")
                 async def _go():
                     await _run_runway_animate_photo(update, context, img, prompt, dur, asp)
                 await _try_pay_then_do(update, context, update.effective_user.id, "runway",
@@ -3331,33 +3159,33 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                        remember_payload={"duration": dur, "aspect": asp, "prompt": prompt})
                 return
 
-            # удалить фон
-            if any(k in tl for k in ("удали фон", "removebg", "убрать фон")):
+            # СѓРґР°Р»РёС‚СЊ С„РѕРЅ
+            if any(k in tl for k in ("СѓРґР°Р»Рё С„РѕРЅ", "removebg", "СѓР±СЂР°С‚СЊ С„РѕРЅ")):
                 await _pedit_removebg(update, context, img); return
 
-            # заменить фон
-            if any(k in tl for k in ("замени фон", "replacebg", "размытый фон", "blur")):
+            # Р·Р°РјРµРЅРёС‚СЊ С„РѕРЅ
+            if any(k in tl for k in ("Р·Р°РјРµРЅРё С„РѕРЅ", "replacebg", "СЂР°Р·РјС‹С‚С‹Р№ С„РѕРЅ", "blur")):
                 await _pedit_replacebg(update, context, img); return
 
             # outpaint
-            if "outpaint" in tl or "расшир" in tl:
+            if "outpaint" in tl or "СЂР°СЃС€РёСЂ" in tl:
                 await _pedit_outpaint(update, context, img); return
 
-            # раскадровка
-            if "раскадров" in tl or "storyboard" in tl:
+            # СЂР°СЃРєР°РґСЂРѕРІРєР°
+            if "СЂР°СЃРєР°РґСЂРѕРІ" in tl or "storyboard" in tl:
                 await _pedit_storyboard(update, context, img); return
 
-            # картинка по описанию (Luma / фолбэк OpenAI)
-            if any(k in tl for k in ("картин", "изображен", "image", "img")) and any(k in tl for k in ("сгенериру", "созда", "сделай")):
+            # РєР°СЂС‚РёРЅРєР° РїРѕ РѕРїРёСЃР°РЅРёСЋ (Luma / С„РѕР»Р±СЌРє OpenAI)
+            if any(k in tl for k in ("РєР°СЂС‚РёРЅ", "РёР·РѕР±СЂР°Р¶РµРЅ", "image", "img")) and any(k in tl for k in ("СЃРіРµРЅРµСЂРёСЂСѓ", "СЃРѕР·РґР°", "СЃРґРµР»Р°Р№")):
                 await _start_luma_img(update, context, caption); return
 
-        # если явной команды в подписи нет — показываем быстрые кнопки
-        await update.effective_message.reply_text("Фото получено. Что сделать?",
+        # РµСЃР»Рё СЏРІРЅРѕР№ РєРѕРјР°РЅРґС‹ РІ РїРѕРґРїРёСЃРё РЅРµС‚ вЂ” РїРѕРєР°Р·С‹РІР°РµРј Р±С‹СЃС‚СЂС‹Рµ РєРЅРѕРїРєРё
+        await update.effective_message.reply_text("Р¤РѕС‚Рѕ РїРѕР»СѓС‡РµРЅРѕ. Р§С‚Рѕ СЃРґРµР»Р°С‚СЊ?",
                                                   reply_markup=photo_quick_actions_kb())
     except Exception as e:
         log.exception("on_photo error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Не смог обработать фото.")
+            await update.effective_message.reply_text("РќРµ СЃРјРѕРі РѕР±СЂР°Р±РѕС‚Р°С‚СЊ С„РѕС‚Рѕ.")
 
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -3371,24 +3199,24 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if mt.startswith("image/"):
             _cache_photo(update.effective_user.id, raw)
-            await update.effective_message.reply_text("Изображение получено как документ. Что сделать?", reply_markup=photo_quick_actions_kb())
+            await update.effective_message.reply_text("РР·РѕР±СЂР°Р¶РµРЅРёРµ РїРѕР»СѓС‡РµРЅРѕ РєР°Рє РґРѕРєСѓРјРµРЅС‚. Р§С‚Рѕ СЃРґРµР»Р°С‚СЊ?", reply_markup=photo_quick_actions_kb())
             return
 
         text, kind = extract_text_from_document(raw, doc.file_name or "file")
         if not (text or "").strip():
-            await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
+            await update.effective_message.reply_text(f"РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РІР»РµС‡СЊ С‚РµРєСЃС‚ РёР· {kind}.")
             return
 
         goal = (update.message.caption or "").strip() or None
-        await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
+        await update.effective_message.reply_text(f"рџ“„ РР·РІР»РµРєР°СЋ С‚РµРєСЃС‚ ({kind}), РіРѕС‚РѕРІР»СЋ РєРѕРЅСЃРїРµРєС‚вЂ¦")
         summary = await summarize_long_text(text, query=goal)
-        summary = summary or "Готово."
+        summary = summary or "Р“РѕС‚РѕРІРѕ."
         await update.effective_message.reply_text(summary)
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Ошибка при обработке документа.")
+            await update.effective_message.reply_text("РћС€РёР±РєР° РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ РґРѕРєСѓРјРµРЅС‚Р°.")
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -3401,14 +3229,14 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
         text = await transcribe_audio(bio, "voice.ogg")
         if not text:
-            await update.effective_message.reply_text("Не удалось распознать речь.")
+            await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїРѕР·РЅР°С‚СЊ СЂРµС‡СЊ.")
             return
         update.message.text = text
         await on_text(update, context)
     except Exception as e:
         log.exception("on_voice error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Ошибка при обработке voice.")
+            await update.effective_message.reply_text("РћС€РёР±РєР° РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ voice.")
 
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -3422,27 +3250,27 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
         text = await transcribe_audio(bio, filename)
         if not text:
-            await update.effective_message.reply_text("Не удалось распознать речь из аудио.")
+            await update.effective_message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїРѕР·РЅР°С‚СЊ СЂРµС‡СЊ РёР· Р°СѓРґРёРѕ.")
             return
         update.message.text = text
         await on_text(update, context)
     except Exception as e:
         log.exception("on_audio error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Ошибка при обработке аудио.")
+            await update.effective_message.reply_text("РћС€РёР±РєР° РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ Р°СѓРґРёРѕ.")
 
 
-# ───────── Обработчик ошибок PTB ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РћР±СЂР°Р±РѕС‚С‡РёРє РѕС€РёР±РѕРє PTB в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
     log.exception("Unhandled error: %s", context_.error)
     try:
         if isinstance(update, Update) and update.effective_message:
-            await update.effective_message.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
+            await update.effective_message.reply_text("РЈРїСЃ, РїСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР°. РЇ СѓР¶Рµ СЂР°Р·Р±РёСЂР°СЋСЃСЊ.")
     except Exception:
         pass
 
 
-# ───────── Роутеры для текстовых кнопок/режимов ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р РѕСѓС‚РµСЂС‹ РґР»СЏ С‚РµРєСЃС‚РѕРІС‹С… РєРЅРѕРїРѕРє/СЂРµР¶РёРјРѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await cmd_engines(update, context)
 
@@ -3456,70 +3284,70 @@ async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_mode_school_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "🎓 *Учёба*\n"
-        "Помогу: конспекты из PDF/EPUB/DOCX/TXT, разбор задач пошагово, эссе/рефераты, мини-квизы.\n\n"
-        "_Быстрые действия:_\n"
-        "• Разобрать PDF → конспект\n"
-        "• Сократить в шпаргалку\n"
-        "• Объяснить тему с примерами\n"
-        "• План ответа / презентации"
+        "рџЋ“ *РЈС‡С‘Р±Р°*\n"
+        "РџРѕРјРѕРіСѓ: РєРѕРЅСЃРїРµРєС‚С‹ РёР· PDF/EPUB/DOCX/TXT, СЂР°Р·Р±РѕСЂ Р·Р°РґР°С‡ РїРѕС€Р°РіРѕРІРѕ, СЌСЃСЃРµ/СЂРµС„РµСЂР°С‚С‹, РјРёРЅРё-РєРІРёР·С‹.\n\n"
+        "_Р‘С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ:_\n"
+        "вЂў Р Р°Р·РѕР±СЂР°С‚СЊ PDF в†’ РєРѕРЅСЃРїРµРєС‚\n"
+        "вЂў РЎРѕРєСЂР°С‚РёС‚СЊ РІ С€РїР°СЂРіР°Р»РєСѓ\n"
+        "вЂў РћР±СЉСЏСЃРЅРёС‚СЊ С‚РµРјСѓ СЃ РїСЂРёРјРµСЂР°РјРё\n"
+        "вЂў РџР»Р°РЅ РѕС‚РІРµС‚Р° / РїСЂРµР·РµРЅС‚Р°С†РёРё"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown")
 
 async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "💼 *Работа*\n"
-        "Письма/брифы/резюме/аналитика, ToDo/планы, сводные таблицы из документов.\n"
-        "Для архитектора/дизайнера/проектировщика — структурирование ТЗ, чек-листы стадий, "
-        "сводные таблицы листов, пояснительные записки.\n\n"
-        "_Гибриды:_ GPT-5 (текст/логика) + Images (иллюстрации) + Luma/Runway (клипы/мокапы).\n\n"
-        "_Быстрые действия:_\n"
-        "• Сформировать бриф/ТЗ\n"
-        "• Свести требования в таблицу\n"
-        "• Сгенерировать письмо/резюме\n"
-        "• Черновик презентации"
+        "рџ’ј *Р Р°Р±РѕС‚Р°*\n"
+        "РџРёСЃСЊРјР°/Р±СЂРёС„С‹/СЂРµР·СЋРјРµ/Р°РЅР°Р»РёС‚РёРєР°, ToDo/РїР»Р°РЅС‹, СЃРІРѕРґРЅС‹Рµ С‚Р°Р±Р»РёС†С‹ РёР· РґРѕРєСѓРјРµРЅС‚РѕРІ.\n"
+        "Р”Р»СЏ Р°СЂС…РёС‚РµРєС‚РѕСЂР°/РґРёР·Р°Р№РЅРµСЂР°/РїСЂРѕРµРєС‚РёСЂРѕРІС‰РёРєР° вЂ” СЃС‚СЂСѓРєС‚СѓСЂРёСЂРѕРІР°РЅРёРµ РўР—, С‡РµРє-Р»РёСЃС‚С‹ СЃС‚Р°РґРёР№, "
+        "СЃРІРѕРґРЅС‹Рµ С‚Р°Р±Р»РёС†С‹ Р»РёСЃС‚РѕРІ, РїРѕСЏСЃРЅРёС‚РµР»СЊРЅС‹Рµ Р·Р°РїРёСЃРєРё.\n\n"
+        "_Р“РёР±СЂРёРґС‹:_ GPT-5 (С‚РµРєСЃС‚/Р»РѕРіРёРєР°) + Images (РёР»Р»СЋСЃС‚СЂР°С†РёРё) + Luma/Runway (РєР»РёРїС‹/РјРѕРєР°РїС‹).\n\n"
+        "_Р‘С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ:_\n"
+        "вЂў РЎС„РѕСЂРјРёСЂРѕРІР°С‚СЊ Р±СЂРёС„/РўР—\n"
+        "вЂў РЎРІРµСЃС‚Рё С‚СЂРµР±РѕРІР°РЅРёСЏ РІ С‚Р°Р±Р»РёС†Сѓ\n"
+        "вЂў РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РїРёСЃСЊРјРѕ/СЂРµР·СЋРјРµ\n"
+        "вЂў Р§РµСЂРЅРѕРІРёРє РїСЂРµР·РµРЅС‚Р°С†РёРё"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown")
 
 async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "🔥 *Развлечения*\n"
-        "Фото-мастерская: удалить/заменить фон, добавить/убрать объект/человека, outpaint, "
-        "*оживление старых фото*.\n"
-        "Видео: Luma/Runway — клипы под Reels/Shorts; *Reels по смыслу из цельного видео* "
-        "(умная нарезка), авто-таймкоды. Мемы/квизы.\n\n"
-        "Выбери действие ниже:"
+        "рџ”Ґ *Р Р°Р·РІР»РµС‡РµРЅРёСЏ*\n"
+        "Р¤РѕС‚Рѕ-РјР°СЃС‚РµСЂСЃРєР°СЏ: СѓРґР°Р»РёС‚СЊ/Р·Р°РјРµРЅРёС‚СЊ С„РѕРЅ, РґРѕР±Р°РІРёС‚СЊ/СѓР±СЂР°С‚СЊ РѕР±СЉРµРєС‚/С‡РµР»РѕРІРµРєР°, outpaint, "
+        "*РѕР¶РёРІР»РµРЅРёРµ СЃС‚Р°СЂС‹С… С„РѕС‚Рѕ*.\n"
+        "Р’РёРґРµРѕ: Luma/Runway вЂ” РєР»РёРїС‹ РїРѕРґ Reels/Shorts; *Reels РїРѕ СЃРјС‹СЃР»Сѓ РёР· С†РµР»СЊРЅРѕРіРѕ РІРёРґРµРѕ* "
+        "(СѓРјРЅР°СЏ РЅР°СЂРµР·РєР°), Р°РІС‚Рѕ-С‚Р°Р№РјРєРѕРґС‹. РњРµРјС‹/РєРІРёР·С‹.\n\n"
+        "Р’С‹Р±РµСЂРё РґРµР№СЃС‚РІРёРµ РЅРёР¶Рµ:"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# ───── Клавиатура «Развлечения» с новыми кнопками ─────
+# в”Ђв”Ђв”Ђв”Ђв”Ђ РљР»Р°РІРёР°С‚СѓСЂР° В«Р Р°Р·РІР»РµС‡РµРЅРёСЏВ» СЃ РЅРѕРІС‹РјРё РєРЅРѕРїРєР°РјРё в”Ђв”Ђв”Ђв”Ђв”Ђ
 def _fun_quick_kb() -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="fun:ideas")],
-        [InlineKeyboardButton("🎬 Сценарий шорта", callback_data="fun:storyboard")],
-        [InlineKeyboardButton("🎮 Игры/квиз",       callback_data="fun:quiz")],
-        # Новые ключевые кнопки
+        [InlineKeyboardButton("рџЋ­ РРґРµРё РґР»СЏ РґРѕСЃСѓРіР°", callback_data="fun:ideas")],
+        [InlineKeyboardButton("рџЋ¬ РЎС†РµРЅР°СЂРёР№ С€РѕСЂС‚Р°", callback_data="fun:storyboard")],
+        [InlineKeyboardButton("рџЋ® РРіСЂС‹/РєРІРёР·",       callback_data="fun:quiz")],
+        # РќРѕРІС‹Рµ РєР»СЋС‡РµРІС‹Рµ РєРЅРѕРїРєРё
         [
-            InlineKeyboardButton("🪄 Оживить старое фото", callback_data="fun:revive"),
-            InlineKeyboardButton("🎬 Reels из длинного видео", callback_data="fun:smartreels"),
+            InlineKeyboardButton("рџЄ„ РћР¶РёРІРёС‚СЊ СЃС‚Р°СЂРѕРµ С„РѕС‚Рѕ", callback_data="fun:revive"),
+            InlineKeyboardButton("рџЋ¬ Reels РёР· РґР»РёРЅРЅРѕРіРѕ РІРёРґРµРѕ", callback_data="fun:smartreels"),
         ],
         [
-            InlineKeyboardButton("🎥 Runway",      callback_data="fun:clip"),
-            InlineKeyboardButton("🎨 Midjourney",  callback_data="fun:img"),
-            InlineKeyboardButton("🔊 STT/TTS",     callback_data="fun:speech"),
+            InlineKeyboardButton("рџЋҐ Runway",      callback_data="fun:clip"),
+            InlineKeyboardButton("рџЋЁ Midjourney",  callback_data="fun:img"),
+            InlineKeyboardButton("рџ”Љ STT/TTS",     callback_data="fun:speech"),
         ],
-        [InlineKeyboardButton("📝 Свободный запрос", callback_data="fun:free")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")],
+        [InlineKeyboardButton("рџ“ќ РЎРІРѕР±РѕРґРЅС‹Р№ Р·Р°РїСЂРѕСЃ", callback_data="fun:free")],
+        [InlineKeyboardButton("в¬…пёЏ РќР°Р·Р°Рґ", callback_data="fun:back")],
     ]
     return InlineKeyboardMarkup(rows)
 
-# ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
+# в”Ђв”Ђв”Ђв”Ђв”Ђ РћР±СЂР°Р±РѕС‚С‡РёРє Р±С‹СЃС‚СЂС‹С… РґРµР№СЃС‚РІРёР№ В«Р Р°Р·РІР»РµС‡РµРЅРёСЏВ» (fallback-friendly) в”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
     action = data.split(":", 1)[1] if ":" in data else ""
 
-    # Помощники: если в проекте объявлены конкретные реализации — вызываем их.
+    # РџРѕРјРѕС‰РЅРёРєРё: РµСЃР»Рё РІ РїСЂРѕРµРєС‚Рµ РѕР±СЉСЏРІР»РµРЅС‹ РєРѕРЅРєСЂРµС‚РЅС‹Рµ СЂРµР°Р»РёР·Р°С†РёРё вЂ” РІС‹Р·С‹РІР°РµРј РёС….
     async def _try_call(*fn_names, **kwargs):
         fn = _pick_first_defined(*fn_names)
         if callable(fn):
@@ -3527,16 +3355,16 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
 
     if action == "revive":
-        # Пытаемся дернуть твой реальный пайплайн для оживления фото (если есть)
+        # РџС‹С‚Р°РµРјСЃСЏ РґРµСЂРЅСѓС‚СЊ С‚РІРѕР№ СЂРµР°Р»СЊРЅС‹Р№ РїР°Р№РїР»Р°Р№РЅ РґР»СЏ РѕР¶РёРІР»РµРЅРёСЏ С„РѕС‚Рѕ (РµСЃР»Рё РµСЃС‚СЊ)
         if await _try_call("revive_old_photo_flow", "do_revive_photo"):
             return
-        # Fallback: инструкция
-        await q.answer("Оживление фото")
+        # Fallback: РёРЅСЃС‚СЂСѓРєС†РёСЏ
+        await q.answer("РћР¶РёРІР»РµРЅРёРµ С„РѕС‚Рѕ")
         await q.edit_message_text(
-            "🪄 *Оживление старого фото*\n"
-            "Пришли/перешли сюда фото и коротко опиши, что нужно оживить "
-            "(мигание глаз, лёгкая улыбка, движение фона и т.п.). "
-            "Я подготовлю анимацию и верну превью/видео.",
+            "рџЄ„ *РћР¶РёРІР»РµРЅРёРµ СЃС‚Р°СЂРѕРіРѕ С„РѕС‚Рѕ*\n"
+            "РџСЂРёС€Р»Рё/РїРµСЂРµС€Р»Рё СЃСЋРґР° С„РѕС‚Рѕ Рё РєРѕСЂРѕС‚РєРѕ РѕРїРёС€Рё, С‡С‚Рѕ РЅСѓР¶РЅРѕ РѕР¶РёРІРёС‚СЊ "
+            "(РјРёРіР°РЅРёРµ РіР»Р°Р·, Р»С‘РіРєР°СЏ СѓР»С‹Р±РєР°, РґРІРёР¶РµРЅРёРµ С„РѕРЅР° Рё С‚.Рї.). "
+            "РЇ РїРѕРґРіРѕС‚РѕРІР»СЋ Р°РЅРёРјР°С†РёСЋ Рё РІРµСЂРЅСѓ РїСЂРµРІСЊСЋ/РІРёРґРµРѕ.",
             parse_mode="Markdown",
             reply_markup=_fun_quick_kb()
         )
@@ -3545,12 +3373,12 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "smartreels":
         if await _try_call("smart_reels_from_video", "video_sense_reels"):
             return
-        await q.answer("Reels из длинного видео")
+        await q.answer("Reels РёР· РґР»РёРЅРЅРѕРіРѕ РІРёРґРµРѕ")
         await q.edit_message_text(
-            "🎬 *Reels из длинного видео*\n"
-            "Пришли длинное видео (или ссылку) + тему/ЦА. "
-            "Сделаю умную нарезку (hook → value → CTA), субтитры и таймкоды. "
-            "Скажи формат: 9:16 или 1:1.",
+            "рџЋ¬ *Reels РёР· РґР»РёРЅРЅРѕРіРѕ РІРёРґРµРѕ*\n"
+            "РџСЂРёС€Р»Рё РґР»РёРЅРЅРѕРµ РІРёРґРµРѕ (РёР»Рё СЃСЃС‹Р»РєСѓ) + С‚РµРјСѓ/Р¦Рђ. "
+            "РЎРґРµР»Р°СЋ СѓРјРЅСѓСЋ РЅР°СЂРµР·РєСѓ (hook в†’ value в†’ CTA), СЃСѓР±С‚РёС‚СЂС‹ Рё С‚Р°Р№РјРєРѕРґС‹. "
+            "РЎРєР°Р¶Рё С„РѕСЂРјР°С‚: 9:16 РёР»Рё 1:1.",
             parse_mode="Markdown",
             reply_markup=_fun_quick_kb()
         )
@@ -3560,35 +3388,35 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if await _try_call("start_runway_flow", "luma_make_clip", "runway_make_clip"):
             return
         await q.answer()
-        await q.edit_message_text("Запусти /diag_video чтобы проверить ключи Luma/Runway.", reply_markup=_fun_quick_kb())
+        await q.edit_message_text("Р—Р°РїСѓСЃС‚Рё /diag_video С‡С‚РѕР±С‹ РїСЂРѕРІРµСЂРёС‚СЊ РєР»СЋС‡Рё Luma/Runway.", reply_markup=_fun_quick_kb())
         return
 
     if action == "img":
-        # /img или твой кастом
+        # /img РёР»Рё С‚РІРѕР№ РєР°СЃС‚РѕРј
         if await _try_call("cmd_img", "midjourney_flow", "images_make"):
             return
         await q.answer()
-        await q.edit_message_text("Введи /img и тему картинки, или пришли рефы.", reply_markup=_fun_quick_kb())
+        await q.edit_message_text("Р’РІРµРґРё /img Рё С‚РµРјСѓ РєР°СЂС‚РёРЅРєРё, РёР»Рё РїСЂРёС€Р»Рё СЂРµС„С‹.", reply_markup=_fun_quick_kb())
         return
 
     if action == "storyboard":
         if await _try_call("start_storyboard", "storyboard_make"):
             return
         await q.answer()
-        await q.edit_message_text("Напиши тему шорта — накидаю структуру и раскадровку.", reply_markup=_fun_quick_kb())
+        await q.edit_message_text("РќР°РїРёС€Рё С‚РµРјСѓ С€РѕСЂС‚Р° вЂ” РЅР°РєРёРґР°СЋ СЃС‚СЂСѓРєС‚СѓСЂСѓ Рё СЂР°СЃРєР°РґСЂРѕРІРєСѓ.", reply_markup=_fun_quick_kb())
         return
 
     if action in {"ideas", "quiz", "speech", "free", "back"}:
         await q.answer()
         await q.edit_message_text(
-            "Готов! Напиши задачу или выбери кнопку выше.",
+            "Р“РѕС‚РѕРІ! РќР°РїРёС€Рё Р·Р°РґР°С‡Сѓ РёР»Рё РІС‹Р±РµСЂРё РєРЅРѕРїРєСѓ РІС‹С€Рµ.",
             reply_markup=_fun_quick_kb()
         )
         return
 
     await q.answer()
 
-# ───────── Роутеры-кнопки режимов (единая точка входа) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р РѕСѓС‚РµСЂС‹-РєРЅРѕРїРєРё СЂРµР¶РёРјРѕРІ (РµРґРёРЅР°СЏ С‚РѕС‡РєР° РІС…РѕРґР°) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fn = globals().get("_send_mode_menu")
     if callable(fn):
@@ -3607,26 +3435,26 @@ async def on_btn_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await fn(update, context, "fun")
     return await on_mode_fun_text(update, context)
 
-# ───────── Позитивный авто-ответ про возможности (текст/голос) ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ РџРѕР·РёС‚РёРІРЅС‹Р№ Р°РІС‚Рѕ-РѕС‚РІРµС‚ РїСЂРѕ РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё (С‚РµРєСЃС‚/РіРѕР»РѕСЃ) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 _CAPS_PATTERN = (
-    r"(?is)(умеешь|можешь|делаешь|анализируешь|работаешь|поддерживаешь|умеет ли|может ли)"
+    r"(?is)(СѓРјРµРµС€СЊ|РјРѕР¶РµС€СЊ|РґРµР»Р°РµС€СЊ|Р°РЅР°Р»РёР·РёСЂСѓРµС€СЊ|СЂР°Р±РѕС‚Р°РµС€СЊ|РїРѕРґРґРµСЂР¶РёРІР°РµС€СЊ|СѓРјРµРµС‚ Р»Рё|РјРѕР¶РµС‚ Р»Рё)"
     r".{0,120}"
-    r"(pdf|epub|fb2|docx|txt|книг|книга|изображен|фото|картин|image|jpeg|png|video|видео|mp4|mov|аудио|audio|mp3|wav)"
+    r"(pdf|epub|fb2|docx|txt|РєРЅРёРі|РєРЅРёРіР°|РёР·РѕР±СЂР°Р¶РµРЅ|С„РѕС‚Рѕ|РєР°СЂС‚РёРЅ|image|jpeg|png|video|РІРёРґРµРѕ|mp4|mov|Р°СѓРґРёРѕ|audio|mp3|wav)"
 )
 
 async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "Да, умею работать с файлами и медиа:\n"
-        "• 📄 Документы: PDF/EPUB/FB2/DOCX/TXT — конспект, резюме, извлечение таблиц, проверка фактов.\n"
-        "• 🖼 Изображения: анализ/описание, улучшение, фон, разметка, мемы, outpaint.\n"
-        "• 🎞 Видео: разбор смысла, таймкоды, *Reels из длинного видео*, идеи/скрипт, субтитры.\n"
-        "• 🎧 Аудио/книги: транскрипция, тезисы, план.\n\n"
-        "_Подсказки:_ просто загрузите файл или пришлите ссылку + короткое ТЗ. "
-        "Для фото — можно нажать «🪄 Оживить старое фото», для видео — «🎬 Reels из длинного видео»."
+        "Р”Р°, СѓРјРµСЋ СЂР°Р±РѕС‚Р°С‚СЊ СЃ С„Р°Р№Р»Р°РјРё Рё РјРµРґРёР°:\n"
+        "вЂў рџ“„ Р”РѕРєСѓРјРµРЅС‚С‹: PDF/EPUB/FB2/DOCX/TXT вЂ” РєРѕРЅСЃРїРµРєС‚, СЂРµР·СЋРјРµ, РёР·РІР»РµС‡РµРЅРёРµ С‚Р°Р±Р»РёС†, РїСЂРѕРІРµСЂРєР° С„Р°РєС‚РѕРІ.\n"
+        "вЂў рџ–ј РР·РѕР±СЂР°Р¶РµРЅРёСЏ: Р°РЅР°Р»РёР·/РѕРїРёСЃР°РЅРёРµ, СѓР»СѓС‡С€РµРЅРёРµ, С„РѕРЅ, СЂР°Р·РјРµС‚РєР°, РјРµРјС‹, outpaint.\n"
+        "вЂў рџЋћ Р’РёРґРµРѕ: СЂР°Р·Р±РѕСЂ СЃРјС‹СЃР»Р°, С‚Р°Р№РјРєРѕРґС‹, *Reels РёР· РґР»РёРЅРЅРѕРіРѕ РІРёРґРµРѕ*, РёРґРµРё/СЃРєСЂРёРїС‚, СЃСѓР±С‚РёС‚СЂС‹.\n"
+        "вЂў рџЋ§ РђСѓРґРёРѕ/РєРЅРёРіРё: С‚СЂР°РЅСЃРєСЂРёРїС†РёСЏ, С‚РµР·РёСЃС‹, РїР»Р°РЅ.\n\n"
+        "_РџРѕРґСЃРєР°Р·РєРё:_ РїСЂРѕСЃС‚Рѕ Р·Р°РіСЂСѓР·РёС‚Рµ С„Р°Р№Р» РёР»Рё РїСЂРёС€Р»РёС‚Рµ СЃСЃС‹Р»РєСѓ + РєРѕСЂРѕС‚РєРѕРµ РўР—. "
+        "Р”Р»СЏ С„РѕС‚Рѕ вЂ” РјРѕР¶РЅРѕ РЅР°Р¶Р°С‚СЊ В«рџЄ„ РћР¶РёРІРёС‚СЊ СЃС‚Р°СЂРѕРµ С„РѕС‚РѕВ», РґР»СЏ РІРёРґРµРѕ вЂ” В«рџЋ¬ Reels РёР· РґР»РёРЅРЅРѕРіРѕ РІРёРґРµРѕВ»."
     )
     await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# ───────── Вспомогательное: взять первую объявленную функцию по имени ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅРѕРµ: РІР·СЏС‚СЊ РїРµСЂРІСѓСЋ РѕР±СЉСЏРІР»РµРЅРЅСѓСЋ С„СѓРЅРєС†РёСЋ РїРѕ РёРјРµРЅРё в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _pick_first_defined(*names):
     for n in names:
         fn = globals().get(n)
@@ -3634,14 +3462,14 @@ def _pick_first_defined(*names):
             return fn
     return None
 
-# ───────── Регистрация хендлеров и запуск ─────────
+# в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Р РµРіРёСЃС‚СЂР°С†РёСЏ С…РµРЅРґР»РµСЂРѕРІ Рё Р·Р°РїСѓСЃРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def build_application() -> "Application":
     if not BOT_TOKEN:
-        raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
+        raise RuntimeError("РќРµ Р·Р°РґР°РЅ BOT_TOKEN РІ РїРµСЂРµРјРµРЅРЅС‹С… РѕРєСЂСѓР¶РµРЅРёСЏ.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Команды
+    # РљРѕРјР°РЅРґС‹
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
@@ -3658,62 +3486,62 @@ def build_application() -> "Application":
     app.add_handler(CommandHandler("voice_on",     cmd_voice_on))
     app.add_handler(CommandHandler("voice_off",    cmd_voice_off))
 
-    # Платежи
+    # РџР»Р°С‚РµР¶Рё
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
-    # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
+    # >>> PATCH START вЂ” Handlers wiring (WebApp + callbacks + media + text) >>>
 
-    # Данные из мини-приложения (WebApp)
+    # Р”Р°РЅРЅС‹Рµ РёР· РјРёРЅРё-РїСЂРёР»РѕР¶РµРЅРёСЏ (WebApp)
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     with contextlib.suppress(Exception):
         if hasattr(filters, "WEB_APP_DATA"):
             app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
-    # 1) Подписка/оплаты
+    # === РџРђРўР§ 4: РџРѕСЂСЏРґРѕРє callback-С…РµРЅРґР»РµСЂРѕРІ (СѓР·РєРёРµ в†’ РѕР±С‰РёРµ) ===
+    # 1) РџРѕРґРїРёСЃРєР°/РѕРїР»Р°С‚С‹
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
-    # 2) Режимы/подменю (поддержим и старые, и новые префиксы)
+    # 2) Р РµР¶РёРјС‹/РїРѕРґРјРµРЅСЋ (РїРѕРґРґРµСЂР¶РёРј Рё СЃС‚Р°СЂС‹Рµ, Рё РЅРѕРІС‹Рµ РїСЂРµС„РёРєСЃС‹)
     app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:)"))
 
-    # 3) Быстрые развлечения (любые fun:...)
+    # 3) Р‘С‹СЃС‚СЂС‹Рµ СЂР°Р·РІР»РµС‡РµРЅРёСЏ (Р»СЋР±С‹Рµ fun:...)
     app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
 
-    # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
-    # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
+    # 4) РћСЃС‚Р°Р»СЊРЅРѕР№ catch-all (pedit/topup/engine/buy Рё С‚.Рї.)
+    # Р Р°Р·РјРµС‰Р°РµРј РІ РїСЂРёРѕСЂРёС‚РµС‚РЅРѕР№ РіСЂСѓРїРїРµ, С‡С‚РѕР±С‹ РєРѕР»Р±СЌРєРё РѕР±СЂР°Р±Р°С‚С‹РІР°Р»РёСЃСЊ СЃСЂР°Р·Сѓ
     app.add_handler(CallbackQueryHandler(on_cb), group=0)
 
-    # Голос/аудио — относим к медиагруппе (идёт раньше общего текстового хендлера)
+    # Р“РѕР»РѕСЃ/Р°СѓРґРёРѕ вЂ” РѕС‚РЅРѕСЃРёРј Рє РјРµРґРёР°РіСЂСѓРїРїРµ (РёРґС‘С‚ СЂР°РЅСЊС€Рµ РѕР±С‰РµРіРѕ С‚РµРєСЃС‚РѕРІРѕРіРѕ С…РµРЅРґР»РµСЂР°)
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
         app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn), group=1)
 
-    # === ПАТЧ 3: Текстовый выбор «Учёба / Работа / Развлечения» через on_mode_text ===
-    # УДАЛЕНО как дубль: текстовые варианты уже покрыты BTN_STUDY/BTN_WORK/BTN_FUN выше.
-    # СТАВИМ ДО остальных текстовых кнопок и ДО общего текстового хендлера
+    # === РџРђРўР§ 3: РўРµРєСЃС‚РѕРІС‹Р№ РІС‹Р±РѕСЂ В«РЈС‡С‘Р±Р° / Р Р°Р±РѕС‚Р° / Р Р°Р·РІР»РµС‡РµРЅРёСЏВ» С‡РµСЂРµР· on_mode_text ===
+    # РЈР”РђР›Р•РќРћ РєР°Рє РґСѓР±Р»СЊ: С‚РµРєСЃС‚РѕРІС‹Рµ РІР°СЂРёР°РЅС‚С‹ СѓР¶Рµ РїРѕРєСЂС‹С‚С‹ BTN_STUDY/BTN_WORK/BTN_FUN РІС‹С€Рµ.
+    # РЎРўРђР’РРњ Р”Рћ РѕСЃС‚Р°Р»СЊРЅС‹С… С‚РµРєСЃС‚РѕРІС‹С… РєРЅРѕРїРѕРє Рё Р”Рћ РѕР±С‰РµРіРѕ С‚РµРєСЃС‚РѕРІРѕРіРѕ С…РµРЅРґР»РµСЂР°
     app.add_handler(MessageHandler(
         filters.TEXT & (
-            filters.Regex(r"^🎓 Учёба$") |
-            filters.Regex(r"^💼 Работа$") |
-            filters.Regex(r"^🔥 Развлечения$")
+            filters.Regex(r"^рџЋ“ РЈС‡С‘Р±Р°$") |
+            filters.Regex(r"^рџ’ј Р Р°Р±РѕС‚Р°$") |
+            filters.Regex(r"^рџ”Ґ Р Р°Р·РІР»РµС‡РµРЅРёСЏ$")
         ),
         on_mode_text
     ))
 
-    # Текстовые кнопки/ярлыки (остальные) — ЧИСТО без дублей
+    # РўРµРєСЃС‚РѕРІС‹Рµ РєРЅРѕРїРєРё/СЏСЂР»С‹РєРё (РѕСЃС‚Р°Р»СЊРЅС‹Рµ) вЂ” Р§РРЎРўРћ Р±РµР· РґСѓР±Р»РµР№
     import re
 
-    # Строгие паттерны: одно название = один хендлер (эмодзи допускаем, лишние пробелы — тоже)
-    BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
-    BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
-    BTN_PLANS   = re.compile(r"^\s*Подписка(?:\s*[·•]\s*Помощь)?\s*$")
-    BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
-    BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Работа\s*$")
-    BTN_FUN     = re.compile(r"^\s*(?:🔥\s*)?Развлечения\s*$")
+    # РЎС‚СЂРѕРіРёРµ РїР°С‚С‚РµСЂРЅС‹: РѕРґРЅРѕ РЅР°Р·РІР°РЅРёРµ = РѕРґРёРЅ С…РµРЅРґР»РµСЂ (СЌРјРѕРґР·Рё РґРѕРїСѓСЃРєР°РµРј, Р»РёС€РЅРёРµ РїСЂРѕР±РµР»С‹ вЂ” С‚РѕР¶Рµ)
+    BTN_ENGINES = re.compile(r"^\s*(?:рџ§ \s*)?Р”РІРёР¶РєРё\s*$")
+    BTN_BALANCE = re.compile(r"^\s*(?:рџ’і|рџ§ѕ)?\s*Р‘Р°Р»Р°РЅСЃ\s*$")
+    BTN_PLANS   = re.compile(r"^\s*(?:в­ђ\s*)?РџРѕРґРїРёСЃРєР°(?:\s*[В·вЂў]\s*РџРѕРјРѕС‰СЊ)?\s*$")
+    BTN_STUDY   = re.compile(r"^\s*(?:рџЋ“\s*)?РЈС‡[РµС‘]Р±Р°\s*$")
+    BTN_WORK    = re.compile(r"^\s*(?:рџ’ј\s*)?Р Р°Р±РѕС‚Р°\s*$")
+    BTN_FUN     = re.compile(r"^\s*(?:рџ”Ґ\s*)?Р Р°Р·РІР»РµС‡РµРЅРёСЏ\s*$")
 
-    # Кнопки в приоритетной группе (0), чтобы они срабатывали раньше любых общих обработчиков
+    # РљРЅРѕРїРєРё РІ РїСЂРёРѕСЂРёС‚РµС‚РЅРѕР№ РіСЂСѓРїРїРµ (0), С‡С‚РѕР±С‹ РѕРЅРё СЃСЂР°Р±Р°С‚С‹РІР°Р»Рё СЂР°РЅСЊС€Рµ Р»СЋР±С‹С… РѕР±С‰РёС… РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
@@ -3721,10 +3549,10 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(BTN_WORK),    on_btn_work),    group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_FUN),     on_btn_fun),     group=0)
 
-    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
+    # вћ• РџРѕР·РёС‚РёРІРЅС‹Р№ Р°РІС‚Рѕ-РѕС‚РІРµС‚ РЅР° В«Р° СѓРјРµРµС€СЊ Р»РёвЂ¦В» вЂ” РґРѕ РѕР±С‰РµРіРѕ С‚РµРєСЃС‚Р° (РѕС‚РґРµР»СЊРЅР°СЏ РіСЂСѓРїРїР°, РЅРёР¶Рµ РєРЅРѕРїРѕРє)
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
 
-    # Медиа (фото/доки/видео/гиф) — тоже перед общим текстом
+    # РњРµРґРёР° (С„РѕС‚Рѕ/РґРѕРєРё/РІРёРґРµРѕ/РіРёС„) вЂ” С‚РѕР¶Рµ РїРµСЂРµРґ РѕР±С‰РёРј С‚РµРєСЃС‚РѕРј
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
     if photo_fn:
         app.add_handler(MessageHandler(filters.PHOTO, photo_fn), group=1)
@@ -3743,12 +3571,15 @@ def build_application() -> "Application":
 
     # >>> PATCH END <<<
 
-    # Общий текст — САМЫЙ последний (ниже всех частных кейсов)
+    # РћР±С‰РёР№ С‚РµРєСЃС‚ вЂ” РЎРђРњР«Р™ РїРѕСЃР»РµРґРЅРёР№ (РЅРёР¶Рµ РІСЃРµС… С‡Р°СЃС‚РЅС‹С… РєРµР№СЃРѕРІ)
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_fn), group=2)
+        btn_filters = (filters.Regex(BTN_ENGINES) | filters.Regex(BTN_BALANCE) |
+                       filters.Regex(BTN_PLANS)   | filters.Regex(BTN_STUDY)   |
+                       filters.Regex(BTN_WORK)    | filters.Regex(BTN_FUN))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~btn_filters, text_fn), group=2)
 
-    # Ошибки
+    # РћС€РёР±РєРё
     err_fn = _pick_first_defined("on_error", "handle_error")
     if err_fn:
         app.add_error_handler(err_fn)
@@ -3756,7 +3587,7 @@ def build_application() -> "Application":
     return app
 
 
-# === main() с безопасной инициализацией БД (без изменений по сути) ===
+# === main() СЃ Р±РµР·РѕРїР°СЃРЅРѕР№ РёРЅРёС†РёР°Р»РёР·Р°С†РёРµР№ Р‘Р” (Р±РµР· РёР·РјРµРЅРµРЅРёР№ РїРѕ СЃСѓС‚Рё) ===
 def main():
     with contextlib.suppress(Exception):
         db_init()
@@ -3768,7 +3599,7 @@ def main():
     app = build_application()
 
     if USE_WEBHOOK:
-        log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
+        log.info("рџљЂ WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -3778,7 +3609,7 @@ def main():
             allowed_updates=Update.ALL_TYPES,
         )
     else:
-        log.info("🚀 POLLING mode.")
+        log.info("рџљЂ POLLING mode.")
         with contextlib.suppress(Exception):
             asyncio.get_event_loop().run_until_complete(
                 app.bot.delete_webhook(drop_pending_updates=True)
