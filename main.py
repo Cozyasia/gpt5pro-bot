@@ -1717,7 +1717,7 @@ PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "599"))
 PRICE_PRO_RUB = int(os.environ.get("PRICE_PRO_RUB", "999"))
 PRICE_ULT_RUB = int(os.environ.get("PRICE_ULT_RUB", "1990"))
 
-PRICE_START_USD = float(os.environ.get("PRICE_START_USD", "4,99"))
+PRICE_START_USD = float(os.environ.get("PRICE_START_USD", "4.99"))
 PRICE_PRO_USD = float(os.environ.get("PRICE_PRO_USD", "9.99"))
 PRICE_ULT_USD = float(os.environ.get("PRICE_ULT_USD", "19.99"))
 
