@@ -634,9 +634,10 @@ def _pick_vision_model() -> str:
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     """
     Универсальный запрос к LLM:
-    - работает и с OpenAI, и с OpenRouter (через OPENAI_API_KEY + OPENAI_BASE_URL/_auto_base);
+    - поддерживает OpenRouter (через OPENAI_API_KEY = sk-or-...);
     - принудительно шлёт JSON в UTF-8, чтобы не было ascii-ошибок;
-    - делает 3 попытки с экспоненциальной паузой.
+    - логирует HTTP-статус и тело ошибки в Render-логи;
+    - делает до 3 попыток с небольшой паузой.
     """
     user_text = (user_text or "").strip()
     if not user_text:
@@ -650,20 +651,23 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         })
     messages.append({"role": "user", "content": user_text})
 
-    # базовый URL: либо твой OPENAI_BASE_URL, либо авто-определённый openrouter/api/v1,
-    # либо классический api.openai.com/v1
-    base_url = (_auto_base or "").strip()
-    if not base_url:
+    # ── Базовый URL ─────────────────────────────────────────────────────────
+    # Если ключ от OpenRouter или TEXT_PROVIDER=openrouter — шлём на OpenRouter
+    provider = (TEXT_PROVIDER or "").strip().lower()
+    if OPENAI_API_KEY.startswith("sk-or-") or provider == "openrouter":
+        base_url = "https://openrouter.ai/api/v1"
+    else:
         base_url = (OPENAI_BASE_URL or "").strip() or "https://api.openai.com/v1"
 
+    # ── Заголовки ───────────────────────────────────────────────────────────
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json; charset=utf-8",
         "Accept-Charset": "utf-8",
     }
 
-    # Если работаем через OpenRouter — добавляем служебные заголовки
-    if OPENAI_API_KEY.startswith("sk-or-") or "openrouter" in base_url.lower():
+    # Служебные заголовки OpenRouter
+    if "openrouter.ai" in base_url:
         if OPENROUTER_SITE_URL:
             headers["HTTP-Referer"] = OPENROUTER_SITE_URL
         if OPENROUTER_APP_NAME:
@@ -686,11 +690,23 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
                     },
                     headers=headers,
                 )
-            resp.raise_for_status()
+
+            # Логируем всё, что не 2xx
+            if resp.status_code // 100 != 2:
+                body_preview = resp.text[:800]
+                log.warning(
+                    "LLM HTTP %s from %s: %s",
+                    resp.status_code,
+                    base_url,
+                    body_preview,
+                )
+                resp.raise_for_status()
+
             data = resp.json()
             txt = (data["choices"][0]["message"]["content"] or "").strip()
             if txt:
                 return txt
+
         except Exception as e:
             last_err = e
             log.warning(
@@ -700,7 +716,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
             )
             await asyncio.sleep(0.8 * (attempt + 1))
 
-    log.error("ask_openai_text failed: %s", last_err)
+    log.error("ask_openai_text failed after 3 attempts: %s", last_err)
     return (
         "⚠️ Сейчас не получилось получить ответ от модели. "
         "Я на связи — попробуй переформулировать запрос или повторить чуть позже."
