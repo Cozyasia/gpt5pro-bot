@@ -82,7 +82,6 @@ BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
 # STT:
-DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "").strip()
 OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
 TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
 
