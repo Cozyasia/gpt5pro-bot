@@ -118,6 +118,21 @@ RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.co
 RUNWAY_CREATE_PATH = "/v1/tasks"
 RUNWAY_STATUS_PATH = "/v1/tasks/{id}"
 
+def _env_float(name: str, default: float) -> float:
+    """
+    Безопасное чтение float из ENV:
+    - понимает и '4,99', и '4.99'
+    - при ошибке возвращает default
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return float(default)
+    raw = raw.replace(",", ".").strip()
+    try:
+        return float(raw)
+    except Exception:
+        return float(default)
+
 # Kling (через внешний провайдер; заголовки/пути настраиваются через ENV)
 KLING_API_KEY      = os.environ.get("KLING_API_KEY", "").strip()
 KLING_BASE_URL     = (os.environ.get("KLING_BASE_URL", "").strip().rstrip("/"))
