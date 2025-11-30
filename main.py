@@ -917,11 +917,14 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if transcript:
             await msg.reply_text(f"🗣️ Распознал: {transcript}")
 
-    # Пробрасываем как обычный текст — дальше сработает on_text со всей твоей маршрутизацией
-    # (detect_media_intent, выбор Luma/Runway, /img и т.д.)
-    update.message.text = transcript
-    await on_text(update, context)
-
+    # Передаём распознанный текст в общий текстовый обработчик,
+    # не пытаясь менять read-only объект Message
+    try:
+        await on_text_with_text(update, context, transcript)
+    except Exception as e:
+        log.exception("Voice->text handler error: %s", e)
+        await msg.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
+        
 # ───────── Извлечение текста из документов ─────────
 def _safe_decode_txt(b: bytes) -> str:
     for enc in ("utf-8","cp1251","latin-1"):
@@ -3110,6 +3113,41 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
 
 
+# ───────── Обёртка для передачи произвольного текста (напр. из STT) ─────────
+async def on_text_with_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+):
+    """
+    Обёртка, которая позволяет вызвать on_text(), подменив только текст,
+    не изменяя объект Message (который read-only в python-telegram-bot v21+).
+    """
+    class DummyMsg:
+        def __init__(self, t: str, user, chat_id: int):
+            self.text = t
+            self.from_user = user
+            self.chat_id = chat_id
+
+        # Это важно — чтобы on_text мог использовать reply_text()
+        async def reply_text(self, *args, **kwargs):
+            return await update.effective_message.reply_text(*args, **kwargs)
+
+    user = update.effective_user
+    chat = update.effective_chat
+    dummy = DummyMsg(text, user, chat.id if chat else None)
+
+    # Сохраняем оригинал и подменяем update.message временно
+    old_msg = getattr(update, "message", None)
+    update.message = dummy  # type: ignore[attr-defined]
+
+    try:
+        await on_text(update, context)
+    finally:
+        # Восстанавливаем оригинальный message
+        update.message = old_msg  # type: ignore[attr-defined]
+
+
 # ───────── Текстовый вход ─────────
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
@@ -3124,25 +3162,46 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mtype, rest = detect_media_intent(text)
     if mtype == "video":
         duration, aspect = parse_video_opts(text)
-        prompt = rest or re.sub(r"\b(\d+\s*(?:сек|с)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))", "", text, flags=re.I).strip(" ,.")
+        prompt = rest or re.sub(
+            r"\b(\d+\s*(?:сек|с)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))",
+            "",
+            text,
+            flags=re.I
+        ).strip(" ,.")
         if not prompt:
-            await update.effective_message.reply_text("Опишите, что именно снять, напр.: «ретро-авто на берегу, закат».")
+            await update.effective_message.reply_text(
+                "Опишите, что именно снять, напр.: «ретро-авто на берегу, закат»."
+            )
             return
+
         aid = _new_aid()
-        _pending_actions[aid] = {"prompt": prompt, "duration": duration, "aspect": aspect}
+        _pending_actions[aid] = {
+            "prompt": prompt,
+            "duration": duration,
+            "aspect": aspect
+        }
+
         est_luma = 0.40
         est_runway = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",     callback_data=f"choose:luma:{aid}")],
-            [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})",  callback_data=f"choose:runway:{aid}")],
+            [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})", callback_data=f"choose:luma:{aid}")],
+            [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")]
         ])
         await update.effective_message.reply_text(
             f"Что использовать?\nДлительность: {duration} c • Аспект: {aspect}\nЗапрос: «{prompt}»",
             reply_markup=kb
         )
         return
+
     if mtype == "image":
-        prompt = rest or re.sub(r"^(img|image|picture)\s*[:\-]\s*", "", text, flags=re.I).strip()
+        prompt = rest or re.sub(
+            r"^(img|image|picture)\s*[:\-]\s*",
+            "",
+            text,
+            flags=re.I
+        ).strip()
+
         if not prompt:
             await update.effective_message.reply_text("Формат: /img <описание изображения>")
             return
@@ -3150,25 +3209,39 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         async def _go():
             await _do_img_generate(update, context, prompt)
 
-        await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go)
+        await _try_pay_then_do(
+            update,
+            context,
+            update.effective_user.id,
+            "img",
+            IMG_COST_USD,
+            _go
+        )
         return
 
     # Обычный текст → GPT
-    ok, _, _ = check_text_and_inc(update.effective_user.id, update.effective_user.username or "")
+    ok, _, _ = check_text_and_inc(
+        update.effective_user.id,
+        update.effective_user.username or ""
+    )
+
     if not ok:
         await update.effective_message.reply_text(
-            "Лимит текстовых запросов на сегодня исчерпан. Оформите ⭐ подписку или попробуйте завтра."
+            "Лимит текстовых запросов на сегодня исчерпан. "
+            "Оформите ⭐ подписку или попробуйте завтра."
         )
         return
 
     user_id = update.effective_user.id
+
     try:
-        mode  = _mode_get(user_id)
+        mode = _mode_get(user_id)
         track = _mode_track_get(user_id)
     except NameError:
         mode, track = "none", ""
 
     text_for_llm = text
+
     if mode and mode != "none":
         text_for_llm = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
 
