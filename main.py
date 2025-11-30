@@ -632,33 +632,80 @@ def _pick_vision_model() -> str:
         return OPENAI_MODEL
 
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
+    """
+    Универсальный запрос к LLM:
+    - работает и с OpenAI, и с OpenRouter (через OPENAI_API_KEY + OPENAI_BASE_URL/_auto_base);
+    - принудительно шлёт JSON в UTF-8, чтобы не было ascii-ошибок;
+    - делает 3 попытки с экспоненциальной паузой.
+    """
     user_text = (user_text or "").strip()
     if not user_text:
         return "Пустой запрос."
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
-        messages.append({"role": "system", "content": f"Контекст из веб-поиска:\n{web_ctx}"})
+        messages.append({
+            "role": "system",
+            "content": f"Контекст из веб-поиска:\n{web_ctx}",
+        })
     messages.append({"role": "user", "content": user_text})
 
-    last_err = None
+    # базовый URL: либо твой OPENAI_BASE_URL, либо авто-определённый openrouter/api/v1,
+    # либо классический api.openai.com/v1
+    base_url = (_auto_base or "").strip()
+    if not base_url:
+        base_url = (OPENAI_BASE_URL or "").strip() or "https://api.openai.com/v1"
+
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept-Charset": "utf-8",
+    }
+
+    # Если работаем через OpenRouter — добавляем служебные заголовки
+    if OPENAI_API_KEY.startswith("sk-or-") or "openrouter" in base_url.lower():
+        if OPENROUTER_SITE_URL:
+            headers["HTTP-Referer"] = OPENROUTER_SITE_URL
+        if OPENROUTER_APP_NAME:
+            headers["X-Title"] = OPENROUTER_APP_NAME
+
+    last_err: Exception | None = None
+
     for attempt in range(3):
         try:
-            resp = _oai_text_client().chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=messages,
-                temperature=0.6,
-            )
-            txt = (resp.choices[0].message.content or "").strip()
+            async with httpx.AsyncClient(
+                base_url=base_url,
+                timeout=90.0,
+            ) as client:
+                resp = await client.post(
+                    "/chat/completions",
+                    json={
+                        "model": OPENAI_MODEL,
+                        "messages": messages,
+                        "temperature": 0.6,
+                    },
+                    headers=headers,
+                )
+            resp.raise_for_status()
+            data = resp.json()
+            txt = (data["choices"][0]["message"]["content"] or "").strip()
             if txt:
                 return txt
         except Exception as e:
             last_err = e
-            log.warning("OpenAI/OpenRouter chat attempt %d failed: %s", attempt + 1, e)
+            log.warning(
+                "OpenAI/OpenRouter chat attempt %d failed: %s",
+                attempt + 1,
+                e,
+            )
             await asyncio.sleep(0.8 * (attempt + 1))
-    log.error("ask_openai_text failed: %s", last_err)
-    return "⚠️ Сейчас не получилось получить ответ от модели. Я на связи — попробуй переформулировать запрос или повторить чуть позже."
 
+    log.error("ask_openai_text failed: %s", last_err)
+    return (
+        "⚠️ Сейчас не получилось получить ответ от модели. "
+        "Я на связи — попробуй переформулировать запрос или повторить чуть позже."
+    )
+    
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
         prompt = (user_text or "Опиши, что на изображении и какой там текст.").strip()
