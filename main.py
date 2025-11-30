@@ -118,6 +118,14 @@ RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.co
 RUNWAY_CREATE_PATH = "/v1/tasks"
 RUNWAY_STATUS_PATH = "/v1/tasks/{id}"
 
+# Kling (через внешний провайдер; заголовки/пути настраиваются через ENV)
+KLING_API_KEY      = os.environ.get("KLING_API_KEY", "").strip()
+KLING_BASE_URL     = (os.environ.get("KLING_BASE_URL", "").strip().rstrip("/"))
+KLING_CREATE_PATH  = os.environ.get("KLING_CREATE_PATH", "/v1/video").strip()
+KLING_STATUS_PATH  = os.environ.get("KLING_STATUS_PATH", "/v1/video/status").strip()
+KLING_UNIT_COST_USD = _env_float("KLING_UNIT_COST_USD", 0.35)
+KLING_MAX_WAIT_S    = int((os.environ.get("KLING_MAX_WAIT_S") or "900").strip() or 900)
+
 # Таймауты
 LUMA_MAX_WAIT_S     = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
 RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or 1200)
@@ -515,8 +523,10 @@ def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cos
     return True, ""
 
 def _register_engine_spend(user_id: int, engine: str, usd: float):
-    if engine in ("luma","runway","img"):
-        _usage_update(user_id, **{f"{engine}_usd": float(usd)})
+    # Kling учитываем по бюджету Luma, чтобы не ломать существующую схему
+    mapped = {"kling": "luma"}.get(engine, engine)
+    if mapped in ("luma", "runway", "img"):
+        _usage_update(user_id, **{f"{mapped}_usd": float(usd)})
 
 # ───────── Prompts ─────────
 SYSTEM_PROMPT = (
@@ -1366,16 +1376,18 @@ async def on_mode_cb(update, context):
 
 # Fallback — если пользователь нажмёт «Учёба/Работа/Развлечения» обычной кнопкой/текстом
 async def on_mode_text(update, context):
-    text = (update.effective_message.text or "").strip().lower()
+    raw = (update.effective_message.text or "").strip()
+    tl = raw.lower()
+    # убираем ведущие эмодзи и прочие символы, чтобы '🎓 Учёба' превратить в 'учёба'
+    tl = re.sub(r"^[^\wё]+", "", tl).strip()
     mapping = {
         "учёба": "study", "учеба": "study",
         "работа": "work",
         "развлечения": "fun", "развлечение": "fun",
     }
-    key = mapping.get(text)
+    key = mapping.get(tl)
     if key:
         await _send_mode_menu(update, context, key)
-        
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -1713,13 +1725,30 @@ def _sub_info_text(user_id: int) -> str:
     return f"🧾 Текущая подписка: {tier.upper() if tier!='free' else 'нет'}{line_until}\n💵 Баланс: ${bal:.2f}"
 
 # Цены — из env с осмысленными дефолтами
-PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "599"))
-PRICE_PRO_RUB = int(os.environ.get("PRICE_PRO_RUB", "999"))
-PRICE_ULT_RUB = int(os.environ.get("PRICE_ULT_RUB", "1990"))
 
-PRICE_START_USD = float(os.environ.get("PRICE_START_USD", "4.99"))
-PRICE_PRO_USD = float(os.environ.get("PRICE_PRO_USD", "9.99"))
-PRICE_ULT_USD = float(os.environ.get("PRICE_ULT_USD", "19.99"))
+def _env_float(name: str, default: float) -> float:
+    """
+    Безопасное чтение float из ENV:
+    - поддерживает и "4,99", и "4.99"
+    - при ошибке возвращает default
+    """
+    raw = os.environ.get(name, str(default))
+    if raw is None:
+        return float(default)
+    raw = str(raw).replace(",", ".").strip()
+    try:
+        return float(raw)
+    except Exception:
+        return float(default)
+
+# Цены — из env с осмысленными дефолтами
+PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "499"))
+PRICE_PRO_RUB   = int(os.environ.get("PRICE_PRO_RUB", "1299"))
+PRICE_ULT_RUB   = int(os.environ.get("PRICE_ULT_RUB", "2990"))
+
+PRICE_START_USD = _env_float("PRICE_START_USD", 4.99)
+PRICE_PRO_USD   = _env_float("PRICE_PRO_USD",   12.99)
+PRICE_ULT_USD   = _env_float("PRICE_ULT_USD",   29.90)
 
 SUBS_TIERS = {
     "start": {
@@ -2487,13 +2516,25 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prompt   = meta["prompt"]
             duration = meta["duration"]
             aspect   = meta["aspect"]
-            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-            map_engine = "luma" if engine == "luma" else "runway"
+
+            # оценка стоимости по выбранному движку
+            if engine == "luma":
+                est = 0.40
+                map_engine = "luma"
+            elif engine == "kling":
+                est = max(0.15, KLING_UNIT_COST_USD * (duration / 5.0))
+                map_engine = "luma"   # Kling считаем по бюджету Luma
+            else:
+                est = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
+                map_engine = "runway"
 
             async def _start_real_render():
                 if engine == "luma":
                     await _run_luma_video(update, context, prompt, duration, aspect)
                     _register_engine_spend(update.effective_user.id, "luma", 0.40)
+                elif engine == "kling":
+                    await _run_kling_video(update, context, prompt, duration, aspect)
+                    _register_engine_spend(update.effective_user.id, "kling", est)
                 else:
                     await _run_runway_video(update, context, prompt, duration, aspect)
                     base = RUNWAY_UNIT_COST_USD or 7.0
@@ -2501,8 +2542,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     _register_engine_spend(update.effective_user.id, "runway", cost)
 
             await _try_pay_then_do(
-                update, context, update.effective_user.id,
-                map_engine, est, _start_real_render,
+                update,
+                context,
+                update.effective_user.id,
+                map_engine,
+                est,
+                _start_real_render,
                 remember_kind=f"video_{engine}",
                 remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
             )
@@ -2584,6 +2629,8 @@ async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"  model={LUMA_MODEL}  allowed_durations=['5s','9s','10s']  aspect=['16:9','9:16','1:1']",
         f"• Runway key: {'✅' if bool(RUNWAY_API_KEY) else '❌'}  base={RUNWAY_BASE_URL}",
         f"  create={RUNWAY_CREATE_PATH}  status={RUNWAY_STATUS_PATH}",
+        f"• Kling key: {'✅' if bool(KLING_API_KEY and KLING_BASE_URL) else '❌'}  base={KLING_BASE_URL or '-'}",
+        f"  create={KLING_CREATE_PATH}  status={KLING_STATUS_PATH}",
         f"• Поллинг каждые {VIDEO_POLL_DELAY_S:.1f} c",
     ]
     await update.effective_message.reply_text("\n".join(lines))
@@ -2798,6 +2845,95 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
     except Exception as e:
         log.exception("Runway revive error: %s", e)
         await update.effective_message.reply_text("❌ Не удалось анимировать фото в Runway.")
+
+
+# ───────── Kling video (generic provider) ─────────
+async def _run_kling_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
+    """
+    Текст → видео через Kling.
+    Эндпоинты/заголовки должны быть настроены через ENV:
+      KLING_BASE_URL, KLING_CREATE_PATH, KLING_STATUS_PATH, KLING_API_KEY.
+    Код написан максимально универсально: при необходимости адаптируй payload/headers
+    под конкретного провайдера Kling.
+    """
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    if not (KLING_API_KEY and KLING_BASE_URL):
+        await update.effective_message.reply_text("⚠️ Kling не настроен (проверь KLING_API_KEY и KLING_BASE_URL).")
+        return
+
+    # ограничим длительность до разумных пределов
+    duration_s = max(3, min(int(duration_s or 5), 20))
+    aspect_ratio = aspect if aspect in ("16:9", "9:16", "1:1") else "16:9"
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            create_url = f"{KLING_BASE_URL}{KLING_CREATE_PATH}"
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {KLING_API_KEY}",
+            }
+            payload = {
+                "prompt": prompt,
+                "duration": duration_s,
+                "aspect_ratio": aspect_ratio,
+            }
+            r = await client.post(create_url, headers=headers, json=payload)
+            if r.status_code >= 400:
+                await update.effective_message.reply_text(f"⚠️ Kling отклонил задачу ({r.status_code}).")
+                return
+            js = {}
+            try:
+                js = r.json()
+            except Exception:
+                pass
+
+            task_id = js.get("id") or js.get("task_id") or (js.get("data") or {}).get("task_id")
+            if not task_id:
+                await update.effective_message.reply_text("⚠️ Kling не вернул id задачи.")
+                return
+
+            await update.effective_message.reply_text("⏳ Kling рендерит видео… Сообщу, когда будет готово.")
+
+            status_url = f"{KLING_BASE_URL}{KLING_STATUS_PATH}"
+            started = time.time()
+            while True:
+                body = {"id": task_id, "task_id": task_id}
+                rs = await client.post(status_url, headers=headers, json=body)
+                js = {}
+                try:
+                    js = rs.json()
+                except Exception:
+                    pass
+
+                data = js.get("data") or js
+                st = (data.get("status") or data.get("task_status") or "").lower()
+                if st in ("completed", "succeed", "succeeded", "finished", "ready", "success"):
+                    url = data.get("video_url") or data.get("url") or (data.get("result") or {}).get("video_url")
+                    if not url:
+                        await update.effective_message.reply_text("⚠️ Kling: готово, но нет ссылки на видео.")
+                        return
+                    try:
+                        v = await client.get(url, timeout=180.0)
+                        v.raise_for_status()
+                        bio = BytesIO(v.content); bio.name = "kling.mp4"
+                        await update.effective_message.reply_video(InputFile(bio), caption="⚡ Kling: готово ✅")
+                    except Exception:
+                        await update.effective_message.reply_text(f"⚡ Kling: готово ✅\n{url}")
+                    return
+
+                if st in ("failed", "error", "canceled", "cancelled"):
+                    await update.effective_message.reply_text("❌ Kling: ошибка рендера.")
+                    return
+
+                if time.time() - started > KLING_MAX_WAIT_S:
+                    await update.effective_message.reply_text("⌛ Kling: время ожидания вышло.")
+                    return
+
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+    except Exception as e:
+        log.exception("Kling error: %s", e)
+        await update.effective_message.reply_text("❌ Kling: не удалось запустить/получить видео.")
 
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
@@ -3067,14 +3203,50 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not prompt:
             await update.effective_message.reply_text("Опишите, что именно снять, напр.: «ретро-авто на берегу, закат».")
             return
+
+        limits = _limits_for(update.effective_user.id)
+        tier = (limits.get("tier") or "free").lower()
+
         aid = _new_aid()
         _pending_actions[aid] = {"prompt": prompt, "duration": duration, "aspect": aspect}
-        est_luma = 0.40
+
+        # примерная оценка стоимости по движкам
+        est_luma   = 0.40
         est_runway = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",     callback_data=f"choose:luma:{aid}")],
-            [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})",  callback_data=f"choose:runway:{aid}")],
-        ])
+        est_kling  = max(0.15, KLING_UNIT_COST_USD * (duration / 5.0)) if KLING_API_KEY and KLING_BASE_URL else None
+
+        # Тариф START: если Kling настроен — сразу используем его без выбора (он дешевле)
+        if tier == "start" and est_kling is not None:
+            async def _go():
+                await _run_kling_video(update, context, prompt, duration, aspect)
+                _register_engine_spend(update.effective_user.id, "kling", est_kling)
+
+            await _try_pay_then_do(
+                update,
+                context,
+                update.effective_user.id,
+                "luma",  # Kling считаем по бюджету Luma
+                est_kling,
+                _go,
+                remember_kind="video_kling",
+                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
+            )
+            return
+
+        # PRO / ULTIMATE: при наличии Kling даём выбор из трёх движков
+        if tier in ("pro", "ultimate") and est_kling is not None:
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"⚡ Kling (~${est_kling:.2f})", callback_data=f"choose:kling:{aid}")],
+                [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",   callback_data=f"choose:luma:{aid}")],
+                [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")],
+            ])
+        else:
+            # free / start без Kling — как раньше: Luma/Runway
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",   callback_data=f"choose:luma:{aid}")],
+                [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")],
+            ])
+
         await update.effective_message.reply_text(
             f"Что использовать?\nДлительность: {duration} c • Аспект: {aspect}\nЗапрос: «{prompt}»",
             reply_markup=kb
