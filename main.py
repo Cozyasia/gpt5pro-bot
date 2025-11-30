@@ -1713,11 +1713,11 @@ def _sub_info_text(user_id: int) -> str:
     return f"🧾 Текущая подписка: {tier.upper() if tier!='free' else 'нет'}{line_until}\n💵 Баланс: ${bal:.2f}"
 
 # Цены — из env с осмысленными дефолтами
-PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "299"))
-PRICE_PRO_RUB = int(os.environ.get("PRICE_PRO_RUB", "899"))
+PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "599"))
+PRICE_PRO_RUB = int(os.environ.get("PRICE_PRO_RUB", "999"))
 PRICE_ULT_RUB = int(os.environ.get("PRICE_ULT_RUB", "1990"))
 
-PRICE_START_USD = float(os.environ.get("PRICE_START_USD", "3.49"))
+PRICE_START_USD = float(os.environ.get("PRICE_START_USD", "4,99"))
 PRICE_PRO_USD = float(os.environ.get("PRICE_PRO_USD", "9.99"))
 PRICE_ULT_USD = float(os.environ.get("PRICE_ULT_USD", "19.99"))
 
