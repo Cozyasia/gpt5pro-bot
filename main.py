@@ -2719,19 +2719,29 @@ def parse_video_opts(text: str) -> tuple[int, str]:
     asp = None
     for a in _ASPECTS:
         if a in tl:
-            asp = a; break
+            asp = a
+            break
     aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
     return duration, aspect
 
 
 # ───────── Luma video ─────────
-async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
+async def _run_luma_video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    duration_s: int,
+    aspect: str,
+):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             base = await _pick_luma_base(client)
             create_url = f"{base}{LUMA_CREATE_PATH}"
-            headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"}
+            headers = {
+                "Authorization": f"Bearer {LUMA_API_KEY}",
+                "Accept": "application/json",
+            }
             payload = {
                 "model": LUMA_MODEL,
                 "prompt": prompt,
@@ -2740,46 +2750,95 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
             }
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
-                await update.effective_message.reply_text(f"⚠️ Luma отклонила задачу ({r.status_code}).")
-                return
-            rid = (r.json() or {}).get("id") or (r.json() or {}).get("generation_id")
-            if not rid:
-                await update.effective_message.reply_text("⚠️ Luma не вернула id генерации.")
+                await update.effective_message.reply_text(
+                    f"⚠️ Luma отклонила задачу ({r.status_code})."
+                )
                 return
 
-            await update.effective_message.reply_text("⏳ Luma рендерит… Я сообщу, когда видео будет готово.")
+            js_create = {}
+            with contextlib.suppress(Exception):
+                js_create = r.json()
+
+            rid = js_create.get("id") or js_create.get("generation_id")
+            if not rid:
+                await update.effective_message.reply_text(
+                    "⚠️ Luma не вернула id генерации."
+                )
+                return
+
+            await update.effective_message.reply_text(
+                "⏳ Luma рендерит… Я сообщу, когда видео будет готово."
+            )
 
             status_url = f"{base}{LUMA_STATUS_PATH}".format(id=rid)
             started = time.time()
+
             while True:
                 rs = await client.get(status_url, headers=headers)
                 js = {}
-                try: js = rs.json()
-                except Exception: pass
+                with contextlib.suppress(Exception):
+                    js = rs.json()
+
                 st = (js.get("state") or js.get("status") or "").lower()
+
                 if st in ("completed", "succeeded", "finished", "ready"):
-                    url = js.get("assets", [{}])[0].get("url") or js.get("output_url")
+                    # ---- безопасный разбор ответа Luma ----
+                    assets = js.get("assets") or []
+                    url = None
+
+                    if assets and isinstance(assets, list):
+                        first = assets[0]
+                        if isinstance(first, dict):
+                            url = (
+                                first.get("url")
+                                or first.get("signed_url")
+                                or first.get("download_url")
+                            )
+
                     if not url:
-                        await update.effective_message.reply_text("⚠️ Готово, но нет ссылки на видео.")
+                        url = (
+                            js.get("output_url")
+                            or js.get("video")
+                            or js.get("url")
+                        )
+
+                    if not url:
+                        await update.effective_message.reply_text(
+                            "❌ Luma: ответ пришёл без ссылки на видео."
+                        )
                         return
+
                     try:
                         v = await client.get(url, timeout=120.0)
                         v.raise_for_status()
-                        bio = BytesIO(v.content); bio.name = "luma.mp4"
-                        await update.effective_message.reply_video(InputFile(bio), caption="🎬 Luma: готово ✅")
+                        bio = BytesIO(v.content)
+                        bio.name = "luma.mp4"
+                        await update.effective_message.reply_video(
+                            InputFile(bio),
+                            caption="🎬 Luma: готово ✅",
+                        )
                     except Exception:
-                        await update.effective_message.reply_text(f"🎬 Luma: готово ✅\n{url}")
+                        await update.effective_message.reply_text(
+                            f"🎬 Luma: готово ✅\n{url}"
+                        )
                     return
+
                 if st in ("failed", "error", "canceled", "cancelled"):
                     await update.effective_message.reply_text("❌ Luma: ошибка рендера.")
                     return
+
                 if time.time() - started > LUMA_MAX_WAIT_S:
-                    await update.effective_message.reply_text("⌛ Luma: время ожидания вышло.")
+                    await update.effective_message.reply_text(
+                        "⌛ Luma: время ожидания вышло."
+                    )
                     return
+
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
     except Exception as e:
         log.exception("Luma error: %s", e)
-        await update.effective_message.reply_text("❌ Luma: не удалось запустить/получить видео.")
+        await update.effective_message.reply_text(
+            "❌ Luma: не удалось запустить/получить видео."
+        )
 
 
 # ───────── Runway video ─────────
