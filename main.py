@@ -3200,7 +3200,89 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         await update.effective_message.reply_text(
             f"Что использовать?\nДлительность: {duration} c • Аспект: {aspect}\nЗапрос: «{prompt}»",
-            reply_markup=kb
+async def on_text_with_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+):
+    """
+    Обёртка для голосовых/внешних источников текста.
+    НИЧЕГО не меняем в update.message (он read-only),
+    просто передаём распознанный текст в on_text.
+    """
+    text = (text or "").strip()
+    if not text:
+        await update.effective_message.reply_text("Не удалось распознать текст.")
+        return
+
+    # Передаём текст как manual_text
+    await on_text(update, context, manual_text=text)
+
+
+# ───────── Текстовый вход ─────────
+async def on_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    manual_text: str | None = None,
+):
+    # Если пришёл текст извне (голос → STT), используем его,
+    # иначе читаем обычное update.message.text
+    text = (manual_text or (update.message.text or "")).strip()
+
+    # Вопросы о возможностях
+    cap = capability_answer(text)
+    if cap:
+        await update.effective_message.reply_text(cap)
+        return
+
+    # Намёк на видео/картинку
+    mtype, rest = detect_media_intent(text)
+    if mtype == "video":
+        duration, aspect = parse_video_opts(text)
+        prompt = rest or re.sub(
+            r"\b(\d+\s*(?:сек|с)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))",
+            "",
+            text,
+            flags=re.I
+        ).strip(" ,.")
+        if not prompt:
+            await update.effective_message.reply_text(
+                "Опишите, что именно снять, напр.: «ретро-авто на берегу, закат»."
+            )
+            return
+
+        aid = _new_aid()
+        _pending_actions[aid] = {
+            "prompt": prompt,
+            "duration": duration,
+            "aspect": aspect,
+        }
+
+        est_luma = 0.40
+        est_runway = max(
+            1.0,
+            RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)),
+        )
+
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    f"🎬 Luma (~${est_luma:.2f})",
+                    callback_data=f"choose:luma:{aid}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"🎥 Runway (~${est_runway:.2f})",
+                    callback_data=f"choose:runway:{aid}",
+                )
+            ],
+        ])
+        await update.effective_message.reply_text(
+            f"Что использовать?\n"
+            f"Длительность: {duration} c • Аспект: {aspect}\n"
+            f"Запрос: «{prompt}»",
+            reply_markup=kb,
         )
         return
 
@@ -3213,7 +3295,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ).strip()
 
         if not prompt:
-            await update.effective_message.reply_text("Формат: /img <описание изображения>")
+            await update.effective_message.reply_text(
+                "Формат: /img <описание изображения>"
+            )
             return
 
         async def _go():
@@ -3225,14 +3309,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             update.effective_user.id,
             "img",
             IMG_COST_USD,
-            _go
+            _go,
         )
         return
 
     # Обычный текст → GPT
     ok, _, _ = check_text_and_inc(
         update.effective_user.id,
-        update.effective_user.username or ""
+        update.effective_user.username or "",
     )
 
     if not ok:
@@ -3253,7 +3337,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_for_llm = text
 
     if mode and mode != "none":
-        text_for_llm = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
+        text_for_llm = (
+            f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
+        )
 
     if mode == "Учёба" and track:
         await study_process_text(update, context, text)
