@@ -2864,16 +2864,18 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             create_url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
 
             headers = {
-                "Authorization": f"Token {RUNWAY_API_KEY}",   # <-- ключевой фикс
+                "Authorization": f"Token {RUNWAY_API_KEY}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
             }
 
             payload = {
                 "model": RUNWAY_MODEL,
-                "prompt": prompt,
-                "duration": duration_s,
-                "aspect_ratio": aspect,
+                "input": {
+                    "prompt": prompt,
+                    "duration": duration_s,
+                    "aspect_ratio": aspect,
+                }
             }
 
             r = await client.post(create_url, headers=headers, json=payload)
@@ -2895,7 +2897,6 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
             await update.effective_message.reply_text("⏳ Runway рендерит… Я сообщу, когда видео будет готово.")
 
-            # Polling
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=rid)
 
             while True:
@@ -2938,7 +2939,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     except Exception as e:
         log.exception("Runway error: %s", e)
         await update.effective_message.reply_text("❌ Runway: не удалось запустить/получить видео.")
-
+        
 # ───────── Runway: анимация загруженного фото (image→video) ─────────
 async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
