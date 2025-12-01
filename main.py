@@ -3130,92 +3130,14 @@ async def on_text_with_text(
     text: str,
 ):
     """
-    Обёртка, которая позволяет вызвать on_text(), подменив только текст,
-    не изменяя объект Message (который read-only в python-telegram-bot v21+).
-    """
-    class DummyMsg:
-        def __init__(self, t: str, user, chat_id: int):
-            self.text = t
-            self.from_user = user
-            self.chat_id = chat_id
-
-        # Это важно — чтобы on_text мог использовать reply_text()
-        async def reply_text(self, *args, **kwargs):
-            return await update.effective_message.reply_text(*args, **kwargs)
-
-    user = update.effective_user
-    chat = update.effective_chat
-    dummy = DummyMsg(text, user, chat.id if chat else None)
-
-    # Сохраняем оригинал и подменяем update.message временно
-    old_msg = getattr(update, "message", None)
-    update.message = dummy  # type: ignore[attr-defined]
-
-    try:
-        await on_text(update, context)
-    finally:
-        # Восстанавливаем оригинальный message
-        update.message = old_msg  # type: ignore[attr-defined]
-
-
-# ───────── Текстовый вход ─────────
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (update.message.text or "").strip()
-
-    # Вопросы о возможностях
-    cap = capability_answer(text)
-    if cap:
-        await update.effective_message.reply_text(cap)
-        return
-
-    # Намёк на видео/картинку
-    mtype, rest = detect_media_intent(text)
-    if mtype == "video":
-        duration, aspect = parse_video_opts(text)
-        prompt = rest or re.sub(
-            r"\b(\d+\s*(?:сек|с)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))",
-            "",
-            text,
-            flags=re.I
-        ).strip(" ,.")
-        if not prompt:
-            await update.effective_message.reply_text(
-                "Опишите, что именно снять, напр.: «ретро-авто на берегу, закат»."
-            )
-            return
-
-        aid = _new_aid()
-        _pending_actions[aid] = {
-            "prompt": prompt,
-            "duration": duration,
-            "aspect": aspect
-        }
-
-        est_luma = 0.40
-        est_runway = max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})", callback_data=f"choose:luma:{aid}")],
-            [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")]
-        ])
-        await update.effective_message.reply_text(
-            f"Что использовать?\nДлительность: {duration} c • Аспект: {aspect}\nЗапрос: «{prompt}»",
-async def on_text_with_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    text: str,
-):
-    """
-    Обёртка для голосовых/внешних источников текста.
-    НИЧЕГО не меняем в update.message (он read-only),
-    просто передаём распознанный текст в on_text.
+    Обёртка для передачи текста (например, после STT) в on_text,
+    без попыток изменить update.message (read-only!).
     """
     text = (text or "").strip()
     if not text:
         await update.effective_message.reply_text("Не удалось распознать текст.")
         return
 
-    # Передаём текст как manual_text
     await on_text(update, context, manual_text=text)
 
 
@@ -3225,9 +3147,12 @@ async def on_text(
     context: ContextTypes.DEFAULT_TYPE,
     manual_text: str | None = None,
 ):
-    # Если пришёл текст извне (голос → STT), используем его,
-    # иначе читаем обычное update.message.text
-    text = (manual_text or (update.message.text or "")).strip()
+    # Если текст передан извне → используем его
+    # иначе — обычный текст сообщения
+    if manual_text is not None:
+        text = manual_text.strip()
+    else:
+        text = (update.message.text or "").strip()
 
     # Вопросы о возможностях
     cap = capability_answer(text)
@@ -3235,7 +3160,7 @@ async def on_text(
         await update.effective_message.reply_text(cap)
         return
 
-    # Намёк на видео/картинку
+    # Намёк на генерацию видеоролика
     mtype, rest = detect_media_intent(text)
     if mtype == "video":
         duration, aspect = parse_video_opts(text)
@@ -3243,8 +3168,9 @@ async def on_text(
             r"\b(\d+\s*(?:сек|с)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))",
             "",
             text,
-            flags=re.I
+            flags=re.I,
         ).strip(" ,.")
+
         if not prompt:
             await update.effective_message.reply_text(
                 "Опишите, что именно снять, напр.: «ретро-авто на берегу, закат»."
@@ -3278,6 +3204,7 @@ async def on_text(
                 )
             ],
         ])
+
         await update.effective_message.reply_text(
             f"Что использовать?\n"
             f"Длительность: {duration} c • Аспект: {aspect}\n"
@@ -3286,12 +3213,13 @@ async def on_text(
         )
         return
 
+    # Намёк на картинку
     if mtype == "image":
         prompt = rest or re.sub(
             r"^(img|image|picture)\s*[:\-]\s*",
             "",
             text,
-            flags=re.I
+            flags=re.I,
         ).strip()
 
         if not prompt:
@@ -3328,18 +3256,17 @@ async def on_text(
 
     user_id = update.effective_user.id
 
+    # Режимы
     try:
         mode = _mode_get(user_id)
         track = _mode_track_get(user_id)
     except NameError:
         mode, track = "none", ""
 
-    text_for_llm = text
-
     if mode and mode != "none":
-        text_for_llm = (
-            f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
-        )
+        text_for_llm = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
+    else:
+        text_for_llm = text
 
     if mode == "Учёба" and track:
         await study_process_text(update, context, text)
@@ -3348,7 +3275,6 @@ async def on_text(
     reply = await ask_openai_text(text_for_llm)
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
-
 
 # ───────── Фото / Документы / Голос ─────────
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
