@@ -879,13 +879,6 @@ async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
     return ""
 
 # ───────── Хендлер голосовых/аудио ─────────
-import re
-import contextlib
-from io import BytesIO
-from telegram import Update
-from telegram.ext import ContextTypes
-from telegram.constants import ChatAction
-
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     voice = getattr(msg, "voice", None)
@@ -897,9 +890,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Скачиваем файл из Telegram
     try:
-        with contextlib.suppress(Exception):
-            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
         tg_file = await context.bot.get_file(media.file_id)
         buf = BytesIO()
         await tg_file.download_to_memory(out=buf)
@@ -918,10 +909,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             filename = "voice.ogg"
 
     except Exception as e:
-        try:
-            log.exception("TG download error: %s", e)  # если log определён выше
-        except Exception:
-            pass
+        log.exception("TG download error: %s", e)
         await msg.reply_text("Не удалось скачать голосовое сообщение.")
         return
 
@@ -933,17 +921,18 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     transcript = transcript.strip()
 
-    # (опционально) подтвердим распознавание для UX/отладки
-    with contextlib.suppress(Exception):
-        if transcript:
-            await msg.reply_text(f"🗣️ Распознал: {transcript}")
-
-    # Передаём распознанный текст в общий текстовый обработчик,
-    # не пытаясь менять read-only объект Message
+    # Покажем что распознано
     try:
-        await on_text_with_text(update, context, transcript)
+        await msg.reply_text(f"🗣️ Распознал: {transcript}")
+    except:
+        pass
+
+    # Передаём распознанный текст в ОБЩИЙ текстовый обработчик
+    try:
+        update.message.text = transcript
+        await on_text(update, context)
     except Exception as e:
-        log.exception("Voice->text handler error: %s", e)
+        log.exception("Voice->Text routing error: %s", e)
         await msg.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
         
 # ───────── Извлечение текста из документов ─────────
@@ -2640,7 +2629,6 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
 async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = []
     lines.append("🔎 STT диагностика:")
-    lines.append(f"• Deepgram: {'✅ ключ найден' if DEEPGRAM_API_KEY else '❌ нет ключа'}")
     lines.append(f"• OpenAI Whisper: {'✅ клиент активен' if oai_stt else '❌ недоступен'}")
     lines.append(f"• Модель Whisper: {TRANSCRIBE_MODEL}")
     lines.append("• Поддержка форматов: ogg/oga, mp3, m4a/mp4, wav, webm")
