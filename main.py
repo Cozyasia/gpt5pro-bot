@@ -2707,7 +2707,6 @@ def sniff_image_mime(data: bytes) -> str:
         return "image/webp"
     return "application/octet-stream"
 
-
 # ───────── Парс опций видео ─────────
 _ASPECTS = {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"}
 
@@ -2738,6 +2737,7 @@ async def _run_luma_video(
         async with httpx.AsyncClient(timeout=60.0) as client:
             base = await _pick_luma_base(client)
             create_url = f"{base}{LUMA_CREATE_PATH}"
+
             headers = {
                 "Authorization": f"Bearer {LUMA_API_KEY}",
                 "Accept": "application/json",
@@ -2748,6 +2748,8 @@ async def _run_luma_video(
                 "duration": f"{duration_s}s",
                 "aspect_ratio": aspect,
             }
+
+            # создаём задачу
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
                 await update.effective_message.reply_text(
@@ -2755,15 +2757,11 @@ async def _run_luma_video(
                 )
                 return
 
-            js_create = {}
-            with contextlib.suppress(Exception):
-                js_create = r.json()
-
-            rid = js_create.get("id") or js_create.get("generation_id")
+            data = r.json() or {}
+            rid = data.get("id") or data.get("generation_id")
             if not rid:
-                await update.effective_message.reply_text(
-                    "⚠️ Luma не вернула id генерации."
-                )
+                log.error("Luma: no generation id in response: %s", data)
+                await update.effective_message.reply_text("⚠️ Luma не вернула id генерации.")
                 return
 
             await update.effective_message.reply_text(
@@ -2775,39 +2773,53 @@ async def _run_luma_video(
 
             while True:
                 rs = await client.get(status_url, headers=headers)
-                js = {}
-                with contextlib.suppress(Exception):
-                    js = rs.json()
+                try:
+                    js = rs.json() or {}
+                except Exception:
+                    js = {}
 
                 st = (js.get("state") or js.get("status") or "").lower()
 
                 if st in ("completed", "succeeded", "finished", "ready"):
-                    # ---- безопасный разбор ответа Luma ----
-                    assets = js.get("assets") or []
+                    # --- НОВЫЙ надёжный поиск ссылки на видео ---
                     url = None
+                    assets = js.get("assets")
 
-                    if assets and isinstance(assets, list):
-                        first = assets[0]
-                        if isinstance(first, dict):
-                            url = (
-                                first.get("url")
-                                or first.get("signed_url")
-                                or first.get("download_url")
-                            )
+                    def _extract_urls_from_assets(a):
+                        urls = []
+                        if isinstance(a, str):
+                            urls.append(a)
+                        elif isinstance(a, dict):
+                            # типичный формат: {"video": "https://..."} или {"video": {"url": "..."}}
+                            for v in a.values():
+                                urls.extend(_extract_urls_from_assets(v))
+                        elif isinstance(a, (list, tuple)):
+                            for item in a:
+                                urls.extend(_extract_urls_from_assets(item))
+                        return urls
+
+                    if assets is not None:
+                        for u in _extract_urls_from_assets(assets):
+                            if isinstance(u, str) and u.startswith("http"):
+                                url = u
+                                break
+
+                    # запасные ключи на всякий случай
+                    if not url:
+                        for k in ("output_url", "video_url", "url"):
+                            val = js.get(k)
+                            if isinstance(val, str) and val.startswith("http"):
+                                url = val
+                                break
 
                     if not url:
-                        url = (
-                            js.get("output_url")
-                            or js.get("video")
-                            or js.get("url")
-                        )
-
-                    if not url:
+                        log.error("Luma: ответ без ссылки на видео: %s", js)
                         await update.effective_message.reply_text(
                             "❌ Luma: ответ пришёл без ссылки на видео."
                         )
                         return
 
+                    # Скачиваем и отправляем файл как видео
                     try:
                         v = await client.get(url, timeout=120.0)
                         v.raise_for_status()
@@ -2818,12 +2830,14 @@ async def _run_luma_video(
                             caption="🎬 Luma: готово ✅",
                         )
                     except Exception:
+                        # если не получилось скачать — хотя бы даём прямую ссылку
                         await update.effective_message.reply_text(
                             f"🎬 Luma: готово ✅\n{url}"
                         )
                     return
 
                 if st in ("failed", "error", "canceled", "cancelled"):
+                    log.error("Luma returned error state: %s", js)
                     await update.effective_message.reply_text("❌ Luma: ошибка рендера.")
                     return
 
@@ -2834,13 +2848,12 @@ async def _run_luma_video(
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
     except Exception as e:
         log.exception("Luma error: %s", e)
         await update.effective_message.reply_text(
             "❌ Luma: не удалось запустить/получить видео."
         )
-
-
 # ───────── Runway video ─────────
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
