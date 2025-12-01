@@ -888,9 +888,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не нашёл голосовой файл.")
         return
 
-    # Скачиваем файл из Telegram
+    # Скачиваем
     try:
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        with contextlib.suppress(Exception):
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+
         tg_file = await context.bot.get_file(media.file_id)
         buf = BytesIO()
         await tg_file.download_to_memory(out=buf)
@@ -913,7 +915,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не удалось скачать голосовое сообщение.")
         return
 
-    # Транскрибируем
+    # Транскрибация
     transcript = await _stt_transcribe_bytes(filename, raw)
     if not transcript:
         await msg.reply_text("Ошибка при распознавании речи.")
@@ -921,18 +923,25 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     transcript = transcript.strip()
 
-    # Покажем что распознано
-    try:
+    # Показываем, что распознано
+    with contextlib.suppress(Exception):
         await msg.reply_text(f"🗣️ Распознал: {transcript}")
-    except:
-        pass
 
-    # Передаём распознанный текст в ОБЩИЙ текстовый обработчик
+    # Вместо смены update.message.text — создаём фейковый текстовый объект
+    class FakeMessage:
+        def __init__(self, txt):
+            self.text = txt
+
+    fake_update = Update(
+        update.update_id,
+        message=FakeMessage(transcript)
+    )
+
+    # Вызываем стандартный текстовый обработчик
     try:
-        update.message.text = transcript
-        await on_text(update, context)
+        await on_text(fake_update, context)
     except Exception as e:
-        log.exception("Voice->Text routing error: %s", e)
+        log.exception("Voice->text error: %s", e)
         await msg.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
         
 # ───────── Извлечение текста из документов ─────────
