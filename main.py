@@ -888,7 +888,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не нашёл голосовой файл.")
         return
 
-    # Скачиваем
+    # Скачиваем файл
     try:
         with contextlib.suppress(Exception):
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
@@ -915,7 +915,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не удалось скачать голосовое сообщение.")
         return
 
-    # Транскрибация
+    # STT
     transcript = await _stt_transcribe_bytes(filename, raw)
     if not transcript:
         await msg.reply_text("Ошибка при распознавании речи.")
@@ -923,25 +923,17 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     transcript = transcript.strip()
 
-    # Показываем, что распознано
+    # Показываем текст для отладки
     with contextlib.suppress(Exception):
         await msg.reply_text(f"🗣️ Распознал: {transcript}")
 
-    # Вместо смены update.message.text — создаём фейковый текстовый объект
-    class FakeMessage:
-        def __init__(self, txt):
-            self.text = txt
-
-    fake_update = Update(
-        update.update_id,
-        message=FakeMessage(transcript)
-    )
-
-    # Вызываем стандартный текстовый обработчик
+    # ——— КЛЮЧЕВОЙ МОМЕНТ ———
+    # Больше НЕ создаём фейковый Update, не лезем в Message.text — это запрещено в Telegram API
+    # Теперь мы используем безопасный прокси-метод, который создаёт временный message-объект
     try:
-        await on_text(fake_update, context)
+        await on_text_with_text(update, context, transcript)
     except Exception as e:
-        log.exception("Voice->text error: %s", e)
+        log.exception("Voice->text handler error: %s", e)
         await msg.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
         
 # ───────── Извлечение текста из документов ─────────
