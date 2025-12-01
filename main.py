@@ -2857,58 +2857,84 @@ async def _run_luma_video(
 # ───────── Runway video ─────────
 async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
+
             create_url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
-            headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Accept": "application/json"}
+
+            headers = {
+                "Authorization": f"Token {RUNWAY_API_KEY}",   # <-- ключевой фикс
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+
             payload = {
                 "model": RUNWAY_MODEL,
-                "input": {
-                    "prompt": prompt,
-                    "duration": duration_s,
-                    "ratio": aspect.replace(":", "/") if ":" in aspect else RUNWAY_RATIO
-                }
+                "prompt": prompt,
+                "duration": duration_s,
+                "aspect_ratio": aspect,
             }
+
             r = await client.post(create_url, headers=headers, json=payload)
+
+            if r.status_code == 401:
+                await update.effective_message.reply_text("⚠️ Runway: ключ отклонён (401). Проверь API Key.")
+                return
+
             if r.status_code >= 400:
                 await update.effective_message.reply_text(f"⚠️ Runway отклонил задачу ({r.status_code}).")
                 return
-            rid = (r.json() or {}).get("id") or (r.json() or {}).get("task_id")
+
+            js = r.json()
+            rid = js.get("id") or js.get("task_id")
+
             if not rid:
                 await update.effective_message.reply_text("⚠️ Runway не вернул id задачи.")
                 return
 
             await update.effective_message.reply_text("⏳ Runway рендерит… Я сообщу, когда видео будет готово.")
 
+            # Polling
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=rid)
-            started = time.time()
+
             while True:
                 rs = await client.get(status_url, headers=headers)
-                js = {}
-                try: js = rs.json()
-                except Exception: pass
-                st = (js.get("status") or js.get("state") or "").lower()
-                if st in ("completed", "succeeded", "finished", "ready"):
-                    assets = js.get("output", {}) if isinstance(js.get("output"), dict) else (js.get("assets") or {})
-                    url = (assets.get("video") if isinstance(assets, dict) else None) or js.get("video_url") or js.get("output_url")
+                data = {}
+
+                try:
+                    data = rs.json()
+                except:
+                    pass
+
+                status = data.get("status", "").lower()
+
+                if status in ("succeeded", "completed", "finished", "ready"):
+                    url = (
+                        data.get("output", {})
+                            .get("assets", [{}])[0]
+                            .get("url")
+                    )
                     if not url:
-                        await update.effective_message.reply_text("⚠️ Готово, но нет ссылки на видео.")
+                        await update.effective_message.reply_text("⚠️ Runway: готово, но URL отсутствует.")
                         return
+
                     try:
-                        v = await client.get(url, timeout=180.0)
+                        v = await client.get(url, timeout=120)
                         v.raise_for_status()
-                        bio = BytesIO(v.content); bio.name = "runway.mp4"
+                        bio = BytesIO(v.content)
+                        bio.name = "runway.mp4"
                         await update.effective_message.reply_video(InputFile(bio), caption="🎥 Runway: готово ✅")
-                    except Exception:
+                    except:
                         await update.effective_message.reply_text(f"🎥 Runway: готово ✅\n{url}")
                     return
-                if st in ("failed", "error", "canceled", "cancelled"):
+
+                if status in ("failed", "error"):
                     await update.effective_message.reply_text("❌ Runway: ошибка рендера.")
                     return
-                if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await update.effective_message.reply_text("⌛ Runway: время ожидания вышло.")
-                    return
+
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
     except Exception as e:
         log.exception("Runway error: %s", e)
         await update.effective_message.reply_text("❌ Runway: не удалось запустить/получить видео.")
