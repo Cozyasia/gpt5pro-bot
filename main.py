@@ -2930,7 +2930,7 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
                 "init_image": f"data:{sniff_image_mime(img_bytes)};base64,{b64}"
             }
         }
-        headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Accept": "application/json"}
+        headers = {"Authorization": f"Token {RUNWAY_API_KEY}", "Accept": "application/json"}
         async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}", headers=headers, json=payload)
             if r.status_code >= 400:
