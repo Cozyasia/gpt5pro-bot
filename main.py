@@ -210,6 +210,223 @@ def is_unlimited(user_id: int, username: str | None = None) -> bool:
 def _make_tariff_url(src: str = "subscribe") -> str:
     base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/premium.html").strip()
     if src:
+# -*- coding: utf-8 -*-
+import os
+import re
+import json
+import time
+import base64
+import logging
+from io import BytesIO
+import asyncio
+import sqlite3
+from datetime import datetime, timedelta, timezone
+import threading
+import uuid
+import contextlib
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+import httpx
+from telegram import (
+    Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InputFile,
+    LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton
+)
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters,
+    PreCheckoutQueryHandler, CallbackQueryHandler
+)
+from telegram.constants import ChatAction
+from telegram.error import TelegramError
+# ───────── TTS imports ─────────
+import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
+
+# Optional PIL / rembg for photo tools
+try:
+    from PIL import Image, ImageFilter
+except Exception:
+    Image = None
+    ImageFilter = None
+try:
+    from rembg import remove as rembg_remove
+except Exception:
+    rembg_remove = None
+
+# ───────── LOGGING ─────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+log = logging.getLogger("gpt-bot")
+
+# ───────── ENV ─────────
+
+def _env_float(name: str, default: float) -> float:
+    """
+    Безопасное чтение float из ENV:
+    - поддерживает и '4,99', и '4.99'
+    - при ошибке возвращает default
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return float(default)
+    raw = raw.replace(",", ".").strip()
+    try:
+        return float(raw)
+    except Exception:
+        return float(default)
+
+BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
+BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
+PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
+WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
+
+OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
+OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
+
+OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
+OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
+
+USE_WEBHOOK      = os.environ.get("USE_WEBHOOK", "1").lower() in ("1","true","yes","on")
+WEBHOOK_PATH     = os.environ.get("WEBHOOK_PATH", "/tg").strip()
+WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+
+BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
+TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
+
+# ВАЖНО: провайдер текста (openai / openrouter и т.п.)
+TEXT_PROVIDER    = os.environ.get("TEXT_PROVIDER", "").strip()
+
+# STT:
+OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
+TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
+
+# TTS:
+OPENAI_TTS_KEY       = os.environ.get("OPENAI_TTS_KEY", "").strip() or OPENAI_API_KEY
+OPENAI_TTS_BASE_URL  = (os.environ.get("OPENAI_TTS_BASE_URL", "").strip() or "https://api.openai.com/v1")
+OPENAI_TTS_MODEL     = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts").strip()
+OPENAI_TTS_VOICE     = os.environ.get("OPENAI_TTS_VOICE", "alloy").strip()
+TTS_MAX_CHARS        = int(os.environ.get("TTS_MAX_CHARS", "150") or "150")
+
+# Images:
+OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
+IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
+IMAGES_MODEL        = "gpt-image-1"
+
+# Runway
+RUNWAY_API_KEY      = os.environ.get("RUNWAY_API_KEY", "").strip()
+RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
+RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
+RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
+
+# Luma
+LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
+LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
+LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
+LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
+LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
+LUMA_CREATE_PATH = "/generations"
+LUMA_STATUS_PATH = "/generations/{id}"
+# Luma Images (опционально: если нет — используем OpenAI Images как фолбэк)
+LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
+LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
+
+# Фолбэки Luma
+_fallbacks_raw = ",".join([
+    os.environ.get("LUMA_FALLBACKS", ""),
+    os.environ.get("LUMA_FALLBACK_BASE_URL", "")
+])
+LUMA_FALLBACKS = []
+for u in re.split(r"[;,]\s*", _fallbacks_raw):
+    if not u:
+        continue
+    u = u.strip().rstrip("/")
+    if u and u != LUMA_BASE_URL and u not in LUMA_FALLBACKS:
+        LUMA_FALLBACKS.append(u)
+
+# Runway endpoints
+RUNWAY_BASE_URL    = (os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com").strip().rstrip("/"))
+RUNWAY_CREATE_PATH = "/v1/tasks"
+RUNWAY_STATUS_PATH = "/v1/tasks/{id}"
+
+# Таймауты
+LUMA_MAX_WAIT_S     = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
+RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or 1200)
+VIDEO_POLL_DELAY_S  = float((os.environ.get("VIDEO_POLL_DELAY_S") or "6.0").strip() or 6.0)
+
+# ───────── UTILS ---------
+_LUMA_ACTIVE_BASE = None  # кэш последнего живого базового URL
+
+async def _pick_luma_base(client: httpx.AsyncClient) -> str:
+    global _LUMA_ACTIVE_BASE
+    candidates = []
+    if _LUMA_ACTIVE_BASE:
+        candidates.append(_LUMA_ACTIVE_BASE)
+    if LUMA_BASE_URL and LUMA_BASE_URL not in candidates:
+        candidates.append(LUMA_BASE_URL)
+    for b in LUMA_FALLBACKS:
+        if b not in candidates:
+            candidates.append(b)
+    for base in candidates:
+        try:
+            url = f"{base}{LUMA_CREATE_PATH}"
+            r = await client.options(url, timeout=10.0)
+            if r.status_code in (200, 201, 202, 204, 400, 401, 403, 404, 405):
+                _LUMA_ACTIVE_BASE = base
+                if base != LUMA_BASE_URL:
+                    log.info("Luma base switched to fallback: %s", base)
+                return base
+        except Exception as e:
+            log.warning("Luma base probe failed for %s: %s", base, e)
+    return LUMA_BASE_URL or "https://api.lumalabs.ai/dream-machine/v1"
+
+# Payments / DB
+PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN_YOOKASSA", "").strip()
+CURRENCY       = "RUB"
+DB_PATH        = os.path.abspath(os.environ.get("DB_PATH", "subs.db"))
+
+PLAN_PRICE_TABLE = {
+    "start":    {"month": 499,  "quarter": 1299, "year": 4490},
+    "pro":      {"month": 999,  "quarter": 2799, "year": 8490},
+    "ultimate": {"month": 1999, "quarter": 5490, "year": 15990},
+}
+TERM_MONTHS = {"month": 1, "quarter": 3, "year": 12}
+
+MIN_RUB_FOR_INVOICE = int(os.environ.get("MIN_RUB_FOR_INVOICE", "100") or "100")
+
+PORT = int(os.environ.get("PORT", "10000"))
+
+if not BOT_TOKEN:
+    raise RuntimeError("ENV BOT_TOKEN is required")
+if not PUBLIC_URL or not PUBLIC_URL.startswith("https://"):
+    raise RuntimeError("ENV PUBLIC_URL must look like https://xxx.onrender.com")
+if not OPENAI_API_KEY:
+    raise RuntimeError("ENV OPENAI_API_KEY is missing")
+
+# ── Безлимит ──
+def _parse_ids_csv(s: str) -> set[int]:
+    return set(int(x) for x in s.split(",") if x.strip().isdigit())
+
+UNLIM_USER_IDS   = _parse_ids_csv(os.environ.get("UNLIM_USER_IDS",""))
+UNLIM_USERNAMES  = set(s.strip().lstrip("@").lower() for s in os.environ.get("UNLIM_USERNAMES","").split(",") if s.strip())
+UNLIM_USERNAMES.add("gpt5pro_support")
+
+OWNER_ID           = int(os.environ.get("OWNER_ID","0") or "0")
+FORCE_OWNER_UNLIM  = os.environ.get("FORCE_OWNER_UNLIM","1").strip().lower() not in ("0","false","no")
+
+def is_unlimited(user_id: int, username: str | None = None) -> bool:
+    if FORCE_OWNER_UNLIM and OWNER_ID and user_id == OWNER_ID:
+        return True
+    if user_id in UNLIM_USER_IDS:
+        return True
+    if username and username.lower().lstrip("@") in UNLIM_USERNAMES:
+        return True
+    return False
+
+# ── Premium page URL ──
+def _make_tariff_url(src: str = "subscribe") -> str:
+    base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/premium.html").strip()
+    if src:
         sep = "&" if "?" in base else "?"
         base = f"{base}{sep}src={src}"
     if BOT_USERNAME:
