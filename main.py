@@ -72,10 +72,22 @@ IMAGES_MODEL        = "gpt-image-1"
 
 # Runway
 RUNWAY_API_KEY      = os.environ.get("RUNWAY_API_KEY", "").strip()
-RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
-RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "720:1280").strip()
+
+# ВАЖНО: новый базовый URL — dev.runwayml.com
+RUNWAY_BASE_URL     = (os.environ.get("RUNWAY_BASE_URL", "https://api.dev.runwayml.com").strip().rstrip("/"))
+
+# text_to_video endpoint и статус
+RUNWAY_TEXT2VIDEO_PATH = "/v1/text_to_video"
+RUNWAY_STATUS_PATH     = "/v1/tasks/{id}"
+
+# модель для text_to_video — одна из veo3.1 / veo3.1_fast / veo3
+RUNWAY_MODEL        = os.environ.get("RUNWAY_MODEL", "veo3.1").strip()
+
+RUNWAY_RATIO        = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
 RUNWAY_DURATION_S   = int(os.environ.get("RUNWAY_DURATION_S", "8") or 8)
 
+# версия API из доков
+RUNWAY_API_VERSION  = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 # Luma
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
 LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
@@ -1764,65 +1776,106 @@ async def _run_luma_video(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
 
 # ───────── Runway: создание/поллинг/отправка ─────────
 def _runway_ratio_from_ar(ar: str) -> str:
-    if ar == "9:16":  return "720:1280"
-    if ar == "16:9":  return "1280:720"
-    if ar == "1:1":   return "1024:1024"
-    return RUNWAY_RATIO
-
-async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
+    ar = (ar or "").strip()
+    if ar == "9:16":
+        return "720:1280"
+    if ar == "16:9":
+        return "1280:720"
+    # квадрат и прочее мапаем в 1280x720 по умолчанию
+    return RUNWAY_RATIO or "1280:720"
+    
+async def _run_runway_video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    duration_s: int,
+    aspect: str,
+):
     if not RUNWAY_API_KEY:
-        await update.effective_message.reply_text("Runway не настроен.")
+        await update.effective_message.reply_text("Runway не настроен (нет RUNWAY_API_KEY).")
         return
+
     try:
+        # допустимые значения text_to_video: 4, 6, 8 секунд
+        if duration_s <= 4:
+            api_duration = 4
+        elif duration_s <= 6:
+            api_duration = 6
+        else:
+            api_duration = 8
+
+        ratio = _runway_ratio_from_ar(aspect)
+        create_url = f"{RUNWAY_BASE_URL}{RUNWAY_TEXT2VIDEO_PATH}"
+
+        payload = {
+            "model": RUNWAY_MODEL,
+            "promptText": (prompt or "").strip()[:1000],
+            "ratio": ratio,
+            "duration": api_duration,
+            "audio": True,
+        }
+
+        headers = {
+            "Authorization": f"Bearer {RUNWAY_API_KEY}",
+            "Content-Type": "application/json",
+            "X-Runway-Version": RUNWAY_API_VERSION,
+        }
+
         async with httpx.AsyncClient(timeout=60.0) as client:
-            create_url = f"{RUNWAY_BASE_URL}{RUNWAY_CREATE_PATH}"
-            payload = {
-                "model": RUNWAY_MODEL,
-                "input": {
-                    "prompt": prompt,
-                    "duration": int(duration_s),
-                    "ratio": _runway_ratio_from_ar(aspect)
-                }
-            }
-            headers = {"Authorization": f"Bearer {RUNWAY_API_KEY}", "Content-Type": "application/json"}
+            # 1) создаём задачу
             r = await client.post(create_url, headers=headers, json=payload)
             r.raise_for_status()
             js = r.json()
-            task_id = js.get("id") or js.get("task", {}).get("id") or js.get("data", {}).get("id")
+            task_id = js.get("id")
             if not task_id:
-                await update.effective_message.reply_text("Runway: не получил id задачи.")
+                await update.effective_message.reply_text(f"Runway: не получил id задачи: {js}")
                 return
+
             await update.effective_message.reply_text("🎥 Runway: рендер запущен, подожди…")
 
+            # 2) поллим статус
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
             started = time.time()
             video_url = None
+
             while time.time() - started < RUNWAY_MAX_WAIT_S:
                 rs = await client.get(status_url, headers=headers)
                 rs.raise_for_status()
                 st_js = rs.json()
-                st = (st_js.get("status") or st_js.get("state") or "").upper()
-                if st in ("SUCCEEDED","COMPLETED","FINISHED","SUCCESS"):
-                    # разные поля для ссылки
-                    video_url = (
-                        st_js.get("output", {}).get("video") or
-                        st_js.get("output", {}).get("url") or
-                        st_js.get("assets", [{}])[0].get("url") if isinstance(st_js.get("assets"), list) else None
-                    )
+                status = (st_js.get("status") or "").upper()
+
+                if status == "SUCCEEDED":
+                    out = st_js.get("output") or []
+                    if isinstance(out, list) and out:
+                        video_url = out[0]
                     break
-                if st in ("FAILED","ERROR","CANCELED","CANCELLED"):
-                    await update.effective_message.reply_text(f"❌ Runway ошибка: {st}")
+
+                if status in ("FAILED", "ERROR", "CANCELLED", "CANCELED"):
+                    await update.effective_message.reply_text(f"❌ Runway ошибка: {status}")
                     return
+
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
             if not video_url:
                 await update.effective_message.reply_text("⏱️ Runway: таймаут ожидания видео.")
                 return
 
-            vid = await httpx.AsyncClient().get(video_url, timeout=180.0)
+            # 3) скачиваем и отправляем
+            vid = await client.get(video_url, timeout=180.0)
             vid.raise_for_status()
-            bio = BytesIO(vid.content); bio.name = "runway.mp4"
-            caption = _safe_caption(f"Runway • {duration_s}s • {aspect}\n\n{prompt}")
+            bio = BytesIO(vid.content)
+            bio.name = "runway.mp4"
+
+            caption = _safe_caption(f"Runway • {api_duration}s • {ratio}\n\n{prompt}")
             await update.effective_message.reply_video(video=bio, caption=caption)
+
+    except httpx.HTTPStatusError as e:
+        # покажем код/тело, чтобы проще дебажить
+        log.exception("Runway HTTP error: %s | body=%s", e, getattr(e.response, "text", ""))
+        await update.effective_message.reply_text(
+            f"Ошибка Runway (HTTP {e.response.status_code}). "
+            "Проверьте модель, ключ и баланс в Runway."
+        )
     except Exception as e:
         log.exception("Runway error: %s", e)
         await update.effective_message.reply_text("Ошибка Runway при генерации видео.")
