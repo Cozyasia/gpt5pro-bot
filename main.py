@@ -3623,6 +3623,9 @@ async def on_text(
     # Намёк на генерацию видеоролика
     mtype, rest = detect_media_intent(text)
     if mtype == "video":
+        # ГАРАНТИРОВАННО задаём prompt для текста и для голоса
+        prompt = (rest or text).strip()
+
         duration, aspect = parse_video_opts(text)
         ...
         aid = _new_aid()
@@ -3715,7 +3718,7 @@ async def on_text(
     reply = await ask_openai_text(text_for_llm)
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
-
+    
 # ───────── Фото / Документы / Голос ─────────
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
