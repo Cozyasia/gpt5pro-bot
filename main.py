@@ -529,37 +529,78 @@ def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     val = int(rub + 0.999)
     return max(MIN_RUB_FOR_INVOICE, val)
 
-def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cost_usd: float) -> tuple[bool, str]:
-def _can_spend_or_offer(user_id: int, username: str | None, engine: str, est_cost_usd: float) -> tuple[bool, str]:
+# какие движки на какой бюджет садятся
+ENGINE_BUDGET_GROUP = {
+    "luma": "luma",
+    "kling": "luma",   # Kling и Luma делят один бюджет
+    "runway": "runway",
+    "img": "img",
+}
+
+
+def _can_spend_or_offer(
+    user_id: int,
+    username: str | None,
+    engine: str,
+    est_cost_usd: float,
+) -> tuple[bool, str]:
+    """
+    Проверяем, можно ли потратить est_cost_usd на указанный движок.
+    Возвращаем (ok, reason):
+      ok = True  -> можно, reason = ""
+      ok = False -> нельзя, reason = "ASK_SUBSCRIBE" или "OFFER:<usd>"
+    """
+    group = ENGINE_BUDGET_GROUP.get(engine, engine)
+
+    # безлимитные пользователи
     if is_unlimited(user_id, username):
-        group = ENGINE_BUDGET_GROUP.get(engine, engine)
         if group in ("luma", "runway", "img"):
             _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
         return True, ""
-    group = ENGINE_BUDGET_GROUP.get(engine, engine)
+
+    # если движок не тарифицируемый — просто разрешаем
     if group not in ("luma", "runway", "img"):
         return True, ""
+
     tier = get_subscription_tier(user_id)
     lim = _limits_for(user_id)
     row = _usage_row(user_id)
+
     spent = row[f"{group}_usd"]
     budget = lim[f"{group}_budget_usd"]
-    ...
+
+    # если влезаем в дневной бюджет по группе (luma/runway/img)
+    if spent + est_cost_usd <= budget + 1e-9:
+        _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
+        return True, ""
+
     # Попытка покрыть из единого кошелька
     need = max(0.0, spent + est_cost_usd - budget)
     if need > 0:
         if _wallet_total_take(user_id, need):
-            _usage_update(user_id, **{f"{engine}_usd": est_cost_usd})
+            _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
             return True, ""
+
+        # на фри-тарифе просим оформить подписку
         if tier == "free":
             return False, "ASK_SUBSCRIBE"
+
+        # на платных тарифах показываем предложение докупить лимит
         return False, f"OFFER:{need:.2f}"
+
     return True, ""
 
+
 def _register_engine_spend(user_id: int, engine: str, usd: float):
+    """
+    Регистрируем уже совершённый расход по движку.
+    Используется для тех вызовов, где стоимость известна постфактум
+    или когда пользователь безлимитный.
+    """
     group = ENGINE_BUDGET_GROUP.get(engine, engine)
     if group in ("luma", "runway", "img"):
         _usage_update(user_id, **{f"{group}_usd": float(usd)})
+        
 # ───────── Prompts ─────────
 SYSTEM_PROMPT = (
     "Ты дружелюбный и лаконичный ассистент на русском. "
