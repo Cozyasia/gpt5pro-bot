@@ -102,22 +102,30 @@ OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_A
 IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
 IMAGES_MODEL        = "gpt-image-1"
 
-# Runway (DEV API)
-# Runway (DEV)
+# Runway через CometAPI
 
-RUNWAY_API_KEY     = os.environ.get("RUNWAY_API_KEY", "").strip()
-RUNWAY_MODEL       = os.environ.get("RUNWAY_MODEL", "gen4_turbo").strip()
-RUNWAY_RATIO       = os.environ.get("RUNWAY_RATIO", "16:9").strip()   # можно и "1280:720"
+# Ключ берём из RUNWAY_API_KEY, а если он пустой — используем общий COMETAPI_KEY
+RUNWAY_API_KEY     = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
+
+# Модель Runway, которая идёт через CometAPI
+RUNWAY_MODEL       = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
+
+# Рекомендуемый формат — разрешение, как в новой версии API (см. docs Runway)
+# Можно задать "1280:720", "720:1280", "960:960" и т.п.
+RUNWAY_RATIO       = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
+
 RUNWAY_DURATION_S  = int(os.environ.get("RUNWAY_DURATION_S", "5") or 5)
+RUNWAY_MAX_WAIT_S  = int(os.environ.get("RUNWAY_MAX_WAIT_S", "900") or 900)
 
-# DEV-эндпоинты Runway
-RUNWAY_BASE_URL          = (os.environ.get("RUNWAY_BASE_URL", "https://api.dev.runwayml.com").strip().rstrip("/"))
-RUNWAY_IMAGE2VIDEO_PATH  = "/v1/image_to_video"
-RUNWAY_TEXT2VIDEO_PATH = os.environ.get("RUNWAY_TEXT2VIDEO_PATH", "/v1/videos").strip()
-RUNWAY_TEXT2VIDEO_PATH   = "/v1/text_to_video"
-RUNWAY_STATUS_PATH       = "/v1/tasks/{id}"
+# База именно CometAPI (а не api.dev.runwayml.com)
+RUNWAY_BASE_URL          = (os.environ.get("RUNWAY_BASE_URL", "https://api.cometapi.com").strip().rstrip("/"))
 
-# обязательная версия API для DEV-ключей
+# Эндпоинты Runway через CometAPI
+RUNWAY_IMAGE2VIDEO_PATH  = "/runwayml/v1/image_to_video"
+RUNWAY_TEXT2VIDEO_PATH   = "/runwayml/v1/text_to_video"
+RUNWAY_STATUS_PATH       = "/runwayml/v1/tasks/{id}"
+
+# Версия Runway API — обязательно 2024-11-06 (как в их доке)
 RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 
 # Luma
@@ -2991,7 +2999,7 @@ async def _run_luma_video(
             "❌ Luma: не удалось запустить/получить видео."
         )
 
-# ───────── Runway: видео по тексту (text→video, DEV API) ─────────
+# ───────── Runway (CometAPI): видео по тексту (text→video) ─────────
 async def _run_runway_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -2999,132 +3007,146 @@ async def _run_runway_video(
     duration_s: int,
     aspect: str,
 ):
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    msg = update.effective_message
+    chat_id = update.effective_chat.id
 
-    # приводим аспект к формату для Runway
-    # если пользователь прислал "16:9" / "9:16" — берём как есть,
-    # иначе подставляем дефолт из ENV
-    ratio = aspect.strip() if ":" in (aspect or "") else RUNWAY_RATIO
+    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
+
+    if not RUNWAY_API_KEY:
+        await msg.reply_text("⚠️ Runway: не настроен API-ключ (RUNWAY_API_KEY/COMETAPI_KEY).")
+        return
+
+    # нормализуем аспект: если пользователь прислал что-то с двоеточием — берём,
+    # иначе — дефолт из ENV
+    ratio = aspect.strip() if (aspect and ":" in aspect) else RUNWAY_RATIO
+
+    # Runway ждёт duration как число секунд, ratio — строка вида "1280:720"
+    payload = {
+        "promptText": (prompt or "").strip()[:1000],
+        "ratio": ratio,
+        "duration": int(duration_s or RUNWAY_DURATION_S),
+        "model": RUNWAY_MODEL,
+        # аудио оставим включённым по умолчанию, как в доке Runway
+        "audio": True,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {RUNWAY_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Runway-Version": RUNWAY_API_VERSION,
+    }
 
     try:
-        payload = {
-            "model": RUNWAY_MODEL,
-            "promptText": (prompt or "").strip(),
-            "duration": int(duration_s),
-            "ratio": ratio,
-        }
-
-        headers = {
-            "Authorization": f"Token {RUNWAY_API_KEY}",      # для DEV-ключей
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "X-Runway-Version": RUNWAY_API_VERSION,
-        }
-
-        create_url = f"{RUNWAY_BASE_URL}{RUNWAY_TEXT2VIDEO_PATH}"
-
         async with httpx.AsyncClient(timeout=60.0) as client:
-            # 1) создаём задачу
+            create_url = f"{RUNWAY_BASE_URL}{RUNWAY_TEXT2VIDEO_PATH}"
+
             r = await client.post(create_url, headers=headers, json=payload)
-
-            if r.status_code == 401:
-                await update.effective_message.reply_text(
-                    "⚠️ Runway (DEV): ключ отклонён (401). Проверь RUNWAY_API_KEY."
-                )
-                return
-
             if r.status_code >= 400:
-                await update.effective_message.reply_text(
-                    f"⚠️ Runway (DEV) отклонил задачу ({r.status_code})."
-                )
+                txt = r.text[:500]
+                log.warning("Runway text2video error %s: %s", r.status_code, txt)
+                await msg.reply_text(f"⚠️ Runway (text→video) отклонил задачу ({r.status_code}).")
                 return
 
-            js = {}
             try:
                 js = r.json()
             except Exception:
-                pass
+                js = {}
 
-            rid = js.get("id") or js.get("task_id")
-            if not rid:
-                await update.effective_message.reply_text("⚠️ Runway (DEV) не вернул id задачи.")
+            task_id = js.get("id") or js.get("task_id") or js.get("taskId")
+            if not task_id:
+                await msg.reply_text("⚠️ Runway не вернул ID задачи (text→video).")
                 return
 
-            await update.effective_message.reply_text(
-                "⏳ Runway (DEV) рендерит видео… Я сообщу, когда будет готово."
-            )
-
-            status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=rid)
+            status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
             started = time.time()
 
-            # 2) опрашиваем статус
+            # Пулим статус, пока задача не завершится
             while True:
                 rs = await client.get(status_url, headers=headers)
-                data = {}
                 try:
                     data = rs.json()
                 except Exception:
-                    pass
+                    data = {}
 
                 status = (data.get("status") or data.get("state") or "").lower()
 
                 if status in ("succeeded", "completed", "finished", "ready"):
-                    # в DEV API чаще всего видео лежит в output.video / video_url / output_url
-                    output = data.get("output") or {}
-                    if isinstance(output, dict):
-                        url = output.get("video") or output.get("url")
-                    else:
-                        url = None
-                    url = (
-                        url
-                        or data.get("video_url")
-                        or data.get("output_url")
+                    # Runway обычно кладёт результат в artifacts
+                    artifacts = (
+                        data.get("artifacts")
+                        or data.get("outputs")
+                        or data.get("output")
+                        or {}
                     )
+
+                    url = None
+
+                    # универсальный поиск url в разных форматах
+                    candidates = []
+                    if isinstance(artifacts, dict):
+                        candidates.append(artifacts)
+                        for v in artifacts.values():
+                            if isinstance(v, (dict, list, tuple)):
+                                candidates.append(v)
+                    elif isinstance(artifacts, (list, tuple)):
+                        candidates.extend(artifacts)
+
+                    def _extract_url(obj):
+                        if isinstance(obj, dict):
+                            for k in ("url", "uri", "video_url", "videoUri", "output_url"):
+                                v = obj.get(k)
+                                if isinstance(v, str) and v.startswith("http"):
+                                    return v
+                        return None
+
+                    for c in candidates:
+                        if isinstance(c, (list, tuple)):
+                            for item in c:
+                                url = _extract_url(item)
+                                if url:
+                                    break
+                        else:
+                            url = _extract_url(c)
+                        if url:
+                            break
 
                     if not url:
-                        await update.effective_message.reply_text(
-                            "⚠️ Runway (DEV): готово, но нет ссылки на видео."
-                        )
+                        await msg.reply_text("⚠️ Runway: задача завершилась, но ссылка на видео не найдена.")
                         return
 
-                    # пробуем скачать и отправить как файл, если не выйдет — просто ссылкой
+                    # пытаемся скачать и отправить как файл, если нет — даём ссылку
                     try:
-                        v = await client.get(url, timeout=120)
-                        v.raise_for_status()
-                        bio = BytesIO(v.content)
-                        bio.name = "runway_dev.mp4"
-                        await update.effective_message.reply_video(
+                        vr = await client.get(url, timeout=300)
+                        vr.raise_for_status()
+                        bio = BytesIO(vr.content)
+                        bio.name = "runway_text2video.mp4"
+                        await msg.reply_video(
                             InputFile(bio),
-                            caption="🎥 Runway (DEV): готово ✅",
+                            caption="🎬 Runway (text→video, через CometAPI)",
                         )
                     except Exception:
-                        await update.effective_message.reply_text(
-                            f"🎥 Runway (DEV): готово ✅\n{url}"
-                        )
+                        log.exception("Runway: не удалось скачать видео, шлём URL.")
+                        await msg.reply_text(f"🎬 Runway готово: {url}")
+
                     return
 
-                if status in ("failed", "error", "canceled", "cancelled"):
-                    await update.effective_message.reply_text(
-                        "❌ Runway (DEV): ошибка рендера."
-                    )
+                if status in ("failed", "error", "cancelled"):
+                    err = data.get("error") or data.get("message") or str(data)[:500]
+                    await msg.reply_text(f"❌ Runway (text→video) завершился с ошибкой: {err}")
                     return
 
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await update.effective_message.reply_text(
-                        "⌛ Runway (DEV): время ожидания вышло."
-                    )
+                    await msg.reply_text("⚠️ Runway (text→video): превышено время ожидания.")
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
-        log.exception("Runway (DEV) error: %s", e)
-        await update.effective_message.reply_text(
-            "❌ Runway (DEV): не удалось запустить/получить видео."
-        )
+        log.exception("Runway text2video exception: %s", e)
+        await msg.reply_text("❌ Runway: не удалось запустить/получить видео (text→video).")
         
-
-# ───────── Runway: анимация загруженного фото (image→video, DEV) ─────────
+# ───────── Runway (CometAPI): анимация фото (image→video) ─────────
 async def _run_runway_animate_photo(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -3133,104 +3155,151 @@ async def _run_runway_animate_photo(
     duration_s: int,
     aspect: str,
 ):
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    msg = update.effective_message
+    chat_id = update.effective_chat.id
+
+    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
+
+    if not RUNWAY_API_KEY:
+        await msg.reply_text("⚠️ Runway: не настроен API-ключ (RUNWAY_API_KEY/COMETAPI_KEY).")
+        return
+
+    # ratio: как и в text→video
+    ratio = aspect.strip() if (aspect and ":" in aspect) else RUNWAY_RATIO
+
+    # Кодируем картинку в data:URL — это всё равно строка, как и ждёт promptImage
     try:
         b64 = base64.b64encode(img_bytes).decode("ascii")
-        mime = sniff_image_mime(img_bytes)
-        ratio = aspect.replace(":", "/") if ":" in aspect else RUNWAY_RATIO
+    except Exception:
+        await msg.reply_text("❌ Runway: не удалось прочитать изображение.")
+        return
 
-        payload = {
-            "model": RUNWAY_MODEL,
-            "promptText": (prompt or "animate the input photo with subtle camera motion, lifelike micro-movements").strip(),
-            "promptImage": f"data:{mime};base64,{b64}",
-            "duration": duration_s,
-            "ratio": ratio,
-        }
+    mime = sniff_image_mime(img_bytes) or "image/png"
+    prompt_image = f"data:{mime};base64,{b64}"
 
-        headers = {
-            "Authorization": f"Bearer {RUNWAY_API_KEY}",
-            "Runway-Version": RUNWAY_API_VERSION,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
+    payload = {
+        "promptImage": prompt_image,                 # строка url / data-uri
+        "model": RUNWAY_MODEL,                       # например, gen3a_turbo / gen4_turbo
+        "duration": int(duration_s or RUNWAY_DURATION_S),
+        "ratio": ratio,
+        "watermark": False,
+    }
 
+    if prompt and prompt.strip():
+        payload["promptText"] = prompt.strip()[:512]
+
+    headers = {
+        "Authorization": f"Bearer {RUNWAY_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Runway-Version": RUNWAY_API_VERSION,
+    }
+
+    try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            # создаём задачу
-            r = await client.post(
-                f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}",
-                headers=headers,
-                json=payload,
-            )
+            create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
 
+            r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
-                # логируем ответ, чтобы при необходимости посмотреть точную ошибку
-                log.error("Runway DEV create error %s: %s", r.status_code, r.text)
-                await update.effective_message.reply_text(
-                    f"⚠️ Runway (DEV) отклонил задачу ({r.status_code})."
-                )
+                txt = r.text[:500]
+                log.warning("Runway image2video error %s: %s", r.status_code, txt)
+                await msg.reply_text(f"⚠️ Runway (image→video) отклонил задачу ({r.status_code}).")
                 return
 
-            js = r.json() or {}
-            rid = js.get("id") or js.get("task_id")
-            if not rid:
-                await update.effective_message.reply_text("⚠️ Runway не вернул id задачи.")
+            try:
+                js = r.json()
+            except Exception:
+                js = {}
+
+            task_id = js.get("id") or js.get("task_id") or js.get("taskId")
+            if not task_id:
+                await msg.reply_text("⚠️ Runway не вернул ID задачи (image→video).")
                 return
 
-            await update.effective_message.reply_text(
-                "⏳ Оживляю фото в Runway… Сообщу, когда будет готово."
-            )
-
-            status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH}".format(id=rid)
+            status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
             started = time.time()
 
             while True:
                 rs = await client.get(status_url, headers=headers)
                 try:
-                    js = rs.json()
+                    data = rs.json()
                 except Exception:
-                    js = {}
+                    data = {}
 
-                st = (js.get("status") or js.get("state") or "").lower()
-                if st in ("completed", "succeeded", "finished", "ready"):
-                    output = js.get("output") or js.get("assets") or {}
-                    if isinstance(output, dict):
-                        url = (
-                            output.get("video")
-                            or output.get("video_url")
-                            or output.get("url")
-                        )
-                    else:
-                        url = None
+                status = (data.get("status") or data.get("state") or "").lower()
 
-                    url = url or js.get("video_url") or js.get("output_url")
+                if status in ("succeeded", "completed", "finished", "ready"):
+                    artifacts = (
+                        data.get("artifacts")
+                        or data.get("outputs")
+                        or data.get("output")
+                        or {}
+                    )
+
+                    url = None
+                    candidates = []
+                    if isinstance(artifacts, dict):
+                        candidates.append(artifacts)
+                        for v in artifacts.values():
+                            if isinstance(v, (dict, list, tuple)):
+                                candidates.append(v)
+                    elif isinstance(artifacts, (list, tuple)):
+                        candidates.extend(artifacts)
+
+                    def _extract_url(obj):
+                        if isinstance(obj, dict):
+                            for k in ("url", "uri", "video_url", "videoUri", "output_url"):
+                                v = obj.get(k)
+                                if isinstance(v, str) and v.startswith("http"):
+                                    return v
+                        return None
+
+                    for c in candidates:
+                        if isinstance(c, (list, tuple)):
+                            for item in c:
+                                url = _extract_url(item)
+                                if url:
+                                    break
+                        else:
+                            url = _extract_url(c)
+                        if url:
+                            break
 
                     if not url:
-                        await update.effective_message.reply_text(
-                            "⚠️ Готово, но Runway не вернул ссылку на видео."
-                        )
+                        await msg.reply_text("⚠️ Runway: видео готово, но ссылка не найдена (image→video).")
                         return
 
-                    await update.effective_message.reply_video(url)
+                    try:
+                        vr = await client.get(url, timeout=300)
+                        vr.raise_for_status()
+                        bio = BytesIO(vr.content)
+                        bio.name = "runway_image2video.mp4"
+                        await msg.reply_video(
+                            InputFile(bio),
+                            caption="🎬 Runway (image→video, через CometAPI)",
+                        )
+                    except Exception:
+                        log.exception("Runway: не удалось скачать видео, шлём URL.")
+                        await msg.reply_text(f"🎬 Runway готово: {url}")
+
                     return
 
-                if st in ("failed", "error", "canceled"):
-                    await update.effective_message.reply_text(
-                        f"⚠️ Runway сообщил об ошибке: {st or 'unknown'}"
-                    )
+                if status in ("failed", "error", "cancelled"):
+                    err = data.get("error") or data.get("message") or str(data)[:500]
+                    await msg.reply_text(f"❌ Runway (image→video) завершился с ошибкой: {err}")
                     return
 
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await update.effective_message.reply_text(
-                        "⚠️ Runway слишком долго готовит видео, я прервал ожидание."
-                    )
+                    await msg.reply_text("⚠️ Runway (image→video): превышено время ожидания.")
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
-        log.exception("Runway error: %s", e)
-        await update.effective_message.reply_text("❌ Runway: не удалось запустить/получить видео.")
+        log.exception("Runway image2video exception: %s", e)
+        await msg.reply_text("❌ Runway: не удалось запустить/получить видео (image→video).")
 
+        
 async def _run_kling_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
