@@ -3313,64 +3313,43 @@ async def _run_kling_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     prompt: str,
-    duration_s: int,
+    duration: int,
     aspect: str,
 ):
     """
-    Генерация видео через Kling (CometAPI, эндпоинт /kling/v1/videos/text2video).
+    Запуск рендера видео в Kling (через CometAPI) и отправка результата
+    в Telegram уже как mp4-файла, а не просто ссылкой.
     """
     msg = update.effective_message
-    chat_id = update.effective_chat.id
 
     if not COMETAPI_KEY:
-        await msg.reply_text("⚠️ Kling: не настроен COMETAPI_KEY.")
+        await msg.reply_text("⚠️ Kling через CometAPI не настроен (нет COMETAPI_KEY).")
         return
 
-    # Нормализуем параметры под API
-    dur = "10" if duration_s >= 10 else "5"
-    aspect_ratio = aspect or KLING_ASPECT
-
-    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
-
-    # Вспомогательный поиск первой ссылки в произвольном JSON
-    def _extract_first_url(obj):
-        if isinstance(obj, str):
-            if obj.startswith("http://") or obj.startswith("https://"):
-                return obj
-            return None
-        if isinstance(obj, dict):
-            for v in obj.values():
-                u = _extract_first_url(v)
-                if u:
-                    return u
-        if isinstance(obj, list):
-            for item in obj:
-                u = _extract_first_url(item)
-                if u:
-                    return u
-        return None
+    # Нормализуем длительность и аспект
+    dur = str(max(1, min(duration, 10)))   # Kling ждёт строку "5" / "10"
+    aspect_ratio = aspect.replace(" ", "") # "16:9", "9:16" и т.п.
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video"
 
             headers = {
-                # для CometAPI по Kling используется Bearer-токен
-                "Authorization": f"Bearer {COMETAPI_KEY}",
+                "Authorization": f"Bearer {COMETAPI_KEY}",  # ключ CometAPI
                 "Content-Type": "application/json",
             }
 
             payload = {
                 "prompt": prompt.strip(),
-                "model_name": KLING_MODEL_NAME,  # напр. "kling-v1-6"
+                "model_name": KLING_MODEL_NAME,   # напр. "kling-v1-6"
                 "mode": KLING_MODE,              # "std" или "pro"
                 "duration": dur,                 # "5" или "10"
-                "aspect_ratio": aspect_ratio,    # "16:9", "9:16" и т.п.
+                "aspect_ratio": aspect_ratio,    # "16:9", "9:16", "1:1" ...
             }
 
             log.info("Kling create payload: %r", payload)
-
             r = await client.post(create_url, headers=headers, json=payload)
+
             try:
                 js = r.json() or {}
             except Exception:
@@ -3393,6 +3372,7 @@ async def _run_kling_video(
             # Пулим статус по GET /kling/v1/videos/text2video/{task_id}
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
             started = time.time()
+
             while True:
                 rs = await client.get(
                     status_url,
@@ -3400,6 +3380,7 @@ async def _run_kling_video(
                         "Authorization": f"Bearer {COMETAPI_KEY}",
                         "Accept": "application/json",
                     },
+                    timeout=60.0,
                 )
 
                 try:
@@ -3407,12 +3388,9 @@ async def _run_kling_video(
                 except Exception:
                     sjs = {}
                 sdata = sjs.get("data") or {}
-
-                # Возможные варианты:
-                # 1) sdata["task_status"] (формат агрегатора)
-                # 2) sdata["data"]["task_status"] (как в твоём примере)
-                # 3) sdata["status"] (NOT_START / SUCCESS / FAIL и т.п.)
                 inner = sdata.get("data") or {}
+
+                # Возможные варианты статуса от Comet/Kling
                 task_status = (
                     (sdata.get("task_status"))
                     or (inner.get("task_status"))
@@ -3423,7 +3401,8 @@ async def _run_kling_video(
 
                 log.info("Kling poll status: %r", sjs)
 
-                # У Kling/Comet встречаются: submitted, not_start, processing, succeed, success, failed и др.
+                # У Kling/Comet встречаются: submitted, not_start, processing,
+                # succeed, success, finished, failed и т.п.
                 if status in (
                     "succeed",
                     "success",
@@ -3434,106 +3413,73 @@ async def _run_kling_video(
                     "complete",
                     "completed",
                 ):
-                    # Пытаемся вытащить ссылку на видео.
-                    # В одних форматах она лежит в data["task_result"]["videos"][0]["url"],
-                    # в других — глубже, в data["data"]["task_info"], и т.д.
-                    task_result = (
-                        sdata.get("task_result")
-                        or inner.get("task_result")
-                        or {}
+                    # Пытаемся вытащить URL видео
+                    video_url = (
+                        sdata.get("video_url")
+                        or sdata.get("url")
+                        or (sdata.get("result") or {}).get("video_url")
+                        or (inner.get("result") or {}).get("video_url")
                     )
 
-                    video_url = None
-
-                    # 1) Явное поле videos/images в task_result
-                    if isinstance(task_result, dict):
-                        videos = task_result.get("videos") or task_result.get("video")
-                        images = task_result.get("images") or task_result.get("image")
-                        candidate = videos or images
-                        if candidate:
-                            if isinstance(candidate, list) and candidate:
-                                first = candidate[0]
-                                if isinstance(first, dict):
-                                    video_url = first.get("url") or first.get("video_url")
-                                elif isinstance(first, str):
-                                    video_url = first
-                            elif isinstance(candidate, dict):
-                                video_url = (
-                                    candidate.get("url")
-                                    or candidate.get("video_url")
-                                )
-                            elif isinstance(candidate, str):
-                                video_url = candidate
-
-                    # 2) Если не нашли — просто ищем первую ссылку во всём ответе
-                    if not video_url:
-                        video_url = _extract_first_url(sjs)
-
                     if not video_url:
                         await msg.reply_text(
-                            "⚠️ Kling: задача завершилась успешно, но не удалось "
-                            "найти ссылку на видео.\n"
-                            f"Сырой ответ сервера: {sjs}"
+                            "🎞 Kling: задача завершена, но URL видео не найден.\n"
+                            f"`{json.dumps(sdata)[:800]}`",
+                            parse_mode="Markdown",
                         )
                         return
 
-                    # Отправляем видео в Telegram по прямой ссылке — Telegram сам его скачает
+                    # Скачиваем видео и отправляем в Telegram как файл
                     try:
-                        await msg.reply_video(
-                            video=video_url,
-                            caption="🎞 Kling: видео готово ✅",
-                        )
+                        vr = await client.get(video_url, timeout=180.0)
+                        vr.raise_for_status()
+                        data_bytes = vr.content
+                        if not data_bytes:
+                            raise RuntimeError("empty video data from Kling")
+
+                        bio = BytesIO(data_bytes)
+                        bio.seek(0)
+                        filename = "kling_video.mp4"
+
+                        # Сначала пробуем как видео
+                        try:
+                            await msg.reply_video(
+                                InputFile(bio, filename=filename),
+                                caption="🎞 Kling: видео готово ✅",
+                            )
+                        except TelegramError as te:
+                            # Если Telegram не принял как video — отправим как документ
+                            log.warning("Kling send_video failed, fallback to document: %s", te)
+                            bio.seek(0)
+                            await msg.reply_document(
+                                InputFile(bio, filename=filename),
+                                caption="🎞 Kling: видео готово ✅",
+                            )
+
                     except Exception as e:
-                        log.exception("Kling video send error: %s", e)
-                        # Фоллбек: хотя бы дадим рабочую ссылку
+                        # В крайнем случае всё равно отдаём ссылку
+                        log.exception("Kling video download/send error: %s", e)
                         await msg.reply_text(
-                            f"🎞 Kling: видео готово ✅\n{video_url}"
+                            "🎞 Kling: видео готово ✅\n"
+                            "(не удалось отправить файл, ссылка на скачивание ниже)\n"
+                            f"{video_url}"
                         )
+
                     return
 
-                # Явные статусы ошибки
                 if status in ("failed", "fail", "error"):
-                    fail_reason = sdata.get("fail_reason") or inner.get("fail_reason") or ""
-                    if fail_reason:
-                        await msg.reply_text(
-                            f"❌ Kling: задача завершилась с ошибкой.\nПричина: {fail_reason}"
-                        )
-                    else:
-                        await msg.reply_text("❌ Kling: задача завершилась с ошибкой.")
+                    await msg.reply_text("❌ Kling: задача завершилась с ошибкой.")
                     return
 
-                # Промежуточные статусы считаем нормой
-                if status in (
-                    "submitted",
-                    "submited",
-                    "processing",
-                    "running",
-                    "queued",
-                    "queue",
-                    "not_start",
-                    "pending",
-                ):
-                    if time.time() - started > KLING_MAX_WAIT_S:
-                        await msg.reply_text(
-                            "⌛ Kling: время ожидания результата истекло. "
-                            "Попробуйте повторить запрос чуть позже."
-                        )
-                        return
-                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
-                    continue
+                if time.time() - started > KLING_MAX_WAIT_S:
+                    await msg.reply_text("⌛ Kling: время ожидания результата истекло.")
+                    return
 
-                # Во всех остальных случаях — непонятный статус, логируем и выходим
-                await msg.reply_text(
-                    "⚠️ Kling: получен неожиданный статус задачи.\n"
-                    f"status={status or status_field or 'unknown'}\n"
-                    f"Сырой ответ: {sjs}"
-                )
-                return
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Kling exception: %s", e)
         await msg.reply_text("❌ Kling: не удалось запустить или получить видео.")
-
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
