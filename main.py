@@ -3296,9 +3296,7 @@ async def _run_kling_video(
 ):
     """
     Генерация видео через Kling (CometAPI, /kling/v1/videos/text2video).
-
-    Цель этой версии — ещё и отладка:
-    - если структура статуса нам непонятна, шлём сырое JSON в чат и выходим.
+    Нормально обрабатывает статусы NOT_START / submitted / processing / succeed / failed.
     """
     msg = update.effective_message
     chat_id = update.effective_chat.id
@@ -3307,7 +3305,7 @@ async def _run_kling_video(
         await msg.reply_text("⚠️ Kling: не настроен COMETAPI_KEY.")
         return
 
-    # Нормализуем параметры под API
+    # Нормализуем параметры
     dur = "10" if duration_s >= 10 else "5"
     aspect_ratio = aspect or KLING_ASPECT
 
@@ -3317,8 +3315,6 @@ async def _run_kling_video(
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video"
 
-            # Для Kling через CometAPI используется Bearer-токен
-            # (в их статье по Kling 2.5 Turbo это явно указано).
             headers = {
                 "Authorization": f"Bearer {COMETAPI_KEY}",
                 "Content-Type": "application/json",
@@ -3327,12 +3323,13 @@ async def _run_kling_video(
 
             payload = {
                 "prompt": prompt.strip(),
-                "model_name": KLING_MODEL_NAME,  # например, "kling-v1-6"
-                "mode": KLING_MODE,              # "std" или "pro"
+                "model_name": KLING_MODEL_NAME,  # например, kling-v1-6
+                "mode": KLING_MODE,              # std / pro
                 "duration": dur,                 # "5" или "10"
                 "aspect_ratio": aspect_ratio,    # "9:16", "16:9" и т.п.
             }
 
+            # 1) создаём задачу
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
                 txt = r.text[:800]
@@ -3349,10 +3346,8 @@ async def _run_kling_video(
             except Exception:
                 js = {}
 
-            data = js.get("data") or js
-            task_id = data.get("task_id") or data.get("id")
-            task_status = (data.get("task_status") or data.get("status") or "").lower()
-
+            outer = js.get("data") or js
+            task_id = outer.get("task_id") or (outer.get("data") or {}).get("task_id")
             if not task_id:
                 snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
                 await msg.reply_text(
@@ -3364,12 +3359,10 @@ async def _run_kling_video(
 
             await msg.reply_text("⏳ Kling: задача принята, начинаю рендер видео…")
 
-            # --- Пуллинг статуса ---
-            # Явно сократим максимум ожидания до более разумного (например, 240 с)
-            max_wait = min(KLING_MAX_WAIT_S, 240)
+            # 2) пуллинг статуса
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
+            max_wait = min(KLING_MAX_WAIT_S, 240)  # до 4 минут
             started = time.time()
-            first_unknown_sent = False
 
             while True:
                 rs = await client.get(
@@ -3385,13 +3378,27 @@ async def _run_kling_video(
                 except Exception:
                     sjs = {}
 
-                sdata = sjs.get("data") or sjs
-                status = (sdata.get("task_status") or sdata.get("status") or "").lower()
+                outer = sjs.get("data") or sjs
+                inner = outer.get("data") if isinstance(outer.get("data"), dict) else outer
 
-                # Для Kling официально фигурируют статусы:
-                # submitted, processing, succeed, failed.
-                if status in ("succeed", "succeeded", "success"):
-                    artifacts = sdata.get("artifacts") or sdata.get("outputs") or {}
+                # пробуем взять task_status из внутреннего блока, если есть;
+                # если нет — fallback на верхний status.
+                status = (
+                    inner.get("task_status")
+                    or inner.get("status")
+                    or outer.get("task_status")
+                    or outer.get("status")
+                    or ""
+                ).lower()
+
+                # У Kling статусы:
+                #  outer.status: NOT_START / RUNNING / FINISH / FAILED ...
+                #  inner.task_status: submitted / processing / succeed / failed ...
+                # Объединяем их логически.
+
+                # Успех
+                if status in ("succeed", "succeeded", "success", "finish", "finished", "done", "completed"):
+                    artifacts = inner.get("artifacts") or outer.get("artifacts") or {}
                     video_url = None
 
                     if isinstance(artifacts, dict):
@@ -3421,37 +3428,49 @@ async def _run_kling_video(
                     await msg.reply_video(video_url, caption="Готово! Kling-видео 🎞")
                     return
 
+                # Ошибка
                 if status in ("failed", "error", "cancelled", "canceled"):
-                    err = sdata.get("error") or sdata.get("message") or str(sdata)[:500]
+                    err = (
+                        inner.get("fail_reason")
+                        or outer.get("fail_reason")
+                        or inner.get("error")
+                        or outer.get("error")
+                        or str(inner or outer)[:500]
+                    )
                     await msg.reply_text(
                         f"❌ Kling: задача завершилась с ошибкой: `{err}`",
                         parse_mode="Markdown",
                     )
                     return
 
-                # Если статус нам не понятен — один раз покажем сырое тело и выходим,
-                # чтобы не зависать на 15 минут в тишине.
-                if status not in ("submitted", "processing", "") and not first_unknown_sent:
-                    snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
-                    first_unknown_sent = True
-                    await msg.reply_text(
-                        "⚠️ Kling: получен неожиданный статус задачи.\n"
-                        f"status=`{status}`\n"
-                        f"Сырой ответ:\n`{snippet}`",
-                        parse_mode="Markdown",
-                    )
-                    return
+                # Ожидание: NOT_START / submitted / processing / running / queued / pending
+                if status in (
+                    "",
+                    "not_start",
+                    "submitted",
+                    "processing",
+                    "running",
+                    "queued",
+                    "pending",
+                ):
+                    if time.time() - started > max_wait:
+                        await msg.reply_text(
+                            "⌛ Kling: время ожидания результата истекло. "
+                            "Попробуйте повторить запрос чуть позже."
+                        )
+                        return
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    continue
 
-                # Нормальный «ожидательный» статус — просто ждём дальше
-                if time.time() - started > max_wait:
-                    await msg.reply_text(
-                        "⌛ Kling: время ожидания результата истекло. "
-                        "Если видео всё же придёт позже на стороне CometAPI, "
-                        "мы его уже не увидим — попробуй ещё раз с тем же промптом."
-                    )
-                    return
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                # Любой другой странный статус — покажем как есть и выйдем
+                snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
+                await msg.reply_text(
+                    "⚠️ Kling: получен непонятный статус задачи.\n"
+                    f"status=`{status}`\n"
+                    f"Сырой ответ:\n`{snippet}`",
+                    parse_mode="Markdown",
+                )
+                return
 
     except Exception as e:
         log.exception("Kling exception: %s", e)
