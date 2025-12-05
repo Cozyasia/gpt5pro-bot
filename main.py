@@ -3295,8 +3295,7 @@ async def _run_kling_video(
     aspect: str,
 ):
     """
-    Генерация видео через Kling (CometAPI, /kling/v1/videos/text2video).
-    Нормально обрабатывает статусы NOT_START / submitted / processing / succeed / failed.
+    Генерация видео через Kling (CometAPI, эндпоинт /kling/v1/videos/text2video).
     """
     msg = update.effective_message
     chat_id = update.effective_chat.id
@@ -3305,65 +3304,74 @@ async def _run_kling_video(
         await msg.reply_text("⚠️ Kling: не настроен COMETAPI_KEY.")
         return
 
-    # Нормализуем параметры
+    # Нормализуем параметры под API
     dur = "10" if duration_s >= 10 else "5"
     aspect_ratio = aspect or KLING_ASPECT
 
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
+
+    # Вспомогательный поиск первой ссылки в произвольном JSON
+    def _extract_first_url(obj):
+        if isinstance(obj, str):
+            if obj.startswith("http://") or obj.startswith("https://"):
+                return obj
+            return None
+        if isinstance(obj, dict):
+            for v in obj.values():
+                u = _extract_first_url(v)
+                if u:
+                    return u
+        if isinstance(obj, list):
+            for item in obj:
+                u = _extract_first_url(item)
+                if u:
+                    return u
+        return None
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video"
 
             headers = {
+                # для CometAPI по Kling используется Bearer-токен
                 "Authorization": f"Bearer {COMETAPI_KEY}",
                 "Content-Type": "application/json",
-                "Accept": "application/json",
             }
 
             payload = {
                 "prompt": prompt.strip(),
-                "model_name": KLING_MODEL_NAME,  # например, kling-v1-6
-                "mode": KLING_MODE,              # std / pro
+                "model_name": KLING_MODEL_NAME,  # напр. "kling-v1-6"
+                "mode": KLING_MODE,              # "std" или "pro"
                 "duration": dur,                 # "5" или "10"
-                "aspect_ratio": aspect_ratio,    # "9:16", "16:9" и т.п.
+                "aspect_ratio": aspect_ratio,    # "16:9", "9:16" и т.п.
             }
 
-            # 1) создаём задачу
-            r = await client.post(create_url, headers=headers, json=payload)
-            if r.status_code >= 400:
-                txt = r.text[:800]
-                log.error("Kling create error %s: %r", r.status_code, txt)
-                await msg.reply_text(
-                    "❌ Kling: ошибка создания задачи "
-                    f"({r.status_code}).\nОтвет сервера:\n`{txt}`",
-                    parse_mode="Markdown",
-                )
-                return
+            log.info("Kling create payload: %r", payload)
 
+            r = await client.post(create_url, headers=headers, json=payload)
             try:
                 js = r.json() or {}
             except Exception:
                 js = {}
+            log.info("Kling create response: %r", js)
 
-            outer = js.get("data") or js
-            task_id = outer.get("task_id") or (outer.get("data") or {}).get("task_id")
+            data = js.get("data") or {}
+            # task_id может лежать и здесь, и во вложенном data.data
+            task_id = data.get("task_id") or (data.get("data") or {}).get("task_id")
+
             if not task_id:
-                snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
                 await msg.reply_text(
                     "⚠️ Kling: не удалось получить task_id из ответа.\n"
-                    f"Ответ сервера:\n`{snippet}`",
-                    parse_mode="Markdown",
+                    f"Сырой ответ сервера: {js}"
                 )
                 return
 
             await msg.reply_text("⏳ Kling: задача принята, начинаю рендер видео…")
 
-            # 2) пуллинг статуса
+            # Пулим статус по GET /kling/v1/videos/text2video/{task_id}
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
-            max_wait = min(KLING_MAX_WAIT_S, 240)  # до 4 минут
-            started = time.time()
 
+            started = time.time()
             while True:
                 rs = await client.get(
                     status_url,
@@ -3377,83 +3385,117 @@ async def _run_kling_video(
                     sjs = rs.json() or {}
                 except Exception:
                     sjs = {}
+                sdata = sjs.get("data") or {}
 
-                outer = sjs.get("data") or sjs
-                inner = outer.get("data") if isinstance(outer.get("data"), dict) else outer
-
-                # пробуем взять task_status из внутреннего блока, если есть;
-                # если нет — fallback на верхний status.
-                status = (
-                    inner.get("task_status")
-                    or inner.get("status")
-                    or outer.get("task_status")
-                    or outer.get("status")
+                # Возможные варианты:
+                # 1) sdata["task_status"] (формат агрегатора)
+                # 2) sdata["data"]["task_status"] (как в твоём примере)
+                # 3) sdata["status"] (NOT_START / SUCCESS / FAIL и т.п.)
+                inner = sdata.get("data") or {}
+                task_status = (
+                    (sdata.get("task_status"))
+                    or (inner.get("task_status"))
                     or ""
-                ).lower()
+                )
+                status_field = (sdata.get("status") or "").lower()
+                status = (task_status or "").lower() or status_field
 
-                # У Kling статусы:
-                #  outer.status: NOT_START / RUNNING / FINISH / FAILED ...
-                #  inner.task_status: submitted / processing / succeed / failed ...
-                # Объединяем их логически.
+                log.info("Kling poll status: %r", sjs)
 
-                # Успех
-                if status in ("succeed", "succeeded", "success", "finish", "finished", "done", "completed"):
-                    artifacts = inner.get("artifacts") or outer.get("artifacts") or {}
+                # У Kling/Comet встречаются: submitted, not_start, processing, succeed, success, failed и др.
+                if status in (
+                    "succeed",
+                    "success",
+                    "succeeded",
+                    "finished",
+                    "finish",
+                    "done",
+                    "complete",
+                    "completed",
+                ):
+                    # Пытаемся вытащить ссылку на видео.
+                    # В одних форматах она лежит в data["task_result"]["videos"][0]["url"],
+                    # в других — глубже, в data["data"]["task_info"], и т.д.
+                    task_result = (
+                        sdata.get("task_result")
+                        or inner.get("task_result")
+                        or {}
+                    )
+
                     video_url = None
 
-                    if isinstance(artifacts, dict):
-                        for v in artifacts.values():
-                            if isinstance(v, dict):
-                                u = v.get("url") or v.get("video_url") or v.get("uri")
-                                if isinstance(u, str) and u.startswith("http"):
-                                    video_url = u
-                                    break
-                    elif isinstance(artifacts, (list, tuple)):
-                        for item in artifacts:
-                            if isinstance(item, dict):
-                                u = item.get("url") or item.get("video_url") or item.get("uri")
-                                if isinstance(u, str) and u.startswith("http"):
-                                    video_url = u
-                                    break
+                    # 1) Явное поле videos/images в task_result
+                    if isinstance(task_result, dict):
+                        videos = task_result.get("videos") or task_result.get("video")
+                        images = task_result.get("images") or task_result.get("image")
+                        candidate = videos or images
+                        if candidate:
+                            if isinstance(candidate, list) and candidate:
+                                first = candidate[0]
+                                if isinstance(first, dict):
+                                    video_url = first.get("url") or first.get("video_url")
+                                elif isinstance(first, str):
+                                    video_url = first
+                            elif isinstance(candidate, dict):
+                                video_url = (
+                                    candidate.get("url")
+                                    or candidate.get("video_url")
+                                )
+                            elif isinstance(candidate, str):
+                                video_url = candidate
+
+                    # 2) Если не нашли — просто ищем первую ссылку во всём ответе
+                    if not video_url:
+                        video_url = _extract_first_url(sjs)
 
                     if not video_url:
-                        snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
                         await msg.reply_text(
-                            "⚠️ Kling: задача завершилась, но не удалось найти ссылку на видео.\n"
-                            f"Ответ сервера:\n`{snippet}`",
-                            parse_mode="Markdown",
+                            "⚠️ Kling: задача завершилась успешно, но не удалось "
+                            "найти ссылку на видео.\n"
+                            f"Сырой ответ сервера: {sjs}"
                         )
                         return
 
-                    await msg.reply_video(video_url, caption="Готово! Kling-видео 🎞")
+                    # Скачиваем и отправляем
+                    try:
+                        vr = await client.get(video_url)
+                        vr.raise_for_status()
+                        bio = BytesIO(vr.content)
+                        bio.name = "kling.mp4"
+                        await msg.reply_video(
+                            InputFile(bio),
+                            caption="🎞 Kling: видео готово ✅",
+                        )
+                    except Exception as e:
+                        log.exception("Kling video download error: %s", e)
+                        await msg.reply_text(
+                            f"🎞 Kling: видео готово ✅\n{video_url}"
+                        )
                     return
 
-                # Ошибка
-                if status in ("failed", "error", "cancelled", "canceled"):
-                    err = (
-                        inner.get("fail_reason")
-                        or outer.get("fail_reason")
-                        or inner.get("error")
-                        or outer.get("error")
-                        or str(inner or outer)[:500]
-                    )
-                    await msg.reply_text(
-                        f"❌ Kling: задача завершилась с ошибкой: `{err}`",
-                        parse_mode="Markdown",
-                    )
+                # Явные статусы ошибки
+                if status in ("failed", "fail", "error"):
+                    fail_reason = sdata.get("fail_reason") or inner.get("fail_reason") or ""
+                    if fail_reason:
+                        await msg.reply_text(
+                            f"❌ Kling: задача завершилась с ошибкой.\nПричина: {fail_reason}"
+                        )
+                    else:
+                        await msg.reply_text("❌ Kling: задача завершилась с ошибкой.")
                     return
 
-                # Ожидание: NOT_START / submitted / processing / running / queued / pending
+                # Промежуточные статусы считаем нормой
                 if status in (
-                    "",
-                    "not_start",
                     "submitted",
+                    "submited",
                     "processing",
                     "running",
                     "queued",
+                    "queue",
+                    "not_start",
                     "pending",
                 ):
-                    if time.time() - started > max_wait:
+                    if time.time() - started > KLING_MAX_WAIT_S:
                         await msg.reply_text(
                             "⌛ Kling: время ожидания результата истекло. "
                             "Попробуйте повторить запрос чуть позже."
@@ -3462,24 +3504,17 @@ async def _run_kling_video(
                     await asyncio.sleep(VIDEO_POLL_DELAY_S)
                     continue
 
-                # Любой другой странный статус — покажем как есть и выйдем
-                snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
+                # Во всех остальных случаях — непонятный статус, логируем и выходим
                 await msg.reply_text(
-                    "⚠️ Kling: получен непонятный статус задачи.\n"
-                    f"status=`{status}`\n"
-                    f"Сырой ответ:\n`{snippet}`",
-                    parse_mode="Markdown",
+                    "⚠️ Kling: получен неожиданный статус задачи.\n"
+                    f"status={status or status_field or 'unknown'}\n"
+                    f"Сырой ответ: {sjs}"
                 )
                 return
 
     except Exception as e:
         log.exception("Kling exception: %s", e)
-        err = str(e)[:400]
-        await msg.reply_text(
-            "❌ Kling: не удалось запустить или получить видео.\n"
-            f"Текст ошибки:\n`{err}`",
-            parse_mode="Markdown",
-        )
+        await msg.reply_text("❌ Kling: не удалось запустить или получить видео.")
 
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
