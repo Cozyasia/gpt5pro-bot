@@ -3295,7 +3295,10 @@ async def _run_kling_video(
     aspect: str,
 ):
     """
-    Генерация видео через Kling (CometAPI, эндпоинт /kling/v1/videos/text2video).
+    Генерация видео через Kling (CometAPI, /kling/v1/videos/text2video).
+
+    Цель этой версии — ещё и отладка:
+    - если структура статуса нам непонятна, шлём сырое JSON в чат и выходим.
     """
     msg = update.effective_message
     chat_id = update.effective_chat.id
@@ -3314,19 +3317,20 @@ async def _run_kling_video(
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video"
 
-            # В спецификации CometAPI для Kling пример без Bearer → шлём ключ «как есть»
+            # Для Kling через CometAPI используется Bearer-токен
+            # (в их статье по Kling 2.5 Turbo это явно указано).
             headers = {
-                "Authorization": COMETAPI_KEY,
+                "Authorization": f"Bearer {COMETAPI_KEY}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             }
 
             payload = {
                 "prompt": prompt.strip(),
-                "model_name": KLING_MODEL_NAME,  # напр. "kling-v1-6"
+                "model_name": KLING_MODEL_NAME,  # например, "kling-v1-6"
                 "mode": KLING_MODE,              # "std" или "pro"
                 "duration": dur,                 # "5" или "10"
-                "aspect_ratio": aspect_ratio,    # "9:16", "16:9" и т.д.
+                "aspect_ratio": aspect_ratio,    # "9:16", "16:9" и т.п.
             }
 
             r = await client.post(create_url, headers=headers, json=payload)
@@ -3344,9 +3348,10 @@ async def _run_kling_video(
                 js = r.json() or {}
             except Exception:
                 js = {}
-            data = js.get("data") or {}
-            task_id = data.get("task_id")
-            task_status = (data.get("task_status") or "").lower()
+
+            data = js.get("data") or js
+            task_id = data.get("task_id") or data.get("id")
+            task_status = (data.get("task_status") or data.get("status") or "").lower()
 
             if not task_id:
                 snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
@@ -3359,15 +3364,18 @@ async def _run_kling_video(
 
             await msg.reply_text("⏳ Kling: задача принята, начинаю рендер видео…")
 
-            # Пуллинг статуса
+            # --- Пуллинг статуса ---
+            # Явно сократим максимум ожидания до более разумного (например, 240 с)
+            max_wait = min(KLING_MAX_WAIT_S, 240)
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
             started = time.time()
+            first_unknown_sent = False
 
             while True:
                 rs = await client.get(
                     status_url,
                     headers={
-                        "Authorization": COMETAPI_KEY,
+                        "Authorization": f"Bearer {COMETAPI_KEY}",
                         "Accept": "application/json",
                     },
                 )
@@ -3376,19 +3384,27 @@ async def _run_kling_video(
                     sjs = rs.json() or {}
                 except Exception:
                     sjs = {}
-                sdata = sjs.get("data") or {}
-                status = (sdata.get("task_status") or "").lower()
 
-                # У Kling статусы: submitted, processing, succeed, failed
-                if status in ("succeed", "success", "succeeded"):
-                    artifacts = sdata.get("artifacts") or {}
+                sdata = sjs.get("data") or sjs
+                status = (sdata.get("task_status") or sdata.get("status") or "").lower()
+
+                # Для Kling официально фигурируют статусы:
+                # submitted, processing, succeed, failed.
+                if status in ("succeed", "succeeded", "success"):
+                    artifacts = sdata.get("artifacts") or sdata.get("outputs") or {}
                     video_url = None
 
-                    # частый формат: {"artifacts":{"video":{"url": "..."} } }
                     if isinstance(artifacts, dict):
                         for v in artifacts.values():
                             if isinstance(v, dict):
-                                u = v.get("url") or v.get("video_url")
+                                u = v.get("url") or v.get("video_url") or v.get("uri")
+                                if isinstance(u, str) and u.startswith("http"):
+                                    video_url = u
+                                    break
+                    elif isinstance(artifacts, (list, tuple)):
+                        for item in artifacts:
+                            if isinstance(item, dict):
+                                u = item.get("url") or item.get("video_url") or item.get("uri")
                                 if isinstance(u, str) and u.startswith("http"):
                                     video_url = u
                                     break
@@ -3413,8 +3429,26 @@ async def _run_kling_video(
                     )
                     return
 
-                if time.time() - started > KLING_MAX_WAIT_S:
-                    await msg.reply_text("⌛ Kling: время ожидания результата истекло.")
+                # Если статус нам не понятен — один раз покажем сырое тело и выходим,
+                # чтобы не зависать на 15 минут в тишине.
+                if status not in ("submitted", "processing", "") and not first_unknown_sent:
+                    snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
+                    first_unknown_sent = True
+                    await msg.reply_text(
+                        "⚠️ Kling: получен неожиданный статус задачи.\n"
+                        f"status=`{status}`\n"
+                        f"Сырой ответ:\n`{snippet}`",
+                        parse_mode="Markdown",
+                    )
+                    return
+
+                # Нормальный «ожидательный» статус — просто ждём дальше
+                if time.time() - started > max_wait:
+                    await msg.reply_text(
+                        "⌛ Kling: время ожидания результата истекло. "
+                        "Если видео всё же придёт позже на стороне CometAPI, "
+                        "мы его уже не увидим — попробуй ещё раз с тем же промптом."
+                    )
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
