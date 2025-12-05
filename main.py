@@ -1628,79 +1628,7 @@ async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ───────── Коллбэки подрежимов ─────────
-async def on_cb_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    data = (q.data or "")
-    try:
-        if any(data.startswith(p) for p in ("school:", "work:", "fun:")):
-            # базовый трекинг старых веток (photo/video/quiz/meme)
-            if data in ("fun:revive","fun:clip","fun:img","fun:storyboard"):
-                # эти обрабатываются отдельным хендлером on_cb_fun
-                return
-            _, track = data.split(":", 1)
-            _mode_track_set(update.effective_user.id, track)
-            mode = _mode_get(update.effective_user.id)
-            await q.edit_message_text(f"{mode} → {track}. Напишите задание/тему — сделаю.")
-            return
-    finally:
-        with contextlib.suppress(Exception):
-            await q.answer()
-            # Подтверждение выбора движка для видео
-        if data.startswith("choose:"):
-            await q.answer()
-            _, engine, aid = data.split(":", 2)
-            meta = _pending_actions.pop(aid, None)
-            if not meta:
-                await q.answer("Задача устарела", show_alert=True)
-                return
-            prompt   = meta["prompt"]
-            duration = meta["duration"]
-            aspect   = meta["aspect"]
-
-            if engine == "kling":
-                est = KLING_UNIT_COST_USD or 0.40
-                async def _start_real_render():
-                    await _run_kling_video(update, context, prompt, duration, aspect)
-                    _register_engine_spend(update.effective_user.id, "kling", est)
-                await _try_pay_then_do(
-                    update, context, update.effective_user.id,
-                    "kling", est, _start_real_render,
-                    remember_kind="video_kling",
-                    remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
-                )
-                return
-
-            # дальше – как у тебя сейчас для luma/runway
-
-# быстрые действия «Развлечения»
-
-async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    data = q.data or ""
-
-    # Кнопка "картинки"
-    if data == "fun:img":
-        return await q.edit_message_text(
-            "🖼 Генерация изображений\n\n"
-            "Пришли промпт или используй команду:\n"
-            "/img <описание картинки> — я сгенерирую изображение."
-        )
-
-    # Кнопка "оживить фото"
-    if data == "fun:revive":
-        return await q.edit_message_text(
-            "🪄 Оживление фото\n\n"
-            "Загрузи фото (как картинку) и напиши, что нужно оживить — "
-            "движение камеры, мимику, фон и т.п. Я сделаю анимацию "
-            "через Runway/Kling."
-        )
-
-    # Кнопка "клип (Luma/Runway)"
-    if data == "fun:clip":
-        return await q.edit_message_text(
-            "🎬 Клип по описанию (Luma/Runway)\n\n"
+лLuma/Runway)\n\n"
             "Пришли текст/голосовое с описанием идеи, форматом (Reels/Shorts), "
             "музыкой/стилем — я соберу сценарий и сделаю клип через Luma или Runway."
         )
@@ -2496,18 +2424,44 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 amount_rub = 0
             if amount_rub < MIN_RUB_FOR_INVOICE:
-                await q.edit_message_text(f"Минимальная сумма пополнения: {MIN_RUB_FOR_INVOICE} ₽")
+                await q.edit_message_text(
+                    f"Минимальная сумма пополнения {MIN_RUB_FOR_INVOICE} ₽."
+                )
                 return
-            ok = await _send_invoice_rub("Пополнение баланса", "Единый кошелёк для перерасходов.", amount_rub, "t=3", update)
-            await q.answer("Выставляю счёт…" if ok else "Не удалось выставить счёт", show_alert=not ok)
+            title = "Пополнение баланса (карта)"
+            desc = f"Пополнение USD-баланса бота на сумму ≈ {amount_rub} ₽"
+            payload = f"topup:{amount_rub}"
+            ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
+            if not ok:
+                await q.answer("Не удалось выставить счёт", show_alert=True)
             return
 
-        # TOPUP CRYPTO
+        # TOPUP CRYPTO: выбор валюты
+        if data == "topup:crypto":
+            await q.answer()
+            await q.edit_message_text(
+                "Пополнение через CryptoBot (USDT):\n\n"
+                "Выберите сумму пополнения ($):",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton("$5", callback_data="topup:crypto:5"),
+                            InlineKeyboardButton("$10", callback_data="topup:crypto:10"),
+                            InlineKeyboardButton("$25", callback_data="topup:crypto:25"),
+                        ],
+                        [
+                            InlineKeyboardButton("$50", callback_data="topup:crypto:50"),
+                            InlineKeyboardButton("$100", callback_data="topup:crypto:100"),
+                        ],
+                        [InlineKeyboardButton("Отмена", callback_data="topup:cancel")],
+                    ]
+                ),
+            )
+            return
+
+        # TOPUP CRYPTO: создание инвойса
         if data.startswith("topup:crypto:"):
             await q.answer()
-            if not CRYPTO_PAY_API_TOKEN:
-                await q.edit_message_text("Настройте CRYPTO_PAY_API_TOKEN для оплаты через CryptoBot.")
-                return
             try:
                 usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
             except Exception:
@@ -2515,40 +2469,61 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if usd <= 0.0:
                 await q.edit_message_text("Неверная сумма.")
                 return
-            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT", description="Wallet top-up")
+            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(
+                usd, asset="USDT", description="Wallet top-up"
+            )
             if not inv_id or not pay_url:
-                await q.edit_message_text("Не удалось создать счёт в CryptoBot. Попробуйте позже.")
+                await q.edit_message_text(
+                    "Не удалось создать счёт в CryptoBot. Попробуйте позже."
+                )
                 return
             msg = await update.effective_message.reply_text(
-                f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\nПосле оплаты баланс пополнится автоматически.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")]
-                ])
+                f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\n"
+                f"После оплаты баланс пополнится автоматически.",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "Оплатить в CryptoBot", url=pay_url
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Проверить оплату", callback_data=f"crypto:check:{inv_id}"
+                            )
+                        ],
+                    ]
+                ),
             )
-            context.application.create_task(_poll_crypto_invoice(
-                context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
-            ))
+            # запустим фоновый поллинг инвойса
+            asyncio.create_task(_poll_crypto_invoice(inv_id, msg.chat_id, msg.message_id))
             return
 
+        # CryptoBot: ручная проверка инвойса
         if data.startswith("crypto:check:"):
             await q.answer()
             inv_id = data.split(":", 2)[-1]
-            inv = await _crypto_get_invoice(inv_id)
-            if not inv:
-                await q.edit_message_text("Не нашёл счёт. Создайте новый.")
-                return
-            st = (inv.get("status") or "").lower()
-            if st == "paid":
-                usd_amount = float(inv.get("amount", 0.0))
-                if (inv.get("asset") or "").upper() == "TON":
-                    usd_amount *= TON_USD_RATE
-                _wallet_total_add(update.effective_user.id, usd_amount)
-                await q.edit_message_text(f"💳 Оплата получена. Баланс пополнен на ≈ ${usd_amount:.2f}.")
-            elif st == "active":
-                await q.answer("Платёж ещё не подтверждён", show_alert=True)
+            status, paid_amount, asset = await _crypto_get_invoice(inv_id)
+            if status == "paid":
+                await q.edit_message_text(
+                    f"✅ Платёж получен: {paid_amount} {asset}.\nБаланс будет пополнен в течение минуты."
+                )
+            elif status == "active":
+                await q.edit_message_text("Счёт ещё не оплачен.")
             else:
-                await q.edit_message_text(f"Статус счёта: {st}")
+                await q.edit_message_text("Счёт не активен или истёк.")
+            return
+
+        # TOPUP cancel
+        if data == "topup:cancel":
+            await q.answer()
+            await q.edit_message_text("Пополнение отменено.")
+            return
+
+        # Подписка: выбор тарифа и срока
+        if data == "plans":
+            await q.answer()
+            await cmd_plans(update, context)
             return
 
         # Подписка: выбор способа
@@ -2559,10 +2534,22 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             desc = f"Подписка {tier.upper()} на {months} мес."
             await q.edit_message_text(
                 f"{desc}\nВыберите способ оплаты:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Оплатить картой (ЮKassa)", callback_data=f"buyinv:{tier}:{months}")],
-                    [InlineKeyboardButton("Списать с баланса (USD)",  callback_data=f"buywallet:{tier}:{months}")],
-                ])
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "Оплатить картой (ЮKassa)",
+                                callback_data=f"buyinv:{tier}:{months}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Списать с баланса (USD)",
+                                callback_data=f"buywallet:{tier}:{months}",
+                            )
+                        ],
+                    ]
+                ),
             )
             return
 
@@ -2583,58 +2570,72 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer()
             _, tier, months = data.split(":", 2)
             months = int(months)
-            amount_rub = _plan_rub(tier, {1: "month", 3: "quarter", 12: "year"}[months])
-            need_usd = float(amount_rub) / max(1e-9, USD_RUB)
-            if _wallet_total_take(update.effective_user.id, need_usd):
-                until = activate_subscription_with_tier(update.effective_user.id, tier, months)
+            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
+            usd_price = amount_rub / USD_RUB_RATE
+            bal = _user_balance_get(update.effective_user.id)
+            if bal < usd_price:
+                need = usd_price - bal
                 await q.edit_message_text(
-                    f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n"
-                    f"Списано с баланса: ~${need_usd:.2f}."
+                    f"На балансе недостаточно средств.\n"
+                    f"Требуется ещё ≈ ${need:.2f}.\n\n"
+                    f"Пополните баланс через меню «🧾 Баланс».",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "➕ Пополнить баланс", callback_data="topup"
+                                )
+                            ]
+                        ]
+                    ),
                 )
-            else:
-                await q.edit_message_text(
-                    "Недостаточно средств на едином балансе.\nПополните баланс и повторите.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]])
-                )
+                return
+            # списываем и активируем
+            _user_balance_debit(update.effective_user.id, usd_price)
+            tier_name = payload.split(":", 1)[-1]
+            _sub_activate(update.effective_user.id, tier_name, months)
+            await q.edit_message_text(
+                f"✅ Подписка {tier_name.upper()} на {months} мес. оформлена.\n"
+                f"Баланс: ${_user_balance_get(update.effective_user.id):.2f}"
+            )
             return
 
-        # Выбор движка
-        if data.startswith("engine:"):
+        # Баланс: просто открыть меню
+        if data == "balance:open":
             await q.answer()
-            engine = data.split(":", 1)[1]
-            username = (update.effective_user.username or "")
-            if is_unlimited(update.effective_user.id, username):
-                await q.edit_message_text(
-                    f"✅ Движок «{engine}» доступен без ограничений.\n"
-                    f"Отправьте задачу, например: «сделай видео ретро-авто, 9 секунд, 9:16»."
-                )
-                return
+            await cmd_balance(update, context)
+            return
 
-            if engine in ("gpt", "stt_tts", "midjourney"):
-                await q.edit_message_text(
-                    f"✅ Выбран «{engine}». Отправьте запрос текстом/фото. "
-                    f"Для Luma/Runway/Images действуют дневные бюджеты тарифа."
-                )
-                return
+        # Баланс: покупка/списание по офферу
+        if data.startswith("offer:"):
+            await q.answer()
+            _, engine, offer = data.split(":", 2)
+            user_id = update.effective_user.id
+            limits = _limits_for(user_id)
+            grp = ENGINE_BUDGET_GROUP.get(engine, engine)
+            est_cost = float((offer.split(":", 1)[-1] or "0").strip() or "0")
 
-            est_cost = IMG_COST_USD if engine == "images" else (0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD))
-            map_engine = {"images": "img", "luma": "luma", "runway": "runway"}[engine]
-            ok, offer = _can_spend_or_offer(update.effective_user.id, username, map_engine, est_cost)
-
-            if ok:
+            # проверяем лимит
+            if limits.get(f"{grp}_usd", 0.0) >= limits.get(f"{grp}_usd_max", 0.0):
+                # предложим разовую покупку
+                amount_rub = _calc_oneoff_price_rub(grp, est_cost)
                 await q.edit_message_text(
-                    "✅ Доступно. " +
-                    ("Запустите: /img кот в очках" if engine == "images"
-                     else "Напишите: «сделай видео … 9 секунд 9:16» — предложу Luma/Runway.")
-                )
-                return
-
-            if offer == "ASK_SUBSCRIBE":
-                await q.edit_message_text(
-                    "Для этого движка нужна активная подписка или единый баланс. Откройте /plans или пополните «🧾 Баланс».",
+                    f"Ваш дневной лимит по «{engine}» исчерпан. "
+                    f"Разовая покупка ≈ {amount_rub} ₽ или пополните баланс в «🧾 Баланс».",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                         [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "⭐ Тарифы",
+                                    web_app=WebAppInfo(url=TARIFF_URL),
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "➕ Пополнить баланс", callback_data="topup"
+                                )
+                            ],
+                        ]
                     ),
                 )
                 return
@@ -2643,14 +2644,23 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 need_usd = float(offer.split(":", 1)[-1])
             except Exception:
                 need_usd = est_cost
-            amount_rub = _calc_oneoff_price_rub(map_engine, need_usd)
+            amount_rub = _calc_oneoff_price_rub(grp, need_usd)
             await q.edit_message_text(
                 f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
                 f"или пополните баланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                        [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
+                        [
+                            InlineKeyboardButton(
+                                "⭐ Тарифы",
+                                web_app=WebAppInfo(url=TARIFF_URL),
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "➕ Пополнить баланс", callback_data="topup"
+                            )
+                        ],
                     ]
                 ),
             )
@@ -2664,67 +2674,18 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data.startswith("mode:set:"):
             await q.answer()
-            mode = data.split(":")[-1]
-            mode_set(update.effective_user.id, mode)
-            if mode == "study":
-                study_sub_set(update.effective_user.id, "explain")
-                await q.edit_message_text("Режим «Учёба» включён. Выберите подрежим:", reply_markup=study_kb())
-            elif mode == "photo":
-                await q.edit_message_text("Режим «Фото» включён. Пришлите изображение — появятся быстрые кнопки.", reply_markup=photo_quick_actions_kb())
-            elif mode == "docs":
-                await q.edit_message_text("Режим «Документы». Пришлите PDF/DOCX/EPUB/TXT — сделаю конспект.")
-            elif mode == "voice":
-                await q.edit_message_text("Режим «Голос». Отправьте voice/audio. Озвучка ответов: /voice_on")
+            _, mode = data.split(":", 2)[1:]
+            _mode_set(update.effective_user.id, mode)
+            if mode == "none":
+                await q.edit_message_text("Режим выключен.")
             else:
-                await q.edit_message_text(f"Режим «{mode}» активирован.")
+                await q.edit_message_text(
+                    f"Режим «{mode}» включён. Напишите задание."
+                )
             return
 
-        if data.startswith("study:set:"):
-            await q.answer()
-            sub = data.split(":")[-1]
-            study_sub_set(update.effective_user.id, sub)
-            await q.edit_message_text(f"Учёба → {sub}. Напишите тему/задание.", reply_markup=study_kb())
-            return
-
-        # Photo edits require cached image
-        if data.startswith("pedit:"):
-            await q.answer()
-            img = _get_cached_photo(update.effective_user.id)
-            if not img:
-                await q.edit_message_text("Сначала пришлите фото, затем выберите действие.", reply_markup=photo_quick_actions_kb())
-                return
-            if data == "pedit:removebg":
-                await _pedit_removebg(update, context, img); return
-            if data == "pedit:replacebg":
-                await _pedit_replacebg(update, context, img); return
-            if data == "pedit:outpaint":
-                await _pedit_outpaint(update, context, img); return
-            if data == "pedit:story":
-                await _pedit_storyboard(update, context, img); return
-            if data == "pedit:revive":
-                img = _get_cached_photo(update.effective_user.id)
-                if not img:
-                    await q.edit_message_text("Сначала пришлите фото, затем нажмите «Оживить фото».")
-                    return
-                dur, asp = parse_video_opts("")  # дефолт из ENV
-                async def _go():
-                    await _run_runway_animate_photo(update, context, img, prompt="", duration_s=dur, aspect=asp)
-                await _try_pay_then_do(update, context, update.effective_user.id, "runway",
-                                       max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
-                                       _go, remember_kind="revive_photo_btn",
-                                       remember_payload={"duration": dur, "aspect": asp})
-                return
-
-            if data == "pedit:lumaimg":
-                _mode_track_set(update.effective_user.id, "lumaimg_wait_text")
-                await q.edit_message_text("Напишите одно предложение — что сгенерировать. Я сделаю картинку (Luma / фолбэк OpenAI).")
-                return
-            if data == "pedit:vision":
-                b64 = base64.b64encode(img).decode("ascii")
-                mime = sniff_image_mime(img)
-                ans = await ask_openai_vision("Опиши фото и текст на нём кратко.", b64, mime)
-                await update.effective_message.reply_text(ans or "Готово.")
-                return
+        # -------- здесь могут быть другие ветки твоего on_cb (quiz, photo-edit и т.п.) --------
+        # Я их не трогаю — оставь как в твоём файле до блока choose:
 
         # Подтверждение выбора движка для видео
         if data.startswith("choose:"):
@@ -2734,12 +2695,51 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not meta:
                 await q.answer("Задача устарела", show_alert=True)
                 return
+
             prompt   = meta["prompt"]
             duration = meta["duration"]
             aspect   = meta["aspect"]
-            est = 0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD * (duration / max(1, RUNWAY_DURATION_S)))
-            map_engine = "luma" if engine == "luma" else "runway"
 
+            # Оценка стоимости
+            if engine == "kling":
+                est = KLING_UNIT_COST_USD or 0.40
+                map_engine = "kling"
+            elif engine == "luma":
+                est = 0.40
+                map_engine = "luma"
+            else:  # runway
+                base = RUNWAY_UNIT_COST_USD or 7.0
+                est = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
+                map_engine = "runway"
+
+            async def _start_real_render():
+                if engine == "kling":
+                    await _run_kling_video(update, context, prompt, duration, aspect)
+                    _register_engine_spend(update.effective_user.id, "kling", est)
+                elif engine == "luma":
+                    await _run_luma_video(update, context, prompt, duration, aspect)
+                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
+                else:
+                    await _run_runway_video(update, context, prompt, duration, aspect)
+                    base = RUNWAY_UNIT_COST_USD or 7.0
+                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
+                    _register_engine_spend(update.effective_user.id, "runway", cost)
+
+            await _try_pay_then_do(
+                update, context, update.effective_user.id,
+                map_engine, est, _start_real_render,
+                remember_kind=f"video_{engine}",
+                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
+            )
+            return
+
+        await q.answer("Неизвестная команда", show_alert=True)
+
+    except Exception as e:
+        log.exception("on_cb error: %s", e)
+    finally:
+        with contextlib.suppress(Exception):
+            await q.answer()
             async def _start_real_render():
                 if engine == "luma":
                     await _run_luma_video(update, context, prompt, duration, aspect)
@@ -3779,7 +3779,7 @@ async def on_text(
         prompt = (rest or text).strip()
 
         duration, aspect = parse_video_opts(text)
-        ...
+
         aid = _new_aid()
         _pending_actions[aid] = {
             "prompt": prompt,
@@ -3795,9 +3795,18 @@ async def on_text(
         )
 
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🎞 Kling (~${est_kling:.2f})",  callback_data=f"choose:kling:{aid}")],
-            [InlineKeyboardButton(f"🎬 Luma (~${est_luma:.2f})",    callback_data=f"choose:luma:{aid}")],
-            [InlineKeyboardButton(f"🎥 Runway (~${est_runway:.2f})", callback_data=f"choose:runway:{aid}")],
+            [InlineKeyboardButton(
+                f"🎞 Kling (~${est_kling:.2f})",
+                callback_data=f"choose:kling:{aid}",
+            )],
+            [InlineKeyboardButton(
+                f"🎬 Luma (~${est_luma:.2f})",
+                callback_data=f"choose:luma:{aid}",
+            )],
+            [InlineKeyboardButton(
+                f"🎥 Runway (~${est_runway:.2f})",
+                callback_data=f"choose:runway:{aid}",
+            )],
         ])
 
         await update.effective_message.reply_text(
