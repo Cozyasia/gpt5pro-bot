@@ -662,43 +662,65 @@ def _looks_like_capability_question(tl: str) -> bool:
     return False
 
 def detect_media_intent(text: str):
+    """
+    Пытаемся понять, просит ли пользователь:
+    - сгенерировать ВИДЕО ("video")
+    - сгенерировать КАРТИНКУ ("image")
+    Возвращаем кортеж (mtype, rest), где:
+        mtype ∈ {"video", "image", None}
+        rest  — очищенный промпт без служебных слов.
+    """
     if not text:
         return (None, "")
+
     t = text.strip()
     tl = t.lower()
 
+    # Вопросы "что ты умеешь?" и т.п. сразу отбрасываем
     if _looks_like_capability_question(tl):
         return (None, "")
 
+    # 1) Явные паттерны для видео (с учётом новых _PREFIXES_VIDEO)
     for p in _PREFIXES_VIDEO:
         m = re.search(p, tl, re.I)
         if m:
             return ("video", _after_match(t, m))
+
+    # 2) Явные паттерны для картинок (новые _PREFIXES_IMAGE)
     for p in _PREFIXES_IMAGE:
         m = re.search(p, tl, re.I)
         if m:
             return ("image", _after_match(t, m))
 
+    # 3) Общий случай: если есть глагол из _CREATE_CMD
+    #    и отдельно слова "видео/ролик" или "картинка/фото/…"
     if re.search(_CREATE_CMD, tl, re.I):
+        # --- видео ---
         if re.search(_VID_WORDS, tl, re.I):
-            clean = re.sub(_VID_WORDS, "", tl, flags=re.I)
+            # вырезаем "видео/ролик" и глагол ИЗ ОРИГИНАЛЬНОЙ СТРОКИ t
+            clean = re.sub(_VID_WORDS, "", t, flags=re.I)
             clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
             return ("video", _strip_leading(clean))
+
+        # --- картинки ---
         if re.search(_IMG_WORDS, tl, re.I):
-            clean = re.sub(_IMG_WORDS, "", tl, flags=re.I)
+            clean = re.sub(_IMG_WORDS, "", t, flags=re.I)
             clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
             return ("image", _strip_leading(clean))
 
+    # 4) Старые короткие форматы "img: ..." / "image: ..." / "picture: ..."
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
     if m:
-        return ("image", _strip_leading(t[m.end(1)+1:]))
+        # берём хвост уже из оригинальной строки t
+        return ("image", _strip_leading(t[m.end(1) + 1:]))
 
+    # 5) Старые короткие форматы "video: ..." / "reels: ..." / "shorts: ..."
     m = re.match(r"^(video|vid|reels?|shorts?)\s*[:\-]\s*(.+)$", tl)
     if m:
-        return ("video", _strip_leading(t[m.end(1)+1:]))
+        return ("video", _strip_leading(t[m.end(1) + 1:]))
 
+    # Ничего не нашли — обычный текст
     return (None, "")
-
 # ───────── OpenAI helpers ─────────
 def _oai_text_client():
     return oai_llm
