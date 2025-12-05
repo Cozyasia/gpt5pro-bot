@@ -2953,19 +2953,20 @@ async def _run_runway_video(
         await msg.reply_text("⚠️ Runway: не настроен API-ключ (RUNWAY_API_KEY/COMETAPI_KEY).")
         return
 
-    # ratio: если пользователь задал что-то вида "16:9"/"9:16" — берём, иначе дефолт
+    # ratio: если пользователь задал "16:9"/"9:16" — берём, иначе дефолт
     ratio = aspect.strip() if (aspect and ":" in aspect) else RUNWAY_RATIO
 
     payload = {
-        "model": RUNWAY_MODEL,                         # например, gen3a_turbo
+        "model": RUNWAY_MODEL,                         # gen3a_turbo или то, что ты указал
         "promptText": (prompt or "").strip()[:512],
         "duration": int(duration_s or RUNWAY_DURATION_S),
         "ratio": ratio,
         "watermark": False,
     }
 
+    # На стороне Comet для Runway обычно ожидается Bearer, поэтому оставляем так:
     headers = {
-        "Authorization": f"Bearer {RUNWAY_API_KEY}",   # ВАЖНО: Bearer для CometAPI
+        "Authorization": f"Bearer {RUNWAY_API_KEY}",
         "Content-Type": "application/json",
         "Accept": "application/json",
         "X-Runway-Version": RUNWAY_API_VERSION,
@@ -2975,14 +2976,16 @@ async def _run_runway_video(
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{RUNWAY_BASE_URL}{RUNWAY_TEXT2VIDEO_PATH}"
 
-            # 1. создаём задачу
+            # 1) создаём задачу
             r = await client.post(create_url, headers=headers, json=payload)
 
             if r.status_code >= 400:
-                txt = r.text[:500]
+                txt = r.text[:800]
                 log.warning("Runway text2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    f"⚠️ Runway (text→video) отклонил задачу ({r.status_code})."
+                    "⚠️ Runway (text→video) отклонил задачу "
+                    f"({r.status_code}).\nОтвет сервера:\n`{txt}`",
+                    parse_mode="Markdown",
                 )
                 return
 
@@ -2999,10 +3002,11 @@ async def _run_runway_video(
             )
 
             if not task_id:
+                # Сейчас у тебя как раз этот кейс: js == {} → покажем сырое тело
                 try:
                     body_snippet = json.dumps(js, ensure_ascii=False)[:800]
                 except Exception:
-                    body_snippet = str(js)[:800]
+                    body_snippet = (r.text or "")[:800]
                 await msg.reply_text(
                     "⚠️ Runway (text→video) не вернул ID задачи.\n"
                     f"Ответ сервера:\n`{body_snippet}`",
@@ -3015,41 +3019,43 @@ async def _run_runway_video(
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
             started = time.time()
 
-            # 2. опрашиваем статус задачи
             while True:
                 rs = await client.get(status_url, headers=headers)
-                try:
-                    data = rs.json() or {}
-                except Exception:
-                    data = {}
 
-                status = (data.get("status") or data.get("state") or "").lower()
-
-                if status in ("succeeded", "completed", "finished", "ready"):
-                    artifacts = (
-                        data.get("artifacts")
-                        or data.get("outputs")
-                        or data.get("output")
-                        or {}
+                if rs.status_code >= 400:
+                    txt = rs.text[:800]
+                    log.warning("Runway text2video status error %s: %s", rs.status_code, txt)
+                    await msg.reply_text(
+                        "⚠️ Runway (text→video) вернул ошибку при запросе статуса "
+                        f"({rs.status_code}).\nОтвет сервера:\n`{txt}`",
+                        parse_mode="Markdown",
                     )
+                    return
 
+                try:
+                    sjs = rs.json() or {}
+                except Exception:
+                    sjs = {}
+
+                data = sjs.get("data") or sjs
+                status = (data.get("status") or data.get("task_status") or "").lower()
+
+                if status in ("succeeded", "success", "succeed", "completed"):
+                    artifacts = data.get("artifacts") or data.get("outputs") or {}
                     url = None
-                    candidates = []
 
-                    if isinstance(artifacts, dict):
-                        candidates.append(artifacts)
-                        for v in artifacts.values():
-                            if isinstance(v, (dict, list, tuple)):
-                                candidates.append(v)
-                    elif isinstance(artifacts, (list, tuple)):
-                        candidates.extend(artifacts)
+                    # Выдёргиваем первую подходящую ссылку на видео
+                    candidates = [artifacts]
+                    if isinstance(artifacts, (list, tuple)):
+                        candidates = artifacts
 
-                    def _extract_url(obj):
-                        if isinstance(obj, dict):
-                            for k in ("url", "uri", "video_url", "videoUri", "output_url"):
-                                v = obj.get(k)
-                                if isinstance(v, str) and v.startswith("http"):
-                                    return v
+                    def _extract_url(obj: dict | None) -> str | None:
+                        if not isinstance(obj, dict):
+                            return None
+                        for k in ("url", "uri", "video_url", "videoUri", "output_url"):
+                            v = obj.get(k)
+                            if isinstance(v, str) and v.startswith("http"):
+                                return v
                         return None
 
                     for c in candidates:
@@ -3064,31 +3070,27 @@ async def _run_runway_video(
                             break
 
                     if not url:
+                        snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
                         await msg.reply_text(
-                            "⚠️ Runway: задача завершилась, но ссылка на видео не найдена."
+                            "⚠️ Runway (text→video): задача завершилась, но не найден URL видео.\n"
+                            f"Ответ сервера:\n`{snippet}`",
+                            parse_mode="Markdown",
                         )
                         return
 
-                    # пробуем скачать видео, если не получится — шлём URL
-                    try:
-                        vr = await client.get(url, timeout=300)
-                        vr.raise_for_status()
-                        bio = BytesIO(vr.content)
-                        bio.name = "runway_text2video.mp4"
-                        await msg.reply_video(
-                            InputFile(bio),
-                            caption="🎬 Runway (text→video, CometAPI)",
-                        )
-                    except Exception:
-                        log.exception("Runway text2video download error")
-                        await msg.reply_text(f"🎬 Runway: видео готово\n{url}")
-
+                    await msg.reply_video(url, caption="Готово! Runway-видео 🎥")
                     return
 
                 if status in ("failed", "error", "cancelled", "canceled"):
-                    err = data.get("error") or data.get("message") or str(data)[:500]
+                    err = (
+                        data.get("error")
+                        or data.get("failure_reason")
+                        or data.get("message")
+                        or str(data)[:500]
+                    )
                     await msg.reply_text(
-                        f"❌ Runway (text→video) завершился с ошибкой: {err}"
+                        f"❌ Runway (text→video) завершился с ошибкой: `{err}`",
+                        parse_mode="Markdown",
                     )
                     return
 
@@ -3102,7 +3104,12 @@ async def _run_runway_video(
 
     except Exception as e:
         log.exception("Runway text2video exception: %s", e)
-        await msg.reply_text("❌ Runway: не удалось запустить/получить видео (text→video).")
+        err = str(e)[:400]
+        await msg.reply_text(
+            "❌ Runway: не удалось запустить/получить видео (text→video).\n"
+            f"Текст ошибки:\n`{err}`",
+            parse_mode="Markdown",
+        )
 
 # ───────── Runway (CometAPI): анимация фото (image→video) ─────────
 async def _run_runway_animate_photo(
@@ -3307,10 +3314,11 @@ async def _run_kling_video(
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video"
 
+            # В спецификации CometAPI для Kling пример без Bearer → шлём ключ «как есть»
             headers = {
-                # для CometAPI по Kling 2.0/2.5 используется Bearer-токен
-                "Authorization": f"Bearer {COMETAPI_KEY}",
+                "Authorization": COMETAPI_KEY,
                 "Content-Type": "application/json",
+                "Accept": "application/json",
             }
 
             payload = {
@@ -3319,39 +3327,47 @@ async def _run_kling_video(
                 "mode": KLING_MODE,              # "std" или "pro"
                 "duration": dur,                 # "5" или "10"
                 "aspect_ratio": aspect_ratio,    # "9:16", "16:9" и т.д.
-                # можно добавить cfg_scale / negative_prompt / camera_control позже
             }
 
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
-                try:
-                    err = r.json()
-                except Exception:
-                    err = r.text
-                log.error("Kling create error %s: %r", r.status_code, err)
-                await msg.reply_text(f"❌ Kling: ошибка создания задачи ({r.status_code}).")
+                txt = r.text[:800]
+                log.error("Kling create error %s: %r", r.status_code, txt)
+                await msg.reply_text(
+                    "❌ Kling: ошибка создания задачи "
+                    f"({r.status_code}).\nОтвет сервера:\n`{txt}`",
+                    parse_mode="Markdown",
+                )
                 return
 
-            js = r.json() or {}
+            try:
+                js = r.json() or {}
+            except Exception:
+                js = {}
             data = js.get("data") or {}
             task_id = data.get("task_id")
-            task_status = data.get("task_status")
+            task_status = (data.get("task_status") or "").lower()
 
             if not task_id:
-                await msg.reply_text("⚠️ Kling: не удалось получить task_id из ответа.")
+                snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
+                await msg.reply_text(
+                    "⚠️ Kling: не удалось получить task_id из ответа.\n"
+                    f"Ответ сервера:\n`{snippet}`",
+                    parse_mode="Markdown",
+                )
                 return
 
             await msg.reply_text("⏳ Kling: задача принята, начинаю рендер видео…")
 
-            # Пулим статус по GET /kling/v1/videos/text2video/{task_id}
+            # Пуллинг статуса
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
-
             started = time.time()
+
             while True:
                 rs = await client.get(
                     status_url,
                     headers={
-                        "Authorization": f"Bearer {COMETAPI_KEY}",
+                        "Authorization": COMETAPI_KEY,
                         "Accept": "application/json",
                     },
                 )
@@ -3363,42 +3379,38 @@ async def _run_kling_video(
                 sdata = sjs.get("data") or {}
                 status = (sdata.get("task_status") or "").lower()
 
-                # У Kling статусы обычно: submitted, processing, succeed, failed
+                # У Kling статусы: submitted, processing, succeed, failed
                 if status in ("succeed", "success", "succeeded"):
-                    # Пытаемся вытащить URL видео
-                    video_url = (
-                        sdata.get("video_url")
-                        or sdata.get("url")
-                        or (sdata.get("result") or {}).get("video_url")
-                    )
+                    artifacts = sdata.get("artifacts") or {}
+                    video_url = None
+
+                    # частый формат: {"artifacts":{"video":{"url": "..."} } }
+                    if isinstance(artifacts, dict):
+                        for v in artifacts.values():
+                            if isinstance(v, dict):
+                                u = v.get("url") or v.get("video_url")
+                                if isinstance(u, str) and u.startswith("http"):
+                                    video_url = u
+                                    break
+
                     if not video_url:
-                        # если формат другой — хотя бы вернём JSON как текст
+                        snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
                         await msg.reply_text(
-                            "🎞 Kling: задача завершена, но URL не найден.\n"
-                            f"`{json.dumps(sdata)[:800]}`",
+                            "⚠️ Kling: задача завершилась, но не удалось найти ссылку на видео.\n"
+                            f"Ответ сервера:\n`{snippet}`",
                             parse_mode="Markdown",
                         )
                         return
 
-                    # Скачиваем видео и отправляем в Telegram
-                    try:
-                        vr = await client.get(video_url, timeout=180.0)
-                        vr.raise_for_status()
-                        bio = BytesIO(vr.content)
-                        bio.name = "kling.mp4"
-                        await msg.reply_video(
-                            InputFile(bio),
-                            caption="🎞 Kling: видео готово ✅",
-                        )
-                    except Exception as e:
-                        log.exception("Kling video download error: %s", e)
-                        await msg.reply_text(
-                            f"🎞 Kling: видео готово ✅\n{video_url}"
-                        )
+                    await msg.reply_video(video_url, caption="Готово! Kling-видео 🎞")
                     return
 
-                if status in ("failed", "fail", "error"):
-                    await msg.reply_text("❌ Kling: задача завершилась с ошибкой.")
+                if status in ("failed", "error", "cancelled", "canceled"):
+                    err = sdata.get("error") or sdata.get("message") or str(sdata)[:500]
+                    await msg.reply_text(
+                        f"❌ Kling: задача завершилась с ошибкой: `{err}`",
+                        parse_mode="Markdown",
+                    )
                     return
 
                 if time.time() - started > KLING_MAX_WAIT_S:
@@ -3409,7 +3421,12 @@ async def _run_kling_video(
 
     except Exception as e:
         log.exception("Kling exception: %s", e)
-        await msg.reply_text("❌ Kling: не удалось запустить или получить видео.")
+        err = str(e)[:400]
+        await msg.reply_text(
+            "❌ Kling: не удалось запустить или получить видео.\n"
+            f"Текст ошибки:\n`{err}`",
+            parse_mode="Markdown",
+        )
 
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
