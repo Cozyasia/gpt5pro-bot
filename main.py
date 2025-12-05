@@ -3659,6 +3659,8 @@ async def _run_kling_video(
     except Exception as e:
         log.exception("Kling exception: %s", e)
         await msg.reply_text("❌ Kling: не удалось запустить или получить видео.")
+
+
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
