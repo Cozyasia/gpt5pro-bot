@@ -2826,17 +2826,28 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("\n".join(lines))
 
 async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+
     lines = [
         "🎬 Видео-движки:",
+        # Luma
         f"• Luma key: {'✅' if bool(LUMA_API_KEY) else '❌'}  base={LUMA_BASE_URL}",
         f"  create={LUMA_CREATE_PATH}  status={LUMA_STATUS_PATH}",
-        f"  model={LUMA_MODEL}  allowed_durations=['5s','9s','10s']  aspect=['16:9','9:16','1:1']",
+        f"  model={LUMA_MODEL}  durations=['5s','9s','10s']  aspect=['16:9','9:16','1:1']",
+        "",
+        # Kling через CometAPI
+        f"• Kling key (COMETAPI_KEY): {'✅' if bool(COMETAPI_KEY) else '❌'}  base={KLING_BASE_URL}",
+        f"  model_name={KLING_MODEL_NAME}  mode={KLING_MODE}  aspect={KLING_ASPECT}  duration={KLING_DURATION_S}s",
+        "",
+        # Runway (текущий DEV или Comet — неважно, просто показываем конфиг)
         f"• Runway key: {'✅' if bool(RUNWAY_API_KEY) else '❌'}  base={RUNWAY_BASE_URL}",
-        f"  create={RUNWAY_CREATE_PATH}  status={RUNWAY_STATUS_PATH}",
+        f"  text2video={RUNWAY_TEXT2VIDEO_PATH}  image2video={RUNWAY_IMAGE2VIDEO_PATH}",
+        f"  api_version={RUNWAY_API_VERSION}",
+        "",
         f"• Поллинг каждые {VIDEO_POLL_DELAY_S:.1f} c",
     ]
-    await update.effective_message.reply_text("\n".join(lines))
 
+    await msg.reply_text("\n".join(lines))
 
 # ───────── MIME для изображений ─────────
 def sniff_image_mime(data: bytes) -> str:
@@ -3049,13 +3060,30 @@ async def _run_runway_video(
                 return
 
             try:
+                js = {}
+            try:
                 js = r.json()
             except Exception:
-                js = {}
+                pass
 
-            task_id = js.get("id") or js.get("task_id") or js.get("taskId")
-            if not task_id:
-                await msg.reply_text("⚠️ Runway не вернул ID задачи (text→video).")
+            rid = (
+                js.get("id")
+                or js.get("task_id")
+                or (js.get("data") or {}).get("id")
+                or (js.get("data") or {}).get("task_id")
+            )
+            if not rid:
+                # показываем кусок ответа, чтобы проще было дебажить
+                try:
+                    body_snippet = json.dumps(js, ensure_ascii=False)[:800]
+                except Exception:
+                    body_snippet = str(js)[:800]
+
+                await update.effective_message.reply_text(
+                    "⚠️ Runway (text→video) не вернул ID задачи.\n"
+                    f"Ответ сервера:\n`{body_snippet}`",
+                    parse_mode="Markdown",
+                )
                 return
 
             status_url = f"{RUNWAY_BASE_URL}{RUNWAY_STATUS_PATH.format(id=task_id)}"
