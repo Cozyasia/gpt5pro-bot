@@ -3370,7 +3370,6 @@ async def _run_kling_video(
 
             # Пулим статус по GET /kling/v1/videos/text2video/{task_id}
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
-
             started = time.time()
             while True:
                 rs = await client.get(
@@ -3456,18 +3455,15 @@ async def _run_kling_video(
                         )
                         return
 
-                    # Скачиваем и отправляем
+                    # Отправляем видео в Telegram по прямой ссылке — Telegram сам его скачает
                     try:
-                        vr = await client.get(video_url)
-                        vr.raise_for_status()
-                        bio = BytesIO(vr.content)
-                        bio.name = "kling.mp4"
                         await msg.reply_video(
-                            InputFile(bio),
+                            video=video_url,
                             caption="🎞 Kling: видео готово ✅",
                         )
                     except Exception as e:
-                        log.exception("Kling video download error: %s", e)
+                        log.exception("Kling video send error: %s", e)
+                        # Фоллбек: хотя бы дадим рабочую ссылку
                         await msg.reply_text(
                             f"🎞 Kling: видео готово ✅\n{video_url}"
                         )
