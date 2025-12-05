@@ -2401,6 +2401,7 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ───────── CallbackQuery (всё остальное) ─────────
+
 _pending_actions = {}
 
 def _new_aid() -> str:
@@ -2436,7 +2437,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("Не удалось выставить счёт", show_alert=True)
             return
 
-        # TOPUP CRYPTO: выбор валюты
+        # TOPUP CRYPTO: выбор суммы
         if data == "topup:crypto":
             await q.answer()
             await q.edit_message_text(
@@ -2445,12 +2446,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
-                            InlineKeyboardButton("$5", callback_data="topup:crypto:5"),
+                            InlineKeyboardButton("$5",  callback_data="topup:crypto:5"),
                             InlineKeyboardButton("$10", callback_data="topup:crypto:10"),
                             InlineKeyboardButton("$25", callback_data="topup:crypto:25"),
                         ],
                         [
-                            InlineKeyboardButton("$50", callback_data="topup:crypto:50"),
+                            InlineKeyboardButton("$50",  callback_data="topup:crypto:50"),
                             InlineKeyboardButton("$100", callback_data="topup:crypto:100"),
                         ],
                         [InlineKeyboardButton("Отмена", callback_data="topup:cancel")],
@@ -2469,6 +2470,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if usd <= 0.0:
                 await q.edit_message_text("Неверная сумма.")
                 return
+
             inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(
                 usd, asset="USDT", description="Wallet top-up"
             )
@@ -2477,36 +2479,36 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "Не удалось создать счёт в CryptoBot. Попробуйте позже."
                 )
                 return
+
             msg = await update.effective_message.reply_text(
                 f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\n"
                 f"После оплаты баланс пополнится автоматически.",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [
-                            InlineKeyboardButton(
-                                "Оплатить в CryptoBot", url=pay_url
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Проверить оплату", callback_data=f"crypto:check:{inv_id}"
-                            )
-                        ],
+                        [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
+                        [InlineKeyboardButton("Проверить оплату", callback_data=f"crypto:check:{inv_id}")],
                     ]
                 ),
             )
             # запустим фоновый поллинг инвойса
-            asyncio.create_task(_poll_crypto_invoice(inv_id, msg.chat_id, msg.message_id))
+            context.application.create_task(
+                _poll_crypto_invoice(context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount)
+            )
             return
 
         # CryptoBot: ручная проверка инвойса
         if data.startswith("crypto:check:"):
             await q.answer()
             inv_id = data.split(":", 2)[-1]
-            status, paid_amount, asset = await _crypto_get_invoice(inv_id)
+            inv = await _crypto_get_invoice(inv_id)
+            status = (inv or {}).get("status", "").lower() if inv else ""
+            paid_amount = (inv or {}).get("amount") or 0
+            asset = (inv or {}).get("asset") or "USDT"
+
             if status == "paid":
                 await q.edit_message_text(
-                    f"✅ Платёж получен: {paid_amount} {asset}.\nБаланс будет пополнен в течение минуты."
+                    f"✅ Платёж получен: {paid_amount} {asset}.\n"
+                    f"Баланс будет пополнен в течение минуты."
                 )
             elif status == "active":
                 await q.edit_message_text("Счёт ещё не оплачен.")
@@ -2520,13 +2522,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text("Пополнение отменено.")
             return
 
-        # Подписка: выбор тарифа и срока
+        # Подписка: старое меню /plans (если используешь)
         if data == "plans":
             await q.answer()
             await cmd_plans(update, context)
             return
 
-        # Подписка: выбор способа
+        # Подписка: выбор тарифа и срока
         if data.startswith("buy:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
@@ -2571,7 +2573,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _, tier, months = data.split(":", 2)
             months = int(months)
             payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-            usd_price = amount_rub / USD_RUB_RATE
+            usd_price = amount_rub / USD_RUB
             bal = _user_balance_get(update.effective_user.id)
             if bal < usd_price:
                 need = usd_price - bal
@@ -2580,20 +2582,14 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Требуется ещё ≈ ${need:.2f}.\n\n"
                     f"Пополните баланс через меню «🧾 Баланс».",
                     reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "➕ Пополнить баланс", callback_data="topup"
-                                )
-                            ]
-                        ]
+                        [[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
                     ),
                 )
                 return
             # списываем и активируем
             _user_balance_debit(update.effective_user.id, usd_price)
             tier_name = payload.split(":", 1)[-1]
-            _sub_activate(update.effective_user.id, tier_name, months)
+            activate_subscription_with_tier(update.effective_user.id, tier_name, months)
             await q.edit_message_text(
                 f"✅ Подписка {tier_name.upper()} на {months} мес. оформлена.\n"
                 f"Баланс: ${_user_balance_get(update.effective_user.id):.2f}"
@@ -2606,61 +2602,27 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await cmd_balance(update, context)
             return
 
-        # Баланс: покупка/списание по офферу
+        # Оффер на доп.расход (когда не хватило лимита)
         if data.startswith("offer:"):
             await q.answer()
             _, engine, offer = data.split(":", 2)
             user_id = update.effective_user.id
             limits = _limits_for(user_id)
             grp = ENGINE_BUDGET_GROUP.get(engine, engine)
-            est_cost = float((offer.split(":", 1)[-1] or "0").strip() or "0")
-
-            # проверяем лимит
-            if limits.get(f"{grp}_usd", 0.0) >= limits.get(f"{grp}_usd_max", 0.0):
-                # предложим разовую покупку
-                amount_rub = _calc_oneoff_price_rub(grp, est_cost)
-                await q.edit_message_text(
-                    f"Ваш дневной лимит по «{engine}» исчерпан. "
-                    f"Разовая покупка ≈ {amount_rub} ₽ или пополните баланс в «🧾 Баланс».",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "⭐ Тарифы",
-                                    web_app=WebAppInfo(url=TARIFF_URL),
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "➕ Пополнить баланс", callback_data="topup"
-                                )
-                            ],
-                        ]
-                    ),
-                )
-                return
 
             try:
                 need_usd = float(offer.split(":", 1)[-1])
             except Exception:
-                need_usd = est_cost
-            amount_rub = _calc_oneoff_price_rub(grp, need_usd)
+                need_usd = 0.0
+
+            amount_rub = _calc_oneoff_price_rub(grp, need_usd or 0.0)
             await q.edit_message_text(
                 f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
                 f"или пополните баланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [
-                            InlineKeyboardButton(
-                                "⭐ Тарифы",
-                                web_app=WebAppInfo(url=TARIFF_URL),
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "➕ Пополнить баланс", callback_data="topup"
-                            )
-                        ],
+                        [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")],
                     ]
                 ),
             )
@@ -2674,7 +2636,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data.startswith("mode:set:"):
             await q.answer()
-            _, mode = data.split(":", 2)[1:]
+            _, _, mode = data.split(":", 2)
             _mode_set(update.effective_user.id, mode)
             if mode == "none":
                 await q.edit_message_text("Режим выключен.")
@@ -2684,10 +2646,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
 
-        # -------- здесь могут быть другие ветки твоего on_cb (quiz, photo-edit и т.п.) --------
-        # Я их не трогаю — оставь как в твоём файле до блока choose:
-
-        # Подтверждение выбора движка для видео
+        # Подтверждение выбора движка для видео (Kling / Luma / Runway)
         if data.startswith("choose:"):
             await q.answer()
             _, engine, aid = data.split(":", 2)
@@ -2726,13 +2685,18 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     _register_engine_spend(update.effective_user.id, "runway", cost)
 
             await _try_pay_then_do(
-                update, context, update.effective_user.id,
-                map_engine, est, _start_real_render,
+                update,
+                context,
+                update.effective_user.id,
+                map_engine,
+                est,
+                _start_real_render,
                 remember_kind=f"video_{engine}",
                 remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
             )
             return
 
+        # Если не подошла ни одна ветка
         await q.answer("Неизвестная команда", show_alert=True)
 
     except Exception as e:
@@ -2740,31 +2704,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         with contextlib.suppress(Exception):
             await q.answer()
-            async def _start_real_render():
-                if engine == "luma":
-                    await _run_luma_video(update, context, prompt, duration, aspect)
-                    _register_engine_spend(update.effective_user.id, "luma", 0.40)
-                else:
-                    await _run_runway_video(update, context, prompt, duration, aspect)
-                    base = RUNWAY_UNIT_COST_USD or 7.0
-                    cost = max(1.0, base * (duration / max(1, RUNWAY_DURATION_S)))
-                    _register_engine_spend(update.effective_user.id, "runway", cost)
 
-            await _try_pay_then_do(
-                update, context, update.effective_user.id,
-                map_engine, est, _start_real_render,
-                remember_kind=f"video_{engine}",
-                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect},
-            )
-            return
-
-        await q.answer("Неизвестная команда", show_alert=True)
-
-    except Exception as e:
-        log.exception("on_cb error: %s", e)
-    finally:
-        with contextlib.suppress(Exception):
-            await q.answer()
 
 
 # ───────── STT ─────────
@@ -4249,8 +4189,7 @@ def build_application() -> "Application":
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
     # 2) Режимы/подменю (поддержим и старые, и новые префиксы)
-    app.add_handler(CallbackQueryHandler(on_cb_mode,  pattern=r"^(?:mode:|act:|school:|work:)"))
-
+    app.add_handler(CallbackQueryHandler(on_mode_cb,  pattern=r"^(?:mode:|act:|school:|work:)"))
     # 3) Быстрые развлечения (любые fun:...)
     app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
 
