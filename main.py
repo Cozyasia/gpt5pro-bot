@@ -1757,6 +1757,21 @@ def capability_answer(text: str) -> str | None:
             "и я сделаю промт для генерации."
         )
 
+   # --- Оживление старых фото / анимация снимков ---
+    if ("ожив" in tl or "анимиру" in tl or "анимировать" in tl) and (
+        "фото" in tl or "фотограф" in tl or "картин" in tl or "изображен" in tl
+    ):
+        if "?" in tl or "можешь" in tl or "умеешь" in tl:
+            return (
+                "Да, я могу оживлять старые фотографии и делать из них короткие клипы.\n"
+                "1) Пришли сюда фото (лучше портрет).\n"
+                "2) В подписи к фото можешь написать, что именно оживить: глаза, улыбку, "
+                "лёгкое движение, фон и т.п.\n"
+                "3) После этого я запущу анимацию через Runway (и другие движки, если они включены)."
+            ) 
+
+    
+
     # Ничего подходящего — пусть дальше обрабатывается обычной логикой
     return None
 
@@ -2978,15 +2993,18 @@ async def _run_runway_video(
     # ratio: если пользователь задал "16:9"/"9:16" — берём, иначе дефолт
     ratio = aspect.strip() if (aspect and ":" in aspect) else RUNWAY_RATIO
 
+    text_clean = (prompt or "").strip()[:512]
+
+    # payload: кладём и старые поля, и более универсальные
     payload = {
-        "model": RUNWAY_MODEL,                         # gen3a_turbo или то, что ты указал
-        "promptText": (prompt or "").strip()[:512],
+        "model": RUNWAY_MODEL,                       # gen3a_turbo / gen4_turbo / 2.1 и т.п.
+        "promptText": text_clean,
+        "prompt": text_clean,                        # дублируем, если Comet/Runway ждёт "prompt"
         "duration": int(duration_s or RUNWAY_DURATION_S),
         "ratio": ratio,
         "watermark": False,
     }
 
-    # На стороне Comet для Runway обычно ожидается Bearer, поэтому оставляем так:
     headers = {
         "Authorization": f"Bearer {RUNWAY_API_KEY}",
         "Content-Type": "application/json",
@@ -2998,9 +3016,7 @@ async def _run_runway_video(
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{RUNWAY_BASE_URL}{RUNWAY_TEXT2VIDEO_PATH}"
 
-            # 1) создаём задачу
             r = await client.post(create_url, headers=headers, json=payload)
-
             if r.status_code >= 400:
                 txt = r.text[:800]
                 log.warning("Runway text2video create error %s: %s", r.status_code, txt)
@@ -3024,7 +3040,7 @@ async def _run_runway_video(
             )
 
             if not task_id:
-                # Сейчас у тебя как раз этот кейс: js == {} → покажем сырое тело
+                # как раз тот кейс, когда js == {} → покажем сырое тело
                 try:
                     body_snippet = json.dumps(js, ensure_ascii=False)[:800]
                 except Exception:
@@ -3048,8 +3064,9 @@ async def _run_runway_video(
                     txt = rs.text[:800]
                     log.warning("Runway text2video status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        "⚠️ Runway (text→video) вернул ошибку при запросе статуса "
-                        f"({rs.status_code}).\nОтвет сервера:\n`{txt}`",
+                        "⚠️ Runway (text→video): ошибка при проверке статуса.\n"
+                        f"Код: {rs.status_code}\n"
+                        f"Ответ:\n`{txt}`",
                         parse_mode="Markdown",
                     )
                     return
@@ -3066,7 +3083,7 @@ async def _run_runway_video(
                     artifacts = data.get("artifacts") or data.get("outputs") or {}
                     url = None
 
-                    # Выдёргиваем первую подходящую ссылку на видео
+                    # вытаскиваем первую подходящую ссылку
                     candidates = [artifacts]
                     if isinstance(artifacts, (list, tuple)):
                         candidates = artifacts
@@ -3074,7 +3091,7 @@ async def _run_runway_video(
                     def _extract_url(obj: dict | None) -> str | None:
                         if not isinstance(obj, dict):
                             return None
-                        for k in ("url", "uri", "video_url", "videoUri", "output_url"):
+                        for k in ("url", "video_url", "output_url"):
                             v = obj.get(k)
                             if isinstance(v, str) and v.startswith("http"):
                                 return v
@@ -3100,7 +3117,20 @@ async def _run_runway_video(
                         )
                         return
 
-                    await msg.reply_video(url, caption="Готово! Runway-видео 🎥")
+                    # 👉 вместо прямой ссылки — скачиваем и шлём именно MP4, чтобы не было .bin
+                    try:
+                        vr = await client.get(url, timeout=300)
+                        vr.raise_for_status()
+                        bio = BytesIO(vr.content)
+                        filename = "runway_text2video.mp4"
+                        bio.name = filename
+                        await msg.reply_video(
+                            InputFile(bio, filename=filename),
+                            caption="Готово! Runway-видео 🎥",
+                        )
+                    except Exception:
+                        log.exception("Runway text2video download error")
+                        await msg.reply_text(f"🎬 Runway: видео готово\n{url}")
                     return
 
                 if status in ("failed", "error", "cancelled", "canceled"):
@@ -3132,7 +3162,6 @@ async def _run_runway_video(
             f"Текст ошибки:\n`{err}`",
             parse_mode="Markdown",
         )
-
 # ───────── Runway (CometAPI): анимация фото (image→video) ─────────
 async def _run_runway_animate_photo(
     update: Update,
@@ -4105,6 +4134,53 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")],
     ]
     return InlineKeyboardMarkup(rows)
+
+async def revive_old_photo_flow(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    engine: str | None = None,
+):
+    """
+    Универсальный пайплайн оживления фото:
+    - берём последнее фото из кэша (_get_cached_photo);
+    - по умолчанию анимируем через Runway (image→video);
+    - биллинг через _try_pay_then_do, как и в on_photo.
+    """
+    msg = update.effective_message
+    user_id = update.effective_user.id
+
+    img = _get_cached_photo(user_id)
+    if not img:
+        await msg.reply_text(
+            "Сначала пришли фото (желательно портрет), "
+            "а потом нажми «🪄 Оживить старое фото» или подпиши фото «оживи»."
+        )
+        return True  # чтобы on_cb_fun понял, что мы что-то сделали
+
+    # Пока реальное оживление фото делаем через Runway image→video.
+    # Здесь можно будет позже переключать движок на Kling/Luma, когда появится рабочий endpoint.
+    chosen_engine = (engine or "runway").lower()
+
+    # Для Runway используем уже готовую функцию _run_runway_animate_photo
+    dur = RUNWAY_DURATION_S
+    asp = RUNWAY_RATIO
+    prompt = ""  # можно потом прокидывать текст от пользователя
+
+    async def _go():
+        await _run_runway_animate_photo(update, context, img, prompt, dur, asp)
+
+    est_cost = max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S)))
+    await _try_pay_then_do(
+        update,
+        context,
+        user_id,
+        "runway",
+        est_cost,
+        _go,
+        remember_kind="revive_photo",
+        remember_payload={"duration": dur, "aspect": asp, "prompt": prompt},
+    )
+    return True
 
 # ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
