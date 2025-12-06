@@ -3357,7 +3357,6 @@ async def _run_kling_video(
             log.info("Kling create response: %r", js)
 
             data = js.get("data") or {}
-            # task_id может лежать и здесь, и во вложенном data.data
             inner = data.get("data") or {}
             task_id = data.get("task_id") or inner.get("task_id")
 
@@ -3391,7 +3390,6 @@ async def _run_kling_video(
                 sdata = sjs.get("data") or {}
                 inner = sdata.get("data") or {}
 
-                # Возможные варианты статуса от Comet/Kling
                 task_status = (
                     (sdata.get("task_status"))
                     or (inner.get("task_status"))
@@ -3402,8 +3400,6 @@ async def _run_kling_video(
 
                 log.info("Kling poll status: %r", sjs)
 
-                # У Kling/Comet встречаются: submitted, not_start, processing,
-                # succeed, success, finished, failed и т.п.
                 if status in (
                     "succeed",
                     "success",
@@ -3435,7 +3431,6 @@ async def _run_kling_video(
                             first = videos[0] or {}
                             video_url = first.get("url") or first.get("video_url")
 
-                        # На всякий случай, если video_url лежит прямо в task_result
                         if not video_url and isinstance(task_result.get("video_url"), str):
                             video_url = task_result["video_url"]
 
@@ -3449,7 +3444,19 @@ async def _run_kling_video(
 
                     # Скачиваем видео и отправляем в Telegram как файл
                     try:
-                        vr = await client.get(video_url, timeout=180.0)
+                        # ВАЖНО: при скачивании тоже используем Bearer-токен,
+                        # иначе Comet часто отдаёт ошибку/редирект → падение в fallback.
+                        download_headers = {
+                            "Accept": "application/octet-stream",
+                            "Authorization": f"Bearer {COMETAPI_KEY}",
+                        }
+                        vr = await client.get(video_url, headers=download_headers, timeout=180.0)
+
+                        # Если с токеном что-то не так — пробуем без него
+                        if vr.status_code >= 400:
+                            log.warning("Kling download with auth failed %s, retry without auth", vr.status_code)
+                            vr = await client.get(video_url, timeout=180.0)
+
                         vr.raise_for_status()
                         data_bytes = vr.content
                         if not data_bytes:
@@ -3498,7 +3505,6 @@ async def _run_kling_video(
     except Exception as e:
         log.exception("Kling exception: %s", e)
         await msg.reply_text("❌ Kling: не удалось запустить или получить видео.")
-
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
