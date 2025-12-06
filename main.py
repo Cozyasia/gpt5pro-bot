@@ -130,12 +130,25 @@ RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 
 # Luma
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
-LUMA_MODEL       = os.environ.get("LUMA_MODEL", "ray-2").strip()
-LUMA_ASPECT      = os.environ.get("LUMA_ASPECT", "16:9").strip()
+
+# Всегда гарантируем непустой model/aspect, даже если в ENV пустая строка
+_LUMA_MODEL_ENV  = (os.environ.get("LUMA_MODEL") or "").strip()
+LUMA_MODEL       = _LUMA_MODEL_ENV or "ray-2"
+
+_LUMA_ASPECT_ENV = (os.environ.get("LUMA_ASPECT") or "").strip()
+LUMA_ASPECT      = _LUMA_ASPECT_ENV or "16:9"
+
 LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
-LUMA_BASE_URL    = (os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1").strip().rstrip("/"))
+
+# База уже содержит /dream-machine/v1 → дальше добавляем /generations
+LUMA_BASE_URL    = (
+    os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1")
+    .strip()
+    .rstrip("/")
+)
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
+
 # Luma Images (опционально: если нет — используем OpenAI Images как фолбэк)
 LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
 LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
@@ -143,15 +156,21 @@ LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
 # Фолбэки Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
-    os.environ.get("LUMA_FALLBACK_BASE_URL", "")
+    os.environ.get("LUMA_FALLBACK_BASE_URL", ""),
 ])
-LUMA_FALLBACKS = []
+LUMA_FALLBACKS: list[str] = []
 for u in re.split(r"[;,]\s*", _fallbacks_raw):
     if not u:
         continue
     u = u.strip().rstrip("/")
     if u and u != LUMA_BASE_URL and u not in LUMA_FALLBACKS:
         LUMA_FALLBACKS.append(u)
+
+# ───────── КЭШИ / ГЛОБАЛЬНОЕ СОСТОЯНИЕ ─────────
+
+# Последнее фото пользователя для анимации (оживления)
+# user_id -> {"bytes": b"...", "url": "https://..."}
+_LAST_ANIM_PHOTO: dict[int, dict] = {}
 
 # Kling (новый видеодвижок)
 COMETAPI_KEY     = os.environ.get("COMETAPI_KEY", "").strip()
@@ -1770,8 +1789,6 @@ def capability_answer(text: str) -> str | None:
                 "3) После этого я запущу анимацию через Runway (и другие движки, если они включены)."
             ) 
 
-    
-
     # Ничего подходящего — пусть дальше обрабатывается обычной логикой
     return None
 
@@ -2292,6 +2309,22 @@ def photo_quick_actions_kb():
          InlineKeyboardButton("📽 Раскадровка", callback_data="pedit:story")],
         [InlineKeyboardButton("🖌 Картинка по описанию (Luma)", callback_data="pedit:lumaimg")],
         [InlineKeyboardButton("👁 Анализ фото", callback_data="pedit:vision")],
+        ])
+    
+        def revive_engine_kb() -> InlineKeyboardMarkup:
+    """
+    Кнопки выбора движка для оживления фото.
+    """
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Runway", callback_data="revive_engine:runway"),
+        ],
+        [
+            InlineKeyboardButton("Kling",  callback_data="revive_engine:kling"),
+        ],
+        [
+            InlineKeyboardButton("Luma",   callback_data="revive_engine:luma"),
+        ],
     ])
 
 _photo_cache = {}  # user_id -> bytes
@@ -2434,6 +2467,45 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
     try:
+
+        # Photo edit / анимация по inline-кнопкам pedit:...
+        if data.startswith("pedit:"):
+            await q.answer()
+            action = data.split(":", 1)[1] if ":" in data else ""
+
+            user_id = update.effective_user.id
+            img = _get_cached_photo(user_id)
+            if not img:
+                await q.edit_message_text(
+                    "Не нашёл фото в кэше. Пришли фото ещё раз, пожалуйста."
+                )
+                return
+
+            # Оживление фото (Runway image→video)
+            if action == "revive":
+                dur = RUNWAY_DURATION_S
+                asp = RUNWAY_RATIO
+                prompt = ""
+
+                async def _go():
+                    await _run_runway_animate_photo(update, context, img, prompt, dur, asp)
+
+                est_cost = max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S)))
+                await _try_pay_then_do(
+                    update,
+                    context,
+                    user_id,
+                    "runway",
+                    est_cost,
+                    _go,
+                    remember_kind="revive_photo",
+                    remember_payload={"duration": dur, "aspect": asp, "prompt": prompt},
+                )
+                return
+
+            # Остальные pedit:* при необходимости можно развести отдельно
+            # (removebg/replacebg/outpaint/...); пока оставим как есть.
+        
         # TOPUP меню
         if data == "topup":
             await q.answer()
@@ -2972,7 +3044,146 @@ async def _run_luma_video(
         await update.effective_message.reply_text(
             "❌ Luma: не удалось запустить/получить видео."
         )
+# ───────── Luma: Ray-2 image→video (оживление фото) ─────────
 
+async def _run_luma_image2video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    image_url: str,
+    prompt: str,
+    aspect: str,
+):
+    """
+    Оживление фото через Luma Ray-2 Image→Video.
+    Использует официальный endpoint /dream-machine/v1/generations.
+
+    Важно: image_url должен быть публично доступен.
+    Для Telegram подойдёт tg_file.file_path (https://api.telegram.org/file/...).
+    """
+    msg = update.effective_message
+    chat_id = update.effective_chat.id
+
+    if not LUMA_API_KEY:
+        await msg.reply_text("⚠️ Luma: не настроен LUMA_API_KEY.")
+        return
+
+    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
+
+    aspect_ratio = aspect or "16:9"
+
+    payload = {
+        "prompt": (prompt or "Animate this photo with natural, cinematic motion.")[:512],
+        "model": LUMA_MODEL or "ray-2",
+        "keyframes": {
+            "frame0": {
+                "type": "image",
+                "url": image_url,
+            }
+        },
+        "loop": False,
+        "aspect_ratio": aspect_ratio,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {LUMA_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        create_url = f"{LUMA_BASE_URL}{LUMA_GENERATIONS_PATH}"
+        r = await client.post(create_url, headers=headers, json=payload)
+        if r.status_code >= 400:
+            txt = r.text[:800]
+            log.warning("Luma image2video create error %s: %s", r.status_code, txt)
+            await msg.reply_text(
+                "⚠️ Luma (image→video) отклонила задачу "
+                f"({r.status_code}).\nОтвет сервера:\n`{txt}`",
+                parse_mode="Markdown",
+            )
+            return
+
+        try:
+            gen = r.json() or {}
+        except Exception:
+            gen = {}
+
+        gen_id = gen.get("id") or gen.get("generation_id")
+        if not gen_id:
+            snippet = (json.dumps(gen, ensure_ascii=False) if gen else r.text)[:800]
+            await msg.reply_text(
+                "⚠️ Luma (image→video) не вернула ID генерации.\n"
+                f"Ответ сервера:\n`{snippet}`",
+                parse_mode="Markdown",
+            )
+            return
+
+        await msg.reply_text("⏳ Luma: оживляю фото…")
+
+        status_url = f"{LUMA_BASE_URL}{LUMA_GENERATIONS_PATH}/{gen_id}"
+        started = time.time()
+
+        while True:
+            rs = await client.get(status_url, headers=headers)
+            try:
+                sgen = rs.json() or {}
+            except Exception:
+                sgen = {}
+
+            state = (sgen.get("state") or sgen.get("status") or "").lower()
+            # Luma обычно: dreaming / completed / failed
+            if state in ("completed", "success", "succeeded"):
+                # пробуем вытащить видео-URL
+                video_url = (
+                    sgen.get("video_url")
+                    or (sgen.get("assets") or {}).get("video")
+                )
+
+                if not video_url:
+                    snippet = (json.dumps(sgen, ensure_ascii=False) if sgen else rs.text)[:800]
+                    await msg.reply_text(
+                        "⚠️ Luma (image→video): генерация завершена, "
+                        "но не найден URL видео.\n"
+                        f"Ответ сервера:\n`{snippet}`",
+                        parse_mode="Markdown",
+                    )
+                    return
+
+                # скачиваем и отправляем MP4
+                try:
+                    vr = await client.get(video_url, timeout=300)
+                    vr.raise_for_status()
+                    bio = BytesIO(vr.content)
+                    filename = "luma_image2video.mp4"
+                    bio.name = filename
+                    await msg.reply_video(
+                        InputFile(bio, filename=filename),
+                        caption="Готово! Luma-анимация 🎬",
+                    )
+                except Exception:
+                    log.exception("Luma image2video download error")
+                    await msg.reply_text(f"🎬 Luma: видео готово\n{video_url}")
+                return
+
+            if state in ("failed", "error"):
+                err = (
+                    sgen.get("failure_reason")
+                    or sgen.get("error")
+                    or sgen.get("message")
+                    or str(sgen)[:500]
+                )
+                await msg.reply_text(
+                    f"❌ Luma (image→video) завершилась с ошибкой: `{err}`",
+                    parse_mode="Markdown",
+                )
+                return
+
+            if time.time() - started > RUNWAY_MAX_WAIT_S:
+                await msg.reply_text("⌛ Luma (image→video): превышено время ожидания.")
+                return
+
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            
 # ───────── Runway (CometAPI): видео по тексту (text→video) ─────────
 async def _run_runway_video(
     update: Update,
@@ -3534,6 +3745,7 @@ async def _run_kling_video(
     except Exception as e:
         log.exception("Kling exception: %s", e)
         await msg.reply_text("❌ Kling: не удалось запустить или получить видео.")
+        
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
@@ -3936,66 +4148,117 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f = await ph.get_file()
         data = await f.download_as_bytearray()
         img = bytes(data)
+
+        # --- СТАРЫЙ КЭШ (как раньше)
         _cache_photo(update.effective_user.id, img)
+
+        # --- НОВЫЙ КЭШ ДЛЯ ОЖИВЛЕНИЯ / LUMA / KLING ---
+        # Сохраняем и bytes, и публичный URL Telegram (подходит для Luma)
+        try:
+            _LAST_ANIM_PHOTO[update.effective_user.id] = {
+                "bytes": img,
+                "url": f.file_path,   # публичный HTTPS-URL Telegram API
+            }
+        except Exception:
+            pass
 
         caption = (update.message.caption or "").strip()
         if caption:
             tl = caption.lower()
-            # оживить фото → Runway по умолчанию
+
+            # оживление фото → Runway по умолчанию (до введения выбора движка)
             if any(k in tl for k in ("оживи", "анимиру", "сделай видео", "revive", "animate")):
                 dur, asp = parse_video_opts(caption)
-                prompt = re.sub(r"\b(оживи|оживить|анимируй|анимировать|сделай видео|revive|animate)\b", "", caption, flags=re.I).strip(" ,.")
+                prompt = re.sub(
+                    r"\b(оживи|оживить|анимируй|анимировать|сделай видео|revive|animate)\b",
+                    "",
+                    caption,
+                    flags=re.I
+                ).strip(" ,.")
+
                 async def _go():
                     await _run_runway_animate_photo(update, context, img, prompt, dur, asp)
-                await _try_pay_then_do(update, context, update.effective_user.id, "runway",
-                                       max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
-                                       _go, remember_kind="revive_photo",
-                                       remember_payload={"duration": dur, "aspect": asp, "prompt": prompt})
+
+                await _try_pay_then_do(
+                    update, context, update.effective_user.id, "runway",
+                    max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
+                    _go,
+                    remember_kind="revive_photo",
+                    remember_payload={"duration": dur, "aspect": asp, "prompt": prompt}
+                )
                 return
 
             # удалить фон
             if any(k in tl for k in ("удали фон", "removebg", "убрать фон")):
-                await _pedit_removebg(update, context, img); return
+                await _pedit_removebg(update, context, img)
+                return
 
             # заменить фон
-            if any(k in tl for k in ("замени фон", "replacebg", "размытый фон", "blur")):
-                await _pedit_replacebg(update, context, img); return
+            if any(k in tl for k in ("замени фон", "replacebg", "размытый", "blur")):
+                await _pedit_replacebg(update, context, img)
+                return
 
             # outpaint
             if "outpaint" in tl or "расшир" in tl:
-                await _pedit_outpaint(update, context, img); return
+                await _pedit_outpaint(update, context, img)
+                return
 
             # раскадровка
             if "раскадров" in tl or "storyboard" in tl:
-                await _pedit_storyboard(update, context, img); return
+                await _pedit_storyboard(update, context, img)
+                return
 
-            # картинка по описанию (Luma / фолбэк OpenAI)
-            if any(k in tl for k in ("картин", "изображен", "image", "img")) and any(k in tl for k in ("сгенериру", "созда", "сделай")):
-                await _start_luma_img(update, context, caption); return
+            # картинка по описанию (Luma / fallback OpenAI)
+            if (
+                any(k in tl for k in ("картин", "изображен", "image", "img"))
+                and any(k in tl for k in ("сгенериру", "созда", "сделай"))
+            ):
+                await _start_luma_img(update, context, caption)
+                return
 
-        # если явной команды в подписи нет — показываем быстрые кнопки
-        await update.effective_message.reply_text("Фото получено. Что сделать?",
-                                                  reply_markup=photo_quick_actions_kb())
+        # если явной команды нет — быстрые кнопки
+        await update.effective_message.reply_text(
+            "Фото получено. Что сделать?",
+            reply_markup=photo_quick_actions_kb()
+        )
+
     except Exception as e:
         log.exception("on_photo error: %s", e)
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Не смог обработать фото.")
 
+
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.document:
             return
+
         doc = update.message.document
         mt = (doc.mime_type or "").lower()
         tg_file = await doc.get_file()
         data = await tg_file.download_as_bytearray()
         raw = bytes(data)
 
+        # документ оказался изображением
         if mt.startswith("image/"):
             _cache_photo(update.effective_user.id, raw)
-            await update.effective_message.reply_text("Изображение получено как документ. Что сделать?", reply_markup=photo_quick_actions_kb())
+
+            # --- НОВЫЙ КЭШ ДЛЯ ОЖИВЛЕНИЯ ---
+            try:
+                _LAST_ANIM_PHOTO[update.effective_user.id] = {
+                    "bytes": raw,
+                    "url": tg_file.file_path,    # Telegram public URL
+                }
+            except Exception:
+                pass
+
+            await update.effective_message.reply_text(
+                "Изображение получено как документ. Что сделать?",
+                reply_markup=photo_quick_actions_kb()
+            )
             return
 
+        # остальные документы → извлечение текста
         text, kind = extract_text_from_document(raw, doc.file_name or "file")
         if not (text or "").strip():
             await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
@@ -4003,15 +4266,155 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         goal = (update.message.caption or "").strip() or None
         await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
+
         summary = await summarize_long_text(text, query=goal)
         summary = summary or "Готово."
         await update.effective_message.reply_text(summary)
+
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
+
     except Exception as e:
         log.exception("on_doc error: %s", e)
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Ошибка при обработке документа.")
 
+# ───────── Kling (CometAPI): image→video (оживление фото) ─────────
+
+async def _run_kling_animate_photo(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    prompt: str,
+    duration_s: int,
+    aspect: str,
+):
+    """
+    Оживление фото через Kling image2video.
+    Использует CometAPI /kling/v1/videos/image2video и тот же статус-пуллин,
+    что и text2video.
+    """
+    msg = update.effective_message
+    chat_id = update.effective_chat.id
+
+    if not COMETAPI_KEY:
+        await msg.reply_text("⚠️ Kling: не настроен COMETAPI_KEY.")
+        return
+
+    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
+
+    duration_s = int(duration_s or 5)
+    if duration_s not in (5, 10):
+        duration_s = 5
+
+    prompt_clean = (prompt or "").strip()[:500]
+
+    payload = {
+        "model_name": KLING_MODEL_NAME or "kling-v1-6",
+        "mode": KLING_MODE or "pro",
+        "duration": str(duration_s),
+        "image": base64.b64encode(img_bytes).decode(),
+        "prompt": prompt_clean,
+        "cfg_scale": 0.5,
+        # static_mask / dynamic_masks можно добавить позже под motion brush
+    }
+
+    headers = {
+        "Authorization": f"Bearer {COMETAPI_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    create_url = f"{KLING_BASE_URL}{KLING_IMAGE2VIDEO_PATH}"
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(create_url, headers=headers, json=payload)
+        if r.status_code >= 400:
+            txt = r.text[:800]
+            log.warning("Kling image2video create error %s: %s", r.status_code, txt)
+            await msg.reply_text(
+                "⚠️ Kling (image→video) отклонил задачу "
+                f"({r.status_code}).\nОтвет сервера:\n`{txt}`",
+                parse_mode="Markdown",
+            )
+            return
+
+        try:
+            js = r.json() or {}
+        except Exception:
+            js = {}
+
+        data = js.get("data") or {}
+        task_id = data.get("task_id")
+        if not task_id:
+            snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
+            await msg.reply_text(
+                "⚠️ Kling (image→video) не вернул ID задачи.\n"
+                f"Ответ сервера:\n`{snippet}`",
+                parse_mode="Markdown",
+            )
+            return
+
+        await msg.reply_text("⏳ Kling: анимирую фото…")
+
+        status_url = f"{KLING_BASE_URL}/kling/v1/tasks/{task_id}"
+        started = time.time()
+
+        while True:
+            rs = await client.get(status_url, headers=headers)
+            try:
+                sjs = rs.json() or {}
+            except Exception:
+                sjs = {}
+
+            d = sjs.get("data") or {}
+            status = (d.get("task_status") or "").lower()
+
+            if status in ("succeed", "success", "completed"):
+                # task_result.videos.{id,url,duration}
+                tr = d.get("task_result") or {}
+                vids = tr.get("videos") or {}
+                video_url = vids.get("url") if isinstance(vids, dict) else None
+
+                if not video_url:
+                    snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
+                    await msg.reply_text(
+                        "⚠️ Kling (image→video): задача завершилась, "
+                        "но не найден URL видео.\n"
+                        f"Ответ сервера:\n`{snippet}`",
+                        parse_mode="Markdown",
+                    )
+                    return
+
+                # скачиваем и отправляем MP4
+                try:
+                    vr = await client.get(video_url, timeout=300)
+                    vr.raise_for_status()
+                    bio = BytesIO(vr.content)
+                    filename = "kling_image2video.mp4"
+                    bio.name = filename
+                    await msg.reply_video(
+                        InputFile(bio, filename=filename),
+                        caption="Готово! Kling-анимация 📺",
+                    )
+                except Exception:
+                    log.exception("Kling image2video download error")
+                    await msg.reply_text(f"🎬 Kling: видео готово\n{video_url}")
+                return
+
+            if status in ("failed", "error"):
+                err = d.get("task_status_msg") or d.get("message") or str(d)[:500]
+                await msg.reply_text(
+                    f"❌ Kling (image→video) завершился с ошибкой: `{err}`",
+                    parse_mode="Markdown",
+                )
+                return
+
+            if time.time() - started > RUNWAY_MAX_WAIT_S:
+                await msg.reply_text("⌛ Kling (image→video): превышено время ожидания.")
+                return
+
+            await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.voice:
@@ -4141,51 +4544,113 @@ async def revive_old_photo_flow(
     engine: str | None = None,
 ):
     """
-    Универсальный пайплайн оживления фото:
-    - берём последнее фото из кэша (_get_cached_photo);
-    - по умолчанию анимируем через Runway (image→video);
-    - биллинг через _try_pay_then_do, как и в on_photo.
+    Универсальный пайплайн оживления фото.
+
+    1) Берём последнее фото из _LAST_ANIM_PHOTO.
+    2) Если движок не выбран — показываем меню выбора (Runway/Kling/Luma).
+    3) Если выбран движок — считаем цену и запускаем соответствующий backend.
     """
     msg = update.effective_message
     user_id = update.effective_user.id
 
-    img = _get_cached_photo(user_id)
-    if not img:
+    photo_info = _LAST_ANIM_PHOTO.get(user_id)
+    if not photo_info:
         await msg.reply_text(
             "Сначала пришли фото (желательно портрет), "
-            "а потом нажми «🪄 Оживить старое фото» или подпиши фото «оживи»."
+            "а потом нажми «🪄 Оживить старое фото» или кнопку под фотографией."
         )
-        return True  # чтобы on_cb_fun понял, что мы что-то сделали
+        return True
 
-    # Пока реальное оживление фото делаем через Runway image→video.
-    # Здесь можно будет позже переключать движок на Kling/Luma, когда появится рабочий endpoint.
-    chosen_engine = (engine or "runway").lower()
+    img_bytes = photo_info.get("bytes")
+    image_url = photo_info.get("url")
 
-    # Для Runway используем уже готовую функцию _run_runway_animate_photo
+    if not img_bytes:
+        await msg.reply_text("Не удалось найти байты фото в кэше, пришли его ещё раз.")
+        return True
+
+    # шаг 1: выбор движка
+    if not engine:
+        await msg.reply_text("Выбери движок для оживления фото:", reply_markup=revive_engine_kb())
+        return True
+
+    engine = engine.lower()
     dur = RUNWAY_DURATION_S
     asp = RUNWAY_RATIO
-    prompt = ""  # можно потом прокидывать текст от пользователя
+    prompt = ""  # сюда можно позже подкинуть текст от пользователя
 
-    async def _go():
-        await _run_runway_animate_photo(update, context, img, prompt, dur, asp)
+    # шаг 2: функция, которую обернём в биллинг
+    async def _go_runway():
+        await _run_runway_animate_photo(update, context, img_bytes, prompt, dur, asp)
 
-    est_cost = max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S)))
-    await _try_pay_then_do(
-        update,
-        context,
-        user_id,
-        "runway",
-        est_cost,
-        _go,
-        remember_kind="revive_photo",
-        remember_payload={"duration": dur, "aspect": asp, "prompt": prompt},
-    )
+    async def _go_kling():
+        await _run_kling_animate_photo(update, context, img_bytes, prompt, dur, asp)
+
+    async def _go_luma():
+        if not image_url:
+            await msg.reply_text(
+                "Для Luma нужен публичный URL изображения, "
+                "а в кэше его нет. Пришли фото ещё раз."
+            )
+            return
+        await _run_luma_image2video(update, context, image_url, prompt, asp)
+
+    # Прикидываем стоимость — пока очень грубо одинаковую
+    est = {
+        "runway": max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
+        "kling":  max(1.0, KLING_UNIT_COST_USD if 'KLING_UNIT_COST_USD' in globals() else RUNWAY_UNIT_COST_USD),
+        "luma":   max(1.0, LUMA_UNIT_COST_USD if 'LUMA_UNIT_COST_USD' in globals() else RUNWAY_UNIT_COST_USD),
+    }
+
+    if engine == "runway":
+        await _try_pay_then_do(
+            update,
+            context,
+            user_id,
+            "runway",
+            est["runway"],
+            _go_runway,
+            remember_kind="revive_photo",
+            remember_payload={"engine": "runway", "duration": dur, "aspect": asp, "prompt": prompt},
+        )
+        return True
+
+    if engine == "kling":
+        await _try_pay_then_do(
+            update,
+            context,
+            user_id,
+            "kling",
+            est["kling"],
+            _go_kling,
+            remember_kind="revive_photo",
+            remember_payload={"engine": "kling", "duration": dur, "aspect": asp, "prompt": prompt},
+        )
+        return True
+
+    if engine == "luma":
+        await _try_pay_then_do(
+            update,
+            context,
+            user_id,
+            "luma",
+            est["luma"],
+            _go_luma,
+            remember_kind="revive_photo",
+            remember_payload={"engine": "luma", "duration": dur, "aspect": asp, "prompt": prompt},
+        )
+        return True
+
+    # если вдруг прилетело что-то левое
+    await msg.reply_text("Неизвестный движок оживления. Попробуй ещё раз.")
     return True
 
 # ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
+
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
+
+    # action — часть после первого "fun:" или "something:"
     action = data.split(":", 1)[1] if ":" in data else ""
 
     # Помощники: если в проекте объявлены конкретные реализации — вызываем их.
@@ -4195,22 +4660,42 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await fn(update, context, **kwargs)
         return None
 
-    if action == "revive":
-        # Пытаемся дернуть твой реальный пайплайн для оживления фото (если есть)
-        if await _try_call("revive_old_photo_flow", "do_revive_photo"):
-            return
-        # Fallback: инструкция
+    # =====================================================================
+    # 🆕 F2 — обработка pedit:revive  (кнопка под фото "✨ оживить фото")
+    # =====================================================================
+    if data.startswith("pedit:revive"):
         await q.answer("Оживление фото")
+        # Показываем выбор движка (Runway / Kling / Luma)
         await q.edit_message_text(
-            "🪄 *Оживление старого фото*\n"
-            "Пришли/перешли сюда фото и коротко опиши, что нужно оживить "
-            "(мигание глаз, лёгкая улыбка, движение фона и т.п.). "
-            "Я подготовлю анимацию и верну превью/видео.",
-            parse_mode="Markdown",
-            reply_markup=_fun_quick_kb()
+            "Выбери движок для оживления фото:",
+            reply_markup=revive_engine_kb()
         )
         return
 
+    # =====================================================================
+    # 🆕 F3 — выбор движка оживления: revive_engine:runway / kling / luma
+    # =====================================================================
+    if data.startswith("revive_engine:"):
+        await q.answer()
+        engine = data.split(":", 1)[1] if ":" in data else ""
+        # Передаём выбранный движок в пайплайн
+        await revive_old_photo_flow(update, context, engine=engine)
+        return
+
+    # =====================================================================
+    # 🆕 F1 — ОЖИВЛЕНИЕ СТАРОГО ФОТО (кнопка в меню "Развлечения")
+    # =====================================================================
+    if action == "revive":
+        await q.answer("Оживление фото")
+        # Новый корректный пайплайн:
+        # 1) Если нет фото — попросит прислать
+        # 2) Если есть — покажет выбор движка (Runway / Kling / Luma)
+        await revive_old_photo_flow(update, context, engine=None)
+        return
+
+    # =====================================================================
+    # Умные Reels
+    # =====================================================================
     if action == "smartreels":
         if await _try_call("smart_reels_from_video", "video_sense_reels"):
             return
@@ -4225,28 +4710,48 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # =====================================================================
+    # Создать клип (Runway/Luma)
+    # =====================================================================
     if action == "clip":
         if await _try_call("start_runway_flow", "luma_make_clip", "runway_make_clip"):
             return
         await q.answer()
-        await q.edit_message_text("Запусти /diag_video чтобы проверить ключи Luma/Runway.", reply_markup=_fun_quick_kb())
+        await q.edit_message_text(
+            "Запусти /diag_video чтобы проверить ключи Luma/Runway.",
+            reply_markup=_fun_quick_kb()
+        )
         return
 
+    # =====================================================================
+    # Картинки (image generation)
+    # =====================================================================
     if action == "img":
-        # /img или твой кастом
         if await _try_call("cmd_img", "midjourney_flow", "images_make"):
             return
         await q.answer()
-        await q.edit_message_text("Введи /img и тему картинки, или пришли рефы.", reply_markup=_fun_quick_kb())
+        await q.edit_message_text(
+            "Введи /img и тему картинки, или пришли рефы.",
+            reply_markup=_fun_quick_kb()
+        )
         return
 
+    # =====================================================================
+    # Раскадровка
+    # =====================================================================
     if action == "storyboard":
         if await _try_call("start_storyboard", "storyboard_make"):
             return
         await q.answer()
-        await q.edit_message_text("Напиши тему шорта — накидаю структуру и раскадровку.", reply_markup=_fun_quick_kb())
+        await q.edit_message_text(
+            "Напиши тему шорта — накидаю структуру и раскадровку.",
+            reply_markup=_fun_quick_kb()
+        )
         return
 
+    # =====================================================================
+    # Прочие быстрые режимы
+    # =====================================================================
     if action in {"ideas", "quiz", "speech", "free", "back"}:
         await q.answer()
         await q.edit_message_text(
@@ -4255,6 +4760,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Если ничего не подошло — просто ACK
     await q.answer()
 
 # ───────── Роутеры-кнопки режимов (единая точка входа) ─────────
