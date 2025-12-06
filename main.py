@@ -2300,33 +2300,27 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ───────── Photo quick actions ─────────
-def photo_quick_actions_kb():
+def photo_quick_actions_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Оживить фото (Runway)", callback_data="pedit:revive")],
+        [InlineKeyboardButton("✨ Оживить фото", callback_data="pedit:revive")],
         [InlineKeyboardButton("🧼 Удалить фон",  callback_data="pedit:removebg"),
          InlineKeyboardButton("🖼 Заменить фон", callback_data="pedit:replacebg")],
         [InlineKeyboardButton("🧭 Расширить кадр (outpaint)", callback_data="pedit:outpaint"),
          InlineKeyboardButton("📽 Раскадровка", callback_data="pedit:story")],
         [InlineKeyboardButton("🖌 Картинка по описанию (Luma)", callback_data="pedit:lumaimg")],
         [InlineKeyboardButton("👁 Анализ фото", callback_data="pedit:vision")],
-        ])
-    
-        def revive_engine_kb() -> InlineKeyboardMarkup:
+    ])
+
+
+def revive_engine_kb() -> InlineKeyboardMarkup:
     """
     Кнопки выбора движка для оживления фото.
     """
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("Runway", callback_data="revive_engine:runway"),
-        ],
-        [
-            InlineKeyboardButton("Kling",  callback_data="revive_engine:kling"),
-        ],
-        [
-            InlineKeyboardButton("Luma",   callback_data="revive_engine:luma"),
-        ],
+        [InlineKeyboardButton("Runway", callback_data="revive_engine:runway")],
+        [InlineKeyboardButton("Kling",  callback_data="revive_engine:kling")],
+        [InlineKeyboardButton("Luma",   callback_data="revive_engine:luma")],
     ])
-
 _photo_cache = {}  # user_id -> bytes
 
 def _cache_photo(user_id: int, data: bytes):
