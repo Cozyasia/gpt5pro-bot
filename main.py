@@ -2461,13 +2461,34 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
     try:
+        # 🆕 Выбор движка для оживления фото (Runway/Kling/Luma)
+        if data.startswith("revive_engine:"):
+            await q.answer()
+            engine = data.split(":", 1)[1] if ":" in data else ""
+            await revive_old_photo_flow(update, context, engine=engine)
+            return
 
         # Photo edit / анимация по inline-кнопкам pedit:...
         if data.startswith("pedit:"):
             await q.answer()
             action = data.split(":", 1)[1] if ":" in data else ""
-
             user_id = update.effective_user.id
+
+            # Специальный случай: оживление фото → показать выбор движка
+            if action == "revive":
+                if user_id not in _LAST_ANIM_PHOTO:
+                    await q.edit_message_text(
+                        "Не нашёл фото в кэше. Пришли фото ещё раз, пожалуйста."
+                    )
+                    return
+
+                await q.edit_message_text(
+                    "Выбери движок для оживления фото:",
+                    reply_markup=revive_engine_kb(),
+                )
+                return
+
+            # Для остальных pedit:* нужен байтовый образ картинки
             img = _get_cached_photo(user_id)
             if not img:
                 await q.edit_message_text(
@@ -2475,31 +2496,29 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # Оживление фото (Runway image→video)
-            if action == "revive":
-                dur = RUNWAY_DURATION_S
-                asp = RUNWAY_RATIO
-                prompt = ""
-
-                async def _go():
-                    await _run_runway_animate_photo(update, context, img, prompt, dur, asp)
-
-                est_cost = max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S)))
-                await _try_pay_then_do(
-                    update,
-                    context,
-                    user_id,
-                    "runway",
-                    est_cost,
-                    _go,
-                    remember_kind="revive_photo",
-                    remember_payload={"duration": dur, "aspect": asp, "prompt": prompt},
-                )
+            if action == "removebg":
+                await _pedit_removebg(update, context, img)
                 return
 
-            # Остальные pedit:* при необходимости можно развести отдельно
-            # (removebg/replacebg/outpaint/...); пока оставим как есть.
-        
+            if action == "replacebg":
+                await _pedit_replacebg(update, context, img)
+                return
+
+            if action == "outpaint":
+                await _pedit_outpaint(update, context, img)
+                return
+
+            if action == "story":
+                await _pedit_storyboard(update, context, img)
+                return
+
+            if action == "lumaimg":
+                await _start_luma_img(update, context, "")
+                return
+
+            # неизвестный pedit:* — просто выходим
+            return
+
         # TOPUP меню
         if data == "topup":
             await q.answer()
@@ -2571,7 +2590,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             msg = await update.effective_message.reply_text(
                 f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\n"
-                f"После оплаты баланс пополнится автоматически.",
+                "После оплаты баланс пополнится автоматически.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
@@ -2581,7 +2600,14 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             # запустим фоновый поллинг инвойса
             context.application.create_task(
-                _poll_crypto_invoice(context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount)
+                _poll_crypto_invoice(
+                    context,
+                    msg.chat_id,
+                    msg.message_id,
+                    update.effective_user.id,
+                    inv_id,
+                    usd_amount,
+                )
             )
             return
 
@@ -2597,7 +2623,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if status == "paid":
                 await q.edit_message_text(
                     f"✅ Платёж получен: {paid_amount} {asset}.\n"
-                    f"Баланс будет пополнен в течение минуты."
+                    "Баланс будет пополнен в течение минуты."
                 )
             elif status == "active":
                 await q.edit_message_text("Счёт ещё не оплачен.")
@@ -2669,7 +2695,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.edit_message_text(
                     f"На балансе недостаточно средств.\n"
                     f"Требуется ещё ≈ ${need:.2f}.\n\n"
-                    f"Пополните баланс через меню «🧾 Баланс».",
+                    "Пополните баланс через меню «🧾 Баланс».",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
                     ),
@@ -2707,7 +2733,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             amount_rub = _calc_oneoff_price_rub(grp, need_usd or 0.0)
             await q.edit_message_text(
                 f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
-                f"или пополните баланс в «🧾 Баланс».",
+                "или пополните баланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
