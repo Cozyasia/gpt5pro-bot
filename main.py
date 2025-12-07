@@ -64,119 +64,6 @@ def _env_float(name: str, default: float) -> float:
     except Exception:
         return float(default)
 
-BOT_TOKEN        = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
-BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
-PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
-WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
-
-OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
-OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
-
-OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
-OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME", "").strip()
-
-USE_WEBHOOK      = os.environ.get("USE_WEBHOOK", "1").lower() in ("1","true","yes","on")
-WEBHOOK_PATH     = os.environ.get("WEBHOOK_PATH", "/tg").strip()
-WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
-
-BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
-TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
-
-# ВАЖНО: провайдер текста (openai / openrouter и т.п.)
-TEXT_PROVIDER    = os.environ.get("TEXT_PROVIDER", "").strip()
-
-# STT:
-OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
-TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
-
-# TTS:
-OPENAI_TTS_KEY       = os.environ.get("OPENAI_TTS_KEY", "").strip() or OPENAI_API_KEY
-OPENAI_TTS_BASE_URL  = (os.environ.get("OPENAI_TTS_BASE_URL", "").strip() or "https://api.openai.com/v1")
-OPENAI_TTS_MODEL     = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts").strip()
-OPENAI_TTS_VOICE     = os.environ.get("OPENAI_TTS_VOICE", "alloy").strip()
-TTS_MAX_CHARS        = int(os.environ.get("TTS_MAX_CHARS", "1000") or "1000")
-
-# Images:
-OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
-IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
-IMAGES_MODEL        = "gpt-image-1"
-
-# Runway через CometAPI
-
-# Ключ берём из RUNWAY_API_KEY, а если он пустой — используем общий COMETAPI_KEY
-RUNWAY_API_KEY     = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
-
-# Модель Runway, которая идёт через CometAPI
-RUNWAY_MODEL       = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
-
-# Рекомендуемый формат — разрешение, как в новой версии API (см. docs Runway)
-# Можно задать "1280:720", "720:1280", "960:960" и т.п.
-RUNWAY_RATIO       = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
-
-RUNWAY_DURATION_S  = int(os.environ.get("RUNWAY_DURATION_S", "5") or 5)
-RUNWAY_MAX_WAIT_S  = int(os.environ.get("RUNWAY_MAX_WAIT_S", "900") or 900)
-
-# База именно CometAPI (а не api.dev.runwayml.com)
-RUNWAY_BASE_URL          = (os.environ.get("RUNWAY_BASE_URL", "https://api.cometapi.com").strip().rstrip("/"))
-
-# Эндпоинты Runway через CometAPI
-RUNWAY_IMAGE2VIDEO_PATH  = "/runwayml/v1/image_to_video"
-RUNWAY_TEXT2VIDEO_PATH   = "/runwayml/v1/text_to_video"
-RUNWAY_STATUS_PATH       = "/runwayml/v1/tasks/{id}"
-
-# Версия Runway API — обязательно 2024-11-06 (как в их доке)
-RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
-
-# Luma
-LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
-
-# Всегда гарантируем непустой model/aspect, даже если в ENV пустая строка
-_LUMA_MODEL_ENV  = (os.environ.get("LUMA_MODEL") or "").strip()
-LUMA_MODEL       = _LUMA_MODEL_ENV or "ray-2"
-
-_LUMA_ASPECT_ENV = (os.environ.get("LUMA_ASPECT") or "").strip()
-LUMA_ASPECT      = _LUMA_ASPECT_ENV or "16:9"
-
-LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
-
-# База уже содержит /dream-machine/v1 → дальше добавляем /generations
-LUMA_BASE_URL    = (
-    os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1")
-    .strip()
-    .rstrip("/")
-)
-LUMA_CREATE_PATH = "/generations"
-LUMA_STATUS_PATH = "/generations/{id}"
-
-# Luma Images (опционально: если нет — используем OpenAI Images как фолбэк)
-LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
-LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
-
-# Фолбэки Luma
-_fallbacks_raw = ",".join([
-    os.environ.get("LUMA_FALLBACKS", ""),
-    os.environ.get("LUMA_FALLBACK_BASE_URL", ""),
-])
-LUMA_FALLBACKS: list[str] = []
-for u in re.split(r"[;,]\s*", _fallbacks_raw):
-# ───────── ENV ─────────
-
-def _env_float(name: str, default: float) -> float:
-    """
-    Безопасное чтение float из ENV:
-    - поддерживает и '4,99', и '4.99'
-    - при ошибке возвращает default
-    """
-    raw = os.environ.get(name)
-    if not raw:
-        return float(default)
-    raw = raw.replace(",", ".").strip()
-    try:
-        return float(raw)
-    except Exception:
-        return float(default)
-
 
 BOT_TOKEN        = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
 BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
@@ -219,6 +106,92 @@ OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_A
 IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
 IMAGES_MODEL        = "gpt-image-1"
 
+# ───────── Runway через CometAPI ─────────
+
+# Ключ берём из RUNWAY_API_KEY, а если он пустой — используем общий COMETAPI_KEY
+RUNWAY_API_KEY     = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
+
+# Модель Runway, которая идёт через CometAPI
+RUNWAY_MODEL       = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
+
+# Рекомендуемый формат — разрешение, как в новой версии API (см. docs Runway)
+# Можно задать "1280:720", "720:1280", "960:960" и т.п.
+RUNWAY_RATIO       = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
+
+RUNWAY_DURATION_S  = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or 5)
+RUNWAY_MAX_WAIT_S  = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "900").strip() or 900)
+
+# База именно CometAPI (а не api.dev.runwayml.com)
+RUNWAY_BASE_URL          = (os.environ.get("RUNWAY_BASE_URL", "https://api.cometapi.com").strip().rstrip("/"))
+
+# Эндпоинты Runway через CometAPI
+RUNWAY_IMAGE2VIDEO_PATH  = "/runwayml/v1/image_to_video"
+RUNWAY_TEXT2VIDEO_PATH   = "/runwayml/v1/text_to_video"
+RUNWAY_STATUS_PATH       = "/runwayml/v1/tasks/{id}"
+
+# Версия Runway API — обязательно 2024-11-06 (как в их доке)
+RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
+
+# ───────── Luma ─────────
+
+LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
+
+# Всегда гарантируем непустой model/aspect, даже если в ENV пустая строка
+_LUMA_MODEL_ENV  = (os.environ.get("LUMA_MODEL") or "").strip()
+LUMA_MODEL       = _LUMA_MODEL_ENV or "ray-2"
+
+_LUMA_ASPECT_ENV = (os.environ.get("LUMA_ASPECT") or "").strip()
+LUMA_ASPECT      = _LUMA_ASPECT_ENV or "16:9"
+
+LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
+
+# База уже содержит /dream-machine/v1 → дальше добавляем /generations
+LUMA_BASE_URL    = (
+    os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1")
+    .strip()
+    .rstrip("/")
+)
+LUMA_CREATE_PATH = "/generations"
+LUMA_STATUS_PATH = "/generations/{id}"
+
+# Максимальный таймаут ожидания Luma
+LUMA_MAX_WAIT_S  = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
+
+# Luma Images (опционально: если нет — используем OpenAI Images как фолбэк)
+LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
+LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
+
+# Фолбэки Luma
+_fallbacks_raw = ",".join([
+    os.environ.get("LUMA_FALLBACKS", ""),
+    os.environ.get("LUMA_FALLBACK_BASE_URL", ""),
+])
+LUMA_FALLBACKS: list[str] = []
+for u in re.split(r"[;,]\s*", _fallbacks_raw):
+    if not u:
+        continue
+    u = u.strip().rstrip("/")
+    if u and u != LUMA_BASE_URL and u not in LUMA_FALLBACKS:
+        LUMA_FALLBACKS.append(u)
+
+# ───────── Kling (новый видеодвижок через CometAPI) ─────────
+
+KLING_BASE_URL   = os.environ.get("KLING_BASE_URL", "https://api.cometapi.com").strip().rstrip("/")
+KLING_MODEL_NAME = os.environ.get("KLING_MODEL_NAME", "kling-v1-6").strip()
+KLING_MODE       = os.environ.get("KLING_MODE", "std").strip()
+KLING_ASPECT     = os.environ.get("KLING_ASPECT", "9:16").strip()
+KLING_DURATION_S = int((os.environ.get("KLING_DURATION_S") or "5").strip() or 5)
+KLING_MAX_WAIT_S = int((os.environ.get("KLING_MAX_WAIT_S") or "900").strip() or 900)
+KLING_UNIT_COST_USD = float((os.environ.get("KLING_UNIT_COST_USD") or "0.80").replace(",", ".") or "0.80")
+
+# Общий интервал между опросами статуса задач видео
+VIDEO_POLL_DELAY_S = _env_float("VIDEO_POLL_DELAY_S", 6.0)
+
+# ───────── КЭШИ / ГЛОБАЛЬНОЕ СОСТОЯНИЕ ─────────
+
+# Последнее фото пользователя для анимации (оживления)
+# user_id -> {"bytes": b"...", "url": "https://..."}
+_LAST_ANIM_PHOTO: dict[int, dict] = {}
 # ───────── Runway через CometAPI ─────────
 
 # Ключ берём из RUNWAY_API_KEY, а если он пустой — используем общий COMETAPI_KEY
