@@ -3169,6 +3169,8 @@ async def _run_luma_video(
         )
 # ───────── Luma: Ray-2 image→video (оживление фото) ─────────
 
+# ───────── Luma: Ray-2 image→video (оживление фото) ─────────
+
 async def _run_luma_image2video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -3179,9 +3181,10 @@ async def _run_luma_image2video(
     """
     Оживление фото через Luma Ray-2 Image→Video.
 
-    Предполагается:
+    Используем Dream Machine:
     - LUMA_BASE_URL, например: https://api.lumalabs.ai/dream-machine/v1
-    - LUMA_GENERATIONS_PATH = "/generations"
+    - LUMA_CREATE_PATH = "/generations"
+    - LUMA_STATUS_PATH = "/generations/{id}"
     - LUMA_API_KEY — ключ Dream Machine
     - image_url — публичный URL Telegram файла (f.file_path)
     """
@@ -3195,18 +3198,18 @@ async def _run_luma_image2video(
 
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
 
-    # упрощённое отображение аспектов
+    # Аспект
     ar = aspect or LUMA_ASPECT or "16:9"
     prompt_clean = (prompt or "").strip()[:500]
 
-    create_url = f"{LUMA_BASE_URL}{LUMA_GENERATIONS_PATH}"
+    create_url = f"{LUMA_BASE_URL}{LUMA_CREATE_PATH}"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
 
-    # минимальный payload для image→video Dream Machine
+    # Минимальный payload для image→video Dream Machine
     payload = {
         "prompt": prompt_clean or "Animate this portrait.",
         "aspect_ratio": ar,
@@ -3250,7 +3253,7 @@ async def _run_luma_image2video(
 
             await msg.reply_text("⏳ Luma: оживляю фото…")
 
-            status_url = f"{LUMA_BASE_URL}{LUMA_GENERATIONS_PATH}/{gen_id}"
+            status_url = f"{LUMA_BASE_URL}{LUMA_STATUS_PATH.format(id=gen_id)}"
             started = time.time()
 
             while True:
@@ -3308,7 +3311,7 @@ async def _run_luma_image2video(
                     )
                     return
 
-                if time.time() - started > RUNWAY_MAX_WAIT_S:
+                if time.time() - started > LUMA_MAX_WAIT_S:
                     await msg.reply_text("⌛ Luma (image→video): превышено время ожидания.")
                     return
 
@@ -3529,8 +3532,11 @@ async def _run_runway_animate_photo(
     msg = update.effective_message
     chat_id = update.effective_chat.id
 
-    api_key = (os.environ.get("RUNWAY_API_KEY") or RUNWAY_API_KEY or "").strip() or \
-              (os.environ.get("COMETAPI_KEY") or COMETAPI_KEY or "").strip()
+    # Берём ключ сначала из RUNWAY_API_KEY, потом из COMETAPI_KEY
+    api_key = (
+        (os.environ.get("RUNWAY_API_KEY") or RUNWAY_API_KEY or "").strip()
+        or (os.environ.get("COMETAPI_KEY") or COMETAPI_KEY or "").strip()
+    )
 
     if not api_key:
         await msg.reply_text("⚠️ Runway: не настроен API-ключ (RUNWAY_API_KEY/COMETAPI_KEY).")
@@ -3551,8 +3557,7 @@ async def _run_runway_animate_photo(
     ratio = aspect or RUNWAY_RATIO or "9:16"
     prompt_clean = (prompt or "").strip()[:500]
 
-    # Runway через Comet обычно принимает URL, но часть прокси позволяют Base64,
-    # поэтому делаем Base64-кодирование изображения.
+    # Кодируем фото в Base64
     img_b64 = base64.b64encode(img_bytes).decode()
 
     create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
@@ -3562,13 +3567,19 @@ async def _run_runway_animate_photo(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
+        # Важный заголовок версии Runway
+        "X-Runway-Version": RUNWAY_API_VERSION,
     }
 
+    # Ключевой момент:
+    #   Gen3a / Comet в ошибке пишет prompt_image_empty → ждут promptImage.
+    #   Для надёжности кладём и promptImage, и image.
     payload = {
-        "model": RUNWAY_MODEL,
+        "model": RUNWAY_MODEL,          # у тебя: "gen3a_turbo"
         "duration": duration_s,
         "ratio": ratio,
-        "image": img_b64,
+        "promptImage": img_b64,         # <-- главное поле для фото
+        "image": img_b64,               # <-- дубликат для совместимости
         "promptText": prompt_clean or None,
     }
 
@@ -4408,7 +4419,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
             return
 
-        goal = (update.message.caption or "").strip() or None
+        goal = (update.message.caption or "").strip() or Noneбх
         await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
 
         summary = await summarize_long_text(text, query=goal)
@@ -4450,13 +4461,15 @@ async def _run_kling_animate_photo(
 
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
 
+    # Нормализация длительности: Kling понимает только 5 или 10
     try:
-        duration_s = int(duration_s or 5)
+        dur = int(duration_s or KLING_DURATION_S or 5)
     except Exception:
-        duration_s = 5
-    if duration_s not in (5, 10):
-        duration_s = 5
+        dur = KLING_DURATION_S or 5
+    if dur not in (5, 10):
+        dur = 5
 
+    aspect_ratio = aspect or KLING_ASPECT or "9:16"
     prompt_clean = (prompt or "").strip()[:500]
     img_b64 = base64.b64encode(img_bytes).decode()
 
@@ -4470,9 +4483,9 @@ async def _run_kling_animate_photo(
     }
 
     payload = {
-        "model_name": KLING_MODEL_NAME or "kling-v2-master",
-        "mode": KLING_MODE or "pro",
-        "duration": str(duration_s),
+        "model_name": KLING_MODEL_NAME or "kling-v1-6",
+        "mode": KLING_MODE or "std",   # std / pro
+        "duration": str(dur),
         "image": img_b64,
         "prompt": prompt_clean or "Animate this portrait.",
         "cfg_scale": 0.5,
@@ -4498,7 +4511,7 @@ async def _run_kling_animate_photo(
                 js = {}
 
             data = js.get("data") or {}
-            task_id = data.get("task_id")
+            task_id = data.get("task_id") or data.get("id")
             if not task_id:
                 snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
                 await msg.reply_text(
@@ -4539,6 +4552,7 @@ async def _run_kling_animate_photo(
                         )
                         return
 
+                    # Скачиваем и шлём готовое видео
                     vr = await client.get(video_url, timeout=300)
                     try:
                         vr.raise_for_status()
@@ -4566,7 +4580,7 @@ async def _run_kling_animate_photo(
                     )
                     return
 
-                if time.time() - started > RUNWAY_MAX_WAIT_S:
+                if time.time() - started > KLING_MAX_WAIT_S:
                     await msg.reply_text("⌛ Kling (image→video): превышено время ожидания.")
                     return
 
