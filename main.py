@@ -3036,15 +3036,6 @@ def parse_video_opts(text: str) -> tuple[int, str]:
     aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
     return duration, aspect
 
-
-ивление фото через Runway image→video (через CometAPI).
-
-    Ожидаем, что:
-    - RUNWAY_BASE_URL по умолчанию "https://api.cometapi.com"
-    - RUNWAY_IMAGE2VIDEO_PATH = "/runwayml/v1/image_to_video"
-    - RUNWAY_STATUS_PATH      = "/runwayml/v1/tasks/{id}"
-    - ключ берём из RUNWAY_API_KEY или COMETAPI_KEY
-    """
     msg = update.effective_message
     chat_id = update.effective_chat.id
 
