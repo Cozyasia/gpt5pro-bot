@@ -3811,195 +3811,114 @@ async def _run_runway_animate_photo(
     aspect: str,
 ):
     """
-    Оживление фото через Runway image→video (через CometAPI).
-
-    Ожидаем, что:
-    - RUNWAY_BASE_URL           = "https://api.cometapi.com" или "https://api.runwayml.com"
-    - RUNWAY_IMAGE2VIDEO_PATH   = "/runwayml/v1/image_to_video" или "/v1/image_to_video"
-    - RUNWAY_STATUS_PATH        = "/runwayml/v1/tasks/{id}" или "/v1/tasks/{id}"
-    - RUNWAY_MODEL              = "gen3a_turbo"
-    - RUNWAY_API_VERSION        = "2024-11-06"
-    - ключ лежит в COMETAPI_KEY или RUNWAY_API_KEY
+    Оживление фото через Runway image→video через CometAPI.
+    Формат payload адаптирован под требования CometAPI (image, prompt, duration).
     """
     msg = update.effective_message
     chat_id = update.effective_chat.id
 
-    # 1) Ключ: приоритетно COMETAPI_KEY
+    # Берём ключ только для CometAPI
     api_key = (os.environ.get("COMETAPI_KEY") or COMETAPI_KEY or "").strip()
     if not api_key:
-        api_key = (os.environ.get("RUNWAY_API_KEY") or RUNWAY_API_KEY or "").strip()
-
-    if not api_key:
-        await msg.reply_text("⚠️ Runway: не настроен API-ключ (COMETAPI_KEY / RUNWAY_API_KEY).")
+        await msg.reply_text("⚠️ Не настроен COMETAPI_KEY.")
         return
 
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
 
-    # 2) Нормализуем длительность и ratio
+    # Длительность — Runway через Comet принимает duration (5 или 10)
     try:
         duration_s = int(duration_s or RUNWAY_DURATION_S or 5)
     except Exception:
-        duration_s = RUNWAY_DURATION_S or 5
-
-    # Runway через CometAPI фактически принимает только 5 или 10 секунд.
-    # Приводим к ближайшему допустимому значению.
-    if duration_s <= 7:
         duration_s = 5
-    else:
-        duration_s = 10
+
+    duration_s = 5 if duration_s <= 7 else 10
 
     ratio = _runway_aspect_to_ratio(aspect)
-    prompt_clean = (prompt or "").strip()[:512]
+    prompt_clean = (prompt or "").strip()[:500]
 
-    # 3) Base64-код картинки
+    # Готовим base64 как data-url для поля "image"
     img_b64 = base64.b64encode(img_bytes).decode("ascii")
+    image_data_url = f"data:image/jpeg;base64,{img_b64}"
 
-    # Некоторые провайдеры (CometAPI и аналоги) ожидают data-URL,
-    # иначе Runway может вернуть ошибку вида "file is not url or base64".
-    # Поэтому передаём изображение как data:image/jpeg;base64,...
-    prompt_image = f"data:image/jpeg;base64,{img_b64}"
+    # ВАЖНО — payload для CometAPI
+    payload = {
+        "model": RUNWAY_MODEL or "gen3a_turbo",
+        "prompt": prompt_clean,
+        "image": image_data_url,     # НЕ promptImage — иначе ошибка "file is not url or base64"
+        "duration": duration_s,      # НЕ seconds (CometAPI больше его не принимает)
+        "ratio": ratio,
+    }
 
     create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
-    status_tpl = RUNWAY_STATUS_PATH or "/runwayml/v1/tasks/{id}"
+    status_tpl = RUNWAY_STATUS_PATH
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "X-Runway-Version": RUNWAY_API_VERSION,
     }
-
-    # ВАЖНО: CometAPI → Runway ждёт seconds (5 или 10), а не duration
-    payload = {
-        "promptImage": prompt_image,
-        "model": RUNWAY_MODEL or "gen3a_turbo",
-        "seconds": int(duration_s),   # ключ seconds вместо duration
-        "ratio": ratio,
-        "watermark": False,
-    }
-    if prompt_clean:
-        payload["promptText"] = prompt_clean
 
     try:
         async with httpx.AsyncClient(timeout=300) as client:
-            # 1) создаём задачу image→video
+
+            # 1. Создаём задачу
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code not in (200, 201):
                 txt = (r.text or "")[:800]
-                log.warning("Runway image2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    f"⚠️ Runway (image→video) отклонил задачу ({r.status_code}).\n"
-                    f"Ответ сервера:\n`{txt}`",
+                    f"⚠️ Runway/Comet image→video ошибка ({r.status_code}).\n"
+                    f"`{txt}`",
                     parse_mode="Markdown",
                 )
                 return
 
-            try:
-                js = r.json() or {}
-            except Exception:
-                js = {}
-
-            task_id = js.get("id") or js.get("task_id") or (js.get("data") or {}).get("id")
+            js = r.json() or {}
+            task_id = js.get("id") or js.get("task_id")
             if not task_id:
-                snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
-                await msg.reply_text(
-                    "⚠️ Runway (image→video): не удалось получить id задачи.\n"
-                    f"Ответ сервера:\n`{snippet}`",
-                    parse_mode="Markdown",
-                )
+                await msg.reply_text("⚠️ CometAPI не вернул task_id.")
                 return
 
             status_url = f"{RUNWAY_BASE_URL}{status_tpl.format(id=task_id)}"
             started = time.time()
 
+            # 2. Пулим статус
             while True:
                 rs = await client.get(status_url, headers=headers)
-                if rs.status_code != 200:
-                    txt = (rs.text or "")[:800]
-                    log.warning("Runway image2video status error %s: %s", rs.status_code, txt)
-                    await msg.reply_text(
-                        f"⚠️ Runway (image→video): ошибка при получении статуса ({rs.status_code}).\n"
-                        f"Ответ сервера:\n`{txt}`",
-                        parse_mode="Markdown",
-                    )
-                    return
-
-                try:
-                    sjs = rs.json() or {}
-                except Exception:
-                    sjs = {}
-
+                sjs = rs.json() or {}
                 d = sjs.get("data") or sjs
-                status = (
-                    d.get("status")
-                    or d.get("task_status")
-                    or d.get("state")
-                    or ""
-                ).lower()
+
+                status = (d.get("status") or d.get("state") or "").lower()
 
                 if status in ("succeeded", "success", "completed", "done"):
-                    # --- Достаём URL видео ---
+
+                    # Ищем видео
                     video_url = None
-
-                    candidates = [
-                        d.get("result"),
-                        d.get("output"),
-                        d.get("task_result"),
-                        d.get("data"),
-                        d.get("video"),
-                        d.get("videos"),
-                        sjs.get("result"),
-                        sjs.get("output"),
-                    ]
-
-                    def _extract_url(obj):
-                        if isinstance(obj, dict):
-                            for k in ("url", "uri", "video_url", "videoUri", "output_url"):
-                                v = obj.get(k)
-                                if isinstance(v, str) and v.startswith("http"):
-                                    return v
-                        return None
-
-                    for c in candidates:
-                        if isinstance(c, str) and c.startswith("http"):
-                            video_url = c
-                            break
-                        elif isinstance(c, list):
-                            for item in c:
-                                if isinstance(item, str) and item.startswith("http"):
-                                    video_url = item
-                                    break
-                                else:
-                                    video_url = _extract_url(item)
-                                if video_url:
-                                    break
-                        else:
-                            video_url = _extract_url(c)
-                        if video_url:
-                            break
+                    assets = d.get("assets") or {}
+                    if isinstance(assets, dict):
+                        video_url = (
+                            assets.get("video") or
+                            assets.get("url") or
+                            assets.get("file")
+                        )
 
                     if not video_url:
-                        snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
-                        await msg.reply_text(
-                            "⚠️ Runway (image→video): задача завершилась, но URL видео не найден.\n"
-                            f"Ответ сервера:\n`{snippet}`",
-                            parse_mode="Markdown",
-                        )
+                        for key in ("output", "result", "video_url", "video"):
+                            v = d.get(key)
+                            if isinstance(v, str) and v.startswith("http"):
+                                video_url = v
+                                break
+
+                    if not video_url:
+                        await msg.reply_text("⚠️ Видео не найдено в ответе Runway/Comet.")
                         return
 
-                    # --- Скачиваем и отправляем видео ---
+                    # 3. Скачиваем и отправляем
                     vr = await client.get(video_url, timeout=300)
-                    try:
-                        vr.raise_for_status()
-                    except Exception:
-                        await msg.reply_text(
-                            "⚠️ Runway: не удалось скачать готовое видео "
-                            f"({vr.status_code})."
-                        )
-                        return
+                    vr.raise_for_status()
 
                     bio = BytesIO(vr.content)
                     bio.name = "runway_image2video.mp4"
+
                     await context.bot.send_video(
                         chat_id=chat_id,
                         video=bio,
@@ -4007,30 +3926,20 @@ async def _run_runway_animate_photo(
                     )
                     return
 
-                if status in ("failed", "error", "cancelled", "canceled"):
-                    err = (
-                        d.get("error_message")
-                        or d.get("error")
-                        or d.get("task_status_msg")
-                        or str(sjs)[:500]
-                    )
-                    await msg.reply_text(
-                        f"❌ Runway (image→video) завершилась с ошибкой: `{err}`",
-                        parse_mode="Markdown",
-                    )
+                if status in ("failed", "error"):
+                    err = d.get("error") or d.get("error_message") or str(d)[:400]
+                    await msg.reply_text(f"❌ Ошибка Runway/Comet: `{err}`", parse_mode="Markdown")
                     return
 
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await msg.reply_text("⌛ Runway (image→video): превышено время ожидания.")
+                    await msg.reply_text("⌛ Время ожидания Runway/Comet истекло.")
                     return
 
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                await asyncio.sleep(5.0)
 
     except Exception as e:
-        log.exception("Runway image2video exception: %s", e)
-        await msg.reply_text(
-            "❌ Runway: не удалось запустить/получить видео (image→video)."
-        )
+        log.exception("Runway image2video via Comet exception")
+        await msg.reply_text(f"❌ Ошибка вызова Runway/Comet: {e}")
 # ───────── RUNWAY: TEXT → VIDEO ─────────
 
 async def _run_runway_video(
