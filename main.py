@@ -3036,9 +3036,6 @@ def parse_video_opts(text: str) -> tuple[int, str]:
     aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
     return duration, aspect
 
-    msg = update.effective_message
-    chat_id = update.effective_chat.id
-
     # Берём ключ сначала из RUNWAY_API_KEY, потом из COMETAPI_KEY
     api_key = (
         (os.environ.get("RUNWAY_API_KEY") or RUNWAY_API_KEY or "").strip()
