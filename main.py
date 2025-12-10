@@ -3814,9 +3814,9 @@ async def _run_runway_animate_photo(
     Оживление фото через Runway image→video (через CometAPI).
 
     Ожидаем, что:
-    - RUNWAY_BASE_URL           = "https://api.cometapi.com"
-    - RUNWAY_IMAGE2VIDEO_PATH   = "/runwayml/v1/image_to_video"
-    - RUNWAY_STATUS_PATH        = "/runwayml/v1/tasks/{id}"
+    - RUNWAY_BASE_URL           = "https://api.cometapi.com" или "https://api.runwayml.com"
+    - RUNWAY_IMAGE2VIDEO_PATH   = "/runwayml/v1/image_to_video" или "/v1/image_to_video"
+    - RUNWAY_STATUS_PATH        = "/runwayml/v1/tasks/{id}" или "/v1/tasks/{id}"
     - RUNWAY_MODEL              = "gen3a_turbo"
     - RUNWAY_API_VERSION        = "2024-11-06"
     - ключ лежит в COMETAPI_KEY или RUNWAY_API_KEY
@@ -3840,9 +3840,12 @@ async def _run_runway_animate_photo(
         duration_s = int(duration_s or RUNWAY_DURATION_S or 5)
     except Exception:
         duration_s = RUNWAY_DURATION_S or 5
-    if duration_s <= 0:
+
+    # Runway через CometAPI фактически принимает только 5 или 10 секунд.
+    # Приводим к ближайшему допустимому значению.
+    if duration_s <= 7:
         duration_s = 5
-    if duration_s > 10:
+    else:
         duration_s = 10
 
     ratio = _runway_aspect_to_ratio(aspect)
@@ -3866,11 +3869,11 @@ async def _run_runway_animate_photo(
         "X-Runway-Version": RUNWAY_API_VERSION,
     }
 
-    # строго по спецификации: promptImage + model + duration + ratio
+    # ВАЖНО: CometAPI → Runway ждёт seconds (5 или 10), а не duration
     payload = {
         "promptImage": prompt_image,
         "model": RUNWAY_MODEL or "gen3a_turbo",
-        "duration": int(duration_s),
+        "seconds": int(duration_s),   # ключ seconds вместо duration
         "ratio": ratio,
         "watermark": False,
     }
@@ -4028,7 +4031,6 @@ async def _run_runway_animate_photo(
         await msg.reply_text(
             "❌ Runway: не удалось запустить/получить видео (image→video)."
         )
-
 # ───────── RUNWAY: TEXT → VIDEO ─────────
 
 async def _run_runway_video(
