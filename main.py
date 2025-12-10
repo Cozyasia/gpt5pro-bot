@@ -3036,16 +3036,6 @@ def parse_video_opts(text: str) -> tuple[int, str]:
     aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
     return duration, aspect
 
-    # Берём ключ сначала из RUNWAY_API_KEY, потом из COMETAPI_KEY
-    api_key = (
-        (os.environ.get("RUNWAY_API_KEY") or RUNWAY_API_KEY or "").strip()
-        or (os.environ.get("COMETAPI_KEY") or COMETAPI_KEY or "").strip()
-    )
-
-    if not api_key:
-        await msg.reply_text("⚠️ Runway: не настроен API-ключ (RUNWAY_API_KEY/COMETAPI_KEY).")
-        return
-
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
 
     # duration и aspect нормализуем, но не переусложняем
