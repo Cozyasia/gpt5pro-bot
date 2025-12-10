@@ -106,30 +106,41 @@ OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_A
 IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
 IMAGES_MODEL        = "gpt-image-1"
 
-# ───────── Runway через CometAPI ─────────
+# ───────── Runway / CometAPI (унифицированная конфигурация) ─────────
 
-# Ключ берём из RUNWAY_API_KEY, а если он пустой — используем общий COMETAPI_KEY
-RUNWAY_API_KEY     = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
+# API-ключ:
+# 1) Если RUNWAY_API_KEY указан — используем прямой Runway (рекомендуется для image→video)
+# 2) Если нет — используем CometAPI_KEY (совместимость с твоим текущим проектом)
+RUNWAY_API_KEY = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
 
-# Модель Runway, которая идёт через CometAPI
-RUNWAY_MODEL       = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
+# Модель (по умолчанию Gen-3a Turbo)
+RUNWAY_MODEL = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
 
-# Рекомендуемый формат — разрешение, как в новой версии API (см. docs Runway)
-# Можно задать "1280:720", "720:1280", "960:960" и т.п.
-RUNWAY_RATIO       = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
+# Рекомендуемый ratio — указываем в виде "1280:720", "720:1280", "960:960"
+RUNWAY_RATIO = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
 
-RUNWAY_DURATION_S  = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or 5)
-RUNWAY_MAX_WAIT_S  = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "900").strip() or 900)
+# Длительность video default
+RUNWAY_DURATION_S = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or 5)
 
-# База именно CometAPI (а не api.dev.runwayml.com)
-RUNWAY_BASE_URL          = (os.environ.get("RUNWAY_BASE_URL", "https://api.cometapi.com").strip().rstrip("/"))
+# Максимальное ожидание результата
+RUNWAY_MAX_WAIT_S = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "900").strip() or 900)
 
-# Эндпоинты Runway через CometAPI
-RUNWAY_IMAGE2VIDEO_PATH  = "/runwayml/v1/image_to_video"
-RUNWAY_TEXT2VIDEO_PATH   = "/runwayml/v1/text_to_video"
-RUNWAY_STATUS_PATH       = "/runwayml/v1/tasks/{id}"
+# База API:
+# ВАЖНО: Runway image→video корректно работает ТОЛЬКО через официальную базу:
+#   https://api.runwayml.com
+# CometAPI остаётся как fallback (через env), но по умолчанию ставим официальный URL
+RUNWAY_BASE_URL = (
+    os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com")
+        .strip()
+        .rstrip("/")
+)
 
-# Версия Runway API — обязательно 2024-11-06 (как в их доке)
+# Эндпоинты Runway (официальные и совместимые)
+RUNWAY_IMAGE2VIDEO_PATH = "/v1/image_to_video"      # новый корректный endpoint Runway
+RUNWAY_TEXT2VIDEO_PATH  = "/v1/text_to_video"       # универсальный endpoint Runway
+RUNWAY_STATUS_PATH      = "/v1/tasks/{id}"          # единый статусный endpoint Runway
+
+# Версия Runway API (обязательно!)
 RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 
 # ───────── Luma ─────────
@@ -3203,8 +3214,6 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
 
     return "16:9"
 
-
-# ───────── RUNWAY: IMAGE → VIDEO (оживление фото) ─────────
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
@@ -3831,7 +3840,7 @@ async def _run_runway_animate_photo(
         duration_s = int(duration_s or RUNWAY_DURATION_S or 5)
     except Exception:
         duration_s = RUNWAY_DURATION_S or 5
-    if duration_s < 5:
+    if duration_s <= 0:
         duration_s = 5
     if duration_s > 10:
         duration_s = 10
@@ -3841,6 +3850,11 @@ async def _run_runway_animate_photo(
 
     # 3) Base64-код картинки
     img_b64 = base64.b64encode(img_bytes).decode("ascii")
+
+    # Некоторые провайдеры (CometAPI и аналоги) ожидают data-URL,
+    # иначе Runway может вернуть ошибку вида "file is not url or base64".
+    # Поэтому передаём изображение как data:image/jpeg;base64,...
+    prompt_image = f"data:image/jpeg;base64,{img_b64}"
 
     create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
     status_tpl = RUNWAY_STATUS_PATH or "/runwayml/v1/tasks/{id}"
@@ -3854,7 +3868,7 @@ async def _run_runway_animate_photo(
 
     # строго по спецификации: promptImage + model + duration + ratio
     payload = {
-        "promptImage": img_b64,
+        "promptImage": prompt_image,
         "model": RUNWAY_MODEL or "gen3a_turbo",
         "duration": int(duration_s),
         "ratio": ratio,
@@ -3867,7 +3881,7 @@ async def _run_runway_animate_photo(
         async with httpx.AsyncClient(timeout=300) as client:
             # 1) создаём задачу image→video
             r = await client.post(create_url, headers=headers, json=payload)
-            if r.status_code != 200:
+            if r.status_code not in (200, 201):
                 txt = (r.text or "")[:800]
                 log.warning("Runway image2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
@@ -3901,8 +3915,8 @@ async def _run_runway_animate_photo(
                     txt = (rs.text or "")[:800]
                     log.warning("Runway image2video status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        f"⚠️ Runway (image→video) статус-заказ вернул ошибку ({rs.status_code}).\n"
-                        f"`{txt}`",
+                        f"⚠️ Runway (image→video): ошибка при получении статуса ({rs.status_code}).\n"
+                        f"Ответ сервера:\n`{txt}`",
                         parse_mode="Markdown",
                     )
                     return
@@ -3944,9 +3958,16 @@ async def _run_runway_animate_photo(
                         return None
 
                     for c in candidates:
-                        if isinstance(c, (list, tuple)):
+                        if isinstance(c, str) and c.startswith("http"):
+                            video_url = c
+                            break
+                        elif isinstance(c, list):
                             for item in c:
-                                video_url = _extract_url(item)
+                                if isinstance(item, str) and item.startswith("http"):
+                                    video_url = item
+                                    break
+                                else:
+                                    video_url = _extract_url(item)
                                 if video_url:
                                     break
                         else:
@@ -3963,6 +3984,7 @@ async def _run_runway_animate_photo(
                         )
                         return
 
+                    # --- Скачиваем и отправляем видео ---
                     vr = await client.get(video_url, timeout=300)
                     try:
                         vr.raise_for_status()
@@ -4006,7 +4028,6 @@ async def _run_runway_animate_photo(
         await msg.reply_text(
             "❌ Runway: не удалось запустить/получить видео (image→video)."
         )
-
 
 # ───────── RUNWAY: TEXT → VIDEO ─────────
 
