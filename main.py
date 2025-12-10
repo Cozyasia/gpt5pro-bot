@@ -3036,168 +3036,7 @@ def parse_video_opts(text: str) -> tuple[int, str]:
     aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
     return duration, aspect
 
-    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
 
-    # duration и aspect нормализуем, но не переусложняем
-    try:
-        duration_s = int(duration_s or RUNWAY_DURATION_S or 5)
-    except Exception:
-        duration_s = RUNWAY_DURATION_S or 5
-
-    if duration_s <= 0:
-        duration_s = 5
-
-    # ratio в формате "16:9" / "9:16" и т.п.
-    ratio = aspect or RUNWAY_RATIO or "9:16"
-    prompt_clean = (prompt or "").strip()[:500]
-
-    # Кодируем фото в Base64
-    img_b64 = base64.b64encode(img_bytes).decode()
-
-    create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
-    status_tpl = RUNWAY_STATUS_PATH or "/runwayml/v1/tasks/{id}"
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        # Важный заголовок версии Runway
-        "X-Runway-Version": RUNWAY_API_VERSION,
-    }
-
-    # Ключевой момент:
-    #   Gen3a / Comet в ошибке пишет prompt_image_empty → ждут promptImage.
-    #   Для надёжности кладём и promptImage, и image.
-    payload = {
-        "model": RUNWAY_MODEL,          # у тебя: "gen3a_turbo"
-        "duration": duration_s,
-        "ratio": ratio,
-        "promptImage": img_b64,         # <-- главное поле для фото
-        "image": img_b64,               # <-- дубликат для совместимости
-        "promptText": prompt_clean or None,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=300) as client:
-            # 1) создаём задачу
-            r = await client.post(create_url, headers=headers, json=payload)
-            if r.status_code != 200:
-                txt = (r.text or "")[:800]
-                log.warning("Runway image2video create error %s: %s", r.status_code, txt)
-                await msg.reply_text(
-                    f"⚠️ Runway (image→video) отклонил задачу ({r.status_code}).\n"
-                    f"Ответ сервера:\n`{txt}`",
-                    parse_mode="Markdown",
-                )
-                return
-
-            try:
-                js = r.json() or {}
-            except Exception:
-                js = {}
-
-            # Пытаемся вытащить task_id из разных мест
-            data = js.get("data") or {}
-            task_id = (
-                js.get("id")
-                or js.get("task_id")
-                or data.get("id")
-                or data.get("task_id")
-            )
-
-            if not task_id:
-                try:
-                    body_snippet = json.dumps(js, ensure_ascii=False)[:800]
-                except Exception:
-                    body_snippet = (r.text or "")[:800]
-                await msg.reply_text(
-                    "⚠️ Runway (image→video) не вернул ID задачи.\n"
-                    f"Ответ сервера:\n`{body_snippet}`",
-                    parse_mode="Markdown",
-                )
-                return
-
-            await msg.reply_text("⏳ Runway: анимирую фото…")
-
-            status_url = f"{RUNWAY_BASE_URL}{status_tpl.format(id=task_id)}"
-            started = time.time()
-
-            while True:
-                rs = await client.get(status_url, headers=headers)
-                try:
-                    sjs = rs.json() or {}
-                except Exception:
-                    sjs = {}
-
-                # типовая структура: data: { status, output } или task: { status, result }
-                d = sjs.get("data") or sjs.get("task") or {}
-                status = (d.get("status") or d.get("task_status") or "").lower()
-
-                if status in ("completed", "succeeded", "success"):
-                    # пробуем вытащить URL
-                    vid = d.get("output") or d.get("result") or {}
-                    video_url = (
-                        vid.get("url")
-                        or vid.get("video_url")
-                        or d.get("video_url")
-                    )
-                    if not video_url:
-                        snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
-                        await msg.reply_text(
-                            "⚠️ Runway (image→video): задача завершилась, "
-                            "но не найден URL видео.\n"
-                            f"Ответ сервера:\n`{snippet}`",
-                            parse_mode="Markdown",
-                        )
-                        return
-
-                    # скачиваем и шлём mp4
-                    vr = await client.get(video_url, timeout=300)
-                    try:
-                        vr.raise_for_status()
-                    except Exception:
-                        await msg.reply_text(
-                            "⚠️ Runway: не удалось скачать готовое видео "
-                            f"({vr.status_code})."
-                        )
-                        return
-
-                    bio = BytesIO(vr.content)
-                    bio.name = "runway_image2video.mp4"
-                    await context.bot.send_video(
-                        chat_id=chat_id,
-                        video=bio,
-                        supports_streaming=True,
-                    )
-                    return
-
-                if status in ("failed", "error"):
-                    err = (
-                        d.get("error_message")
-                        or d.get("error")
-                        or str(sjs)[:500]
-                    )
-                    await msg.reply_text(
-                        f"❌ Runway (image→video) завершилась с ошибкой: `{err}`",
-                        parse_mode="Markdown",
-                    )
-                    return
-
-                # защита по времени
-                if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await msg.reply_text(
-                        "⌛ Runway (image→video): превышено время ожидания."
-                    )
-                    return
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
-    except Exception as e:
-        log.exception("Runway image2video exception: %s", e)
-        await msg.reply_text(
-            "❌ Runway: не удалось запустить/получить видео (image→video)."
-        )
-        
 async def _run_kling_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -3238,17 +3077,22 @@ async def _run_kling_video(
 
             log.info("Kling create payload: %r", payload)
             r = await client.post(create_url, headers=headers, json=payload)
+            if r.status_code != 200:
+                txt = (r.text or "")[:800]
+                log.warning("Kling create error %s: %s", r.status_code, txt)
+                await msg.reply_text(
+                    f"⚠️ Kling (text→video) отклонил задачу ({r.status_code}).\n"
+                    f"Ответ сервера:\n`{txt}`",
+                    parse_mode="Markdown",
+                )
+                return
 
             try:
                 js = r.json() or {}
             except Exception:
                 js = {}
-            log.info("Kling create response: %r", js)
 
-            data = js.get("data") or {}
-            inner = data.get("data") or {}
-            task_id = data.get("task_id") or inner.get("task_id")
-
+            task_id = js.get("id") or js.get("task_id") or js.get("data", {}).get("task_id")
             if not task_id:
                 await msg.reply_text(
                     "⚠️ Kling: не удалось получить task_id из ответа.\n"
@@ -3263,138 +3107,104 @@ async def _run_kling_video(
             started = time.time()
 
             while True:
-                rs = await client.get(
-                    status_url,
-                    headers={
-                        "Authorization": f"Bearer {COMETAPI_KEY}",
-                        "Accept": "application/json",
-                    },
-                    timeout=60.0,
-                )
+                if time.time() - started > 600:  # 10 минут
+                    await msg.reply_text("⚠️ Kling: превышен лимит ожидания рендера (>10 минут).")
+                    return
+
+                sr = await client.get(status_url, headers=headers)
+                if sr.status_code != 200:
+                    txt = (sr.text or "")[:500]
+                    log.warning("Kling status error %s: %s", sr.status_code, txt)
+                    await msg.reply_text(
+                        f"⚠️ Kling status error ({sr.status_code}).\n"
+                        f"Ответ сервера:\n`{txt}`",
+                        parse_mode="Markdown",
+                    )
+                    return
 
                 try:
-                    sjs = rs.json() or {}
+                    sjs = sr.json() or {}
                 except Exception:
                     sjs = {}
-                sdata = sjs.get("data") or {}
-                inner = sdata.get("data") or {}
 
-                task_status = (
-                    (sdata.get("task_status"))
-                    or (inner.get("task_status"))
-                    or ""
+                status = (sjs.get("status") or sjs.get("state") or "").lower()
+                data = sjs.get("data") or {}
+                video_url = (
+                    data.get("video_url")
+                    or data.get("url")
+                    or sjs.get("video_url")
+                    or sjs.get("url")
                 )
-                status_field = (sdata.get("status") or "").lower()
-                status = (task_status or "").lower() or status_field
 
-                log.info("Kling poll status: %r", sjs)
-
-                if status in (
-                    "succeed",
-                    "success",
-                    "succeeded",
-                    "finished",
-                    "finish",
-                    "done",
-                    "complete",
-                    "completed",
-                ):
-                    # --- ИЩЕМ URL ВИДЕО ---
-                    video_url = (
-                        sdata.get("video_url")
-                        or sdata.get("url")
-                        or (sdata.get("result") or {}).get("video_url")
-                        or (inner.get("result") or {}).get("video_url")
-                    )
-
-                    # Новый кейс: task_result.videos[0].url
-                    if not video_url:
-                        task_result = (
-                            sdata.get("task_result")
-                            or sdata.get("result")
-                            or inner.get("task_result")
-                            or {}
-                        )
-                        videos = task_result.get("videos") or []
-                        if isinstance(videos, list) and videos:
-                            first = videos[0] or {}
-                            video_url = first.get("url") or first.get("video_url")
-
-                        if not video_url and isinstance(task_result.get("video_url"), str):
-                            video_url = task_result["video_url"]
-
-                    if not video_url:
+                if status in ("succeed", "success", "completed") and video_url:
+                    # Качаем готовое видео
+                    vr = await client.get(video_url, timeout=300)
+                    try:
+                        vr.raise_for_status()
+                    except Exception:
                         await msg.reply_text(
-                            "🎞 Kling: задача завершена, но URL видео не найден.\n"
-                            f"`{json.dumps(sdata, ensure_ascii=False)[:800]}`",
-                            parse_mode="Markdown",
+                            "⚠️ Kling: не удалось скачать готовое видео "
+                            f"({vr.status_code})."
                         )
                         return
 
-                    # Скачиваем видео и отправляем в Telegram как файл
-                    try:
-                        # ВАЖНО: при скачивании тоже используем Bearer-токен,
-                        # иначе Comet часто отдаёт ошибку/редирект → падение в fallback.
-                        download_headers = {
-                            "Accept": "application/octet-stream",
-                            "Authorization": f"Bearer {COMETAPI_KEY}",
-                        }
-                        vr = await client.get(video_url, headers=download_headers, timeout=180.0)
-
-                        # Если с токеном что-то не так — пробуем без него
-                        if vr.status_code >= 400:
-                            log.warning("Kling download with auth failed %s, retry without auth", vr.status_code)
-                            vr = await client.get(video_url, timeout=180.0)
-
-                        vr.raise_for_status()
-                        data_bytes = vr.content
-                        if not data_bytes:
-                            raise RuntimeError("empty video data from Kling")
-
-                        bio = BytesIO(data_bytes)
-                        bio.seek(0)
-                        filename = "kling_video.mp4"
-
-                        # Сначала пробуем как видео
-                        try:
-                            await msg.reply_video(
-                                InputFile(bio, filename=filename),
-                                caption="🎞 Kling: видео готово ✅",
-                            )
-                        except TelegramError as te:
-                            # Если Telegram не принял как video — отправим как документ
-                            log.warning("Kling send_video failed, fallback to document: %s", te)
-                            bio.seek(0)
-                            await msg.reply_document(
-                                InputFile(bio, filename=filename),
-                                caption="🎞 Kling: видео готово ✅",
-                            )
-
-                    except Exception as e:
-                        # В крайнем случае всё равно отдаём ссылку
-                        log.exception("Kling video download/send error: %s", e)
-                        await msg.reply_text(
-                            "🎞 Kling: видео готово ✅\n"
-                            "(не удалось отправить файл, ссылка на скачивание ниже)\n"
-                            f"{video_url}"
-                        )
-
+                    bio = BytesIO(vr.content)
+                    bio.name = "kling_text2video.mp4"
+                    await context.bot.send_video(
+                        chat_id=msg.chat_id,
+                        video=bio,
+                        supports_streaming=True,
+                    )
                     return
 
-                if status in ("failed", "fail", "error"):
-                    await msg.reply_text("❌ Kling: задача завершилась с ошибкой.")
+                if status in ("failed", "error"):
+                    err = (
+                        data.get("error_message")
+                        or data.get("error")
+                        or sjs.get("error_message")
+                        or sjs.get("error")
+                        or str(sjs)[:500]
+                    )
+                    await msg.reply_text(
+                        f"❌ Kling завершился с ошибкой: `{err}`",
+                        parse_mode="Markdown",
+                    )
                     return
 
-                if time.time() - started > KLING_MAX_WAIT_S:
-                    await msg.reply_text("⌛ Kling: время ожидания результата истекло.")
-                    return
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                # Иначе — ждём дальше
+                await asyncio.sleep(5.0)
 
     except Exception as e:
-        log.exception("Kling exception: %s", e)
-        await msg.reply_text("❌ Kling: не удалось запустить или получить видео.")
-        
+        log.exception("Kling text2video exception: %s", e)
+        await msg.reply_text("❌ Kling: внутренняя ошибка при рендере видео.")
+
+
+def _normalize_luma_aspect(aspect: str | None) -> str:
+    """
+    Luma Dream Machine поддерживает ограниченный набор аспектов.
+    Приводим пользовательский аспект к допустимому значению.
+    """
+    allowed = {"16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21"}
+    if not aspect:
+        a = (LUMA_ASPECT or "16:9").replace(" ", "")
+    else:
+        a = aspect.replace(" ", "")
+
+    if a in allowed:
+        return a
+
+    # Мягкая коррекция «похожих» форматов
+    mapping = {
+        "4:5": "3:4",
+        "5:4": "4:3",
+    }
+    if a in mapping:
+        return mapping[a]
+
+    return "16:9"
+
+
+# ───────── RUNWAY: IMAGE → VIDEO (оживление фото) ─────────
 # ───────── Покупки/инвойсы ─────────
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
