@@ -3612,35 +3612,34 @@ async def on_text(
 # ───────── Фото / Документы / Голос ─────────
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        if not update.message or not update.message.photo:
+            return
+
         ph = update.message.photo[-1]
         f = await ph.get_file()
-
-        # bytes (для pedit / локальных операций)
         data = await f.download_as_bytearray()
         img = bytes(data)
 
-        # --- СТАРЫЙ КЭШ (как раньше)
+        # --- СТАРЫЙ КЭШ (как раньше) ---
         _cache_photo(update.effective_user.id, img)
 
         # --- НОВЫЙ КЭШ ДЛЯ ОЖИВЛЕНИЯ / LUMA / KLING ---
-        # Сохраняем и bytes, и URL Telegram file API
-        # (URL удобен для провайдеров, которые требуют promptImage=URL)
-        try:
+        # Сохраняем и bytes, и публичный URL Telegram (подходит для Luma/Comet)
+        with contextlib.suppress(Exception):
             _LAST_ANIM_PHOTO[update.effective_user.id] = {
                 "bytes": img,
-                "url": f.file_path,
+                "url": (f.file_path or "").strip(),   # публичный HTTPS-URL Telegram API
             }
-        except Exception:
-            pass
 
         caption = (update.message.caption or "").strip()
         if caption:
             tl = caption.lower()
 
-            # оживление фото → Runway по умолчанию (до введения выбора движка)
-            if any(k in tl for k in ("оживи", "анимиру", "сделай видео", "revive", "animate")):
+            # ── ОЖИВЛЕНИЕ ФОТО (через выбор движка) ──
+            if any(k in tl for k in ("оживи", "оживить", "анимиру", "анимировать", "сделай видео", "revive", "animate")):
                 dur, asp = parse_video_opts(caption)
 
+                # очищаем prompt от триггер-слов
                 prompt = re.sub(
                     r"\b(оживи|оживить|анимируй|анимировать|сделай видео|revive|animate)\b",
                     "",
@@ -3648,40 +3647,41 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     flags=re.I
                 ).strip(" ,.")
 
-                async def _go():
-                    # ВАЖНО: передаём URL, а не bytes
-                    await _run_runway_animate_photo(update, context, f.file_path, prompt, dur, asp)
+                # сохраняем входные параметры в user_data (без глобальных pending)
+                context.user_data["revive_photo"] = {
+                    "duration": int(dur),
+                    "aspect": asp,
+                    "prompt": prompt,
+                }
 
-                await _try_pay_then_do(
-                    update, context, update.effective_user.id, "runway",
-                    max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
-                    _go,
-                    remember_kind="revive_photo",
-                    remember_payload={"duration": dur, "aspect": asp, "prompt": prompt}
+                # показываем выбор движка
+                await update.effective_message.reply_text(
+                    "Выбери движок для оживления фото:",
+                    reply_markup=revive_engine_kb()
                 )
                 return
 
-            # удалить фон
+            # ── удалить фон ──
             if any(k in tl for k in ("удали фон", "removebg", "убрать фон")):
                 await _pedit_removebg(update, context, img)
                 return
 
-            # заменить фон
+            # ── заменить фон ──
             if any(k in tl for k in ("замени фон", "replacebg", "размытый", "blur")):
                 await _pedit_replacebg(update, context, img)
                 return
 
-            # outpaint
+            # ── outpaint ──
             if "outpaint" in tl or "расшир" in tl:
                 await _pedit_outpaint(update, context, img)
                 return
 
-            # раскадровка
+            # ── раскадровка ──
             if "раскадров" in tl or "storyboard" in tl:
                 await _pedit_storyboard(update, context, img)
                 return
 
-            # картинка по описанию (Luma / fallback OpenAI)
+            # ── картинка по описанию (Luma / fallback OpenAI) ──
             if (
                 any(k in tl for k in ("картин", "изображен", "image", "img"))
                 and any(k in tl for k in ("сгенериру", "созда", "сделай"))
@@ -3699,7 +3699,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("on_photo error: %s", e)
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text("Не смог обработать фото.")
-
+            
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.document:
