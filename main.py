@@ -5211,6 +5211,7 @@ def _pick_first_defined(*names):
             return fn
     return None
 
+
 # ───────── Регистрация хендлеров и запуск ─────────
 def build_application() -> "Application":
     if not BOT_TOKEN:
@@ -5218,7 +5219,7 @@ def build_application() -> "Application":
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Команды
+    # ───── Команды ─────
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
@@ -5235,41 +5236,88 @@ def build_application() -> "Application":
     app.add_handler(CommandHandler("voice_on",     cmd_voice_on))
     app.add_handler(CommandHandler("voice_off",    cmd_voice_off))
 
-    # Платежи
+    # ───── Платежи ─────
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
-    # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
+    # >>> PATCH START — Handlers wiring (callbacks / media / text) >>>
 
-    # Данные из мини-приложения (WebApp)
+    # ───── WebApp ─────
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     with contextlib.suppress(Exception):
         if hasattr(filters, "WEB_APP_DATA"):
             app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
-    # 1) Подписка/оплаты
-    app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
+    # ───────────────── CALLBACK QUERY HANDLERS ─────────────────
+    # ВАЖНО: порядок = от узких к широким
 
-    # 2) Режимы/подменю (поддержим и старые, и новые префиксы)
-    app.add_handler(CallbackQueryHandler(on_mode_cb,  pattern=r"^(?:mode:|act:|school:|work:)"))
-    # 3) Быстрые развлечения (любые fun:...)
-    app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
+    # 1) Подписка / оплата
+    app.add_handler(
+        CallbackQueryHandler(
+            on_cb_plans,
+            pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"
+        )
+    )
 
-    # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
-    # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
-    app.add_handler(CallbackQueryHandler(on_cb), group=0)
+    # 2) Режимы / подменю
+    app.add_handler(
+        CallbackQueryHandler(
+            on_mode_cb,
+            pattern=r"^(?:mode:|act:|school:|work:)"
+        )
+    )
 
-    # Голос/аудио — относим к медиагруппе (идёт раньше общего текстового хендлера)
+    # 3) Fun + Photo Edit + Revive (КРИТИЧЕСКИЙ ПАТЧ)
+    app.add_handler(
+        CallbackQueryHandler(
+            on_cb_fun,
+            pattern=(
+                r"^(?:"
+                r"fun:[a-z_]+"
+                r"|pedit:revive"
+                r"|revive_engine:(?:runway|kling|luma)"
+                r")$"
+            )
+        )
+    )
+
+    # 4) Catch-all (ВСЁ ОСТАЛЬНОЕ)
+    app.add_handler(
+        CallbackQueryHandler(on_cb),
+        group=0
+    )
+
+    # ───────────────── MEDIA HANDLERS ─────────────────
+
+    # Голос / аудио
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
         app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn), group=1)
 
-    # Текстовые кнопки/ярлыки (остальные) — ЧИСТО без дублей
+    # Фото
+    photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
+    if photo_fn:
+        app.add_handler(MessageHandler(filters.PHOTO, photo_fn), group=1)
+
+    # Документы
+    doc_fn = _pick_first_defined("handle_doc", "on_document", "handle_document", "doc_handler")
+    if doc_fn:
+        app.add_handler(MessageHandler(filters.Document.ALL, doc_fn), group=1)
+
+    # Видео
+    video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
+    if video_fn:
+        app.add_handler(MessageHandler(filters.VIDEO, video_fn), group=1)
+
+    # GIF / animation
+    gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
+    if gif_fn:
+        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn), group=1)
+
+    # ───────────────── TEXT BUTTONS ─────────────────
     import re
 
-    # Строгие паттерны: одно название = один хендлер (эмодзи допускаем, лишние пробелы — тоже)
     BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
     BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
     BTN_PLANS   = re.compile(r"^\s*(?:⭐\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
@@ -5277,7 +5325,6 @@ def build_application() -> "Application":
     BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Работа\s*$")
     BTN_FUN     = re.compile(r"^\s*(?:🔥\s*)?Развлечения\s*$")
 
-    # Кнопки в приоритетной группе (0), чтобы они срабатывали раньше любых общих обработчиков
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
@@ -5285,37 +5332,29 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(BTN_WORK),    on_btn_work),    group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_FUN),     on_btn_fun),     group=0)
 
-    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
-    app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
+    # ───────────────── CAPABILITIES Q/A ─────────────────
+    app.add_handler(
+        MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa),
+        group=1
+    )
 
-    # Медиа (фото/доки/видео/гиф) — тоже перед общим текстом
-    photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
-    if photo_fn:
-        app.add_handler(MessageHandler(filters.PHOTO, photo_fn), group=1)
-
-    doc_fn = _pick_first_defined("handle_doc", "on_document", "handle_document", "doc_handler")
-    if doc_fn:
-        app.add_handler(MessageHandler(filters.Document.ALL, doc_fn), group=1)
-
-    video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
-    if video_fn:
-        app.add_handler(MessageHandler(filters.VIDEO, video_fn), group=1)
-
-    gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
-    if gif_fn:
-        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn), group=1)
-
-    # >>> PATCH END <<<
-
-    # Общий текст — САМЫЙ последний (ниже всех частных кейсов)
+    # ───────────────── FALLBACK TEXT ─────────────────
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
-        btn_filters = (filters.Regex(BTN_ENGINES) | filters.Regex(BTN_BALANCE) |
-                       filters.Regex(BTN_PLANS)   | filters.Regex(BTN_STUDY)   |
-                       filters.Regex(BTN_WORK)    | filters.Regex(BTN_FUN))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~btn_filters, text_fn), group=2)
+        btn_filters = (
+            filters.Regex(BTN_ENGINES) |
+            filters.Regex(BTN_BALANCE) |
+            filters.Regex(BTN_PLANS)   |
+            filters.Regex(BTN_STUDY)   |
+            filters.Regex(BTN_WORK)    |
+            filters.Regex(BTN_FUN)
+        )
+        app.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND & ~btn_filters, text_fn),
+            group=2
+        )
 
-    # Ошибки
+    # ───────────────── ERRORS ─────────────────
     err_fn = _pick_first_defined("on_error", "handle_error")
     if err_fn:
         app.add_error_handler(err_fn)
@@ -5323,7 +5362,7 @@ def build_application() -> "Application":
     return app
 
 
-# === main() с безопасной инициализацией БД (без изменений по сути) ===
+# ───────── main() ─────────
 def main():
     with contextlib.suppress(Exception):
         db_init()
