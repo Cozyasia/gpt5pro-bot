@@ -3853,6 +3853,34 @@ async def _run_runway_animate_photo(
         "watermark": False,
     }
 
+    # ================== ВОТ ЗДЕСЬ ГЛАВНАЯ ПРАВКА ==================
+    timeout = httpx.Timeout(60.0)
+
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=True   # <-- КРИТИЧНО для Comet / 301 / 302
+    ) as client:
+        r = await client.post(
+            create_url,
+            headers=headers,
+            json=payload
+        )
+    # =============================================================
+
+    if r.status_code >= 400:
+        await msg.reply_text(
+            f"❌ Runway (image→video) ошибка {r.status_code}:\n{r.text[:500]}"
+        )
+        return
+
+    js = r.json()
+    task_id = js.get("id") or js.get("task_id")
+    if not task_id:
+        await msg.reply_text("❌ Runway не вернул task_id.")
+        return
+
+    # дальше — polling статуса (у тебя он уже есть ниже)
+
 # ---------------- helpers ----------------
     def _dicts_bfs(root: object, max_depth: int = 4):
         """Собираем словари в ширину, чтобы найти status/video_url в любом вложении."""
