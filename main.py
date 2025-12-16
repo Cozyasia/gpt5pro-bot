@@ -4015,7 +4015,13 @@ def _pick_video_url(obj):
 
     if isinstance(obj, dict):
         # быстрые ключи
-        for k in ("video_url", "videoUrl", "download_url", "downloadUrl", "output_url", "outputUrl", "url", "uri"):
+        for k in (
+            "video_url", "videoUrl",
+            "download_url", "downloadUrl",
+            "output_url", "outputUrl",
+            "url", "uri",
+            "video", "videoUrl", "videoURL",
+        ):
             v = obj.get(k)
             if isinstance(v, str) and v.strip().startswith("http"):
                 return v.strip()
@@ -4039,11 +4045,28 @@ def _pick_video_url(obj):
                 return u
 
     return None
-    
-# ---------------- main ----------------
+
+
+# ---------------- main (ВЫНЕСЕНО В ASYNC-ФУНКЦИЮ) ----------------
+async def _run_runway_animate_photo_main(
+    *,
+    create_url: str,
+    headers: dict,
+    payload: dict,
+    status_tpl: str,
+    msg,
+    context,
+    chat_id: int,
+):
+    """
+    Основной цикл Runway/Comet image→video.
+    ВАЖНО: этот код должен быть в async def, иначе будет:
+    SyntaxError: 'async with' outside async function
+    """
     try:
-        async with httpx.AsyncClient(timeout=300) as client:
+        async with httpx.AsyncClient(timeout=300, follow_redirects=True) as client:
             r = await client.post(create_url, headers=headers, json=payload)
+
             if r.status_code != 200:
                 txt = (r.text or "")[:1200]
                 log.warning("Runway/Comet image2video create error %s: %s", r.status_code, txt)
@@ -4053,11 +4076,10 @@ def _pick_video_url(obj):
                 )
                 return
 
-            js = {}
             try:
                 js = r.json() or {}
             except Exception:
-                pass
+                js = {}
 
             # Comet обычно возвращает id в js.id или js.data.id или js.data.task.id и т.п.
             task_id = None
@@ -4068,7 +4090,10 @@ def _pick_video_url(obj):
                     break
 
             if not task_id:
-                await msg.reply_text(f"⚠️ Runway: не вернул id задачи.\n`{str(js)[:1200]}`", parse_mode="Markdown")
+                await msg.reply_text(
+                    f"⚠️ Runway: не вернул id задачи.\n`{str(js)[:1200]}`",
+                    parse_mode="Markdown",
+                )
                 return
 
             await msg.reply_text("⏳ Runway: анимирую фото…")
@@ -4078,6 +4103,7 @@ def _pick_video_url(obj):
 
             while True:
                 rs = await client.get(status_url, headers=headers, timeout=60.0)
+
                 if rs.status_code != 200:
                     txt = (rs.text or "")[:1200]
                     log.warning("Runway/Comet status error %s: %s", rs.status_code, txt)
@@ -4087,7 +4113,6 @@ def _pick_video_url(obj):
                     )
                     return
 
-                sjs = {}
                 try:
                     sjs = rs.json() or {}
                 except Exception:
@@ -4113,7 +4138,11 @@ def _pick_video_url(obj):
 
                     bio = BytesIO(vr.content)
                     bio.name = "runway_image2video.mp4"
-                    await context.bot.send_video(chat_id=chat_id, video=bio, supports_streaming=True)
+                    await context.bot.send_video(
+                        chat_id=chat_id,
+                        video=bio,
+                        supports_streaming=True,
+                    )
                     return
 
                 if status in ("failed", "error", "cancelled", "canceled", "rejected"):
@@ -4130,9 +4159,9 @@ def _pick_video_url(obj):
     except Exception as e:
         log.exception("Runway image2video exception: %s", e)
         await msg.reply_text("❌ Runway: ошибка выполнения image→video.")
-                
-# ───────── RUNWAY: TEXT → VIDEO ─────────
 
+
+# ───────── RUNWAY: TEXT → VIDEO ─────────
 async def _run_runway_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
