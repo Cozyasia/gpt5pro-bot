@@ -3825,93 +3825,145 @@ async def _run_runway_animate_photo(
     # --- Runway/Comet: duration только 5 или 10 ---
     # Правило: 7–9 секунд => 10, всё остальное => 5
     try:
-        dur = int(round(float(dur)))
+        dur_i = int(round(float(dur)))
     except Exception:
-        dur = int(RUNWAY_DURATION_S or 5)
+        try:
+            dur_i = int(RUNWAY_DURATION_S or 5)
+        except Exception:
+            dur_i = 5
 
-    dur = 10 if (dur == 10 or 7 <= dur <= 9) else 5
+    dur_i = 10 if (dur_i == 10 or 7 <= dur_i <= 9) else 5
 
     ratio = (aspect or RUNWAY_RATIO or "720:1280").strip()
     prompt_clean = (prompt or "").strip()
 
-    create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
+    create_url = f"{(RUNWAY_BASE_URL or '').strip()}{(RUNWAY_IMAGE2VIDEO_PATH or '/runwayml/v1/image_to_video').strip()}"
     status_tpl = (RUNWAY_STATUS_PATH or "/runwayml/v1/tasks/{id}").strip()
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "X-Runway-Version": RUNWAY_API_VERSION,
+        "X-Runway-Version": (RUNWAY_API_VERSION or "").strip(),
     }
 
     payload = {
         "promptImage": (img_url or "").strip(),   # ВАЖНО: promptImage
         "model": (RUNWAY_MODEL or "gen3a_turbo").strip(),
         "promptText": prompt_clean,
-        "duration": int(dur),                     # ВАЖНО: int 5 или 10
+        "duration": int(dur_i),                   # ВАЖНО: int 5 или 10
         "ratio": ratio,
         "watermark": False,
     }
 
-    # ================== ВОТ ЗДЕСЬ ГЛАВНАЯ ПРАВКА ==================
-    timeout = httpx.Timeout(60.0)
+    timeout = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0)
 
-    async with httpx.AsyncClient(
-        timeout=timeout,
-        follow_redirects=True   # <-- КРИТИЧНО для Comet / 301 / 302
-    ) as client:
-        r = await client.post(
-            create_url,
-            headers=headers,
-            json=payload
-        )
-    # =============================================================
+    try:
+        await msg.reply_text("⏳ Runway: анимирую фото…")
 
-    if r.status_code >= 400:
-        await msg.reply_text(
-            f"❌ Runway (image→video) ошибка {r.status_code}:\n{r.text[:500]}"
-        )
-        return
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            r = await client.post(create_url, headers=headers, json=payload)
+            if r.status_code >= 400:
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(
+                    f"⚠️ Runway/Comet image→video ошибка ({r.status_code}).\n`{txt}`",
+                    parse_mode="Markdown",
+                )
+                return
 
-    js = r.json()
-    task_id = js.get("id") or js.get("task_id")
-    if not task_id:
-        await msg.reply_text("❌ Runway не вернул task_id.")
-        return
+            try:
+                js = r.json() or {}
+            except Exception:
+                js = {}
 
-    # дальше — polling статуса (у тебя он уже есть ниже)
+            task_id = js.get("id") or js.get("task_id") or js.get("taskId")
+            if not task_id:
+                snippet = (json.dumps(js, ensure_ascii=False) if js else (r.text or ""))[:1200]
+                await msg.reply_text(
+                    "⚠️ Runway/Comet не вернул id задачи.\n"
+                    f"Ответ:\n`{snippet}`",
+                    parse_mode="Markdown",
+                )
+                return
 
+            status_url = f"{(RUNWAY_BASE_URL or '').strip()}{status_tpl.format(id=task_id)}"
+            started = time.time()
+
+            while True:
+                rs = await client.get(status_url, headers=headers)
+                raw_text = rs.text or ""
+
+                # Comet иногда отдаёт HTML при 502/504
+                if rs.status_code >= 500 and "<html" in raw_text.lower():
+                    await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    if time.time() - started > RUNWAY_MAX_WAIT_S:
+                        await msg.reply_text("⌛ Runway (image→video): превышено время ожидания.")
+                        return
+                    continue
+
+                try:
+                    sjs = rs.json() or {}
+                except Exception:
+                    sjs = {}
+
+                st = _pick_status(sjs)
+
+                if st in ("completed", "succeeded", "success", "finished", "ready", "done"):
+                    video_url = _pick_video_url(sjs)
+                    if not video_url:
+                        await msg.reply_text("❌ Runway: задача завершилась, но ссылка на видео не найдена.")
+                        return
+
+                    v = await client.get(video_url, timeout=180.0)
+                    v.raise_for_status()
+                    bio = BytesIO(v.content)
+                    bio.name = "runway_image2video.mp4"
+                    await context.bot.send_video(
+                        chat_id=chat_id,
+                        video=bio,
+                        supports_streaming=True,
+                    )
+                    return
+
+                if st in ("failed", "error", "canceled", "cancelled"):
+                    err = _pick_error(sjs) or "unknown error"
+                    if len(err) > 700:
+                        err = err[:700].rstrip() + "…"
+                    await msg.reply_text(f"❌ Runway: задача завершилась с ошибкой:\n`{err}`", parse_mode="Markdown")
+                    return
+
+                if time.time() - started > RUNWAY_MAX_WAIT_S:
+                    await msg.reply_text("⌛ Runway (image→video): превышено время ожидания.")
+                    return
+
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
+    except Exception as e:
+        log.exception("Runway image2video error: %s", e)
+        await msg.reply_text("❌ Runway: не удалось запустить/получить видео.")
 # ---------------- helpers ----------------
-from typing import Any, Optional
-
-def _dicts_bfs(root: Any, max_depth: int = 6) -> list[dict]:
-    """
-    Собираем словари в ширину, чтобы найти status/video_url в любом вложении.
-    max_depth увеличил: у Comet часто data -> data -> output.
-    """
-    out: list[dict] = []
-    q: list[tuple[Any, int]] = [(root, 0)]
-    seen: set[int] = set()
-
+def _dicts_bfs(root: object, max_depth: int = 6):
+    """Собираем словари в ширину, чтобы найти status/video_url в любом вложении."""
+    out = []
+    q = [(root, 0)]
+    seen = set()
     while q:
         node, dpt = q.pop(0)
-        nid = id(node)
-        if nid in seen:
+        if id(node) in seen:
             continue
-        seen.add(nid)
+        seen.add(id(node))
 
         if isinstance(node, dict):
             out.append(node)
             if dpt < max_depth:
                 for v in node.values():
-                    if isinstance(v, (dict, list)):
+                    if isinstance(v, (dict, list, tuple)):
                         q.append((v, dpt + 1))
-        elif isinstance(node, list):
+        elif isinstance(node, (list, tuple)):
             if dpt < max_depth:
                 for v in node:
-                    if isinstance(v, (dict, list)):
+                    if isinstance(v, (dict, list, tuple)):
                         q.append((v, dpt + 1))
-
     return out
 
 
@@ -3926,76 +3978,67 @@ def _pick_status(sjs: dict) -> str:
 
 def _pick_error(sjs: dict) -> str:
     for d in _dicts_bfs(sjs):
-        # строковые ошибки
-        for k in ("error_message", "message", "detail", "task_status_msg", "fail_reason", "failure_reason"):
+        for k in ("error_message", "message", "detail", "task_status_msg"):
             v = d.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
-
-        # error может быть dict
         v = d.get("error")
         if isinstance(v, dict):
             for kk in ("message", "detail", "type"):
                 vv = v.get(kk)
                 if isinstance(vv, str) and vv.strip():
                     return vv.strip()
-
-        # error может быть строкой
-        if isinstance(v, str) and v.strip():
+        elif isinstance(v, str) and v.strip():
             return v.strip()
-
     return ""
 
 
-def _pick_video_url(obj: Any) -> Optional[str]:
+def _pick_video_url(obj):
     """
     Достаёт URL видео из любых форм ответов (Comet/Runway/Luma/etc).
-    Важно: Comet часто отдаёт: data -> data -> output: [ "https://...mp4" ]
+    Часто Comet: data -> data -> output: [ "https://...mp4" ]
     """
     if not obj:
         return None
 
-    # если уже строка
     if isinstance(obj, str):
         s = obj.strip()
         return s if s.startswith("http") else None
 
-    # если список: Comet может вернуть output: [urlstr]
-    if isinstance(obj, list):
+    if isinstance(obj, (list, tuple)):
         for it in obj:
             u = _pick_video_url(it)
             if u:
                 return u
         return None
 
-    # если словарь — пробуем типовые ключи и рекурсивно обходим вложения
     if isinstance(obj, dict):
-        # 1) быстрые ключи
-        for k in ("video_url", "videoUrl", "download_url", "downloadUrl", "output_url", "outputUrl", "url"):
+        # быстрые ключи
+        for k in ("video_url", "videoUrl", "download_url", "downloadUrl", "output_url", "outputUrl", "url", "uri"):
             v = obj.get(k)
             if isinstance(v, str) and v.strip().startswith("http"):
                 return v.strip()
 
-        # 2) Comet/Runway: output может быть list[str]
+        # output / outputs
         for k in ("output", "outputs"):
             u = _pick_video_url(obj.get(k))
             if u:
                 return u
 
-        # 3) часто лежит глубже
-        for k in ("data", "result", "response", "payload"):
+        # типичные контейнеры
+        for k in ("data", "result", "response", "payload", "assets"):
             u = _pick_video_url(obj.get(k))
             if u:
                 return u
 
-        # 4) общий обход всех значений
+        # общий обход
         for v in obj.values():
             u = _pick_video_url(v)
             if u:
                 return u
 
     return None
-
+    
 # ---------------- main ----------------
     try:
         async with httpx.AsyncClient(timeout=300) as client:
