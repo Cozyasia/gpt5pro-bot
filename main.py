@@ -3823,11 +3823,13 @@ async def _run_runway_animate_photo(
         return
 
     # --- Runway/Comet: duration только 5 или 10 ---
+    # Правило: 7–9 секунд => 10, всё остальное => 5
     try:
-        dur = int(dur)
+        dur = int(round(float(dur)))
     except Exception:
         dur = int(RUNWAY_DURATION_S or 5)
-    dur = 10 if dur >= 7 else 5  # жёсткая нормализация для Comet/Runway
+
+    dur = 10 if (dur == 10 or 7 <= dur <= 9) else 5
 
     ratio = (aspect or RUNWAY_RATIO or "720:1280").strip()
     prompt_clean = (prompt or "").strip()
@@ -3846,7 +3848,7 @@ async def _run_runway_animate_photo(
         "promptImage": (img_url or "").strip(),   # ВАЖНО: promptImage
         "model": (RUNWAY_MODEL or "gen3a_turbo").strip(),
         "promptText": prompt_clean,
-        "duration": dur,                          # ВАЖНО: int 5 или 10
+        "duration": int(dur),                     # ВАЖНО: int 5 или 10
         "ratio": ratio,
         "watermark": False,
     }
@@ -3900,38 +3902,62 @@ async def _run_runway_animate_photo(
         return ""
 
     def _pick_video_url(sjs: dict) -> str | None:
-        # 1) прямые поля url/video_url/output_url
-        for d in _dicts_bfs(sjs):
-            for k in ("video_url", "output_url", "url"):
-                v = d.get(k)
-                if isinstance(v, str) and v.startswith("http"):
-                    return v
-
-        # 2) assets/output варианты
-        for d in _dicts_bfs(sjs):
-            assets = d.get("assets") or d.get("output")
-            if isinstance(assets, dict):
-                # частые варианты:
-                v = assets.get("video")
-                if isinstance(v, str) and v.startswith("http"):
-                    return v
-                if isinstance(v, dict):
-                    vv = v.get("url")
-                    if isinstance(vv, str) and vv.startswith("http"):
-                        return vv
-                vv = assets.get("url")
-                if isinstance(vv, str) and vv.startswith("http"):
-                    return vv
-
-                arr = assets.get("assets")
-                if isinstance(arr, list) and arr:
-                    x = arr[0] or {}
-                    if isinstance(x, dict):
-                        uu = x.get("url")
-                        if isinstance(uu, str) and uu.startswith("http"):
-                            return uu
+    def _pick_video_url(obj):
+    """
+    Достаёт URL видео из любых форм ответов (Comet/Runway/Luma/etc).
+    Важно: Comet часто отдаёт: data -> data -> output: [ "https://...mp4" ]
+    """
+    if not obj:
         return None
 
+    # если уже строка
+    if isinstance(obj, str):
+        s = obj.strip()
+        if s.startswith("http"):
+            return s
+        return None
+
+    # если список: Comet может вернуть output: [urlstr]
+    if isinstance(obj, list):
+        for it in obj:
+            if isinstance(it, str) and it.strip().startswith("http"):
+                return it.strip()
+            if isinstance(it, dict):
+                u = _pick_video_url(it)
+                if u:
+                    return u
+        return None
+
+    # если словарь — BFS по всем значениям
+    if isinstance(obj, dict):
+        # 1) быстрые ключи
+        for k in ("video_url", "videoUrl", "download_url", "downloadUrl", "output_url", "outputUrl", "url"):
+            v = obj.get(k)
+            if isinstance(v, str) and v.strip().startswith("http"):
+                return v.strip()
+
+        # 2) Comet/Runway: output может быть list[str]
+        for k in ("output", "outputs"):
+            v = obj.get(k)
+            u = _pick_video_url(v)
+            if u:
+                return u
+
+        # 3) иногда лежит в data/response/result и т.п.
+        for k in ("data", "result", "response", "payload"):
+            v = obj.get(k)
+            u = _pick_video_url(v)
+            if u:
+                return u
+
+        # 4) общий обход всех значений
+        for v in obj.values():
+            u = _pick_video_url(v)
+            if u:
+                return u
+
+    return None
+    
     # ---------------- main ----------------
     try:
         async with httpx.AsyncClient(timeout=300) as client:
@@ -4994,17 +5020,19 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 # ───────── Нормализация duration для Runway/Comet (image_to_video) ─────────
-def _normalize_runway_duration_for_comet(d: int | None) -> int:
+def _normalize_runway_duration_for_comet(seconds: int | float | None) -> int:
     """
-    Comet /runwayml/v1/image_to_video принимает duration строго 5 или 10.
-    Требование: любые 7–9 => 10, всё остальное => 5.
+    Comet/Runway принимает строго 5 или 10 секунд.
+    Требование: 7–9 секунд => 10, всё остальное => 5.
     """
     try:
-        d = int(d or 0)
+        d = int(round(float(seconds or 0)))
     except Exception:
         d = 0
-    return 10 if d >= 7 else 5
 
+    if d == 10 or (7 <= d <= 9):
+        return 10
+    return 5
 
 # ───────── Оживление фото: универсальный пайплайн (Runway / Kling / Luma) ─────────
 
@@ -5023,45 +5051,37 @@ async def revive_old_photo_flow(
     msg = update.effective_message
     user_id = update.effective_user.id
 
-    photo_info = _LAST_ANIM_PHOTO.get(user_id)
-    if not photo_info:
+    photo_info = _LAST_ANIM_PHOTO.get(user_id) or {}
+    img_bytes = photo_info.get("bytes")
+    image_url = (photo_info.get("url") or "").strip()
+
+    if not img_bytes:
         await msg.reply_text(
             "Сначала пришли фото (желательно портрет), "
             "а потом нажми «🪄 Оживить старое фото» или кнопку под фотографией."
         )
         return True
 
-    img_bytes = photo_info.get("bytes")
-    image_url = (photo_info.get("url") or "").strip() or None
-
-    if not img_bytes:
-        await msg.reply_text("Не удалось найти байты фото в кэше, пришли его ещё раз.")
-        return True
-
-    # ── подтягиваем сохранённые параметры из on_photo (caption → parse_video_opts)
-    meta = context.user_data.get("revive_photo") or {}
-    dur = int(meta.get("duration") or RUNWAY_DURATION_S or 5)
-    asp = (meta.get("aspect") or RUNWAY_RATIO or "9:16")
-    prompt = (meta.get("prompt") or "").strip()
-
-    # На всякий случай: минимальный безопасный промпт
-    if not prompt:
-        prompt = "subtle lifelike motion, gentle blink, slight smile, natural camera micro-movement"
+    # параметры (пришли из on_photo через context.user_data["revive_photo"])
+    rp = context.user_data.get("revive_photo") or {}
+    dur = int(rp.get("duration") or RUNWAY_DURATION_S or 5)
+    asp = (rp.get("aspect") or RUNWAY_RATIO or "720:1280")
+    prompt = (rp.get("prompt") or "").strip()
 
     # шаг 1: выбор движка
     if not engine:
         await msg.reply_text("Выбери движок для оживления фото:", reply_markup=revive_engine_kb())
         return True
 
-    engine = (engine or "").strip().lower()
+    engine = engine.lower().strip()
 
-    # ── локальные run-функции (важно: это должно быть ВНУТРИ revive_old_photo_flow)
+    # --- готовим функции, которые будем отдавать в биллинг ---
     async def _go_runway():
-        # Runway/Comet обычно работает по URL (а не bytes)
-        if not image_url:
+        # Runway/Comet требует публичный URL картинки
+        if not image_url or not image_url.startswith("http"):
             await msg.reply_text(
-                "Для Runway нужен публичный URL изображения, а в кэше его нет.\n"
-                "Пришли фото ещё раз (как обычное фото, не как файл)."
+                "Для Runway нужен публичный URL изображения (Telegram file_path). "
+                "Пришли фото ещё раз."
             )
             return
         await _run_runway_animate_photo(update, context, image_url, prompt, dur, asp)
@@ -5070,62 +5090,38 @@ async def revive_old_photo_flow(
         await _run_kling_animate_photo(update, context, img_bytes, prompt, dur, asp)
 
     async def _go_luma():
-        if not image_url:
+        if not image_url or not image_url.startswith("http"):
             await msg.reply_text(
-                "Для Luma нужен публичный URL изображения, а в кэше его нет.\n"
-                "Пришли фото ещё раз (как обычное фото, не как файл)."
+                "Для Luma нужен публичный URL изображения (Telegram file_path). "
+                "Пришли фото ещё раз."
             )
             return
         await _run_luma_image2video(update, context, image_url, prompt, asp)
 
-    # Прикидываем стоимость
-    runway_unit = float(RUNWAY_UNIT_COST_USD or 0.0)
-    kling_unit = float(globals().get("KLING_UNIT_COST_USD") or runway_unit or 0.0)
-    luma_unit  = float(globals().get("LUMA_UNIT_COST_USD")  or runway_unit or 0.0)
-
-    est = {
-        "runway": max(1.0, runway_unit * (dur / max(1, int(RUNWAY_DURATION_S or dur or 5)))) if runway_unit else 1.0,
-        "kling":  max(1.0, kling_unit) if kling_unit else 1.0,
-        "luma":   max(1.0, luma_unit)  if luma_unit  else 1.0,
-    }
+    # стоимость (черновая)
+    est_runway = max(1.0, float(RUNWAY_UNIT_COST_USD or 1.0) * (dur / max(1, int(RUNWAY_DURATION_S or 5))))
+    est_kling  = max(1.0, float(globals().get("KLING_UNIT_COST_USD", RUNWAY_UNIT_COST_USD) or 1.0))
+    est_luma   = max(1.0, float(globals().get("LUMA_UNIT_COST_USD", RUNWAY_UNIT_COST_USD) or 1.0))
 
     if engine == "runway":
-        await msg.reply_text("⏳ Runway: анимирую фото…")
         await _try_pay_then_do(
-            update,
-            context,
-            user_id,
-            "runway",
-            est["runway"],
-            _go_runway,
+            update, context, user_id, "runway", est_runway, _go_runway,
             remember_kind="revive_photo",
             remember_payload={"engine": "runway", "duration": dur, "aspect": asp, "prompt": prompt},
         )
         return True
 
     if engine == "kling":
-        await msg.reply_text("⏳ Kling: анимирую фото…")
         await _try_pay_then_do(
-            update,
-            context,
-            user_id,
-            "kling",
-            est["kling"],
-            _go_kling,
+            update, context, user_id, "kling", est_kling, _go_kling,
             remember_kind="revive_photo",
             remember_payload={"engine": "kling", "duration": dur, "aspect": asp, "prompt": prompt},
         )
         return True
 
     if engine == "luma":
-        await msg.reply_text("⏳ Luma: анимирую фото…")
         await _try_pay_then_do(
-            update,
-            context,
-            user_id,
-            "luma",
-            est["luma"],
-            _go_luma,
+            update, context, user_id, "luma", est_luma, _go_luma,
             remember_kind="revive_photo",
             remember_payload={"engine": "luma", "duration": dur, "aspect": asp, "prompt": prompt},
         )
