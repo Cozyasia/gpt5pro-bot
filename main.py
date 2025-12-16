@@ -4741,6 +4741,19 @@ async def _run_luma_image2video(
 
 # ───────── LUMA: TEXT → VIDEO ─────────
 
+    def _is_luma_ip_error(obj: dict) -> bool:
+    fr = (obj.get("failure_reason") or "")
+    fr2 = (obj.get("error") or "")
+    txt = f"{fr} {fr2}".lower()
+    return ("contains ip" in txt) or ("intellectual property" in txt)
+
+def _short_luma_error(obj: dict) -> str:
+    fr = obj.get("failure_reason") or obj.get("message") or obj.get("error") or ""
+    fr = str(fr).strip()
+    if len(fr) > 400:
+        fr = fr[:400].rstrip() + "…"
+    return fr or "unknown error"
+    
 async def _run_luma_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -4767,13 +4780,18 @@ async def _run_luma_video(
     prompt_clean = (prompt or "").strip()
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            base = await _pick_luma_base(client)
-            create_url = f"{base}{LUMA_CREATE_PATH}"
+        async with httpx.AsyncClient(
+    timeout=60.0,
+    follow_redirects=True
+) as client:
+    base = await _pick_luma_base(client)
+    create_url = f"{base}{LUMA_CREATE_PATH}"
 
-            headers = {
-                "Authorization": f"Bearer {LUMA_API_KEY}",
-                "Accept": "application/json",
+    headers = {
+        "Authorization": f"Bearer {LUMA_API_KEY}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
             }
             payload = {
                 "model": LUMA_MODEL,
@@ -4876,16 +4894,16 @@ async def _run_luma_video(
                     return
 
                 if st in ("failed", "error"):
-                    err = (
-                        js.get("error_message")
-                        or js.get("error")
-                        or str(js)[:500]
-                    )
-                    await update.effective_message.reply_text(
-                        f"❌ Luma (text→video) завершилась с ошибкой: `{err}`",
-                        parse_mode="Markdown",
-                    )
-                    return
+    if _is_luma_ip_error(js):
+        await update.effective_message.reply_text(
+            "❌ Luma отклонила запрос из-за IP (защищённый персонаж/бренд в тексте).\n"
+            "Переформулируй без названий (например: «плюшевый медвежонок…») и попробуй ещё раз."
+        )
+    else:
+        await update.effective_message.reply_text(
+            f"❌ Luma (text→video) ошибка: {_short_luma_error(js)}"
+        )
+    return
 
                 if time.time() - started > LUMA_MAX_WAIT_S:
                     await update.effective_message.reply_text(
