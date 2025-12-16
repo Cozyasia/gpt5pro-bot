@@ -4953,7 +4953,244 @@ def _normalize_runway_duration_for_comet(d: int | None) -> int:
     return 10 if d >= 7 else 5
 
 
+# ───────── Оживление фото: универсальный пайплайн (Runway / Kling / Luma) ─────────
 
+async def revive_old_photo_flow(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    engine: str | None = None,
+):
+    """
+    Универсальный пайплайн оживления фото.
+
+    1) Берём последнее фото из _LAST_ANIM_PHOTO.
+    2) Если движок не выбран — показываем меню выбора (Runway/Kling/Luma).
+    3) Если выбран движок — считаем цену и запускаем соответствующий backend.
+    """
+    msg = update.effective_message
+    user_id = update.effective_user.id
+
+    photo_info = _LAST_ANIM_PHOTO.get(user_id)
+    if not photo_info:
+        await msg.reply_text(
+            "Сначала пришли фото (желательно портрет), "
+            "а потом нажми «🪄 Оживить старое фото» или кнопку под фотографией."
+        )
+        return True
+
+    img_bytes = photo_info.get("bytes")
+    image_url = (photo_info.get("url") or "").strip() or None
+
+    if not img_bytes:
+        await msg.reply_text("Не удалось найти байты фото в кэше, пришли его ещё раз.")
+        return True
+
+    # ── подтягиваем сохранённые параметры из on_photo (caption → parse_video_opts)
+    meta = context.user_data.get("revive_photo") or {}
+    dur = int(meta.get("duration") or RUNWAY_DURATION_S or 5)
+    asp = (meta.get("aspect") or RUNWAY_RATIO or "9:16")
+    prompt = (meta.get("prompt") or "").strip()
+
+    # На всякий случай: минимальный безопасный промпт
+    if not prompt:
+        prompt = "subtle lifelike motion, gentle blink, slight smile, natural camera micro-movement"
+
+    # шаг 1: выбор движка
+    if not engine:
+        await msg.reply_text("Выбери движок для оживления фото:", reply_markup=revive_engine_kb())
+        return True
+
+    engine = (engine or "").strip().lower()
+
+    # ── локальные run-функции (важно: это должно быть ВНУТРИ revive_old_photo_flow)
+    async def _go_runway():
+        # Runway/Comet обычно работает по URL (а не bytes)
+        if not image_url:
+            await msg.reply_text(
+                "Для Runway нужен публичный URL изображения, а в кэше его нет.\n"
+                "Пришли фото ещё раз (как обычное фото, не как файл)."
+            )
+            return
+        await _run_runway_animate_photo(update, context, image_url, prompt, dur, asp)
+
+    async def _go_kling():
+        await _run_kling_animate_photo(update, context, img_bytes, prompt, dur, asp)
+
+    async def _go_luma():
+        if not image_url:
+            await msg.reply_text(
+                "Для Luma нужен публичный URL изображения, а в кэше его нет.\n"
+                "Пришли фото ещё раз (как обычное фото, не как файл)."
+            )
+            return
+        await _run_luma_image2video(update, context, image_url, prompt, asp)
+
+    # Прикидываем стоимость
+    runway_unit = float(RUNWAY_UNIT_COST_USD or 0.0)
+    kling_unit = float(globals().get("KLING_UNIT_COST_USD") or runway_unit or 0.0)
+    luma_unit  = float(globals().get("LUMA_UNIT_COST_USD")  or runway_unit or 0.0)
+
+    est = {
+        "runway": max(1.0, runway_unit * (dur / max(1, int(RUNWAY_DURATION_S or dur or 5)))) if runway_unit else 1.0,
+        "kling":  max(1.0, kling_unit) if kling_unit else 1.0,
+        "luma":   max(1.0, luma_unit)  if luma_unit  else 1.0,
+    }
+
+    if engine == "runway":
+        await msg.reply_text("⏳ Runway: анимирую фото…")
+        await _try_pay_then_do(
+            update,
+            context,
+            user_id,
+            "runway",
+            est["runway"],
+            _go_runway,
+            remember_kind="revive_photo",
+            remember_payload={"engine": "runway", "duration": dur, "aspect": asp, "prompt": prompt},
+        )
+        return True
+
+    if engine == "kling":
+        await msg.reply_text("⏳ Kling: анимирую фото…")
+        await _try_pay_then_do(
+            update,
+            context,
+            user_id,
+            "kling",
+            est["kling"],
+            _go_kling,
+            remember_kind="revive_photo",
+            remember_payload={"engine": "kling", "duration": dur, "aspect": asp, "prompt": prompt},
+        )
+        return True
+
+    if engine == "luma":
+        await msg.reply_text("⏳ Luma: анимирую фото…")
+        await _try_pay_then_do(
+            update,
+            context,
+            user_id,
+            "luma",
+            est["luma"],
+            _go_luma,
+            remember_kind="revive_photo",
+            remember_payload={"engine": "luma", "duration": dur, "aspect": asp, "prompt": prompt},
+        )
+        return True
+
+    await msg.reply_text("Неизвестный движок оживления. Попробуй ещё раз.")
+    return True
+
+
+# ───── Обработчик быстрых действий «Развлечения» (revive + выбор движка) ─────
+
+async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = (q.data or "").strip()
+
+    # action — часть после первого "fun:" или "something:"
+    action = data.split(":", 1)[1] if ":" in data else ""
+
+    async def _try_call(*fn_names, **kwargs):
+        fn = _pick_first_defined(*fn_names)
+        if callable(fn):
+            return await fn(update, context, **kwargs)
+        return None
+
+    # ---------------------------------------------------------------------
+    # Кнопка под фото "✨ оживить фото" (pedit:revive)
+    # ---------------------------------------------------------------------
+    if data.startswith("pedit:revive"):
+        with contextlib.suppress(Exception):
+            await q.answer("Оживление фото")
+        # показываем выбор движка
+        with contextlib.suppress(Exception):
+            await q.edit_message_text("Выбери движок для оживления фото:", reply_markup=revive_engine_kb())
+        return
+
+    # ---------------------------------------------------------------------
+    # Выбор движка оживления: revive_engine:runway / kling / luma
+    # ---------------------------------------------------------------------
+    if data.startswith("revive_engine:"):
+        with contextlib.suppress(Exception):
+            await q.answer()
+        engine = data.split(":", 1)[1].strip().lower() if ":" in data else ""
+
+        # Важно: запускаем пайплайн и НЕ пытаемся edit-ить старое сообщение дальше
+        await revive_old_photo_flow(update, context, engine=engine)
+        return
+
+    # ---------------------------------------------------------------------
+    # Меню "Развлечения" → оживление
+    # ---------------------------------------------------------------------
+    if action == "revive":
+        with contextlib.suppress(Exception):
+            await q.answer("Оживление фото")
+        await revive_old_photo_flow(update, context, engine=None)
+        return
+
+    # ---------------------------------------------------------------------
+    # Остальное — как у тебя было (оставляю структуру)
+    # ---------------------------------------------------------------------
+    if action == "smartreels":
+        if await _try_call("smart_reels_from_video", "video_sense_reels"):
+            return
+        with contextlib.suppress(Exception):
+            await q.answer("Reels из длинного видео")
+        await q.edit_message_text(
+            "🎬 *Reels из длинного видео*\n"
+            "Пришли длинное видео (или ссылку) + тему/ЦА. "
+            "Сделаю умную нарезку (hook → value → CTA), субтитры и таймкоды. "
+            "Скажи формат: 9:16 или 1:1.",
+            parse_mode="Markdown",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
+    if action == "clip":
+        if await _try_call("start_runway_flow", "luma_make_clip", "runway_make_clip"):
+            return
+        with contextlib.suppress(Exception):
+            await q.answer()
+        await q.edit_message_text(
+            "Запусти /diag_video чтобы проверить ключи Luma/Runway.",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
+    if action == "img":
+        if await _try_call("cmd_img", "midjourney_flow", "images_make"):
+            return
+        with contextlib.suppress(Exception):
+            await q.answer()
+        await q.edit_message_text(
+            "Введи /img и тему картинки, или пришли рефы.",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
+    if action == "storyboard":
+        if await _try_call("start_storyboard", "storyboard_make"):
+            return
+        with contextlib.suppress(Exception):
+            await q.answer()
+        await q.edit_message_text(
+            "Напиши тему шорта — накидаю структуру и раскадровку.",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
+    if action in {"ideas", "quiz", "speech", "free", "back"}:
+        with contextlib.suppress(Exception):
+            await q.answer()
+        await q.edit_message_text(
+            "Готов! Напиши задачу или выбери кнопку выше.",
+            reply_markup=_fun_quick_kb()
+        )
+        return
+
+    with contextlib.suppress(Exception):
+        await q.answer()
 
 
 # ───────── Роутеры-кнопки режимов (единая точка входа) ─────────
