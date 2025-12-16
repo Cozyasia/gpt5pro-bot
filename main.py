@@ -4940,6 +4940,19 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(rows)
 
+# ───────── Нормализация duration для Runway/Comet (image_to_video) ─────────
+def _normalize_runway_duration_for_comet(d: int | None) -> int:
+    """
+    Comet /runwayml/v1/image_to_video принимает duration строго 5 или 10.
+    Требование: любые 7–9 => 10, всё остальное => 5.
+    """
+    try:
+        d = int(d or 0)
+    except Exception:
+        d = 0
+    return 10 if d >= 7 else 5
+
+
 async def revive_old_photo_flow(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -4964,7 +4977,7 @@ async def revive_old_photo_flow(
         return True
 
     img_bytes = photo_info.get("bytes")
-    image_url = photo_info.get("url")
+    image_url = (photo_info.get("url") or "").strip()
 
     if not img_bytes:
         await msg.reply_text("Не удалось найти байты фото в кэше, пришли его ещё раз.")
@@ -4975,16 +4988,31 @@ async def revive_old_photo_flow(
         await msg.reply_text("Выбери движок для оживления фото:", reply_markup=revive_engine_kb())
         return True
 
-    engine = engine.lower()
-    dur = RUNWAY_DURATION_S
-    asp = RUNWAY_RATIO
-    prompt = ""  # сюда можно позже подкинуть текст от пользователя
+    engine = (engine or "").lower().strip()
 
-    # шаг 2: функция, которую обернём в биллинг
-async def _go_runway():
-    await _run_runway_animate_photo(update, context, image_url, prompt, dur, asp)
+    # ── берём параметры, которые сохранил on_photo (если есть) ──
+    saved = context.user_data.get("revive_photo") or {}
+    prompt = (saved.get("prompt") or "").strip()
+    asp = (saved.get("aspect") or RUNWAY_RATIO)
+
+    # duration: Runway/Comet принимает только 5/10 — нормализуем
+    dur_in = saved.get("duration")
+    if dur_in is None:
+        dur_in = RUNWAY_DURATION_S
+    dur = _normalize_runway_duration_for_comet(dur_in)
+
+    # шаг 2: функции, которые обернём в биллинг (ВАЖНО: правильные отступы)
+    async def _go_runway():
+        if not image_url:
+            await msg.reply_text(
+                "Для Runway/Comet нужен публичный URL изображения (promptImage). "
+                "Сейчас URL пустой — пришли фото ещё раз."
+            )
+            return
+        await _run_runway_animate_photo(update, context, image_url, prompt, dur, asp)
 
     async def _go_kling():
+        # Kling обычно нормально ест bytes
         await _run_kling_animate_photo(update, context, img_bytes, prompt, dur, asp)
 
     async def _go_luma():
@@ -4994,13 +5022,15 @@ async def _go_runway():
                 "а в кэше его нет. Пришли фото ещё раз."
             )
             return
+        # оставляю твою функцию как есть (ты её так назвал)
         await _run_luma_image2video(update, context, image_url, prompt, asp)
 
-    # Прикидываем стоимость — пока очень грубо одинаковую
+    # Прикидываем стоимость
+    # (Runway — пропорционально dur; Kling/Luma — по их unit cost если есть)
     est = {
-        "runway": max(1.0, RUNWAY_UNIT_COST_USD * (dur / max(1, RUNWAY_DURATION_S))),
-        "kling":  max(1.0, KLING_UNIT_COST_USD if 'KLING_UNIT_COST_USD' in globals() else RUNWAY_UNIT_COST_USD),
-        "luma":   max(1.0, LUMA_UNIT_COST_USD if 'LUMA_UNIT_COST_USD' in globals() else RUNWAY_UNIT_COST_USD),
+        "runway": max(1.0, float(RUNWAY_UNIT_COST_USD or 1.0) * (dur / max(1, _normalize_runway_duration_for_comet(RUNWAY_DURATION_S)))),
+        "kling":  max(1.0, float(KLING_UNIT_COST_USD) if "KLING_UNIT_COST_USD" in globals() and KLING_UNIT_COST_USD else float(RUNWAY_UNIT_COST_USD or 1.0)),
+        "luma":   max(1.0, float(LUMA_UNIT_COST_USD)  if "LUMA_UNIT_COST_USD"  in globals() and LUMA_UNIT_COST_USD  else float(RUNWAY_UNIT_COST_USD or 1.0)),
     }
 
     if engine == "runway":
@@ -5046,8 +5076,8 @@ async def _go_runway():
     await msg.reply_text("Неизвестный движок оживления. Попробуй ещё раз.")
     return True
 
-# ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
 
+# ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
@@ -5067,7 +5097,6 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # =====================================================================
     if data.startswith("pedit:revive"):
         await q.answer("Оживление фото")
-        # Показываем выбор движка (Runway / Kling / Luma)
         await q.edit_message_text(
             "Выбери движок для оживления фото:",
             reply_markup=revive_engine_kb()
@@ -5080,7 +5109,6 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("revive_engine:"):
         await q.answer()
         engine = data.split(":", 1)[1] if ":" in data else ""
-        # Передаём выбранный движок в пайплайн
         await revive_old_photo_flow(update, context, engine=engine)
         return
 
@@ -5089,9 +5117,6 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # =====================================================================
     if action == "revive":
         await q.answer("Оживление фото")
-        # Новый корректный пайплайн:
-        # 1) Если нет фото — попросит прислать
-        # 2) Если есть — покажет выбор движка (Runway / Kling / Luma)
         await revive_old_photo_flow(update, context, engine=None)
         return
 
@@ -5164,6 +5189,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если ничего не подошло — просто ACK
     await q.answer()
+
 
 # ───────── Роутеры-кнопки режимов (единая точка входа) ─────────
 async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
