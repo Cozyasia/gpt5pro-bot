@@ -4814,9 +4814,8 @@ async def _run_luma_video(
 
     try:
         async with httpx.AsyncClient(
-    timeout=60.0,
-    follow_redirects=True
-) as client:
+    timeout = 60.0
+async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
     base = await _pick_luma_base(client)
     create_url = f"{base}{LUMA_CREATE_PATH}"
 
@@ -4825,15 +4824,15 @@ async def _run_luma_video(
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
-            }
-            payload = {
-                "model": LUMA_MODEL,
-                "prompt": prompt_clean,
-                "duration": f"{duration_val}s",
-                "aspect_ratio": aspect_ratio,
-            }
 
-            r = await client.post(create_url, headers=headers, json=payload)
+    payload = {
+        "model": LUMA_MODEL,
+        "prompt": prompt_clean,
+        "duration": f"{duration_val}s",
+        "aspect_ratio": aspect_ratio,
+    }
+
+    r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
                 txt = (r.text or "")[:800]
                 await update.effective_message.reply_text(
