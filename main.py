@@ -4697,26 +4697,23 @@ async def _run_kling_video(
 
 # ───────── LUMA: IMAGE → VIDEO (оживление фото) ─────────
 
-async def _run_luma_image2video(
+async def _run_luma_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    img_url: str,
     prompt: str,
     duration_s: int,
     aspect: str,
 ):
     """
-    Фото → видео в Luma Dream Machine (ray-2).
+    Текст → видео в Luma Dream Machine (ray-2).
     """
-    msg = update.effective_message
-    chat_id = update.effective_chat.id
-
-    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
 
     if not LUMA_API_KEY:
-        await msg.reply_text("⚠️ Luma: не настроен LUMA_API_KEY.")
+        await update.effective_message.reply_text("⚠️ Luma: не настроен LUMA_API_KEY.")
         return
 
+    # duration
     try:
         duration_val = int(duration_s or LUMA_DURATION_S or 5)
     except Exception:
@@ -4725,10 +4722,8 @@ async def _run_luma_image2video(
 
     aspect_ratio = _normalize_luma_aspect(aspect)
     prompt_clean = (prompt or "").strip()
-    img_clean = (img_url or "").strip()
 
-    # Важно: follow_redirects=True, потому что ассеты Luma часто отдают 302/307 на storage
-    timeout = httpx.Timeout(connect=30.0, read=120.0, write=60.0, pool=30.0)
+    timeout = httpx.Timeout(60.0, connect=30.0)
 
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
@@ -4742,24 +4737,17 @@ async def _run_luma_image2video(
             }
 
             payload = {
-                "model": (LUMA_MODEL or "ray-2"),
+                "model": (LUMA_MODEL or "ray-2").strip(),
+                "prompt": prompt_clean,
                 "duration": f"{duration_val}s",
                 "aspect_ratio": aspect_ratio,
-                "keyframes": {
-                    "frame0": {
-                        "type": "image",
-                        "url": img_clean,
-                    }
-                },
             }
-            if prompt_clean:
-                payload["prompt"] = prompt_clean
 
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code >= 400:
-                txt = (r.text or "")[:1200]
-                await msg.reply_text(
-                    "⚠️ Luma (image→video) отклонила задачу.\n"
+                txt = (r.text or "")[:800]
+                await update.effective_message.reply_text(
+                    "⚠️ Luma (text→video) отклонила задачу.\n"
                     f"Код: {r.status_code}\n"
                     f"Ответ:\n`{txt}`",
                     parse_mode="Markdown",
@@ -4773,15 +4761,17 @@ async def _run_luma_image2video(
 
             gen_id = gen.get("id") or gen.get("generation_id")
             if not gen_id:
-                snippet = (json.dumps(gen, ensure_ascii=False) if gen else (r.text or ""))[:1200]
-                await msg.reply_text(
+                snippet = (json.dumps(gen, ensure_ascii=False) if gen else (r.text or ""))[:800]
+                await update.effective_message.reply_text(
                     "⚠️ Luma: не вернула id генерации.\n"
                     f"Ответ сервера:\n`{snippet}`",
                     parse_mode="Markdown",
                 )
                 return
 
+            # ВАЖНО: status_url должен быть СТРОКОЙ, а не .format-методом
             status_url = f"{base}{LUMA_STATUS_PATH}".format(id=gen_id)
+
             started = time.time()
 
             while True:
@@ -4794,51 +4784,78 @@ async def _run_luma_image2video(
                 st = (js.get("state") or js.get("status") or "").lower()
 
                 if st in ("completed", "succeeded", "finished", "ready"):
-                    # Универсально вытаскиваем ссылку через твой _pick_video_url (самый надёжный)
-                    url = _pick_video_url(js) or _pick_video_url(js.get("assets"))
+                    url = None
+                    assets = js.get("assets")
+
+                    def _extract_urls_from_assets(a):
+                        urls = []
+                        if isinstance(a, str):
+                            if a.startswith("http"):
+                                urls.append(a)
+                        elif isinstance(a, dict):
+                            for v in a.values():
+                                urls.extend(_extract_urls_from_assets(v))
+                        elif isinstance(a, (list, tuple)):
+                            for item in a:
+                                urls.extend(_extract_urls_from_assets(item))
+                        return urls
+
+                    candidates = []
+                    if assets is not None:
+                        candidates.extend(_extract_urls_from_assets(assets))
+
+                    for k in ("video", "video_url"):
+                        v = js.get(k)
+                        if isinstance(v, str) and v.startswith("http"):
+                            candidates.append(v)
+
+                    for u in candidates:
+                        if isinstance(u, str) and u.startswith("http"):
+                            url = u
+                            break
 
                     if not url:
                         log.error("Luma: ответ без ссылки на видео: %s", js)
-                        await msg.reply_text("❌ Luma: ответ пришёл без ссылки на видео.")
+                        await update.effective_message.reply_text("❌ Luma: ответ пришёл без ссылки на видео.")
                         return
 
                     try:
-                        v = await client.get(url, timeout=httpx.Timeout(30.0, read=300.0))
+                        v = await client.get(url, timeout=httpx.Timeout(120.0, connect=30.0))
                         v.raise_for_status()
-
                         bio = BytesIO(v.content)
-                        bio.name = "luma_image2video.mp4"
+                        bio.name = "luma_text2video.mp4"
                         await context.bot.send_video(
-                            chat_id=chat_id,
+                            chat_id=update.effective_chat.id,
                             video=bio,
                             supports_streaming=True,
                         )
                     except Exception as e:
                         log.exception("Luma download/send error: %s", e)
-                        await msg.reply_text("⚠️ Luma: ошибка при скачивании/отправке видео.")
+                        await update.effective_message.reply_text("⚠️ Luma: ошибка при скачивании/отправке видео.")
                     return
 
                 if st in ("failed", "error"):
                     if _is_luma_ip_error(js):
-                        await msg.reply_text(
+                        await update.effective_message.reply_text(
                             "❌ Luma отклонила запрос из-за IP (защищённый персонаж/бренд в тексте).\n"
                             "Переформулируй без названий (например: «плюшевый медвежонок…») и попробуй ещё раз."
                         )
                     else:
-                        await msg.reply_text(f"❌ Luma (image→video) ошибка: {_short_luma_error(js)}")
+                        await update.effective_message.reply_text(
+                            f"❌ Luma (text→video) ошибка: {_short_luma_error(js)}"
+                        )
                     return
 
                 if time.time() - started > LUMA_MAX_WAIT_S:
-                    await msg.reply_text("⌛ Luma (image→video): превышено время ожидания.")
+                    await update.effective_message.reply_text("⌛ Luma (text→video): превышено время ожидания.")
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
-        log.exception("Luma image2video error: %s", e)
-        await msg.reply_text("❌ Luma: не удалось запустить/получить видео.")
-                    
-
+        log.exception("Luma error: %s", e)
+        await update.effective_message.reply_text("❌ Luma: не удалось запустить/получить видео.")
+                            
 # ───────── LUMA: TEXT → VIDEO ─────────
 
 def _is_luma_ip_error(obj: dict) -> bool:
