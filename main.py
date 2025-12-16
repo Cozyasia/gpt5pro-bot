@@ -3853,17 +3853,19 @@ async def _run_runway_animate_photo(
         "watermark": False,
     }
 
-    # ---------------- helpers ----------------
+# ---------------- helpers ----------------
     def _dicts_bfs(root: object, max_depth: int = 4):
         """Собираем словари в ширину, чтобы найти status/video_url в любом вложении."""
-        out = []
-        q = [(root, 0)]
-        seen = set()
+        out: list[dict] = []
+        q: list[tuple[object, int]] = [(root, 0)]
+        seen: set[int] = set()
+
         while q:
             node, dpt = q.pop(0)
-            if id(node) in seen:
+            nid = id(node)
+            if nid in seen:
                 continue
-            seen.add(id(node))
+            seen.add(nid)
 
             if isinstance(node, dict):
                 out.append(node)
@@ -3871,11 +3873,13 @@ async def _run_runway_animate_photo(
                     for v in node.values():
                         if isinstance(v, (dict, list)):
                             q.append((v, dpt + 1))
+
             elif isinstance(node, list):
                 if dpt < max_depth:
                     for v in node:
                         if isinstance(v, (dict, list)):
                             q.append((v, dpt + 1))
+
         return out
 
     def _pick_status(sjs: dict) -> str:
@@ -3888,75 +3892,76 @@ async def _run_runway_animate_photo(
 
     def _pick_error(sjs: dict) -> str:
         for d in _dicts_bfs(sjs):
-            for k in ("error_message", "error", "message", "detail", "task_status_msg"):
+            # простые строковые поля
+            for k in ("error_message", "message", "detail", "task_status_msg", "fail_reason", "failReason"):
                 v = d.get(k)
                 if isinstance(v, str) and v.strip():
                     return v.strip()
-            # иногда error — dict
+
+            # иногда error — dict или строка
             v = d.get("error")
+            if isinstance(v, str) and v.strip():
+                return v.strip()
             if isinstance(v, dict):
                 for kk in ("message", "detail", "type"):
                     vv = v.get(kk)
                     if isinstance(vv, str) and vv.strip():
                         return vv.strip()
+
         return ""
 
-    def _pick_video_url(sjs: dict) -> str | None:
-    def _pick_video_url(obj):
-    """
-    Достаёт URL видео из любых форм ответов (Comet/Runway/Luma/etc).
-    Важно: Comet часто отдаёт: data -> data -> output: [ "https://...mp4" ]
-    """
-    if not obj:
-        return None
+    def _pick_video_url(obj) -> str | None:
+        """
+        Достаёт URL видео из любых форм ответов (Comet/Runway/Luma/etc).
+        Важно: Comet часто отдаёт: data -> data -> output: [ "https://...mp4" ]
+        """
+        if obj is None:
+            return None
 
-    # если уже строка
-    if isinstance(obj, str):
-        s = obj.strip()
-        if s.startswith("http"):
-            return s
-        return None
+        # если уже строка
+        if isinstance(obj, str):
+            s = obj.strip()
+            return s if s.startswith("http") else None
 
-    # если список: Comet может вернуть output: [urlstr]
-    if isinstance(obj, list):
-        for it in obj:
-            if isinstance(it, str) and it.strip().startswith("http"):
-                return it.strip()
-            if isinstance(it, dict):
-                u = _pick_video_url(it)
+        # если список: Comet может вернуть output: [urlstr]
+        if isinstance(obj, list):
+            for it in obj:
+                if isinstance(it, str) and it.strip().startswith("http"):
+                    return it.strip()
+                if isinstance(it, (dict, list)):
+                    u = _pick_video_url(it)
+                    if u:
+                        return u
+            return None
+
+        # если словарь — ищем по ключам и рекурсивно по значениям
+        if isinstance(obj, dict):
+            # 1) быстрые ключи
+            for k in (
+                "output", "outputs",
+                "video_url", "videoUrl",
+                "download_url", "downloadUrl",
+                "output_url", "outputUrl",
+                "url", "uri",
+            ):
+                u = _pick_video_url(obj.get(k))
                 if u:
                     return u
+
+            # 2) типичные контейнеры
+            for k in ("data", "result", "response", "payload"):
+                u = _pick_video_url(obj.get(k))
+                if u:
+                    return u
+
+            # 3) общий обход всех значений
+            for v in obj.values():
+                u = _pick_video_url(v)
+                if u:
+                    return u
+
         return None
 
-    # если словарь — BFS по всем значениям
-    if isinstance(obj, dict):
-        # 1) быстрые ключи
-        for k in ("video_url", "videoUrl", "download_url", "downloadUrl", "output_url", "outputUrl", "url"):
-            v = obj.get(k)
-            if isinstance(v, str) and v.strip().startswith("http"):
-                return v.strip()
-
-        # 2) Comet/Runway: output может быть list[str]
-        for k in ("output", "outputs"):
-            v = obj.get(k)
-            u = _pick_video_url(v)
-            if u:
-                return u
-
-        # 3) иногда лежит в data/response/result и т.п.
-        for k in ("data", "result", "response", "payload"):
-            v = obj.get(k)
-            u = _pick_video_url(v)
-            if u:
-                return u
-
-        # 4) общий обход всех значений
-        for v in obj.values():
-            u = _pick_video_url(v)
-            if u:
-                return u
-
-    return None
     
     # ---------------- main ----------------
     try:
