@@ -3809,56 +3809,31 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
 async def _run_runway_animate_photo(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    img_url: str | None,
+    img_url: str,
     prompt: str,
-    duration_s: int,
-    aspect: str,
+    dur: int,
+    aspect: str | None = None,
 ):
-    """
-    Image → video в Runway через CometAPI:
-    POST /runwayml/v1/image_to_video
-    payload: { promptImage: <URL>, model: ..., promptText, duration, ratio, watermark }
-    """
     msg = update.effective_message
     chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
 
-    api_key = (os.environ.get("COMETAPI_KEY") or COMETAPI_KEY or "").strip()
+    api_key = (COMETAPI_KEY or "").strip()
     if not api_key:
-        api_key = (os.environ.get("RUNWAY_API_KEY") or RUNWAY_API_KEY or "").strip()
-
-    if not api_key:
-        await msg.reply_text("⚠️ Runway: не настроен API-ключ (COMETAPI_KEY / RUNWAY_API_KEY).")
+        await msg.reply_text("⚠️ Не задан COMETAPI_KEY.")
         return
 
-    # Если URL не передали — попробуем взять из кэша последнего фото
-    if not img_url:
-        try:
-            img_url = (_LAST_ANIM_PHOTO.get(user_id) or {}).get("url")
-        except Exception:
-            img_url = None
-
-    if not img_url or not isinstance(img_url, str) or not img_url.startswith("http"):
-        await msg.reply_text(
-            "⚠️ Runway: не найден URL изображения (promptImage).\n"
-            "Пришли фото ещё раз и попробуй снова."
-        )
-        return
-
-    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
-
-    # Comet/Runway image_to_video обычно принимает 5 или 10 секунд (по твоей спеки)
+    # --- Runway/Comet: duration только 5 или 10 ---
     try:
-        dur = int(duration_s or RUNWAY_DURATION_S or 5)
+        dur = int(dur)
     except Exception:
         dur = int(RUNWAY_DURATION_S or 5)
-    dur = 10 if dur >= 10 else 5  # жёстко приводим к 5/10, чтобы не ловить 400
+    dur = 10 if dur >= 7 else 5  # жёсткая нормализация для Comet/Runway
 
-    ratio = _runway_aspect_to_ratio(aspect)  # у тебя уже маппинг есть
-    prompt_clean = (prompt or "").strip()[:512]
+    ratio = (aspect or RUNWAY_RATIO or "720:1280").strip()
+    prompt_clean = (prompt or "").strip()
 
     create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
-    status_tpl = RUNWAY_STATUS_PATH or "/runwayml/v1/tasks/{id}"
+    status_tpl = (RUNWAY_STATUS_PATH or "/runwayml/v1/tasks/{id}").strip()
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -3868,23 +3843,104 @@ async def _run_runway_animate_photo(
     }
 
     payload = {
-        "promptImage": img_url,                 # ВАЖНО: именно promptImage
-        "model": RUNWAY_MODEL or "gen3a_turbo",
+        "promptImage": (img_url or "").strip(),   # ВАЖНО: promptImage
+        "model": (RUNWAY_MODEL or "gen3a_turbo").strip(),
         "promptText": prompt_clean,
-        "duration": dur,
+        "duration": dur,                          # ВАЖНО: int 5 или 10
         "ratio": ratio,
         "watermark": False,
     }
 
+    # ---------------- helpers ----------------
+    def _dicts_bfs(root: object, max_depth: int = 4):
+        """Собираем словари в ширину, чтобы найти status/video_url в любом вложении."""
+        out = []
+        q = [(root, 0)]
+        seen = set()
+        while q:
+            node, dpt = q.pop(0)
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
+
+            if isinstance(node, dict):
+                out.append(node)
+                if dpt < max_depth:
+                    for v in node.values():
+                        if isinstance(v, (dict, list)):
+                            q.append((v, dpt + 1))
+            elif isinstance(node, list):
+                if dpt < max_depth:
+                    for v in node:
+                        if isinstance(v, (dict, list)):
+                            q.append((v, dpt + 1))
+        return out
+
+    def _pick_status(sjs: dict) -> str:
+        for d in _dicts_bfs(sjs):
+            for k in ("status", "state", "task_status", "taskStatus", "job_status", "jobStatus"):
+                v = d.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip().lower()
+        return ""
+
+    def _pick_error(sjs: dict) -> str:
+        for d in _dicts_bfs(sjs):
+            for k in ("error_message", "error", "message", "detail", "task_status_msg"):
+                v = d.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            # иногда error — dict
+            v = d.get("error")
+            if isinstance(v, dict):
+                for kk in ("message", "detail", "type"):
+                    vv = v.get(kk)
+                    if isinstance(vv, str) and vv.strip():
+                        return vv.strip()
+        return ""
+
+    def _pick_video_url(sjs: dict) -> str | None:
+        # 1) прямые поля url/video_url/output_url
+        for d in _dicts_bfs(sjs):
+            for k in ("video_url", "output_url", "url"):
+                v = d.get(k)
+                if isinstance(v, str) and v.startswith("http"):
+                    return v
+
+        # 2) assets/output варианты
+        for d in _dicts_bfs(sjs):
+            assets = d.get("assets") or d.get("output")
+            if isinstance(assets, dict):
+                # частые варианты:
+                v = assets.get("video")
+                if isinstance(v, str) and v.startswith("http"):
+                    return v
+                if isinstance(v, dict):
+                    vv = v.get("url")
+                    if isinstance(vv, str) and vv.startswith("http"):
+                        return vv
+                vv = assets.get("url")
+                if isinstance(vv, str) and vv.startswith("http"):
+                    return vv
+
+                arr = assets.get("assets")
+                if isinstance(arr, list) and arr:
+                    x = arr[0] or {}
+                    if isinstance(x, dict):
+                        uu = x.get("url")
+                        if isinstance(uu, str) and uu.startswith("http"):
+                            return uu
+        return None
+
+    # ---------------- main ----------------
     try:
         async with httpx.AsyncClient(timeout=300) as client:
             r = await client.post(create_url, headers=headers, json=payload)
             if r.status_code != 200:
-                txt = (r.text or "")[:800]
+                txt = (r.text or "")[:1200]
                 log.warning("Runway/Comet image2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    "⚠️ Runway/Comet image→video ошибка "
-                    f"({r.status_code}).\nОтвет:\n`{txt}`",
+                    f"⚠️ Runway/Comet image→video ошибка ({r.status_code}).\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return
@@ -3895,9 +3951,16 @@ async def _run_runway_animate_photo(
             except Exception:
                 pass
 
-            task_id = js.get("id") or js.get("task_id")
+            # Comet обычно возвращает id в js.id или js.data.id или js.data.task.id и т.п.
+            task_id = None
+            for d in _dicts_bfs(js):
+                v = d.get("id") or d.get("task_id") or d.get("taskId")
+                if isinstance(v, str) and v.strip():
+                    task_id = v.strip()
+                    break
+
             if not task_id:
-                await msg.reply_text(f"⚠️ Runway: не вернул id задачи.\n`{str(js)[:800]}`", parse_mode="Markdown")
+                await msg.reply_text(f"⚠️ Runway: не вернул id задачи.\n`{str(js)[:1200]}`", parse_mode="Markdown")
                 return
 
             await msg.reply_text("⏳ Runway: анимирую фото…")
@@ -3907,40 +3970,30 @@ async def _run_runway_animate_photo(
 
             while True:
                 rs = await client.get(status_url, headers=headers, timeout=60.0)
+                if rs.status_code != 200:
+                    txt = (rs.text or "")[:1200]
+                    log.warning("Runway/Comet status error %s: %s", rs.status_code, txt)
+                    await msg.reply_text(
+                        f"⚠️ Runway: ошибка статуса ({rs.status_code}).\n`{txt}`",
+                        parse_mode="Markdown",
+                    )
+                    return
+
                 sjs = {}
                 try:
                     sjs = rs.json() or {}
                 except Exception:
-                    pass
+                    sjs = {}
 
-                d = sjs.get("data") or sjs  # на всякий случай
-                status = (d.get("status") or d.get("state") or "").lower()
+                status = _pick_status(sjs)
 
-                if status in ("succeeded", "completed", "finished", "ready"):
-                    # пробуем вытащить ссылку на видео из разных форматов ответа
-                    video_url = None
-                    assets = d.get("assets") or d.get("output") or {}
-                    if isinstance(assets, dict):
-                        # частые варианты
-                        video_url = (
-                            assets.get("video")
-                            or (assets.get("video", {}) or {}).get("url")
-                            or assets.get("url")
+                if status in ("succeeded", "success", "completed", "finished", "ready", "done"):
+                    video_url = _pick_video_url(sjs)
+                    if not video_url:
+                        await msg.reply_text(
+                            f"⚠️ Runway: задача завершилась, но не найден URL видео.\n`{str(sjs)[:1200]}`",
+                            parse_mode="Markdown",
                         )
-                        if not video_url:
-                            # иногда assets: { "assets":[{"url":...}] }
-                            arr = assets.get("assets")
-                            if isinstance(arr, list) and arr:
-                                video_url = (arr[0] or {}).get("url")
-                    if not video_url:
-                        for k in ("video_url", "output_url", "url"):
-                            v = d.get(k)
-                            if isinstance(v, str) and v.startswith("http"):
-                                video_url = v
-                                break
-
-                    if not video_url:
-                        await msg.reply_text(f"⚠️ Runway: готово, но не найден URL видео.\n`{str(sjs)[:800]}`", parse_mode="Markdown")
                         return
 
                     vr = await client.get(video_url, timeout=300)
@@ -3955,8 +4008,8 @@ async def _run_runway_animate_photo(
                     await context.bot.send_video(chat_id=chat_id, video=bio, supports_streaming=True)
                     return
 
-                if status in ("failed", "error", "cancelled", "canceled"):
-                    err = d.get("error_message") or d.get("error") or d.get("task_status_msg") or str(sjs)[:500]
+                if status in ("failed", "error", "cancelled", "canceled", "rejected"):
+                    err = _pick_error(sjs) or str(sjs)[:500]
                     await msg.reply_text(f"❌ Runway (image→video) ошибка: `{err}`", parse_mode="Markdown")
                     return
 
@@ -3968,7 +4021,7 @@ async def _run_runway_animate_photo(
 
     except Exception as e:
         log.exception("Runway image2video exception: %s", e)
-        await msg.reply_text("❌ Runway: не удалось запустить/получить видео (image→video).")
+        await msg.reply_text("❌ Runway: ошибка выполнения image→video.")
                 
 # ───────── RUNWAY: TEXT → VIDEO ─────────
 
