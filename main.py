@@ -120,10 +120,10 @@ RUNWAY_MODEL = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
 RUNWAY_RATIO = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
 
 # Длительность video default
-RUNWAY_DURATION_S = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or 5)
+RUNWAY_DURATION_S = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or "5")
 
-# Максимальное ожидание результата
-RUNWAY_MAX_WAIT_S = int(os.environ.get("RUNWAY_MAX_WAIT_S", "1200"))
+# Максимальное ожидание результата (сек)
+RUNWAY_MAX_WAIT_S = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or "1200")
 
 # База API:
 # ВАЖНО: Runway image→video корректно работает ТОЛЬКО через официальную базу:
@@ -3810,59 +3810,68 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
 async def _run_runway_animate_photo(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    img_url: str,
-    prompt: str,
-    dur: int,
-    aspect: str | None = None,
+    image_url: str,
+    prompt: str = "",
+    duration_s: int = 5,
+    aspect: str = "16:9",
 ):
-    msg = update.effective_message
+    """
+    Image -> Video через CometAPI (runwayml wrapper).
+    Делает create -> poll status -> download mp4 -> send_video
+    + уведомление, если считает > 3 минут.
+    """
     chat_id = update.effective_chat.id
+    msg = update.effective_message
 
-    api_key = (COMETAPI_KEY or "").strip()
+    await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
+
+    # Берём ключ: приоритет COMETAPI_KEY, иначе RUNWAY_API_KEY
+    api_key = (COMETAPI_KEY or RUNWAY_API_KEY or "").strip()
     if not api_key:
-        await msg.reply_text("⚠️ Не задан COMETAPI_KEY.")
+        await msg.reply_text("⚠️ Runway/Comet: не настроен ключ (COMETAPI_KEY или RUNWAY_API_KEY).")
         return
 
-    # --- Runway/Comet: duration только 5 или 10 ---
-    # Правило: 7–9 секунд => 10, всё остальное => 5
+    # Нормализуем duration
     try:
-        dur = int(round(float(dur)))
+        duration_val = int(duration_s or RUNWAY_DURATION_S or 5)
     except Exception:
-        dur = int(RUNWAY_DURATION_S or 5)
+        duration_val = RUNWAY_DURATION_S or 5
+    duration_val = max(3, min(20, duration_val))
 
-    dur = 10 if (dur == 10 or 7 <= dur <= 9) else 5
-
-    ratio = (aspect or RUNWAY_RATIO or "720:1280").strip()
+    ratio = _runway_aspect_to_ratio(aspect)  # у тебя уже есть эта функция/маппинг
     prompt_clean = (prompt or "").strip()
 
-    create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
+    # Paths (Comet)
+    create_path = (RUNWAY_IMAGE2VIDEO_PATH or "/runwayml/v1/image_to_video").strip()
     status_tpl = (RUNWAY_STATUS_PATH or "/runwayml/v1/tasks/{id}").strip()
+    create_url = f"{RUNWAY_BASE_URL}{create_path}"
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
         "Accept": "application/json",
-        "X-Runway-Version": RUNWAY_API_VERSION,
+        "Content-Type": "application/json",
     }
 
     payload = {
-        "promptImage": (img_url or "").strip(),   # ВАЖНО: promptImage
-        "model": (RUNWAY_MODEL or "gen3a_turbo").strip(),
+        "model": (RUNWAY_MODEL or "gen3a_turbo"),
+        "promptImage": image_url,
         "promptText": prompt_clean,
-        "duration": int(dur),                    # ВАЖНО: int 5 или 10
+        "duration": duration_val,
         "ratio": ratio,
         "watermark": False,
     }
 
     try:
-        async with httpx.AsyncClient(timeout=300, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
             r = await client.post(create_url, headers=headers, json=payload)
 
-            if r.status_code != 200:
+            if r.status_code >= 400:
                 txt = (r.text or "")[:1200]
                 log.warning("Runway/Comet image2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    f"⚠️ Runway/Comet image→video ошибка ({r.status_code}).\n`{txt}`",
+                    "⚠️ Runway/Comet image→video отклонил задачу.\n"
+                    f"Код: {r.status_code}\n"
+                    f"Ответ:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return
@@ -3872,7 +3881,7 @@ async def _run_runway_animate_photo(
             except Exception:
                 js = {}
 
-            # Comet обычно возвращает id в js.id или js.data.id или js.data.task.id и т.п.
+            # Comet: id может лежать глубоко
             task_id = None
             for d in _dicts_bfs(js):
                 v = d.get("id") or d.get("task_id") or d.get("taskId")
@@ -3882,7 +3891,7 @@ async def _run_runway_animate_photo(
 
             if not task_id:
                 await msg.reply_text(
-                    f"⚠️ Runway: не вернул id задачи.\n`{str(js)[:1200]}`",
+                    f"⚠️ Runway/Comet: не вернул id задачи.\n`{str(js)[:1200]}`",
                     parse_mode="Markdown",
                 )
                 return
@@ -3896,11 +3905,13 @@ async def _run_runway_animate_photo(
             while True:
                 rs = await client.get(status_url, headers=headers, timeout=60.0)
 
-                if rs.status_code != 200:
+                if rs.status_code >= 400:
                     txt = (rs.text or "")[:1200]
                     log.warning("Runway/Comet status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        f"⚠️ Runway: ошибка статуса ({rs.status_code}).\n`{txt}`",
+                        "⚠️ Runway: ошибка статуса.\n"
+                        f"Код: {rs.status_code}\n"
+                        f"Ответ:\n`{txt}`",
                         parse_mode="Markdown",
                     )
                     return
@@ -3912,7 +3923,7 @@ async def _run_runway_animate_photo(
 
                 status = _pick_status(sjs)
 
-                # --- УВЕДОМЛЕНИЕ ПРИ ДОЛГОМ ОЖИДАНИИ ---
+                # Уведомление при долгом ожидании (1 раз)
                 elapsed = time.time() - started
                 if elapsed > 180 and not notified_long_wait:
                     notified_long_wait = True
@@ -3921,7 +3932,6 @@ async def _run_runway_animate_photo(
                         "Я пришлю видео сразу, как оно будет готово."
                     )
 
-                # --- УСПЕХ ---
                 if status in ("succeeded", "success", "completed", "finished", "ready", "done"):
                     video_url = _pick_video_url(sjs)
                     if not video_url:
@@ -3931,7 +3941,7 @@ async def _run_runway_animate_photo(
                         )
                         return
 
-                    vr = await client.get(video_url, timeout=300)
+                    vr = await client.get(video_url, timeout=300.0)
                     try:
                         vr.raise_for_status()
                     except Exception:
@@ -3947,18 +3957,18 @@ async def _run_runway_animate_photo(
                     )
                     return
 
-                # --- ОШИБКА ---
                 if status in ("failed", "error", "cancelled", "canceled", "rejected"):
-                    err = _pick_error(sjs) or str(sjs)[:500]
+                    err = _pick_error(sjs) or str(sjs)[:700]
                     await msg.reply_text(f"❌ Runway (image→video) ошибка: `{err}`", parse_mode="Markdown")
                     return
 
-                # --- ТАЙМАУТ ---
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
                     await msg.reply_text(
                         "⌛ Runway считает слишком долго.\n"
                         "Если видео будет готово позже — я пришлю его автоматически."
                     )
+                    # ВАЖНО: сейчас мы просто выходим.
+                    # Если хочешь реально “автоматически позже” — добавлю background-poller (через create_task)
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
@@ -3967,7 +3977,7 @@ async def _run_runway_animate_photo(
         log.exception("Runway image2video exception: %s", e)
         await msg.reply_text("❌ Runway: ошибка выполнения image→video.")
 
- # ---------------- helpers -----------------def-_dicts_bfs(cts_bfs(root: object, max_depth6)int = """Собираем словари в ширину, чтобы найти status/video_url в любом вложении."""ении.""" = []
+# ---------------- helpers -----------------def-_dicts_bfs(cts_bfs(root: object, max_depth6)int = """Собираем словари в ширину, чтобы найти status/video_url в любом вложении."""ении.""" = []
     q = [(root, 0)]
     seen = set()
     while q:
@@ -4100,151 +4110,6 @@ def _pick_video_url(obj):
                 return u
 
     return None
-
-
-# ---------------- main (ВЫНЕСЕНО В ASYNC-ФУНКЦИЮ) ----------------
-
-async def _run_runway_animate_photo(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    image_url: str,
-    prompt: str,
-    asp: str = "16:9",
-    dur: int = 5,
-):
-    msg = update.effective_message
-    chat_id = update.effective_chat.id
-
-    # Собираем URL-ы
-    create_url = f"{RUNWAY_BASE_URL}{RUNWAY_IMAGE2VIDEO_PATH}"
-    status_tpl = RUNWAY_IMAGE2VIDEO_STATUS_PATH  # например: "/.../tasks/{id}" или similar
-
-    # payload под твой Comet/Runway endpoint (оставляю максимально совместимо)
-    payload = {
-        "model": (RUNWAY_MODEL or "").strip(),
-        "image": image_url,
-        "promptText": (prompt or "").strip(),
-        "duration": int(dur or RUNWAY_DURATION_S or 5),
-        "ratio": _runway_aspect_to_ratio(asp),
-    }
-
-    headers = {
-        "Authorization": f"Bearer {RUNWAY_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=300) as client:
-            r = await client.post(create_url, headers=headers, json=payload)
-
-            # иногда API возвращает 201/202 — считаем успехом любые 2xx
-            if not (200 <= r.status_code < 300):
-                txt = (r.text or "")[:1200]
-                log.warning("Runway/Comet image2video create error %s: %s", r.status_code, txt)
-                await msg.reply_text(
-                    f"⚠️ Runway/Comet image→video ошибка ({r.status_code}).\n`{txt}`",
-                    parse_mode="Markdown",
-                )
-                return
-
-            try:
-                js = r.json() or {}
-            except Exception:
-                js = {}
-
-            # Ищем task id везде
-            task_id = None
-            for d in _dicts_bfs(js):
-                v = d.get("id") or d.get("task_id") or d.get("taskId")
-                if isinstance(v, str) and v.strip():
-                    task_id = v.strip()
-                    break
-
-            if not task_id:
-                await msg.reply_text(
-                    f"⚠️ Runway: не вернул id задачи.\n`{str(js)[:1200]}`",
-                    parse_mode="Markdown",
-                )
-                return
-
-            await msg.reply_text("⏳ Runway: анимирую фото…")
-
-            status_url = f"{RUNWAY_BASE_URL}{status_tpl.format(id=task_id)}"
-            started = time.time()
-            notified_long_wait = False
-
-            while True:
-                rs = await client.get(status_url, headers=headers, timeout=60.0)
-                if not (200 <= rs.status_code < 300):
-                    txt = (rs.text or "")[:1200]
-                    log.warning("Runway/Comet status error %s: %s", rs.status_code, txt)
-                    await msg.reply_text(
-                        f"⚠️ Runway: ошибка статуса ({rs.status_code}).\n`{txt}`",
-                        parse_mode="Markdown",
-                    )
-                    return
-
-                try:
-                    sjs = rs.json() or {}
-                except Exception:
-                    sjs = {}
-
-                status = _pick_status(sjs)
-
-                # --- УВЕДОМЛЕНИЕ ПРИ ДОЛГОМ ОЖИДАНИИ ---
-                elapsed = time.time() - started
-                if elapsed > 180 and not notified_long_wait:
-                    notified_long_wait = True
-                    await msg.reply_text(
-                        "⏳ Runway считает дольше обычного.\n"
-                        "Я пришлю видео сразу, как оно будет готово."
-                    )
-
-                # --- УСПЕХ ---
-                if status in ("succeeded", "success", "completed", "finished", "ready", "done"):
-                    video_url = _pick_video_url(sjs)
-                    if not video_url:
-                        await msg.reply_text(
-                            f"⚠️ Runway: задача завершилась, но не найден URL видео.\n`{str(sjs)[:1200]}`",
-                            parse_mode="Markdown",
-                        )
-                        return
-
-                    vr = await client.get(video_url, timeout=300)
-                    try:
-                        vr.raise_for_status()
-                    except Exception:
-                        await msg.reply_text(f"⚠️ Runway: не удалось скачать видео ({vr.status_code}).")
-                        return
-
-                    bio = BytesIO(vr.content)
-                    bio.name = "runway_image2video.mp4"
-                    await context.bot.send_video(
-                        chat_id=chat_id,
-                        video=bio,
-                        supports_streaming=True,
-                    )
-                    return
-
-                # --- ОШИБКА ---
-                if status in ("failed", "error", "cancelled", "canceled", "rejected"):
-                    err = _pick_error(sjs) or str(sjs)[:500]
-                    await msg.reply_text(f"❌ Runway (image→video) ошибка: `{err}`", parse_mode="Markdown")
-                    return
-
-                # --- ТАЙМАУТ ---
-                if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await msg.reply_text(
-                        "⌛ Runway считает слишком долго.\n"
-                        "Я пришлю видео сразу, как оно будет готово (если оно дойдёт позже)."
-                    )
-                    return
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
-    except Exception as e:
-        log.exception("Runway image2video exception: %s", e)
-        await msg.reply_text("❌ Runway: ошибка выполнения image→video.")
 
 # ───────── RUNWAY: TEXT → VIDEO ─────────
 async def _run_runway_video(
