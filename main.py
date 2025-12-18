@@ -215,6 +215,9 @@ def set_lang(user_id: int, lang: str):
         kv_set(f"lang:{user_id}", lang)
 
 # Мини-словарь (полные пакеты дальше по файлу)
+# =============================
+# UI dictionary (short labels for buttons/menus)
+# =============================
 I18N: dict[str, dict[str, str]] = {
     "ru": {
         "choose_lang": "🌍 Выберите язык",
@@ -224,6 +227,131 @@ I18N: dict[str, dict[str, str]] = {
         "btn_photo": "🖼 Оживить фото",
         "btn_help": "❓ Помощь",
     },
+    "be": {
+        "choose_lang": "🌍 Абярыце мову",
+        "lang_set": "✅ Мова ўсталявана",
+        "menu_title": "Галоўнае меню",
+        "btn_video": "🎞 Стварыць відэа",
+        "btn_photo": "🖼 Ажывіць фота",
+        "btn_help": "❓ Дапамога",
+    },
+    "uk": {
+        "choose_lang": "🌍 Оберіть мову",
+        "lang_set": "✅ Мову встановлено",
+        "menu_title": "Головне меню",
+        "btn_video": "🎞 Створити відео",
+        "btn_photo": "🖼 Оживити фото",
+        "btn_help": "❓ Допомога",
+    },
+    "de": {
+        "choose_lang": "🌍 Sprache auswählen",
+        "lang_set": "✅ Sprache gesetzt",
+        "menu_title": "Hauptmenü",
+        "btn_video": "🎞 Video erstellen",
+        "btn_photo": "🖼 Foto animieren",
+        "btn_help": "❓ Hilfe",
+    },
+    "en": {
+        "choose_lang": "🌍 Choose language",
+        "lang_set": "✅ Language set",
+        "menu_title": "Main menu",
+        "btn_video": "🎞 Create video",
+        "btn_photo": "🖼 Animate photo",
+        "btn_help": "❓ Help",
+    },
+    "fr": {
+        "choose_lang": "🌍 Choisir la langue",
+        "lang_set": "✅ Langue définie",
+        "menu_title": "Menu principal",
+        "btn_video": "🎞 Créer une vidéo",
+        "btn_photo": "🖼 Animer une photo",
+        "btn_help": "❓ Aide",
+    },
+    "th": {
+        "choose_lang": "🌍 เลือกภาษา",
+        "lang_set": "✅ ตั้งค่าภาษาแล้ว",
+        "menu_title": "เมนูหลัก",
+        "btn_video": "🎞 สร้างวิดีโอ",
+        "btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
+        "btn_help": "❓ ช่วยเหลือ",
+    },
+}
+
+def t(user_id: int, key: str) -> str:
+    """
+    Short UI strings (buttons/menus).
+    """
+    lang = get_lang(user_id)
+    return (I18N.get(lang) or I18N["ru"]).get(key, key)
+
+
+def system_prompt_for(lang: str) -> str:
+    """
+    GPT system prompt that forces output language.
+    """
+    mapping = {
+        "ru": "Отвечай на русском языке.",
+        "be": "Адказвай па-беларуску.",
+        "uk": "Відповідай українською мовою.",
+        "de": "Antworte auf Deutsch.",
+        "en": "Answer in English.",
+        "fr": "Réponds en français.",
+        "th": "ตอบเป็นภาษาไทย",
+    }
+    return mapping.get(lang, mapping["ru"])
+
+
+# =============================
+# Extended language pack (long UI texts / hints / messages)
+# =============================
+I18N_PACK: dict[str, dict[str, str]] = {
+    "welcome": {
+        "ru": "Добро пожаловать! Выберите режим или напишите запрос.",
+        "be": "Сардэчна запрашаем! Абярыце рэжым або напішыце запыт.",
+        "uk": "Ласкаво просимо! Оберіть режим або напишіть запит.",
+        "de": "Willkommen! Wähle einen Modus oder schreibe eine Anfrage.",
+        "en": "Welcome! Choose a mode or type your request.",
+        "fr": "Bienvenue ! Choisissez un mode ou écrivez votre demande.",
+        "th": "ยินดีต้อนรับ! เลือกโหมดหรือพิมพ์คำขอของคุณ",
+    },
+    "help": {
+        "ru": "❓ Помощь: напиши «сделай видео …» или пришли фото и нажми «Оживить фото».",
+        "be": "❓ Дапамога: напішы «зрабі відэа …» або дашлі фота і націсні «Ажывіць фота».",
+        "uk": "❓ Допомога: напиши «зроби відео …» або надішли фото й натисни «Оживити фото».",
+        "de": "❓ Hilfe: schreibe „make video …“ oder sende ein Foto und drücke „Foto animieren“.",
+        "en": "❓ Help: type “make video …” or send a photo and tap “Animate photo”.",
+        "fr": "❓ Aide : écrivez « make video … » ou envoyez une photo puis « Animer une photo ».",
+        "th": "❓ วิธีใช้: พิมพ์ “ทำวิดีโอ …” หรือส่งรูปแล้วกด “ทำให้รูปเคลื่อนไหว”",
+    },
+    "runway_disabled_textvideo": {
+        "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
+        "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
+        "uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оберіть Kling, Luma або Sora.",
+        "de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
+        "en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
+        "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
+        "th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
+    },
+    "rendering": {
+        "ru": "⏳ Рендерю…",
+        "be": "⏳ Рэндэр…",
+        "uk": "⏳ Рендерю…",
+        "de": "⏳ Rendere…",
+        "en": "⏳ Rendering…",
+        "fr": "⏳ Rendu…",
+        "th": "⏳ กำลังสร้าง…",
+    },
+    "done": {
+        "ru": "✅ Готово!",
+        "be": "✅ Гатова!",
+        "uk": "✅ Готово!",
+        "de": "✅ Fertig!",
+        "en": "✅ Done!",
+        "fr": "✅ Terminé !",
+        "th": "✅ เสร็จแล้ว!",
+    },
+
+    # --- Your requested keys (long hints/messages) ---
     "ask_video_prompt": {
         "ru": "🎞 Напиши запрос для видео, например:\n«Сделай видео: закат над морем, 7 сек, 16:9»",
         "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зрабі відэа: захад сонца над морам, 7 сек, 16:9»",
@@ -260,34 +388,22 @@ I18N: dict[str, dict[str, str]] = {
         "fr": "🎬 Animer la photo",
         "th": "🎬 ทำให้รูปเคลื่อนไหว",
     },
-    "en": {
-        "choose_lang": "🌍 Choose language",
-        "lang_set": "✅ Language set",
-        "menu_title": "Main menu",
-        "btn_video": "🎞 Create video",
-        "btn_photo": "🖼 Animate photo",
-        "btn_help": "❓ Help",
-    },
 }
 
-def t(user_id: int, key: str) -> str:
+def _tr(user_id: int, key: str, **kwargs) -> str:
+    """
+    Long UI strings / messages (I18N_PACK).
+    Safe fallback: returns RU if present, else returns key.
+    """
     lang = get_lang(user_id)
-    return (I18N.get(lang) or I18N["ru"]).get(key, key)
-
-def system_prompt_for(lang: str) -> str:
-    """
-    GPT system prompt that forces output language.
-    """
-    mapping = {
-        "ru": "Отвечай на русском языке.",
-        "be": "Адказвай па-беларуску.",
-        "uk": "Відповідай українською мовою.",
-        "de": "Antworte auf Deutsch.",
-        "en": "Answer in English.",
-        "fr": "Réponds en français.",
-        "th": "ตอบเป็นภาษาไทย",
-    }
-    return mapping.get(lang, mapping["ru"])
+    pack = I18N_PACK.get(key) or {}
+    text = pack.get(lang) or pack.get("ru") or key
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            return text
+    return text
 
 # =============================
 # Pending actions
@@ -713,16 +829,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    # меню
-if text == t(uid, "btn_help"):
+# меню
+    if text == t(uid, "btn_help"):
         await cmd_help(update, context)
         return
 
     if text == t(uid, "btn_video"):
-        # Максимально корректно: UI на выбранном языке + fallback
         tip = _tr(uid, "ask_video_prompt")
         if tip == "ask_video_prompt" or not tip.strip():
-            # fallback (если ключ не добавлен в I18N_PACK)
             tip = (
                 "🎞 Напиши запрос для видео, например:\n"
                 "«Сделай видео: закат над морем, 7 сек, 16:9»"
@@ -731,7 +845,6 @@ if text == t(uid, "btn_help"):
         return
 
     if text == t(uid, "btn_photo"):
-        # Максимально корректно: UI на выбранном языке + fallback
         tip = _tr(uid, "ask_send_photo")
         if tip == "ask_send_photo" or not tip.strip():
             tip = "🖼 Пришли фото, затем выбери «Оживить фото»."
