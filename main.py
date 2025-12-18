@@ -112,6 +112,7 @@ LUMA_ENABLED = (_env("LUMA_ENABLED") or "1").strip() != "0"
 RUNWAY_ENABLED = (_env("RUNWAY_ENABLED") or "1").strip() != "0"
 RUNWAY_BASE_URL = (_env("RUNWAY_BASE_URL") or "").rstrip("/")
 RUNWAY_MODEL = (_env("RUNWAY_MODEL") or "gen3a_turbo").strip()
+RUNWAY_API_KEY = (_env("RUNWAY_API_KEY") or "").strip()
 
 # Sora через Comet
 SORA_ENABLED = (_env("SORA_ENABLED") or "1").strip() != "0"
@@ -1307,10 +1308,14 @@ async def _run_runway_animate_photo(
         await msg.reply_text("Runway: не настроен.")
         return
 
+    if not RUNWAY_API_KEY:
+    await msg.reply_text("Runway: нет RUNWAY_API_KEY.")
+    return
+
     await msg.reply_text(_tr(uid, "rendering"))
 
     headers = {
-        "Authorization": f"Bearer {_env('RUNWAY_API_KEY')}",
+        "Authorization": f"Bearer {RUNWAY_API_KEY}",
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
@@ -1527,16 +1532,6 @@ async def _async_main():
         log.info("Bot started in polling mode")
         await app.run_polling()
 
-
-def main():
-    try:
-        asyncio.run(_async_main())
-    except (KeyboardInterrupt, SystemExit):
-        log.info("Bot stopped")
-
-
-if __name__ == "__main__":
-    main()
 
 # === END PART 8 ===
 
