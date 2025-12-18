@@ -711,42 +711,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # CALLBACK ROUTER
 # ============================================================
 
-async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    data = (q.data or "").strip()
-    uid = update.effective_user.id
-
-    # язык
-    if data.startswith("lang:"):
-        await on_lang_callback(update, context)
-        return
-
-    # жёстко запрещаем Runway для text/voice
-    if data.startswith("choose:runway:"):
-        await q.answer(_tr(uid, "runway_disabled_textvideo"), show_alert=True)
-        return
-
-    if not data.startswith("choose:"):
-        await q.answer()
-        return
-
-    await q.answer()
-
-    try:
-        _, engine, aid = data.split(":", 2)
-    except Exception:
-        await q.answer("Некорректная кнопка.", show_alert=True)
-        return
-
-    meta = _pending_actions.pop(aid, None)
-    if not meta:
-        await q.answer("Задача устарела.", show_alert=True)
-        return
-
-    prompt = meta.get("prompt", "")
-    duration = int(meta.get("duration", 5))
-    aspect = meta.get("aspect", "16:9")
-
     # =========================
     # KLING
     # =========================
@@ -1557,31 +1521,6 @@ def build_app() -> Application:
 # MAIN ENTRYPOINT — WEBHOOK ONLY
 # ============================================================
 
-def main():
-    if not APP_URL:
-        raise RuntimeError("APP_URL is required for webhook mode (public https url of your service).")
-
-    app = build_app()
-
-    path = WEBHOOK_PATH if WEBHOOK_PATH.startswith("/") else f"/{WEBHOOK_PATH}"
-    webhook_full = f"{APP_URL.rstrip('/')}{path}"
-
-    log.info("Bot started in WEBHOOK mode: %s", webhook_full)
-
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=path.lstrip("/"),
-        webhook_url=webhook_full,
-        secret_token=(WEBHOOK_SECRET or None),
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-    )
-
-if __name__ == "__main__":
-    main()
-
-
 # === END PART 8 ===
 
 # ============================================================
@@ -1833,5 +1772,29 @@ log.info(
     "Feature flags loaded: %s",
     feature_flags(),
 )
+
+def main():
+    if not APP_URL:
+        raise RuntimeError("APP_URL is required for webhook mode (public https url of your service).")
+
+    app = build_app()
+
+    path = WEBHOOK_PATH if WEBHOOK_PATH.startswith("/") else f"/{WEBHOOK_PATH}"
+    webhook_full = f"{APP_URL.rstrip('/')}{path}"
+
+    log.info("Bot started in WEBHOOK mode: %s", webhook_full)
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=path.lstrip("/"),
+        webhook_url=webhook_full,
+        secret_token=(WEBHOOK_SECRET or None),
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
+
+if __name__ == "__main__":
+    main()
 
 # === END PART 9 ===
