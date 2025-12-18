@@ -1603,6 +1603,111 @@ async def run_luma_video(*args, **kwargs):
     log.warning("run_luma_video is deprecated, use _run_luma_video")
     return await _run_luma_video(*args, **kwargs)
 
+# ============================================================
+# SORA — TEXT / VOICE -> VIDEO (через Comet)
+# ============================================================
+
+async def _run_sora_video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    seconds: int,
+    aspect: str,
+):
+    msg = update.effective_message
+    uid = update.effective_user.id
+
+    if not SORA_ENABLED:
+        await msg.reply_text("Sora отключена.")
+        return
+    if not COMET_API_KEY:
+        await msg.reply_text("Sora: нет COMET_API_KEY.")
+        return
+
+    seconds = max(1, min(30, int(seconds)))
+    aspect = aspect if aspect in ("16:9", "9:16", "1:1") else "16:9"
+    model = _pick_sora_model(uid)
+
+    await msg.reply_text(_tr(uid, "rendering"))
+
+    headers = {
+        "Authorization": f"Bearer {COMET_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    payload = {
+        "model": model,
+        "prompt": (prompt or "").strip(),
+        "seconds": seconds,
+        "ratio": aspect,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
+            r = await client.post(
+                f"{SORA_BASE_URL}/video/generations",
+                headers=headers,
+                json=payload,
+            )
+            if r.status_code >= 400:
+                await msg.reply_text(f"⚠️ Sora отклонила задачу ({r.status_code}).\n{(r.text or '')[:1000]}")
+                return
+
+            js = r.json() or {}
+            task_id = js.get("id") or js.get("task_id")
+            if not task_id:
+                await msg.reply_text("Sora: не вернулся task_id.")
+                return
+
+            status_url = f"{SORA_BASE_URL}/video/generations/{task_id}"
+            started = time.time()
+
+            while True:
+                rs = await client.get(status_url, headers=headers)
+                if rs.status_code >= 400:
+                    await msg.reply_text(f"⚠️ Sora: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}")
+                    return
+
+                st_js = rs.json() or {}
+                st = (st_js.get("status") or "").lower()
+
+                if st in ("completed", "succeeded", "done"):
+                    out = st_js.get("output") or st_js.get("result") or {}
+                    video_url = out.get("url") or out.get("video_url")
+                    if not video_url:
+                        await msg.reply_text("Sora: нет ссылки на видео.")
+                        return
+
+                    vr = await client.get(video_url, timeout=180.0)
+                    if vr.status_code >= 400:
+                        await msg.reply_text(f"Sora: не удалось скачать видео ({vr.status_code}).")
+                        return
+
+                    bio = BytesIO(vr.content)
+                    bio.name = "sora.mp4"
+                    await context.bot.send_video(
+                        chat_id=update.effective_chat.id,
+                        video=bio,
+                        supports_streaming=True,
+                    )
+                    await msg.reply_text(_tr(uid, "done"))
+                    return
+
+                if st in ("failed", "error", "rejected", "cancelled", "canceled"):
+                    await msg.reply_text(f"❌ Sora: ошибка генерации.\n{st_js}")
+                    return
+
+                if time.time() - started > int(SORA_MAX_WAIT_S or 900):
+                    await msg.reply_text("⌛ Sora: превышено время ожидания.")
+                    return
+
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+
+    except Exception as e:
+        log.exception("Sora exception: %s", e)
+        await msg.reply_text("❌ Ошибка Sora.")
+
 async def run_sora_video(*args, **kwargs):
     log.warning("run_sora_video is deprecated, use _run_sora_video")
     return await _run_sora_video(*args, **kwargs)
