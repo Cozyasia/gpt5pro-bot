@@ -973,8 +973,7 @@ async def _run_kling_video(
 
                     await msg.reply_text(_tr(uid, "done"))
                     return
-                    await msg.reply_text(_tr(uid, "done"))
-                    return
+                    
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
                     await msg.reply_text(f"❌ Kling: ошибка генерации.\n{st_js}")
