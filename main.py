@@ -224,6 +224,42 @@ I18N: dict[str, dict[str, str]] = {
         "btn_photo": "🖼 Оживить фото",
         "btn_help": "❓ Помощь",
     },
+    "ask_video_prompt": {
+        "ru": "🎞 Напиши запрос для видео, например:\n«Сделай видео: закат над морем, 7 сек, 16:9»",
+        "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зрабі відэа: захад сонца над морам, 7 сек, 16:9»",
+        "uk": "🎞 Напиши запит для відео, наприклад:\n«Зроби відео: захід над морем, 7 с, 16:9»",
+        "de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
+        "en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
+        "fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n« Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 »",
+        "th": "🎞 พิมพ์คำสั่งทำวิดีโอ เช่น:\n“ทำวิดีโอ: พระอาทิตย์ตกเหนือทะเล 7วิ 16:9”",
+    },
+    "ask_send_photo": {
+        "ru": "🖼 Пришли фото, затем выбери «Оживить фото».",
+        "be": "🖼 Дашлі фота, затым выберы «Ажывіць фота».",
+        "uk": "🖼 Надішли фото, потім обери «Оживити фото».",
+        "de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
+        "en": "🖼 Send a photo, then choose “Animate photo”.",
+        "fr": "🖼 Envoyez une photo, puis choisissez « Animer la photo ».",
+        "th": "🖼 ส่งรูป จากนั้นเลือก “ทำให้รูปเคลื่อนไหว”",
+    },
+    "photo_received": {
+        "ru": "🖼 Фото получено. Хотите оживить?",
+        "be": "🖼 Фота атрымана. Ажывіць?",
+        "uk": "🖼 Фото отримано. Оживити?",
+        "de": "🖼 Foto erhalten. Animieren?",
+        "en": "🖼 Photo received. Animate it?",
+        "fr": "🖼 Photo reçue. L’animer ?",
+        "th": "🖼 ได้รับรูปแล้ว ต้องการทำให้เคลื่อนไหวไหม?",
+    },
+    "animate_btn": {
+        "ru": "🎬 Оживить фото",
+        "be": "🎬 Ажывіць фота",
+        "uk": "🎬 Оживити фото",
+        "de": "🎬 Foto animieren",
+        "en": "🎬 Animate photo",
+        "fr": "🎬 Animer la photo",
+        "th": "🎬 ทำให้รูปเคลื่อนไหว",
+    },
     "en": {
         "choose_lang": "🌍 Choose language",
         "lang_set": "✅ Language set",
@@ -376,10 +412,10 @@ async def on_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await q.edit_message_text(f"{t(user_id, 'lang_set')}: {LANGS[code]}")
     await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=t(user_id, "menu_title"),
-        reply_markup=_main_menu_keyboard(user_id),
-    )
+    chat_id=update.effective_chat.id,
+    text=_tr(user_id, "welcome"),
+    reply_markup=_main_menu_keyboard(user_id),
+)
 
 # =============================
 # Video intent detection (text/voice)
@@ -678,19 +714,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # меню
-    if text == t(uid, "btn_help"):
+if text == t(uid, "btn_help"):
         await cmd_help(update, context)
         return
 
     if text == t(uid, "btn_video"):
-        await msg.reply_text(
-            "🎞 Напиши запрос для видео, например:\n"
-            "«Сделай видео: закат над морем, 7 сек, 16:9»"
-        )
+        # Максимально корректно: UI на выбранном языке + fallback
+        tip = _tr(uid, "ask_video_prompt")
+        if tip == "ask_video_prompt" or not tip.strip():
+            # fallback (если ключ не добавлен в I18N_PACK)
+            tip = (
+                "🎞 Напиши запрос для видео, например:\n"
+                "«Сделай видео: закат над морем, 7 сек, 16:9»"
+            )
+        await msg.reply_text(tip, reply_markup=_main_menu_keyboard(uid))
         return
 
     if text == t(uid, "btn_photo"):
-        await msg.reply_text("🖼 Пришли фото, затем выбери «Оживить фото».")
+        # Максимально корректно: UI на выбранном языке + fallback
+        tip = _tr(uid, "ask_send_photo")
+        if tip == "ask_send_photo" or not tip.strip():
+            tip = "🖼 Пришли фото, затем выбери «Оживить фото»."
+        await msg.reply_text(tip, reply_markup=_main_menu_keyboard(uid))
         return
 
     # video intent
@@ -1410,10 +1455,6 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await q.answer("Неизвестный движок.", show_alert=True)
 
-
-# ============================================================
-# PATCH CALLBACK ROUTER (add animate_photo)
-# ============================================================
 
 # === END PART 7 ===
 
