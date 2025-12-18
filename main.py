@@ -527,11 +527,12 @@ async def on_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     await q.edit_message_text(f"{t(user_id, 'lang_set')}: {LANGS[code]}")
+    await q.edit_message_text(f"{t(user_id, 'lang_set')}: {LANGS[code]}")
     await context.bot.send_message(
-    chat_id=update.effective_chat.id,
-    text=_tr(user_id, "welcome"),
-    reply_markup=_main_menu_keyboard(user_id),
-)
+        chat_id=update.effective_chat.id,
+        text=_tr(user_id, "welcome"),
+        reply_markup=_main_menu_keyboard(user_id),
+    )
 
 # =============================
 # Video intent detection (text/voice)
@@ -578,10 +579,14 @@ def _aspect_to_size(aspect: str) -> str:
 # === END PART 2 ===
 
 # =============================
-# Full language pack (menus/buttons/answers)
+# Full language pack (MERGED, no redefinition)
 # =============================
 
-I18N_PACK: dict[str, dict[str, str]] = {
+# ⚠️ ВАЖНО:
+# I18N_PACK ДОЛЖЕН БЫТЬ ОБЪЯВЛЕН ВЫШЕ (с ask_video_prompt, ask_send_photo, photo_received, animate_btn)
+# Здесь мы ТОЛЬКО ДОБАВЛЯЕМ новые ключи через update()
+
+I18N_PACK.update({
     "welcome": {
         "ru": "Добро пожаловать! Выберите режим или напишите запрос.",
         "be": "Сардэчна запрашаем! Абярыце рэжым або напішыце запыт.",
@@ -645,9 +650,14 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "fr": "❓ Aide : écrivez « make video … » ou envoyez une photo puis « Animate photo ».",
         "th": "❓ วิธีใช้: พิมพ์ “ทำวิดีโอ …” หรือส่งรูปแล้วกด “ทำให้รูปเคลื่อนไหว”",
     },
-}
+})
+
 
 def _tr(user_id: int, key: str, **kwargs) -> str:
+    """
+    Long UI strings / messages (I18N_PACK).
+    Safe fallback: lang -> ru -> key
+    """
     lang = get_lang(user_id)
     pack = I18N_PACK.get(key) or {}
     s = pack.get(lang) or pack.get("ru") or key
@@ -657,6 +667,7 @@ def _tr(user_id: int, key: str, **kwargs) -> str:
         except Exception:
             return s
     return s
+
 
 def _mk_menu_kb(user_id: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
@@ -668,21 +679,37 @@ def _mk_menu_kb(user_id: int) -> ReplyKeyboardMarkup:
         one_time_keyboard=False,
     )
 
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    await update.effective_message.reply_text(_tr(uid, "help"), reply_markup=_mk_menu_kb(uid))
+    await update.effective_message.reply_text(
+        _tr(uid, "help"),
+        reply_markup=_mk_menu_kb(uid),
+    )
+
 
 def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
     tier = get_subscription_tier(user_id)
-    rows = []
+    rows: list[list[InlineKeyboardButton]] = []
 
-    # Kling + Luma всегда
+    # Kling + Luma — всегда
     if KLING_ENABLED:
-        rows.append([InlineKeyboardButton(f"📼 Kling (~${KLING_UNIT_COST_USD:.2f})", callback_data=f"choose:kling:{aid}")])
-    if LUMA_ENABLED:
-        rows.append([InlineKeyboardButton(f"🎞 Luma (~${LUMA_UNIT_COST_USD:.2f})", callback_data=f"choose:luma:{aid}")])
+        rows.append([
+            InlineKeyboardButton(
+                f"📼 Kling (~${KLING_UNIT_COST_USD:.2f})",
+                callback_data=f"choose:kling:{aid}",
+            )
+        ])
 
-    # Sora: доступна всем, но sora-2-pro = pro/ultimate
+    if LUMA_ENABLED:
+        rows.append([
+            InlineKeyboardButton(
+                f"🎞 Luma (~${LUMA_UNIT_COST_USD:.2f})",
+                callback_data=f"choose:luma:{aid}",
+            )
+        ])
+
+    # Sora: sora-2-pro доступна только pro / ultimate
     if SORA_ENABLED:
         if tier in ("pro", "ultimate"):
             rows.append([InlineKeyboardButton("✨ Sora 2 Pro", callback_data=f"choose:sora:{aid}")])
@@ -691,12 +718,17 @@ def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(rows)
 
+
 async def _ask_video_engine(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     uid = update.effective_user.id
     dur, asp = _parse_video_opts(prompt)
 
     aid = _new_aid()
-    _pending_actions[aid] = {"prompt": prompt, "duration": dur, "aspect": asp}
+    _pending_actions[aid] = {
+        "prompt": prompt,
+        "duration": dur,
+        "aspect": asp,
+    }
 
     await update.effective_message.reply_text(
         _tr(uid, "video_opts", dur=dur, asp=asp, prompt=prompt),
@@ -829,7 +861,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-# меню
+    # меню
     if text == t(uid, "btn_help"):
         await cmd_help(update, context)
         return
@@ -863,7 +895,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("GPT error: %s", e)
         await msg.reply_text("Ошибка генерации ответа.")
-
 
 # === END PART 4 ===
 
