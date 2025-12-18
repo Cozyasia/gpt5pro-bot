@@ -1188,19 +1188,6 @@ async def on_callback_query_plans(update: Update, context: ContextTypes.DEFAULT_
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Patch existing callback router to include plans handler
-# ──────────────────────────────────────────────────────────────────────────────
-
-_old_on_callback_query = on_callback_query
-
-async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # планы
-    if await on_callback_query_plans(update, context):
-        return
-    # остальное
-    await _old_on_callback_query(update, context)
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # /start override: show language picker first
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1433,18 +1420,95 @@ async def on_callback_query_animate_photo(update: Update, context: ContextTypes.
     await _run_runway_animate_photo(update, context, photo_bytes)
     return True
 
+# ============================================================
+# CALLBACK ROUTER — SINGLE (lang + plans + animate_photo + engines)
+# ============================================================
+
+async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = (q.data or "").strip()
+    uid = update.effective_user.id
+
+    # 1) Language
+    if data.startswith("lang:"):
+        await on_lang_callback(update, context)
+        return
+
+    # 2) Plans / payments
+    if data == "plans:back" or data.startswith("plan:") or data.startswith("paid:"):
+        handled = await on_callback_query_plans(update, context)
+        if handled:
+            return
+
+    # 3) Animate photo
+    if data.startswith("animate_photo:"):
+        handled = await on_callback_query_animate_photo(update, context)
+        if handled:
+            return
+
+    # 4) Hard-disable Runway for text/voice → video
+    if data.startswith("choose:runway:"):
+        await q.answer(_tr(uid, "runway_disabled_textvideo"), show_alert=True)
+        return
+
+    # 5) Engine choose (Kling/Luma/Sora)
+    if not data.startswith("choose:"):
+        await q.answer()
+        return
+
+    await q.answer()
+
+    try:
+        _, engine, aid = data.split(":", 2)
+    except Exception:
+        await q.answer("Некорректная кнопка.", show_alert=True)
+        return
+
+    meta = _pending_actions.pop(aid, None)
+    if not meta:
+        await q.answer("Задача устарела.", show_alert=True)
+        return
+
+    prompt = meta.get("prompt", "")
+    duration = int(meta.get("duration", 5))
+    aspect = meta.get("aspect", "16:9")
+
+    if engine == "kling":
+        est = float(KLING_UNIT_COST_USD or 0.40)
+
+        async def _do():
+            await _run_kling_video(update, context, prompt, duration, aspect)
+            _register_engine_spend(uid, "kling", est)
+
+        await _try_pay_then_do(update, context, uid, "kling", est, _do)
+        return
+
+    if engine == "luma":
+        est = float(LUMA_UNIT_COST_USD or 0.40)
+
+        async def _do():
+            await _run_luma_video(update, context, prompt, duration, aspect)
+            _register_engine_spend(uid, "luma", est)
+
+        await _try_pay_then_do(update, context, uid, "luma", est, _do)
+        return
+
+    if engine == "sora":
+        est = _sora_est_cost_usd(uid, duration)
+
+        async def _do():
+            await _run_sora_video(update, context, prompt, duration, aspect)
+            _register_engine_spend(uid, "sora", est)
+
+        await _try_pay_then_do(update, context, uid, "sora", est, _do)
+        return
+
+    await q.answer("Неизвестный движок.", show_alert=True)
+
 
 # ============================================================
 # PATCH CALLBACK ROUTER (add animate_photo)
 # ============================================================
-
-_prev_on_callback_query = on_callback_query
-
-async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await on_callback_query_animate_photo(update, context):
-        return
-    await _prev_on_callback_query(update, context)
-
 
 # === END PART 7 ===
 
