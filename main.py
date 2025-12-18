@@ -527,7 +527,6 @@ async def on_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     await q.edit_message_text(f"{t(user_id, 'lang_set')}: {LANGS[code]}")
-    await q.edit_message_text(f"{t(user_id, 'lang_set')}: {LANGS[code]}")
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=_tr(user_id, "welcome"),
@@ -651,22 +650,6 @@ I18N_PACK.update({
         "th": "❓ วิธีใช้: พิมพ์ “ทำวิดีโอ …” หรือส่งรูปแล้วกด “ทำให้รูปเคลื่อนไหว”",
     },
 })
-
-
-def _tr(user_id: int, key: str, **kwargs) -> str:
-    """
-    Long UI strings / messages (I18N_PACK).
-    Safe fallback: lang -> ru -> key
-    """
-    lang = get_lang(user_id)
-    pack = I18N_PACK.get(key) or {}
-    s = pack.get(lang) or pack.get("ru") or key
-    if kwargs:
-        try:
-            return s.format(**kwargs)
-        except Exception:
-            return s
-    return s
 
 
 def _mk_menu_kb(user_id: int) -> ReplyKeyboardMarkup:
@@ -981,12 +964,12 @@ async def _run_kling_video(
 
                     bio = BytesIO(vr.content)
                     bio.name = "kling.mp4"
+                    bio.seek(0)
 
-                    await context.bot.send_video(
-                        chat_id=update.effective_chat.id,
-                        video=bio,
-                        supports_streaming=True,
-                    )
+                    ok = await safe_send_video(context, update.effective_chat.id, bio)
+                    if not ok:
+                    await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
+                    return
                     await msg.reply_text(_tr(uid, "done"))
                     return
 
@@ -1088,13 +1071,11 @@ async def _run_luma_video(
 
                     bio = BytesIO(vr.content)
                     bio.name = "luma.mp4"
+                    bio.seek(0)
 
-                    await context.bot.send_video(
-                        chat_id=update.effective_chat.id,
-                        video=bio,
-                        supports_streaming=True,
-                    )
-                    await msg.reply_text(_tr(uid, "done"))
+                    ok = await safe_send_video(context, update.effective_chat.id, bio)
+                    if not ok:
+                    await msg.reply_text("❌ Luma: не удалось отправить файл в Telegram.")
                     return
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
@@ -1462,13 +1443,11 @@ async def _run_runway_animate_photo(
 
                     bio = BytesIO(vr.content)
                     bio.name = "runway.mp4"
+                    bio.seek(0)
 
-                    await context.bot.send_video(
-                        chat_id=update.effective_chat.id,
-                        video=bio,
-                        supports_streaming=True,
-                    )
-                    await msg.reply_text(_tr(uid, "done"))
+                    ok = await safe_send_video(context, update.effective_chat.id, bio)
+                    if not ok:
+                    await msg.reply_text("❌ Runway: не удалось отправить файл в Telegram.")
                     return
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
@@ -1790,12 +1769,11 @@ async def _run_sora_video(
 
                     bio = BytesIO(vr.content)
                     bio.name = "sora.mp4"
-                    await context.bot.send_video(
-                        chat_id=update.effective_chat.id,
-                        video=bio,
-                        supports_streaming=True,
-                    )
-                    await msg.reply_text(_tr(uid, "done"))
+                    bio.seek(0)
+
+                    ok = await safe_send_video(context, update.effective_chat.id, bio)
+                    if not ok:
+                    await msg.reply_text("❌ Sora: не удалось отправить файл в Telegram.")
                     return
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
