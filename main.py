@@ -122,6 +122,9 @@ SORA_MODEL_PRO = (_env("SORA_MODEL_PRO") or "sora-2-pro").strip()
 SORA_MAX_WAIT_S = _env_int("SORA_MAX_WAIT_S", 900)
 
 # =============================
+WEBHOOK_PATH = (_env("WEBHOOK_PATH") or "/telegram").strip()
+WEBHOOK_SECRET = (_env("WEBHOOK_SECRET") or "").strip()  # опционально
+
 # Costs (estimates)
 # =============================
 KLING_UNIT_COST_USD = _env_float("KLING_UNIT_COST_USD", 0.40)
@@ -1309,11 +1312,9 @@ async def _run_runway_animate_photo(
         return
 
     if not RUNWAY_API_KEY:
-    await msg.reply_text("Runway: нет RUNWAY_API_KEY.")
-    return
-
-    await msg.reply_text(_tr(uid, "rendering"))
-
+        await msg.reply_text("Runway: нет RUNWAY_API_KEY.")
+        return
+        
     headers = {
         "Authorization": f"Bearer {RUNWAY_API_KEY}",
         "Accept": "application/json",
@@ -1472,26 +1473,6 @@ def register_all_handlers(app: Application):
 # ============================================================
 # HEALTHCHECK / SIMPLE WEB SERVER (for Render)
 # ============================================================
-
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path in ("/", "/health", "/healthz"):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(b"OK")
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-def run_health_server():
-    try:
-        httpd = HTTPServer(("0.0.0.0", PORT), HealthHandler)
-        httpd.serve_forever()
-    except Exception as e:
-        log.error("Health server error: %s", e)
-
-
 # ============================================================
 # APPLICATION FACTORY
 # ============================================================
@@ -1509,28 +1490,32 @@ def build_app() -> Application:
 
 
 # ============================================================
-# MAIN ENTRYPOINT
+# MAIN ENTRYPOINT — WEBHOOK ONLY
 # ============================================================
 
-async def _async_main():
+def main():
+    if not APP_URL:
+        raise RuntimeError("APP_URL is required for webhook mode (public https url of your service).")
+
     app = build_app()
 
-    # webhook or polling
-    if APP_URL:
-        await app.initialize()
-        await app.bot.set_webhook(f"{APP_URL}/telegram")
-        await app.start()
+    path = WEBHOOK_PATH if WEBHOOK_PATH.startswith("/") else f"/{WEBHOOK_PATH}"
+    webhook_full = f"{APP_URL.rstrip('/')}{path}"
 
-        log.info("Bot started in webhook mode")
-        # health server (blocking) — run in thread
-        threading.Thread(target=run_health_server, daemon=True).start()
+    log.info("Bot started in WEBHOOK mode: %s", webhook_full)
 
-        # keep running
-        while True:
-            await asyncio.sleep(3600)
-    else:
-        log.info("Bot started in polling mode")
-        await app.run_polling()
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=path.lstrip("/"),
+        webhook_url=webhook_full,
+        secret_token=(WEBHOOK_SECRET or None),
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
+
+if __name__ == "__main__":
+    main()
 
 
 # === END PART 8 ===
