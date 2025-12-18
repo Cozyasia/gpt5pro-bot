@@ -36,7 +36,6 @@ from telegram.constants import ChatAction
 from telegram.error import TelegramError
 
 # ───────── TTS imports ─────────
-import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
 
 # Optional PIL / rembg for photo tools
 try:
@@ -75,7 +74,7 @@ def _env_int(key: str, default: int) -> int:
 
 def _env_float(key: str, default: float) -> float:
     try:
-        return float(os.getenv(key, str(default))))
+        return float(os.getenv(key, str(default)))
     except Exception:
         return default
 
@@ -421,7 +420,15 @@ def _aspect_to_size(aspect: str) -> str:
     return "1280x720"
 
 # === END PART 2 ===
-"be": "Сардэчна запрашаем! Абярыце рэжым або напішыце запыт.",
+
+# =============================
+# Full language pack (menus/buttons/answers)
+# =============================
+
+I18N_PACK: dict[str, dict[str, str]] = {
+    "welcome": {
+        "ru": "Добро пожаловать! Выберите режим или напишите запрос.",
+        "be": "Сардэчна запрашаем! Абярыце рэжым або напішыце запыт.",
         "uk": "Ласкаво просимо! Оберіть режим або напишіть запит.",
         "de": "Willkommen! Wähle einen Modus oder schreibe eine Anfrage.",
         "en": "Welcome! Choose a mode or type your request.",
@@ -1008,28 +1015,6 @@ async def _run_luma_video(
 
 
 # === END PART 5 ===
-):
-        return (
-            "Да, могу запускать генерацию коротких видео. "
-            "Можно сделать ролик по текстовому описанию или оживить фото. "
-            "После того как ты пришлёшь запрос и/или файл, я предложу выбрать движок "
-            "(Runway, Kling, Luma — в зависимости от доступных)."
-        )
-
-    if "runway" in t or "kling" in t or "luma" in t or "sora" in t:
-        return (
-            "Доступны движки: Kling, Luma, Sora (видео по тексту/голосу). "
-            "Runway используется только для оживления фото."
-        )
-
-    if "подпис" in t or "тариф" in t or "оплат" in t or "оплата" in t:
-        return (
-            "У меня есть тарифы и лимиты на генерации. "
-            "Напиши /plans чтобы посмотреть варианты."
-        )
-
-    return None
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CryptoBot (оплата)
