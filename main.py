@@ -963,13 +963,16 @@ async def _run_kling_video(
                         return
 
                     bio = BytesIO(vr.content)
-                    bio.name = "kling.mp4"
-                    bio.seek(0)
+bio.name = "kling.mp4"
+bio.seek(0)
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                    await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
-                    return
+ok = await safe_send_video(context, update.effective_chat.id, bio)
+if not ok:
+    await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
+    return
+
+await msg.reply_text(_tr(uid, "done"))
+return
                     await msg.reply_text(_tr(uid, "done"))
                     return
 
@@ -1070,13 +1073,16 @@ async def _run_luma_video(
                         return
 
                     bio = BytesIO(vr.content)
-                    bio.name = "luma.mp4"
-                    bio.seek(0)
+bio.name = "luma.mp4"
+bio.seek(0)
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                    await msg.reply_text("❌ Luma: не удалось отправить файл в Telegram.")
-                    return
+ok = await safe_send_video(context, update.effective_chat.id, bio)
+if not ok:
+    await msg.reply_text("❌ Luma: не удалось отправить файл в Telegram.")
+    return
+
+await msg.reply_text(_tr(uid, "done"))
+return
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
                     await msg.reply_text(f"❌ Luma: ошибка генерации.\n{st_js}")
@@ -1442,12 +1448,16 @@ async def _run_runway_animate_photo(
                         return
 
                     bio = BytesIO(vr.content)
-                    bio.name = "runway.mp4"
-                    bio.seek(0)
+bio.name = "runway.mp4"
+bio.seek(0)
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                    await msg.reply_text("❌ Runway: не удалось отправить файл в Telegram.")
+ok = await safe_send_video(context, update.effective_chat.id, bio)
+if not ok:
+    await msg.reply_text("❌ Runway: не удалось отправить файл в Telegram.")
+    return
+
+await msg.reply_text(_tr(uid, "done"))
+return
                     return
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
@@ -1768,13 +1778,16 @@ async def _run_sora_video(
                         return
 
                     bio = BytesIO(vr.content)
-                    bio.name = "sora.mp4"
-                    bio.seek(0)
+bio.name = "sora.mp4"
+bio.seek(0)
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                    await msg.reply_text("❌ Sora: не удалось отправить файл в Telegram.")
-                    return
+ok = await safe_send_video(context, update.effective_chat.id, bio)
+if not ok:
+    await msg.reply_text("❌ Sora: не удалось отправить файл в Telegram.")
+    return
+
+await msg.reply_text(_tr(uid, "done"))
+return
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
                     await msg.reply_text(f"❌ Sora: ошибка генерации.\n{st_js}")
