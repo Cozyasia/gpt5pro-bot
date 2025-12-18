@@ -707,65 +707,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Ошибка генерации ответа.")
 
 
-# ============================================================
-# CALLBACK ROUTER
-# ============================================================
-
-    # =========================
-    # KLING
-    # =========================
-    if engine == "kling":
-        est = float(KLING_UNIT_COST_USD or 0.40)
-
-        async def _do():
-            await _run_kling_video(update, context, prompt, duration, aspect)
-            _register_engine_spend(uid, "kling", est)
-
-        await _try_pay_then_do(update, context, uid, "kling", est, _do)
-        return
-
-    # =========================
-    # LUMA
-    # =========================
-    if engine == "luma":
-        est = float(LUMA_UNIT_COST_USD or 0.40)
-
-        async def _do():
-            await _run_luma_video(update, context, prompt, duration, aspect)
-            _register_engine_spend(uid, "luma", est)
-
-        await _try_pay_then_do(update, context, uid, "luma", est, _do)
-        return
-
-    # =========================
-    # SORA 2 / SORA 2 PRO
-    # =========================
-    if engine == "sora":
-        est = _sora_est_cost_usd(uid, duration)
-
-        async def _do():
-            await _run_sora_video(update, context, prompt, duration, aspect)
-            _register_engine_spend(uid, "sora", est)
-
-        await _try_pay_then_do(update, context, uid, "sora", est, _do)
-        return
-
-    await q.answer("Неизвестный движок.", show_alert=True)
-
-
-# ============================================================
-# HANDLER REGISTRATION (later used in main())
-# ============================================================
-
-def register_handlers(app: Application):
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-
-    app.add_handler(CallbackQueryHandler(on_callback_query))
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-
 # === END PART 4 ===
 
 # ============================================================
@@ -1498,11 +1439,6 @@ def register_all_handlers(app: Application):
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
 
-# ============================================================
-# HEALTHCHECK / SIMPLE WEB SERVER (for Render)
-# ============================================================
-# ============================================================
-# APPLICATION FACTORY
 # ============================================================
 
 def build_app() -> Application:
