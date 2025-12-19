@@ -586,15 +586,7 @@ def _aspect_to_size(aspect: str) -> str:
 # Здесь мы ТОЛЬКО ДОБАВЛЯЕМ новые ключи через update()
 
 I18N_PACK.update({
-    "welcome": {
-        "ru": "Добро пожаловать! Выберите режим или напишите запрос.",
-        "be": "Сардэчна запрашаем! Абярыце рэжым або напішыце запыт.",
-        "uk": "Ласкаво просимо! Оберіть режим або напишіть запит.",
-        "de": "Willkommen! Wähle einen Modus oder schreibe eine Anfrage.",
-        "en": "Welcome! Choose a mode or type your request.",
-        "fr": "Bienvenue ! Choisissez un mode ou écrivez votre demande.",
-        "th": "ยินดีต้อนรับ! เลือกโหมดหรือพิมพ์คำขอของคุณ",
-    },
+    
     "choose_engine": {
         "ru": "Выберите движок:",
         "be": "Абярыце рухавік:",
@@ -630,24 +622,6 @@ I18N_PACK.update({
         "en": "⏳ Rendering…",
         "fr": "⏳ Rendu…",
         "th": "⏳ กำลังสร้าง…",
-    },
-    "done": {
-        "ru": "✅ Готово!",
-        "be": "✅ Гатова!",
-        "uk": "✅ Готово!",
-        "de": "✅ Fertig!",
-        "en": "✅ Done!",
-        "fr": "✅ Terminé !",
-        "th": "✅ เสร็จแล้ว!",
-    },
-    "help": {
-        "ru": "❓ Помощь: напиши «сделай видео …» или пришли фото и нажми «Оживить фото».",
-        "be": "❓ Дапамога: напішы «зрабі відэа …» або дашлі фота і націсні «Ажывіць фота».",
-        "uk": "❓ Допомога: напиши «зроби відео …» або надішли фото й натисни «Оживити фото».",
-        "de": "❓ Hilfe: schreibe „make video …“ oder sende ein Foto und drücke „Animate photo“.",
-        "en": "❓ Help: type “make video …” or send a photo and tap “Animate photo”.",
-        "fr": "❓ Aide : écrivez « make video … » ou envoyez une photo puis « Animate photo ».",
-        "th": "❓ วิธีใช้: พิมพ์ “ทำวิดีโอ …” หรือส่งรูปแล้วกด “ทำให้รูปเคลื่อนไหว”",
     },
 })
 
@@ -1175,7 +1149,10 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for k, p in PLANS.items():
         lines.append(f"• {p['title']}: {p['price_usdt']} USDT — {p['desc']}")
     txt = "💳 Тарифы:\n\n" + "\n".join(lines)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(p["title"], callback_data=f"plan:{k}")]] for k, p in PLANS.items())
+    kb = InlineKeyboardMarkup([
+    [InlineKeyboardButton(p["title"], callback_data=f"plan:{k}")]
+    for k, p in PLANS.items()
+])
     await update.effective_message.reply_text(txt, reply_markup=kb)
 
 async def on_plan_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, plan_key: str):
@@ -1347,9 +1324,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     kb = InlineKeyboardMarkup([
-        InlineKeyboardButton(_tr(uid, "animate_btn"), callback_data=f"animate_photo:{aid}")
-    ])
-
+    [InlineKeyboardButton(_tr(uid, "animate_btn"), callback_data=f"animate_photo:{aid}")]
+])
     await msg.reply_text(
         _tr(uid, "photo_received"),
         reply_markup=kb,
