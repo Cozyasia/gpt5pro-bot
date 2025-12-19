@@ -323,15 +323,7 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "fr": "❓ Aide : écrivez « make video … » ou envoyez une photo puis « Animer une photo ».",
         "th": "❓ วิธีใช้: พิมพ์ “ทำวิดีโอ …” หรือส่งรูปแล้วกด “ทำให้รูปเคลื่อนไหว”",
     },
-    "runway_disabled_textvideo": {
-        "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
-        "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
-        "uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оберіть Kling, Luma або Sora.",
-        "de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
-        "en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
-        "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
-        "th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
-    },
+    
     "rendering": {
         "ru": "⏳ Рендерю…",
         "be": "⏳ Рэндэр…",
@@ -1769,10 +1761,6 @@ async def _run_sora_video(
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
-    
-
-    seconds = max(1, min(30, int(seconds)))
-    aspect = aspect if aspect in ("16:9", "9:16", "1:1") else "16:9"
     model = _pick_sora_model(uid)
 
     await msg.reply_text(_tr(uid, "rendering"))
