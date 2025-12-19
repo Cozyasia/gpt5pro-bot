@@ -932,23 +932,23 @@ async def _run_kling_video(
                         return
 
                     try:
-    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-except Exception as e:
-    log.exception("Kling download failed: %s", e)
-    await msg.reply_text("Kling: не удалось скачать видео (redirect/download error).")
-    return
+                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+                    except Exception as e:
+                        log.exception("Kling download failed: %s", e)
+                        await msg.reply_text("Kling: не удалось скачать видео (redirect/download error).")
+                        return
 
-bio = BytesIO(data)
-bio.name = "kling.mp4"
-bio.seek(0)
+                    bio = BytesIO(data)
+                    bio.name = "kling.mp4"
+                    bio.seek(0)
 
-ok = await safe_send_video(context, update.effective_chat.id, bio)
-if not ok:
-    await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
-    return
+                    ok = await safe_send_video(context, update.effective_chat.id, bio)
+                    if not ok:
+                        await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
+                        return
 
-await msg.reply_text(_tr(uid, "done"))
-return
+                    await msg.reply_text(_tr(uid, "done"))
+                    return
                     
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
@@ -1043,15 +1043,13 @@ async def _run_luma_video(
                         return
 
                     try:
-    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-except Exception as e:
-    log.exception("Luma download failed: %s", e)
-    await msg.reply_text("Luma: не удалось скачать видео (redirect/download error).")
-    return
+                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+                    except Exception as e:
+                        log.exception("Luma download failed: %s", e)
+                        await msg.reply_text("Luma: не удалось скачать видео (redirect/download error).")
+                        return
 
-bio = BytesIO(data)
-bio.name = "luma.mp4"
-bio.seek(0)
+                    bio = BytesIO(data)
                     bio.name = "luma.mp4"
                     bio.seek(0)
 
@@ -1424,15 +1422,13 @@ async def _run_runway_animate_photo(
                         return
 
                     try:
-    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-except Exception as e:
-    log.exception("Runway download failed: %s", e)
-    await msg.reply_text("Runway: не удалось скачать видео (redirect/download error).")
-    return
+                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+                    except Exception as e:
+                        log.exception("Runway download failed: %s", e)
+                        await msg.reply_text("Runway: не удалось скачать видео (redirect/download error).")
+                        return
 
-bio = BytesIO(data)
-bio.name = "runway.mp4"
-bio.seek(0)
+                    bio = BytesIO(data)
                     bio.name = "runway.mp4"
                     bio.seek(0)
 
@@ -1806,15 +1802,13 @@ async def _run_sora_video(
                         return
 
                     try:
-    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-except Exception as e:
-    log.exception("Sora download failed: %s", e)
-    await msg.reply_text("Sora: не удалось скачать видео (redirect/download error).")
-    return
+                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+                    except Exception as e:
+                        log.exception("Sora download failed: %s", e)
+                        await msg.reply_text("Sora: не удалось скачать видео (redirect/download error).")
+                        return
 
-bio = BytesIO(data)
-bio.name = "sora.mp4"
-bio.seek(0)
+                    bio = BytesIO(data)
                     bio.name = "sora.mp4"
                     bio.seek(0)
 
