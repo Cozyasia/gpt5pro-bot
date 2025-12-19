@@ -559,15 +559,20 @@ def _parse_video_opts(text: str) -> tuple[int, str]:
     m = re.search(r"(\d+)\s*(сек|s)", text, re.I)
     if m:
         try:
-            duration = max(1, min(30, int(m.group(1))))
+            duration = int(m.group(1))
         except Exception:
-            pass
-    if "9:16" in text or "вертик" in text.lower():
+            duration = 5
+
+    tl = (text or "").lower()
+    if "9:16" in text or "вертик" in tl:
         aspect = "9:16"
     elif "1:1" in text:
         aspect = "1:1"
-    return duration, aspect
+    else:
+        aspect = "16:9"
 
+    return normalize_seconds(duration), normalize_aspect(aspect)
+    
 def _aspect_to_size(aspect: str) -> str:
     if aspect == "9:16":
         return "720x1280"
@@ -679,6 +684,9 @@ def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
 async def _ask_video_engine(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     uid = update.effective_user.id
     dur, asp = _parse_video_opts(prompt)
+
+    dur = normalize_seconds(dur)
+    asp = normalize_aspect(asp)
 
     aid = _new_aid()
     _pending_actions[aid] = {
@@ -876,6 +884,9 @@ async def _run_kling_video(
         await msg.reply_text("Kling: нет COMET_API_KEY.")
         return
 
+    seconds = normalize_seconds(seconds)
+    aspect = normalize_aspect(aspect)
+
     await msg.reply_text(_tr(uid, "rendering"))
 
     payload = {
@@ -986,6 +997,9 @@ async def _run_luma_video(
     if not COMET_API_KEY:
         await msg.reply_text("Luma: нет COMET_API_KEY.")
         return
+
+    seconds = normalize_seconds(seconds)
+    aspect = normalize_aspect(aspect)
 
     await msg.reply_text(_tr(uid, "rendering"))
 
@@ -1361,6 +1375,9 @@ async def _run_runway_animate_photo(
     if not RUNWAY_API_KEY:
         await msg.reply_text("Runway: нет RUNWAY_API_KEY.")
         return
+
+    seconds = normalize_seconds(seconds)
+    aspect = normalize_aspect(aspect)
         
     headers = {
         "Authorization": f"Bearer {RUNWAY_API_KEY}",
@@ -1536,6 +1553,9 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     duration = int(meta.get("duration", 5))
     aspect = meta.get("aspect", "16:9")
 
+    duration = normalize_seconds(duration)
+    aspect = normalize_aspect(aspect)
+    
     if engine == "kling":
         est = float(KLING_UNIT_COST_USD or 0.40)
 
@@ -1745,6 +1765,11 @@ async def _run_sora_video(
     if not COMET_API_KEY:
         await msg.reply_text("Sora: нет COMET_API_KEY.")
         return
+
+    seconds = normalize_seconds(seconds)
+    aspect = normalize_aspect(aspect)
+
+    
 
     seconds = max(1, min(30, int(seconds)))
     aspect = aspect if aspect in ("16:9", "9:16", "1:1") else "16:9"
