@@ -931,12 +931,14 @@ async def _run_kling_video(
                         await msg.reply_text("Kling: нет ссылки на видео.")
                         return
 
-                    vr = await client.get(video_url, timeout=180.0)
-                    if vr.status_code >= 400:
-                        await msg.reply_text(f"Kling: не удалось скачать видео ({vr.status_code}).")
-                        return
+                    try:
+    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+except Exception as e:
+    log.exception("Kling download failed: %s", e)
+    await msg.reply_text("Kling: не удалось скачать видео (redirect/download error).")
+    return
 
-                    bio = BytesIO(vr.content)
+bio = BytesIO(data)
                     bio.name = "kling.mp4"
                     bio.seek(0)
 
@@ -1040,12 +1042,16 @@ async def _run_luma_video(
                         await msg.reply_text("Luma: нет ссылки на видео.")
                         return
 
-                    vr = await client.get(video_url, timeout=180.0)
-                    if vr.status_code >= 400:
-                        await msg.reply_text(f"Luma: не удалось скачать видео ({vr.status_code}).")
-                        return
+                    try:
+    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+except Exception as e:
+    log.exception("Luma download failed: %s", e)
+    await msg.reply_text("Luma: не удалось скачать видео (redirect/download error).")
+    return
 
-                    bio = BytesIO(vr.content)
+bio = BytesIO(data)
+bio.name = "luma.mp4"
+bio.seek(0)
                     bio.name = "luma.mp4"
                     bio.seek(0)
 
@@ -1615,11 +1621,19 @@ def build_app() -> Application:
 # Safe send helpers (Telegram sometimes fails on large files)
 # ------------------------------------------------------------
 
-async def safe_send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, bio: BytesIO, caption: str | None = None):
+async def safe_send_video(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    bio: BytesIO,
+    caption: str | None = None,
+) -> bool:
+    filename = getattr(bio, "name", None) or "video.mp4"
+
     try:
+        bio.seek(0)
         await context.bot.send_video(
             chat_id=chat_id,
-            video=bio,
+            video=InputFile(bio, filename=filename),
             caption=caption,
             supports_streaming=True,
         )
@@ -1631,7 +1645,7 @@ async def safe_send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, bio:
         bio.seek(0)
         await context.bot.send_document(
             chat_id=chat_id,
-            document=bio,
+            document=InputFile(bio, filename=filename),
             caption=caption,
         )
         return True
@@ -1639,6 +1653,47 @@ async def safe_send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, bio:
         log.error("send_document failed: %s", e)
         return False
 
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
+async def download_bytes_redirect_safe(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: dict | None = None,
+    timeout_s: float = 180.0,
+    max_redirects: int = 5,
+) -> bytes:
+    """
+    Robust downloader that handles redirects and weird intermediate responses.
+    - Follows 301/302/303/307/308 manually (for relative Location too)
+    - Validates that we got non-empty bytes
+    """
+    cur = url
+    for _ in range(max_redirects + 1):
+        req = client.build_request("GET", cur, headers=headers)
+        resp = await client.send(req, follow_redirects=False, timeout=timeout_s)
+
+        # Redirect?
+        if resp.status_code in _REDIRECT_STATUSES:
+            loc = resp.headers.get("location") or resp.headers.get("Location")
+            if not loc:
+                raise httpx.HTTPStatusError("Redirect without Location", request=req, response=resp)
+            cur = httpx.URL(cur).join(loc)  # supports relative locations
+            continue
+
+        if resp.status_code >= 400:
+            raise httpx.HTTPStatusError(
+                f"Download failed status={resp.status_code} body={(resp.text or '')[:400]}",
+                request=req,
+                response=resp,
+            )
+
+        data = resp.content or b""
+        if not data:
+            raise RuntimeError("Empty response body while downloading video")
+        return data
+
+    raise RuntimeError(f"Too many redirects while downloading: {url}")
 
 # ------------------------------------------------------------
 # Normalize aspect / seconds (extra safety)
@@ -1746,12 +1801,16 @@ async def _run_sora_video(
                         await msg.reply_text("Sora: нет ссылки на видео.")
                         return
 
-                    vr = await client.get(video_url, timeout=180.0)
-                    if vr.status_code >= 400:
-                        await msg.reply_text(f"Sora: не удалось скачать видео ({vr.status_code}).")
-                        return
+                    try:
+    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+except Exception as e:
+    log.exception("Sora download failed: %s", e)
+    await msg.reply_text("Sora: не удалось скачать видео (redirect/download error).")
+    return
 
-                    bio = BytesIO(vr.content)
+bio = BytesIO(data)
+bio.name = "sora.mp4"
+bio.seek(0)
                     bio.name = "sora.mp4"
                     bio.seek(0)
 
