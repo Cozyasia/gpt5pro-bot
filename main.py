@@ -939,16 +939,16 @@ except Exception as e:
     return
 
 bio = BytesIO(data)
-                    bio.name = "kling.mp4"
-                    bio.seek(0)
+bio.name = "kling.mp4"
+bio.seek(0)
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                        await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
-                        return
+ok = await safe_send_video(context, update.effective_chat.id, bio)
+if not ok:
+    await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
+    return
 
-                    await msg.reply_text(_tr(uid, "done"))
-                    return
+await msg.reply_text(_tr(uid, "done"))
+return
                     
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
