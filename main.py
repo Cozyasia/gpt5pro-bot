@@ -865,7 +865,8 @@ async def _run_kling_video(
     prompt: str,
     seconds: int,
     aspect: str,
-):
+) -> bool:
+    
     msg = update.effective_message
     uid = update.effective_user.id
 
@@ -979,7 +980,8 @@ async def _run_luma_video(
     prompt: str,
     seconds: int,
     aspect: str,
-):
+) -> bool:
+    
     msg = update.effective_message
     uid = update.effective_user.id
 
@@ -1349,10 +1351,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _run_runway_animate_photo(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    photo_bytes: bytes,
-    seconds: int = 5,
-    aspect: str = "16:9",
-):
+    image_url: str,
+    seconds: int,
+    aspect: str,
+) -> bool:
+    
     msg = update.effective_message
     uid = update.effective_user.id
 
@@ -1552,8 +1555,9 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         est = float(KLING_UNIT_COST_USD or 0.40)
 
         async def _do():
-            await _run_kling_video(update, context, prompt, duration, aspect)
-            _register_engine_spend(uid, "kling", est)
+    ok = await _run_kling_video(update, context, prompt, duration, aspect)
+    if ok:
+        _register_engine_spend(uid, "kling", est)
 
         await _try_pay_then_do(update, context, uid, "kling", est, _do)
         return
@@ -1562,8 +1566,9 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         est = float(LUMA_UNIT_COST_USD or 0.40)
 
         async def _do():
-            await _run_luma_video(update, context, prompt, duration, aspect)
-            _register_engine_spend(uid, "luma", est)
+    ok = await _run_luma_video(update, context, prompt, duration, aspect)
+    if ok:
+        _register_engine_spend(uid, "luma", est)
 
         await _try_pay_then_do(update, context, uid, "luma", est, _do)
         return
@@ -1572,8 +1577,9 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         est = _sora_est_cost_usd(uid, duration)
 
         async def _do():
-            await _run_sora_video(update, context, prompt, duration, aspect)
-            _register_engine_spend(uid, "sora", est)
+    ok = await _run_sora_video(update, context, prompt, duration, aspect)
+    if ok:
+        _register_engine_spend(uid, "sora", est)
 
         await _try_pay_then_do(update, context, uid, "sora", est, _do)
         return
@@ -1747,7 +1753,8 @@ async def _run_sora_video(
     prompt: str,
     seconds: int,
     aspect: str,
-):
+) -> bool:
+    
     msg = update.effective_message
     uid = update.effective_user.id
 
