@@ -866,13 +866,12 @@ async def _run_kling_video(
     seconds: int,
     aspect: str,
 ) -> bool:
-    
     msg = update.effective_message
     uid = update.effective_user.id
 
     if not KLING_ENABLED:
-    await msg.reply_text("Kling отключён.")
-    return False
+        await msg.reply_text("Kling отключён.")
+        return False
     if not COMET_API_KEY:
         await msg.reply_text("Kling: нет COMET_API_KEY.")
         return False
@@ -883,7 +882,7 @@ async def _run_kling_video(
     await msg.reply_text(_tr(uid, "rendering"))
 
     payload = {
-        "prompt": prompt.strip(),
+        "prompt": (prompt or "").strip(),
         "seconds": int(seconds),
         "ratio": aspect,
     }
@@ -903,15 +902,26 @@ async def _run_kling_video(
             )
 
             if r.status_code >= 400:
-                await msg.reply_text(
-                    f"⚠️ Kling отклонил задачу ({r.status_code}).\n{(r.text or '')[:1000]}"
-                )
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(f"⚠️ Kling отклонил задачу ({r.status_code}).\n{txt}")
                 return False
 
-            js = r.json() or {}
-            task_id = js.get("id") or js.get("task_id")
+            try:
+                js = r.json() or {}
+            except Exception:
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(f"Kling: неожиданный ответ (не JSON).\n{txt}")
+                return False
+
+            task_id = (
+                js.get("task_id")
+                or js.get("taskId")
+                or js.get("id")
+                or (js.get("data") or {}).get("task_id")
+                or (js.get("data") or {}).get("id")
+            )
             if not task_id:
-                await msg.reply_text("Kling: не вернулся task_id.")
+                await msg.reply_text(f"Kling: не вернулся task_id.\n{str(js)[:1200]}")
                 return False
 
             status_url = f"{COMET_BASE_URL}/kling/v1/tasks/{task_id}"
@@ -930,10 +940,19 @@ async def _run_kling_video(
 
                 if st in ("completed", "succeeded", "done"):
                     out = st_js.get("output") or {}
-                    video_url = out.get("url") or out.get("video_url")
+                    video_url = (
+                        out.get("url")
+                        or out.get("video_url")
+                        or out.get("videoUrl")
+                        or (out.get("data") or {}).get("url")
+                    )
                     if not video_url:
-                        await msg.reply_text("Kling: нет ссылки на видео.")
-                        return False
+                        # иногда output может быть строкой
+                        if isinstance(out, str) and out.startswith("http"):
+                            video_url = out
+                        else:
+                            await msg.reply_text(f"Kling: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
@@ -953,10 +972,9 @@ async def _run_kling_video(
 
                     await msg.reply_text(_tr(uid, "done"))
                     return True
-                    
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Kling: ошибка генерации.\n{st_js}")
+                    await msg.reply_text(f"❌ Kling: ошибка генерации.\n{str(st_js)[:1200]}")
                     return False
 
                 if time.time() - started > 900:
@@ -968,7 +986,7 @@ async def _run_kling_video(
     except Exception as e:
         log.exception("Kling exception: %s", e)
         await msg.reply_text("❌ Ошибка Kling.")
-
+        return False
 
 # ============================================================
 # LUMA — TEXT / VOICE -> VIDEO
@@ -981,7 +999,6 @@ async def _run_luma_video(
     seconds: int,
     aspect: str,
 ) -> bool:
-    
     msg = update.effective_message
     uid = update.effective_user.id
 
@@ -990,15 +1007,15 @@ async def _run_luma_video(
         return False
     if not COMET_API_KEY:
         await msg.reply_text("Luma: нет COMET_API_KEY.")
-        return
+        return False
 
-            return Falsealize_seconds(seconds)
+    seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
     await msg.reply_text(_tr(uid, "rendering"))
 
     payload = {
-        "prompt": prompt.strip(),
+        "prompt": (prompt or "").strip(),
         "seconds": int(seconds),
         "ratio": aspect,
     }
@@ -1017,14 +1034,11 @@ async def _run_luma_video(
                 json=payload,
             )
 
-            if r.if r.status_code >= 400:
+            if r.status_code >= 400:
                 txt = (r.text or "")[:1200]
-                await msg.reply_text(
-                    f"⚠️ Luma отклонила задачу ({r.status_code}).\n{txt}"
-                )
+                await msg.reply_text(f"⚠️ Luma отклонила задачу ({r.status_code}).\n{txt}")
                 return False
 
-            # Пытаемся разобрать JSON корректно
             try:
                 js = r.json() or {}
             except Exception:
@@ -1032,7 +1046,6 @@ async def _run_luma_video(
                 await msg.reply_text(f"Luma: неожиданный ответ (не JSON).\n{txt}")
                 return False
 
-            # В разных прокси/провайдерах task id может называться по-разному
             task_id = (
                 js.get("task_id")
                 or js.get("taskId")
@@ -1040,49 +1053,72 @@ async def _run_luma_video(
                 or (js.get("data") or {}).get("task_id")
                 or (js.get("data") or {}).get("id")
             )
-
             if not task_id:
                 await msg.reply_text(f"Luma: не вернулся task_id.\n{str(js)[:1200]}")
-                return False          status_url = rl{COMET_BASE_URL}_URL}/luma/v1/t{task_id}k
+                return False
+
+            status_url = f"{COMET_BASE_URL}/luma/v1/tasks/{task_id}"
             started = time.time()
 
             while True:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code >= 400:
                     await msg.reply_text(
-                             f"⚠️ Luma: ошибка стат{rs.status_code}code{(rs.text or t )[:1000]}0
-                    )                     retur                st_js = rs.json() or {}
+                        f"⚠️ Luma: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
+                    )
+                    return False
+
+                st_js = rs.json() or {}
                 st = (st_js.get("status") or "").lower()
 
                 if st in ("completed", "succeeded", "done"):
                     out = st_js.get("output") or {}
-                    video_url = out.get("url") or out.get("video_url")
-                    if not v                    if not video_url: 
+                    video_url = (
+                        out.get("url")
+                        or out.get("video_url")
+                        or out.get("videoUrl")
+                        or (out.get("data") or {}).get("url")
+                    )
+                    if not video_url:
+                        if isinstance(out, str) and out.startswith("http"):
+                            video_url = out
+                        else:
+                            await msg.reply_text(f"Luma: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            return False
+
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
-          "Luma download failed: %s"n("Luma download failed: %s", e)
-                 "Luma: не удалось скачать видео (redirect/download error)." (redirect/download error).")
-                            return False                  bio = BytesIO(data)
-   "luma.mp4"       bio.name = "luma.mp4"
+                        log.exception("Luma download failed: %s", e)
+                        await msg.reply_text("Luma: не удалось скачать видео (redirect/download error).")
+                        return False
+
+                    bio = BytesIO(data)
+                    bio.name = "luma.mp4"
                     bio.seek(0)
 
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
-                 "❌ Luma: не удалось отправить файл в Telegram." отправить файл в Telegram.")
-   
-
+                        await msg.reply_text("❌ Luma: не удалось отправить файл в Telegram.")
+                        return False
 
                     await msg.reply_text(_tr(uid, "done"))
-                        return True              if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Luma: ошибка генерации.\n{st_js}")
-                        return False              if time.time() - started > 900:
+                    return True
+
+                if st in ("failed", "error", "rejected", "cancelled", "canceled"):
+                    await msg.reply_text(f"❌ Luma: ошибка генерации.\n{str(st_js)[:1200]}")
+                    return False
+
+                if time.time() - started > 900:
                     await msg.reply_text("⌛ Luma: превышено время ожидания.")
-                        return False              await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                    return False
+
+                await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Luma exception: %s", e)
         await msg.reply_text("❌ Ошибка Luma.")
+        return False
 
 
 # === END PART 5 ===
@@ -1351,68 +1387,80 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _run_runway_animate_photo(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    image_url: str,
-    seconds: int,
-    aspect: str,
+    photo_bytes: bytes,
+    seconds: int = 5,
+    aspect: str = "16:9",
 ) -> bool:
-    
     msg = update.effective_message
     uid = update.effective_user.id
 
     if not RUNWAY_ENABLED:
         await msg.reply_text("Runway отключён.")
-        return
-
-    if not RUNWAY_BASE_URL or not RUNWAY_MODEL:
-        await msg.reply_text("Runway: не настроен.")
-        return
-
-    if not RUNWAY_API_KEY:
-        await msg.reply_text("Runway: нет RUNWAY_API_KEY.")
-        return
+        return False
+    if not COMET_API_KEY:
+        await msg.reply_text("Runway: нет COMET_API_KEY.")
+        return False
+    if not photo_bytes:
+        await msg.reply_text("Runway: нет данных фото.")
+        return False
 
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
-        
-    headers = {
-        "Authorization": f"Bearer {RUNWAY_API_KEY}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
 
-    # 1) Загружаем изображение (Runway требует URL)
-    # Используем data: URL
-    img_b64 = base64.b64encode(photo_bytes).decode("ascii")
-    image_url = f"data:image/jpeg;base64,{img_b64}"
+    await msg.reply_text(_tr(uid, "rendering"))
+
+    try:
+        img_b64 = base64.b64encode(photo_bytes).decode("ascii")
+        image_data_url = f"data:image/jpeg;base64,{img_b64}"
+    except Exception:
+        await msg.reply_text("Runway: не удалось подготовить изображение.")
+        return False
 
     payload = {
-        "model": RUNWAY_MODEL,
-        "promptImage": image_url,
+        "model": RUNWAY_MODEL,          # если у тебя нет RUNWAY_MODEL — замени на строку модели
+        "promptImage": image_data_url,
         "seconds": int(seconds),
         "ratio": aspect,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {COMET_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
     }
 
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
             r = await client.post(
-                f"{RUNWAY_BASE_URL}/image_to_video",
+                f"{COMET_BASE_URL}/runwayml/v1/image_to_video",
                 headers=headers,
                 json=payload,
             )
 
             if r.status_code >= 400:
-                await msg.reply_text(
-                    f"⚠️ Runway отклонил задачу ({r.status_code}).\n{(r.text or '')[:1000]}"
-                )
-                return
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(f"⚠️ Runway отклонил задачу ({r.status_code}).\n{txt}")
+                return False
 
-            js = r.json() or {}
-            task_id = js.get("id") or js.get("task_id")
+            try:
+                js = r.json() or {}
+            except Exception:
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(f"Runway: неожиданный ответ (не JSON).\n{txt}")
+                return False
+
+            task_id = (
+                js.get("task_id")
+                or js.get("taskId")
+                or js.get("id")
+                or (js.get("data") or {}).get("task_id")
+                or (js.get("data") or {}).get("id")
+            )
             if not task_id:
-                await msg.reply_text("Runway: не вернулся task_id.")
-                return
+                await msg.reply_text(f"Runway: не вернулся task_id.\n{str(js)[:1200]}")
+                return False
 
-            status_url = f"{RUNWAY_BASE_URL}/tasks/{task_id}"
+            status_url = f"{COMET_BASE_URL}/runwayml/v1/tasks/{task_id}"
             started = time.time()
 
             while True:
@@ -1421,24 +1469,32 @@ async def _run_runway_animate_photo(
                     await msg.reply_text(
                         f"⚠️ Runway: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
                     )
-                    return
+                    return False
 
                 st_js = rs.json() or {}
                 st = (st_js.get("status") or "").lower()
 
                 if st in ("completed", "succeeded", "done"):
                     out = st_js.get("output") or {}
-                    video_url = out.get("url") or out.get("video_url")
+                    video_url = (
+                        out.get("url")
+                        or out.get("video_url")
+                        or out.get("videoUrl")
+                        or (out.get("data") or {}).get("url")
+                    )
                     if not video_url:
-                        await msg.reply_text("Runway: нет ссылки на видео.")
-                        return
+                        if isinstance(out, str) and out.startswith("http"):
+                            video_url = out
+                        else:
+                            await msg.reply_text(f"Runway: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
                         log.exception("Runway download failed: %s", e)
                         await msg.reply_text("Runway: не удалось скачать видео (redirect/download error).")
-                        return
+                        return False
 
                     bio = BytesIO(data)
                     bio.name = "runway.mp4"
@@ -1447,24 +1503,25 @@ async def _run_runway_animate_photo(
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
                         await msg.reply_text("❌ Runway: не удалось отправить файл в Telegram.")
-                        return
+                        return False
 
                     await msg.reply_text(_tr(uid, "done"))
-                    return
+                    return True
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Runway: ошибка генерации.\n{st_js}")
-                    return
+                    await msg.reply_text(f"❌ Runway: ошибка генерации.\n{str(st_js)[:1200]}")
+                    return False
 
                 if time.time() - started > 900:
                     await msg.reply_text("⌛ Runway: превышено время ожидания.")
-                    return
+                    return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Runway exception: %s", e)
         await msg.reply_text("❌ Ошибка Runway.")
+        return False
 
 
 # ============================================================
@@ -1501,90 +1558,154 @@ async def on_callback_query_animate_photo(update: Update, context: ContextTypes.
 
 async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    data = (q.data or "").strip()
+    if not q:
+        return
+
     uid = update.effective_user.id
-
-    # 1) Language
-    if data.startswith("lang:"):
-        await on_lang_callback(update, context)
-        return
-
-    # 2) Plans / payments
-    if data == "plans:back" or data.startswith("plan:") or data.startswith("paid:"):
-        handled = await on_callback_query_plans(update, context)
-        if handled:
-            return
-
-    # 3) Animate photo
-    if data.startswith("animate_photo:"):
-        handled = await on_callback_query_animate_photo(update, context)
-        if handled:
-            return
-
-    # 4) Hard-disable Runway for text/voice → video
-    if data.startswith("choose:runway:"):
-        await q.answer(_tr(uid, "runway_disabled_textvideo"), show_alert=True)
-        return
-
-    # 5) Engine choose (Kling/Luma/Sora)
-    if not data.startswith("choose:"):
+    data = (q.data or "").strip()
+    if not data:
         await q.answer()
         return
 
-    await q.answer()
-
     try:
-        _, engine, aid = data.split(":", 2)
-    except Exception:
-        await q.answer("Некорректная кнопка.", show_alert=True)
+        # =============================
+        # Выбор языка: lang:<code>
+        # =============================
+        if data.startswith("lang:"):
+            try:
+                await on_lang_callback(update, context)
+            except NameError:
+                await q.answer("Language handler missing")
+            return
+
+        # =============================
+        # Тарифы/планы: plan:<key>
+        # =============================
+        if data.startswith("plan:"):
+            parts = data.split(":", 1)
+            if len(parts) != 2:
+                await q.answer("Bad callback")
+                return
+            _, plan_key = parts
+            try:
+                await on_plan_callback(update, context, plan_key)
+            except NameError:
+                await q.answer("Plan handler missing")
+            return
+
+        # =============================
+        # Оживить фото: animate_photo:<aid>
+        # =============================
+        if data.startswith("animate_photo:"):
+            parts = data.split(":")
+            if len(parts) != 2:
+                await q.answer("Bad callback")
+                return
+            _, aid = parts
+
+            act = _pending_actions.get(aid) or {}
+            photo_bytes = act.get("photo_bytes")
+            if not photo_bytes:
+                await q.answer()
+                await q.message.reply_text("Фото не найдено. Пришлите фото ещё раз.")
+                return
+
+            seconds = normalize_seconds(int(act.get("duration") or 5))
+            aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
+
+            async def _do():
+                ok = await _run_runway_animate_photo(
+                    update, context, photo_bytes, seconds=seconds, aspect=aspect
+                )
+                # Если нужно списание за animate-photo — включи:
+                # if ok:
+                #     est = float(RUNWAY_UNIT_COST_USD or 0.40) * seconds
+                #     _register_engine_spend(uid, "runway", est)
+
+            await q.answer()
+            await _do()
+            return
+
+        # =============================
+        # Выбор движка: choose:<engine>:<aid>
+        # =============================
+        if data.startswith("choose:"):
+            parts = data.split(":")
+            if len(parts) != 3:
+                await q.answer("Bad callback")
+                return
+            _, engine, aid = parts
+
+            act = _pending_actions.get(aid) or {}
+            prompt = (act.get("prompt") or "").strip()
+            duration = normalize_seconds(int(act.get("duration") or 5))
+            aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
+
+            # Runway для text/voice→video отключён (как договаривались)
+            if engine == "runway":
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "runway_disabled_textvideo"))
+                return
+
+            # ---- KLING ----
+            if engine == "kling":
+                est = float(KLING_UNIT_COST_USD or 0.40) * duration
+
+                async def _do():
+                    ok = await _run_kling_video(update, context, prompt, duration, aspect)
+                    if ok:
+                        _register_engine_spend(uid, "kling", est)
+
+                await q.answer()
+                await _try_pay_then_do(update, context, uid, "kling", est, _do)
+                return
+
+            # ---- LUMA ----
+            if engine == "luma":
+                est = float(LUMA_UNIT_COST_USD or 0.40) * duration
+
+                async def _do():
+                    ok = await _run_luma_video(update, context, prompt, duration, aspect)
+                    if ok:
+                        _register_engine_spend(uid, "luma", est)
+
+                await q.answer()
+                await _try_pay_then_do(update, context, uid, "luma", est, _do)
+                return
+
+            # ---- SORA ----
+            if engine == "sora":
+                est = _sora_est_cost_usd(uid, duration)
+
+                async def _do():
+                    ok = await _run_sora_video(update, context, prompt, duration, aspect)
+                    if ok:
+                        _register_engine_spend(uid, "sora", est)
+
+                await q.answer()
+                await _try_pay_then_do(update, context, uid, "sora", est, _do)
+                return
+
+            await q.answer("Unknown engine")
+            return
+
+        # =============================
+        # Неизвестный callback
+        # =============================
+        await q.answer("Unknown action")
         return
 
-    meta = _pending_actions.pop(aid, None)
-    if not meta:
-        await q.answer("Задача устарела.", show_alert=True)
+    except Exception as e:
+        log.exception("on_callback_query error: %s", e)
+        try:
+            await q.answer("Error")
+        except Exception:
+            pass
+        try:
+            await q.message.reply_text("❌ Ошибка обработки кнопки.")
+        except Exception:
+            pass
         return
-
-    prompt = meta.get("prompt", "")
-    duration = int(meta.get("duration", 5))
-    aspect = meta.get("aspect", "16:9")
-
-    duration = normalize_seconds(duration)
-    aspect = normalize_aspect(aspect)
-    
-    if engine == "kling":
-        est = float(KLING_UNIT_COST_USD or 0.40)
-
-        async def _do():
-            ok = await _run_kling_video(update, context, prompt, duration, aspect)
-            if ok:
-                _register_engine_spend(uid, "kling", est)
-
-        await _try_pay_then_do(update, context, uid, "kling", est, _do)
-        return
-        
-    if engine == "luma":
-        est = float(LUMA_UNIT_COST_USD or 0.40)
-
-        async def _do():
-            ok = await _run_luma_video(update, context, prompt, duration, aspect)
-            if ok:
-                _register_engine_spend(uid, "luma", est)
-
-        await _try_pay_then_do(update, context, uid, "luma", est, _do)
-        return
-
-    if engine == "sora":
-        est = _sora_est_cost_usd(uid, duration)
-
-        async def _do():
-            ok = await _run_sora_video(update, context, prompt, duration, aspect)
-            if ok:
-                _register_engine_spend(uid, "sora", est)
-
-        await _try_pay_then_do(update, context, uid, "sora", est, _do)
-        return
-
-    await q.answer("Неизвестный движок.", show_alert=True)
 
 
 # === END PART 7 ===
@@ -1754,23 +1875,31 @@ async def _run_sora_video(
     seconds: int,
     aspect: str,
 ) -> bool:
-    
     msg = update.effective_message
     uid = update.effective_user.id
 
     if not SORA_ENABLED:
         await msg.reply_text("Sora отключена.")
-        return
+        return False
     if not COMET_API_KEY:
         await msg.reply_text("Sora: нет COMET_API_KEY.")
-        return
+        return False
 
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
-    model = _pick_sora_model(uid)
-
     await msg.reply_text(_tr(uid, "rendering"))
+
+    tier = get_subscription_tier(uid)
+    # pro/ultimate -> sora-2-pro, иначе sora-2 (как ты и хотел)
+    sora_model = "sora-2-pro" if tier in ("pro", "ultimate") else "sora-2"
+
+    payload = {
+        "model": sora_model,
+        "prompt": (prompt or "").strip(),
+        "seconds": int(seconds),
+        "ratio": aspect,
+    }
 
     headers = {
         "Authorization": f"Bearer {COMET_API_KEY}",
@@ -1778,55 +1907,72 @@ async def _run_sora_video(
         "Accept": "application/json",
     }
 
-    payload = {
-        "model": model,
-        "prompt": (prompt or "").strip(),
-        "seconds": seconds,
-        "ratio": aspect,
-    }
-
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
             r = await client.post(
-                f"{SORA_BASE_URL}/video/generations",
+                f"{COMET_BASE_URL}/sora/v1/text_to_video",
                 headers=headers,
                 json=payload,
             )
+
             if r.status_code >= 400:
-                await msg.reply_text(f"⚠️ Sora отклонила задачу ({r.status_code}).\n{(r.text or '')[:1000]}")
-                return
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(f"⚠️ Sora отклонила задачу ({r.status_code}).\n{txt}")
+                return False
 
-            js = r.json() or {}
-            task_id = js.get("id") or js.get("task_id")
+            try:
+                js = r.json() or {}
+            except Exception:
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(f"Sora: неожиданный ответ (не JSON).\n{txt}")
+                return False
+
+            task_id = (
+                js.get("task_id")
+                or js.get("taskId")
+                or js.get("id")
+                or (js.get("data") or {}).get("task_id")
+                or (js.get("data") or {}).get("id")
+            )
             if not task_id:
-                await msg.reply_text("Sora: не вернулся task_id.")
-                return
+                await msg.reply_text(f"Sora: не вернулся task_id.\n{str(js)[:1200]}")
+                return False
 
-            status_url = f"{SORA_BASE_URL}/video/generations/{task_id}"
+            status_url = f"{COMET_BASE_URL}/sora/v1/tasks/{task_id}"
             started = time.time()
 
             while True:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code >= 400:
-                    await msg.reply_text(f"⚠️ Sora: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}")
-                    return
+                    await msg.reply_text(
+                        f"⚠️ Sora: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
+                    )
+                    return False
 
                 st_js = rs.json() or {}
                 st = (st_js.get("status") or "").lower()
 
                 if st in ("completed", "succeeded", "done"):
-                    out = st_js.get("output") or st_js.get("result") or {}
-                    video_url = out.get("url") or out.get("video_url")
+                    out = st_js.get("output") or {}
+                    video_url = (
+                        out.get("url")
+                        or out.get("video_url")
+                        or out.get("videoUrl")
+                        or (out.get("data") or {}).get("url")
+                    )
                     if not video_url:
-                        await msg.reply_text("Sora: нет ссылки на видео.")
-                        return
+                        if isinstance(out, str) and out.startswith("http"):
+                            video_url = out
+                        else:
+                            await msg.reply_text(f"Sora: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
                         log.exception("Sora download failed: %s", e)
                         await msg.reply_text("Sora: не удалось скачать видео (redirect/download error).")
-                        return
+                        return False
 
                     bio = BytesIO(data)
                     bio.name = "sora.mp4"
@@ -1835,25 +1981,25 @@ async def _run_sora_video(
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
                         await msg.reply_text("❌ Sora: не удалось отправить файл в Telegram.")
-                        return
+                        return False
 
                     await msg.reply_text(_tr(uid, "done"))
-                    return
+                    return True
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Sora: ошибка генерации.\n{st_js}")
-                    return
+                    await msg.reply_text(f"❌ Sora: ошибка генерации.\n{str(st_js)[:1200]}")
+                    return False
 
-                if time.time() - started > int(SORA_MAX_WAIT_S or 900):
+                if time.time() - started > 900:
                     await msg.reply_text("⌛ Sora: превышено время ожидания.")
-                    return
+                    return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Sora exception: %s", e)
         await msg.reply_text("❌ Ошибка Sora.")
-
+        return False
 async def run_sora_video(*args, **kwargs):
     log.warning("run_sora_video is deprecated, use _run_sora_video")
     return await _run_sora_video(*args, **kwargs)
