@@ -1423,12 +1423,16 @@ async def _run_runway_animate_photo(
                         await msg.reply_text("Runway: нет ссылки на видео.")
                         return
 
-                    vr = await client.get(video_url, timeout=180.0)
-                    if vr.status_code >= 400:
-                        await msg.reply_text(f"Runway: не удалось скачать видео ({vr.status_code}).")
-                        return
+                    try:
+    data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+except Exception as e:
+    log.exception("Runway download failed: %s", e)
+    await msg.reply_text("Runway: не удалось скачать видео (redirect/download error).")
+    return
 
-                    bio = BytesIO(vr.content)
+bio = BytesIO(data)
+bio.name = "runway.mp4"
+bio.seek(0)
                     bio.name = "runway.mp4"
                     bio.seek(0)
 
