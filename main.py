@@ -489,7 +489,7 @@ def _main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
         one_time_keyboard=False,
     )
 
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cmd_start_impl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     # Если язык ещё не выбран — показываем панель
     lang = get_lang(user_id)
@@ -1127,7 +1127,9 @@ async def _run_luma_video(
 # CryptoBot (оплата)
 # ──────────────────────────────────────────────────────────────────────────────
 
-CRYPTOBOT_TOKEN = (_env("CRYPTOBOT_TOKEN") or "").striCRYPTOBOT_BASE = (_env("CRYPTOBOT_BASE") or "https://pay.crypt.bot").rstrip("/")
+CRYPTOBOT_TOKEN = (_env("CRYPTOBOT_TOKEN") or "").strip()
+CRYPTOBOT_BASE = (_env("CRYPTOBOT_BASE") or "https://pay.crypt.bot").rstrip("/")
+CRYPTOBOT_API = (_env("CRYPTOBOT_API") or f"{CRYPTOBOT_BASE}/api").rstrip("/")
 CRYPTOBOT_API = (_env("CRYPTOBOT_API") or "https://pay.crypt.bot/api").rstrip("/")
 
 PLANS = {
@@ -1290,6 +1292,27 @@ async def on_callback_query_plans(update: Update, context: ContextTypes.DEFAULT_
         return True
 
     return False
+
+# =============================
+        # Назад к тарифам: plans:back
+        # =============================
+        if data == "plans:back":
+            await q.answer()
+            await cmd_plans(update, context)
+            return
+
+        # =============================
+        # Я оплатил: paid:<plan_key>
+        # =============================
+        if data.startswith("paid:"):
+            parts = data.split(":", 1)
+            if len(parts) != 2:
+                await q.answer("Bad callback")
+                return
+            _, plan_key = parts
+            await q.answer()
+            await on_paid_callback(update, context, plan_key)
+            return
 
 
 # ──────────────────────────────────────────────────────────────────────────────
