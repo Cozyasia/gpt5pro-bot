@@ -871,11 +871,11 @@ async def _run_kling_video(
     uid = update.effective_user.id
 
     if not KLING_ENABLED:
-        await msg.reply_text("Kling отключён.")
-        return
+    await msg.reply_text("Kling отключён.")
+    return False
     if not COMET_API_KEY:
         await msg.reply_text("Kling: нет COMET_API_KEY.")
-        return
+        return False
 
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
@@ -906,13 +906,13 @@ async def _run_kling_video(
                 await msg.reply_text(
                     f"⚠️ Kling отклонил задачу ({r.status_code}).\n{(r.text or '')[:1000]}"
                 )
-                return
+                return False
 
             js = r.json() or {}
             task_id = js.get("id") or js.get("task_id")
             if not task_id:
                 await msg.reply_text("Kling: не вернулся task_id.")
-                return
+                return False
 
             status_url = f"{COMET_BASE_URL}/kling/v1/tasks/{task_id}"
             started = time.time()
@@ -923,7 +923,7 @@ async def _run_kling_video(
                     await msg.reply_text(
                         f"⚠️ Kling: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
                     )
-                    return
+                    return False
 
                 st_js = rs.json() or {}
                 st = (st_js.get("status") or "").lower()
@@ -933,14 +933,14 @@ async def _run_kling_video(
                     video_url = out.get("url") or out.get("video_url")
                     if not video_url:
                         await msg.reply_text("Kling: нет ссылки на видео.")
-                        return
+                        return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
                         log.exception("Kling download failed: %s", e)
                         await msg.reply_text("Kling: не удалось скачать видео (redirect/download error).")
-                        return
+                        return False
 
                     bio = BytesIO(data)
                     bio.name = "kling.mp4"
@@ -949,19 +949,19 @@ async def _run_kling_video(
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
                         await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
-                        return
+                        return False
 
                     await msg.reply_text(_tr(uid, "done"))
-                    return
+                    return True
                     
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
                     await msg.reply_text(f"❌ Kling: ошибка генерации.\n{st_js}")
-                    return
+                    return False
 
                 if time.time() - started > 900:
                     await msg.reply_text("⌛ Kling: превышено время ожидания.")
-                    return
+                    return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
@@ -987,12 +987,12 @@ async def _run_luma_video(
 
     if not LUMA_ENABLED:
         await msg.reply_text("Luma отключена.")
-        return
+        return False
     if not COMET_API_KEY:
         await msg.reply_text("Luma: нет COMET_API_KEY.")
         return
 
-    seconds = normalize_seconds(seconds)
+            return Falsealize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
     await msg.reply_text(_tr(uid, "rendering"))
@@ -1017,67 +1017,68 @@ async def _run_luma_video(
                 json=payload,
             )
 
-            if r.status_code >= 400:
+            if r.if r.status_code >= 400:
+                txt = (r.text or "")[:1200]
                 await msg.reply_text(
-                    f"⚠️ Luma отклонила задачу ({r.status_code}).\n{(r.text or '')[:1000]}"
+                    f"⚠️ Luma отклонила задачу ({r.status_code}).\n{txt}"
                 )
-                return
+                return False
 
-            js = r.json() or {}
-            task_id = js.get("id") or js.get("task_id")
+            # Пытаемся разобрать JSON корректно
+            try:
+                js = r.json() or {}
+            except Exception:
+                txt = (r.text or "")[:1200]
+                await msg.reply_text(f"Luma: неожиданный ответ (не JSON).\n{txt}")
+                return False
+
+            # В разных прокси/провайдерах task id может называться по-разному
+            task_id = (
+                js.get("task_id")
+                or js.get("taskId")
+                or js.get("id")
+                or (js.get("data") or {}).get("task_id")
+                or (js.get("data") or {}).get("id")
+            )
+
             if not task_id:
-                await msg.reply_text("Luma: не вернулся task_id.")
-                return
-
-            status_url = f"{COMET_BASE_URL}/luma/v1/tasks/{task_id}"
+                await msg.reply_text(f"Luma: не вернулся task_id.\n{str(js)[:1200]}")
+                return False          status_url = rl{COMET_BASE_URL}_URL}/luma/v1/t{task_id}k
             started = time.time()
 
             while True:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code >= 400:
                     await msg.reply_text(
-                        f"⚠️ Luma: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
-                    )
-                    return
-
-                st_js = rs.json() or {}
+                             f"⚠️ Luma: ошибка стат{rs.status_code}code{(rs.text or t )[:1000]}0
+                    )                     retur                st_js = rs.json() or {}
                 st = (st_js.get("status") or "").lower()
 
                 if st in ("completed", "succeeded", "done"):
                     out = st_js.get("output") or {}
                     video_url = out.get("url") or out.get("video_url")
-                    if not video_url:
-                        await msg.reply_text("Luma: нет ссылки на видео.")
-                        return
-
+                    if not v                    if not video_url: 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
-                        log.exception("Luma download failed: %s", e)
-                        await msg.reply_text("Luma: не удалось скачать видео (redirect/download error).")
-                        return
-
-                    bio = BytesIO(data)
-                    bio.name = "luma.mp4"
+          "Luma download failed: %s"n("Luma download failed: %s", e)
+                 "Luma: не удалось скачать видео (redirect/download error)." (redirect/download error).")
+                            return False                  bio = BytesIO(data)
+   "luma.mp4"       bio.name = "luma.mp4"
                     bio.seek(0)
 
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
-                        await msg.reply_text("❌ Luma: не удалось отправить файл в Telegram.")
-                        return
+                 "❌ Luma: не удалось отправить файл в Telegram." отправить файл в Telegram.")
+   
+
 
                     await msg.reply_text(_tr(uid, "done"))
-                    return
-
-                if st in ("failed", "error", "rejected", "cancelled", "canceled"):
+                        return True              if st in ("failed", "error", "rejected", "cancelled", "canceled"):
                     await msg.reply_text(f"❌ Luma: ошибка генерации.\n{st_js}")
-                    return
-
-                if time.time() - started > 900:
+                        return False              if time.time() - started > 900:
                     await msg.reply_text("⌛ Luma: превышено время ожидания.")
-                    return
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+                        return False              await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Luma exception: %s", e)
@@ -1090,8 +1091,7 @@ async def _run_luma_video(
 # CryptoBot (оплата)
 # ──────────────────────────────────────────────────────────────────────────────
 
-CRYPTOBOT_TOKEN = (_env("CRYPTOBOT_TOKEN") or "").strip()
-CRYPTOBOT_BASE = (_env("CRYPTOBOT_BASE") or "https://pay.crypt.bot").rstrip("/")
+CRYPTOBOT_TOKEN = (_env("CRYPTOBOT_TOKEN") or "").striCRYPTOBOT_BASE = (_env("CRYPTOBOT_BASE") or "https://pay.crypt.bot").rstrip("/")
 CRYPTOBOT_API = (_env("CRYPTOBOT_API") or "https://pay.crypt.bot/api").rstrip("/")
 
 PLANS = {
