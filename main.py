@@ -1347,11 +1347,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Оживить фото", callback_data=f"animate_photo:{aid}")],
+        InlineKeyboardButton(_tr(uid, "animate_btn"), callback_data=f"animate_photo:{aid}")
     ])
 
     await msg.reply_text(
-        "🖼 Фото получено. Хотите оживить?",
+        _tr(uid, "photo_received"),
         reply_markup=kb,
     )
 
