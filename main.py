@@ -11,8 +11,6 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 import threading
 import uuid
-import contextlib
-from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import httpx
 
@@ -480,6 +478,111 @@ I18N_PACK.update({
     },
 })
 
+# =============================
+# Engine messages (status/errors)
+# =============================
+I18N_PACK.update({
+    "engine_disabled": {
+        "ru": "{name} отключён.",
+        "be": "{name} адключаны.",
+        "uk": "{name} вимкнено.",
+        "de": "{name} ist deaktiviert.",
+        "en": "{name} is disabled.",
+        "fr": "{name} est désactivé.",
+        "th": "ปิดใช้งาน {name}",
+    },
+    "engine_no_key": {
+        "ru": "{name}: нет ключа/токена API.",
+        "be": "{name}: няма ключа/токена API.",
+        "uk": "{name}: немає ключа/токена API.",
+        "de": "{name}: API-Key/Token fehlt.",
+        "en": "{name}: missing API key/token.",
+        "fr": "{name} : clé/token API manquant.",
+        "th": "{name}: ไม่มีคีย์/โทเคน API",
+    },
+    "engine_rendering": {
+        "ru": "⏳ {name}: рендерю…",
+        "be": "⏳ {name}: рэндэр…",
+        "uk": "⏳ {name}: рендерю…",
+        "de": "⏳ {name}: rendere…",
+        "en": "⏳ {name}: rendering…",
+        "fr": "⏳ {name} : rendu…",
+        "th": "⏳ {name}: กำลังสร้าง…",
+    },
+    "engine_rejected": {
+        "ru": "⚠️ {name} отклонил задачу ({code}).\n{txt}",
+        "be": "⚠️ {name} адхіліў задачу ({code}).\n{txt}",
+        "uk": "⚠️ {name} відхилив задачу ({code}).\n{txt}",
+        "de": "⚠️ {name} hat die Aufgabe abgelehnt ({code}).\n{txt}",
+        "en": "⚠️ {name} rejected the request ({code}).\n{txt}",
+        "fr": "⚠️ {name} a rejeté la requête ({code}).\n{txt}",
+        "th": "⚠️ {name} ปฏิเสธงาน ({code}).\n{txt}",
+    },
+    "engine_status_error": {
+        "ru": "⚠️ {name}: ошибка статуса ({code}).\n{txt}",
+        "be": "⚠️ {name}: памылка статусу ({code}).\n{txt}",
+        "uk": "⚠️ {name}: помилка статусу ({code}).\n{txt}",
+        "de": "⚠️ {name}: Statusfehler ({code}).\n{txt}",
+        "en": "⚠️ {name}: status error ({code}).\n{txt}",
+        "fr": "⚠️ {name} : erreur de statut ({code}).\n{txt}",
+        "th": "⚠️ {name}: สถานะผิดพลาด ({code}).\n{txt}",
+    },
+    "engine_no_task": {
+        "ru": "{name}: не вернулся task_id.\n{txt}",
+        "be": "{name}: не вярнуўся task_id.\n{txt}",
+        "uk": "{name}: не повернувся task_id.\n{txt}",
+        "de": "{name}: task_id fehlt.\n{txt}",
+        "en": "{name}: task_id missing.\n{txt}",
+        "fr": "{name} : task_id manquant.\n{txt}",
+        "th": "{name}: ไม่มี task_id\n{txt}",
+    },
+    "engine_no_url": {
+        "ru": "{name}: нет ссылки на видео.\n{txt}",
+        "be": "{name}: няма спасылкі на відэа.\n{txt}",
+        "uk": "{name}: немає посилання на відео.\n{txt}",
+        "de": "{name}: keine Video-URL.\n{txt}",
+        "en": "{name}: no video URL.\n{txt}",
+        "fr": "{name} : pas d’URL vidéo.\n{txt}",
+        "th": "{name}: ไม่มีลิงก์วิดีโอ\n{txt}",
+    },
+    "engine_failed": {
+        "ru": "❌ {name}: ошибка генерации.\n{txt}",
+        "be": "❌ {name}: памылка генерацыі.\n{txt}",
+        "uk": "❌ {name}: помилка генерації.\n{txt}",
+        "de": "❌ {name}: Generierungsfehler.\n{txt}",
+        "en": "❌ {name}: generation failed.\n{txt}",
+        "fr": "❌ {name} : échec de génération.\n{txt}",
+        "th": "❌ {name}: สร้างไม่สำเร็จ\n{txt}",
+    },
+    "engine_timeout": {
+        "ru": "⌛ {name}: превышено время ожидания.",
+        "be": "⌛ {name}: перавышаны час чакання.",
+        "uk": "⌛ {name}: перевищено час очікування.",
+        "de": "⌛ {name}: Zeitüberschreitung.",
+        "en": "⌛ {name}: timed out.",
+        "fr": "⌛ {name} : délai dépassé.",
+        "th": "⌛ {name}: หมดเวลา",
+    },
+    "engine_download_err": {
+        "ru": "{name}: не удалось скачать видео (redirect/download error).",
+        "be": "{name}: не ўдалося спампаваць відэа (redirect/download error).",
+        "uk": "{name}: не вдалося завантажити відео (redirect/download error).",
+        "de": "{name}: Download fehlgeschlagen (redirect/download error).",
+        "en": "{name}: failed to download video (redirect/download error).",
+        "fr": "{name} : échec du téléchargement (redirect/download error).",
+        "th": "{name}: ดาวน์โหลดวิดีโอไม่สำเร็จ (redirect/download error)",
+    },
+    "engine_send_err": {
+        "ru": "❌ {name}: не удалось отправить файл в Telegram.",
+        "be": "❌ {name}: не ўдалося адправіць файл у Telegram.",
+        "uk": "❌ {name}: не вдалося надіслати файл у Telegram.",
+        "de": "❌ {name}: Senden an Telegram fehlgeschlagen.",
+        "en": "❌ {name}: failed to send the file to Telegram.",
+        "fr": "❌ {name} : envoi vers Telegram échoué.",
+        "th": "❌ {name}: ส่งไฟล์ไป Telegram ไม่สำเร็จ",
+    },
+})
+
 def _tr(user_id: int, key: str, **kwargs) -> str:
     """
     Long UI strings / messages (I18N_PACK).
@@ -917,16 +1020,16 @@ async def _run_kling_video(
     uid = update.effective_user.id
 
     if not KLING_ENABLED:
-        await msg.reply_text("Kling отключён.")
+        await msg.reply_text(_tr(uid, "engine_disabled", name="Kling"))
         return False
     if not COMET_API_KEY:
-        await msg.reply_text("Kling: нет COMET_API_KEY.")
+        await msg.reply_text(_tr(uid, "engine_no_key", name="Kling"))
         return False
 
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
-    await msg.reply_text(_tr(uid, "rendering"))
+    await msg.reply_text(_tr(uid, "engine_rendering", name="Kling"))
 
     payload = {
         "prompt": (prompt or "").strip(),
@@ -950,7 +1053,7 @@ async def _run_kling_video(
 
             if r.status_code >= 400:
                 txt = (r.text or "")[:1200]
-                await msg.reply_text(f"⚠️ Kling отклонил задачу ({r.status_code}).\n{txt}")
+                await msg.reply_text(_tr(uid, "engine_rejected", name="Kling", code=r.status_code, txt=txt))
                 return False
 
             try:
@@ -968,7 +1071,7 @@ async def _run_kling_video(
                 or (js.get("data") or {}).get("id")
             )
             if not task_id:
-                await msg.reply_text(f"Kling: не вернулся task_id.\n{str(js)[:1200]}")
+                await msg.reply_text(_tr(uid, "engine_no_task", name="Kling", txt=str(js)[:1200]))
                 return False
 
             status_url = f"{COMET_BASE_URL}/kling/v1/tasks/{task_id}"
@@ -977,9 +1080,7 @@ async def _run_kling_video(
             while True:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code >= 400:
-                    await msg.reply_text(
-                        f"⚠️ Kling: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
-                    )
+                    await msg.reply_text(_tr(uid, "engine_status_error", name="Kling", code=rs.status_code, txt=(rs.text or "")[:1000]))
                     return False
 
                 st_js = rs.json() or {}
@@ -997,14 +1098,14 @@ async def _run_kling_video(
                         if isinstance(out, str) and out.startswith("http"):
                             video_url = out
                         else:
-                            await msg.reply_text(f"Kling: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            await msg.reply_text(_tr(uid, "engine_no_url", name="Kling", txt=str(st_js)[:1000]))
                             return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
                         log.exception("Kling download failed: %s", e)
-                        await msg.reply_text("Kling: не удалось скачать видео (redirect/download error).")
+                        await msg.reply_text(_tr(uid, "engine_download_err", name="Kling"))
                         return False
 
                     bio = BytesIO(data)
@@ -1013,25 +1114,25 @@ async def _run_kling_video(
 
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
-                        await msg.reply_text("❌ Kling: не удалось отправить файл в Telegram.")
+                        await msg.reply_text(_tr(uid, "engine_send_err", name="Kling"))
                         return False
 
                     await msg.reply_text(_tr(uid, "done"))
                     return True
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Kling: ошибка генерации.\n{str(st_js)[:1200]}")
+                    await msg.reply_text(_tr(uid, "engine_failed", name="Kling", txt=str(st_js)[:1200]))
                     return False
 
                 if time.time() - started > 900:
-                    await msg.reply_text("⌛ Kling: превышено время ожидания.")
+                    await msg.reply_text(_tr(uid, "engine_timeout", name="Kling"))
                     return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Kling exception: %s", e)
-        await msg.reply_text("❌ Ошибка Kling.")
+        await msg.reply_text(_tr(uid, "engine_failed", name="Kling", txt=str(e)))
         return False
 
 # ============================================================
@@ -1048,16 +1149,16 @@ async def _run_luma_video(
     uid = update.effective_user.id
 
     if not LUMA_ENABLED:
-        await msg.reply_text("Luma отключена.")
+        await msg.reply_text(_tr(uid, "engine_disabled", name="Luma"))
         return False
     if not COMET_API_KEY:
-        await msg.reply_text("Luma: нет COMET_API_KEY.")
+        await msg.reply_text(_tr(uid, "engine_no_key", name="Luma"))
         return False
 
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
-    await msg.reply_text(_tr(uid, "rendering"))
+    await msg.reply_text(_tr(uid, "engine_rendering", name="Luma"))
 
     payload = {
         "prompt": (prompt or "").strip(),
@@ -1081,7 +1182,7 @@ async def _run_luma_video(
 
             if r.status_code >= 400:
                 txt = (r.text or "")[:1200]
-                await msg.reply_text(f"⚠️ Luma отклонила задачу ({r.status_code}).\n{txt}")
+                await msg.reply_text(_tr(uid, "engine_rejected", name="Luma", code=r.status_code, txt=txt))
                 return False
 
             try:
@@ -1099,7 +1200,7 @@ async def _run_luma_video(
                 or (js.get("data") or {}).get("id")
             )
             if not task_id:
-                await msg.reply_text(f"Luma: не вернулся task_id.\n{str(js)[:1200]}")
+                await msg.reply_text(_tr(uid, "engine_no_task", name="Luma", txt=str(js)[:1200]))
                 return False
 
             status_url = f"{COMET_BASE_URL}/luma/v1/tasks/{task_id}"
@@ -1108,9 +1209,7 @@ async def _run_luma_video(
             while True:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code >= 400:
-                    await msg.reply_text(
-                        f"⚠️ Luma: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
-                    )
+                    await msg.reply_text(_tr(uid, "engine_status_error", name="Luma", code=rs.status_code, txt=(rs.text or "")[:1000]))
                     return False
 
                 st_js = rs.json() or {}
@@ -1128,14 +1227,14 @@ async def _run_luma_video(
                         if isinstance(out, str) and out.startswith("http"):
                             video_url = out
                         else:
-                            await msg.reply_text(f"Luma: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            await msg.reply_text(_tr(uid, "engine_no_url", name="Luma", txt=str(st_js)[:1000]))
                             return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
                         log.exception("Luma download failed: %s", e)
-                        await msg.reply_text("Luma: не удалось скачать видео (redirect/download error).")
+                        await msg.reply_text(_tr(uid, "engine_download_err", name="Luma"))
                         return False
 
                     bio = BytesIO(data)
@@ -1144,25 +1243,25 @@ async def _run_luma_video(
 
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
-                        await msg.reply_text("❌ Luma: не удалось отправить файл в Telegram.")
+                        await msg.reply_text(_tr(uid, "engine_send_err", name="Luma"))
                         return False
 
                     await msg.reply_text(_tr(uid, "done"))
                     return True
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Luma: ошибка генерации.\n{str(st_js)[:1200]}")
+                    await msg.reply_text(_tr(uid, "engine_failed", name="Luma", txt=str(st_js)[:1200]))
                     return False
 
                 if time.time() - started > 900:
-                    await msg.reply_text("⌛ Luma: превышено время ожидания.")
+                    await msg.reply_text(_tr(uid, "engine_timeout", name="Luma"))
                     return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Luma exception: %s", e)
-        await msg.reply_text("❌ Ошибка Luma.")
+        await msg.reply_text(_tr(uid, "engine_failed", name="Luma", txt=str(e)))
         return False
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1384,19 +1483,19 @@ async def _run_runway_animate_photo(
     uid = update.effective_user.id
 
     if not RUNWAY_ENABLED:
-        await msg.reply_text("Runway отключён.")
+        await msg.reply_text(_tr(uid, "engine_disabled", name="Runway"))
         return False
     if not COMET_API_KEY:
-        await msg.reply_text("Runway: нет COMET_API_KEY.")
+        await msg.reply_text(_tr(uid, "engine_no_key", name="Runway"))
         return False
     if not photo_bytes:
-        await msg.reply_text("Runway: нет данных фото.")
+        await msg.reply_text(_tr(uid, "engine_failed", name="Runway", txt="no photo bytes"))
         return False
 
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
-    await msg.reply_text(_tr(uid, "rendering"))
+    await msg.reply_text(_tr(uid, "engine_rendering", name="Runway"))
 
     try:
         img_b64 = base64.b64encode(photo_bytes).decode("ascii")
@@ -1428,7 +1527,7 @@ async def _run_runway_animate_photo(
 
             if r.status_code >= 400:
                 txt = (r.text or "")[:1200]
-                await msg.reply_text(f"⚠️ Runway отклонил задачу ({r.status_code}).\n{txt}")
+                await msg.reply_text(_tr(uid, "engine_rejected", name="Runway", code=r.status_code, txt=txt))
                 return False
 
             try:
@@ -1446,7 +1545,7 @@ async def _run_runway_animate_photo(
                 or (js.get("data") or {}).get("id")
             )
             if not task_id:
-                await msg.reply_text(f"Runway: не вернулся task_id.\n{str(js)[:1200]}")
+                await msg.reply_text(_tr(uid, "engine_no_task", name="Runway", txt=str(js)[:1200]))
                 return False
 
             status_url = f"{COMET_BASE_URL}/runwayml/v1/tasks/{task_id}"
@@ -1455,9 +1554,7 @@ async def _run_runway_animate_photo(
             while True:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code >= 400:
-                    await msg.reply_text(
-                        f"⚠️ Runway: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
-                    )
+                    await msg.reply_text(_tr(uid, "engine_status_error", name="Runway", code=rs.status_code, txt=(rs.text or "")[:1000]))
                     return False
 
                 st_js = rs.json() or {}
@@ -1475,14 +1572,14 @@ async def _run_runway_animate_photo(
                         if isinstance(out, str) and out.startswith("http"):
                             video_url = out
                         else:
-                            await msg.reply_text(f"Runway: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            await msg.reply_text(_tr(uid, "engine_no_url", name="Runway", txt=str(st_js)[:1000]))
                             return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
                         log.exception("Runway download failed: %s", e)
-                        await msg.reply_text("Runway: не удалось скачать видео (redirect/download error).")
+                        await msg.reply_text(_tr(uid, "engine_download_err", name="Runway"))
                         return False
 
                     bio = BytesIO(data)
@@ -1491,25 +1588,25 @@ async def _run_runway_animate_photo(
 
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
-                        await msg.reply_text("❌ Runway: не удалось отправить файл в Telegram.")
+                        await msg.reply_text(_tr(uid, "engine_send_err", name="Runway"))
                         return False
 
                     await msg.reply_text(_tr(uid, "done"))
                     return True
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Runway: ошибка генерации.\n{str(st_js)[:1200]}")
+                    await msg.reply_text(_tr(uid, "engine_failed", name="Runway", txt=str(st_js)[:1200]))
                     return False
 
                 if time.time() - started > 900:
-                    await msg.reply_text("⌛ Runway: превышено время ожидания.")
+                    await msg.reply_text(_tr(uid, "engine_timeout", name="Runway"))
                     return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Runway exception: %s", e)
-        await msg.reply_text("❌ Ошибка Runway.")
+        await msg.reply_text(_tr(uid, "engine_failed", name="Runway", txt=str(e)))
         return False
 
 # ============================================================
@@ -1790,16 +1887,16 @@ async def _run_sora_video(
     uid = update.effective_user.id
 
     if not SORA_ENABLED:
-        await msg.reply_text("Sora отключена.")
+        await msg.reply_text(_tr(uid, "engine_disabled", name="Sora"))
         return False
     if not COMET_API_KEY:
-        await msg.reply_text("Sora: нет COMET_API_KEY.")
+        await msg.reply_text(_tr(uid, "engine_no_key", name="Sora"))
         return False
 
     seconds = normalize_seconds(seconds)
     aspect = normalize_aspect(aspect)
 
-    await msg.reply_text(_tr(uid, "rendering"))
+    await msg.reply_text(_tr(uid, "engine_rendering", name="Sora"))
 
     tier = get_subscription_tier(uid)
     sora_model = "sora-2-pro" if tier in ("pro", "ultimate") else "sora-2"
@@ -1827,7 +1924,7 @@ async def _run_sora_video(
 
             if r.status_code >= 400:
                 txt = (r.text or "")[:1200]
-                await msg.reply_text(f"⚠️ Sora отклонила задачу ({r.status_code}).\n{txt}")
+                await msg.reply_text(_tr(uid, "engine_rejected", name="Sora", code=r.status_code, txt=txt))
                 return False
 
             try:
@@ -1845,7 +1942,7 @@ async def _run_sora_video(
                 or (js.get("data") or {}).get("id")
             )
             if not task_id:
-                await msg.reply_text(f"Sora: не вернулся task_id.\n{str(js)[:1200]}")
+                await msg.reply_text(_tr(uid, "engine_no_task", name="Sora", txt=str(js)[:1200]))
                 return False
 
             status_url = f"{COMET_BASE_URL}/sora/v1/tasks/{task_id}"
@@ -1854,9 +1951,7 @@ async def _run_sora_video(
             while True:
                 rs = await client.get(status_url, headers=headers)
                 if rs.status_code >= 400:
-                    await msg.reply_text(
-                        f"⚠️ Sora: ошибка статуса ({rs.status_code}).\n{(rs.text or '')[:1000]}"
-                    )
+                    await msg.reply_text(_tr(uid, "engine_status_error", name="Sora", code=rs.status_code, txt=(rs.text or "")[:1000]))
                     return False
 
                 st_js = rs.json() or {}
@@ -1874,14 +1969,14 @@ async def _run_sora_video(
                         if isinstance(out, str) and out.startswith("http"):
                             video_url = out
                         else:
-                            await msg.reply_text(f"Sora: нет ссылки на видео.\n{str(st_js)[:1000]}")
+                            await msg.reply_text(_tr(uid, "engine_no_url", name="Sora", txt=str(st_js)[:1000]))
                             return False
 
                     try:
                         data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
                     except Exception as e:
                         log.exception("Sora download failed: %s", e)
-                        await msg.reply_text("Sora: не удалось скачать видео (redirect/download error).")
+                        await msg.reply_text(_tr(uid, "engine_download_err", name="Sora"))
                         return False
 
                     bio = BytesIO(data)
@@ -1890,25 +1985,25 @@ async def _run_sora_video(
 
                     ok = await safe_send_video(context, update.effective_chat.id, bio)
                     if not ok:
-                        await msg.reply_text("❌ Sora: не удалось отправить файл в Telegram.")
+                        await msg.reply_text(_tr(uid, "engine_send_err", name="Sora"))
                         return False
 
                     await msg.reply_text(_tr(uid, "done"))
                     return True
 
                 if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(f"❌ Sora: ошибка генерации.\n{str(st_js)[:1200]}")
+                    await msg.reply_text(_tr(uid, "engine_failed", name="Sora", txt=str(st_js)[:1200]))
                     return False
 
                 if time.time() - started > 900:
-                    await msg.reply_text("⌛ Sora: превышено время ожидания.")
+                    await msg.reply_text(_tr(uid, "engine_timeout", name="Sora"))
                     return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Sora exception: %s", e)
-        await msg.reply_text("❌ Ошибка Sora.")
+        await msg.reply_text(_tr(uid, "engine_failed", name="Sora", txt=str(e)))
         return False
 
 log.info(
