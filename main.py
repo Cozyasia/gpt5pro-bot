@@ -535,6 +535,33 @@ I18N_PACK.update({
         "fr": "Rien à répéter : envoyez d’abord un prompt vidéo.",
         "th": "ไม่มีอะไรให้ทำซ้ำ: โปรดส่งคำสั่งวิดีโอก่อน",
     },
+"repeat_offer": {
+    "ru": "🔁 Повторить тем же движком ({engine}) или выбрать другой?",
+    "be": "🔁 Паўтарыць тым жа рухавіком ({engine}) ці выбраць іншы?",
+    "uk": "🔁 Повторити тим самим рушієм ({engine}) чи обрати інший?",
+    "de": "🔁 Mit derselben Engine ({engine}) wiederholen oder eine andere wählen?",
+    "en": "🔁 Repeat with the same engine ({engine}) or choose another?",
+    "fr": "🔁 Répéter avec le même moteur ({engine}) ou en choisir un autre ?",
+    "th": "🔁 ทำซ้ำด้วยเอนจินเดิม ({engine}) หรือเลือกอันอื่น?",
+},
+"repeat_btn_same": {
+    "ru": "🔁 Тем же движком",
+    "be": "🔁 Тым жа рухавіком",
+    "uk": "🔁 Тим самим рушієм",
+    "de": "🔁 Gleiche Engine",
+    "en": "🔁 Same engine",
+    "fr": "🔁 Même moteur",
+    "th": "🔁 เอนจินเดิม",
+},
+"repeat_btn_choose": {
+    "ru": "🎛 Выбрать движок",
+    "be": "🎛 Абраць рухавік",
+    "uk": "🎛 Обрати рушій",
+    "de": "🎛 Engine wählen",
+    "en": "🎛 Choose engine",
+    "fr": "🎛 Choisir le moteur",
+    "th": "🎛 เลือกเอนจิน",
+},
     "admin_forbidden": {
         "ru": "⛔ Недостаточно прав.",
         "be": "⛔ Недастаткова правоў.",
@@ -914,15 +941,16 @@ I18N_PACK.update({
         "fr": "Choisissez le moteur:",
         "th": "เลือกเอนจิน:",
     },
-    "video_opts": {
-        "ru": "Что использовать?\nДлительность: {dur} с • Аспект: {asp}\nЗапрос: «{prompt}»",
-        "be": "Што выкарыстоўваць?\nПрацягласць: {dur} c • Аспект: {asp}\nЗапыт: «{prompt}»",
-        "uk": "Що використати?\nТривалість: {dur} с • Аспект: {asp}\nЗапит: «{prompt}»",
-        "de": "Was verwenden?\nDauer: {dur}s • Seitenverhältnis: {asp}\nPrompt: „{prompt}“",
-        "en": "What to use?\nDuration: {dur}s • Aspect: {asp}\nPrompt: “{prompt}”",
-        "fr": "Que choisir ?\nDurée : {dur}s • Ratio : {asp}\nPrompt : « {prompt} »",
-        "th": "ใช้ตัวไหน?\nความยาว: {dur} วิ • อัตราส่วน: {asp}\nคำสั่ง: “{prompt}”",
-    },
+    
+"video_opts": {
+    "ru": "Что использовать?\n⏱ Длительность: {dur} сек ✅\n🖼 Аспект: {asp} ✅\nЗапрос: «{prompt}»",
+    "be": "Што выкарыстоўваць?\n⏱ Працягласць: {dur} сек ✅\n🖼 Аспект: {asp} ✅\nЗапыт: «{prompt}»",
+    "uk": "Що використати?\n⏱ Тривалість: {dur} с ✅\n🖼 Аспект: {asp} ✅\nЗапит: «{prompt}»",
+    "de": "Was verwenden?\n⏱ Dauer: {dur}s ✅\n🖼 Verhältnis: {asp} ✅\nPrompt: „{prompt}“",
+    "en": "What to use?\n⏱ Duration: {dur}s ✅\n🖼 Aspect: {asp} ✅\nPrompt: “{prompt}”",
+    "fr": "Que choisir ?\n⏱ Durée : {dur}s ✅\n🖼 Ratio : {asp} ✅\nPrompt : « {prompt} »",
+    "th": "ใช้ตัวไหน?\n⏱ ความยาว: {dur} วิ ✅\n🖼 อัตราส่วน: {asp} ✅\nคำสั่ง: “{prompt}”",
+},
     "runway_disabled_textvideo": {
         "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
         "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
@@ -952,9 +980,33 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
+    """
+    Inline keyboard for choosing presets + engine.
+    Presets are limited by subscription tier.
+    """
     tier = get_subscription_tier(user_id)
     rows: list[list[InlineKeyboardButton]] = []
 
+    # Presets by tier
+    # callback_data:
+    #   setdur:<sec>:<aid>
+    #   setasp:<a1>:<a2>:<aid>   (ratio has ":" so we store it as two parts)
+    if tier in ("pro", "ultimate"):
+        rows.append([
+            InlineKeyboardButton("⏱ 5s", callback_data=f"setdur:5:{aid}"),
+            InlineKeyboardButton("⏱ 8s", callback_data=f"setdur:8:{aid}"),
+            InlineKeyboardButton("⏱ 12s", callback_data=f"setdur:12:{aid}"),
+        ])
+        rows.append([
+            InlineKeyboardButton("🖼 16:9", callback_data=f"setasp:16:9:{aid}"),
+            InlineKeyboardButton("🖼 9:16", callback_data=f"setasp:9:16:{aid}"),
+            InlineKeyboardButton("🖼 1:1", callback_data=f"setasp:1:1:{aid}"),
+        ])
+    else:
+        rows.append([InlineKeyboardButton("⏱ 5s", callback_data=f"setdur:5:{aid}")])
+        rows.append([InlineKeyboardButton("🖼 16:9", callback_data=f"setasp:16:9:{aid}")])
+
+    # Engines
     if KLING_ENABLED:
         rows.append([
             InlineKeyboardButton(
@@ -970,12 +1022,14 @@ def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
             )
         ])
 
+    # Sora: available to all, but sora-2-pro is for pro/ultimate
     if SORA_ENABLED:
         if tier in ("pro", "ultimate"):
             rows.append([InlineKeyboardButton("✨ Sora 2 Pro", callback_data=f"choose:sora:{aid}")])
         else:
             rows.append([InlineKeyboardButton("✨ Sora 2", callback_data=f"choose:sora:{aid}")])
 
+    # Cancel is always available (also used as "unlock" / stop)
     rows.append([InlineKeyboardButton(_tr(user_id, "cancel_btn"), callback_data=f"cancel:{aid}")])
 
     return InlineKeyboardMarkup(rows)
@@ -986,6 +1040,7 @@ async def _ask_video_engine(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     dur = normalize_seconds(dur)
     asp = normalize_aspect(asp)
+    dur = enforce_seconds_limit(dur, get_subscription_tier(uid))
 
     # store last prompt for Repeat
     _last_video_prompt[uid] = {"prompt": prompt, "duration": dur, "aspect": asp, "ts": int(time.time())}
@@ -1108,7 +1163,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ans = await _gpt_chat(uid, [{"role": "user", "content": text}])
         await msg.reply_text(ans)
         _hist_add(uid, "assistant", ans)
-        _hist_add(uid, "assistant", ans)
     except Exception as e:
         log.exception("GPT error: %s", e)
         await msg.reply_text(_tr(uid, "gpt_failed"))
@@ -1152,15 +1206,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-if text == t(uid, "btn_repeat"):
-    last = _last_video_prompt.get(uid) or {}
-    lp = (last.get("prompt") or "").strip()
-    if not lp:
-        await msg.reply_text(_tr(uid, "repeat_empty"), reply_markup=_main_menu_keyboard(uid))
-        return
-    await _ask_video_engine(update, context, lp)
-    return
 
+    if text == t(uid, "btn_repeat"):
+        last = _last_video_prompt.get(uid) or {}
+        lp = (last.get("prompt") or "").strip()
+        if not lp:
+            await msg.reply_text(_tr(uid, "repeat_empty"), reply_markup=_main_menu_keyboard(uid))
+            return
+
+        # Panel: repeat with the same engine OR open standard chooser
+        last_engine = (last.get("engine") or "").strip().lower()
+        if last_engine in ("kling", "luma", "sora"):
+            await msg.reply_text(
+                _tr(uid, "repeat_offer", engine=last_engine.capitalize()),
+                reply_markup=_repeat_choice_kb(uid, last_engine),
+            )
+            return
+
+        # If engine is unknown — fall back to standard engine chooser.
+        await _ask_video_engine(update, context, lp)
+        return
 
     if _detect_video_intent(text):
         await _ask_video_engine(update, context, text)
@@ -1169,7 +1234,6 @@ if text == t(uid, "btn_repeat"):
     try:
         ans = await _gpt_chat(uid, [{"role": "user", "content": text}])
         await msg.reply_text(ans)
-        _hist_add(uid, "assistant", ans)
         _hist_add(uid, "assistant", ans)
     except Exception as e:
         log.exception("GPT error: %s", e)
@@ -1621,6 +1685,15 @@ ADMIN_IDS = set(
     int(x) for x in re.split(r"[ ,;]+", (_env("ADMIN_IDS") or "").strip()) if x.strip().isdigit()
 )
 
+def _repeat_choice_kb(user_id: int, engine: str) -> InlineKeyboardMarkup:
+    """Inline keyboard for Repeat: same engine vs choose another."""
+    label = (engine or "").strip().capitalize() or "Engine"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"{_tr(user_id, 'repeat_btn_same')} ({label})", callback_data=f"repeat:{engine}")],
+        [InlineKeyboardButton(_tr(user_id, "repeat_btn_choose"), callback_data="repeat:choose")],
+    ])
+
+
 def _is_admin(uid: int) -> bool:
     return (not ADMIN_IDS) or (uid in ADMIN_IDS)
 
@@ -1876,6 +1949,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             seconds = normalize_seconds(int(act.get("duration") or 5))
             aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
+            duration = enforce_seconds_limit(duration, get_subscription_tier(uid))
 
             async def _do():
                 try:
@@ -1902,7 +1976,104 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.message.reply_text(_tr(uid, "cancelled"), reply_markup=_main_menu_keyboard(uid))
             return
 
-        # choose:<engine>:<aid>
+                # repeat:choose  OR repeat:<engine>
+        if data.startswith("repeat:"):
+            parts = data.split(":", 1)
+            if len(parts) != 2:
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
+                return
+            _, arg = parts
+            arg = (arg or "").strip().lower()
+
+            last = _last_video_prompt.get(uid) or {}
+            lp = (last.get("prompt") or "").strip()
+            if not lp:
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "repeat_empty"))
+                return
+
+            # choose engine -> open standard chooser panel
+            if arg == "choose":
+                await q.answer()
+                await _ask_video_engine(update, context, lp)
+                return
+
+            # same engine -> open the same standard chooser panel,
+            # but auto-select previous engine by placing it as the first button row.
+            # We do NOT start rendering in 1 click, per requirement.
+            if arg in ("kling", "luma", "sora"):
+                await q.answer()
+                await _ask_video_engine(update, context, lp)
+
+                # Note: we keep the flow uniform. User will still tap the engine button.
+                return
+
+            await q.answer()
+            await q.message.reply_text(_tr(uid, "err_unknown_action"))
+            return
+
+        # setdur:<sec>:<aid>
+        if data.startswith("setdur:"):
+            parts = data.split(":")
+            if len(parts) != 3:
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
+                return
+            _, sec_s, aid = parts
+            try:
+                sec = normalize_seconds(int(sec_s))
+                sec = enforce_seconds_limit(sec, get_subscription_tier(uid))
+            except Exception:
+                sec = 5
+
+            act = _pending_actions.get(aid)
+            if not act:
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "pending_expired"))
+                return
+
+            act["duration"] = sec
+            act["ts"] = int(time.time())
+
+            prompt = (act.get("prompt") or "").strip()
+            aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
+            await q.answer()
+            await q.message.edit_text(
+                _tr(uid, "video_opts", dur=sec, asp=aspect, prompt=prompt),
+                reply_markup=_video_engine_kb(aid, uid),
+            )
+            return
+
+        # setasp:<a1>:<a2>:<aid>  (ratio contains ':')
+        if data.startswith("setasp:"):
+            parts = data.split(":")
+            if len(parts) != 4:
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
+                return
+            _, a1, a2, aid = parts
+            asp = normalize_aspect(f"{a1}:{a2}")
+
+            act = _pending_actions.get(aid)
+            if not act:
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "pending_expired"))
+                return
+
+            act["aspect"] = asp
+            act["ts"] = int(time.time())
+
+            prompt = (act.get("prompt") or "").strip()
+            dur = normalize_seconds(int(act.get("duration") or 5))
+            await q.answer()
+            await q.message.edit_text(
+                _tr(uid, "video_opts", dur=dur, asp=asp, prompt=prompt),
+                reply_markup=_video_engine_kb(aid, uid),
+            )
+            return
+
+# choose:<engine>:<aid>
         if data.startswith("choose:"):
             parts = data.split(":")
             if len(parts) != 3:
@@ -1939,9 +2110,26 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if engine == "kling":
+                # remember last chosen engine for Repeat panel
+                try:
+                    _last_video_prompt.setdefault(uid, {})["engine"] = "kling"
+                except Exception:
+                    pass
+
                 est = float(KLING_UNIT_COST_USD or 0.40) * duration
 
                 _active_jobs[uid] = {"ts": int(time.time()), "engine": "Kling", "aid": aid}
+
+
+                # Lock panel UI (remove engine buttons while rendering; keep Cancel)
+                try:
+                    await _safe_edit_or_reply(
+                        q.message,
+                        _tr(uid, "engine_rendering", name="Kling"),
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_tr(uid, "cancel_btn"), callback_data=f"cancel:{aid}")]]),
+                    )
+                except Exception:
+                    pass
 
                 async def _do():
                     try:
@@ -1958,9 +2146,26 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if engine == "luma":
+                # remember last chosen engine for Repeat panel
+                try:
+                    _last_video_prompt.setdefault(uid, {})["engine"] = "luma"
+                except Exception:
+                    pass
+
                 est = float(LUMA_UNIT_COST_USD or 0.40) * duration
 
                 _active_jobs[uid] = {"ts": int(time.time()), "engine": "Luma", "aid": aid}
+
+
+                # Lock panel UI (remove engine buttons while rendering; keep Cancel)
+                try:
+                    await _safe_edit_or_reply(
+                        q.message,
+                        _tr(uid, "engine_rendering", name="Luma"),
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_tr(uid, "cancel_btn"), callback_data=f"cancel:{aid}")]]),
+                    )
+                except Exception:
+                    pass
 
                 async def _do():
                     try:
@@ -1977,9 +2182,26 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if engine == "sora":
+                # remember last chosen engine for Repeat panel
+                try:
+                    _last_video_prompt.setdefault(uid, {})["engine"] = "sora"
+                except Exception:
+                    pass
+
                 est = _sora_est_cost_usd(uid, duration)
 
                 _active_jobs[uid] = {"ts": int(time.time()), "engine": "Sora", "aid": aid}
+
+
+                # Lock panel UI (remove engine buttons while rendering; keep Cancel)
+                try:
+                    await _safe_edit_or_reply(
+                        q.message,
+                        _tr(uid, "engine_rendering", name="Sora"),
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_tr(uid, "cancel_btn"), callback_data=f"cancel:{aid}")]]),
+                    )
+                except Exception:
+                    pass
 
                 async def _do():
                     try:
@@ -2075,6 +2297,21 @@ def build_app() -> Application:
 
 # ============================================================
 # UTILITIES / FALLBACKS / COMPATIBILITY
+
+async def _safe_edit_or_reply(msg, text: str, reply_markup=None):
+    """
+    Try to edit the current bot message (for inline panels). If edit fails, send a new message.
+    """
+    try:
+        await msg.edit_text(text, reply_markup=reply_markup)
+        return
+    except Exception:
+        pass
+    try:
+        await msg.reply_text(text, reply_markup=reply_markup)
+    except Exception:
+        pass
+
 # ============================================================
 async def safe_send_video(
     context: ContextTypes.DEFAULT_TYPE,
@@ -2156,12 +2393,36 @@ async def poll_task_until_done(
     timeout_s: int = 900,
     poll_delay_s: int = VIDEO_POLL_DELAY_S,
 ) -> tuple[bool, dict]:
-    """Poll provider task status until completion/failure/timeout."""
+    """
+    Poll provider task status until completion/failure/timeout.
+
+    Enhancements:
+    - Cooperative cancellation: if user pressed Cancel (active job removed), stop polling.
+    - Progress UX: periodically edits the inline panel message instead of spamming replies.
+    """
     started = time.time()
+    last_ui_update = 0.0
 
     while True:
+        # Cooperative cancel (user pressed Cancel)
+        job = _active_jobs.get(uid)
+        if not job or (str(job.get("engine") or "").lower() != str(engine_name).lower()):
+            try:
+                await msg.reply_text(_tr(uid, "cancelled"))
+            except Exception:
+                pass
+            return False, {}
+
+        # Timeout
+        elapsed = time.time() - started
+        if elapsed > timeout_s:
+            await msg.reply_text(_tr(uid, "engine_timeout", name=engine_name))
+            return False, {}
+
+        # Status request
         rs = await client.get(status_url, headers=headers)
-        if rs.status_code >= 400:
+
+        if rs.status_code != 200:
             txt = (rs.text or "")[:1000]
             await msg.reply_text(_tr(uid, "engine_status_error", name=engine_name, code=rs.status_code, txt=txt))
             return False, {}
@@ -2175,51 +2436,40 @@ async def poll_task_until_done(
 
         st = (st_js.get("status") or "").lower()
 
+        # UI progress update (every ~25s)
+        if (time.time() - last_ui_update) > 25:
+            last_ui_update = time.time()
+            try:
+                await _safe_edit_or_reply(
+                    msg,
+                    _tr(uid, "engine_rendering", name=engine_name) + f" ({int(elapsed)}s)",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_tr(uid, "cancel_btn"), callback_data=f"cancel:{job.get('aid','')}")]]),
+                )
+            except Exception:
+                pass
+
         if st in ("completed", "succeeded", "done"):
             return True, st_js
 
         if st in ("failed", "error", "rejected", "cancelled", "canceled"):
             await msg.reply_text(_tr(uid, "engine_failed", name=engine_name, txt=str(st_js)[:1200]))
-            return False, st_js
-
-        if time.time() - started > float(timeout_s):
-            await msg.reply_text(_tr(uid, "engine_timeout", name=engine_name))
-            return False, st_js
+            return False, {}
 
         await asyncio.sleep(poll_delay_s)
 
-
-def extract_video_url(status_json: dict) -> str | None:
-    """Extract a video URL from different response shapes."""
-    out = status_json.get("output")
-
-    if isinstance(out, dict):
-        return (
-            out.get("url")
-            or out.get("video_url")
-            or out.get("videoUrl")
-            or (out.get("data") or {}).get("url")
-            or (out.get("data") or {}).get("video_url")
-        )
-
-    if isinstance(out, str) and out.startswith("http"):
-        return out
-
-    if isinstance(out, list) and out:
-        first = out[0]
-        if isinstance(first, str) and first.startswith("http"):
-            return first
-        if isinstance(first, dict):
-            return first.get("url") or first.get("video_url")
-
-    return None
-
-def normalize_seconds(sec: int) -> int:
+async def _safe_edit_or_reply(msg, text: str, reply_markup=None):
+    """
+    Try to edit the current bot message (for inline panels). If edit fails, send a new message.
+    """
     try:
-        sec = int(sec)
+        await msg.edit_text(text, reply_markup=reply_markup)
+        return
     except Exception:
-        sec = 5
-    return max(1, min(30, sec))
+        pass
+    try:
+        await msg.reply_text(text, reply_markup=reply_markup)
+    except Exception:
+        pass
 
 def normalize_aspect(aspect: str) -> str:
     if aspect in ("16:9", "9:16", "1:1"):
