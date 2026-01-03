@@ -224,7 +224,8 @@ I18N: dict[str, dict[str, str]] = {
         "btn_video": "🎞 Создать видео",
         "btn_photo": "🖼 Оживить фото",
         "btn_help": "❓ Помощь",
-    },
+            "btn_repeat": "🔁 Повторить",
+},
     "be": {
         "choose_lang": "🌍 Абярыце мову",
         "lang_set": "✅ Мова ўсталявана",
@@ -232,7 +233,8 @@ I18N: dict[str, dict[str, str]] = {
         "btn_video": "🎞 Стварыць відэа",
         "btn_photo": "🖼 Ажывіць фота",
         "btn_help": "❓ Дапамога",
-    },
+            "btn_repeat": "🔁 Паўтарыць",
+},
     "uk": {
         "choose_lang": "🌍 Оберіть мову",
         "lang_set": "✅ Мову встановлено",
@@ -240,7 +242,8 @@ I18N: dict[str, dict[str, str]] = {
         "btn_video": "🎞 Створити відео",
         "btn_photo": "🖼 Оживити фото",
         "btn_help": "❓ Допомога",
-    },
+            "btn_repeat": "🔁 Повторити",
+},
     "de": {
         "choose_lang": "🌍 Sprache auswählen",
         "lang_set": "✅ Sprache gesetzt",
@@ -248,7 +251,8 @@ I18N: dict[str, dict[str, str]] = {
         "btn_video": "🎞 Video erstellen",
         "btn_photo": "🖼 Foto animieren",
         "btn_help": "❓ Hilfe",
-    },
+            "btn_repeat": "🔁 Wiederholen",
+},
     "en": {
         "choose_lang": "🌍 Choose language",
         "lang_set": "✅ Language set",
@@ -256,7 +260,8 @@ I18N: dict[str, dict[str, str]] = {
         "btn_video": "🎞 Create video",
         "btn_photo": "🖼 Animate photo",
         "btn_help": "❓ Help",
-    },
+            "btn_repeat": "🔁 Repeat",
+},
     "fr": {
         "choose_lang": "🌍 Choisir la langue",
         "lang_set": "✅ Langue définie",
@@ -264,7 +269,8 @@ I18N: dict[str, dict[str, str]] = {
         "btn_video": "🎞 Créer une vidéo",
         "btn_photo": "🖼 Animer une photo",
         "btn_help": "❓ Aide",
-    },
+            "btn_repeat": "🔁 Répéter",
+},
     "th": {
         "choose_lang": "🌍 เลือกภาษา",
         "lang_set": "✅ ตั้งค่าภาษาแล้ว",
@@ -272,7 +278,8 @@ I18N: dict[str, dict[str, str]] = {
         "btn_video": "🎞 สร้างวิดีโอ",
         "btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
         "btn_help": "❓ ช่วยเหลือ",
-    },
+            "btn_repeat": "🔁 ทำซ้ำ",
+},
 }
 
 def t(user_id: int, key: str) -> str:
@@ -496,11 +503,113 @@ I18N_PACK.update({
     },
 })
 
+
+# =============================
+# Extra UI messages (ping/history/repeat/admin)
+# =============================
+I18N_PACK.update({
+    "pong": {
+        "ru": "✅ Бот онлайн.",
+        "be": "✅ Бот анлайн.",
+        "uk": "✅ Бот онлайн.",
+        "de": "✅ Bot ist online.",
+        "en": "✅ Bot is online.",
+        "fr": "✅ Bot en ligne.",
+        "th": "✅ บอทออนไลน์",
+    },
+    "history_empty": {
+        "ru": "История пуста.",
+        "be": "Гісторыя пустая.",
+        "uk": "Історія порожня.",
+        "de": "Verlauf ist leer.",
+        "en": "History is empty.",
+        "fr": "Historique vide.",
+        "th": "ประวัติว่างเปล่า",
+    },
+    "repeat_empty": {
+        "ru": "Нечего повторять: сначала отправьте запрос для видео.",
+        "be": "Няма чаго паўтараць: спачатку адпраўце запыт для відэа.",
+        "uk": "Нічого повторювати: спочатку надішліть запит для відео.",
+        "de": "Nichts zu wiederholen: sende zuerst einen Video-Prompt.",
+        "en": "Nothing to repeat: send a video prompt first.",
+        "fr": "Rien à répéter : envoyez d’abord un prompt vidéo.",
+        "th": "ไม่มีอะไรให้ทำซ้ำ: โปรดส่งคำสั่งวิดีโอก่อน",
+    },
+    "admin_forbidden": {
+        "ru": "⛔ Недостаточно прав.",
+        "be": "⛔ Недастаткова правоў.",
+        "uk": "⛔ Недостатньо прав.",
+        "de": "⛔ Keine Berechtigung.",
+        "en": "⛔ Forbidden.",
+        "fr": "⛔ Accès refusé.",
+        "th": "⛔ ไม่มีสิทธิ์",
+    },
+})
+
+
+
+# =============================
+# Queue / TTL / Anti-spam messages
+# =============================
+I18N_PACK.update({
+    "busy_render": {
+        "ru": "⏳ У вас уже идёт генерация ({engine}). Подождите завершения или нажмите Отмена в предыдущем сообщении.",
+        "be": "⏳ У вас ужо ідзе генерацыя ({engine}). Пачакайце завершання або націсніце Адмена ў папярэднім паведамленні.",
+        "uk": "⏳ У вас уже триває генерація ({engine}). Зачекайте завершення або натисніть Скасувати у попередньому повідомленні.",
+        "de": "⏳ Du hast bereits eine Generierung ({engine}) laufen. Bitte warten oder im vorherigen Beitrag abbrechen.",
+        "en": "⏳ You already have a generation running ({engine}). Please wait or cancel it in the previous message.",
+        "fr": "⏳ Une génération est déjà en cours ({engine}). Attendez ou annulez dans le message précédent.",
+        "th": "⏳ คุณกำลังสร้างอยู่แล้ว ({engine}) โปรดรอหรือกดยกเลิกจากข้อความก่อนหน้า",
+    },
+    "pending_expired": {
+        "ru": "⌛ Старая кнопка устарела. Отправьте запрос заново.",
+        "be": "⌛ Старая кнопка пратэрмінавана. Адпраўце запыт зноў.",
+        "uk": "⌛ Стара кнопка застаріла. Надішліть запит знову.",
+        "de": "⌛ Diese Schaltfläche ist abgelaufen. Bitte sende die Anfrage erneut.",
+        "en": "⌛ This button has expired. Please send the request again.",
+        "fr": "⌛ Ce bouton a expiré. Veuillez renvoyer la demande.",
+        "th": "⌛ ปุ่มนี้หมดอายุแล้ว โปรดส่งคำขอใหม่",
+    },
+    "spam_wait": {
+        "ru": "⚠️ Слишком часто. Подождите несколько секунд и попробуйте снова.",
+        "be": "⚠️ Занадта часта. Пачакайце некалькі секунд і паспрабуйце зноў.",
+        "uk": "⚠️ Занадто часто. Зачекайте кілька секунд і спробуйте знову.",
+        "de": "⚠️ Zu häufig. Bitte kurz warten und erneut versuchen.",
+        "en": "⚠️ Too frequent. Wait a few seconds and try again.",
+        "fr": "⚠️ Trop fréquent. Attendez quelques secondes et réessayez.",
+        "th": "⚠️ ถี่เกินไป รอสักครู่แล้วลองใหม่",
+    },
+})
+
+# =============================
+# =============================
+# Queue / Anti-spam / TTL cleanup
+# =============================
+PENDING_TTL_S = _env_int("PENDING_TTL_S", 60 * 60)           # 1h
+ACTIVE_JOB_TTL_S = _env_int("ACTIVE_JOB_TTL_S", 30 * 60)    # 30m safety
+ANTI_SPAM_WINDOW_S = _env_int("ANTI_SPAM_WINDOW_S", 12)     # seconds
+ANTI_SPAM_MAX = _env_int("ANTI_SPAM_MAX", 4)                # messages per window
+
+# per-user "one active render" lock
+_active_jobs: dict[int, dict] = {}  # uid -> {"ts": int, "engine": str, "aid": str}
+
+# per-user anti-spam counter
+_recent_msgs: dict[int, list[float]] = {}  # uid -> [timestamps]
+
+def _spam_check(uid: int) -> bool:
+    """Simple rate limiter per user."""
+    now = time.time()
+    arr = _recent_msgs.get(uid) or []
+    arr = [t for t in arr if now - t <= ANTI_SPAM_WINDOW_S]
+    arr.append(now)
+    _recent_msgs[uid] = arr
+    return len(arr) > ANTI_SPAM_MAX
+
 # =============================
 # Engine messages (status/errors)
 # =============================
 I18N_PACK.update({
-    "engine_disabled": {
+"engine_disabled": {
         "ru": "{name} отключён.",
         "be": "{name} адключаны.",
         "uk": "{name} вимкнено.",
@@ -616,6 +725,12 @@ def _tr(user_id: int, key: str, **kwargs) -> str:
             return text
     return text
 
+
+# =============================
+# Last video prompts per user (for "Repeat")
+# =============================
+_last_video_prompt: dict[int, dict] = {}  # uid -> {"prompt": str, "duration": int, "aspect": str, "ts": int}
+
 # =============================
 # Pending actions
 # =============================
@@ -699,7 +814,7 @@ def _main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton(t(user_id, "btn_video")), KeyboardButton(t(user_id, "btn_photo"))],
-            [KeyboardButton(t(user_id, "btn_help"))],
+            [KeyboardButton(t(user_id, "btn_repeat")), KeyboardButton(t(user_id, "btn_help"))],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -823,7 +938,7 @@ def _mk_menu_kb(user_id: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton(t(user_id, "btn_video")), KeyboardButton(t(user_id, "btn_photo"))],
-            [KeyboardButton(t(user_id, "btn_help"))],
+            [KeyboardButton(t(user_id, "btn_repeat")), KeyboardButton(t(user_id, "btn_help"))],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -872,8 +987,14 @@ async def _ask_video_engine(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     dur = normalize_seconds(dur)
     asp = normalize_aspect(asp)
 
+    # store last prompt for Repeat
+    _last_video_prompt[uid] = {"prompt": prompt, "duration": dur, "aspect": asp, "ts": int(time.time())}
+
     aid = _new_aid()
     _pending_actions[aid] = {
+        "uid": uid,
+        "ts": int(time.time()),
+        "type": "text_video",
         "prompt": prompt,
         "duration": dur,
         "aspect": asp,
@@ -952,6 +1073,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     uid = update.effective_user.id
 
+
+    if _spam_check(uid):
+        await msg.reply_text(_tr(uid, "spam_wait"))
+        return
+
     media = msg.voice or msg.audio
     if not media:
         await msg.reply_text(_tr(uid, "voice_not_found"))
@@ -972,6 +1098,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await msg.reply_text(f"🗣 {text}")
+    _hist_add(uid, "user", text)
 
     if _detect_video_intent(text):
         await _ask_video_engine(update, context, text)
@@ -980,6 +1107,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ans = await _gpt_chat(uid, [{"role": "user", "content": text}])
         await msg.reply_text(ans)
+        _hist_add(uid, "assistant", ans)
+        _hist_add(uid, "assistant", ans)
     except Exception as e:
         log.exception("GPT error: %s", e)
         await msg.reply_text(_tr(uid, "gpt_failed"))
@@ -992,6 +1121,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = (msg.text or "").strip()
     if not text:
+        return
+
+    _hist_add(uid, "user", text)
+
+
+    if _spam_check(uid):
+        await msg.reply_text(_tr(uid, "spam_wait"))
         return
 
     if text == t(uid, "btn_help"):
@@ -1015,6 +1151,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(tip, reply_markup=_main_menu_keyboard(uid))
         return
 
+
+if text == t(uid, "btn_repeat"):
+    last = _last_video_prompt.get(uid) or {}
+    lp = (last.get("prompt") or "").strip()
+    if not lp:
+        await msg.reply_text(_tr(uid, "repeat_empty"), reply_markup=_main_menu_keyboard(uid))
+        return
+    await _ask_video_engine(update, context, lp)
+    return
+
+
     if _detect_video_intent(text):
         await _ask_video_engine(update, context, text)
         return
@@ -1022,6 +1169,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ans = await _gpt_chat(uid, [{"role": "user", "content": text}])
         await msg.reply_text(ans)
+        _hist_add(uid, "assistant", ans)
+        _hist_add(uid, "assistant", ans)
     except Exception as e:
         log.exception("GPT error: %s", e)
         await msg.reply_text(_tr(uid, "gpt_failed"))
@@ -1424,6 +1573,86 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt)
 
+
+async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    await update.effective_message.reply_text(_tr(uid, "pong"), reply_markup=_main_menu_keyboard(uid))
+
+def _hist_key(uid: int) -> str:
+    return f"hist:{uid}"
+
+def _hist_add(uid: int, role: str, content: str):
+    try:
+        raw = kv_get(_hist_key(uid), "[]") or "[]"
+        arr = json.loads(raw)
+        if not isinstance(arr, list):
+            arr = []
+    except Exception:
+        arr = []
+    arr.append({"ts": int(time.time()), "role": role, "content": (content or "")[:2000]})
+    arr = arr[-20:]
+    kv_set(_hist_key(uid), json.dumps(arr, ensure_ascii=False))
+
+async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    try:
+        raw = kv_get(_hist_key(uid), "[]") or "[]"
+        arr = json.loads(raw)
+        if not isinstance(arr, list) or not arr:
+            await update.effective_message.reply_text(_tr(uid, "history_empty"))
+            return
+    except Exception:
+        await update.effective_message.reply_text(_tr(uid, "history_empty"))
+        return
+
+    lines = []
+    for item in arr[-20:]:
+        role = item.get("role") or "?"
+        c = (item.get("content") or "").replace("\n", " ")
+        if len(c) > 160:
+            c = c[:160] + "…"
+        lines.append(f"[{role}] {c}")
+    await update.effective_message.reply_text("🧾 History (last 20):\n\n" + "\n".join(lines))
+
+# =============================
+# Admin tools (optional)
+# =============================
+ADMIN_IDS = set(
+    int(x) for x in re.split(r"[ ,;]+", (_env("ADMIN_IDS") or "").strip()) if x.strip().isdigit()
+)
+
+def _is_admin(uid: int) -> bool:
+    return (not ADMIN_IDS) or (uid in ADMIN_IDS)
+
+async def cmd_settier(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if not _is_admin(uid):
+        await update.effective_message.reply_text(_tr(uid, "admin_forbidden"))
+        return
+    if not context.args:
+        await update.effective_message.reply_text("Usage: /settier <user_id> <free|start|pro|ultimate>")
+        return
+    try:
+        target = int(context.args[0])
+        tier = (context.args[1] if len(context.args) > 1 else "free").lower()
+    except Exception:
+        await update.effective_message.reply_text("Usage: /settier <user_id> <free|start|pro|ultimate>")
+        return
+    set_subscription_tier(target, tier)
+    await update.effective_message.reply_text(f"OK: user {target} tier={get_subscription_tier(target)}")
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if not _is_admin(uid):
+        await update.effective_message.reply_text(_tr(uid, "admin_forbidden"))
+        return
+    # simple counters
+    row = db_exec("SELECT COUNT(*) AS c FROM subs").fetchone()
+    subs_cnt = int(row["c"] if row else 0)
+    row2 = db_exec("SELECT COUNT(*) AS c FROM spend").fetchone()
+    spend_cnt = int(row2["c"] if row2 else 0)
+    await update.effective_message.reply_text(f"DB stats: subs={subs_cnt}, spend_rows={spend_cnt}")
+
 # ============================================================
 # PHOTO HANDLER
 # ============================================================
@@ -1446,7 +1675,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     aid = _new_aid()
-    _pending_actions[aid] = {"photo_bytes": bytes(raw)}
+    _pending_actions[aid] = {
+        "uid": uid,
+        "ts": int(time.time()),
+        "type": "animate_photo",
+        "photo_bytes": bytes(raw),
+    }
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(_tr(uid, "animate_btn"), callback_data=f"animate_photo:{aid}")]
@@ -1654,7 +1888,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _do()
             return
 
-# cancel:<aid>
+        # cancel:<aid>
         if data.startswith("cancel:"):
             parts = data.split(":")
             if len(parts) != 2:
@@ -1663,6 +1897,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             _, aid = parts
             _pending_actions.pop(aid, None)
+            _active_jobs.pop(uid, None)
             await q.answer()
             await q.message.reply_text(_tr(uid, "cancelled"), reply_markup=_main_menu_keyboard(uid))
             return
@@ -1681,6 +1916,22 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             duration = normalize_seconds(int(act.get("duration") or 5))
             aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
 
+            # pending expired?
+            act_ts = int(act.get("ts") or 0)
+            if act_ts and int(time.time()) - act_ts > PENDING_TTL_S:
+                _pending_actions.pop(aid, None)
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "pending_expired"))
+                return
+
+            # one active render per user (text/voice -> video)
+            if engine in ("kling", "luma", "sora"):
+                job = _active_jobs.get(uid)
+                if job:
+                    await q.answer()
+                    await q.message.reply_text(_tr(uid, "busy_render", engine=job.get("engine") or "engine"))
+                    return
+
             # Runway для text/voice→video отключён
             if engine == "runway":
                 await q.answer()
@@ -1690,6 +1941,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if engine == "kling":
                 est = float(KLING_UNIT_COST_USD or 0.40) * duration
 
+                _active_jobs[uid] = {"ts": int(time.time()), "engine": "Kling", "aid": aid}
+
                 async def _do():
                     try:
                         ok = await _run_kling_video(update, context, prompt, duration, aspect)
@@ -1697,6 +1950,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             _register_engine_spend(uid, "kling", est)
                         return ok
                     finally:
+                        _active_jobs.pop(uid, None)
                         _pending_actions.pop(aid, None)
 
                 await q.answer()
@@ -1706,6 +1960,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if engine == "luma":
                 est = float(LUMA_UNIT_COST_USD or 0.40) * duration
 
+                _active_jobs[uid] = {"ts": int(time.time()), "engine": "Luma", "aid": aid}
+
                 async def _do():
                     try:
                         ok = await _run_luma_video(update, context, prompt, duration, aspect)
@@ -1713,6 +1969,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             _register_engine_spend(uid, "luma", est)
                         return ok
                     finally:
+                        _active_jobs.pop(uid, None)
                         _pending_actions.pop(aid, None)
 
                 await q.answer()
@@ -1722,6 +1979,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if engine == "sora":
                 est = _sora_est_cost_usd(uid, duration)
 
+                _active_jobs[uid] = {"ts": int(time.time()), "engine": "Sora", "aid": aid}
+
                 async def _do():
                     try:
                         ok = await _run_sora_video(update, context, prompt, duration, aspect)
@@ -1729,6 +1988,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             _register_engine_spend(uid, "sora", est)
                         return ok
                     finally:
+                        _active_jobs.pop(uid, None)
                         _pending_actions.pop(aid, None)
 
                 await q.answer()
@@ -1755,6 +2015,33 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
+
+# =============================
+# Cleanup loop (TTL for pending/actions)
+# =============================
+async def _cleanup_loop(app: Application):
+    """Periodically cleans expired pending actions and stale active jobs."""
+    while True:
+        try:
+            now = int(time.time())
+
+            # pending ttl cleanup
+            for aid, act in list(_pending_actions.items()):
+                ts = int(act.get("ts") or 0)
+                if ts and (now - ts) > PENDING_TTL_S:
+                    _pending_actions.pop(aid, None)
+
+            # active job ttl cleanup (safety)
+            for uid, job in list(_active_jobs.items()):
+                ts = int(job.get("ts") or 0)
+                if ts and (now - ts) > ACTIVE_JOB_TTL_S:
+                    _active_jobs.pop(uid, None)
+
+        except Exception as e:
+            log.warning("cleanup loop error: %s", e)
+
+        await asyncio.sleep(30)
+
 # ============================================================
 # REGISTER ALL HANDLERS
 # ============================================================
@@ -1763,6 +2050,10 @@ def register_all_handlers(app: Application):
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("ping", cmd_ping))
+    app.add_handler(CommandHandler("history", cmd_history))
+    app.add_handler(CommandHandler("settier", cmd_settier))
+    app.add_handler(CommandHandler("stats", cmd_stats))
 
     app.add_handler(CallbackQueryHandler(on_callback_query))
 
@@ -1778,6 +2069,8 @@ def build_app() -> Application:
         .build()
     )
     register_all_handlers(app)
+    # start background cleanup
+    app.job_queue.run_once(lambda ctx: asyncio.create_task(_cleanup_loop(app)), when=1)
     return app
 
 # ============================================================
