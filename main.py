@@ -125,6 +125,7 @@ SORA_MAX_WAIT_S = _env_int("SORA_MAX_WAIT_S", 900)
 WEBHOOK_PATH = (_env("WEBHOOK_PATH") or "/telegram").strip()
 WEBHOOK_SECRET = (_env("WEBHOOK_SECRET") or "").strip()  # опционально
 
+# =============================
 # Costs (estimates)
 # =============================
 KLING_UNIT_COST_USD = _env_float("KLING_UNIT_COST_USD", 0.40)
@@ -214,7 +215,6 @@ def set_lang(user_id: int, lang: str):
     if lang in LANGS:
         kv_set(f"lang:{user_id}", lang)
 
-# Мини-словарь (полные пакеты дальше по файлу)
 # =============================
 # UI dictionary (short labels for buttons/menus)
 # =============================
@@ -284,7 +284,6 @@ def t(user_id: int, key: str) -> str:
     lang = get_lang(user_id)
     return (I18N.get(lang) or I18N["ru"]).get(key, key)
 
-
 def system_prompt_for(lang: str) -> str:
     """
     GPT system prompt that forces output language.
@@ -299,7 +298,6 @@ def system_prompt_for(lang: str) -> str:
         "th": "ตอบเป็นภาษาไทย",
     }
     return mapping.get(lang, mapping["ru"])
-
 
 # =============================
 # Extended language pack (long UI texts / hints / messages)
@@ -323,7 +321,6 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "fr": "❓ Aide : écrivez « make video … » ou envoyez une photo puis « Animer une photo ».",
         "th": "❓ วิธีใช้: พิมพ์ “ทำวิดีโอ …” หรือส่งรูปแล้วกด “ทำให้รูปเคลื่อนไหว”",
     },
-    
     "rendering": {
         "ru": "⏳ Рендерю…",
         "be": "⏳ Рэндэр…",
@@ -342,8 +339,6 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "fr": "✅ Terminé !",
         "th": "✅ เสร็จแล้ว!",
     },
-
-    # --- Your requested keys (long hints/messages) ---
     "ask_video_prompt": {
         "ru": "🎞 Напиши запрос для видео, например:\n«Сделай видео: закат над морем, 7 сек, 16:9»",
         "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зрабі відэа: захад сонца над морам, 7 сек, 16:9»",
@@ -405,8 +400,6 @@ _pending_actions: dict[str, dict] = {}
 def _new_aid() -> str:
     return uuid.uuid4().hex
 
-# === END PART 1 ===
-
 # =============================
 # Subscription / Limits
 # =============================
@@ -460,7 +453,6 @@ def _can_spend(user_id: int, engine: str, usd: float) -> bool:
         return (_spent_today(user_id, "luma") + usd) <= float(limits.get("luma_budget_usd", 0.0))
     if engine == "sora":
         return (_spent_today(user_id, "sora") + usd) <= float(limits.get("sora_budget_usd", 0.0))
-    # kling/runway/img etc. — оставляем как было или безлимит, зависит от твоей логики
     return True
 
 async def _try_pay_then_do(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int,
@@ -491,8 +483,6 @@ def _main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
 
 async def cmd_start_impl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    # Если язык ещё не выбран — показываем панель
-    lang = get_lang(user_id)
     if kv_get(f"lang:{user_id}", None) is None:
         await update.effective_message.reply_text(
             t(user_id, "choose_lang"),
@@ -564,7 +554,7 @@ def _parse_video_opts(text: str) -> tuple[int, str]:
         aspect = "16:9"
 
     return normalize_seconds(duration), normalize_aspect(aspect)
-    
+
 def _aspect_to_size(aspect: str) -> str:
     if aspect == "9:16":
         return "720x1280"
@@ -572,18 +562,10 @@ def _aspect_to_size(aspect: str) -> str:
         return "1024x1024"
     return "1280x720"
 
-# === END PART 2 ===
-
 # =============================
-# Full language pack (MERGED, no redefinition)
+# MERGED keys into I18N_PACK (no redefinition)
 # =============================
-
-# ⚠️ ВАЖНО:
-# I18N_PACK ДОЛЖЕН БЫТЬ ОБЪЯВЛЕН ВЫШЕ (с ask_video_prompt, ask_send_photo, photo_received, animate_btn)
-# Здесь мы ТОЛЬКО ДОБАВЛЯЕМ новые ключи через update()
-
 I18N_PACK.update({
-    
     "choose_engine": {
         "ru": "Выберите движок:",
         "be": "Абярыце рухавік:",
@@ -611,17 +593,7 @@ I18N_PACK.update({
         "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
         "th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
     },
-    "rendering": {
-        "ru": "⏳ Рендерю…",
-        "be": "⏳ Рэндэр…",
-        "uk": "⏳ Рендерю…",
-        "de": "⏳ Rendere…",
-        "en": "⏳ Rendering…",
-        "fr": "⏳ Rendu…",
-        "th": "⏳ กำลังสร้าง…",
-    },
 })
-
 
 def _mk_menu_kb(user_id: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
@@ -633,7 +605,6 @@ def _mk_menu_kb(user_id: int) -> ReplyKeyboardMarkup:
         one_time_keyboard=False,
     )
 
-
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     await update.effective_message.reply_text(
@@ -641,12 +612,10 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=_mk_menu_kb(uid),
     )
 
-
 def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
     tier = get_subscription_tier(user_id)
     rows: list[list[InlineKeyboardButton]] = []
 
-    # Kling + Luma — всегда
     if KLING_ENABLED:
         rows.append([
             InlineKeyboardButton(
@@ -654,7 +623,6 @@ def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
                 callback_data=f"choose:kling:{aid}",
             )
         ])
-
     if LUMA_ENABLED:
         rows.append([
             InlineKeyboardButton(
@@ -663,7 +631,6 @@ def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
             )
         ])
 
-    # Sora: sora-2-pro доступна только pro / ultimate
     if SORA_ENABLED:
         if tier in ("pro", "ultimate"):
             rows.append([InlineKeyboardButton("✨ Sora 2 Pro", callback_data=f"choose:sora:{aid}")])
@@ -671,7 +638,6 @@ def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
             rows.append([InlineKeyboardButton("✨ Sora 2", callback_data=f"choose:sora:{aid}")])
 
     return InlineKeyboardMarkup(rows)
-
 
 async def _ask_video_engine(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     uid = update.effective_user.id
@@ -694,7 +660,6 @@ async def _ask_video_engine(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 # =============================
 # OpenAI / GPT client placeholders
-# (оставляем интерфейс, реализация у тебя ниже по файлу)
 # =============================
 OPENAI_API_KEY = (_env("OPENAI_API_KEY") or "").strip()
 OPENAI_BASE_URL = (_env("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
@@ -709,10 +674,6 @@ def _oai_stt_client():
     return httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True)
 
 async def _gpt_chat(user_id: int, messages: list[dict], model: str = "gpt-4o-mini") -> str:
-    """
-    GPT ответ ДОЛЖЕН идти на выбранном языке.
-    Мы добавляем system-подсказку в messages.
-    """
     lang = get_lang(user_id)
     sys_msg = {"role": "system", "content": system_prompt_for(lang)}
     payload = {
@@ -737,13 +698,8 @@ async def _transcribe_telegram_voice(file_bytes: bytes, filename: str = "voice.o
         return ""
     url = f"{OPENAI_BASE_URL}/audio/transcriptions"
 
-    # Multipart/form-data
-    data = {
-        "model": WHISPER_MODEL,
-    }
-    files = {
-        "file": (filename, file_bytes, "audio/ogg"),
-    }
+    data = {"model": WHISPER_MODEL}
+    files = {"file": (filename, file_bytes, "audio/ogg")}
 
     last_err = None
     for _ in range(2):
@@ -766,7 +722,6 @@ async def _transcribe_telegram_voice(file_bytes: bytes, filename: str = "voice.o
 # ============================================================
 # VOICE HANDLER (voice -> STT -> intent)
 # ============================================================
-
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     uid = update.effective_user.id
@@ -785,7 +740,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не удалось скачать голосовое сообщение.")
         return
 
-    # STT
     text = await _transcribe_telegram_voice(bytes(raw))
     if not text:
         await msg.reply_text("Не удалось распознать речь.")
@@ -793,12 +747,10 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await msg.reply_text(f"🗣 {text}")
 
-    # video intent
     if _detect_video_intent(text):
         await _ask_video_engine(update, context, text)
         return
 
-    # обычный GPT
     try:
         ans = await _gpt_chat(uid, [{"role": "user", "content": text}])
         await msg.reply_text(ans)
@@ -806,11 +758,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("GPT error: %s", e)
         await msg.reply_text("Ошибка генерации ответа.")
 
-
 # ============================================================
 # TEXT HANDLER
 # ============================================================
-
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     uid = update.effective_user.id
@@ -818,7 +768,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    # меню
     if text == t(uid, "btn_help"):
         await cmd_help(update, context)
         return
@@ -840,12 +789,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(tip, reply_markup=_main_menu_keyboard(uid))
         return
 
-    # video intent
     if _detect_video_intent(text):
         await _ask_video_engine(update, context, text)
         return
 
-    # обычный GPT
     try:
         ans = await _gpt_chat(uid, [{"role": "user", "content": text}])
         await msg.reply_text(ans)
@@ -853,12 +800,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("GPT error: %s", e)
         await msg.reply_text("Ошибка генерации ответа.")
 
-# === END PART 4 ===
-
 # ============================================================
 # KLING — TEXT / VOICE -> VIDEO
 # ============================================================
-
 async def _run_kling_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -947,7 +891,6 @@ async def _run_kling_video(
                         or (out.get("data") or {}).get("url")
                     )
                     if not video_url:
-                        # иногда output может быть строкой
                         if isinstance(out, str) and out.startswith("http"):
                             video_url = out
                         else:
@@ -991,7 +934,6 @@ async def _run_kling_video(
 # ============================================================
 # LUMA — TEXT / VOICE -> VIDEO
 # ============================================================
-
 async def _run_luma_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1120,17 +1062,12 @@ async def _run_luma_video(
         await msg.reply_text("❌ Ошибка Luma.")
         return False
 
-
-# === END PART 5 ===
-
 # ──────────────────────────────────────────────────────────────────────────────
 # CryptoBot (оплата)
 # ──────────────────────────────────────────────────────────────────────────────
-
 CRYPTOBOT_TOKEN = (_env("CRYPTOBOT_TOKEN") or "").strip()
 CRYPTOBOT_BASE = (_env("CRYPTOBOT_BASE") or "https://pay.crypt.bot").rstrip("/")
 CRYPTOBOT_API = (_env("CRYPTOBOT_API") or f"{CRYPTOBOT_BASE}/api").rstrip("/")
-CRYPTOBOT_API = (_env("CRYPTOBOT_API") or "https://pay.crypt.bot/api").rstrip("/")
 
 PLANS = {
     "start": {
@@ -1200,9 +1137,9 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"• {p['title']}: {p['price_usdt']} USDT — {p['desc']}")
     txt = "💳 Тарифы:\n\n" + "\n".join(lines)
     kb = InlineKeyboardMarkup([
-    [InlineKeyboardButton(p["title"], callback_data=f"plan:{k}")]
-    for k, p in PLANS.items()
-])
+        [InlineKeyboardButton(p["title"], callback_data=f"plan:{k}")]
+        for k, p in PLANS.items()
+    ])
     await update.effective_message.reply_text(txt, reply_markup=kb)
 
 async def on_plan_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, plan_key: str):
@@ -1266,10 +1203,7 @@ async def on_paid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, p
     else:
         await q.answer(f"Статус оплаты: {status}", show_alert=True)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Callback router extension (plans)
-# ──────────────────────────────────────────────────────────────────────────────
-
+# Legacy (не используется, т.к. роутер один). Оставлено для совместимости.
 async def on_callback_query_plans(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = (q.data or "").strip()
@@ -1293,33 +1227,12 @@ async def on_callback_query_plans(update: Update, context: ContextTypes.DEFAULT_
 
     return False
 
-# =============================
-        # Назад к тарифам: plans:back
-        # =============================
-        if data == "plans:back":
-            await q.answer()
-            await cmd_plans(update, context)
-            return
-
-        # =============================
-        # Я оплатил: paid:<plan_key>
-        # =============================
-        if data.startswith("paid:"):
-            parts = data.split(":", 1)
-            if len(parts) != 2:
-                await q.answer("Bad callback")
-                return
-            _, plan_key = parts
-            await q.answer()
-            await on_paid_callback(update, context, plan_key)
-            return
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # ──────────────────────────────────────────────────────────────────────────────
 # /start override: show language picker first
 # ──────────────────────────────────────────────────────────────────────────────
 
+# FIX: cmd_start must exist before referencing it
+cmd_start = cmd_start_impl
 _old_cmd_start = cmd_start
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1332,17 +1245,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await _old_cmd_start(update, context)
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# /plans command
-# ──────────────────────────────────────────────────────────────────────────────
-
-# (cmd_plans already defined above)
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Human-readable subscription status
 # ──────────────────────────────────────────────────────────────────────────────
-
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     tier = get_subscription_tier(uid)
@@ -1357,14 +1262,9 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# End part
-# ──────────────────────────────────────────────────────────────────────────────
-
 # ============================================================
 # PHOTO HANDLER
 # ============================================================
-
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     uid = update.effective_user.id
@@ -1372,7 +1272,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg.photo:
         return
 
-    # Берём фото максимального размера
     photo = msg.photo[-1]
 
     try:
@@ -1384,29 +1283,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не удалось скачать фото.")
         return
 
-    # Сохраняем во временный буфер
-    bio = BytesIO(raw)
-    bio.name = "photo.jpg"
-
-    # Сохраняем в pending, чтобы кнопка знала, что оживлять
     aid = _new_aid()
-    _pending_actions[aid] = {
-        "photo_bytes": bytes(raw),
-    }
+    _pending_actions[aid] = {"photo_bytes": bytes(raw)}
 
     kb = InlineKeyboardMarkup([
-    [InlineKeyboardButton(_tr(uid, "animate_btn"), callback_data=f"animate_photo:{aid}")]
-])
-    await msg.reply_text(
-        _tr(uid, "photo_received"),
-        reply_markup=kb,
-    )
-
+        [InlineKeyboardButton(_tr(uid, "animate_btn"), callback_data=f"animate_photo:{aid}")]
+    ])
+    await msg.reply_text(_tr(uid, "photo_received"), reply_markup=kb)
 
 # ============================================================
 # RUNWAY — IMAGE -> VIDEO (ТОЛЬКО ЗДЕСЬ)
 # ============================================================
-
 async def _run_runway_animate_photo(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1440,7 +1327,7 @@ async def _run_runway_animate_photo(
         return False
 
     payload = {
-        "model": RUNWAY_MODEL,          # если у тебя нет RUNWAY_MODEL — замени на строку модели
+        "model": RUNWAY_MODEL,
         "promptImage": image_data_url,
         "seconds": int(seconds),
         "ratio": aspect,
@@ -1546,11 +1433,7 @@ async def _run_runway_animate_photo(
         await msg.reply_text("❌ Ошибка Runway.")
         return False
 
-
-# ============================================================
-# CALLBACK EXTENSION: animate_photo
-# ============================================================
-
+# Legacy (не используется). Оставлено для совместимости.
 async def on_callback_query_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = (q.data or "").strip()
@@ -1578,7 +1461,6 @@ async def on_callback_query_animate_photo(update: Update, context: ContextTypes.
 # ============================================================
 # CALLBACK ROUTER — SINGLE (lang + plans + animate_photo + engines)
 # ============================================================
-
 async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     if not q:
@@ -1591,34 +1473,39 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # =============================
-        # Выбор языка: lang:<code>
-        # =============================
+        # lang:<code>
         if data.startswith("lang:"):
-            try:
-                await on_lang_callback(update, context)
-            except NameError:
-                await q.answer("Language handler missing")
+            await on_lang_callback(update, context)
             return
 
-        # =============================
-        # Тарифы/планы: plan:<key>
-        # =============================
+        # plan:<key>
         if data.startswith("plan:"):
             parts = data.split(":", 1)
             if len(parts) != 2:
                 await q.answer("Bad callback")
                 return
             _, plan_key = parts
-            try:
-                await on_plan_callback(update, context, plan_key)
-            except NameError:
-                await q.answer("Plan handler missing")
+            await on_plan_callback(update, context, plan_key)
             return
 
-        # =============================
-        # Оживить фото: animate_photo:<aid>
-        # =============================
+        # plans:back
+        if data == "plans:back":
+            await q.answer()
+            await cmd_plans(update, context)
+            return
+
+        # paid:<plan_key>
+        if data.startswith("paid:"):
+            parts = data.split(":", 1)
+            if len(parts) != 2:
+                await q.answer("Bad callback")
+                return
+            _, plan_key = parts
+            await q.answer()
+            await on_paid_callback(update, context, plan_key)
+            return
+
+        # animate_photo:<aid>
         if data.startswith("animate_photo:"):
             parts = data.split(":")
             if len(parts) != 2:
@@ -1637,21 +1524,14 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
 
             async def _do():
-                ok = await _run_runway_animate_photo(
-                    update, context, photo_bytes, seconds=seconds, aspect=aspect
-                )
-                # Если нужно списание за animate-photo — включи:
-                # if ok:
-                #     est = float(RUNWAY_UNIT_COST_USD or 0.40) * seconds
-                #     _register_engine_spend(uid, "runway", est)
+                ok = await _run_runway_animate_photo(update, context, photo_bytes, seconds=seconds, aspect=aspect)
+                # при желании можно списывать тут (только при ok == True)
 
             await q.answer()
             await _do()
             return
 
-        # =============================
-        # Выбор движка: choose:<engine>:<aid>
-        # =============================
+        # choose:<engine>:<aid>
         if data.startswith("choose:"):
             parts = data.split(":")
             if len(parts) != 3:
@@ -1664,13 +1544,11 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             duration = normalize_seconds(int(act.get("duration") or 5))
             aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
 
-            # Runway для text/voice→video отключён (как договаривались)
             if engine == "runway":
                 await q.answer()
                 await q.message.reply_text(_tr(uid, "runway_disabled_textvideo"))
                 return
 
-            # ---- KLING ----
             if engine == "kling":
                 est = float(KLING_UNIT_COST_USD or 0.40) * duration
 
@@ -1683,7 +1561,6 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _try_pay_then_do(update, context, uid, "kling", est, _do)
                 return
 
-            # ---- LUMA ----
             if engine == "luma":
                 est = float(LUMA_UNIT_COST_USD or 0.40) * duration
 
@@ -1696,7 +1573,6 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _try_pay_then_do(update, context, uid, "luma", est, _do)
                 return
 
-            # ---- SORA ----
             if engine == "sora":
                 est = _sora_est_cost_usd(uid, duration)
 
@@ -1712,9 +1588,6 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Unknown engine")
             return
 
-        # =============================
-        # Неизвестный callback
-        # =============================
         await q.answer("Unknown action")
         return
 
@@ -1730,32 +1603,20 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
-
-# === END PART 7 ===
-
 # ============================================================
 # REGISTER ALL HANDLERS
 # ============================================================
-
 def register_all_handlers(app: Application):
-    # commands
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plans", cmd_plans))
     app.add_handler(CommandHandler("status", cmd_status))
 
-    # callbacks (buttons)
     app.add_handler(CallbackQueryHandler(on_callback_query))
 
-    # media
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
-
-    # text (last)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-
-# ============================================================
 
 def build_app() -> Application:
     app = (
@@ -1764,25 +1625,12 @@ def build_app() -> Application:
         .concurrent_updates(True)
         .build()
     )
-
     register_all_handlers(app)
     return app
-
-
-# ============================================================
-# MAIN ENTRYPOINT — WEBHOOK ONLY
-# ============================================================
-
-# === END PART 8 ===
 
 # ============================================================
 # UTILITIES / FALLBACKS / COMPATIBILITY
 # ============================================================
-
-# ------------------------------------------------------------
-# Safe send helpers (Telegram sometimes fails on large files)
-# ------------------------------------------------------------
-
 async def safe_send_video(
     context: ContextTypes.DEFAULT_TYPE,
     chat_id: int,
@@ -1825,22 +1673,16 @@ async def download_bytes_redirect_safe(
     timeout_s: float = 180.0,
     max_redirects: int = 5,
 ) -> bytes:
-    """
-    Robust downloader that handles redirects and weird intermediate responses.
-    - Follows 301/302/303/307/308 manually (for relative Location too)
-    - Validates that we got non-empty bytes
-    """
     cur = url
     for _ in range(max_redirects + 1):
         req = client.build_request("GET", cur, headers=headers)
         resp = await client.send(req, follow_redirects=False, timeout=timeout_s)
 
-        # Redirect?
         if resp.status_code in _REDIRECT_STATUSES:
             loc = resp.headers.get("location") or resp.headers.get("Location")
             if not loc:
                 raise httpx.HTTPStatusError("Redirect without Location", request=req, response=resp)
-            cur = httpx.URL(cur).join(loc)  # supports relative locations
+            cur = httpx.URL(cur).join(loc)
             continue
 
         if resp.status_code >= 400:
@@ -1857,10 +1699,6 @@ async def download_bytes_redirect_safe(
 
     raise RuntimeError(f"Too many redirects while downloading: {url}")
 
-# ------------------------------------------------------------
-# Normalize aspect / seconds (extra safety)
-# ------------------------------------------------------------
-
 def normalize_seconds(sec: int) -> int:
     try:
         sec = int(sec)
@@ -1873,12 +1711,6 @@ def normalize_aspect(aspect: str) -> str:
         return aspect
     return "16:9"
 
-
-# ------------------------------------------------------------
-# Legacy compatibility shims
-# (если старый код где-то всё ещё вызывает эти имена)
-# ------------------------------------------------------------
-
 async def run_kling_video(*args, **kwargs):
     log.warning("run_kling_video is deprecated, use _run_kling_video")
     return await _run_kling_video(*args, **kwargs)
@@ -1890,7 +1722,6 @@ async def run_luma_video(*args, **kwargs):
 # ============================================================
 # SORA — TEXT / VOICE -> VIDEO (через Comet)
 # ============================================================
-
 async def _run_sora_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1914,7 +1745,6 @@ async def _run_sora_video(
     await msg.reply_text(_tr(uid, "rendering"))
 
     tier = get_subscription_tier(uid)
-    # pro/ultimate -> sora-2-pro, иначе sora-2 (как ты и хотел)
     sora_model = "sora-2-pro" if tier in ("pro", "ultimate") else "sora-2"
 
     payload = {
@@ -2023,6 +1853,7 @@ async def _run_sora_video(
         log.exception("Sora exception: %s", e)
         await msg.reply_text("❌ Ошибка Sora.")
         return False
+
 async def run_sora_video(*args, **kwargs):
     log.warning("run_sora_video is deprecated, use _run_sora_video")
     return await _run_sora_video(*args, **kwargs)
@@ -2031,78 +1862,14 @@ async def run_runway_animate_photo(*args, **kwargs):
     log.warning("run_runway_animate_photo is deprecated, use _run_runway_animate_photo")
     return await _run_runway_animate_photo(*args, **kwargs)
 
-
-# ------------------------------------------------------------
-# Defensive wrappers around GPT / STT
-# ------------------------------------------------------------
-
-async def safe_gpt_chat(user_id: int, messages: list[dict], model: str = "gpt-4o-mini") -> str:
-    try:
-        return await _gpt_chat(user_id, messages, model=model)
-    except Exception as e:
-        log.exception("safe_gpt_chat failed: %s", e)
-        return "⚠️ Ошибка генерации ответа. Попробуйте позже."
-
-async def safe_transcribe(raw: bytes, filename: str = "voice.ogg") -> str:
-    try:
-        return await _transcribe_telegram_voice(raw, filename=filename)
-    except Exception as e:
-        log.exception("safe_transcribe failed: %s", e)
-        return ""
-
-
-# ------------------------------------------------------------
-# Small helpers for prompts
-# ------------------------------------------------------------
-
-def trim_prompt(prompt: str, max_len: int = 800) -> str:
-    p = (prompt or "").strip()
-    if len(p) > max_len:
-        return p[:max_len]
-    return p
-
-def enrich_video_prompt(prompt: str) -> str:
-    """
-    Лёгкое улучшение промпта без изменения смысла.
-    Можно дорабатывать позже.
-    """
-    p = trim_prompt(prompt)
-    if not p:
-        return p
-    return p
-
-
-# ------------------------------------------------------------
-# Logging helpers
-# ------------------------------------------------------------
-
-def log_user_action(user_id: int, action: str, meta: dict | None = None):
-    try:
-        log.info("user=%s action=%s meta=%s", user_id, action, meta or {})
-    except Exception:
-        pass
-
-
-# ------------------------------------------------------------
-# Feature flags summary (for debug)
-# ------------------------------------------------------------
-
-def feature_flags() -> dict:
-    return {
+log.info(
+    "Feature flags loaded: %s",
+    {
         "KLING_ENABLED": KLING_ENABLED,
         "LUMA_ENABLED": LUMA_ENABLED,
         "SORA_ENABLED": SORA_ENABLED,
         "RUNWAY_ENABLED": RUNWAY_ENABLED,
-    }
-
-
-# ------------------------------------------------------------
-# Final safety note
-# ------------------------------------------------------------
-
-log.info(
-    "Feature flags loaded: %s",
-    feature_flags(),
+    },
 )
 
 def main():
@@ -2128,5 +1895,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# === END PART 9 ===
