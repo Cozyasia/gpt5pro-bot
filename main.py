@@ -377,6 +377,109 @@ I18N_PACK: dict[str, dict[str, str]] = {
     },
 }
 
+# Add common/technical messages (errors/status) to long pack
+I18N_PACK.update({
+    "limit_exceeded": {
+        "ru": "⛔ Лимит исчерпан. Обновите подписку.",
+        "be": "⛔ Ліміт вычарпаны. Абнавіце падпіску.",
+        "uk": "⛔ Ліміт вичерпано. Оновіть підписку.",
+        "de": "⛔ Limit erreicht. Bitte Abo upgraden.",
+        "en": "⛔ Limit reached. Please upgrade your plan.",
+        "fr": "⛔ Limite atteinte. Veuillez améliorer votre abonnement.",
+        "th": "⛔ ใช้โควตาครบแล้ว โปรดอัปเกรดแพ็กเกจ",
+    },
+    "err_bad_callback": {
+        "ru": "⚠️ Некорректная кнопка (bad callback).",
+        "be": "⚠️ Некарэктная кнопка (bad callback).",
+        "uk": "⚠️ Некоректна кнопка (bad callback).",
+        "de": "⚠️ Ungültiger Callback.",
+        "en": "⚠️ Invalid callback.",
+        "fr": "⚠️ Callback invalide.",
+        "th": "⚠️ ปุ่มไม่ถูกต้อง",
+    },
+    "err_unknown_action": {
+        "ru": "⚠️ Неизвестное действие.",
+        "be": "⚠️ Невядомае дзеянне.",
+        "uk": "⚠️ Невідома дія.",
+        "de": "⚠️ Unbekannte Aktion.",
+        "en": "⚠️ Unknown action.",
+        "fr": "⚠️ Action inconnue.",
+        "th": "⚠️ ไม่รู้จักคำสั่ง",
+    },
+    "err_unknown_engine": {
+        "ru": "⚠️ Неизвестный движок.",
+        "be": "⚠️ Невядомы рухавік.",
+        "uk": "⚠️ Невідомий рушій.",
+        "de": "⚠️ Unbekannte Engine.",
+        "en": "⚠️ Unknown engine.",
+        "fr": "⚠️ Moteur inconnu.",
+        "th": "⚠️ ไม่รู้จักเอนจิน",
+    },
+    "photo_missing_retry": {
+        "ru": "🖼 Фото не найдено. Пришлите фото ещё раз.",
+        "be": "🖼 Фота не знойдзена. Дашліце фота яшчэ раз.",
+        "uk": "🖼 Фото не знайдено. Надішліть фото ще раз.",
+        "de": "🖼 Foto nicht gefunden. Bitte sende es erneut.",
+        "en": "🖼 Photo not found. Please send it again.",
+        "fr": "🖼 Photo introuvable. Merci de l’envoyer à nouveau.",
+        "th": "🖼 ไม่พบรูป โปรดส่งใหม่อีกครั้ง",
+    },
+    "err_button_failed": {
+        "ru": "❌ Ошибка обработки кнопки.",
+        "be": "❌ Памылка апрацоўкі кнопкі.",
+        "uk": "❌ Помилка обробки кнопки.",
+        "de": "❌ Fehler bei der Button-Verarbeitung.",
+        "en": "❌ Button processing error.",
+        "fr": "❌ Erreur de traitement du bouton.",
+        "th": "❌ เกิดข้อผิดพลาดในการประมวลผลปุ่ม",
+    },
+    "voice_not_found": {
+        "ru": "Не найдено голосовое сообщение.",
+        "be": "Галасавое паведамленне не знойдзена.",
+        "uk": "Голосове повідомлення не знайдено.",
+        "de": "Keine Sprachnachricht gefunden.",
+        "en": "No voice message found.",
+        "fr": "Message vocal introuvable.",
+        "th": "ไม่พบข้อความเสียง",
+    },
+    "voice_download_failed": {
+        "ru": "Не удалось скачать голосовое сообщение.",
+        "be": "Не ўдалося спампаваць галасавое паведамленне.",
+        "uk": "Не вдалося завантажити голосове повідомлення.",
+        "de": "Sprachnachricht konnte nicht geladen werden.",
+        "en": "Failed to download the voice message.",
+        "fr": "Impossible de télécharger le message vocal.",
+        "th": "ดาวน์โหลดข้อความเสียงไม่สำเร็จ",
+    },
+    "voice_stt_failed": {
+        "ru": "Не удалось распознать речь.",
+        "be": "Не атрымалася распазнаць маўленне.",
+        "uk": "Не вдалося розпізнати мовлення.",
+        "de": "Spracherkennung fehlgeschlagen.",
+        "en": "Speech recognition failed.",
+        "fr": "Échec de la reconnaissance vocale.",
+        "th": "รู้จำเสียงไม่สำเร็จ",
+    },
+    "photo_download_failed": {
+        "ru": "Не удалось скачать фото.",
+        "be": "Не ўдалося спампаваць фота.",
+        "uk": "Не вдалося завантажити фото.",
+        "de": "Foto konnte nicht geladen werden.",
+        "en": "Failed to download the photo.",
+        "fr": "Impossible de télécharger la photo.",
+        "th": "ดาวน์โหลดรูปไม่สำเร็จ",
+    },
+    "gpt_failed": {
+        "ru": "Ошибка генерации ответа.",
+        "be": "Памылка генерацыі адказу.",
+        "uk": "Помилка генерації відповіді.",
+        "de": "Fehler bei der Antwortgenerierung.",
+        "en": "Failed to generate a reply.",
+        "fr": "Échec de génération de la réponse.",
+        "th": "สร้างคำตอบไม่สำเร็จ",
+    },
+})
+
 def _tr(user_id: int, key: str, **kwargs) -> str:
     """
     Long UI strings / messages (I18N_PACK).
@@ -458,7 +561,7 @@ def _can_spend(user_id: int, engine: str, usd: float) -> bool:
 async def _try_pay_then_do(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int,
                           engine: str, est_usd: float, coro):
     if not _can_spend(user_id, engine, est_usd):
-        await update.effective_message.reply_text("⛔ Лимит исчерпан. Обновите подписку.")
+        await update.effective_message.reply_text(_tr(user_id, "limit_exceeded"))
         return
     await coro()
 
@@ -728,7 +831,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     media = msg.voice or msg.audio
     if not media:
-        await msg.reply_text("Не найдено голосовое сообщение.")
+        await msg.reply_text(_tr(uid, "voice_not_found"))
         return
 
     try:
@@ -737,12 +840,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raw = await tg_file.download_as_bytearray()
     except Exception as e:
         log.exception("Voice download error: %s", e)
-        await msg.reply_text("Не удалось скачать голосовое сообщение.")
+        await msg.reply_text(_tr(uid, "voice_download_failed"))
         return
 
     text = await _transcribe_telegram_voice(bytes(raw))
     if not text:
-        await msg.reply_text("Не удалось распознать речь.")
+        await msg.reply_text(_tr(uid, "voice_stt_failed"))
         return
 
     await msg.reply_text(f"🗣 {text}")
@@ -756,7 +859,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(ans)
     except Exception as e:
         log.exception("GPT error: %s", e)
-        await msg.reply_text("Ошибка генерации ответа.")
+        await msg.reply_text(_tr(uid, "gpt_failed"))
 
 # ============================================================
 # TEXT HANDLER
@@ -798,7 +901,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(ans)
     except Exception as e:
         log.exception("GPT error: %s", e)
-        await msg.reply_text("Ошибка генерации ответа.")
+        await msg.reply_text(_tr(uid, "gpt_failed"))
 
 # ============================================================
 # KLING — TEXT / VOICE -> VIDEO
@@ -1203,30 +1306,6 @@ async def on_paid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, p
     else:
         await q.answer(f"Статус оплаты: {status}", show_alert=True)
 
-# Legacy (не используется, т.к. роутер один). Оставлено для совместимости.
-async def on_callback_query_plans(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    q = update.callback_query
-    data = (q.data or "").strip()
-
-    if data == "plans:back":
-        await q.answer()
-        await cmd_plans(update, context)
-        return True
-
-    if data.startswith("plan:"):
-        await q.answer()
-        plan_key = data.split(":", 1)[1]
-        await on_plan_callback(update, context, plan_key)
-        return True
-
-    if data.startswith("paid:"):
-        await q.answer()
-        plan_key = data.split(":", 1)[1]
-        await on_paid_callback(update, context, plan_key)
-        return True
-
-    return False
-
 # ──────────────────────────────────────────────────────────────────────────────
 # /start override: show language picker first
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1280,7 +1359,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raw = await tg_file.download_as_bytearray()
     except Exception as e:
         log.exception("Photo download error: %s", e)
-        await msg.reply_text("Не удалось скачать фото.")
+        await msg.reply_text(_tr(uid, "photo_download_failed"))
         return
 
     aid = _new_aid()
@@ -1433,31 +1512,6 @@ async def _run_runway_animate_photo(
         await msg.reply_text("❌ Ошибка Runway.")
         return False
 
-# Legacy (не используется). Оставлено для совместимости.
-async def on_callback_query_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    q = update.callback_query
-    data = (q.data or "").strip()
-    uid = update.effective_user.id
-
-    if not data.startswith("animate_photo:"):
-        return False
-
-    await q.answer()
-
-    aid = data.split(":", 1)[1]
-    meta = _pending_actions.pop(aid, None)
-    if not meta:
-        await q.answer("Задача устарела.", show_alert=True)
-        return True
-
-    photo_bytes = meta.get("photo_bytes")
-    if not photo_bytes:
-        await q.answer("Фото не найдено.", show_alert=True)
-        return True
-
-    await _run_runway_animate_photo(update, context, photo_bytes)
-    return True
-
 # ============================================================
 # CALLBACK ROUTER — SINGLE (lang + plans + animate_photo + engines)
 # ============================================================
@@ -1482,7 +1536,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("plan:"):
             parts = data.split(":", 1)
             if len(parts) != 2:
-                await q.answer("Bad callback")
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
                 return
             _, plan_key = parts
             await on_plan_callback(update, context, plan_key)
@@ -1498,7 +1553,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("paid:"):
             parts = data.split(":", 1)
             if len(parts) != 2:
-                await q.answer("Bad callback")
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
                 return
             _, plan_key = parts
             await q.answer()
@@ -1509,7 +1565,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("animate_photo:"):
             parts = data.split(":")
             if len(parts) != 2:
-                await q.answer("Bad callback")
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
                 return
             _, aid = parts
 
@@ -1517,7 +1574,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             photo_bytes = act.get("photo_bytes")
             if not photo_bytes:
                 await q.answer()
-                await q.message.reply_text("Фото не найдено. Пришлите фото ещё раз.")
+                await q.message.reply_text(_tr(uid, "photo_missing_retry"))
                 return
 
             seconds = normalize_seconds(int(act.get("duration") or 5))
@@ -1525,7 +1582,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             async def _do():
                 ok = await _run_runway_animate_photo(update, context, photo_bytes, seconds=seconds, aspect=aspect)
-                # при желании можно списывать тут (только при ok == True)
+                if ok:
+                    _pending_actions.pop(aid, None)
 
             await q.answer()
             await _do()
@@ -1535,7 +1593,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("choose:"):
             parts = data.split(":")
             if len(parts) != 3:
-                await q.answer("Bad callback")
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
                 return
             _, engine, aid = parts
 
@@ -1544,6 +1603,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             duration = normalize_seconds(int(act.get("duration") or 5))
             aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
 
+            # Runway для text/voice→video отключён
             if engine == "runway":
                 await q.answer()
                 await q.message.reply_text(_tr(uid, "runway_disabled_textvideo"))
@@ -1556,6 +1616,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ok = await _run_kling_video(update, context, prompt, duration, aspect)
                     if ok:
                         _register_engine_spend(uid, "kling", est)
+                        _pending_actions.pop(aid, None)
 
                 await q.answer()
                 await _try_pay_then_do(update, context, uid, "kling", est, _do)
@@ -1568,6 +1629,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ok = await _run_luma_video(update, context, prompt, duration, aspect)
                     if ok:
                         _register_engine_spend(uid, "luma", est)
+                        _pending_actions.pop(aid, None)
 
                 await q.answer()
                 await _try_pay_then_do(update, context, uid, "luma", est, _do)
@@ -1580,25 +1642,28 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ok = await _run_sora_video(update, context, prompt, duration, aspect)
                     if ok:
                         _register_engine_spend(uid, "sora", est)
+                        _pending_actions.pop(aid, None)
 
                 await q.answer()
                 await _try_pay_then_do(update, context, uid, "sora", est, _do)
                 return
 
-            await q.answer("Unknown engine")
+            await q.answer()
+            await q.message.reply_text(_tr(uid, "err_unknown_engine"))
             return
 
-        await q.answer("Unknown action")
+        await q.answer()
+        await q.message.reply_text(_tr(uid, "err_unknown_action"))
         return
 
     except Exception as e:
         log.exception("on_callback_query error: %s", e)
         try:
-            await q.answer("Error")
+            await q.answer()
         except Exception:
             pass
         try:
-            await q.message.reply_text("❌ Ошибка обработки кнопки.")
+            await q.message.reply_text(_tr(uid, "err_button_failed"))
         except Exception:
             pass
         return
@@ -1710,14 +1775,6 @@ def normalize_aspect(aspect: str) -> str:
     if aspect in ("16:9", "9:16", "1:1"):
         return aspect
     return "16:9"
-
-async def run_kling_video(*args, **kwargs):
-    log.warning("run_kling_video is deprecated, use _run_kling_video")
-    return await _run_kling_video(*args, **kwargs)
-
-async def run_luma_video(*args, **kwargs):
-    log.warning("run_luma_video is deprecated, use _run_luma_video")
-    return await _run_luma_video(*args, **kwargs)
 
 # ============================================================
 # SORA — TEXT / VOICE -> VIDEO (через Comet)
@@ -1853,14 +1910,6 @@ async def _run_sora_video(
         log.exception("Sora exception: %s", e)
         await msg.reply_text("❌ Ошибка Sora.")
         return False
-
-async def run_sora_video(*args, **kwargs):
-    log.warning("run_sora_video is deprecated, use _run_sora_video")
-    return await _run_sora_video(*args, **kwargs)
-
-async def run_runway_animate_photo(*args, **kwargs):
-    log.warning("run_runway_animate_photo is deprecated, use _run_runway_animate_photo")
-    return await _run_runway_animate_photo(*args, **kwargs)
 
 log.info(
     "Feature flags loaded: %s",
