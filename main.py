@@ -422,6 +422,24 @@ I18N_PACK.update({
         "fr": "🖼 Photo introuvable. Merci de l’envoyer à nouveau.",
         "th": "🖼 ไม่พบรูป โปรดส่งใหม่อีกครั้ง",
     },
+    "cancel_btn": {
+        "ru": "✖️ Отмена",
+        "be": "✖️ Адмена",
+        "uk": "✖️ Скасувати",
+        "de": "✖️ Abbrechen",
+        "en": "✖️ Cancel",
+        "fr": "✖️ Annuler",
+        "th": "✖️ ยกเลิก",
+    },
+    "cancelled": {
+        "ru": "✖️ Отменено.",
+        "be": "✖️ Адменена.",
+        "uk": "✖️ Скасовано.",
+        "de": "✖️ Abgebrochen.",
+        "en": "✖️ Cancelled.",
+        "fr": "✖️ Annulé.",
+        "th": "✖️ ยกเลิกแล้ว",
+    },
     "err_button_failed": {
         "ru": "❌ Ошибка обработки кнопки.",
         "be": "❌ Памылка апрацоўкі кнопкі.",
@@ -843,6 +861,8 @@ def _video_engine_kb(aid: str, user_id: int) -> InlineKeyboardMarkup:
         else:
             rows.append([InlineKeyboardButton("✨ Sora 2", callback_data=f"choose:sora:{aid}")])
 
+    rows.append([InlineKeyboardButton(_tr(user_id, "cancel_btn"), callback_data=f"cancel:{aid}")])
+
     return InlineKeyboardMarkup(rows)
 
 async def _ask_video_engine(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
@@ -1075,60 +1095,42 @@ async def _run_kling_video(
                 return False
 
             status_url = f"{COMET_BASE_URL}/kling/v1/tasks/{task_id}"
-            started = time.time()
 
-            while True:
-                rs = await client.get(status_url, headers=headers)
-                if rs.status_code >= 400:
-                    await msg.reply_text(_tr(uid, "engine_status_error", name="Kling", code=rs.status_code, txt=(rs.text or "")[:1000]))
-                    return False
+            ok, st_js = await poll_task_until_done(
+                client,
+                status_url=status_url,
+                headers=headers,
+                engine_name="Kling",
+                msg=msg,
+                uid=uid,
+                timeout_s=900,
+            )
+            if not ok:
+                return False
 
-                st_js = rs.json() or {}
-                st = (st_js.get("status") or "").lower()
+            video_url = extract_video_url(st_js)
+            if not video_url:
+                await msg.reply_text(_tr(uid, "engine_no_url", name="Kling", txt=str(st_js)[:1000]))
+                return False
 
-                if st in ("completed", "succeeded", "done"):
-                    out = st_js.get("output") or {}
-                    video_url = (
-                        out.get("url")
-                        or out.get("video_url")
-                        or out.get("videoUrl")
-                        or (out.get("data") or {}).get("url")
-                    )
-                    if not video_url:
-                        if isinstance(out, str) and out.startswith("http"):
-                            video_url = out
-                        else:
-                            await msg.reply_text(_tr(uid, "engine_no_url", name="Kling", txt=str(st_js)[:1000]))
-                            return False
+            try:
+                data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+            except Exception as e:
+                log.exception("Kling download failed: %s", e)
+                await msg.reply_text(_tr(uid, "engine_download_err", name="Kling"))
+                return False
 
-                    try:
-                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-                    except Exception as e:
-                        log.exception("Kling download failed: %s", e)
-                        await msg.reply_text(_tr(uid, "engine_download_err", name="Kling"))
-                        return False
+            bio = BytesIO(data)
+            bio.name = "kling.mp4"
+            bio.seek(0)
 
-                    bio = BytesIO(data)
-                    bio.name = "kling.mp4"
-                    bio.seek(0)
+            ok_send = await safe_send_video(context, update.effective_chat.id, bio)
+            if not ok_send:
+                await msg.reply_text(_tr(uid, "engine_send_err", name="Kling"))
+                return False
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                        await msg.reply_text(_tr(uid, "engine_send_err", name="Kling"))
-                        return False
-
-                    await msg.reply_text(_tr(uid, "done"))
-                    return True
-
-                if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(_tr(uid, "engine_failed", name="Kling", txt=str(st_js)[:1200]))
-                    return False
-
-                if time.time() - started > 900:
-                    await msg.reply_text(_tr(uid, "engine_timeout", name="Kling"))
-                    return False
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            await msg.reply_text(_tr(uid, "done"))
+            return True
 
     except Exception as e:
         log.exception("Kling exception: %s", e)
@@ -1204,60 +1206,42 @@ async def _run_luma_video(
                 return False
 
             status_url = f"{COMET_BASE_URL}/luma/v1/tasks/{task_id}"
-            started = time.time()
 
-            while True:
-                rs = await client.get(status_url, headers=headers)
-                if rs.status_code >= 400:
-                    await msg.reply_text(_tr(uid, "engine_status_error", name="Luma", code=rs.status_code, txt=(rs.text or "")[:1000]))
-                    return False
+            ok, st_js = await poll_task_until_done(
+                client,
+                status_url=status_url,
+                headers=headers,
+                engine_name="Luma",
+                msg=msg,
+                uid=uid,
+                timeout_s=900,
+            )
+            if not ok:
+                return False
 
-                st_js = rs.json() or {}
-                st = (st_js.get("status") or "").lower()
+            video_url = extract_video_url(st_js)
+            if not video_url:
+                await msg.reply_text(_tr(uid, "engine_no_url", name="Luma", txt=str(st_js)[:1000]))
+                return False
 
-                if st in ("completed", "succeeded", "done"):
-                    out = st_js.get("output") or {}
-                    video_url = (
-                        out.get("url")
-                        or out.get("video_url")
-                        or out.get("videoUrl")
-                        or (out.get("data") or {}).get("url")
-                    )
-                    if not video_url:
-                        if isinstance(out, str) and out.startswith("http"):
-                            video_url = out
-                        else:
-                            await msg.reply_text(_tr(uid, "engine_no_url", name="Luma", txt=str(st_js)[:1000]))
-                            return False
+            try:
+                data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+            except Exception as e:
+                log.exception("Luma download failed: %s", e)
+                await msg.reply_text(_tr(uid, "engine_download_err", name="Luma"))
+                return False
 
-                    try:
-                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-                    except Exception as e:
-                        log.exception("Luma download failed: %s", e)
-                        await msg.reply_text(_tr(uid, "engine_download_err", name="Luma"))
-                        return False
+            bio = BytesIO(data)
+            bio.name = "luma.mp4"
+            bio.seek(0)
 
-                    bio = BytesIO(data)
-                    bio.name = "luma.mp4"
-                    bio.seek(0)
+            ok_send = await safe_send_video(context, update.effective_chat.id, bio)
+            if not ok_send:
+                await msg.reply_text(_tr(uid, "engine_send_err", name="Luma"))
+                return False
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                        await msg.reply_text(_tr(uid, "engine_send_err", name="Luma"))
-                        return False
-
-                    await msg.reply_text(_tr(uid, "done"))
-                    return True
-
-                if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(_tr(uid, "engine_failed", name="Luma", txt=str(st_js)[:1200]))
-                    return False
-
-                if time.time() - started > 900:
-                    await msg.reply_text(_tr(uid, "engine_timeout", name="Luma"))
-                    return False
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            await msg.reply_text(_tr(uid, "done"))
+            return True
 
     except Exception as e:
         log.exception("Luma exception: %s", e)
@@ -1549,60 +1533,42 @@ async def _run_runway_animate_photo(
                 return False
 
             status_url = f"{COMET_BASE_URL}/runwayml/v1/tasks/{task_id}"
-            started = time.time()
 
-            while True:
-                rs = await client.get(status_url, headers=headers)
-                if rs.status_code >= 400:
-                    await msg.reply_text(_tr(uid, "engine_status_error", name="Runway", code=rs.status_code, txt=(rs.text or "")[:1000]))
-                    return False
+            ok, st_js = await poll_task_until_done(
+                client,
+                status_url=status_url,
+                headers=headers,
+                engine_name="Runway",
+                msg=msg,
+                uid=uid,
+                timeout_s=900,
+            )
+            if not ok:
+                return False
 
-                st_js = rs.json() or {}
-                st = (st_js.get("status") or "").lower()
+            video_url = extract_video_url(st_js)
+            if not video_url:
+                await msg.reply_text(_tr(uid, "engine_no_url", name="Runway", txt=str(st_js)[:1000]))
+                return False
 
-                if st in ("completed", "succeeded", "done"):
-                    out = st_js.get("output") or {}
-                    video_url = (
-                        out.get("url")
-                        or out.get("video_url")
-                        or out.get("videoUrl")
-                        or (out.get("data") or {}).get("url")
-                    )
-                    if not video_url:
-                        if isinstance(out, str) and out.startswith("http"):
-                            video_url = out
-                        else:
-                            await msg.reply_text(_tr(uid, "engine_no_url", name="Runway", txt=str(st_js)[:1000]))
-                            return False
+            try:
+                data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+            except Exception as e:
+                log.exception("Runway download failed: %s", e)
+                await msg.reply_text(_tr(uid, "engine_download_err", name="Runway"))
+                return False
 
-                    try:
-                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-                    except Exception as e:
-                        log.exception("Runway download failed: %s", e)
-                        await msg.reply_text(_tr(uid, "engine_download_err", name="Runway"))
-                        return False
+            bio = BytesIO(data)
+            bio.name = "runway.mp4"
+            bio.seek(0)
 
-                    bio = BytesIO(data)
-                    bio.name = "runway.mp4"
-                    bio.seek(0)
+            ok_send = await safe_send_video(context, update.effective_chat.id, bio)
+            if not ok_send:
+                await msg.reply_text(_tr(uid, "engine_send_err", name="Runway"))
+                return False
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                        await msg.reply_text(_tr(uid, "engine_send_err", name="Runway"))
-                        return False
-
-                    await msg.reply_text(_tr(uid, "done"))
-                    return True
-
-                if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(_tr(uid, "engine_failed", name="Runway", txt=str(st_js)[:1200]))
-                    return False
-
-                if time.time() - started > 900:
-                    await msg.reply_text(_tr(uid, "engine_timeout", name="Runway"))
-                    return False
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            await msg.reply_text(_tr(uid, "done"))
+            return True
 
     except Exception as e:
         log.exception("Runway exception: %s", e)
@@ -1678,12 +1644,27 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             aspect = normalize_aspect(str(act.get("aspect") or "16:9"))
 
             async def _do():
-                ok = await _run_runway_animate_photo(update, context, photo_bytes, seconds=seconds, aspect=aspect)
-                if ok:
+                try:
+                    ok = await _run_runway_animate_photo(update, context, photo_bytes, seconds=seconds, aspect=aspect)
+                    return ok
+                finally:
                     _pending_actions.pop(aid, None)
 
             await q.answer()
             await _do()
+            return
+
+# cancel:<aid>
+        if data.startswith("cancel:"):
+            parts = data.split(":")
+            if len(parts) != 2:
+                await q.answer()
+                await q.message.reply_text(_tr(uid, "err_bad_callback"))
+                return
+            _, aid = parts
+            _pending_actions.pop(aid, None)
+            await q.answer()
+            await q.message.reply_text(_tr(uid, "cancelled"), reply_markup=_main_menu_keyboard(uid))
             return
 
         # choose:<engine>:<aid>
@@ -1710,9 +1691,12 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 est = float(KLING_UNIT_COST_USD or 0.40) * duration
 
                 async def _do():
-                    ok = await _run_kling_video(update, context, prompt, duration, aspect)
-                    if ok:
-                        _register_engine_spend(uid, "kling", est)
+                    try:
+                        ok = await _run_kling_video(update, context, prompt, duration, aspect)
+                        if ok:
+                            _register_engine_spend(uid, "kling", est)
+                        return ok
+                    finally:
                         _pending_actions.pop(aid, None)
 
                 await q.answer()
@@ -1723,9 +1707,12 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 est = float(LUMA_UNIT_COST_USD or 0.40) * duration
 
                 async def _do():
-                    ok = await _run_luma_video(update, context, prompt, duration, aspect)
-                    if ok:
-                        _register_engine_spend(uid, "luma", est)
+                    try:
+                        ok = await _run_luma_video(update, context, prompt, duration, aspect)
+                        if ok:
+                            _register_engine_spend(uid, "luma", est)
+                        return ok
+                    finally:
                         _pending_actions.pop(aid, None)
 
                 await q.answer()
@@ -1736,9 +1723,12 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 est = _sora_est_cost_usd(uid, duration)
 
                 async def _do():
-                    ok = await _run_sora_video(update, context, prompt, duration, aspect)
-                    if ok:
-                        _register_engine_spend(uid, "sora", est)
+                    try:
+                        ok = await _run_sora_video(update, context, prompt, duration, aspect)
+                        if ok:
+                            _register_engine_spend(uid, "sora", est)
+                        return ok
+                    finally:
                         _pending_actions.pop(aid, None)
 
                 await q.answer()
@@ -1861,6 +1851,76 @@ async def download_bytes_redirect_safe(
 
     raise RuntimeError(f"Too many redirects while downloading: {url}")
 
+
+async def poll_task_until_done(
+    client: httpx.AsyncClient,
+    *,
+    status_url: str,
+    headers: dict,
+    engine_name: str,
+    msg,
+    uid: int,
+    timeout_s: int = 900,
+    poll_delay_s: int = VIDEO_POLL_DELAY_S,
+) -> tuple[bool, dict]:
+    """Poll provider task status until completion/failure/timeout."""
+    started = time.time()
+
+    while True:
+        rs = await client.get(status_url, headers=headers)
+        if rs.status_code >= 400:
+            txt = (rs.text or "")[:1000]
+            await msg.reply_text(_tr(uid, "engine_status_error", name=engine_name, code=rs.status_code, txt=txt))
+            return False, {}
+
+        try:
+            st_js = rs.json() or {}
+        except Exception:
+            txt = (rs.text or "")[:1000]
+            await msg.reply_text(_tr(uid, "engine_status_error", name=engine_name, code=rs.status_code, txt=txt))
+            return False, {}
+
+        st = (st_js.get("status") or "").lower()
+
+        if st in ("completed", "succeeded", "done"):
+            return True, st_js
+
+        if st in ("failed", "error", "rejected", "cancelled", "canceled"):
+            await msg.reply_text(_tr(uid, "engine_failed", name=engine_name, txt=str(st_js)[:1200]))
+            return False, st_js
+
+        if time.time() - started > float(timeout_s):
+            await msg.reply_text(_tr(uid, "engine_timeout", name=engine_name))
+            return False, st_js
+
+        await asyncio.sleep(poll_delay_s)
+
+
+def extract_video_url(status_json: dict) -> str | None:
+    """Extract a video URL from different response shapes."""
+    out = status_json.get("output")
+
+    if isinstance(out, dict):
+        return (
+            out.get("url")
+            or out.get("video_url")
+            or out.get("videoUrl")
+            or (out.get("data") or {}).get("url")
+            or (out.get("data") or {}).get("video_url")
+        )
+
+    if isinstance(out, str) and out.startswith("http"):
+        return out
+
+    if isinstance(out, list) and out:
+        first = out[0]
+        if isinstance(first, str) and first.startswith("http"):
+            return first
+        if isinstance(first, dict):
+            return first.get("url") or first.get("video_url")
+
+    return None
+
 def normalize_seconds(sec: int) -> int:
     try:
         sec = int(sec)
@@ -1899,7 +1959,7 @@ async def _run_sora_video(
     await msg.reply_text(_tr(uid, "engine_rendering", name="Sora"))
 
     tier = get_subscription_tier(uid)
-    sora_model = "sora-2-pro" if tier in ("pro", "ultimate") else "sora-2"
+    sora_model = _pick_sora_model(uid)
 
     payload = {
         "model": sora_model,
@@ -1946,60 +2006,42 @@ async def _run_sora_video(
                 return False
 
             status_url = f"{COMET_BASE_URL}/sora/v1/tasks/{task_id}"
-            started = time.time()
 
-            while True:
-                rs = await client.get(status_url, headers=headers)
-                if rs.status_code >= 400:
-                    await msg.reply_text(_tr(uid, "engine_status_error", name="Sora", code=rs.status_code, txt=(rs.text or "")[:1000]))
-                    return False
+            ok, st_js = await poll_task_until_done(
+                client,
+                status_url=status_url,
+                headers=headers,
+                engine_name="Sora",
+                msg=msg,
+                uid=uid,
+                timeout_s=900,
+            )
+            if not ok:
+                return False
 
-                st_js = rs.json() or {}
-                st = (st_js.get("status") or "").lower()
+            video_url = extract_video_url(st_js)
+            if not video_url:
+                await msg.reply_text(_tr(uid, "engine_no_url", name="Sora", txt=str(st_js)[:1000]))
+                return False
 
-                if st in ("completed", "succeeded", "done"):
-                    out = st_js.get("output") or {}
-                    video_url = (
-                        out.get("url")
-                        or out.get("video_url")
-                        or out.get("videoUrl")
-                        or (out.get("data") or {}).get("url")
-                    )
-                    if not video_url:
-                        if isinstance(out, str) and out.startswith("http"):
-                            video_url = out
-                        else:
-                            await msg.reply_text(_tr(uid, "engine_no_url", name="Sora", txt=str(st_js)[:1000]))
-                            return False
+            try:
+                data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
+            except Exception as e:
+                log.exception("Sora download failed: %s", e)
+                await msg.reply_text(_tr(uid, "engine_download_err", name="Sora"))
+                return False
 
-                    try:
-                        data = await download_bytes_redirect_safe(client, video_url, timeout_s=180.0)
-                    except Exception as e:
-                        log.exception("Sora download failed: %s", e)
-                        await msg.reply_text(_tr(uid, "engine_download_err", name="Sora"))
-                        return False
+            bio = BytesIO(data)
+            bio.name = "sora.mp4"
+            bio.seek(0)
 
-                    bio = BytesIO(data)
-                    bio.name = "sora.mp4"
-                    bio.seek(0)
+            ok_send = await safe_send_video(context, update.effective_chat.id, bio)
+            if not ok_send:
+                await msg.reply_text(_tr(uid, "engine_send_err", name="Sora"))
+                return False
 
-                    ok = await safe_send_video(context, update.effective_chat.id, bio)
-                    if not ok:
-                        await msg.reply_text(_tr(uid, "engine_send_err", name="Sora"))
-                        return False
-
-                    await msg.reply_text(_tr(uid, "done"))
-                    return True
-
-                if st in ("failed", "error", "rejected", "cancelled", "canceled"):
-                    await msg.reply_text(_tr(uid, "engine_failed", name="Sora", txt=str(st_js)[:1200]))
-                    return False
-
-                if time.time() - started > 900:
-                    await msg.reply_text(_tr(uid, "engine_timeout", name="Sora"))
-                    return False
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
+            await msg.reply_text(_tr(uid, "done"))
+            return True
 
     except Exception as e:
         log.exception("Sora exception: %s", e)
