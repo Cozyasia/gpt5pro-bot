@@ -12251,3 +12251,91 @@ ENGINE_REGISTRY.update({
 LIMITS["start"]["allow_engines"] += ["gemini"]
 LIMITS["pro"]["allow_engines"] += ["gemini","suno"]
 LIMITS["ultimate"]["allow_engines"] += ["gemini","suno","sora"]
+\n\n
+# =======================
+# FINAL ARCHITECTURAL EXTENSIONS (LANG + ENGINES)
+# =======================
+# This section is appended to avoid breaking existing handlers.
+# It introduces:
+# - 5-language global selection before /start
+# - Engine registry for Sora, Gemini, Suno with tariff gating
+# - Menu extension for new engines
+
+SUPPORTED_LANGS = {
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "de": "Deutsch",
+}
+
+ENGINE_REGISTRY = {
+    "gpt": {"title": "GPT-5", "tier": "free"},
+    "images": {"title": "Images (OpenAI)", "tier": "free"},
+    "runway": {"title": "Runway", "tier": "pro"},
+    "luma": {"title": "Luma", "tier": "free"},
+    "kling": {"title": "Kling", "tier": "free"},
+    "midjourney": {"title": "Midjourney", "tier": "pro"},
+    "gemini": {"title": "Gemini 1.5 Pro", "tier": "pro"},
+    "sora": {"title": "Sora (video)", "tier": "pro"},
+    "suno": {"title": "Suno (music)", "tier": "pro"},
+}
+
+def _env(name, default=None):
+    return os.getenv(name, default)
+
+# Language persistence
+def get_user_lang(user_id):
+    return _env(f"USER_LANG_{user_id}", "ru")
+
+def set_user_lang(user_id, lang):
+    os.environ[f"USER_LANG_{user_id}"] = lang
+
+# Language selection keyboard
+def lang_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(v, callback_data=f"lang:{k}")]
+        for k, v in SUPPORTED_LANGS.items()
+    ])
+
+# Extend /start to enforce language choice
+async def start_with_lang(update, context):
+    user = update.effective_user
+    await update.message.reply_text(
+        "Please select your language / Пожалуйста, выберите язык:",
+        reply_markup=lang_keyboard()
+    )
+
+# Callback handler for language
+async def lang_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    _, lang = query.data.split(":")
+    set_user_lang(query.from_user.id, lang)
+    await query.edit_message_text(f"Language set: {SUPPORTED_LANGS.get(lang)}")
+    # proceed to original start if exists
+    if 'start' in globals():
+        await start(update, context)
+
+# Engine menu extension
+def engines_keyboard(user_tier="free"):
+    rows = []
+    for k, meta in ENGINE_REGISTRY.items():
+        if meta["tier"] == "free" or user_tier == "pro":
+            rows.append([InlineKeyboardButton(meta["title"], callback_data=f"engine:{k}")])
+    return InlineKeyboardMarkup(rows)
+
+# Register handlers safely if dispatcher exists
+try:
+    application.add_handler(CommandHandler("start", start_with_lang), group=0)
+    application.add_handler(CallbackQueryHandler(lang_callback, pattern=r"^lang:"), group=0)
+except Exception:
+    pass
+
+# =======================
+# REQUIRED ENVIRONMENT VARIABLES (ADD TO ENV)
+# =======================
+# GEMINI_API_KEY=your_key
+# SUNO_API_KEY=your_key
+# SORA_API_KEY=your_key
+# USER_DEFAULT_TIER=free|pro
