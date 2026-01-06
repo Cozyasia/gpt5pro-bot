@@ -12217,3 +12217,37 @@ def get_welcome_text(lang: str) -> str:
     )
 
 # ================== END FINAL STEP ==================
+
+
+
+# ===== PATCH: LANGUAGE GATE (5 LANGUAGES) =====
+LANGS = {
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+    "es": "🇪🇸 Español",
+    "fr": "🇫🇷 Français",
+    "de": "🇩🇪 Deutsch",
+}
+
+def lang_set(user_id: int, lang: str):
+    kv_set(f"user:{user_id}:lang", lang)
+
+def lang_get(user_id: int):
+    return kv_get(f"user:{user_id}:lang")
+
+def language_kb():
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    return InlineKeyboardMarkup([[InlineKeyboardButton(v, callback_data=f"lang:{k}")]
+                                 for k,v in LANGS.items()])
+
+# ===== PATCH: ENGINE REGISTRY EXTENDED =====
+ENGINE_REGISTRY.update({
+    "gemini": {"title": "Gemini 1.5 Pro", "type": "text"},
+    "sora": {"title": "Sora (video)", "type": "video"},
+    "suno": {"title": "Suno (music)", "type": "music"},
+})
+
+# ===== PATCH: TARIFF LIMITS =====
+LIMITS["start"]["allow_engines"] += ["gemini"]
+LIMITS["pro"]["allow_engines"] += ["gemini","suno"]
+LIMITS["ultimate"]["allow_engines"] += ["gemini","suno","sora"]
