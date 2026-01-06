@@ -12251,7 +12251,6 @@ ENGINE_REGISTRY.update({
 LIMITS["start"]["allow_engines"] += ["gemini"]
 LIMITS["pro"]["allow_engines"] += ["gemini","suno"]
 LIMITS["ultimate"]["allow_engines"] += ["gemini","suno","sora"]
-\n\n
 # =======================
 # FINAL ARCHITECTURAL EXTENSIONS (LANG + ENGINES)
 # =======================
