@@ -601,6 +601,11 @@ I18N: dict[str, dict[str, str]] = {
         "btn_photo": "🖼 Оживити фото",
         "btn_help": "❓ Допомога",
         "btn_back": "⬅️ Назад",
+        "btn_study": "🎓 Навчання",
+        "btn_work": "💼 Робота",
+        "btn_fun": "🔥 Розваги",
+        "input_placeholder": "Оберіть режим або напишіть запит…",
+    
     },
     "de": {
         "choose_lang": "🌍 Sprache wählen",
@@ -746,8 +751,18 @@ def _tr(user_id: int, key: str, **kwargs) -> str:
             return s
     return s
 
-def _lang_choose_kb() -> InlineKeyboardMarkup:
+def _lang_choose_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
+    """
+    Клавиатура выбора языка.
+    Требование: показывать при каждом /start.
+    Для удобства добавляем «Продолжить» с текущим языком, если он уже выбран.
+    """
+    uid = int(user_id) if user_id is not None else 0
     rows = []
+    if uid and has_lang(uid):
+        cur = get_lang(uid)
+        cur_name = LANG_NAMES.get(cur, cur)
+        rows.append([InlineKeyboardButton(f"➡️ Продолжить ({cur_name})", callback_data="lang:__keep__")])
     for code in LANGS:
         rows.append([InlineKeyboardButton(LANG_NAMES[code], callback_data=f"lang:{code}")])
     return InlineKeyboardMarkup(rows)
@@ -1175,6 +1190,59 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         "Я на связи — попробуй переформулировать запрос или повторить чуть позже."
     )
     
+
+# ───────── Gemini (через CometAPI, опционально) ─────────
+
+GEMINI_API_KEY   = (os.environ.get("GEMINI_API_KEY", "").strip() or COMETAPI_KEY)
+GEMINI_BASE_URL  = os.environ.get("GEMINI_BASE_URL", "https://api.cometapi.com").strip().rstrip("/")
+GEMINI_CHAT_PATH = os.environ.get("GEMINI_CHAT_PATH", "/gemini/v1/chat").strip()
+GEMINI_MODEL     = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro").strip()
+
+async def ask_gemini_text(user_text: str) -> str:
+    """
+    Минимальная интеграция Gemini через CometAPI (или любой совместимый прокси).
+    Если эндпоинт отличается — поправь GEMINI_CHAT_PATH/GEMINI_BASE_URL в ENV.
+    """
+    if not GEMINI_API_KEY:
+        return "⚠️ Gemini: не задан GEMINI_API_KEY/COMETAPI_KEY. Добавьте ключ в Environment."
+    if not user_text.strip():
+        return ""
+
+    headers = {
+        "Authorization": f"Bearer {GEMINI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": GEMINI_MODEL,
+        "prompt": user_text.strip(),
+    }
+
+    try:
+        async with httpx.AsyncClient(base_url=GEMINI_BASE_URL, timeout=60.0) as client:
+            r = await client.post(GEMINI_CHAT_PATH, headers=headers, json=payload)
+        if r.status_code // 100 != 2:
+            txt = (r.text or "")[:1200]
+            log.warning("Gemini error %s: %s", r.status_code, txt)
+            return "⚠️ Gemini: ошибка запроса. Проверьте GEMINI_CHAT_PATH/BASE_URL и ключ."
+        js = r.json()
+        # Пытаемся вытащить текст из разных схем ответов
+        for k in ("text", "output", "result", "content", "message"):
+            v = js.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        # Иногда ответ бывает вида {"choices":[{"message":{"content":"..."}}]}
+        ch = js.get("choices")
+        if isinstance(ch, list) and ch:
+            msg = (ch[0].get("message") or {})
+            cont = msg.get("content")
+            if isinstance(cont, str) and cont.strip():
+                return cont.strip()
+        return "⚠️ Gemini: ответ получен, но формат не распознан. Смотрите логи."
+    except Exception as e:
+        log.exception("Gemini request error: %s", e)
+        return "⚠️ Gemini: исключение при запросе. Смотрите логи."
+
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
         prompt = (user_text or "Опиши, что на изображении и какой там текст.").strip()
@@ -1608,9 +1676,12 @@ def engines_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💬 GPT (текст/фото/документы)", callback_data="engine:gpt")],
         [InlineKeyboardButton("🖼 Images (OpenAI)",             callback_data="engine:images")],
-        [InlineKeyboardButton("🎞 Kling — клипы / шорты",      callback_data="engine:kling")],  # NEW
+        [InlineKeyboardButton("🎞 Kling — клипы / шорты",       callback_data="engine:kling")],
         [InlineKeyboardButton("🎬 Luma — короткие видео",       callback_data="engine:luma")],
         [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
+        [InlineKeyboardButton("🎬 Sora — видео (Comet)",        callback_data="engine:sora")],
+        [InlineKeyboardButton("🧠 Gemini (Comet)",             callback_data="engine:gemini")],
+        [InlineKeyboardButton("🎵 Suno (music)",               callback_data="engine:suno")],
         [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
         [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
     ])
@@ -1899,74 +1970,89 @@ async def on_mode_text(update, context):
     if key:
         await _send_mode_menu(update, context, key)
         
-def main_keyboard():
+def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
+    """
+    Главная ReplyKeyboard, локализованная под язык пользователя.
+    Если user_id не задан — используем RU.
+    """
+    uid = int(user_id) if user_id is not None else 0
+    # Кнопки режимов (эмодзи оставляем для узнаваемости)
+    # Локализация — через I18N (минимальный набор строк).
+    try:
+        study = t(uid, "btn_study")
+        work  = t(uid, "btn_work")
+        fun   = t(uid, "btn_fun")
+    except Exception:
+        study, work, fun = "🎓 Учёба", "💼 Работа", "🔥 Развлечения"
+
+    try:
+        engines = t(uid, "btn_engines")
+        subhelp = t(uid, "btn_sub")
+        wallet  = t(uid, "btn_wallet")
+    except Exception:
+        engines, subhelp, wallet = "🧠 Движки", "⭐ Подписка · Помощь", "🧾 Баланс"
+
+    placeholder = t(uid, "input_placeholder") if "input_placeholder" in (I18N.get(get_lang(uid), {}) or {}) else "Выберите режим или напишите запрос…"
+
     return ReplyKeyboardMarkup(
         [
-            [KeyboardButton("🎓 Учёба"), KeyboardButton("💼 Работа"), KeyboardButton("🔥 Развлечения")],
-            [KeyboardButton("🧠 Движки"), KeyboardButton("⭐ Подписка · Помощь"), KeyboardButton("🧾 Баланс")],
+            [KeyboardButton(study), KeyboardButton(work), KeyboardButton(fun)],
+            [KeyboardButton(engines), KeyboardButton(subhelp), KeyboardButton(wallet)],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
         selective=False,
-        input_field_placeholder="Выберите режим или напишите запрос…",
+        input_field_placeholder=placeholder,
     )
 
-main_kb = main_keyboard()
+# RU-клавиатура по умолчанию (на случай редких мест без user_id)
+main_kb = main_keyboard(0)
 
 # ───────── /start ─────────
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Entry point. First-time users must choose language."""
+async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Отрисовка главного меню (после выбора языка и в других местах).
+    """
     uid = update.effective_user.id
-
-    # Force language selection before any other UX.
-    if not has_lang(uid):
-        await update.effective_message.reply_text(
-            t(uid, "choose_lang"),
-            reply_markup=_lang_choose_kb(),
-        )
-        return
-
-    # Existing welcome/menu
-    try:
-        await update.effective_message.reply_text(
-            _tr(uid, "welcome"),
-            reply_markup=main_kb,
-        )
-    except Exception:
-        await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb)
-
-async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _mode_set(update.effective_user.id, "Работа")
-    _mode_track_set(update.effective_user.id, "")
-    # показываем НОВОЕ подменю «Работа»
-    await _send_mode_menu(update, context, "work")
-
-async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _mode_set(update.effective_user.id, "Развлечения")
-    _mode_track_set(update.effective_user.id, "")
-    await update.effective_message.reply_text(
-        "🔥 Развлечения — быстрые действия:",
-        reply_markup=_fun_quick_kb()
-    )
-
-    # НОВАЯ КНОПКА: Kling
-    if data == "fun:kling":
-        return await q.edit_message_text(
-            "🎞 Kling — быстрые клипы и шорты\n\n"
-            "Пришли тему, длительность (обычно 5–10 секунд) и формат (например, 9:16). "
-            "Я подготовлю сценарий и запущу генерацию клипа в Kling."
-        )
-
-# ───────── Старт / Движки / Помощь ─────────
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Баннер (если задан)
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(welcome_url)
-    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
+
+    # Короткое приветствие на выбранном языке
+    text = _tr(uid, "welcome")
+    with contextlib.suppress(Exception):
+        await update.effective_message.reply_text(
+            text,
+            reply_markup=main_keyboard(uid),
+            disable_web_page_preview=True,
+        )
+
+# ───────── /start ─────────
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Требование: выбор языка показываем при каждом новом /start (не только первый раз).
+    Меню показываем после нажатия кнопки языка (или «Продолжить»).
+    """
+    uid = update.effective_user.id
+
+    # Показываем баннер (если задан)
+    welcome_url = kv_get("welcome_url", BANNER_URL)
+    if welcome_url:
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_photo(welcome_url)
+
+    # Показываем выбор языка всегда
+    await update.effective_message.reply_text(
+        t(uid, "choose_lang"),
+        reply_markup=_lang_choose_kb(uid),
+    )
+# ───────── Старт / Движки / Помощь ─────────
 
 async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("Выберите движок:", reply_markup=engines_kb())
+    uid = update.effective_user.id
+    await update.effective_message.reply_text(_tr(uid, "choose_engine"), reply_markup=engines_kb())
 
 async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
@@ -2753,20 +2839,51 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
     
-    # Language selection (lang:<code>)
+        # Language selection (lang:<code>)
     if data.startswith("lang:"):
         code = data.split(":", 1)[1].strip()
-        set_lang(uid, code)
+        uid = update.effective_user.id
+
+        # "keep current" shortcut
+        if code != "__keep__":
+            set_lang(uid, code)
+
         await q.answer()
+
+        # Показываем главное меню после выбора языка
         try:
-            await q.message.reply_text(t(uid, "lang_set"), reply_markup=main_kb)
+            await q.message.reply_text(t(uid, "lang_set"), reply_markup=main_keyboard(uid))
         except Exception:
             pass
-        # Show main menu after setting language
+
         try:
-            await cmd_start(update, context)
+            await _send_main_menu(update, context)
         except Exception:
             pass
+        return
+
+    # Engine selection (engine:<name>)
+    if data.startswith("engine:"):
+        await q.answer()
+        eng = data.split(":", 1)[1].strip() if ":" in data else "gpt"
+        engine_set(uid, eng)
+
+        # Короткое подтверждение + подсказка
+        hint = {
+            "gpt": "Теперь по умолчанию отвечаю текстом (GPT).",
+            "images": "Теперь любой текст будет трактоваться как промпт для картинки (Images).",
+            "kling": "Теперь любой текст будет трактоваться как промпт для видео в Kling.",
+            "luma": "Теперь любой текст будет трактоваться как промпт для видео в Luma.",
+            "runway": "Runway выбран. Для видео используйте «сделай видео…» (текст→видео может быть отключён).",
+            "sora": "Sora выбран (через Comet). Если ключи/эндпоинт не заданы — покажу подсказку.",
+            "gemini": "Gemini выбран (через Comet). Если ключи/эндпоинт не заданы — будет подсказка/фолбэк.",
+            "suno": "Suno выбран (музыка). Сейчас включён как режим-подсказка.",
+            "midjourney": "Midjourney выбран. Сейчас включён как режим-подсказка.",
+            "stt_tts": "Режим STT/TTS: можно прислать голосовое или включить озвучку ответов.",
+        }.get(eng, f"Движок выбран: {eng}")
+
+        with contextlib.suppress(Exception):
+            await q.message.reply_text(hint, reply_markup=main_keyboard(uid))
         return
 
     try:
@@ -3744,6 +3861,78 @@ async def on_text(
 
     # Намёк на генерацию видеоролика
     mtype, rest = detect_media_intent(text)
+    # Принудительный выбор движка (через меню «Движки»)
+    user_id = update.effective_user.id
+    forced_engine = "gpt"
+    with contextlib.suppress(Exception):
+        forced_engine = engine_get(user_id)
+
+    # Если пользователь выбрал видео-движок, а явного префикса нет — трактуем текст как видео-запрос
+    if (mtype is None) and forced_engine in ("kling", "luma", "runway", "sora"):
+        prompt = text.strip()
+        duration, aspect = parse_video_opts(text)
+
+        # Runway text→video может быть выключен (оставляем защиту как раньше)
+        if forced_engine == "runway" and RUNWAY_DISABLE_TEXTVIDEO:
+            await update.effective_message.reply_text(_tr(user_id, "runway_disabled_textvideo"))
+            return
+
+        async def _go_video():
+            if forced_engine == "kling":
+                return await _run_kling_video(update, context, prompt, duration, aspect)
+            if forced_engine == "luma":
+                return await _run_luma_video(update, context, prompt, duration, aspect)
+            if forced_engine == "runway":
+                return await _run_runway_video(update, context, prompt, duration, aspect)
+            if forced_engine == "sora":
+                return await _run_sora_video(update, context, prompt, duration, aspect)
+            return False
+
+        # Платёж/лимиты — учитываем как «oneoff» видео
+        est = float(KLING_UNIT_COST_USD or 0.40) * duration
+        if forced_engine == "luma":
+            est = float(LUMA_UNIT_COST_USD or 0.40) * duration
+        elif forced_engine == "runway":
+            est = float(RUNWAY_UNIT_COST_USD or 1.00) * duration
+        elif forced_engine == "sora":
+            est = float(SORA_UNIT_COST_USD or 0.40) * duration
+
+        await _try_pay_then_do(update, context, user_id, forced_engine, est, _go_video)
+        return
+
+    # Если выбран Images, а префикса нет — трактуем текст как промпт для картинки
+    if (mtype is None) and forced_engine == "images":
+        prompt = text.strip()
+        if not prompt:
+            await update.effective_message.reply_text("Формат: /img <описание изображения>")
+            return
+
+        async def _go_img():
+            await _do_img_generate(update, context, prompt)
+
+        await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go_img)
+        return
+
+    # Если выбран Gemini — обрабатываем обычный текст через Gemini (Comet) вместо OpenAI
+    if (mtype is None) and forced_engine == "gemini":
+        reply = await ask_gemini_text(text)
+        await update.effective_message.reply_text(reply)
+        await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
+        return
+
+    # Suno / Midjourney пока как подсказка (без прямого API в этом файле)
+    if (mtype is None) and forced_engine in ("suno", "midjourney"):
+        if forced_engine == "suno":
+            await update.effective_message.reply_text(
+                "🎵 Suno выбран. Напишите: «песня: жанр, настроение, тема, длительность» — и я подготовлю текст/структуру.\n"
+                "Если у вас есть API/провайдер — добавьте ключи, и я подключу генерацию."
+            )
+        else:
+            await update.effective_message.reply_text(
+                "🎨 Midjourney выбран. Опишите изображение — я подготовлю промпт. "
+                "Дальше вы можете отправить его в Midjourney/Discord."
+            )
+        return
     if mtype == "video":
         # ГАРАНТИРОВАННО задаём prompt для текста и для голоса
         prompt = (rest or text).strip()
@@ -6090,3 +6279,53 @@ def get_welcome_text(lang: str) -> str:
 
 # ================== END FINAL STEP ==================
 
+
+# ================== ENV VARIABLES TO ADD / UPDATE ==================
+# Добавьте/проверьте эти переменные в Environment (Render):
+#
+# --- Language ---
+# (язык хранится в SQLite kv_store автоматически, доп. ENV не нужно)
+#
+# --- CometAPI shared key (если используете через Comet) ---
+# COMETAPI_KEY=...
+#
+# --- Kling (CometAPI) ---
+# KLING_BASE_URL=https://api.cometapi.com
+# KLING_MODEL_NAME=kling-v1-6
+# KLING_MODE=std               # std|pro (если поддерживается вашим аккаунтом)
+# KLING_ASPECT=9:16
+# KLING_DURATION_S=5
+# KLING_UNIT_COST_USD=0.80     # опционально для расчёта/инвойсов
+#
+# --- Runway ---
+# RUNWAY_API_KEY=...           # если пусто — будет использован COMETAPI_KEY
+# RUNWAY_MODEL=gen3a_turbo
+# RUNWAY_API_VERSION=2024-11-06
+# RUNWAY_DISABLE_TEXTVIDEO=1   # если хотите запретить текст→видео через Runway
+#
+# --- Luma ---
+# LUMA_API_KEY=...
+# LUMA_BASE_URL=https://api.lumalabs.ai/dream-machine/v1
+# LUMA_MODEL=ray-2
+# LUMA_ASPECT=16:9
+# LUMA_DURATION_S=5
+# LUMA_UNIT_COST_USD=0.40      # опционально
+#
+# --- Sora (через Comet / ваш прокси) ---
+# SORA_ENABLED=0|1
+# SORA_COMET_BASE_URL=https://api.cometapi.com
+# SORA_COMET_API_KEY=...       # если пусто — используйте COMETAPI_KEY
+# SORA_MODEL_FREE=sora
+# SORA_MODEL_PRO=sora
+# SORA_UNIT_COST_USD=0.40
+#
+# --- Gemini (через Comet / ваш прокси) ---
+# GEMINI_API_KEY=...           # если пусто — будет использован COMETAPI_KEY
+# GEMINI_BASE_URL=https://api.cometapi.com
+# GEMINI_CHAT_PATH=/gemini/v1/chat   # ВАЖНО: путь зависит от вашего провайдера/Comet. Исправьте при необходимости.
+# GEMINI_MODEL=gemini-1.5-pro
+#
+# --- Optional placeholders (no direct API in this file yet) ---
+# SUNO_API_KEY=...
+# MIDJOURNEY_API_KEY=...
+# ================================================================
