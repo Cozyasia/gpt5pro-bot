@@ -5749,6 +5749,7 @@ def build_application() -> "Application":
     import re
 
     BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
+    BTN_LANG = re.compile(r"^\s*(?:🌐\s*)?Язык\s*$")
     BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
     BTN_PLANS   = re.compile(r"^\s*(?:⭐\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
     BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
@@ -8899,6 +8900,22 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # 🆕 Выбор движка для оживления фото (Runway/Kling/Luma)
+        # engine selection (force provider)
+        if data.startswith("engine:"):
+            eng = data.split(":", 1)[1].strip().lower()
+            if not eng:
+                await q.answer("⚠️ Пустой выбор движка", show_alert=True)
+                return
+            ctx.user_data["engine"] = eng
+            if "set_user_engine" in globals():
+                try:
+                    set_user_engine(uid, eng)
+                except Exception:
+                    pass
+            await q.answer()
+            await q.message.reply_text(f"✅ Движок выбран: {eng}", reply_markup=main_keyboard(uid))
+            return
+
         if data.startswith("revive_engine:"):
             await q.answer()
             engine = data.split(":", 1)[1] if ":" in data else ""
@@ -9273,8 +9290,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-# ───────── STT ─────────
-def _mime_from_filename(fn: str) -> str:
+# ───────── STT ─────────def _mime_from_filename(fn: str) -> str:
     fnl = (fn or "").lower()
     if fnl.endswith((".ogg", ".oga")): return "audio/ogg"
     if fnl.endswith(".mp3"):           return "audio/mpeg"
@@ -11877,6 +11893,7 @@ def build_application() -> "Application":
     import re
 
     BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
+    BTN_LANG = re.compile(r"^\s*(?:🌐\s*)?Язык\s*$")
     BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
     BTN_PLANS   = re.compile(r"^\s*(?:⭐\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
     BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
@@ -11952,6 +11969,12 @@ def main():
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=False,
         )
+
+
+
+async def on_btn_lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id if update.effective_user else 0
+    await update.message.reply_text(t(uid, "choose_lang"), reply_markup=lang_kb())
 
 
 if __name__ == "__main__":
