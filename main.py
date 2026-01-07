@@ -1900,14 +1900,20 @@ async def on_mode_text(update, context):
         await _send_mode_menu(update, context, key)
         
 def main_keyboard():
-    # Reply keyboard shown at the bottom (Учёба/Работа/Развлечения/Движки/Помощь/Баланс/Язык)
-    kb = [
-        [KeyboardButton('🎓 Учёба'), KeyboardButton('💼 Работа'), KeyboardButton('🔥 Развлечения')],
-        [KeyboardButton('🧠 Движки'), KeyboardButton('⭐ Подписка · Помощь'), KeyboardButton('💳 Баланс')],
-        [KeyboardButton('🌐 Язык')],
-    ]
-    return ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=False)
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🎓 Учёба"), KeyboardButton("💼 Работа"), KeyboardButton("🔥 Развлечения")],
+            [KeyboardButton("🧠 Движки"), KeyboardButton("⭐ Подписка · Помощь"), KeyboardButton("🧾 Баланс")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        selective=False,
+        input_field_placeholder="Выберите режим или напишите запрос…",
+    )
 
+main_kb = main_keyboard()
+
+# ───────── /start ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Entry point. First-time users must choose language."""
     uid = update.effective_user.id
@@ -5299,28 +5305,6 @@ async def on_btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_btn_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await cmd_balance(update, context)
 
-async def on_btn_lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Open language picker
-    try:
-        user_id = str(update.effective_user.id) if update.effective_user else None
-        current = (get_user_lang(user_id) if user_id else None) or LANG_DEFAULT
-    except Exception:
-        current = LANG_DEFAULT
-
-    rows = []
-    row = []
-    for code in LANG_AVAILABLE:
-        nm = LANG_NAMES.get(code, code)
-        label = f"✅ {nm}" if code == current else nm
-        row.append(InlineKeyboardButton(label, callback_data=f"lang:set:{code}"))
-        if len(row) >= 2:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
-    rows.append([InlineKeyboardButton('⬅️ Назад', callback_data='mode:root')])
-    await update.effective_message.reply_text('🌐 Выберите язык интерфейса:', reply_markup=InlineKeyboardMarkup(rows))
-
 async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = _plans_overview_text(user_id)
@@ -5766,7 +5750,6 @@ def build_application() -> "Application":
 
     BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
     BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
-    BTN_LANG = re.compile(r'^(?:🌐\s*)?(?:язык|language)\b', re.I)
     BTN_PLANS   = re.compile(r"^\s*(?:⭐\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
     BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
     BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Работа\s*$")
@@ -5774,7 +5757,6 @@ def build_application() -> "Application":
 
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_LANG), on_btn_lang), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_STUDY),   on_btn_study),   group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_WORK),    on_btn_work),    group=0)
@@ -5845,8 +5827,7 @@ def main():
 
 
 if __name__ == "__main__":
-    # NOTE: legacy entrypoint disabled; use main_final() at file end.
-    pass
+    main()
 # === END PATCH ===
 
 
@@ -7752,31 +7733,21 @@ START_TEXT = (
 )
 
 def engines_kb():
-    # Inline engine chooser (forced provider selection)
-    order = ['gpt', 'images', 'midjourney', 'kling', 'luma', 'runway', 'sora', 'suno', 'stt_tts']
-    rows = []
-    for key in order:
-        meta = ENGINE_REGISTRY.get(key) if isinstance(globals().get('ENGINE_REGISTRY'), dict) else None
-        title = None
-        if meta and isinstance(meta, dict):
-            title = meta.get('title')
-        if not title:
-            # fallback titles
-            title = {
-                'gpt': '💬 GPT (текст/фото/документы)',
-                'images': '🖼 Images (OpenAI)',
-                'midjourney': '🎨 Midjourney (изображения)',
-                'kling': '🎬 Kling — клипы / шорты',
-                'luma': '🎞 Luma — короткие видео',
-                'runway': '🎥 Runway — премиум-видео',
-                'sora': '🪄 Sora — видео (OpenAI)',
-                'suno': '🎵 Suno — музыка',
-                'stt_tts': '🎙 STT/TTS — речь↔текст',
-            }.get(key, key)
-        rows.append([InlineKeyboardButton(title, callback_data=f"engine:{key}")])
-    rows.append([InlineKeyboardButton('⬅️ Назад', callback_data='mode:root')])
-    return InlineKeyboardMarkup(rows)
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("💬 GPT (текст/фото/документы)", callback_data="engine:gpt")],
+        [InlineKeyboardButton("🖼 Images (OpenAI)",             callback_data="engine:images")],
+        [InlineKeyboardButton("🎞 Kling — клипы / шорты",      callback_data="engine:kling")],  # NEW
+        [InlineKeyboardButton("🎬 Luma — короткие видео",       callback_data="engine:luma")],
+        [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
+        [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
+        [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
+    ])
+# ───────── MODES (Учёба / Работа / Развлечения) ─────────
 
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import CallbackQueryHandler, MessageHandler, filters
+
+# Текст корневого меню режимов
 def _modes_root_text() -> str:
     return (
         "Выберите режим работы. В каждом режиме бот использует гибрид движков:\n"
@@ -11907,7 +11878,6 @@ def build_application() -> "Application":
 
     BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
     BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
-    BTN_LANG = re.compile(r'^(?:🌐\s*)?(?:язык|language)\b', re.I)
     BTN_PLANS   = re.compile(r"^\s*(?:⭐\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
     BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
     BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Работа\s*$")
@@ -11915,7 +11885,6 @@ def build_application() -> "Application":
 
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_LANG), on_btn_lang))
     app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_STUDY),   on_btn_study),   group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_WORK),    on_btn_work),    group=0)
@@ -12371,8 +12340,55 @@ except Exception:
 # USER_DEFAULT_TIER=free|pro
 
 
-# =======================
-# Final entrypoint
-# =======================
-if __name__ == "__main__":
-    main()
+
+# ===================== FIXES: LANGUAGE + ENGINE CALLBACKS =====================
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CallbackQueryHandler
+
+SUPPORTED_LANGUAGES = {
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+    "zh": "🇨🇳 中文",
+    "th": "🇹🇭 ไทย",
+    "ar": "🇸🇦 العربية",
+}
+
+def language_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(name, callback_data=f"lang:{code}")]
+        for code, name in SUPPORTED_LANGUAGES.items()
+    ])
+
+ENGINE_REGISTRY = {
+    "gpt": "GPT-5",
+    "gemini": "Gemini",
+    "images": "OpenAI Images",
+    "midjourney": "Midjourney",
+    "kling": "Kling",
+    "luma": "Luma",
+    "runway": "Runway",
+    "sora": "Sora",
+    "suno": "Suno",
+    "stt": "STT / TTS",
+}
+
+async def on_language_selected(update, context):
+    query = update.callback_query
+    await query.answer()
+    lang = query.data.split(":")[1]
+    context.user_data["lang"] = lang
+    await query.edit_message_text(f"✅ Язык установлен: {SUPPORTED_LANGUAGES.get(lang)}")
+    if 'show_main_menu' in globals():
+        await show_main_menu(update, context)
+
+async def on_engine_selected(update, context):
+    query = update.callback_query
+    await query.answer()
+    engine = query.data.split(":")[1]
+    context.user_data["engine"] = engine
+    await query.edit_message_text(f"🧠 Выбран движок: {ENGINE_REGISTRY.get(engine, engine)}")
+
+if 'application' in globals():
+    application.add_handler(CallbackQueryHandler(on_language_selected, pattern="^lang:"))
+    application.add_handler(CallbackQueryHandler(on_engine_selected, pattern="^engine:"))
+# =================== END FIXES ===============================================
