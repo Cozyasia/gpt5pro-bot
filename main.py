@@ -436,11 +436,11 @@ def db_init():
 _ensure_kv(conn)
 cur = con.cursor()
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS subscriptions (
-        user_id INTEGER PRIMARY KEY,
-        until_ts INTEGER NOT NULL,
-        tier TEXT
-    )""")
+CREATE TABLE IF NOT EXISTS subscriptions (
+user_id INTEGER PRIMARY KEY,
+until_ts INTEGER NOT NULL,
+tier TEXT
+    """)
     con.commit(); con.close()
 
 def _utcnow():
@@ -457,10 +457,10 @@ def activate_subscription(user_id: int, months: int = 1):
         current_until = datetime.fromtimestamp(row[0], tz=timezone.utc)
         until = current_until + timedelta(days=30 * months)
     cur.execute("""
-        INSERT INTO subscriptions (user_id, until_ts)
-        VALUES (?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET until_ts=excluded.until_ts
-    """, (user_id, int(until.timestamp())))
+INSERT INTO subscriptions (user_id, until_ts)
+VALUES (?, ?)
+ON CONFLICT(user_id) DO UPDATE SET until_ts=excluded.until_ts
+    """)
     con.commit(); con.close()
     return until
 
@@ -501,46 +501,46 @@ def db_init_usage():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS usage_daily (
-        user_id INTEGER,
-        ymd TEXT,
-        text_count INTEGER DEFAULT 0,
-        luma_usd  REAL DEFAULT 0.0,
-        runway_usd REAL DEFAULT 0.0,
-        img_usd REAL DEFAULT 0.0,
-        PRIMARY KEY (user_id, ymd)
-    )""")
+CREATE TABLE IF NOT EXISTS usage_daily (
+user_id INTEGER,
+ymd TEXT,
+text_count INTEGER DEFAULT 0,
+luma_usd  REAL DEFAULT 0.0,
+runway_usd REAL DEFAULT 0.0,
+img_usd REAL DEFAULT 0.0,
+PRIMARY KEY (user_id, ymd)
+    """)
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS wallet (
-        user_id INTEGER PRIMARY KEY,
-        luma_usd  REAL DEFAULT 0.0,
-        runway_usd REAL DEFAULT 0.0,
-        img_usd  REAL DEFAULT 0.0,
-        usd REAL DEFAULT 0.0
-    )""")
+CREATE TABLE IF NOT EXISTS wallet (
+user_id INTEGER PRIMARY KEY,
+luma_usd  REAL DEFAULT 0.0,
+runway_usd REAL DEFAULT 0.0,
+img_usd  REAL DEFAULT 0.0,
+usd REAL DEFAULT 0.0
+    """)
     # kv store
-    cur.execute("""CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)""")
-    # миграции
-    try:
-        cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
-    except Exception:
-        pass
-    try:
-        cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
-    except Exception:
-        pass
-    con.commit(); con.close()
+    cur.execute("""
+# миграции
+try:
+cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
+except Exception:
+pass
+try:
+cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
+except Exception:
+pass
+con.commit(); con.close()
 
 def kv_get(key: str, default: str | None = None) -> str | None:
-    con = sqlite3.connect(DB_PATH); cur = con.cursor()
-    cur.execute("SELECT value FROM kv WHERE key=?", (key,))
-    row = cur.fetchone(); con.close()
-    return (row[0] if row else default)
+con = sqlite3.connect(DB_PATH); cur = con.cursor()
+cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+row = cur.fetchone(); con.close()
+return (row[0] if row else default)
 
 def kv_set(key: str, value: str):
-    con = sqlite3.connect(DB_PATH); cur = con.cursor()
-    cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
-    con.commit(); con.close()
+con = sqlite3.connect(DB_PATH); cur = con.cursor()
+cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
+con.commit(); con.close()
 
 # =============================
 # Language / i18n
@@ -548,228 +548,228 @@ def kv_set(key: str, value: str):
 
 LANGS: list[str] = ["ru", "be", "uk", "de", "en", "fr", "th"]
 LANG_NAMES: dict[str, str] = {
-    "ru": "Русский",
-    "be": "Белорусский",
-    "uk": "Украинский",
-    "de": "Deutsch",
-    "en": "English",
-    "fr": "Français",
-    "th": "ไทย",
+"ru": "Русский",
+"be": "Белорусский",
+"uk": "Украинский",
+"de": "Deutsch",
+"en": "English",
+"fr": "Français",
+"th": "ไทย",
 }
 
 def _lang_key(user_id: int) -> str:
-    return f"lang:{user_id}"
+return f"lang:{user_id}"
 
 def has_lang(user_id: int) -> bool:
-    return bool((kv_get(_lang_key(user_id), "") or "").strip())
+return bool((kv_get(_lang_key(user_id), "") or "").strip())
 
 def get_lang(user_id: int) -> str:
-    lang = (kv_get(_lang_key(user_id), "") or "").strip()
-    return lang if lang in LANGS else "ru"
+lang = (kv_get(_lang_key(user_id), "") or "").strip()
+return lang if lang in LANGS else "ru"
 
 def set_lang(user_id: int, lang: str) -> None:
-    if lang not in LANGS:
-        lang = "ru"
-    kv_set(_lang_key(user_id), lang)
+if lang not in LANGS:
+lang = "ru"
+kv_set(_lang_key(user_id), lang)
 
 # Mini-dictionary (menus/buttons)
 I18N: dict[str, dict[str, str]] = {
-    "ru": {
-        "choose_lang": "🌍 Выберите язык",
-        "lang_set": "✅ Язык установлен",
-        "menu_title": "Главное меню",
-        "btn_engines": "🧠 Движки",
-        "btn_sub": "⭐ Подписка • Помощь",
-        "btn_wallet": "🧾 Баланс",
-        "btn_video": "🎞 Создать видео",
-        "btn_photo": "🖼 Оживить фото",
-        "btn_help": "❓ Помощь",
-        "btn_back": "⬅️ Назад",
-    },
-    "be": {
-        "choose_lang": "🌍 Абярыце мову",
-        "lang_set": "✅ Мова ўсталявана",
-        "menu_title": "Галоўнае меню",
-        "btn_engines": "🧠 Рухавікі",
-        "btn_sub": "⭐ Падпіска • Дапамога",
-        "btn_wallet": "🧾 Баланс",
-        "btn_video": "🎞 Стварыць відэа",
-        "btn_photo": "🖼 Ажывіць фота",
-        "btn_help": "❓ Дапамога",
-        "btn_back": "⬅️ Назад",
-    },
-    "uk": {
-        "choose_lang": "🌍 Оберіть мову",
-        "lang_set": "✅ Мову встановлено",
-        "menu_title": "Головне меню",
-        "btn_engines": "🧠 Рушії",
-        "btn_sub": "⭐ Підписка • Допомога",
-        "btn_wallet": "🧾 Баланс",
-        "btn_video": "🎞 Створити відео",
-        "btn_photo": "🖼 Оживити фото",
-        "btn_help": "❓ Допомога",
-        "btn_back": "⬅️ Назад",
-        "btn_study": "🎓 Навчання",
-        "btn_work": "💼 Робота",
-        "btn_fun": "🔥 Розваги",
-        "input_placeholder": "Оберіть режим або напишіть запит…",
-    
-    },
-    "de": {
-        "choose_lang": "🌍 Sprache wählen",
-        "lang_set": "✅ Sprache gesetzt",
-        "menu_title": "Hauptmenü",
-        "btn_engines": "🧠 Engines",
-        "btn_sub": "⭐ Abo • Hilfe",
-        "btn_wallet": "🧾 Guthaben",
-        "btn_video": "🎞 Video erstellen",
-        "btn_photo": "🖼 Foto animieren",
-        "btn_help": "❓ Hilfe",
-        "btn_back": "⬅️ Zurück",
-    },
-    "en": {
-        "choose_lang": "🌍 Choose language",
-        "lang_set": "✅ Language set",
-        "menu_title": "Main menu",
-        "btn_engines": "🧠 Engines",
-        "btn_sub": "⭐ Subscription • Help",
-        "btn_wallet": "🧾 Balance",
-        "btn_video": "🎞 Create video",
-        "btn_photo": "🖼 Animate photo",
-        "btn_help": "❓ Help",
-        "btn_back": "⬅️ Back",
-    },
-    "fr": {
-        "choose_lang": "🌍 Choisir la langue",
-        "lang_set": "✅ Langue définie",
-        "menu_title": "Menu principal",
-        "btn_engines": "🧠 Moteurs",
-        "btn_sub": "⭐ Abonnement • Aide",
-        "btn_wallet": "🧾 Solde",
-        "btn_video": "🎞 Créer une vidéo",
-        "btn_photo": "🖼 Animer une photo",
-        "btn_help": "❓ Aide",
-        "btn_back": "⬅️ Retour",
-    },
-    "th": {
-        "choose_lang": "🌍 เลือกภาษา",
-        "lang_set": "✅ ตั้งค่าภาษาแล้ว",
-        "menu_title": "เมนูหลัก",
-        "btn_engines": "🧠 เอนจิน",
-        "btn_sub": "⭐ สมัครสมาชิก • ช่วยเหลือ",
-        "btn_wallet": "🧾 ยอดคงเหลือ",
-        "btn_video": "🎞 สร้างวิดีโอ",
-        "btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
-        "btn_help": "❓ ช่วยเหลือ",
-        "btn_back": "⬅️ กลับ",
-    },
+"ru": {
+"choose_lang": "🌍 Выберите язык",
+"lang_set": "✅ Язык установлен",
+"menu_title": "Главное меню",
+"btn_engines": "🧠 Движки",
+"btn_sub": "⭐ Подписка • Помощь",
+"btn_wallet": "🧾 Баланс",
+"btn_video": "🎞 Создать видео",
+"btn_photo": "🖼 Оживить фото",
+"btn_help": "❓ Помощь",
+"btn_back": "⬅️ Назад",
+},
+"be": {
+"choose_lang": "🌍 Абярыце мову",
+"lang_set": "✅ Мова ўсталявана",
+"menu_title": "Галоўнае меню",
+"btn_engines": "🧠 Рухавікі",
+"btn_sub": "⭐ Падпіска • Дапамога",
+"btn_wallet": "🧾 Баланс",
+"btn_video": "🎞 Стварыць відэа",
+"btn_photo": "🖼 Ажывіць фота",
+"btn_help": "❓ Дапамога",
+"btn_back": "⬅️ Назад",
+},
+"uk": {
+"choose_lang": "🌍 Оберіть мову",
+"lang_set": "✅ Мову встановлено",
+"menu_title": "Головне меню",
+"btn_engines": "🧠 Рушії",
+"btn_sub": "⭐ Підписка • Допомога",
+"btn_wallet": "🧾 Баланс",
+"btn_video": "🎞 Створити відео",
+"btn_photo": "🖼 Оживити фото",
+"btn_help": "❓ Допомога",
+"btn_back": "⬅️ Назад",
+"btn_study": "🎓 Навчання",
+"btn_work": "💼 Робота",
+"btn_fun": "🔥 Розваги",
+"input_placeholder": "Оберіть режим або напишіть запит…",
+
+},
+"de": {
+"choose_lang": "🌍 Sprache wählen",
+"lang_set": "✅ Sprache gesetzt",
+"menu_title": "Hauptmenü",
+"btn_engines": "🧠 Engines",
+"btn_sub": "⭐ Abo • Hilfe",
+"btn_wallet": "🧾 Guthaben",
+"btn_video": "🎞 Video erstellen",
+"btn_photo": "🖼 Foto animieren",
+"btn_help": "❓ Hilfe",
+"btn_back": "⬅️ Zurück",
+},
+"en": {
+"choose_lang": "🌍 Choose language",
+"lang_set": "✅ Language set",
+"menu_title": "Main menu",
+"btn_engines": "🧠 Engines",
+"btn_sub": "⭐ Subscription • Help",
+"btn_wallet": "🧾 Balance",
+"btn_video": "🎞 Create video",
+"btn_photo": "🖼 Animate photo",
+"btn_help": "❓ Help",
+"btn_back": "⬅️ Back",
+},
+"fr": {
+"choose_lang": "🌍 Choisir la langue",
+"lang_set": "✅ Langue définie",
+"menu_title": "Menu principal",
+"btn_engines": "🧠 Moteurs",
+"btn_sub": "⭐ Abonnement • Aide",
+"btn_wallet": "🧾 Solde",
+"btn_video": "🎞 Créer une vidéo",
+"btn_photo": "🖼 Animer une photo",
+"btn_help": "❓ Aide",
+"btn_back": "⬅️ Retour",
+},
+"th": {
+"choose_lang": "🌍 เลือกภาษา",
+"lang_set": "✅ ตั้งค่าภาษาแล้ว",
+"menu_title": "เมนูหลัก",
+"btn_engines": "🧠 เอนจิน",
+"btn_sub": "⭐ สมัครสมาชิก • ช่วยเหลือ",
+"btn_wallet": "🧾 ยอดคงเหลือ",
+"btn_video": "🎞 สร้างวิดีโอ",
+"btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
+"btn_help": "❓ ช่วยเหลือ",
+"btn_back": "⬅️ กลับ",
+},
 }
 
 def t(user_id: int, key: str) -> str:
-    lang = get_lang(user_id)
-    return (I18N.get(lang) or I18N["ru"]).get(key, key)
+lang = get_lang(user_id)
+return (I18N.get(lang) or I18N["ru"]).get(key, key)
 
 def system_prompt_for(lang: str) -> str:
-    mapping = {
-        "ru": "Отвечай на русском языке.",
-        "be": "Адказвай па-беларуску.",
-        "uk": "Відповідай українською мовою.",
-        "de": "Antworte auf Deutsch.",
-        "en": "Answer in English.",
-        "fr": "Réponds en français.",
-        "th": "ตอบเป็นภาษาไทย",
-    }
-    return mapping.get(lang, mapping["ru"])
+mapping = {
+"ru": "Отвечай на русском языке.",
+"be": "Адказвай па-беларуску.",
+"uk": "Відповідай українською мовою.",
+"de": "Antworte auf Deutsch.",
+"en": "Answer in English.",
+"fr": "Réponds en français.",
+"th": "ตอบเป็นภาษาไทย",
+}
+return mapping.get(lang, mapping["ru"])
 
 # Extended pack (long UI texts / hints)
 I18N_PACK: dict[str, dict[str, str]] = {
-    "welcome": {
-        "ru": "Привет! Я Нейро‑Bot — ⚡ мультирежимный бот из 7 нейросетей для учёбы, работы и развлечений.",
-        "be": "Прывітанне! Я Нейро‑Bot — ⚡ шматрэжымны бот з 7 нейрасетак для вучобы, працы і забаў.",
-        "uk": "Привіт! Я Нейро‑Bot — ⚡ мультирежимний бот із 7 нейромереж для навчання, роботи та розваг.",
-        "de": "Hallo! Ich bin Neuro‑Bot — ⚡ ein Multimode‑Bot mit 7 KI‑Engines für Lernen, Arbeit und Spaß.",
-        "en": "Hi! I’m Neuro‑Bot — ⚡ a multi‑mode bot with 7 AI engines for study, work and fun.",
-        "fr": "Salut ! Je suis Neuro‑Bot — ⚡ un bot multi‑modes avec 7 moteurs IA pour étudier, travailler et se divertir.",
-        "th": "สวัสดี! ฉันคือ Neuro‑Bot — ⚡ บอทหลายโหมดพร้อมเอนจิน AI 7 ตัว สำหรับเรียน งาน และความบันเทิง",
-    },
-    "ask_video_prompt": {
-        "ru": "🎞 Напиши запрос для видео, например:\nСоздай видео, где заяц ест морковь",
+"welcome": {
+"ru": "Привет! Я Нейро‑Bot — ⚡ мультирежимный бот из 7 нейросетей для учёбы, работы и развлечений.",
+"be": "Прывітанне! Я Нейро‑Bot — ⚡ шматрэжымны бот з 7 нейрасетак для вучобы, працы і забаў.",
+"uk": "Привіт! Я Нейро‑Bot — ⚡ мультирежимний бот із 7 нейромереж для навчання, роботи та розваг.",
+"de": "Hallo! Ich bin Neuro‑Bot — ⚡ ein Multimode‑Bot mit 7 KI‑Engines für Lernen, Arbeit und Spaß.",
+"en": "Hi! I’m Neuro‑Bot — ⚡ a multi‑mode bot with 7 AI engines for study, work and fun.",
+"fr": "Salut ! Je suis Neuro‑Bot — ⚡ un bot multi‑modes avec 7 moteurs IA pour étudier, travailler et se divertir.",
+"th": "สวัสดี! ฉันคือ Neuro‑Bot — ⚡ บอทหลายโหมดพร้อมเอนจิน AI 7 ตัว สำหรับเรียน งาน และความบันเทิง",
+},
+"ask_video_prompt": {
+"ru": "🎞 Напиши запрос для видео, например:\nСоздай видео, где заяц ест морковь",
 # =======================
 # FORCE KV INIT AT IMPORT TIME (FINAL FIX)
 # =======================
 try:
-    _db_init_kv_safe()
+_db_init_kv_safe()
 except Exception:
-    pass
+pass
 # =======================
 "Сделай видео: закат над морем, 7 сек, 16:9"",
-        "be": "🎞 Напішы запыт для відэа, напрыклад:\n"Зрабі відэа: захад сонца над морам, 7 сек, 16:9"",
-        "uk": "🎞 Напиши запит для відео, наприклад:\n"Зроби відео: захід над морем, 7 с, 16:9"",
-        "de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
-        "en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
-        "fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n" Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 "",
-        "th": "🎞 พิมพ์คำสั่งทำวิดีโอ เช่น:\n“ทำวิดีโอ: พระอาทิตย์ตกเหนือทะเล 7วิ 16:9”",
-    },
-    "ask_send_photo": {
-        "ru": "🖼 Пришли фото, затем выбери "Оживить фото".",
-        "be": "🖼 Дашлі фота, затым выберы "Ажывіць фота".",
-        "uk": "🖼 Надішли фото, потім обери "Оживити фото".",
-        "de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
-        "en": "🖼 Send a photo, then choose “Animate photo”.",
-        "fr": "🖼 Envoyez une photo, puis choisissez " Animer la photo ".",
-        "th": "🖼 ส่งรูป จากนั้นเลือก “ทำให้รูปเคลื่อนไหว”",
-    },
-    "photo_received": {
-        "ru": "🖼 Фото получено. Хотите оживить?",
-        "be": "🖼 Фота атрымана. Ажывіць?",
-        "uk": "🖼 Фото отримано. Оживити?",
-        "de": "🖼 Foto erhalten. Animieren?",
-        "en": "🖼 Photo received. Animate it?",
-        "fr": "🖼 Photo reçue. L’animer ?",
-        "th": "🖼 ได้รับรูปแล้ว ต้องการทำให้เคลื่อนไหวไหม?",
-    },
-    "animate_btn": {
-        "ru": "🎬 Оживить фото",
-        "be": "🎬 Ажывіць фота",
-        "uk": "🎬 Оживити фото",
-        "de": "🎬 Foto animieren",
-        "en": "🎬 Animate photo",
-        "fr": "🎬 Animer la photo",
-        "th": "🎬 ทำให้รูปเคลื่อนไหว",
-    },
-    "choose_engine": {
-        "ru": "Выберите движок:",
-        "be": "Абярыце рухавік:",
-        "uk": "Оберіть рушій:",
-        "de": "Wähle die Engine:",
-        "en": "Choose engine:",
-        "fr": "Choisissez le moteur:",
-        "th": "เลือกเอนจิน:",
-    },
-    "runway_disabled_textvideo": {
-        "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
-        "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
-        "uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оберіть Kling, Luma або Sora.",
-        "de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
-        "en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
-        "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
-        "th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
-    },
+"be": "🎞 Напішы запыт для відэа, напрыклад:\n"Зрабі відэа: захад сонца над морам, 7 сек, 16:9"",
+"uk": "🎞 Напиши запит для відео, наприклад:\n"Зроби відео: захід над морем, 7 с, 16:9"",
+"de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
+"en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
+"fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n" Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 "",
+"th": "🎞 พิมพ์คำสั่งทำวิดีโอ เช่น:\n“ทำวิดีโอ: พระอาทิตย์ตกเหนือทะเล 7วิ 16:9”",
+},
+"ask_send_photo": {
+"ru": "🖼 Пришли фото, затем выбери "Оживить фото".",
+"be": "🖼 Дашлі фота, затым выберы "Ажывіць фота".",
+"uk": "🖼 Надішли фото, потім обери "Оживити фото".",
+"de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
+"en": "🖼 Send a photo, then choose “Animate photo”.",
+"fr": "🖼 Envoyez une photo, puis choisissez " Animer la photo ".",
+"th": "🖼 ส่งรูป จากนั้นเลือก “ทำให้รูปเคลื่อนไหว”",
+},
+"photo_received": {
+"ru": "🖼 Фото получено. Хотите оживить?",
+"be": "🖼 Фота атрымана. Ажывіць?",
+"uk": "🖼 Фото отримано. Оживити?",
+"de": "🖼 Foto erhalten. Animieren?",
+"en": "🖼 Photo received. Animate it?",
+"fr": "🖼 Photo reçue. L’animer ?",
+"th": "🖼 ได้รับรูปแล้ว ต้องการทำให้เคลื่อนไหวไหม?",
+},
+"animate_btn": {
+"ru": "🎬 Оживить фото",
+"be": "🎬 Ажывіць фота",
+"uk": "🎬 Оживити фото",
+"de": "🎬 Foto animieren",
+"en": "🎬 Animate photo",
+"fr": "🎬 Animer la photo",
+"th": "🎬 ทำให้รูปเคลื่อนไหว",
+},
+"choose_engine": {
+"ru": "Выберите движок:",
+"be": "Абярыце рухавік:",
+"uk": "Оберіть рушій:",
+"de": "Wähle die Engine:",
+"en": "Choose engine:",
+"fr": "Choisissez le moteur:",
+"th": "เลือกเอนจิน:",
+},
+"runway_disabled_textvideo": {
+"ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
+"be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
+"uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оберіть Kling, Luma або Sora.",
+"de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
+"en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
+"fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
+"th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
+},
 }
 
 def _tr(user_id: int, key: str, **kwargs) -> str:
-    lang = get_lang(user_id)
-    pack = I18N_PACK.get(key) or {}
-    s = pack.get(lang) or pack.get("ru") or key
-    if kwargs:
-        try:
-            return s.format(**kwargs)
-        except Exception:
-            return s
-    return s
+lang = get_lang(user_id)
+pack = I18N_PACK.get(key) or {}
+s = pack.get(lang) or pack.get("ru") or key
+if kwargs:
+try:
+return s.format(**kwargs)
+except Exception:
+return s
+return s
 
 def _lang_choose_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
-    """
+    """)
     Клавиатура выбора языка.
     Требование: показывать при каждом /start.
     Для удобства добавляем "Продолжить" с текущим языком, если он уже выбран.
@@ -802,12 +802,12 @@ def _usage_update(user_id: int, **delta):
     ymd = _today_ymd()
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     row = _usage_row(user_id, ymd)
-    cur.execute("""UPDATE usage_daily SET
-        text_count=?,
-        luma_usd=?,
-        runway_usd=?,
-        img_usd=?
-        WHERE user_id=? AND ymd=?""",
+    cur.execute("""
+text_count=?,
+luma_usd=?,
+runway_usd=?,
+img_usd=?
+    """)
         (row["text_count"] + delta.get("text_count", 0),
          row["luma_usd"]  + delta.get("luma_usd", 0.0),
          row["runway_usd"]+ delta.get("runway_usd", 0.0),
@@ -1286,10 +1286,10 @@ def _db_init_prefs():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS user_prefs (
-        user_id INTEGER PRIMARY KEY,
-        tts_on  INTEGER DEFAULT 0
-    )""")
+CREATE TABLE IF NOT EXISTS user_prefs (
+user_id INTEGER PRIMARY KEY,
+tts_on  INTEGER DEFAULT 0
+    """)
     con.commit(); con.close()
 
 def _tts_get(user_id: int) -> bool:
