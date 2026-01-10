@@ -523,32 +523,12 @@ def db_init_usage():
         pass
     con.commit(); con.close()
 
-
-# Ensure DB schema exists even during module import (Render cold-start safe).
-# main_keyboard() is built at import-time below, and it depends on get_lang() -> kv_get() -> table kv.
-with contextlib.suppress(Exception):
-    db_init()
-with contextlib.suppress(Exception):
-    db_init_usage()
 def kv_get(key: str, default: str | None = None) -> str | None:
-    """Small KV helper backed by SQLite.
-    Robust to first-run / missing schema (auto-creates tables on demand).
-    """
-    try:
-        con = sqlite3.connect(DB_PATH); cur = con.cursor()
-        cur.execute("SELECT value FROM kv WHERE key=?", (key,))
-        row = cur.fetchone(); con.close()
-        return (row[0] if row else default)
-    except sqlite3.OperationalError as e:
-        # Typically: sqlite3.OperationalError: no such table: kv
-        with contextlib.suppress(Exception):
-            db_init_usage()
-        with contextlib.suppress(Exception):
-            con = sqlite3.connect(DB_PATH); cur = con.cursor()
-            cur.execute("SELECT value FROM kv WHERE key=?", (key,))
-            row = cur.fetchone(); con.close()
-            return (row[0] if row else default)
-        raise
+    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+    cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+    row = cur.fetchone(); con.close()
+    return (row[0] if row else default)
+
 def kv_set(key: str, value: str):
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
@@ -6349,3 +6329,73 @@ def get_welcome_text(lang: str) -> str:
 # SUNO_API_KEY=...
 # MIDJOURNEY_API_KEY=...
 # ================================================================
+
+
+
+# ===== PATCH: i18n mode labels =====
+I18N.setdefault("ru", {}).update({
+    "mode_study": "📚 Учёба",
+    "mode_work": "💼 Работа",
+    "mode_fun": "🔥 Развлечения",
+})
+I18N.setdefault("en", {}).update({
+    "mode_study": "📚 Study",
+    "mode_work": "💼 Work",
+    "mode_fun": "🔥 Fun",
+})
+I18N.setdefault("de", {}).update({
+    "mode_study": "📚 Lernen",
+    "mode_work": "💼 Arbeit",
+    "mode_fun": "🔥 Unterhaltung",
+})
+I18N.setdefault("fr", {}).update({
+    "mode_study": "📚 Études",
+    "mode_work": "💼 Travail",
+    "mode_fun": "🔥 Divertissement",
+})
+I18N.setdefault("th", {}).update({
+    "mode_study": "📚 การเรียน",
+    "mode_work": "💼 งาน",
+    "mode_fun": "🔥 ความบันเทิง",
+})
+# ===== END PATCH =====
+
+
+
+# ===== PATCH: mode buttons callback routing =====
+def _handle_mode_callback(update, context):
+    try:
+        q = update.callback_query
+        data = q.data
+        uid = q.from_user.id
+
+        if data in ("btn_study", "btn_work", "btn_fun"):
+            mode = data.replace("btn_", "")
+            kv_set(f"user:{uid}:mode", mode)
+            q.answer()
+
+            text = {
+                "study": t(uid, "mode_study"),
+                "work": t(uid, "mode_work"),
+                "fun": t(uid, "mode_fun"),
+            }.get(mode, "")
+
+            context.bot.send_message(
+                chat_id=uid,
+                text=f"✅ {text}",
+                reply_markup=main_keyboard(uid),
+            )
+            return True
+    except Exception as e:
+        log.exception("mode callback error: %s", e)
+    return False
+# ===== END PATCH =====
+
+
+
+# ===== PATCH: register mode callback handler =====
+try:
+    application.add_handler(CallbackQueryHandler(_handle_mode_callback, pattern="^btn_"))
+except Exception:
+    pass
+# ===== END PATCH =====
