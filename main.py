@@ -523,12 +523,32 @@ def db_init_usage():
         pass
     con.commit(); con.close()
 
-def kv_get(key: str, default: str | None = None) -> str | None:
-    con = sqlite3.connect(DB_PATH); cur = con.cursor()
-    cur.execute("SELECT value FROM kv WHERE key=?", (key,))
-    row = cur.fetchone(); con.close()
-    return (row[0] if row else default)
 
+# Ensure DB schema exists even during module import (Render cold-start safe).
+# main_keyboard() is built at import-time below, and it depends on get_lang() -> kv_get() -> table kv.
+with contextlib.suppress(Exception):
+    db_init()
+with contextlib.suppress(Exception):
+    db_init_usage()
+def kv_get(key: str, default: str | None = None) -> str | None:
+    """Small KV helper backed by SQLite.
+    Robust to first-run / missing schema (auto-creates tables on demand).
+    """
+    try:
+        con = sqlite3.connect(DB_PATH); cur = con.cursor()
+        cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+        row = cur.fetchone(); con.close()
+        return (row[0] if row else default)
+    except sqlite3.OperationalError as e:
+        # Typically: sqlite3.OperationalError: no such table: kv
+        with contextlib.suppress(Exception):
+            db_init_usage()
+        with contextlib.suppress(Exception):
+            con = sqlite3.connect(DB_PATH); cur = con.cursor()
+            cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+            row = cur.fetchone(); con.close()
+            return (row[0] if row else default)
+        raise
 def kv_set(key: str, value: str):
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
