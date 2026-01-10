@@ -1,9 +1,3 @@
-
-def _ensure_kv(conn):
-    cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)")
-    conn.commit()
-
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -432,15 +426,13 @@ except Exception:
 # ───────── DB: subscriptions / usage / wallet / kv ─────────
 def db_init():
     con = sqlite3.connect(DB_PATH)
-    
-_ensure_kv(conn)
-cur = con.cursor()
+    cur = con.cursor()
     cur.execute("""
-CREATE TABLE IF NOT EXISTS subscriptions (
-user_id INTEGER PRIMARY KEY,
-until_ts INTEGER NOT NULL,
-tier TEXT
-    """)
+    CREATE TABLE IF NOT EXISTS subscriptions (
+        user_id INTEGER PRIMARY KEY,
+        until_ts INTEGER NOT NULL,
+        tier TEXT
+    )""")
     con.commit(); con.close()
 
 def _utcnow():
@@ -457,10 +449,10 @@ def activate_subscription(user_id: int, months: int = 1):
         current_until = datetime.fromtimestamp(row[0], tz=timezone.utc)
         until = current_until + timedelta(days=30 * months)
     cur.execute("""
-INSERT INTO subscriptions (user_id, until_ts)
-VALUES (?, ?)
-ON CONFLICT(user_id) DO UPDATE SET until_ts=excluded.until_ts
-    """)
+        INSERT INTO subscriptions (user_id, until_ts)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET until_ts=excluded.until_ts
+    """, (user_id, int(until.timestamp())))
     con.commit(); con.close()
     return until
 
@@ -501,46 +493,66 @@ def db_init_usage():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
-CREATE TABLE IF NOT EXISTS usage_daily (
-user_id INTEGER,
-ymd TEXT,
-text_count INTEGER DEFAULT 0,
-luma_usd  REAL DEFAULT 0.0,
-runway_usd REAL DEFAULT 0.0,
-img_usd REAL DEFAULT 0.0,
-PRIMARY KEY (user_id, ymd)
-    """)
+    CREATE TABLE IF NOT EXISTS usage_daily (
+        user_id INTEGER,
+        ymd TEXT,
+        text_count INTEGER DEFAULT 0,
+        luma_usd  REAL DEFAULT 0.0,
+        runway_usd REAL DEFAULT 0.0,
+        img_usd REAL DEFAULT 0.0,
+        PRIMARY KEY (user_id, ymd)
+    )""")
     cur.execute("""
-CREATE TABLE IF NOT EXISTS wallet (
-user_id INTEGER PRIMARY KEY,
-luma_usd  REAL DEFAULT 0.0,
-runway_usd REAL DEFAULT 0.0,
-img_usd  REAL DEFAULT 0.0,
-usd REAL DEFAULT 0.0
-    """)
+    CREATE TABLE IF NOT EXISTS wallet (
+        user_id INTEGER PRIMARY KEY,
+        luma_usd  REAL DEFAULT 0.0,
+        runway_usd REAL DEFAULT 0.0,
+        img_usd  REAL DEFAULT 0.0,
+        usd REAL DEFAULT 0.0
+    )""")
     # kv store
-    cur.execute("""
-# миграции
-try:
-cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
-except Exception:
-pass
-try:
-cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
-except Exception:
-pass
-con.commit(); con.close()
+    cur.execute("""CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)""")
+    # миграции
+    try:
+        cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE subscriptions ADD COLUMN tier TEXT")
+    except Exception:
+        pass
+    con.commit(); con.close()
 
+
+# Ensure DB schema exists even during module import (Render cold-start safe).
+# main_keyboard() is built at import-time below, and it depends on get_lang() -> kv_get() -> table kv.
+with contextlib.suppress(Exception):
+    db_init()
+with contextlib.suppress(Exception):
+    db_init_usage()
 def kv_get(key: str, default: str | None = None) -> str | None:
-con = sqlite3.connect(DB_PATH); cur = con.cursor()
-cur.execute("SELECT value FROM kv WHERE key=?", (key,))
-row = cur.fetchone(); con.close()
-return (row[0] if row else default)
-
+    """Small KV helper backed by SQLite.
+    Robust to first-run / missing schema (auto-creates tables on demand).
+    """
+    try:
+        con = sqlite3.connect(DB_PATH); cur = con.cursor()
+        cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+        row = cur.fetchone(); con.close()
+        return (row[0] if row else default)
+    except sqlite3.OperationalError as e:
+        # Typically: sqlite3.OperationalError: no such table: kv
+        with contextlib.suppress(Exception):
+            db_init_usage()
+        with contextlib.suppress(Exception):
+            con = sqlite3.connect(DB_PATH); cur = con.cursor()
+            cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+            row = cur.fetchone(); con.close()
+            return (row[0] if row else default)
+        raise
 def kv_set(key: str, value: str):
-con = sqlite3.connect(DB_PATH); cur = con.cursor()
-cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
-con.commit(); con.close()
+    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+    cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
+    con.commit(); con.close()
 
 # =============================
 # Language / i18n
@@ -548,231 +560,237 @@ con.commit(); con.close()
 
 LANGS: list[str] = ["ru", "be", "uk", "de", "en", "fr", "th"]
 LANG_NAMES: dict[str, str] = {
-"ru": "Русский",
-"be": "Белорусский",
-"uk": "Украинский",
-"de": "Deutsch",
-"en": "English",
-"fr": "Français",
-"th": "ไทย",
+    "ru": "Русский",
+    "be": "Белорусский",
+    "uk": "Украинский",
+    "de": "Deutsch",
+    "en": "English",
+    "fr": "Français",
+    "th": "ไทย",
 }
 
 def _lang_key(user_id: int) -> str:
-return f"lang:{user_id}"
+    return f"lang:{user_id}"
 
 def has_lang(user_id: int) -> bool:
-return bool((kv_get(_lang_key(user_id), "") or "").strip())
+    return bool((kv_get(_lang_key(user_id), "") or "").strip())
 
 def get_lang(user_id: int) -> str:
-lang = (kv_get(_lang_key(user_id), "") or "").strip()
-return lang if lang in LANGS else "ru"
+    lang = (kv_get(_lang_key(user_id), "") or "").strip()
+    return lang if lang in LANGS else "ru"
 
 def set_lang(user_id: int, lang: str) -> None:
-if lang not in LANGS:
-lang = "ru"
-kv_set(_lang_key(user_id), lang)
+    if lang not in LANGS:
+        lang = "ru"
+    kv_set(_lang_key(user_id), lang)
 
 # Mini-dictionary (menus/buttons)
 I18N: dict[str, dict[str, str]] = {
-"ru": {
-"choose_lang": "🌍 Выберите язык",
-"lang_set": "✅ Язык установлен",
-"menu_title": "Главное меню",
-"btn_engines": "🧠 Движки",
-"btn_sub": "⭐ Подписка • Помощь",
-"btn_wallet": "🧾 Баланс",
-"btn_video": "🎞 Создать видео",
-"btn_photo": "🖼 Оживить фото",
-"btn_help": "❓ Помощь",
-"btn_back": "⬅️ Назад",
-},
-"be": {
-"choose_lang": "🌍 Абярыце мову",
-"lang_set": "✅ Мова ўсталявана",
-"menu_title": "Галоўнае меню",
-"btn_engines": "🧠 Рухавікі",
-"btn_sub": "⭐ Падпіска • Дапамога",
-"btn_wallet": "🧾 Баланс",
-"btn_video": "🎞 Стварыць відэа",
-"btn_photo": "🖼 Ажывіць фота",
-"btn_help": "❓ Дапамога",
-"btn_back": "⬅️ Назад",
-},
-"uk": {
-"choose_lang": "🌍 Оберіть мову",
-"lang_set": "✅ Мову встановлено",
-"menu_title": "Головне меню",
-"btn_engines": "🧠 Рушії",
-"btn_sub": "⭐ Підписка • Допомога",
-"btn_wallet": "🧾 Баланс",
-"btn_video": "🎞 Створити відео",
-"btn_photo": "🖼 Оживити фото",
-"btn_help": "❓ Допомога",
-"btn_back": "⬅️ Назад",
-"btn_study": "🎓 Навчання",
-"btn_work": "💼 Робота",
-"btn_fun": "🔥 Розваги",
-"input_placeholder": "Оберіть режим або напишіть запит…",
-
-},
-"de": {
-"choose_lang": "🌍 Sprache wählen",
-"lang_set": "✅ Sprache gesetzt",
-"menu_title": "Hauptmenü",
-"btn_engines": "🧠 Engines",
-"btn_sub": "⭐ Abo • Hilfe",
-"btn_wallet": "🧾 Guthaben",
-"btn_video": "🎞 Video erstellen",
-"btn_photo": "🖼 Foto animieren",
-"btn_help": "❓ Hilfe",
-"btn_back": "⬅️ Zurück",
-},
-"en": {
-"choose_lang": "🌍 Choose language",
-"lang_set": "✅ Language set",
-"menu_title": "Main menu",
-"btn_engines": "🧠 Engines",
-"btn_sub": "⭐ Subscription • Help",
-"btn_wallet": "🧾 Balance",
-"btn_video": "🎞 Create video",
-"btn_photo": "🖼 Animate photo",
-"btn_help": "❓ Help",
-"btn_back": "⬅️ Back",
-},
-"fr": {
-"choose_lang": "🌍 Choisir la langue",
-"lang_set": "✅ Langue définie",
-"menu_title": "Menu principal",
-"btn_engines": "🧠 Moteurs",
-"btn_sub": "⭐ Abonnement • Aide",
-"btn_wallet": "🧾 Solde",
-"btn_video": "🎞 Créer une vidéo",
-"btn_photo": "🖼 Animer une photo",
-"btn_help": "❓ Aide",
-"btn_back": "⬅️ Retour",
-},
-"th": {
-"choose_lang": "🌍 เลือกภาษา",
-"lang_set": "✅ ตั้งค่าภาษาแล้ว",
-"menu_title": "เมนูหลัก",
-"btn_engines": "🧠 เอนจิน",
-"btn_sub": "⭐ สมัครสมาชิก • ช่วยเหลือ",
-"btn_wallet": "🧾 ยอดคงเหลือ",
-"btn_video": "🎞 สร้างวิดีโอ",
-"btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
-"btn_help": "❓ ช่วยเหลือ",
-"btn_back": "⬅️ กลับ",
-},
+    "ru": {
+        "choose_lang": "🌍 Выберите язык",
+        "lang_set": "✅ Язык установлен",
+        "menu_title": "Главное меню",
+        "btn_engines": "🧠 Движки",
+        "btn_sub": "⭐ Подписка • Помощь",
+        "btn_wallet": "🧾 Баланс",
+        "btn_video": "🎞 Создать видео",
+        "btn_photo": "🖼 Оживить фото",
+        "btn_help": "❓ Помощь",
+        "btn_back": "⬅️ Назад",
+        "btn_study": "📚 Учёба",
+        "btn_work": "💼 Работа",
+        "btn_fun": "🎉 Развлечения",
+    },
+    "be": {
+        "choose_lang": "🌍 Абярыце мову",
+        "lang_set": "✅ Мова ўсталявана",
+        "menu_title": "Галоўнае меню",
+        "btn_engines": "🧠 Рухавікі",
+        "btn_sub": "⭐ Падпіска • Дапамога",
+        "btn_wallet": "🧾 Баланс",
+        "btn_video": "🎞 Стварыць відэа",
+        "btn_photo": "🖼 Ажывіць фота",
+        "btn_help": "❓ Дапамога",
+        "btn_back": "⬅️ Назад",
+    },
+    "uk": {
+        "choose_lang": "🌍 Оберіть мову",
+        "lang_set": "✅ Мову встановлено",
+        "menu_title": "Головне меню",
+        "btn_engines": "🧠 Рушії",
+        "btn_sub": "⭐ Підписка • Допомога",
+        "btn_wallet": "🧾 Баланс",
+        "btn_video": "🎞 Створити відео",
+        "btn_photo": "🖼 Оживити фото",
+        "btn_help": "❓ Допомога",
+        "btn_back": "⬅️ Назад",
+        "btn_study": "🎓 Навчання",
+        "btn_work": "💼 Робота",
+        "btn_fun": "🔥 Розваги",
+        "input_placeholder": "Оберіть режим або напишіть запит…",
+    
+    },
+    "de": {
+        "choose_lang": "🌍 Sprache wählen",
+        "lang_set": "✅ Sprache gesetzt",
+        "menu_title": "Hauptmenü",
+        "btn_engines": "🧠 Engines",
+        "btn_sub": "⭐ Abo • Hilfe",
+        "btn_wallet": "🧾 Guthaben",
+        "btn_video": "🎞 Video erstellen",
+        "btn_photo": "🖼 Foto animieren",
+        "btn_help": "❓ Hilfe",
+        "btn_back": "⬅️ Zurück",
+        "btn_study": "📚 Lernen",
+        "btn_work": "💼 Arbeit",
+        "btn_fun": "🎉 Spaß",
+    },
+    "en": {
+        "choose_lang": "🌍 Choose language",
+        "lang_set": "✅ Language set",
+        "menu_title": "Main menu",
+        "btn_engines": "🧠 Engines",
+        "btn_sub": "⭐ Subscription • Help",
+        "btn_wallet": "🧾 Balance",
+        "btn_video": "🎞 Create video",
+        "btn_photo": "🖼 Animate photo",
+        "btn_help": "❓ Help",
+        "btn_back": "⬅️ Back",
+        "btn_study": "📚 Study",
+        "btn_work": "💼 Work",
+        "btn_fun": "🎉 Fun",
+    },
+    "fr": {
+        "choose_lang": "🌍 Choisir la langue",
+        "lang_set": "✅ Langue définie",
+        "menu_title": "Menu principal",
+        "btn_engines": "🧠 Moteurs",
+        "btn_sub": "⭐ Abonnement • Aide",
+        "btn_wallet": "🧾 Solde",
+        "btn_video": "🎞 Créer une vidéo",
+        "btn_photo": "🖼 Animer une photo",
+        "btn_help": "❓ Aide",
+        "btn_back": "⬅️ Retour",
+        "btn_study": "📚 Études",
+        "btn_work": "💼 Travail",
+        "btn_fun": "🎉 Divertissement",
+    },
+    "th": {
+        "choose_lang": "🌍 เลือกภาษา",
+        "lang_set": "✅ ตั้งค่าภาษาแล้ว",
+        "menu_title": "เมนูหลัก",
+        "btn_engines": "🧠 เอนจิน",
+        "btn_sub": "⭐ สมัครสมาชิก • ช่วยเหลือ",
+        "btn_wallet": "🧾 ยอดคงเหลือ",
+        "btn_video": "🎞 สร้างวิดีโอ",
+        "btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
+        "btn_help": "❓ ช่วยเหลือ",
+        "btn_back": "⬅️ กลับ",
+        "btn_study": "📚 เรียน",
+        "btn_work": "💼 งาน",
+        "btn_fun": "🎉 สนุก",
+    },
 }
 
 def t(user_id: int, key: str) -> str:
-lang = get_lang(user_id)
-return (I18N.get(lang) or I18N["ru"]).get(key, key)
+    lang = get_lang(user_id)
+    return (I18N.get(lang) or I18N["ru"]).get(key, key)
 
 def system_prompt_for(lang: str) -> str:
-mapping = {
-"ru": "Отвечай на русском языке.",
-"be": "Адказвай па-беларуску.",
-"uk": "Відповідай українською мовою.",
-"de": "Antworte auf Deutsch.",
-"en": "Answer in English.",
-"fr": "Réponds en français.",
-"th": "ตอบเป็นภาษาไทย",
-}
-return mapping.get(lang, mapping["ru"])
+    mapping = {
+        "ru": "Отвечай на русском языке.",
+        "be": "Адказвай па-беларуску.",
+        "uk": "Відповідай українською мовою.",
+        "de": "Antworte auf Deutsch.",
+        "en": "Answer in English.",
+        "fr": "Réponds en français.",
+        "th": "ตอบเป็นภาษาไทย",
+    }
+    return mapping.get(lang, mapping["ru"])
 
 # Extended pack (long UI texts / hints)
 I18N_PACK: dict[str, dict[str, str]] = {
-"welcome": {
-"ru": "Привет! Я Нейро‑Bot — ⚡ мультирежимный бот из 7 нейросетей для учёбы, работы и развлечений.",
-"be": "Прывітанне! Я Нейро‑Bot — ⚡ шматрэжымны бот з 7 нейрасетак для вучобы, працы і забаў.",
-"uk": "Привіт! Я Нейро‑Bot — ⚡ мультирежимний бот із 7 нейромереж для навчання, роботи та розваг.",
-"de": "Hallo! Ich bin Neuro‑Bot — ⚡ ein Multimode‑Bot mit 7 KI‑Engines für Lernen, Arbeit und Spaß.",
-"en": "Hi! I’m Neuro‑Bot — ⚡ a multi‑mode bot with 7 AI engines for study, work and fun.",
-"fr": "Salut ! Je suis Neuro‑Bot — ⚡ un bot multi‑modes avec 7 moteurs IA pour étudier, travailler et se divertir.",
-"th": "สวัสดี! ฉันคือ Neuro‑Bot — ⚡ บอทหลายโหมดพร้อมเอนจิน AI 7 ตัว สำหรับเรียน งาน และความบันเทิง",
-},
-"ask_video_prompt": {
-"ru": "🎞 Напиши запрос для видео, например:\nСоздай видео, где заяц ест морковь",
-# =======================
-# FORCE KV INIT AT IMPORT TIME (FINAL FIX)
-# =======================
-try:
-_db_init_kv_safe()
-except Exception:
-pass
-# =======================
-"Сделай видео: закат над морем, 7 сек, 16:9"",
-"be": "🎞 Напішы запыт для відэа, напрыклад:\n"Зрабі відэа: захад сонца над морам, 7 сек, 16:9"",
-"uk": "🎞 Напиши запит для відео, наприклад:\n"Зроби відео: захід над морем, 7 с, 16:9"",
-"de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
-"en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
-"fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n" Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 "",
-"th": "🎞 พิมพ์คำสั่งทำวิดีโอ เช่น:\n“ทำวิดีโอ: พระอาทิตย์ตกเหนือทะเล 7วิ 16:9”",
-},
-"ask_send_photo": {
-"ru": "🖼 Пришли фото, затем выбери "Оживить фото".",
-"be": "🖼 Дашлі фота, затым выберы "Ажывіць фота".",
-"uk": "🖼 Надішли фото, потім обери "Оживити фото".",
-"de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
-"en": "🖼 Send a photo, then choose “Animate photo”.",
-"fr": "🖼 Envoyez une photo, puis choisissez " Animer la photo ".",
-"th": "🖼 ส่งรูป จากนั้นเลือก “ทำให้รูปเคลื่อนไหว”",
-},
-"photo_received": {
-"ru": "🖼 Фото получено. Хотите оживить?",
-"be": "🖼 Фота атрымана. Ажывіць?",
-"uk": "🖼 Фото отримано. Оживити?",
-"de": "🖼 Foto erhalten. Animieren?",
-"en": "🖼 Photo received. Animate it?",
-"fr": "🖼 Photo reçue. L’animer ?",
-"th": "🖼 ได้รับรูปแล้ว ต้องการทำให้เคลื่อนไหวไหม?",
-},
-"animate_btn": {
-"ru": "🎬 Оживить фото",
-"be": "🎬 Ажывіць фота",
-"uk": "🎬 Оживити фото",
-"de": "🎬 Foto animieren",
-"en": "🎬 Animate photo",
-"fr": "🎬 Animer la photo",
-"th": "🎬 ทำให้รูปเคลื่อนไหว",
-},
-"choose_engine": {
-"ru": "Выберите движок:",
-"be": "Абярыце рухавік:",
-"uk": "Оберіть рушій:",
-"de": "Wähle die Engine:",
-"en": "Choose engine:",
-"fr": "Choisissez le moteur:",
-"th": "เลือกเอนจิน:",
-},
-"runway_disabled_textvideo": {
-"ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
-"be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
-"uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оберіть Kling, Luma або Sora.",
-"de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
-"en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
-"fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
-"th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
-},
+    "welcome": {
+        "ru": "Привет! Я Нейро‑Bot — ⚡ мультирежимный бот из 7 нейросетей для учёбы, работы и развлечений.",
+        "be": "Прывітанне! Я Нейро‑Bot — ⚡ шматрэжымны бот з 7 нейрасетак для вучобы, працы і забаў.",
+        "uk": "Привіт! Я Нейро‑Bot — ⚡ мультирежимний бот із 7 нейромереж для навчання, роботи та розваг.",
+        "de": "Hallo! Ich bin Neuro‑Bot — ⚡ ein Multimode‑Bot mit 7 KI‑Engines für Lernen, Arbeit und Spaß.",
+        "en": "Hi! I’m Neuro‑Bot — ⚡ a multi‑mode bot with 7 AI engines for study, work and fun.",
+        "fr": "Salut ! Je suis Neuro‑Bot — ⚡ un bot multi‑modes avec 7 moteurs IA pour étudier, travailler et se divertir.",
+        "th": "สวัสดี! ฉันคือ Neuro‑Bot — ⚡ บอทหลายโหมดพร้อมเอนจิน AI 7 ตัว สำหรับเรียน งาน และความบันเทิง",
+    },
+    "ask_video_prompt": {
+        "ru": "🎞 Напиши запрос для видео, например:\n«Сделай видео: закат над морем, 7 сек, 16:9»",
+        "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зрабі відэа: захад сонца над морам, 7 сек, 16:9»",
+        "uk": "🎞 Напиши запит для відео, наприклад:\n«Зроби відео: захід над морем, 7 с, 16:9»",
+        "de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
+        "en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
+        "fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n« Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 »",
+        "th": "🎞 พิมพ์คำสั่งทำวิดีโอ เช่น:\n“ทำวิดีโอ: พระอาทิตย์ตกเหนือทะเล 7วิ 16:9”",
+    },
+    "ask_send_photo": {
+        "ru": "🖼 Пришли фото, затем выбери «Оживить фото».",
+        "be": "🖼 Дашлі фота, затым выберы «Ажывіць фота».",
+        "uk": "🖼 Надішли фото, потім обери «Оживити фото».",
+        "de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
+        "en": "🖼 Send a photo, then choose “Animate photo”.",
+        "fr": "🖼 Envoyez une photo, puis choisissez « Animer la photo ».",
+        "th": "🖼 ส่งรูป จากนั้นเลือก “ทำให้รูปเคลื่อนไหว”",
+    },
+    "photo_received": {
+        "ru": "🖼 Фото получено. Хотите оживить?",
+        "be": "🖼 Фота атрымана. Ажывіць?",
+        "uk": "🖼 Фото отримано. Оживити?",
+        "de": "🖼 Foto erhalten. Animieren?",
+        "en": "🖼 Photo received. Animate it?",
+        "fr": "🖼 Photo reçue. L’animer ?",
+        "th": "🖼 ได้รับรูปแล้ว ต้องการทำให้เคลื่อนไหวไหม?",
+    },
+    "animate_btn": {
+        "ru": "🎬 Оживить фото",
+        "be": "🎬 Ажывіць фота",
+        "uk": "🎬 Оживити фото",
+        "de": "🎬 Foto animieren",
+        "en": "🎬 Animate photo",
+        "fr": "🎬 Animer la photo",
+        "th": "🎬 ทำให้รูปเคลื่อนไหว",
+    },
+    "choose_engine": {
+        "ru": "Выберите движок:",
+        "be": "Абярыце рухавік:",
+        "uk": "Оберіть рушій:",
+        "de": "Wähle die Engine:",
+        "en": "Choose engine:",
+        "fr": "Choisissez le moteur:",
+        "th": "เลือกเอนจิน:",
+    },
+    "runway_disabled_textvideo": {
+        "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
+        "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
+        "uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оберіть Kling, Luma або Sora.",
+        "de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
+        "en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
+        "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
+        "th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
+    },
 }
 
 def _tr(user_id: int, key: str, **kwargs) -> str:
-lang = get_lang(user_id)
-pack = I18N_PACK.get(key) or {}
-s = pack.get(lang) or pack.get("ru") or key
-if kwargs:
-try:
-return s.format(**kwargs)
-except Exception:
-return s
-return s
+    lang = get_lang(user_id)
+    pack = I18N_PACK.get(key) or {}
+    s = pack.get(lang) or pack.get("ru") or key
+    if kwargs:
+        try:
+            return s.format(**kwargs)
+        except Exception:
+            return s
+    return s
 
 def _lang_choose_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
-    """)
+    """
     Клавиатура выбора языка.
     Требование: показывать при каждом /start.
-    Для удобства добавляем "Продолжить" с текущим языком, если он уже выбран.
+    Для удобства добавляем «Продолжить» с текущим языком, если он уже выбран.
     """
     uid = int(user_id) if user_id is not None else 0
     rows = []
@@ -802,12 +820,12 @@ def _usage_update(user_id: int, **delta):
     ymd = _today_ymd()
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     row = _usage_row(user_id, ymd)
-    cur.execute("""
-text_count=?,
-luma_usd=?,
-runway_usd=?,
-img_usd=?
-    """)
+    cur.execute("""UPDATE usage_daily SET
+        text_count=?,
+        luma_usd=?,
+        runway_usd=?,
+        img_usd=?
+        WHERE user_id=? AND ymd=?""",
         (row["text_count"] + delta.get("text_count", 0),
          row["luma_usd"]  + delta.get("luma_usd", 0.0),
          row["runway_usd"]+ delta.get("runway_usd", 0.0),
@@ -1031,7 +1049,7 @@ _PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+видео", r"^video\b", r"^reels?
 _PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:картин\w+|изображен\w+|фото\w+|рисунк\w+)", r"^image\b", r"^picture\b", r"^img\b"]
 
 def _strip_leading(s: str) -> str:
-    return s.strip(" \n\t:—–-\"“”'"",.()[]")
+    return s.strip(" \n\t:—–-\"“”'«»,.()[]")
 
 def _after_match(text: str, match) -> str:
     return _strip_leading(text[match.end():])
@@ -1286,10 +1304,10 @@ def _db_init_prefs():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
-CREATE TABLE IF NOT EXISTS user_prefs (
-user_id INTEGER PRIMARY KEY,
-tts_on  INTEGER DEFAULT 0
-    """)
+    CREATE TABLE IF NOT EXISTS user_prefs (
+        user_id INTEGER PRIMARY KEY,
+        tts_on  INTEGER DEFAULT 0
+    )""")
     con.commit(); con.close()
 
 def _tts_get(user_id: int) -> bool:
@@ -1685,7 +1703,7 @@ START_TEXT = (
     "🧭 Как пользоваться:\n"
     "просто выбери режим кнопкой ниже или напиши запрос — я сам определю задачу и предложу варианты. ✍️✨\n"
     "\n"
-    "🧠 Кнопка "Движки":\n"
+    "🧠 Кнопка «Движки»:\n"
     "для точного выбора, какую нейросеть использовать принудительно. 🎯🤖"
 )
 
@@ -1733,7 +1751,7 @@ def _mode_desc(key: str) -> str:
             "Гибрид: GPT-5 для объяснений/конспектов, Vision для фото-задач, "
             "STT/TTS для голосовых, + Midjourney (иллюстрации) и Luma/Runway (учебные ролики).\n\n"
             "Быстрые действия ниже. Можно написать свободный запрос (например: "
-            ""сделай конспект из PDF", "объясни интегралы с примерами")."
+            "«сделай конспект из PDF», «объясни интегралы с примерами»)."
         )
     if key == "work":
         return (
@@ -1741,7 +1759,7 @@ def _mode_desc(key: str) -> str:
             "Гибрид: GPT-5 (резюме/письма/аналитика), Vision (таблицы/скрины), "
             "STT/TTS (диктовка/озвучка), + Midjourney (визуалы), Luma/Runway (презентационные ролики).\n\n"
             "Быстрые действия ниже. Можно написать свободный запрос (например: "
-            ""адаптируй резюме под вакансию PM", "написать коммерческое предложение")."
+            "«адаптируй резюме под вакансию PM», «написать коммерческое предложение»)."
         )
     if key == "fun":
         return (
@@ -1749,7 +1767,7 @@ def _mode_desc(key: str) -> str:
             "Гибрид: GPT-5 (идеи, сценарии), Midjourney (картинки), Luma/Runway (шорты/риелсы), "
             "STT/TTS (озвучка). Всё для быстрых творческих штук.\n\n"
             "Быстрые действия ниже. Можно написать свободный запрос (например: "
-            ""сделай сценарий 30-сек шорта про кота-бариста")."
+            "«сделай сценарий 30-сек шорта про кота-бариста»)."
         )
     return "Режим не найден."
 
@@ -1975,7 +1993,7 @@ async def on_mode_cb(update, context):
 
     await q.answer()
 
-# Fallback — если пользователь нажмёт "Учёба/Работа/Развлечения" обычной кнопкой/текстом
+# Fallback — если пользователь нажмёт «Учёба/Работа/Развлечения» обычной кнопкой/текстом
 async def on_mode_text(update, context):
     text = (update.effective_message.text or "").strip().lower()
     mapping = {
@@ -2023,7 +2041,7 @@ def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
     )
 
 # RU-клавиатура по умолчанию (на случай редких мест без user_id)
-main_kb = main_keyboard()
+main_kb = main_keyboard(0)
 
 # ───────── /start ─────────
 async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2050,7 +2068,7 @@ async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Требование: выбор языка показываем при каждом новом /start (не только первый раз).
-    Меню показываем после нажатия кнопки языка (или "Продолжить").
+    Меню показываем после нажатия кнопки языка (или «Продолжить»).
     """
     uid = update.effective_user.id
 
@@ -2111,13 +2129,13 @@ _CAP_VIDEO = re.compile(r"(видео|ролик|shorts?|reels?|clip)", re.I)
 def capability_answer(text: str) -> str | None:
     """
     Короткие ответы на вопросы вида:
-    - "ты можешь анализировать PDF?"
-    - "ты умеешь работать с электронными книгами?"
-    - "ты можешь создавать видео?"
-    - "ты можешь оживить фотографию?" и т.п.
+    - «ты можешь анализировать PDF?»
+    - «ты умеешь работать с электронными книгами?»
+    - «ты можешь создавать видео?»
+    - «ты можешь оживить фотографию?» и т.п.
 
     Важно: не перехватываем реальные команды
-    "сделай видео…", "сгенерируй картинку…" и т.д.
+    «сделай видео…», «сгенерируй картинку…» и т.д.
     """
 
     tl = (text or "").strip().lower()
@@ -2352,7 +2370,7 @@ SUBS_TIERS = {
         "features": [
             "📚 Глубокий разбор PDF/DOCX/EPUB",
             "🎬 Reels/Shorts по смыслу, видео из фото",
-            "🖼 Outpaint и "оживление" старых фото",
+            "🖼 Outpaint и «оживление» старых фото",
         ],
     },
     "ultimate": {
@@ -2474,7 +2492,7 @@ def plan_pay_kb(plan_key: str) -> InlineKeyboardMarkup:
         ]
     ])
 
-# Кнопка "⭐ Подписка · Помощь"
+# Кнопка «⭐ Подписка · Помощь»
 async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = _plans_overview_text(user_id)
@@ -2891,7 +2909,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "images": "Теперь любой текст будет трактоваться как промпт для картинки (Images).",
             "kling": "Теперь любой текст будет трактоваться как промпт для видео в Kling.",
             "luma": "Теперь любой текст будет трактоваться как промпт для видео в Luma.",
-            "runway": "Runway выбран. Для видео используйте "сделай видео…" (текст→видео может быть отключён).",
+            "runway": "Runway выбран. Для видео используйте «сделай видео…» (текст→видео может быть отключён).",
             "sora": "Sora выбран (через Comet). Если ключи/эндпоинт не заданы — покажу подсказку.",
             "gemini": "Gemini выбран (через Comet). Если ключи/эндпоинт не заданы — будет подсказка/фолбэк.",
             "suno": "Suno выбран (музыка). Сейчас включён как режим-подсказка.",
@@ -3138,7 +3156,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.edit_message_text(
                     f"На балансе недостаточно средств.\n"
                     f"Требуется ещё ≈ ${need:.2f}.\n\n"
-                    "Пополните баланс через меню "🧾 Баланс".",
+                    "Пополните баланс через меню «🧾 Баланс».",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]]
                     ),
@@ -3175,8 +3193,8 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             amount_rub = _calc_oneoff_price_rub(grp, need_usd or 0.0)
             await q.edit_message_text(
-                f"Ваш дневной лимит по "{engine}" исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
-                "или пополните баланс в "🧾 Баланс".",
+                f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
+                "или пополните баланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
@@ -3200,7 +3218,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.edit_message_text("Режим выключен.")
             else:
                 await q.edit_message_text(
-                    f"Режим "{mode}" включён. Напишите задание."
+                    f"Режим «{mode}» включён. Напишите задание."
                 )
             return
 
@@ -3579,7 +3597,7 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
     if a in allowed:
         return a
 
-    # Мягкая коррекция "похожих" форматов
+    # Мягкая коррекция «похожих» форматов
     mapping = {
         "4:5": "3:4",
         "5:4": "4:3",
@@ -3725,7 +3743,7 @@ async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
             await asyncio.sleep(6.0)
         with contextlib.suppress(Exception):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                text="⌛ CryptoBot: время ожидания вышло. Нажмите "Проверить оплату" позже.")
+                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» позже.")
     except Exception as e:
         log.exception("crypto poll error: %s", e)
 
@@ -3764,7 +3782,7 @@ async def _poll_crypto_sub_invoice(
         with contextlib.suppress(Exception):
             await context.bot.edit_message_text(
                 chat_id=chat_id, message_id=message_id,
-                text="⌛ CryptoBot: время ожидания вышло. Нажмите "Проверить оплату" или оплатите заново."
+                text="⌛ CryptoBot: время ожидания вышло. Нажмите «Проверить оплату» или оплатите заново."
             )
     except Exception as e:
         log.exception("crypto poll (subscription) error: %s", e)
@@ -3878,7 +3896,7 @@ async def on_text(
 
     # Намёк на генерацию видеоролика
     mtype, rest = detect_media_intent(text)
-    # Принудительный выбор движка (через меню "Движки")
+    # Принудительный выбор движка (через меню «Движки»)
     user_id = update.effective_user.id
     forced_engine = "gpt"
     with contextlib.suppress(Exception):
@@ -3905,7 +3923,7 @@ async def on_text(
                 return await _run_sora_video(update, context, prompt, duration, aspect)
             return False
 
-        # Платёж/лимиты — учитываем как "oneoff" видео
+        # Платёж/лимиты — учитываем как «oneoff» видео
         est = float(KLING_UNIT_COST_USD or 0.40) * duration
         if forced_engine == "luma":
             est = float(LUMA_UNIT_COST_USD or 0.40) * duration
@@ -3941,7 +3959,7 @@ async def on_text(
     if (mtype is None) and forced_engine in ("suno", "midjourney"):
         if forced_engine == "suno":
             await update.effective_message.reply_text(
-                "🎵 Suno выбран. Напишите: "песня: жанр, настроение, тема, длительность" — и я подготовлю текст/структуру.\n"
+                "🎵 Suno выбран. Напишите: «песня: жанр, настроение, тема, длительность» — и я подготовлю текст/структуру.\n"
                 "Если у вас есть API/провайдер — добавьте ключи, и я подключу генерацию."
             )
         else:
@@ -3991,7 +4009,7 @@ async def on_text(
         await update.effective_message.reply_text(
             f"Что использовать?\n"
             f"Длительность: {duration} c • Аспект: {aspect}\n"
-            f"Запрос: "{prompt}"",
+            f"Запрос: «{prompt}»",
             reply_markup=kb,
         )
         return
@@ -4244,7 +4262,7 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
     if a in allowed:
         return a
 
-    # Мягкая коррекция "похожих" форматов
+    # Мягкая коррекция «похожих» форматов
     mapping = {
         "4:5": "3:4",
         "5:4": "4:3",
@@ -5238,7 +5256,7 @@ async def _run_luma_video(
                     if _is_luma_ip_error(js):
                         await update.effective_message.reply_text(
                             "❌ Luma отклонила запрос из-за IP (защищённый персонаж/бренд в тексте).\n"
-                            "Переформулируй без названий (например: "плюшевый медвежонок…") и попробуй ещё раз."
+                            "Переформулируй без названий (например: «плюшевый медвежонок…») и попробуй ещё раз."
                         )
                     else:
                         await update.effective_message.reply_text(
@@ -5436,7 +5454,7 @@ async def _run_luma_image2video(
                     if _is_luma_ip_error(js):
                         await msg.reply_text(
                             "❌ Luma отклонила запрос из-за IP (защищённый персонаж/бренд в тексте).\n"
-                            "Переформулируй без названий (например: "плюшевый медвежонок…") и попробуй ещё раз."
+                            "Переформулируй без названий (например: «плюшевый медвежонок…») и попробуй ещё раз."
                         )
                     else:
                         await msg.reply_text(f"❌ Luma (image→video) ошибка: {_short_luma_error(js)}")
@@ -5554,7 +5572,7 @@ async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# ───── Клавиатура "Развлечения" с новыми кнопками ─────
+# ───── Клавиатура «Развлечения» с новыми кнопками ─────
 def _fun_quick_kb() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="fun:ideas")],
@@ -5617,7 +5635,7 @@ async def revive_old_photo_flow(
     if not img_bytes:
         await msg.reply_text(
             "Сначала пришли фото (желательно портрет), "
-            "а потом нажми "🪄 Оживить старое фото" или кнопку под фотографией."
+            "а потом нажми «🪄 Оживить старое фото» или кнопку под фотографией."
         )
         return True
 
@@ -5690,7 +5708,7 @@ async def revive_old_photo_flow(
     return True
 
 
-# ───── Обработчик быстрых действий "Развлечения" (revive + выбор движка) ─────
+# ───── Обработчик быстрых действий «Развлечения» (revive + выбор движка) ─────
 
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -5835,7 +5853,7 @@ async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "• 🎞 Видео: разбор смысла, таймкоды, *Reels из длинного видео*, идеи/скрипт, субтитры.\n"
         "• 🎧 Аудио/книги: транскрипция, тезисы, план.\n\n"
         "_Подсказки:_ просто загрузите файл или пришлите ссылку + короткое ТЗ. "
-        "Для фото — можно нажать "🪄 Оживить старое фото", для видео — "🎬 Reels из длинного видео"."
+        "Для фото — можно нажать «🪄 Оживить старое фото», для видео — «🎬 Reels из длинного видео»."
     )
     await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
@@ -6346,114 +6364,3 @@ def get_welcome_text(lang: str) -> str:
 # SUNO_API_KEY=...
 # MIDJOURNEY_API_KEY=...
 # ================================================================
-
-
-
-# ===== PATCH: i18n mode labels =====
-I18N.setdefault("ru", {}).update({
-    "mode_study": "📚 Учёба",
-    "mode_work": "💼 Работа",
-    "mode_fun": "🔥 Развлечения",
-})
-I18N.setdefault("en", {}).update({
-    "mode_study": "📚 Study",
-    "mode_work": "💼 Work",
-    "mode_fun": "🔥 Fun",
-})
-I18N.setdefault("de", {}).update({
-    "mode_study": "📚 Lernen",
-    "mode_work": "💼 Arbeit",
-    "mode_fun": "🔥 Unterhaltung",
-})
-I18N.setdefault("fr", {}).update({
-    "mode_study": "📚 Études",
-    "mode_work": "💼 Travail",
-    "mode_fun": "🔥 Divertissement",
-})
-I18N.setdefault("th", {}).update({
-    "mode_study": "📚 การเรียน",
-    "mode_work": "💼 งาน",
-    "mode_fun": "🔥 ความบันเทิง",
-})
-# ===== END PATCH =====
-
-
-
-# ===== PATCH: mode buttons callback routing =====
-def _handle_mode_callback(update, context):
-    try:
-        q = update.callback_query
-        data = q.data
-        uid = q.from_user.id
-
-        if data in ("btn_study", "btn_work", "btn_fun"):
-            mode = data.replace("btn_", "")
-            kv_set(f"user:{uid}:mode", mode)
-            q.answer()
-
-            text = {
-                "study": t(uid, "mode_study"),
-                "work": t(uid, "mode_work"),
-                "fun": t(uid, "mode_fun"),
-            }.get(mode, "")
-
-            context.bot.send_message(
-                chat_id=uid,
-                text=f"✅ {text}",
-                reply_markup=main_keyboard(uid),
-            )
-            return True
-    except Exception as e:
-        log.exception("mode callback error: %s", e)
-    return False
-# ===== END PATCH =====
-
-
-
-# ===== PATCH: register mode callback handler =====
-try:
-    application.add_handler(CallbackQueryHandler(_handle_mode_callback, pattern="^btn_"))
-except Exception:
-    pass
-# ===== END PATCH =====
-
-
-
-# =======================
-# UNIFIED PATCH (Variant A)
-# Fix: SQLite kv init, get_lang safety, main_keyboard call
-# =======================
-
-# --- SAFE KV INIT ---
-def _db_init_kv_safe():
-    import sqlite3
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)")
-    con.commit()
-    con.close()
-
-# --- SAFE KV GET ---
-def kv_get(key: str, default: str | None = None) -> str | None:
-    try:
-        _db_init_kv_safe()
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-        cur.execute("SELECT value FROM kv WHERE key=?", (key,))
-        row = cur.fetchone()
-        con.close()
-        return row[0] if row else default
-    except Exception:
-        return default
-
-# --- SAFE LANG ---
-def get_lang(user_id: int) -> str:
-    try:
-        lang = (kv_get(_lang_key(user_id), "") or "").strip()
-        return lang if lang in I18N else DEFAULT_LANG
-    except Exception:
-        return DEFAULT_LANG
-
-# =======================
-# END PATCH
-# =======================
