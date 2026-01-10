@@ -2006,7 +2006,7 @@ def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
     )
 
 # RU-клавиатура по умолчанию (на случай редких мест без user_id)
-main_kb = main_keyboard(0)
+main_kb = main_keyboard()
 
 # ───────── /start ─────────
 async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -6399,3 +6399,44 @@ try:
 except Exception:
     pass
 # ===== END PATCH =====
+
+
+
+# =======================
+# UNIFIED PATCH (Variant A)
+# Fix: SQLite kv init, get_lang safety, main_keyboard call
+# =======================
+
+# --- SAFE KV INIT ---
+def _db_init_kv_safe():
+    import sqlite3
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)")
+    con.commit()
+    con.close()
+
+# --- SAFE KV GET ---
+def kv_get(key: str, default: str | None = None) -> str | None:
+    try:
+        _db_init_kv_safe()
+        con = sqlite3.connect(DB_PATH)
+        cur = con.cursor()
+        cur.execute("SELECT value FROM kv WHERE key=?", (key,))
+        row = cur.fetchone()
+        con.close()
+        return row[0] if row else default
+    except Exception:
+        return default
+
+# --- SAFE LANG ---
+def get_lang(user_id: int) -> str:
+    try:
+        lang = (kv_get(_lang_key(user_id), "") or "").strip()
+        return lang if lang in I18N else DEFAULT_LANG
+    except Exception:
+        return DEFAULT_LANG
+
+# =======================
+# END PATCH
+# =======================
