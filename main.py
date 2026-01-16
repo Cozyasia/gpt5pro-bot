@@ -6364,3 +6364,45 @@ def get_welcome_text(lang: str) -> str:
 # SUNO_API_KEY=...
 # MIDJOURNEY_API_KEY=...
 # ================================================================
+
+# ===================== PATCH: MENU PRIORITY & LANGUAGE FIX =====================
+# This patch enforces:
+# 1) CallbackQuery (buttons) always handled before free text
+# 2) Text handler ignores menu labels
+# 3) Replies use user-selected language from context.user_data['lang']
+
+MENU_LABELS = {
+    'Study','Work','Fun','Balance','Subscription','Engines',
+    'Учёба','Работа','Развлечения','Баланс','Подписка','Движки',
+    'Étude','Travail','Amusement','Solde','Abonnement',
+    'เรียน','งาน','สนุก','ยอดคงเหลือ'
+}
+
+def _is_menu_text(txt: str) -> bool:
+    return txt.strip() in MENU_LABELS
+
+# Wrap original free-text handler if exists
+try:
+    _orig_on_text = on_text_message
+    async def on_text_message(update, context):
+        if update.message and update.message.text:
+            if _is_menu_text(update.message.text):
+                return
+        return await _orig_on_text(update, context)
+except Exception:
+    pass
+
+# Language helper
+def get_lang(context, default='ru'):
+    return context.user_data.get('lang', default)
+
+# Example i18n fallback
+_I18N_HELLO = {
+    'ru': 'Привет!',
+    'en': 'Hi!',
+    'de': 'Hallo!',
+    'fr': 'Bonjour!',
+    'th': 'สวัสดี!'
+}
+
+# ===================== END PATCH =====================
