@@ -34,8 +34,8 @@ from telegram.ext import (
 )
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
-# âââââââââ TTS imports âââââââââ
-import contextlib  # ÑÐ¶Ðµ Ñ ÑÐµÐ±Ñ Ð²ÑÑÐµ ÐµÑÑÑ, Ð´ÑÐ±Ð»Ð¸ÑÐ¾Ð²Ð°ÑÑ ÐÐ Ð½Ð°Ð´Ð¾, ÐµÑÐ»Ð¸ Ð¸Ð¼Ð¿Ð¾ÑÑ ÑÑÐ¾Ð¸Ñ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ TTS imports Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
+import contextlib  # ÃÃÂ¶ÃÂµ Ã ÃÃÂµÃÃ ÃÂ²ÃÃÃÂµ ÃÂµÃÃÃ, ÃÂ´ÃÃÃÂ»ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÃ ÃÂ½ÃÂ°ÃÂ´ÃÂ¾, ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¸ÃÂ¼ÃÂ¿ÃÂ¾ÃÃ ÃÃÃÂ¾ÃÂ¸Ã
 
 # Optional PIL / rembg for photo tools
 try:
@@ -48,7 +48,7 @@ try:
 except Exception:
     rembg_remove = None
 
-# âââââââââ LOGGING âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ LOGGING Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -56,13 +56,13 @@ logging.basicConfig(
 log = logging.getLogger("gpt-bot")
 
 
-# âââââââââ ENV âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ENV Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 def _env_float(name: str, default: float) -> float:
     """
-    ÐÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾Ðµ ÑÑÐµÐ½Ð¸Ðµ float Ð¸Ð· ENV:
-    - Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑ Ð¸ '4,99', Ð¸ '4.99'
-    - Ð¿ÑÐ¸ Ð¾ÑÐ¸Ð±ÐºÐµ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ default
+    ÃÃÂµÃÂ·ÃÂ¾ÃÂ¿ÃÂ°ÃÃÂ½ÃÂ¾ÃÂµ ÃÃÃÂµÃÂ½ÃÂ¸ÃÂµ float ÃÂ¸ÃÂ· ENV:
+    - ÃÂ¿ÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃ ÃÂ¸ '4,99', ÃÂ¸ '4.99'
+    - ÃÂ¿ÃÃÂ¸ ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂµ ÃÂ²ÃÂ¾ÃÂ·ÃÂ²ÃÃÂ°ÃÃÂ°ÃÂµÃ default
     """
     raw = os.environ.get(name)
     if not raw:
@@ -80,7 +80,7 @@ PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
 
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
-OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()  # OpenRouter Ð¸Ð»Ð¸ ÑÐ²Ð¾Ð¹ Ð¿ÑÐ¾ÐºÑÐ¸ Ð´Ð»Ñ ÑÐµÐºÑÑÐ°
+OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()  # OpenRouter ÃÂ¸ÃÂ»ÃÂ¸ ÃÃÂ²ÃÂ¾ÃÂ¹ ÃÂ¿ÃÃÂ¾ÃÂºÃÃÂ¸ ÃÂ´ÃÂ»Ã ÃÃÂµÃÂºÃÃÃÂ°
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
 
 OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "").strip()
@@ -93,10 +93,10 @@ WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
-# ÐÐ±ÑÐ¸Ð¹ ÐºÐ»ÑÑ CometAPI (Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ Ð¸ Ð´Ð»Ñ Kling, Ð¸ Ð´Ð»Ñ Runway)
+# ÃÃÃÃÂ¸ÃÂ¹ ÃÂºÃÂ»ÃÃ CometAPI (ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÃÃ ÃÂ¸ ÃÂ´ÃÂ»Ã Kling, ÃÂ¸ ÃÂ´ÃÂ»Ã Runway)
 COMETAPI_KEY     = os.environ.get("COMETAPI_KEY", "").strip()
 
-# ÐÐÐÐÐ: Ð¿ÑÐ¾Ð²Ð°Ð¹Ð´ÐµÑ ÑÐµÐºÑÑÐ° (openai / openrouter Ð¸ Ñ.Ð¿.)
+# ÃÃÃÃÃ: ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃ ÃÃÂµÃÂºÃÃÃÂ° (openai / openrouter ÃÂ¸ Ã.ÃÂ¿.)
 TEXT_PROVIDER    = os.environ.get("TEXT_PROVIDER", "").strip()
 
 # STT:
@@ -110,53 +110,53 @@ OPENAI_TTS_MODEL     = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts").str
 OPENAI_TTS_VOICE     = os.environ.get("OPENAI_TTS_VOICE", "alloy").strip()
 TTS_MAX_CHARS        = int((os.environ.get("TTS_MAX_CHARS") or "1000").strip() or "1000")
 
-# Images (ÑÐ¾Ð»Ð±ÑÐº â OpenAI Images)
+# Images (ÃÃÂ¾ÃÂ»ÃÃÃÂº Ã¢ OpenAI Images)
 OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
 IMAGES_MODEL        = "gpt-image-1"
 
-# âââââââââ Runway / CometAPI (ÑÐ½Ð¸ÑÐ¸ÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð½Ð°Ñ ÐºÐ¾Ð½ÑÐ¸Ð³ÑÑÐ°ÑÐ¸Ñ) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Runway / CometAPI (ÃÃÂ½ÃÂ¸ÃÃÂ¸ÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÂ°Ã ÃÂºÃÂ¾ÃÂ½ÃÃÂ¸ÃÂ³ÃÃÃÂ°ÃÃÂ¸Ã) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
-# API-ÐºÐ»ÑÑ:
-# 1) ÐÑÐ»Ð¸ RUNWAY_API_KEY ÑÐºÐ°Ð·Ð°Ð½ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ Ð¿ÑÑÐ¼Ð¾Ð¹ Runway (ÑÐµÐºÐ¾Ð¼ÐµÐ½Ð´ÑÐµÑÑÑ Ð´Ð»Ñ imageâvideo)
-# 2) ÐÑÐ»Ð¸ Ð½ÐµÑ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ CometAPI_KEY (ÑÐ¾Ð²Ð¼ÐµÑÑÐ¸Ð¼Ð¾ÑÑÑ Ñ ÑÐ²Ð¾Ð¸Ð¼ ÑÐµÐºÑÑÐ¸Ð¼ Ð¿ÑÐ¾ÐµÐºÑÐ¾Ð¼)
+# API-ÃÂºÃÂ»ÃÃ:
+# 1) ÃÃÃÂ»ÃÂ¸ RUNWAY_API_KEY ÃÃÂºÃÂ°ÃÂ·ÃÂ°ÃÂ½ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ ÃÂ¿ÃÃÃÂ¼ÃÂ¾ÃÂ¹ Runway (ÃÃÂµÃÂºÃÂ¾ÃÂ¼ÃÂµÃÂ½ÃÂ´ÃÃÂµÃÃÃ ÃÂ´ÃÂ»Ã imageÃ¢video)
+# 2) ÃÃÃÂ»ÃÂ¸ ÃÂ½ÃÂµÃ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ CometAPI_KEY (ÃÃÂ¾ÃÂ²ÃÂ¼ÃÂµÃÃÃÂ¸ÃÂ¼ÃÂ¾ÃÃÃ Ã ÃÃÂ²ÃÂ¾ÃÂ¸ÃÂ¼ ÃÃÂµÃÂºÃÃÃÂ¸ÃÂ¼ ÃÂ¿ÃÃÂ¾ÃÂµÃÂºÃÃÂ¾ÃÂ¼)
 RUNWAY_API_KEY = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
 
-# ÐÐ¾Ð´ÐµÐ»Ñ (Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ Gen-3a Turbo)
+# ÃÃÂ¾ÃÂ´ÃÂµÃÂ»Ã (ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÂ¾ÃÂ»ÃÃÂ°ÃÂ½ÃÂ¸Ã Gen-3a Turbo)
 RUNWAY_MODEL = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
 
-# Ð ÐµÐºÐ¾Ð¼ÐµÐ½Ð´ÑÐµÐ¼ÑÐ¹ ratio â ÑÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð² Ð²Ð¸Ð´Ðµ "1280:720", "720:1280", "960:960"
+# Ã ÃÂµÃÂºÃÂ¾ÃÂ¼ÃÂµÃÂ½ÃÂ´ÃÃÂµÃÂ¼ÃÃÂ¹ ratio Ã¢ ÃÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ² ÃÂ²ÃÂ¸ÃÂ´ÃÂµ "1280:720", "720:1280", "960:960"
 RUNWAY_RATIO = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
 
-# ÐÐ»Ð¸ÑÐµÐ»ÑÐ½Ð¾ÑÑÑ video default
+# ÃÃÂ»ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÃÃ video default
 RUNWAY_DURATION_S = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or "5")
 
-# ÐÐ°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½Ð¾Ðµ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ðµ ÑÐµÐ·ÑÐ»ÑÑÐ°ÑÐ° (ÑÐµÐº)
+# ÃÃÂ°ÃÂºÃÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ÃÂµ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÃÂµÃÂ·ÃÃÂ»ÃÃÃÂ°ÃÃÂ° (ÃÃÂµÃÂº)
 RUNWAY_MAX_WAIT_S = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or "1200")
 
-# ÐÐ°Ð·Ð° API:
-# ÐÐÐÐÐ: Runway imageâvideo ÐºÐ¾ÑÑÐµÐºÑÐ½Ð¾ ÑÐ°Ð±Ð¾ÑÐ°ÐµÑ Ð¢ÐÐÐ¬ÐÐ ÑÐµÑÐµÐ· Ð¾ÑÐ¸ÑÐ¸Ð°Ð»ÑÐ½ÑÑ Ð±Ð°Ð·Ñ:
+# ÃÃÂ°ÃÂ·ÃÂ° API:
+# ÃÃÃÃÃ: Runway imageÃ¢video ÃÂºÃÂ¾ÃÃÃÂµÃÂºÃÃÂ½ÃÂ¾ ÃÃÂ°ÃÃÂ¾ÃÃÂ°ÃÂµÃ ÃÂ¢ÃÃÃÂ¬ÃÃ ÃÃÂµÃÃÂµÃÂ· ÃÂ¾ÃÃÂ¸ÃÃÂ¸ÃÂ°ÃÂ»ÃÃÂ½ÃÃ ÃÃÂ°ÃÂ·Ã:
 #   https://api.runwayml.com
-# CometAPI Ð¾ÑÑÐ°ÑÑÑÑ ÐºÐ°Ðº fallback (ÑÐµÑÐµÐ· env), Ð½Ð¾ Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ ÑÑÐ°Ð²Ð¸Ð¼ Ð¾ÑÐ¸ÑÐ¸Ð°Ð»ÑÐ½ÑÐ¹ URL
+# CometAPI ÃÂ¾ÃÃÃÂ°ÃÃÃÃ ÃÂºÃÂ°ÃÂº fallback (ÃÃÂµÃÃÂµÃÂ· env), ÃÂ½ÃÂ¾ ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÂ¾ÃÂ»ÃÃÂ°ÃÂ½ÃÂ¸Ã ÃÃÃÂ°ÃÂ²ÃÂ¸ÃÂ¼ ÃÂ¾ÃÃÂ¸ÃÃÂ¸ÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ URL
 RUNWAY_BASE_URL = (
     os.environ.get("RUNWAY_BASE_URL", "https://api.runwayml.com")
         .strip()
         .rstrip("/")
 )
 
-# Ð­Ð½Ð´Ð¿Ð¾Ð¸Ð½ÑÑ Runway (Ð¾ÑÐ¸ÑÐ¸Ð°Ð»ÑÐ½ÑÐµ Ð¸ ÑÐ¾Ð²Ð¼ÐµÑÑÐ¸Ð¼ÑÐµ)
-RUNWAY_IMAGE2VIDEO_PATH = "/v1/image_to_video"      # Ð½Ð¾Ð²ÑÐ¹ ÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐ¹ endpoint Runway
-RUNWAY_TEXT2VIDEO_PATH  = "/v1/text_to_video"       # ÑÐ½Ð¸Ð²ÐµÑÑÐ°Ð»ÑÐ½ÑÐ¹ endpoint Runway
-RUNWAY_STATUS_PATH      = "/v1/tasks/{id}"          # ÐµÐ´Ð¸Ð½ÑÐ¹ ÑÑÐ°ÑÑÑÐ½ÑÐ¹ endpoint Runway
+# ÃÂ­ÃÂ½ÃÂ´ÃÂ¿ÃÂ¾ÃÂ¸ÃÂ½ÃÃ Runway (ÃÂ¾ÃÃÂ¸ÃÃÂ¸ÃÂ°ÃÂ»ÃÃÂ½ÃÃÂµ ÃÂ¸ ÃÃÂ¾ÃÂ²ÃÂ¼ÃÂµÃÃÃÂ¸ÃÂ¼ÃÃÂµ)
+RUNWAY_IMAGE2VIDEO_PATH = "/v1/image_to_video"      # ÃÂ½ÃÂ¾ÃÂ²ÃÃÂ¹ ÃÂºÃÂ¾ÃÃÃÂµÃÂºÃÃÂ½ÃÃÂ¹ endpoint Runway
+RUNWAY_TEXT2VIDEO_PATH  = "/v1/text_to_video"       # ÃÃÂ½ÃÂ¸ÃÂ²ÃÂµÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ endpoint Runway
+RUNWAY_STATUS_PATH      = "/v1/tasks/{id}"          # ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÃÂ¹ ÃÃÃÂ°ÃÃÃÃÂ½ÃÃÂ¹ endpoint Runway
 
-# ÐÐµÑÑÐ¸Ñ Runway API (Ð¾Ð±ÑÐ·Ð°ÑÐµÐ»ÑÐ½Ð¾!)
+# ÃÃÂµÃÃÃÂ¸Ã Runway API (ÃÂ¾ÃÃÃÂ·ÃÂ°ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾!)
 RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 
-# âââââââââ Luma âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Luma Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
 
-# ÐÑÐµÐ³Ð´Ð° Ð³Ð°ÑÐ°Ð½ÑÐ¸ÑÑÐµÐ¼ Ð½ÐµÐ¿ÑÑÑÐ¾Ð¹ model/aspect, Ð´Ð°Ð¶Ðµ ÐµÑÐ»Ð¸ Ð² ENV Ð¿ÑÑÑÐ°Ñ ÑÑÑÐ¾ÐºÐ°
+# ÃÃÃÂµÃÂ³ÃÂ´ÃÂ° ÃÂ³ÃÂ°ÃÃÂ°ÃÂ½ÃÃÂ¸ÃÃÃÂµÃÂ¼ ÃÂ½ÃÂµÃÂ¿ÃÃÃÃÂ¾ÃÂ¹ model/aspect, ÃÂ´ÃÂ°ÃÂ¶ÃÂµ ÃÂµÃÃÂ»ÃÂ¸ ÃÂ² ENV ÃÂ¿ÃÃÃÃÂ°Ã ÃÃÃÃÂ¾ÃÂºÃÂ°
 _LUMA_MODEL_ENV  = (os.environ.get("LUMA_MODEL") or "").strip()
 LUMA_MODEL       = _LUMA_MODEL_ENV or "ray-2"
 
@@ -165,7 +165,7 @@ LUMA_ASPECT      = _LUMA_ASPECT_ENV or "16:9"
 
 LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
 
-# ÐÐ°Ð·Ð° ÑÐ¶Ðµ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ /dream-machine/v1 â Ð´Ð°Ð»ÑÑÐµ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ /generations
+# ÃÃÂ°ÃÂ·ÃÂ° ÃÃÂ¶ÃÂµ ÃÃÂ¾ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸Ã /dream-machine/v1 Ã¢ ÃÂ´ÃÂ°ÃÂ»ÃÃÃÂµ ÃÂ´ÃÂ¾ÃÃÂ°ÃÂ²ÃÂ»ÃÃÂµÃÂ¼ /generations
 LUMA_BASE_URL    = (
     os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1")
     .strip()
@@ -174,14 +174,14 @@ LUMA_BASE_URL    = (
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
 
-# ÐÐ°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½ÑÐ¹ ÑÐ°Ð¹Ð¼Ð°ÑÑ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ Luma
+# ÃÃÂ°ÃÂºÃÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÂ¹ÃÂ¼ÃÂ°ÃÃ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã Luma
 LUMA_MAX_WAIT_S  = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
 
-# Luma Images (Ð¾Ð¿ÑÐ¸Ð¾Ð½Ð°Ð»ÑÐ½Ð¾: ÐµÑÐ»Ð¸ Ð½ÐµÑ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ OpenAI Images ÐºÐ°Ðº ÑÐ¾Ð»Ð±ÑÐº)
+# Luma Images (ÃÂ¾ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÂ½ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾: ÃÂµÃÃÂ»ÃÂ¸ ÃÂ½ÃÂµÃ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ OpenAI Images ÃÂºÃÂ°ÃÂº ÃÃÂ¾ÃÂ»ÃÃÃÂº)
 LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
 LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
 
-# Ð¤Ð¾Ð»Ð±ÑÐºÐ¸ Luma
+# ÃÂ¤ÃÂ¾ÃÂ»ÃÃÃÂºÃÂ¸ Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
     os.environ.get("LUMA_FALLBACK_BASE_URL", ""),
@@ -194,7 +194,7 @@ for u in re.split(r"[;,]\s*", _fallbacks_raw):
     if u and u != LUMA_BASE_URL and u not in LUMA_FALLBACKS:
         LUMA_FALLBACKS.append(u)
 
-# âââââââââ Kling (Ð½Ð¾Ð²ÑÐ¹ Ð²Ð¸Ð´ÐµÐ¾Ð´Ð²Ð¸Ð¶Ð¾Ðº ÑÐµÑÐµÐ· CometAPI) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Kling (ÃÂ½ÃÂ¾ÃÂ²ÃÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÃÂµÃÃÂµÃÂ· CometAPI) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 KLING_BASE_URL   = os.environ.get("KLING_BASE_URL", "https://api.cometapi.com").strip().rstrip("/")
 KLING_MODEL_NAME = os.environ.get("KLING_MODEL_NAME", "kling-v1-6").strip()
@@ -204,45 +204,45 @@ KLING_DURATION_S = int((os.environ.get("KLING_DURATION_S") or "5").strip() or 5)
 KLING_MAX_WAIT_S = int((os.environ.get("KLING_MAX_WAIT_S") or "900").strip() or 900)
 KLING_UNIT_COST_USD = float((os.environ.get("KLING_UNIT_COST_USD") or "0.80").replace(",", ".") or "0.80")
 
-# ÐÐ±ÑÐ¸Ð¹ Ð¸Ð½ÑÐµÑÐ²Ð°Ð» Ð¼ÐµÐ¶Ð´Ñ Ð¾Ð¿ÑÐ¾ÑÐ°Ð¼Ð¸ ÑÑÐ°ÑÑÑÐ° Ð·Ð°Ð´Ð°Ñ Ð²Ð¸Ð´ÐµÐ¾
+# ÃÃÃÃÂ¸ÃÂ¹ ÃÂ¸ÃÂ½ÃÃÂµÃÃÂ²ÃÂ°ÃÂ» ÃÂ¼ÃÂµÃÂ¶ÃÂ´Ã ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÂ°ÃÂ¼ÃÂ¸ ÃÃÃÂ°ÃÃÃÃÂ° ÃÂ·ÃÂ°ÃÂ´ÃÂ°Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾
 VIDEO_POLL_DELAY_S = _env_float("VIDEO_POLL_DELAY_S", 6.0)
 
-# âââââââââ ÐÐ­Ð¨Ð / ÐÐÐÐÐÐÐ¬ÐÐÐ Ð¡ÐÐ¡Ð¢ÐÐ¯ÐÐÐ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ­ÃÂ¨Ã / ÃÃÃÃÃÃÃÂ¬ÃÃÃ ÃÂ¡ÃÃÂ¡ÃÂ¢ÃÃÂ¯ÃÃÃ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
-# ÐÐ¾ÑÐ»ÐµÐ´Ð½ÐµÐµ ÑÐ¾ÑÐ¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð´Ð»Ñ Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ð¸ (Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ)
+# ÃÃÂ¾ÃÃÂ»ÃÂµÃÂ´ÃÂ½ÃÂµÃÂµ ÃÃÂ¾ÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»Ã ÃÂ´ÃÂ»Ã ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸ÃÂ¸ (ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã)
 # user_id -> {"bytes": b"...", "url": "https://..."}
 _LAST_ANIM_PHOTO: dict[int, dict] = {}
-# âââââââââ Runway ÑÐµÑÐµÐ· CometAPI âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Runway ÃÃÂµÃÃÂµÃÂ· CometAPI Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
-# ÐÐ»ÑÑ Ð±ÐµÑÑÐ¼ Ð¸Ð· RUNWAY_API_KEY, Ð° ÐµÑÐ»Ð¸ Ð¾Ð½ Ð¿ÑÑÑÐ¾Ð¹ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ Ð¾Ð±ÑÐ¸Ð¹ COMETAPI_KEY
+# ÃÃÂ»ÃÃ ÃÃÂµÃÃÃÂ¼ ÃÂ¸ÃÂ· RUNWAY_API_KEY, ÃÂ° ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¾ÃÂ½ ÃÂ¿ÃÃÃÃÂ¾ÃÂ¹ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ ÃÂ¾ÃÃÃÂ¸ÃÂ¹ COMETAPI_KEY
 RUNWAY_API_KEY     = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
 
-# ÐÐ¾Ð´ÐµÐ»Ñ Runway, ÐºÐ¾ÑÐ¾ÑÐ°Ñ Ð¸Ð´ÑÑ ÑÐµÑÐµÐ· CometAPI
+# ÃÃÂ¾ÃÂ´ÃÂµÃÂ»Ã Runway, ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂ°Ã ÃÂ¸ÃÂ´ÃÃ ÃÃÂµÃÃÂµÃÂ· CometAPI
 RUNWAY_MODEL       = os.environ.get("RUNWAY_MODEL", "gen3a_turbo").strip()
 
-# Ð ÐµÐºÐ¾Ð¼ÐµÐ½Ð´ÑÐµÐ¼ÑÐ¹ ÑÐ¾ÑÐ¼Ð°Ñ â ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ðµ, ÐºÐ°Ðº Ð² Ð½Ð¾Ð²Ð¾Ð¹ Ð²ÐµÑÑÐ¸Ð¸ API (ÑÐ¼. docs Runway)
-# ÐÐ¾Ð¶Ð½Ð¾ Ð·Ð°Ð´Ð°ÑÑ "1280:720", "720:1280", "960:960" Ð¸ Ñ.Ð¿.
+# Ã ÃÂµÃÂºÃÂ¾ÃÂ¼ÃÂµÃÂ½ÃÂ´ÃÃÂµÃÂ¼ÃÃÂ¹ ÃÃÂ¾ÃÃÂ¼ÃÂ°Ã Ã¢ ÃÃÂ°ÃÂ·ÃÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂµ, ÃÂºÃÂ°ÃÂº ÃÂ² ÃÂ½ÃÂ¾ÃÂ²ÃÂ¾ÃÂ¹ ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ¸ API (ÃÃÂ¼. docs Runway)
+# ÃÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ "1280:720", "720:1280", "960:960" ÃÂ¸ Ã.ÃÂ¿.
 RUNWAY_RATIO       = os.environ.get("RUNWAY_RATIO", "1280:720").strip()
 
 RUNWAY_DURATION_S  = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or 5)
 RUNWAY_MAX_WAIT_S  = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "900").strip() or 900)
 
-# ÐÐ°Ð·Ð° Ð¸Ð¼ÐµÐ½Ð½Ð¾ CometAPI (Ð° Ð½Ðµ api.dev.runwayml.com)
+# ÃÃÂ°ÃÂ·ÃÂ° ÃÂ¸ÃÂ¼ÃÂµÃÂ½ÃÂ½ÃÂ¾ CometAPI (ÃÂ° ÃÂ½ÃÂµ api.dev.runwayml.com)
 RUNWAY_BASE_URL          = (os.environ.get("RUNWAY_BASE_URL", "https://api.cometapi.com").strip().rstrip("/"))
 
-# Ð­Ð½Ð´Ð¿Ð¾Ð¸Ð½ÑÑ Runway ÑÐµÑÐµÐ· CometAPI
+# ÃÂ­ÃÂ½ÃÂ´ÃÂ¿ÃÂ¾ÃÂ¸ÃÂ½ÃÃ Runway ÃÃÂµÃÃÂµÃÂ· CometAPI
 RUNWAY_IMAGE2VIDEO_PATH  = "/runwayml/v1/image_to_video"
 RUNWAY_TEXT2VIDEO_PATH   = "/runwayml/v1/text_to_video"
 RUNWAY_STATUS_PATH       = "/runwayml/v1/tasks/{id}"
 
-# ÐÐµÑÑÐ¸Ñ Runway API â Ð¾Ð±ÑÐ·Ð°ÑÐµÐ»ÑÐ½Ð¾ 2024-11-06 (ÐºÐ°Ðº Ð² Ð¸Ñ Ð´Ð¾ÐºÐµ)
+# ÃÃÂµÃÃÃÂ¸Ã Runway API Ã¢ ÃÂ¾ÃÃÃÂ·ÃÂ°ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ 2024-11-06 (ÃÂºÃÂ°ÃÂº ÃÂ² ÃÂ¸Ã ÃÂ´ÃÂ¾ÃÂºÃÂµ)
 RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 
-# âââââââââ Luma âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Luma Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 LUMA_API_KEY     = os.environ.get("LUMA_API_KEY", "").strip()
 
-# ÐÑÐµÐ³Ð´Ð° Ð³Ð°ÑÐ°Ð½ÑÐ¸ÑÑÐµÐ¼ Ð½ÐµÐ¿ÑÑÑÐ¾Ð¹ model/aspect, Ð´Ð°Ð¶Ðµ ÐµÑÐ»Ð¸ Ð² ENV Ð¿ÑÑÑÐ°Ñ ÑÑÑÐ¾ÐºÐ°
+# ÃÃÃÂµÃÂ³ÃÂ´ÃÂ° ÃÂ³ÃÂ°ÃÃÂ°ÃÂ½ÃÃÂ¸ÃÃÃÂµÃÂ¼ ÃÂ½ÃÂµÃÂ¿ÃÃÃÃÂ¾ÃÂ¹ model/aspect, ÃÂ´ÃÂ°ÃÂ¶ÃÂµ ÃÂµÃÃÂ»ÃÂ¸ ÃÂ² ENV ÃÂ¿ÃÃÃÃÂ°Ã ÃÃÃÃÂ¾ÃÂºÃÂ°
 _LUMA_MODEL_ENV  = (os.environ.get("LUMA_MODEL") or "").strip()
 LUMA_MODEL       = _LUMA_MODEL_ENV or "ray-2"
 
@@ -251,7 +251,7 @@ LUMA_ASPECT      = _LUMA_ASPECT_ENV or "16:9"
 
 LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
 
-# ÐÐ°Ð·Ð° ÑÐ¶Ðµ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ /dream-machine/v1 â Ð´Ð°Ð»ÑÑÐµ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ /generations
+# ÃÃÂ°ÃÂ·ÃÂ° ÃÃÂ¶ÃÂµ ÃÃÂ¾ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸Ã /dream-machine/v1 Ã¢ ÃÂ´ÃÂ°ÃÂ»ÃÃÃÂµ ÃÂ´ÃÂ¾ÃÃÂ°ÃÂ²ÃÂ»ÃÃÂµÃÂ¼ /generations
 LUMA_BASE_URL    = (
     os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1")
     .strip()
@@ -260,14 +260,14 @@ LUMA_BASE_URL    = (
 LUMA_CREATE_PATH = "/generations"
 LUMA_STATUS_PATH = "/generations/{id}"
 
-# ÐÐ°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½ÑÐ¹ ÑÐ°Ð¹Ð¼Ð°ÑÑ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ Luma
+# ÃÃÂ°ÃÂºÃÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÂ¹ÃÂ¼ÃÂ°ÃÃ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã Luma
 LUMA_MAX_WAIT_S  = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
 
-# Luma Images (Ð¾Ð¿ÑÐ¸Ð¾Ð½Ð°Ð»ÑÐ½Ð¾: ÐµÑÐ»Ð¸ Ð½ÐµÑ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ OpenAI Images ÐºÐ°Ðº ÑÐ¾Ð»Ð±ÑÐº)
+# Luma Images (ÃÂ¾ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÂ½ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾: ÃÂµÃÃÂ»ÃÂ¸ ÃÂ½ÃÂµÃ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ OpenAI Images ÃÂºÃÂ°ÃÂº ÃÃÂ¾ÃÂ»ÃÃÃÂº)
 LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
 LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
 
-# Ð¤Ð¾Ð»Ð±ÑÐºÐ¸ Luma
+# ÃÂ¤ÃÂ¾ÃÂ»ÃÃÃÂºÃÂ¸ Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
     os.environ.get("LUMA_FALLBACK_BASE_URL", ""),
@@ -280,7 +280,7 @@ for u in re.split(r"[;,]\s*", _fallbacks_raw):
     if u and u != LUMA_BASE_URL and u not in LUMA_FALLBACKS:
         LUMA_FALLBACKS.append(u)
 
-# âââââââââ Kling (Ð½Ð¾Ð²ÑÐ¹ Ð²Ð¸Ð´ÐµÐ¾Ð´Ð²Ð¸Ð¶Ð¾Ðº ÑÐµÑÐµÐ· CometAPI) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Kling (ÃÂ½ÃÂ¾ÃÂ²ÃÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÃÂµÃÃÂµÃÂ· CometAPI) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 KLING_BASE_URL   = os.environ.get("KLING_BASE_URL", "https://api.cometapi.com").strip().rstrip("/")
 KLING_MODEL_NAME = os.environ.get("KLING_MODEL_NAME", "kling-v1-6").strip()
@@ -290,17 +290,17 @@ KLING_DURATION_S = int((os.environ.get("KLING_DURATION_S") or "5").strip() or 5)
 KLING_MAX_WAIT_S = int((os.environ.get("KLING_MAX_WAIT_S") or "900").strip() or 900)
 KLING_UNIT_COST_USD = float((os.environ.get("KLING_UNIT_COST_USD") or "0.80").replace(",", ".") or "0.80")
 
-# ÐÐ±ÑÐ¸Ð¹ Ð¸Ð½ÑÐµÑÐ²Ð°Ð» Ð¼ÐµÐ¶Ð´Ñ Ð¾Ð¿ÑÐ¾ÑÐ°Ð¼Ð¸ ÑÑÐ°ÑÑÑÐ° Ð·Ð°Ð´Ð°Ñ Ð²Ð¸Ð´ÐµÐ¾
+# ÃÃÃÃÂ¸ÃÂ¹ ÃÂ¸ÃÂ½ÃÃÂµÃÃÂ²ÃÂ°ÃÂ» ÃÂ¼ÃÂµÃÂ¶ÃÂ´Ã ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÂ°ÃÂ¼ÃÂ¸ ÃÃÃÂ°ÃÃÃÃÂ° ÃÂ·ÃÂ°ÃÂ´ÃÂ°Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾
 VIDEO_POLL_DELAY_S = _env_float("VIDEO_POLL_DELAY_S", 6.0)
 
-# âââââââââ ÐÐ­Ð¨Ð / ÐÐÐÐÐÐÐ¬ÐÐÐ Ð¡ÐÐ¡Ð¢ÐÐ¯ÐÐÐ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ­ÃÂ¨Ã / ÃÃÃÃÃÃÃÂ¬ÃÃÃ ÃÂ¡ÃÃÂ¡ÃÂ¢ÃÃÂ¯ÃÃÃ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
-# ÐÐ¾ÑÐ»ÐµÐ´Ð½ÐµÐµ ÑÐ¾ÑÐ¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð´Ð»Ñ Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ð¸ (Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ)
+# ÃÃÂ¾ÃÃÂ»ÃÂµÃÂ´ÃÂ½ÃÂµÃÂµ ÃÃÂ¾ÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»Ã ÃÂ´ÃÂ»Ã ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸ÃÂ¸ (ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã)
 # user_id -> {"bytes": b"...", "url": "https://..."}
 _LAST_ANIM_PHOTO: dict[int, dict] = {}
 
-# âââââââââ UTILS ---------
-_LUMA_ACTIVE_BASE = None  # ÐºÑÑ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ³Ð¾ Ð¶Ð¸Ð²Ð¾Ð³Ð¾ Ð±Ð°Ð·Ð¾Ð²Ð¾Ð³Ð¾ URL
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ UTILS ---------
+_LUMA_ACTIVE_BASE = None  # ÃÂºÃÃ ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµÃÂ´ÃÂ½ÃÂµÃÂ³ÃÂ¾ ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¾ÃÂ³ÃÂ¾ ÃÃÂ°ÃÂ·ÃÂ¾ÃÂ²ÃÂ¾ÃÂ³ÃÂ¾ URL
 
 async def _pick_luma_base(client: httpx.AsyncClient) -> str:
     global _LUMA_ACTIVE_BASE
@@ -348,7 +348,7 @@ if not PUBLIC_URL or not PUBLIC_URL.startswith("https://"):
 if not OPENAI_API_KEY:
     raise RuntimeError("ENV OPENAI_API_KEY is missing")
 
-# ââ ÐÐµÐ·Ð»Ð¸Ð¼Ð¸Ñ ââ
+# Ã¢Ã¢ ÃÃÂµÃÂ·ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸Ã Ã¢Ã¢
 def _parse_ids_csv(s: str) -> set[int]:
     return set(int(x) for x in s.split(",") if x.strip().isdigit())
 
@@ -368,7 +368,7 @@ def is_unlimited(user_id: int, username: str | None = None) -> bool:
         return True
     return False
 
-# ââ Premium page URL ââ
+# Ã¢Ã¢ Premium page URL Ã¢Ã¢
 def _make_tariff_url(src: str = "subscribe") -> str:
     base = (WEBAPP_URL or f"{PUBLIC_URL.rstrip('/')}/premium.html").strip()
     if src:
@@ -380,7 +380,7 @@ def _make_tariff_url(src: str = "subscribe") -> str:
     return base
 TARIFF_URL = _make_tariff_url("subscribe")
 
-# ââ OpenAI clients ââ
+# Ã¢Ã¢ OpenAI clients Ã¢Ã¢
 from openai import OpenAI
 
 def _ascii_or_none(s: str | None):
@@ -422,7 +422,7 @@ except TypeError:
 oai_stt = OpenAI(api_key=OPENAI_STT_KEY) if OPENAI_STT_KEY else None
 oai_img = OpenAI(api_key=OPENAI_IMAGE_KEY, base_url=IMAGES_BASE_URL)
 
-# Tavily (Ð¾Ð¿ÑÐ¸Ð¾Ð½Ð°Ð»ÑÐ½Ð¾)
+# Tavily (ÃÂ¾ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÂ½ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾)
 try:
     if TAVILY_API_KEY:
         from tavily import TavilyClient
@@ -432,7 +432,7 @@ try:
 except Exception:
     tavily = None
 
-# âââââââââ DB: subscriptions / usage / wallet / kv âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ DB: subscriptions / usage / wallet / kv Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def db_init():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -521,7 +521,7 @@ def db_init_usage():
     )""")
     # kv store
     cur.execute("""CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)""")
-    # Ð¼Ð¸Ð³ÑÐ°ÑÐ¸Ð¸
+    # ÃÂ¼ÃÂ¸ÃÂ³ÃÃÂ°ÃÃÂ¸ÃÂ¸
     try:
         cur.execute("ALTER TABLE wallet ADD COLUMN usd REAL DEFAULT 0.0")
     except Exception:
@@ -569,13 +569,13 @@ def kv_set(key: str, value: str):
 
 LANGS: list[str] = ["ru", "be", "uk", "de", "en", "fr", "th"]
 LANG_NAMES: dict[str, str] = {
-    "ru": "Ð ÑÑÑÐºÐ¸Ð¹",
-    "be": "ÐÐµÐ»Ð¾ÑÑÑÑÐºÐ¸Ð¹",
-    "uk": "Ð£ÐºÑÐ°Ð¸Ð½ÑÐºÐ¸Ð¹",
+    "ru": "Ã ÃÃÃÃÂºÃÂ¸ÃÂ¹",
+    "be": "ÃÃÂµÃÂ»ÃÂ¾ÃÃÃÃÃÂºÃÂ¸ÃÂ¹",
+    "uk": "ÃÂ£ÃÂºÃÃÂ°ÃÂ¸ÃÂ½ÃÃÂºÃÂ¸ÃÂ¹",
     "de": "Deutsch",
     "en": "English",
-    "fr": "FranÃ§ais",
-    "th": "à¹à¸à¸¢",
+    "fr": "FranÃÂ§ais",
+    "th": "Ã Â¹Ã Â¸Ã Â¸Â¢",
 }
 
 def _lang_key(user_id: int) -> str:
@@ -596,108 +596,108 @@ def set_lang(user_id: int, lang: str) -> None:
 # Mini-dictionary (menus/buttons)
 I18N: dict[str, dict[str, str]] = {
     "ru": {
-        "choose_lang": "ð ÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÐ·ÑÐº",
-        "lang_set": "â Ð¯Ð·ÑÐº ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½",
-        "menu_title": "ÐÐ»Ð°Ð²Ð½Ð¾Ðµ Ð¼ÐµÐ½Ñ",
-        "btn_engines": "ð§  ÐÐ²Ð¸Ð¶ÐºÐ¸",
-        "btn_sub": "â­ ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° â¢ ÐÐ¾Ð¼Ð¾ÑÑ",
-        "btn_wallet": "ð§¾ ÐÐ°Ð»Ð°Ð½Ñ",
-        "btn_video": "ð Ð¡Ð¾Ð·Ð´Ð°ÑÑ Ð²Ð¸Ð´ÐµÐ¾",
-        "btn_photo": "ð¼ ÐÐ¶Ð¸Ð²Ð¸ÑÑ ÑÐ¾ÑÐ¾",
-        "btn_help": "â ÐÐ¾Ð¼Ð¾ÑÑ",
-        "btn_back": "â¬ï¸ ÐÐ°Ð·Ð°Ð´",
-        "btn_study": "ð Ð£ÑÑÐ±Ð°",
-        "btn_work": "ð¼ Ð Ð°Ð±Ð¾ÑÐ°",
-        "btn_fun": "ð Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ",
+        "choose_lang": "Ã° ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÂ·ÃÃÂº",
+        "lang_set": "Ã¢ ÃÂ¯ÃÂ·ÃÃÂº ÃÃÃÃÂ°ÃÂ½ÃÂ¾ÃÂ²ÃÂ»ÃÂµÃÂ½",
+        "menu_title": "ÃÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÂ¾ÃÂµ ÃÂ¼ÃÂµÃÂ½Ã",
+        "btn_engines": "Ã°Â§  ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸",
+        "btn_sub": "Ã¢Â­ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° Ã¢Â¢ ÃÃÂ¾ÃÂ¼ÃÂ¾ÃÃ",
+        "btn_wallet": "Ã°Â§Â¾ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã",
+        "btn_video": "Ã° ÃÂ¡ÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾",
+        "btn_photo": "Ã°Â¼ ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÂ¾ÃÃÂ¾",
+        "btn_help": "Ã¢ ÃÃÂ¾ÃÂ¼ÃÂ¾ÃÃ",
+        "btn_back": "Ã¢Â¬Ã¯Â¸ ÃÃÂ°ÃÂ·ÃÂ°ÃÂ´",
+        "btn_study": "Ã° ÃÂ£ÃÃÃÃÂ°",
+        "btn_work": "Ã°Â¼ Ã ÃÂ°ÃÃÂ¾ÃÃÂ°",
+        "btn_fun": "Ã° Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã",
     },
     "be": {
-        "choose_lang": "ð ÐÐ±ÑÑÑÑÐµ Ð¼Ð¾Ð²Ñ",
-        "lang_set": "â ÐÐ¾Ð²Ð° ÑÑÑÐ°Ð»ÑÐ²Ð°Ð½Ð°",
-        "menu_title": "ÐÐ°Ð»Ð¾ÑÐ½Ð°Ðµ Ð¼ÐµÐ½Ñ",
-        "btn_engines": "ð§  Ð ÑÑÐ°Ð²ÑÐºÑ",
-        "btn_sub": "â­ ÐÐ°Ð´Ð¿ÑÑÐºÐ° â¢ ÐÐ°Ð¿Ð°Ð¼Ð¾Ð³Ð°",
-        "btn_wallet": "ð§¾ ÐÐ°Ð»Ð°Ð½Ñ",
-        "btn_video": "ð Ð¡ÑÐ²Ð°ÑÑÑÑ Ð²ÑÐ´ÑÐ°",
-        "btn_photo": "ð¼ ÐÐ¶ÑÐ²ÑÑÑ ÑÐ¾ÑÐ°",
-        "btn_help": "â ÐÐ°Ð¿Ð°Ð¼Ð¾Ð³Ð°",
-        "btn_back": "â¬ï¸ ÐÐ°Ð·Ð°Ð´",
+        "choose_lang": "Ã° ÃÃÃÃÃÃÃÂµ ÃÂ¼ÃÂ¾ÃÂ²Ã",
+        "lang_set": "Ã¢ ÃÃÂ¾ÃÂ²ÃÂ° ÃÃÃÃÂ°ÃÂ»ÃÃÂ²ÃÂ°ÃÂ½ÃÂ°",
+        "menu_title": "ÃÃÂ°ÃÂ»ÃÂ¾ÃÃÂ½ÃÂ°ÃÂµ ÃÂ¼ÃÂµÃÂ½Ã",
+        "btn_engines": "Ã°Â§  Ã ÃÃÃÂ°ÃÂ²ÃÃÂºÃ",
+        "btn_sub": "Ã¢Â­ ÃÃÂ°ÃÂ´ÃÂ¿ÃÃÃÂºÃÂ° Ã¢Â¢ ÃÃÂ°ÃÂ¿ÃÂ°ÃÂ¼ÃÂ¾ÃÂ³ÃÂ°",
+        "btn_wallet": "Ã°Â§Â¾ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã",
+        "btn_video": "Ã° ÃÂ¡ÃÃÂ²ÃÂ°ÃÃÃÃ ÃÂ²ÃÃÂ´ÃÃÂ°",
+        "btn_photo": "Ã°Â¼ ÃÃÂ¶ÃÃÂ²ÃÃÃ ÃÃÂ¾ÃÃÂ°",
+        "btn_help": "Ã¢ ÃÃÂ°ÃÂ¿ÃÂ°ÃÂ¼ÃÂ¾ÃÂ³ÃÂ°",
+        "btn_back": "Ã¢Â¬Ã¯Â¸ ÃÃÂ°ÃÂ·ÃÂ°ÃÂ´",
     },
     "uk": {
-        "choose_lang": "ð ÐÐ±ÐµÑÑÑÑ Ð¼Ð¾Ð²Ñ",
-        "lang_set": "â ÐÐ¾Ð²Ñ Ð²ÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾",
-        "menu_title": "ÐÐ¾Ð»Ð¾Ð²Ð½Ðµ Ð¼ÐµÐ½Ñ",
-        "btn_engines": "ð§  Ð ÑÑÑÑ",
-        "btn_sub": "â­ ÐÑÐ´Ð¿Ð¸ÑÐºÐ° â¢ ÐÐ¾Ð¿Ð¾Ð¼Ð¾Ð³Ð°",
-        "btn_wallet": "ð§¾ ÐÐ°Ð»Ð°Ð½Ñ",
-        "btn_video": "ð Ð¡ÑÐ²Ð¾ÑÐ¸ÑÐ¸ Ð²ÑÐ´ÐµÐ¾",
-        "btn_photo": "ð¼ ÐÐ¶Ð¸Ð²Ð¸ÑÐ¸ ÑÐ¾ÑÐ¾",
-        "btn_help": "â ÐÐ¾Ð¿Ð¾Ð¼Ð¾Ð³Ð°",
-        "btn_back": "â¬ï¸ ÐÐ°Ð·Ð°Ð´",
-        "btn_study": "ð ÐÐ°Ð²ÑÐ°Ð½Ð½Ñ",
-        "btn_work": "ð¼ Ð Ð¾Ð±Ð¾ÑÐ°",
-        "btn_fun": "ð¥ Ð Ð¾Ð·Ð²Ð°Ð³Ð¸",
-        "input_placeholder": "ÐÐ±ÐµÑÑÑÑ ÑÐµÐ¶Ð¸Ð¼ Ð°Ð±Ð¾ Ð½Ð°Ð¿Ð¸ÑÑÑÑ Ð·Ð°Ð¿Ð¸Ñâ¦",
+        "choose_lang": "Ã° ÃÃÃÂµÃÃÃÃ ÃÂ¼ÃÂ¾ÃÂ²Ã",
+        "lang_set": "Ã¢ ÃÃÂ¾ÃÂ²Ã ÃÂ²ÃÃÃÂ°ÃÂ½ÃÂ¾ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¾",
+        "menu_title": "ÃÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂ½ÃÂµ ÃÂ¼ÃÂµÃÂ½Ã",
+        "btn_engines": "Ã°Â§  Ã ÃÃÃÃ",
+        "btn_sub": "Ã¢Â­ ÃÃÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° Ã¢Â¢ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ¼ÃÂ¾ÃÂ³ÃÂ°",
+        "btn_wallet": "Ã°Â§Â¾ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã",
+        "btn_video": "Ã° ÃÂ¡ÃÃÂ²ÃÂ¾ÃÃÂ¸ÃÃÂ¸ ÃÂ²ÃÃÂ´ÃÂµÃÂ¾",
+        "btn_photo": "Ã°Â¼ ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃÂ¸ ÃÃÂ¾ÃÃÂ¾",
+        "btn_help": "Ã¢ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ¼ÃÂ¾ÃÂ³ÃÂ°",
+        "btn_back": "Ã¢Â¬Ã¯Â¸ ÃÃÂ°ÃÂ·ÃÂ°ÃÂ´",
+        "btn_study": "Ã° ÃÃÂ°ÃÂ²ÃÃÂ°ÃÂ½ÃÂ½Ã",
+        "btn_work": "Ã°Â¼ Ã ÃÂ¾ÃÃÂ¾ÃÃÂ°",
+        "btn_fun": "Ã°Â¥ Ã ÃÂ¾ÃÂ·ÃÂ²ÃÂ°ÃÂ³ÃÂ¸",
+        "input_placeholder": "ÃÃÃÂµÃÃÃÃ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÂ°ÃÃÂ¾ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÂ¸ÃÃ¢Â¦",
     
     },
     "de": {
-        "choose_lang": "ð Sprache wÃ¤hlen",
-        "lang_set": "â Sprache gesetzt",
-        "menu_title": "HauptmenÃ¼",
-        "btn_engines": "ð§  Engines",
-        "btn_sub": "â­ Abo â¢ Hilfe",
-        "btn_wallet": "ð§¾ Guthaben",
-        "btn_video": "ð Video erstellen",
-        "btn_photo": "ð¼ Foto animieren",
-        "btn_help": "â Hilfe",
-        "btn_back": "â¬ï¸ ZurÃ¼ck",
-        "btn_study": "ð Lernen",
-        "btn_work": "ð¼ Arbeit",
-        "btn_fun": "ð SpaÃ",
+        "choose_lang": "Ã° Sprache wÃÂ¤hlen",
+        "lang_set": "Ã¢ Sprache gesetzt",
+        "menu_title": "HauptmenÃÂ¼",
+        "btn_engines": "Ã°Â§  Engines",
+        "btn_sub": "Ã¢Â­ Abo Ã¢Â¢ Hilfe",
+        "btn_wallet": "Ã°Â§Â¾ Guthaben",
+        "btn_video": "Ã° Video erstellen",
+        "btn_photo": "Ã°Â¼ Foto animieren",
+        "btn_help": "Ã¢ Hilfe",
+        "btn_back": "Ã¢Â¬Ã¯Â¸ ZurÃÂ¼ck",
+        "btn_study": "Ã° Lernen",
+        "btn_work": "Ã°Â¼ Arbeit",
+        "btn_fun": "Ã° SpaÃ",
     },
     "en": {
-        "choose_lang": "ð Choose language",
-        "lang_set": "â Language set",
+        "choose_lang": "Ã° Choose language",
+        "lang_set": "Ã¢ Language set",
         "menu_title": "Main menu",
-        "btn_engines": "ð§  Engines",
-        "btn_sub": "â­ Subscription â¢ Help",
-        "btn_wallet": "ð§¾ Balance",
-        "btn_video": "ð Create video",
-        "btn_photo": "ð¼ Animate photo",
-        "btn_help": "â Help",
-        "btn_back": "â¬ï¸ Back",
-        "btn_study": "ð Study",
-        "btn_work": "ð¼ Work",
-        "btn_fun": "ð Fun",
+        "btn_engines": "Ã°Â§  Engines",
+        "btn_sub": "Ã¢Â­ Subscription Ã¢Â¢ Help",
+        "btn_wallet": "Ã°Â§Â¾ Balance",
+        "btn_video": "Ã° Create video",
+        "btn_photo": "Ã°Â¼ Animate photo",
+        "btn_help": "Ã¢ Help",
+        "btn_back": "Ã¢Â¬Ã¯Â¸ Back",
+        "btn_study": "Ã° Study",
+        "btn_work": "Ã°Â¼ Work",
+        "btn_fun": "Ã° Fun",
     },
     "fr": {
-        "choose_lang": "ð Choisir la langue",
-        "lang_set": "â Langue dÃ©finie",
+        "choose_lang": "Ã° Choisir la langue",
+        "lang_set": "Ã¢ Langue dÃÂ©finie",
         "menu_title": "Menu principal",
-        "btn_engines": "ð§  Moteurs",
-        "btn_sub": "â­ Abonnement â¢ Aide",
-        "btn_wallet": "ð§¾ Solde",
-        "btn_video": "ð CrÃ©er une vidÃ©o",
-        "btn_photo": "ð¼ Animer une photo",
-        "btn_help": "â Aide",
-        "btn_back": "â¬ï¸ Retour",
-        "btn_study": "ð Ãtudes",
-        "btn_work": "ð¼ Travail",
-        "btn_fun": "ð Divertissement",
+        "btn_engines": "Ã°Â§  Moteurs",
+        "btn_sub": "Ã¢Â­ Abonnement Ã¢Â¢ Aide",
+        "btn_wallet": "Ã°Â§Â¾ Solde",
+        "btn_video": "Ã° CrÃÂ©er une vidÃÂ©o",
+        "btn_photo": "Ã°Â¼ Animer une photo",
+        "btn_help": "Ã¢ Aide",
+        "btn_back": "Ã¢Â¬Ã¯Â¸ Retour",
+        "btn_study": "Ã° Ãtudes",
+        "btn_work": "Ã°Â¼ Travail",
+        "btn_fun": "Ã° Divertissement",
     },
     "th": {
-        "choose_lang": "ð à¹à¸¥à¸·à¸­à¸à¸ à¸²à¸©à¸²",
-        "lang_set": "â à¸à¸±à¹à¸à¸à¹à¸²à¸ à¸²à¸©à¸²à¹à¸¥à¹à¸§",
-        "menu_title": "à¹à¸¡à¸à¸¹à¸«à¸¥à¸±à¸",
-        "btn_engines": "ð§  à¹à¸­à¸à¸à¸´à¸",
-        "btn_sub": "â­ à¸ªà¸¡à¸±à¸à¸£à¸ªà¸¡à¸²à¸à¸´à¸ â¢ à¸à¹à¸§à¸¢à¹à¸«à¸¥à¸·à¸­",
-        "btn_wallet": "ð§¾ à¸¢à¸­à¸à¸à¸à¹à¸«à¸¥à¸·à¸­",
-        "btn_video": "ð à¸ªà¸£à¹à¸²à¸à¸§à¸´à¸à¸µà¹à¸­",
-        "btn_photo": "ð¼ à¸à¸³à¹à¸«à¹à¸£à¸¹à¸à¹à¸à¸¥à¸·à¹à¸­à¸à¹à¸«à¸§",
-        "btn_help": "â à¸à¹à¸§à¸¢à¹à¸«à¸¥à¸·à¸­",
-        "btn_back": "â¬ï¸ à¸à¸¥à¸±à¸",
-        "btn_study": "ð à¹à¸£à¸µà¸¢à¸",
-        "btn_work": "ð¼ à¸à¸²à¸",
-        "btn_fun": "ð à¸ªà¸à¸¸à¸",
+        "choose_lang": "Ã° Ã Â¹Ã Â¸Â¥Ã Â¸Â·Ã Â¸Â­Ã Â¸Ã Â¸ Ã Â¸Â²Ã Â¸Â©Ã Â¸Â²",
+        "lang_set": "Ã¢ Ã Â¸Ã Â¸Ã Â¹Ã Â¸Ã Â¸Ã Â¹Ã Â¸Â²Ã Â¸ Ã Â¸Â²Ã Â¸Â©Ã Â¸Â²Ã Â¹Ã Â¸Â¥Ã Â¹Ã Â¸Â§",
+        "menu_title": "Ã Â¹Ã Â¸Â¡Ã Â¸Ã Â¸Â¹Ã Â¸Â«Ã Â¸Â¥Ã Â¸Ã Â¸",
+        "btn_engines": "Ã°Â§  Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¸Ã Â¸Â´Ã Â¸",
+        "btn_sub": "Ã¢Â­ Ã Â¸ÂªÃ Â¸Â¡Ã Â¸Ã Â¸Ã Â¸Â£Ã Â¸ÂªÃ Â¸Â¡Ã Â¸Â²Ã Â¸Ã Â¸Â´Ã Â¸ Ã¢Â¢ Ã Â¸Ã Â¹Ã Â¸Â§Ã Â¸Â¢Ã Â¹Ã Â¸Â«Ã Â¸Â¥Ã Â¸Â·Ã Â¸Â­",
+        "btn_wallet": "Ã°Â§Â¾ Ã Â¸Â¢Ã Â¸Â­Ã Â¸Ã Â¸Ã Â¸Ã Â¹Ã Â¸Â«Ã Â¸Â¥Ã Â¸Â·Ã Â¸Â­",
+        "btn_video": "Ã° Ã Â¸ÂªÃ Â¸Â£Ã Â¹Ã Â¸Â²Ã Â¸Ã Â¸Â§Ã Â¸Â´Ã Â¸Ã Â¸ÂµÃ Â¹Ã Â¸Â­",
+        "btn_photo": "Ã°Â¼ Ã Â¸Ã Â¸Â³Ã Â¹Ã Â¸Â«Ã Â¹Ã Â¸Â£Ã Â¸Â¹Ã Â¸Ã Â¹Ã Â¸Ã Â¸Â¥Ã Â¸Â·Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¹Ã Â¸Â«Ã Â¸Â§",
+        "btn_help": "Ã¢ Ã Â¸Ã Â¹Ã Â¸Â§Ã Â¸Â¢Ã Â¹Ã Â¸Â«Ã Â¸Â¥Ã Â¸Â·Ã Â¸Â­",
+        "btn_back": "Ã¢Â¬Ã¯Â¸ Ã Â¸Ã Â¸Â¥Ã Â¸Ã Â¸",
+        "btn_study": "Ã° Ã Â¹Ã Â¸Â£Ã Â¸ÂµÃ Â¸Â¢Ã Â¸",
+        "btn_work": "Ã°Â¼ Ã Â¸Ã Â¸Â²Ã Â¸",
+        "btn_fun": "Ã° Ã Â¸ÂªÃ Â¸Ã Â¸Â¸Ã Â¸",
     },
 }
 
@@ -707,80 +707,80 @@ def t(user_id: int, key: str) -> str:
 
 def system_prompt_for(lang: str) -> str:
     mapping = {
-        "ru": "ÐÑÐ²ÐµÑÐ°Ð¹ Ð½Ð° ÑÑÑÑÐºÐ¾Ð¼ ÑÐ·ÑÐºÐµ.",
-        "be": "ÐÐ´ÐºÐ°Ð·Ð²Ð°Ð¹ Ð¿Ð°-Ð±ÐµÐ»Ð°ÑÑÑÐºÑ.",
-        "uk": "ÐÑÐ´Ð¿Ð¾Ð²ÑÐ´Ð°Ð¹ ÑÐºÑÐ°ÑÐ½ÑÑÐºÐ¾Ñ Ð¼Ð¾Ð²Ð¾Ñ.",
+        "ru": "ÃÃÃÂ²ÃÂµÃÃÂ°ÃÂ¹ ÃÂ½ÃÂ° ÃÃÃÃÃÂºÃÂ¾ÃÂ¼ ÃÃÂ·ÃÃÂºÃÂµ.",
+        "be": "ÃÃÂ´ÃÂºÃÂ°ÃÂ·ÃÂ²ÃÂ°ÃÂ¹ ÃÂ¿ÃÂ°-ÃÃÂµÃÂ»ÃÂ°ÃÃÃÃÂºÃ.",
+        "uk": "ÃÃÃÂ´ÃÂ¿ÃÂ¾ÃÂ²ÃÃÂ´ÃÂ°ÃÂ¹ ÃÃÂºÃÃÂ°ÃÃÂ½ÃÃÃÂºÃÂ¾Ã ÃÂ¼ÃÂ¾ÃÂ²ÃÂ¾Ã.",
         "de": "Antworte auf Deutsch.",
         "en": "Answer in English.",
-        "fr": "RÃ©ponds en franÃ§ais.",
-        "th": "à¸à¸­à¸à¹à¸à¹à¸à¸ à¸²à¸©à¸²à¹à¸à¸¢",
+        "fr": "RÃÂ©ponds en franÃÂ§ais.",
+        "th": "Ã Â¸Ã Â¸Â­Ã Â¸Ã Â¹Ã Â¸Ã Â¹Ã Â¸Ã Â¸ Ã Â¸Â²Ã Â¸Â©Ã Â¸Â²Ã Â¹Ã Â¸Ã Â¸Â¢",
     }
     return mapping.get(lang, mapping["ru"])
 
 # Extended pack (long UI texts / hints)
 I18N_PACK: dict[str, dict[str, str]] = {
     "welcome": {
-        "ru": "ÐÑÐ¸Ð²ÐµÑ! Ð¯ ÐÐµÐ¹ÑÐ¾âBot â â¡ Ð¼ÑÐ»ÑÑÐ¸ÑÐµÐ¶Ð¸Ð¼Ð½ÑÐ¹ Ð±Ð¾Ñ Ð¸Ð· 7 Ð½ÐµÐ¹ÑÐ¾ÑÐµÑÐµÐ¹ Ð´Ð»Ñ ÑÑÑÐ±Ñ, ÑÐ°Ð±Ð¾ÑÑ Ð¸ ÑÐ°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ð¹.",
-        "be": "ÐÑÑÐ²ÑÑÐ°Ð½Ð½Ðµ! Ð¯ ÐÐµÐ¹ÑÐ¾âBot â â¡ ÑÐ¼Ð°ÑÑÑÐ¶ÑÐ¼Ð½Ñ Ð±Ð¾Ñ Ð· 7 Ð½ÐµÐ¹ÑÐ°ÑÐµÑÐ°Ðº Ð´Ð»Ñ Ð²ÑÑÐ¾Ð±Ñ, Ð¿ÑÐ°ÑÑ Ñ Ð·Ð°Ð±Ð°Ñ.",
-        "uk": "ÐÑÐ¸Ð²ÑÑ! Ð¯ ÐÐµÐ¹ÑÐ¾âBot â â¡ Ð¼ÑÐ»ÑÑÐ¸ÑÐµÐ¶Ð¸Ð¼Ð½Ð¸Ð¹ Ð±Ð¾Ñ ÑÐ· 7 Ð½ÐµÐ¹ÑÐ¾Ð¼ÐµÑÐµÐ¶ Ð´Ð»Ñ Ð½Ð°Ð²ÑÐ°Ð½Ð½Ñ, ÑÐ¾Ð±Ð¾ÑÐ¸ ÑÐ° ÑÐ¾Ð·Ð²Ð°Ð³.",
-        "de": "Hallo! Ich bin NeuroâBot â â¡ ein MultimodeâBot mit 7 KIâEngines fÃ¼r Lernen, Arbeit und SpaÃ.",
-        "en": "Hi! Iâm NeuroâBot â â¡ a multiâmode bot with 7 AI engines for study, work and fun.",
-        "fr": "Salut ! Je suis NeuroâBot â â¡ un bot multiâmodes avec 7 moteurs IA pour Ã©tudier, travailler et se divertir.",
-        "th": "à¸ªà¸§à¸±à¸ªà¸à¸µ! à¸à¸±à¸à¸à¸·à¸­ NeuroâBot â â¡ à¸à¸­à¸à¸«à¸¥à¸²à¸¢à¹à¸«à¸¡à¸à¸à¸£à¹à¸­à¸¡à¹à¸­à¸à¸à¸´à¸ AI 7 à¸à¸±à¸§ à¸ªà¸³à¸«à¸£à¸±à¸à¹à¸£à¸µà¸¢à¸ à¸à¸²à¸ à¹à¸¥à¸°à¸à¸§à¸²à¸¡à¸à¸±à¸à¹à¸à¸´à¸",
+        "ru": "ÃÃÃÂ¸ÃÂ²ÃÂµÃ! ÃÂ¯ ÃÃÂµÃÂ¹ÃÃÂ¾Ã¢Bot Ã¢ Ã¢Â¡ ÃÂ¼ÃÃÂ»ÃÃÃÂ¸ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ½ÃÃÂ¹ ÃÃÂ¾Ã ÃÂ¸ÃÂ· 7 ÃÂ½ÃÂµÃÂ¹ÃÃÂ¾ÃÃÂµÃÃÂµÃÂ¹ ÃÂ´ÃÂ»Ã ÃÃÃÃÃ, ÃÃÂ°ÃÃÂ¾ÃÃ ÃÂ¸ ÃÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂ¹.",
+        "be": "ÃÃÃÃÂ²ÃÃÃÂ°ÃÂ½ÃÂ½ÃÂµ! ÃÂ¯ ÃÃÂµÃÂ¹ÃÃÂ¾Ã¢Bot Ã¢ Ã¢Â¡ ÃÃÂ¼ÃÂ°ÃÃÃÃÂ¶ÃÃÂ¼ÃÂ½Ã ÃÃÂ¾Ã ÃÂ· 7 ÃÂ½ÃÂµÃÂ¹ÃÃÂ°ÃÃÂµÃÃÂ°ÃÂº ÃÂ´ÃÂ»Ã ÃÂ²ÃÃÃÂ¾ÃÃ, ÃÂ¿ÃÃÂ°ÃÃ Ã ÃÂ·ÃÂ°ÃÃÂ°Ã.",
+        "uk": "ÃÃÃÂ¸ÃÂ²ÃÃ! ÃÂ¯ ÃÃÂµÃÂ¹ÃÃÂ¾Ã¢Bot Ã¢ Ã¢Â¡ ÃÂ¼ÃÃÂ»ÃÃÃÂ¸ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ½ÃÂ¸ÃÂ¹ ÃÃÂ¾Ã ÃÃÂ· 7 ÃÂ½ÃÂµÃÂ¹ÃÃÂ¾ÃÂ¼ÃÂµÃÃÂµÃÂ¶ ÃÂ´ÃÂ»Ã ÃÂ½ÃÂ°ÃÂ²ÃÃÂ°ÃÂ½ÃÂ½Ã, ÃÃÂ¾ÃÃÂ¾ÃÃÂ¸ ÃÃÂ° ÃÃÂ¾ÃÂ·ÃÂ²ÃÂ°ÃÂ³.",
+        "de": "Hallo! Ich bin NeuroÃ¢Bot Ã¢ Ã¢Â¡ ein MultimodeÃ¢Bot mit 7 KIÃ¢Engines fÃÂ¼r Lernen, Arbeit und SpaÃ.",
+        "en": "Hi! IÃ¢m NeuroÃ¢Bot Ã¢ Ã¢Â¡ a multiÃ¢mode bot with 7 AI engines for study, work and fun.",
+        "fr": "Salut ! Je suis NeuroÃ¢Bot Ã¢ Ã¢Â¡ un bot multiÃ¢modes avec 7 moteurs IA pour ÃÂ©tudier, travailler et se divertir.",
+        "th": "Ã Â¸ÂªÃ Â¸Â§Ã Â¸Ã Â¸ÂªÃ Â¸Ã Â¸Âµ! Ã Â¸Ã Â¸Ã Â¸Ã Â¸Ã Â¸Â·Ã Â¸Â­ NeuroÃ¢Bot Ã¢ Ã¢Â¡ Ã Â¸Ã Â¸Â­Ã Â¸Ã Â¸Â«Ã Â¸Â¥Ã Â¸Â²Ã Â¸Â¢Ã Â¹Ã Â¸Â«Ã Â¸Â¡Ã Â¸Ã Â¸Ã Â¸Â£Ã Â¹Ã Â¸Â­Ã Â¸Â¡Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¸Ã Â¸Â´Ã Â¸ AI 7 Ã Â¸Ã Â¸Ã Â¸Â§ Ã Â¸ÂªÃ Â¸Â³Ã Â¸Â«Ã Â¸Â£Ã Â¸Ã Â¸Ã Â¹Ã Â¸Â£Ã Â¸ÂµÃ Â¸Â¢Ã Â¸ Ã Â¸Ã Â¸Â²Ã Â¸ Ã Â¹Ã Â¸Â¥Ã Â¸Â°Ã Â¸Ã Â¸Â§Ã Â¸Â²Ã Â¸Â¡Ã Â¸Ã Â¸Ã Â¸Ã Â¹Ã Â¸Ã Â¸Â´Ã Â¸",
     },
     "ask_video_prompt": {
-        "ru": "ð ÐÐ°Ð¿Ð¸ÑÐ¸ Ð·Ð°Ð¿ÑÐ¾Ñ Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾, Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ:\nÂ«Ð¡Ð´ÐµÐ»Ð°Ð¹ Ð²Ð¸Ð´ÐµÐ¾: Ð·Ð°ÐºÐ°Ñ Ð½Ð°Ð´ Ð¼Ð¾ÑÐµÐ¼, 7 ÑÐµÐº, 16:9Â»",
-        "be": "ð ÐÐ°Ð¿ÑÑÑ Ð·Ð°Ð¿ÑÑ Ð´Ð»Ñ Ð²ÑÐ´ÑÐ°, Ð½Ð°Ð¿ÑÑÐºÐ»Ð°Ð´:\nÂ«ÐÑÐ°Ð±Ñ Ð²ÑÐ´ÑÐ°: Ð·Ð°ÑÐ°Ð´ ÑÐ¾Ð½ÑÐ° Ð½Ð°Ð´ Ð¼Ð¾ÑÐ°Ð¼, 7 ÑÐµÐº, 16:9Â»",
-        "uk": "ð ÐÐ°Ð¿Ð¸ÑÐ¸ Ð·Ð°Ð¿Ð¸Ñ Ð´Ð»Ñ Ð²ÑÐ´ÐµÐ¾, Ð½Ð°Ð¿ÑÐ¸ÐºÐ»Ð°Ð´:\nÂ«ÐÑÐ¾Ð±Ð¸ Ð²ÑÐ´ÐµÐ¾: Ð·Ð°ÑÑÐ´ Ð½Ð°Ð´ Ð¼Ð¾ÑÐµÐ¼, 7 Ñ, 16:9Â»",
-        "de": "ð Schreibe einen Prompt fÃ¼r das Video, z.B.:\nâErstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9â",
-        "en": "ð Type a video prompt, e.g.:\nâMake a video: sunset over the sea, 7s, 16:9â",
-        "fr": "ð Ãcris un prompt pour la vidÃ©o, par ex. :\nÂ« Fais une vidÃ©o : coucher de soleil sur la mer, 7s, 16:9 Â»",
-        "th": "ð à¸à¸´à¸¡à¸à¹à¸à¸³à¸ªà¸±à¹à¸à¸à¸³à¸§à¸´à¸à¸µà¹à¸­ à¹à¸à¹à¸:\nâà¸à¸³à¸§à¸´à¸à¸µà¹à¸­: à¸à¸£à¸°à¸­à¸²à¸à¸´à¸à¸¢à¹à¸à¸à¹à¸«à¸à¸·à¸­à¸à¸°à¹à¸¥ 7à¸§à¸´ 16:9â",
+        "ru": "Ã° ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾, ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ:\nÃÂ«ÃÂ¡ÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾: ÃÂ·ÃÂ°ÃÂºÃÂ°Ã ÃÂ½ÃÂ°ÃÂ´ ÃÂ¼ÃÂ¾ÃÃÂµÃÂ¼, 7 ÃÃÂµÃÂº, 16:9ÃÂ»",
+        "be": "Ã° ÃÃÂ°ÃÂ¿ÃÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃ ÃÂ´ÃÂ»Ã ÃÂ²ÃÃÂ´ÃÃÂ°, ÃÂ½ÃÂ°ÃÂ¿ÃÃÃÂºÃÂ»ÃÂ°ÃÂ´:\nÃÂ«ÃÃÃÂ°ÃÃ ÃÂ²ÃÃÂ´ÃÃÂ°: ÃÂ·ÃÂ°ÃÃÂ°ÃÂ´ ÃÃÂ¾ÃÂ½ÃÃÂ° ÃÂ½ÃÂ°ÃÂ´ ÃÂ¼ÃÂ¾ÃÃÂ°ÃÂ¼, 7 ÃÃÂµÃÂº, 16:9ÃÂ»",
+        "uk": "Ã° ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÂ·ÃÂ°ÃÂ¿ÃÂ¸Ã ÃÂ´ÃÂ»Ã ÃÂ²ÃÃÂ´ÃÂµÃÂ¾, ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂºÃÂ»ÃÂ°ÃÂ´:\nÃÂ«ÃÃÃÂ¾ÃÃÂ¸ ÃÂ²ÃÃÂ´ÃÂµÃÂ¾: ÃÂ·ÃÂ°ÃÃÃÂ´ ÃÂ½ÃÂ°ÃÂ´ ÃÂ¼ÃÂ¾ÃÃÂµÃÂ¼, 7 Ã, 16:9ÃÂ»",
+        "de": "Ã° Schreibe einen Prompt fÃÂ¼r das Video, z.B.:\nÃ¢Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9Ã¢",
+        "en": "Ã° Type a video prompt, e.g.:\nÃ¢Make a video: sunset over the sea, 7s, 16:9Ã¢",
+        "fr": "Ã° Ãcris un prompt pour la vidÃÂ©o, par ex. :\nÃÂ« Fais une vidÃÂ©o : coucher de soleil sur la mer, 7s, 16:9 ÃÂ»",
+        "th": "Ã° Ã Â¸Ã Â¸Â´Ã Â¸Â¡Ã Â¸Ã Â¹Ã Â¸Ã Â¸Â³Ã Â¸ÂªÃ Â¸Ã Â¹Ã Â¸Ã Â¸Ã Â¸Â³Ã Â¸Â§Ã Â¸Â´Ã Â¸Ã Â¸ÂµÃ Â¹Ã Â¸Â­ Ã Â¹Ã Â¸Ã Â¹Ã Â¸:\nÃ¢Ã Â¸Ã Â¸Â³Ã Â¸Â§Ã Â¸Â´Ã Â¸Ã Â¸ÂµÃ Â¹Ã Â¸Â­: Ã Â¸Ã Â¸Â£Ã Â¸Â°Ã Â¸Â­Ã Â¸Â²Ã Â¸Ã Â¸Â´Ã Â¸Ã Â¸Â¢Ã Â¹Ã Â¸Ã Â¸Ã Â¹Ã Â¸Â«Ã Â¸Ã Â¸Â·Ã Â¸Â­Ã Â¸Ã Â¸Â°Ã Â¹Ã Â¸Â¥ 7Ã Â¸Â§Ã Â¸Â´ 16:9Ã¢",
     },
     "ask_send_photo": {
-        "ru": "ð¼ ÐÑÐ¸ÑÐ»Ð¸ ÑÐ¾ÑÐ¾, Ð·Ð°ÑÐµÐ¼ Ð²ÑÐ±ÐµÑÐ¸ Â«ÐÐ¶Ð¸Ð²Ð¸ÑÑ ÑÐ¾ÑÐ¾Â».",
-        "be": "ð¼ ÐÐ°ÑÐ»Ñ ÑÐ¾ÑÐ°, Ð·Ð°ÑÑÐ¼ Ð²ÑÐ±ÐµÑÑ Â«ÐÐ¶ÑÐ²ÑÑÑ ÑÐ¾ÑÐ°Â».",
-        "uk": "ð¼ ÐÐ°Ð´ÑÑÐ»Ð¸ ÑÐ¾ÑÐ¾, Ð¿Ð¾ÑÑÐ¼ Ð¾Ð±ÐµÑÐ¸ Â«ÐÐ¶Ð¸Ð²Ð¸ÑÐ¸ ÑÐ¾ÑÐ¾Â».",
-        "de": "ð¼ Sende ein Foto, dann wÃ¤hle âFoto animierenâ.",
-        "en": "ð¼ Send a photo, then choose âAnimate photoâ.",
-        "fr": "ð¼ Envoyez une photo, puis choisissez Â« Animer la photo Â».",
-        "th": "ð¼ à¸ªà¹à¸à¸£à¸¹à¸ à¸à¸²à¸à¸à¸±à¹à¸à¹à¸¥à¸·à¸­à¸ âà¸à¸³à¹à¸«à¹à¸£à¸¹à¸à¹à¸à¸¥à¸·à¹à¸­à¸à¹à¸«à¸§â",
+        "ru": "Ã°Â¼ ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¾, ÃÂ·ÃÂ°ÃÃÂµÃÂ¼ ÃÂ²ÃÃÃÂµÃÃÂ¸ ÃÂ«ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÂ¾ÃÃÂ¾ÃÂ».",
+        "be": "Ã°Â¼ ÃÃÂ°ÃÃÂ»Ã ÃÃÂ¾ÃÃÂ°, ÃÂ·ÃÂ°ÃÃÃÂ¼ ÃÂ²ÃÃÃÂµÃÃ ÃÂ«ÃÃÂ¶ÃÃÂ²ÃÃÃ ÃÃÂ¾ÃÃÂ°ÃÂ».",
+        "uk": "Ã°Â¼ ÃÃÂ°ÃÂ´ÃÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¾, ÃÂ¿ÃÂ¾ÃÃÃÂ¼ ÃÂ¾ÃÃÂµÃÃÂ¸ ÃÂ«ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃÂ¸ ÃÃÂ¾ÃÃÂ¾ÃÂ».",
+        "de": "Ã°Â¼ Sende ein Foto, dann wÃÂ¤hle Ã¢Foto animierenÃ¢.",
+        "en": "Ã°Â¼ Send a photo, then choose Ã¢Animate photoÃ¢.",
+        "fr": "Ã°Â¼ Envoyez une photo, puis choisissez ÃÂ« Animer la photo ÃÂ».",
+        "th": "Ã°Â¼ Ã Â¸ÂªÃ Â¹Ã Â¸Ã Â¸Â£Ã Â¸Â¹Ã Â¸ Ã Â¸Ã Â¸Â²Ã Â¸Ã Â¸Ã Â¸Ã Â¹Ã Â¸Ã Â¹Ã Â¸Â¥Ã Â¸Â·Ã Â¸Â­Ã Â¸ Ã¢Ã Â¸Ã Â¸Â³Ã Â¹Ã Â¸Â«Ã Â¹Ã Â¸Â£Ã Â¸Â¹Ã Â¸Ã Â¹Ã Â¸Ã Â¸Â¥Ã Â¸Â·Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¹Ã Â¸Â«Ã Â¸Â§Ã¢",
     },
     "photo_received": {
-        "ru": "ð¼ Ð¤Ð¾ÑÐ¾ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¾. Ð¥Ð¾ÑÐ¸ÑÐµ Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ?",
-        "be": "ð¼ Ð¤Ð¾ÑÐ° Ð°ÑÑÑÐ¼Ð°Ð½Ð°. ÐÐ¶ÑÐ²ÑÑÑ?",
-        "uk": "ð¼ Ð¤Ð¾ÑÐ¾ Ð¾ÑÑÐ¸Ð¼Ð°Ð½Ð¾. ÐÐ¶Ð¸Ð²Ð¸ÑÐ¸?",
-        "de": "ð¼ Foto erhalten. Animieren?",
-        "en": "ð¼ Photo received. Animate it?",
-        "fr": "ð¼ Photo reÃ§ue. Lâanimer ?",
-        "th": "ð¼ à¹à¸à¹à¸£à¸±à¸à¸£à¸¹à¸à¹à¸¥à¹à¸§ à¸à¹à¸­à¸à¸à¸²à¸£à¸à¸³à¹à¸«à¹à¹à¸à¸¥à¸·à¹à¸­à¸à¹à¸«à¸§à¹à¸«à¸¡?",
+        "ru": "Ã°Â¼ ÃÂ¤ÃÂ¾ÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂµÃÂ½ÃÂ¾. ÃÂ¥ÃÂ¾ÃÃÂ¸ÃÃÂµ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ?",
+        "be": "Ã°Â¼ ÃÂ¤ÃÂ¾ÃÃÂ° ÃÂ°ÃÃÃÃÂ¼ÃÂ°ÃÂ½ÃÂ°. ÃÃÂ¶ÃÃÂ²ÃÃÃ?",
+        "uk": "Ã°Â¼ ÃÂ¤ÃÂ¾ÃÃÂ¾ ÃÂ¾ÃÃÃÂ¸ÃÂ¼ÃÂ°ÃÂ½ÃÂ¾. ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃÂ¸?",
+        "de": "Ã°Â¼ Foto erhalten. Animieren?",
+        "en": "Ã°Â¼ Photo received. Animate it?",
+        "fr": "Ã°Â¼ Photo reÃÂ§ue. LÃ¢animer ?",
+        "th": "Ã°Â¼ Ã Â¹Ã Â¸Ã Â¹Ã Â¸Â£Ã Â¸Ã Â¸Ã Â¸Â£Ã Â¸Â¹Ã Â¸Ã Â¹Ã Â¸Â¥Ã Â¹Ã Â¸Â§ Ã Â¸Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¸Ã Â¸Â²Ã Â¸Â£Ã Â¸Ã Â¸Â³Ã Â¹Ã Â¸Â«Ã Â¹Ã Â¹Ã Â¸Ã Â¸Â¥Ã Â¸Â·Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¹Ã Â¸Â«Ã Â¸Â§Ã Â¹Ã Â¸Â«Ã Â¸Â¡?",
     },
     "animate_btn": {
-        "ru": "ð¬ ÐÐ¶Ð¸Ð²Ð¸ÑÑ ÑÐ¾ÑÐ¾",
-        "be": "ð¬ ÐÐ¶ÑÐ²ÑÑÑ ÑÐ¾ÑÐ°",
-        "uk": "ð¬ ÐÐ¶Ð¸Ð²Ð¸ÑÐ¸ ÑÐ¾ÑÐ¾",
-        "de": "ð¬ Foto animieren",
-        "en": "ð¬ Animate photo",
-        "fr": "ð¬ Animer la photo",
-        "th": "ð¬ à¸à¸³à¹à¸«à¹à¸£à¸¹à¸à¹à¸à¸¥à¸·à¹à¸­à¸à¹à¸«à¸§",
+        "ru": "Ã°Â¬ ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÂ¾ÃÃÂ¾",
+        "be": "Ã°Â¬ ÃÃÂ¶ÃÃÂ²ÃÃÃ ÃÃÂ¾ÃÃÂ°",
+        "uk": "Ã°Â¬ ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃÂ¸ ÃÃÂ¾ÃÃÂ¾",
+        "de": "Ã°Â¬ Foto animieren",
+        "en": "Ã°Â¬ Animate photo",
+        "fr": "Ã°Â¬ Animer la photo",
+        "th": "Ã°Â¬ Ã Â¸Ã Â¸Â³Ã Â¹Ã Â¸Â«Ã Â¹Ã Â¸Â£Ã Â¸Â¹Ã Â¸Ã Â¹Ã Â¸Ã Â¸Â¥Ã Â¸Â·Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¹Ã Â¸Â«Ã Â¸Â§",
     },
     "choose_engine": {
-        "ru": "ÐÑÐ±ÐµÑÐ¸ÑÐµ Ð´Ð²Ð¸Ð¶Ð¾Ðº:",
-        "be": "ÐÐ±ÑÑÑÑÐµ ÑÑÑÐ°Ð²ÑÐº:",
-        "uk": "ÐÐ±ÐµÑÑÑÑ ÑÑÑÑÐ¹:",
-        "de": "WÃ¤hle die Engine:",
+        "ru": "ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº:",
+        "be": "ÃÃÃÃÃÃÃÂµ ÃÃÃÃÂ°ÃÂ²ÃÃÂº:",
+        "uk": "ÃÃÃÂµÃÃÃÃ ÃÃÃÃÃÂ¹:",
+        "de": "WÃÂ¤hle die Engine:",
         "en": "Choose engine:",
         "fr": "Choisissez le moteur:",
-        "th": "à¹à¸¥à¸·à¸­à¸à¹à¸­à¸à¸à¸´à¸:",
+        "th": "Ã Â¹Ã Â¸Â¥Ã Â¸Â·Ã Â¸Â­Ã Â¸Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¸Ã Â¸Â´Ã Â¸:",
     },
     "runway_disabled_textvideo": {
-        "ru": "â ï¸ Runway Ð¾ÑÐºÐ»ÑÑÑÐ½ Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾ Ð¿Ð¾ ÑÐµÐºÑÑÑ/Ð³Ð¾Ð»Ð¾ÑÑ. ÐÑÐ±ÐµÑÐ¸ÑÐµ Kling, Luma Ð¸Ð»Ð¸ Sora.",
-        "be": "â ï¸ Runway Ð°Ð´ÐºÐ»ÑÑÐ°Ð½Ñ Ð´Ð»Ñ Ð²ÑÐ´ÑÐ° Ð¿Ð° ÑÑÐºÑÑÐµ/Ð³Ð¾Ð»Ð°ÑÐµ. ÐÐ±ÑÑÑÑÐµ Kling, Luma Ð°Ð±Ð¾ Sora.",
-        "uk": "â ï¸ Runway Ð²Ð¸Ð¼ÐºÐ½ÐµÐ½Ð¾ Ð´Ð»Ñ Ð²ÑÐ´ÐµÐ¾ Ð· ÑÐµÐºÑÑÑ/Ð³Ð¾Ð»Ð¾ÑÑ. ÐÐ±ÐµÑÑÑÑ Kling, Luma Ð°Ð±Ð¾ Sora.",
-        "de": "â ï¸ Runway ist fÃ¼r Text/VoiceâVideo deaktiviert. WÃ¤hle Kling, Luma oder Sora.",
-        "en": "â ï¸ Runway is disabled for text/voiceâvideo. Choose Kling, Luma or Sora.",
-        "fr": "â ï¸ Runway est dÃ©sactivÃ© pour texte/voixâvidÃ©o. Choisissez Kling, Luma ou Sora.",
-        "th": "â ï¸ à¸à¸´à¸ Runway à¸ªà¸³à¸«à¸£à¸±à¸à¸à¹à¸­à¸à¸§à¸²à¸¡/à¹à¸ªà¸µà¸¢à¸âà¸§à¸´à¸à¸µà¹à¸­ à¹à¸¥à¸·à¸­à¸ Kling, Luma à¸«à¸£à¸·à¸­ Sora",
+        "ru": "Ã¢ Ã¯Â¸ Runway ÃÂ¾ÃÃÂºÃÂ»ÃÃÃÃÂ½ ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ¿ÃÂ¾ ÃÃÂµÃÂºÃÃÃ/ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃ. ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ Kling, Luma ÃÂ¸ÃÂ»ÃÂ¸ Sora.",
+        "be": "Ã¢ Ã¯Â¸ Runway ÃÂ°ÃÂ´ÃÂºÃÂ»ÃÃÃÂ°ÃÂ½Ã ÃÂ´ÃÂ»Ã ÃÂ²ÃÃÂ´ÃÃÂ° ÃÂ¿ÃÂ° ÃÃÃÂºÃÃÃÂµ/ÃÂ³ÃÂ¾ÃÂ»ÃÂ°ÃÃÂµ. ÃÃÃÃÃÃÃÂµ Kling, Luma ÃÂ°ÃÃÂ¾ Sora.",
+        "uk": "Ã¢ Ã¯Â¸ Runway ÃÂ²ÃÂ¸ÃÂ¼ÃÂºÃÂ½ÃÂµÃÂ½ÃÂ¾ ÃÂ´ÃÂ»Ã ÃÂ²ÃÃÂ´ÃÂµÃÂ¾ ÃÂ· ÃÃÂµÃÂºÃÃÃ/ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃ. ÃÃÃÂµÃÃÃÃ Kling, Luma ÃÂ°ÃÃÂ¾ Sora.",
+        "de": "Ã¢ Ã¯Â¸ Runway ist fÃÂ¼r Text/VoiceÃ¢Video deaktiviert. WÃÂ¤hle Kling, Luma oder Sora.",
+        "en": "Ã¢ Ã¯Â¸ Runway is disabled for text/voiceÃ¢video. Choose Kling, Luma or Sora.",
+        "fr": "Ã¢ Ã¯Â¸ Runway est dÃÂ©sactivÃÂ© pour texte/voixÃ¢vidÃÂ©o. Choisissez Kling, Luma ou Sora.",
+        "th": "Ã¢ Ã¯Â¸ Ã Â¸Ã Â¸Â´Ã Â¸ Runway Ã Â¸ÂªÃ Â¸Â³Ã Â¸Â«Ã Â¸Â£Ã Â¸Ã Â¸Ã Â¸Ã Â¹Ã Â¸Â­Ã Â¸Ã Â¸Â§Ã Â¸Â²Ã Â¸Â¡/Ã Â¹Ã Â¸ÂªÃ Â¸ÂµÃ Â¸Â¢Ã Â¸Ã¢Ã Â¸Â§Ã Â¸Â´Ã Â¸Ã Â¸ÂµÃ Â¹Ã Â¸Â­ Ã Â¹Ã Â¸Â¥Ã Â¸Â·Ã Â¸Â­Ã Â¸ Kling, Luma Ã Â¸Â«Ã Â¸Â£Ã Â¸Â·Ã Â¸Â­ Sora",
     },
 }
 
@@ -797,16 +797,16 @@ def _tr(user_id: int, key: str, **kwargs) -> str:
 
 def _lang_choose_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
     """
-    ÐÐ»Ð°Ð²Ð¸Ð°ÑÑÑÐ° Ð²ÑÐ±Ð¾ÑÐ° ÑÐ·ÑÐºÐ°.
-    Ð¢ÑÐµÐ±Ð¾Ð²Ð°Ð½Ð¸Ðµ: Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÑÑ Ð¿ÑÐ¸ ÐºÐ°Ð¶Ð´Ð¾Ð¼ /start.
-    ÐÐ»Ñ ÑÐ´Ð¾Ð±ÑÑÐ²Ð° Ð´Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ Â«ÐÑÐ¾Ð´Ð¾Ð»Ð¶Ð¸ÑÑÂ» Ñ ÑÐµÐºÑÑÐ¸Ð¼ ÑÐ·ÑÐºÐ¾Ð¼, ÐµÑÐ»Ð¸ Ð¾Ð½ ÑÐ¶Ðµ Ð²ÑÐ±ÑÐ°Ð½.
+    ÃÃÂ»ÃÂ°ÃÂ²ÃÂ¸ÃÂ°ÃÃÃÃÂ° ÃÂ²ÃÃÃÂ¾ÃÃÂ° ÃÃÂ·ÃÃÂºÃÂ°.
+    ÃÂ¢ÃÃÂµÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂµ: ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÃ ÃÂ¿ÃÃÂ¸ ÃÂºÃÂ°ÃÂ¶ÃÂ´ÃÂ¾ÃÂ¼ /start.
+    ÃÃÂ»Ã ÃÃÂ´ÃÂ¾ÃÃÃÃÂ²ÃÂ° ÃÂ´ÃÂ¾ÃÃÂ°ÃÂ²ÃÂ»ÃÃÂµÃÂ¼ ÃÂ«ÃÃÃÂ¾ÃÂ´ÃÂ¾ÃÂ»ÃÂ¶ÃÂ¸ÃÃÃÂ» Ã ÃÃÂµÃÂºÃÃÃÂ¸ÃÂ¼ ÃÃÂ·ÃÃÂºÃÂ¾ÃÂ¼, ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¾ÃÂ½ ÃÃÂ¶ÃÂµ ÃÂ²ÃÃÃÃÂ°ÃÂ½.
     """
     uid = int(user_id) if user_id is not None else 0
     rows = []
     if uid and has_lang(uid):
         cur = get_lang(uid)
         cur_name = LANG_NAMES.get(cur, cur)
-        rows.append([InlineKeyboardButton(f"â¡ï¸ ÐÑÐ¾Ð´Ð¾Ð»Ð¶Ð¸ÑÑ ({cur_name})", callback_data="lang:__keep__")])
+        rows.append([InlineKeyboardButton(f"Ã¢Â¡Ã¯Â¸ ÃÃÃÂ¾ÃÂ´ÃÂ¾ÃÂ»ÃÂ¶ÃÂ¸ÃÃ ({cur_name})", callback_data="lang:__keep__")])
     for code in LANGS:
         rows.append([InlineKeyboardButton(LANG_NAMES[code], callback_data=f"lang:{code}")])
     return InlineKeyboardMarkup(rows)
@@ -868,7 +868,7 @@ def _wallet_take(user_id: int, engine: str, usd: float) -> bool:
     con.commit(); con.close()
     return True
 
-# === ÐÐÐÐÐ«Ð ÐÐÐ¨ÐÐÐÐ (USD) ===
+# === ÃÃÃÃÃÂ«Ã ÃÃÃÂ¨ÃÃÃÃ (USD) ===
 def _wallet_total_get(user_id: int) -> float:
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (user_id,))
@@ -893,7 +893,7 @@ def _wallet_total_take(user_id: int, usd: float) -> bool:
     con.commit(); con.close()
     return True
 
-# âââââââââ ÐÐ¸Ð¼Ð¸ÑÑ/ÑÐµÐ½Ñ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¸ÃÂ¼ÃÂ¸ÃÃ/ÃÃÂµÃÂ½Ã Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 USD_RUB = float(os.environ.get("USD_RUB", "100"))
 ONEOFF_MARKUP_DEFAULT = float(os.environ.get("ONEOFF_MARKUP_DEFAULT", "1.0"))
 ONEOFF_MARKUP_RUNWAY  = float(os.environ.get("ONEOFF_MARKUP_RUNWAY",  "0.5"))
@@ -901,7 +901,7 @@ LUMA_RES_HINT = os.environ.get("LUMA_RES", "720p").lower()
 RUNWAY_UNIT_COST_USD = float(os.environ.get("RUNWAY_UNIT_COST_USD", "7.0"))
 IMG_COST_USD = float(os.environ.get("IMG_COST_USD", "0.05"))
 
-# âââââââââââââââââ SORA (via Comet / aggregator) âââââââââââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ SORA (via Comet / aggregator) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 # Variables may be provided later; keep disabled safely by default.
 SORA_ENABLED = bool(os.environ.get("SORA_ENABLED", "").strip())
 SORA_COMET_BASE_URL = os.environ.get("SORA_COMET_BASE_URL", "").strip()  # e.g. https://api.cometapi.com
@@ -911,7 +911,7 @@ SORA_MODEL_PRO = os.environ.get("SORA_MODEL_PRO", "sora-2-pro").strip()
 SORA_UNIT_COST_USD = float(os.environ.get("SORA_UNIT_COST_USD", "0.40"))  # fallback estimate per second
 
 
-# DEMO: free Ð´Ð°ÑÑ Ð¿Ð¾Ð¿ÑÐ¾Ð±Ð¾Ð²Ð°ÑÑ ÐºÐ»ÑÑÐµÐ²ÑÐµ Ð´Ð²Ð¸Ð¶ÐºÐ¸
+# DEMO: free ÃÂ´ÃÂ°ÃÃ ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂºÃÂ»ÃÃÃÂµÃÂ²ÃÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸
 LIMITS = {
     "free":      {"text_per_day": 5,    "luma_budget_usd": 0.40, "runway_budget_usd": 0.0,  "img_budget_usd": 0.05, "allow_engines": ["gpt","luma","images"]},
     "start":     {"text_per_day": 200,  "luma_budget_usd": 0.8,  "runway_budget_usd": 0.0,  "img_budget_usd": 0.2,  "allow_engines": ["gpt","luma","midjourney","images"]},
@@ -927,7 +927,7 @@ def _limits_for(user_id: int) -> dict:
 
     ENGINE_BUDGET_GROUP = {
     "luma":   "luma",
-    "kling":  "luma",    # <â Kling ÑÐ¸Ð´Ð¸Ñ Ð½Ð° ÑÐ¾Ð¼ Ð¶Ðµ Ð±ÑÐ´Ð¶ÐµÑÐµ
+    "kling":  "luma",    # <Ã¢ Kling ÃÃÂ¸ÃÂ´ÃÂ¸Ã ÃÂ½ÃÂ° ÃÃÂ¾ÃÂ¼ ÃÂ¶ÃÂµ ÃÃÃÂ´ÃÂ¶ÃÂµÃÃÂµ
     "runway": "runway",
     "img":    "img",
 }
@@ -950,10 +950,10 @@ def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     val = int(rub + 0.999)
     return max(MIN_RUB_FOR_INVOICE, val)
 
-# ÐºÐ°ÐºÐ¸Ðµ Ð´Ð²Ð¸Ð¶ÐºÐ¸ Ð½Ð° ÐºÐ°ÐºÐ¾Ð¹ Ð±ÑÐ´Ð¶ÐµÑ ÑÐ°Ð´ÑÑÑÑ
+# ÃÂºÃÂ°ÃÂºÃÂ¸ÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸ ÃÂ½ÃÂ° ÃÂºÃÂ°ÃÂºÃÂ¾ÃÂ¹ ÃÃÃÂ´ÃÂ¶ÃÂµÃ ÃÃÂ°ÃÂ´ÃÃÃÃ
 ENGINE_BUDGET_GROUP = {
     "luma": "luma",
-    "kling": "luma",   # Kling Ð¸ Luma Ð´ÐµÐ»ÑÑ Ð¾Ð´Ð¸Ð½ Ð±ÑÐ´Ð¶ÐµÑ
+    "kling": "luma",   # Kling ÃÂ¸ Luma ÃÂ´ÃÂµÃÂ»ÃÃ ÃÂ¾ÃÂ´ÃÂ¸ÃÂ½ ÃÃÃÂ´ÃÂ¶ÃÂµÃ
     "runway": "runway",
     "img": "img",
 }
@@ -966,20 +966,20 @@ def _can_spend_or_offer(
     est_cost_usd: float,
 ) -> tuple[bool, str]:
     """
-    ÐÑÐ¾Ð²ÐµÑÑÐµÐ¼, Ð¼Ð¾Ð¶Ð½Ð¾ Ð»Ð¸ Ð¿Ð¾ÑÑÐ°ÑÐ¸ÑÑ est_cost_usd Ð½Ð° ÑÐºÐ°Ð·Ð°Ð½Ð½ÑÐ¹ Ð´Ð²Ð¸Ð¶Ð¾Ðº.
-    ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÐ¼ (ok, reason):
-      ok = True  -> Ð¼Ð¾Ð¶Ð½Ð¾, reason = ""
-      ok = False -> Ð½ÐµÐ»ÑÐ·Ñ, reason = "ASK_SUBSCRIBE" Ð¸Ð»Ð¸ "OFFER:<usd>"
+    ÃÃÃÂ¾ÃÂ²ÃÂµÃÃÃÂµÃÂ¼, ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÃÃÂ°ÃÃÂ¸ÃÃ est_cost_usd ÃÂ½ÃÂ° ÃÃÂºÃÂ°ÃÂ·ÃÂ°ÃÂ½ÃÂ½ÃÃÂ¹ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº.
+    ÃÃÂ¾ÃÂ·ÃÂ²ÃÃÂ°ÃÃÂ°ÃÂµÃÂ¼ (ok, reason):
+      ok = True  -> ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾, reason = ""
+      ok = False -> ÃÂ½ÃÂµÃÂ»ÃÃÂ·Ã, reason = "ASK_SUBSCRIBE" ÃÂ¸ÃÂ»ÃÂ¸ "OFFER:<usd>"
     """
     group = ENGINE_BUDGET_GROUP.get(engine, engine)
 
-    # Ð±ÐµÐ·Ð»Ð¸Ð¼Ð¸ÑÐ½ÑÐµ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ð¸
+    # ÃÃÂµÃÂ·ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÂ½ÃÃÂµ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»ÃÂ¸
     if is_unlimited(user_id, username):
         if group in ("luma", "runway", "img"):
             _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
         return True, ""
 
-    # ÐµÑÐ»Ð¸ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð½Ðµ ÑÐ°ÑÐ¸ÑÐ¸ÑÐ¸ÑÑÐµÐ¼ÑÐ¹ â Ð¿ÑÐ¾ÑÑÐ¾ ÑÐ°Ð·ÑÐµÑÐ°ÐµÐ¼
+    # ÃÂµÃÃÂ»ÃÂ¸ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ½ÃÂµ ÃÃÂ°ÃÃÂ¸ÃÃÂ¸ÃÃÂ¸ÃÃÃÂµÃÂ¼ÃÃÂ¹ Ã¢ ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÃÂ°ÃÂ·ÃÃÂµÃÃÂ°ÃÂµÃÂ¼
     if group not in ("luma", "runway", "img"):
         return True, ""
 
@@ -990,23 +990,23 @@ def _can_spend_or_offer(
     spent = row[f"{group}_usd"]
     budget = lim[f"{group}_budget_usd"]
 
-    # ÐµÑÐ»Ð¸ Ð²Ð»ÐµÐ·Ð°ÐµÐ¼ Ð² Ð´Ð½ÐµÐ²Ð½Ð¾Ð¹ Ð±ÑÐ´Ð¶ÐµÑ Ð¿Ð¾ Ð³ÑÑÐ¿Ð¿Ðµ (luma/runway/img)
+    # ÃÂµÃÃÂ»ÃÂ¸ ÃÂ²ÃÂ»ÃÂµÃÂ·ÃÂ°ÃÂµÃÂ¼ ÃÂ² ÃÂ´ÃÂ½ÃÂµÃÂ²ÃÂ½ÃÂ¾ÃÂ¹ ÃÃÃÂ´ÃÂ¶ÃÂµÃ ÃÂ¿ÃÂ¾ ÃÂ³ÃÃÃÂ¿ÃÂ¿ÃÂµ (luma/runway/img)
     if spent + est_cost_usd <= budget + 1e-9:
         _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
         return True, ""
 
-    # ÐÐ¾Ð¿ÑÑÐºÐ° Ð¿Ð¾ÐºÑÑÑÑ Ð¸Ð· ÐµÐ´Ð¸Ð½Ð¾Ð³Ð¾ ÐºÐ¾ÑÐµÐ»ÑÐºÐ°
+    # ÃÃÂ¾ÃÂ¿ÃÃÃÂºÃÂ° ÃÂ¿ÃÂ¾ÃÂºÃÃÃÃ ÃÂ¸ÃÂ· ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂºÃÂ°
     need = max(0.0, spent + est_cost_usd - budget)
     if need > 0:
         if _wallet_total_take(user_id, need):
             _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
             return True, ""
 
-        # Ð½Ð° ÑÑÐ¸-ÑÐ°ÑÐ¸ÑÐµ Ð¿ÑÐ¾ÑÐ¸Ð¼ Ð¾ÑÐ¾ÑÐ¼Ð¸ÑÑ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÑ
+        # ÃÂ½ÃÂ° ÃÃÃÂ¸-ÃÃÂ°ÃÃÂ¸ÃÃÂµ ÃÂ¿ÃÃÂ¾ÃÃÂ¸ÃÂ¼ ÃÂ¾ÃÃÂ¾ÃÃÂ¼ÃÂ¸ÃÃ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃ
         if tier == "free":
             return False, "ASK_SUBSCRIBE"
 
-        # Ð½Ð° Ð¿Ð»Ð°ÑÐ½ÑÑ ÑÐ°ÑÐ¸ÑÐ°Ñ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð¿ÑÐµÐ´Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð´Ð¾ÐºÑÐ¿Ð¸ÑÑ Ð»Ð¸Ð¼Ð¸Ñ
+        # ÃÂ½ÃÂ° ÃÂ¿ÃÂ»ÃÂ°ÃÃÂ½ÃÃ ÃÃÂ°ÃÃÂ¸ÃÃÂ°Ã ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ¿ÃÃÂµÃÂ´ÃÂ»ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ´ÃÂ¾ÃÂºÃÃÂ¿ÃÂ¸ÃÃ ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸Ã
         return False, f"OFFER:{need:.2f}"
 
     return True, ""
@@ -1014,32 +1014,32 @@ def _can_spend_or_offer(
 
 def _register_engine_spend(user_id: int, engine: str, usd: float):
     """
-    Ð ÐµÐ³Ð¸ÑÑÑÐ¸ÑÑÐµÐ¼ ÑÐ¶Ðµ ÑÐ¾Ð²ÐµÑÑÑÐ½Ð½ÑÐ¹ ÑÐ°ÑÑÐ¾Ð´ Ð¿Ð¾ Ð´Ð²Ð¸Ð¶ÐºÑ.
-    ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ Ð´Ð»Ñ ÑÐµÑ Ð²ÑÐ·Ð¾Ð²Ð¾Ð², Ð³Ð´Ðµ ÑÑÐ¾Ð¸Ð¼Ð¾ÑÑÑ Ð¸Ð·Ð²ÐµÑÑÐ½Ð° Ð¿Ð¾ÑÑÑÐ°ÐºÑÑÐ¼
-    Ð¸Ð»Ð¸ ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð±ÐµÐ·Ð»Ð¸Ð¼Ð¸ÑÐ½ÑÐ¹.
+    Ã ÃÂµÃÂ³ÃÂ¸ÃÃÃÃÂ¸ÃÃÃÂµÃÂ¼ ÃÃÂ¶ÃÂµ ÃÃÂ¾ÃÂ²ÃÂµÃÃÃÃÂ½ÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÃÃÂ¾ÃÂ´ ÃÂ¿ÃÂ¾ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃ.
+    ÃÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÃÃ ÃÂ´ÃÂ»Ã ÃÃÂµÃ ÃÂ²ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ¾ÃÂ², ÃÂ³ÃÂ´ÃÂµ ÃÃÃÂ¾ÃÂ¸ÃÂ¼ÃÂ¾ÃÃÃ ÃÂ¸ÃÂ·ÃÂ²ÃÂµÃÃÃÂ½ÃÂ° ÃÂ¿ÃÂ¾ÃÃÃÃÂ°ÃÂºÃÃÃÂ¼
+    ÃÂ¸ÃÂ»ÃÂ¸ ÃÂºÃÂ¾ÃÂ³ÃÂ´ÃÂ° ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»Ã ÃÃÂµÃÂ·ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÂ½ÃÃÂ¹.
     """
     group = ENGINE_BUDGET_GROUP.get(engine, engine)
     if group in ("luma", "runway", "img"):
         _usage_update(user_id, **{f"{group}_usd": float(usd)})
         
-# âââââââââ Prompts âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Prompts Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 SYSTEM_PROMPT = (
-    "Ð¢Ñ Ð´ÑÑÐ¶ÐµÐ»ÑÐ±Ð½ÑÐ¹ Ð¸ Ð»Ð°ÐºÐ¾Ð½Ð¸ÑÐ½ÑÐ¹ Ð°ÑÑÐ¸ÑÑÐµÐ½Ñ Ð½Ð° ÑÑÑÑÐºÐ¾Ð¼. "
-    "ÐÑÐ²ÐµÑÐ°Ð¹ Ð¿Ð¾ ÑÑÑÐ¸, ÑÑÑÑÐºÑÑÑÐ¸ÑÑÐ¹ ÑÐ¿Ð¸ÑÐºÐ°Ð¼Ð¸/ÑÐ°Ð³Ð°Ð¼Ð¸, Ð½Ðµ Ð²ÑÐ´ÑÐ¼ÑÐ²Ð°Ð¹ ÑÐ°ÐºÑÑ. "
-    "ÐÑÐ»Ð¸ ÑÑÑÐ»Ð°ÐµÑÑÑÑ Ð½Ð° Ð¸ÑÑÐ¾ÑÐ½Ð¸ÐºÐ¸ â Ð² ÐºÐ¾Ð½ÑÐµ Ð´Ð°Ð¹ ÐºÐ¾ÑÐ¾ÑÐºÐ¸Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÑÑÐ»Ð¾Ðº."
+    "ÃÂ¢Ã ÃÂ´ÃÃÃÂ¶ÃÂµÃÂ»ÃÃÃÂ½ÃÃÂ¹ ÃÂ¸ ÃÂ»ÃÂ°ÃÂºÃÂ¾ÃÂ½ÃÂ¸ÃÃÂ½ÃÃÂ¹ ÃÂ°ÃÃÃÂ¸ÃÃÃÂµÃÂ½Ã ÃÂ½ÃÂ° ÃÃÃÃÃÂºÃÂ¾ÃÂ¼. "
+    "ÃÃÃÂ²ÃÂµÃÃÂ°ÃÂ¹ ÃÂ¿ÃÂ¾ ÃÃÃÃÂ¸, ÃÃÃÃÃÂºÃÃÃÃÂ¸ÃÃÃÂ¹ ÃÃÂ¿ÃÂ¸ÃÃÂºÃÂ°ÃÂ¼ÃÂ¸/ÃÃÂ°ÃÂ³ÃÂ°ÃÂ¼ÃÂ¸, ÃÂ½ÃÂµ ÃÂ²ÃÃÂ´ÃÃÂ¼ÃÃÂ²ÃÂ°ÃÂ¹ ÃÃÂ°ÃÂºÃÃ. "
+    "ÃÃÃÂ»ÃÂ¸ ÃÃÃÃÂ»ÃÂ°ÃÂµÃÃÃÃ ÃÂ½ÃÂ° ÃÂ¸ÃÃÃÂ¾ÃÃÂ½ÃÂ¸ÃÂºÃÂ¸ Ã¢ ÃÂ² ÃÂºÃÂ¾ÃÂ½ÃÃÂµ ÃÂ´ÃÂ°ÃÂ¹ ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¸ÃÂ¹ ÃÃÂ¿ÃÂ¸ÃÃÂ¾ÃÂº ÃÃÃÃÂ»ÃÂ¾ÃÂº."
 )
 VISION_SYSTEM_PROMPT = (
-    "Ð¢Ñ ÑÑÑÐºÐ¾ Ð¾Ð¿Ð¸ÑÑÐ²Ð°ÐµÑÑ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ð¼Ð¾Ðµ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ð¹: Ð¾Ð±ÑÐµÐºÑÑ, ÑÐµÐºÑÑ, ÑÑÐµÐ¼Ñ, Ð³ÑÐ°ÑÐ¸ÐºÐ¸. "
-    "ÐÐµ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÑÐ¸ÑÑÐ¹ Ð»Ð¸ÑÐ½Ð¾ÑÑÐ¸ Ð»ÑÐ´ÐµÐ¹ Ð¸ Ð½Ðµ Ð¿Ð¸ÑÐ¸ Ð¸Ð¼ÐµÐ½Ð°, ÐµÑÐ»Ð¸ Ð¾Ð½Ð¸ Ð½Ðµ Ð½Ð°Ð¿ÐµÑÐ°ÑÐ°Ð½Ñ Ð½Ð° Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ð¸."
+    "ÃÂ¢Ã ÃÃÃÃÂºÃÂ¾ ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÃÂ²ÃÂ°ÃÂµÃÃ ÃÃÂ¾ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ¼ÃÂ¾ÃÂµ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂ¹: ÃÂ¾ÃÃÃÂµÃÂºÃÃ, ÃÃÂµÃÂºÃÃ, ÃÃÃÂµÃÂ¼Ã, ÃÂ³ÃÃÂ°ÃÃÂ¸ÃÂºÃÂ¸. "
+    "ÃÃÂµ ÃÂ¸ÃÂ´ÃÂµÃÂ½ÃÃÂ¸ÃÃÂ¸ÃÃÂ¸ÃÃÃÂ¹ ÃÂ»ÃÂ¸ÃÃÂ½ÃÂ¾ÃÃÃÂ¸ ÃÂ»ÃÃÂ´ÃÂµÃÂ¹ ÃÂ¸ ÃÂ½ÃÂµ ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÂ¸ÃÂ¼ÃÂµÃÂ½ÃÂ°, ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¾ÃÂ½ÃÂ¸ ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÂ¿ÃÂµÃÃÂ°ÃÃÂ°ÃÂ½Ã ÃÂ½ÃÂ° ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂ¸."
 )
 
-# âââââââââ Heuristics / intent âââââââââ
-_SMALLTALK_RE = re.compile(r"^(Ð¿ÑÐ¸Ð²ÐµÑ|Ð·Ð´ÑÐ°Ð²ÑÑÐ²ÑÐ¹|Ð´Ð¾Ð±ÑÑÐ¹\s*(Ð´ÐµÐ½Ñ|Ð²ÐµÑÐµÑ|ÑÑÑÐ¾)|ÑÐ¸|hi|hello|ÐºÐ°Ðº Ð´ÐµÐ»Ð°|ÑÐ¿Ð°ÑÐ¸Ð±Ð¾|Ð¿Ð¾ÐºÐ°)\b", re.I)
-_NEWSY_RE     = re.compile(r"(ÐºÐ¾Ð³Ð´Ð°|Ð´Ð°ÑÐ°|Ð²ÑÐ¹Ð´ÐµÑ|ÑÐµÐ»Ð¸Ð·|Ð½Ð¾Ð²Ð¾ÑÑ|ÐºÑÑÑ|ÑÐµÐ½Ð°|Ð¿ÑÐ¾Ð³Ð½Ð¾Ð·|Ð½Ð°Ð¹Ð´Ð¸|Ð¾ÑÐ¸ÑÐ¸Ð°Ð»|Ð¿Ð¾Ð³Ð¾Ð´Ð°|ÑÐµÐ³Ð¾Ð´Ð½Ñ|ÑÑÐµÐ½Ð´|Ð°Ð´ÑÐµÑ|ÑÐµÐ»ÐµÑÐ¾Ð½)", re.I)
-_CAPABILITY_RE= re.compile(r"(Ð¼Ð¾Ð¶(ÐµÑÑ|Ð½Ð¾|ÐµÑÐµ).{0,16}(Ð°Ð½Ð°Ð»Ð¸Ð·|ÑÐ°ÑÐ¿Ð¾Ð·Ð½|ÑÐ¸ÑÐ°ÑÑ|ÑÐ¾Ð·Ð´Ð°(Ð²Ð°)?Ñ|Ð´ÐµÐ»Ð°(ÑÑ)?).{0,24}(ÑÐ¾ÑÐ¾|ÐºÐ°ÑÑÐ¸Ð½Ðº|Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½|pdf|docx|epub|fb2|Ð°ÑÐ´Ð¸Ð¾|ÐºÐ½Ð¸Ð³))", re.I)
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Heuristics / intent Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
+_SMALLTALK_RE = re.compile(r"^(ÃÂ¿ÃÃÂ¸ÃÂ²ÃÂµÃ|ÃÂ·ÃÂ´ÃÃÂ°ÃÂ²ÃÃÃÂ²ÃÃÂ¹|ÃÂ´ÃÂ¾ÃÃÃÃÂ¹\s*(ÃÂ´ÃÂµÃÂ½Ã|ÃÂ²ÃÂµÃÃÂµÃ|ÃÃÃÃÂ¾)|ÃÃÂ¸|hi|hello|ÃÂºÃÂ°ÃÂº ÃÂ´ÃÂµÃÂ»ÃÂ°|ÃÃÂ¿ÃÂ°ÃÃÂ¸ÃÃÂ¾|ÃÂ¿ÃÂ¾ÃÂºÃÂ°)\b", re.I)
+_NEWSY_RE     = re.compile(r"(ÃÂºÃÂ¾ÃÂ³ÃÂ´ÃÂ°|ÃÂ´ÃÂ°ÃÃÂ°|ÃÂ²ÃÃÂ¹ÃÂ´ÃÂµÃ|ÃÃÂµÃÂ»ÃÂ¸ÃÂ·|ÃÂ½ÃÂ¾ÃÂ²ÃÂ¾ÃÃ|ÃÂºÃÃÃ|ÃÃÂµÃÂ½ÃÂ°|ÃÂ¿ÃÃÂ¾ÃÂ³ÃÂ½ÃÂ¾ÃÂ·|ÃÂ½ÃÂ°ÃÂ¹ÃÂ´ÃÂ¸|ÃÂ¾ÃÃÂ¸ÃÃÂ¸ÃÂ°ÃÂ»|ÃÂ¿ÃÂ¾ÃÂ³ÃÂ¾ÃÂ´ÃÂ°|ÃÃÂµÃÂ³ÃÂ¾ÃÂ´ÃÂ½Ã|ÃÃÃÂµÃÂ½ÃÂ´|ÃÂ°ÃÂ´ÃÃÂµÃ|ÃÃÂµÃÂ»ÃÂµÃÃÂ¾ÃÂ½)", re.I)
+_CAPABILITY_RE= re.compile(r"(ÃÂ¼ÃÂ¾ÃÂ¶(ÃÂµÃÃ|ÃÂ½ÃÂ¾|ÃÂµÃÃÂµ).{0,16}(ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·|ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½|ÃÃÂ¸ÃÃÂ°ÃÃ|ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°(ÃÂ²ÃÂ°)?Ã|ÃÂ´ÃÂµÃÂ»ÃÂ°(ÃÃ)?).{0,24}(ÃÃÂ¾ÃÃÂ¾|ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂº|ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½|pdf|docx|epub|fb2|ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾|ÃÂºÃÂ½ÃÂ¸ÃÂ³))", re.I)
 
-_IMG_WORDS = r"(ÐºÐ°ÑÑÐ¸Ð½\w+|Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½\w+|ÑÐ¾ÑÐ¾\w*|ÑÐ¸ÑÑÐ½Ðº\w+|image|picture|img\b|logo|banner|poster)"
-_VID_WORDS = r"(Ð²Ð¸Ð´ÐµÐ¾|ÑÐ¾Ð»Ð¸Ðº\w*|Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸\w*|shorts?|reels?|clip|video|vid\b)"
+_IMG_WORDS = r"(ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½\w+|ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½\w+|ÃÃÂ¾ÃÃÂ¾\w*|ÃÃÂ¸ÃÃÃÂ½ÃÂº\w+|image|picture|img\b|logo|banner|poster)"
+_VID_WORDS = r"(ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾|ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂº\w*|ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸\w*|shorts?|reels?|clip|video|vid\b)"
 
 def is_smalltalk(text: str) -> bool:
     t = (text or "").strip().lower()
@@ -1053,12 +1053,12 @@ def should_browse(text: str) -> bool:
         return False
     return bool(_NEWSY_RE.search(t)) and not is_smalltalk(t)
 
-_CREATE_CMD = r"(ÑÐ´ÐµÐ»Ð°(Ð¹|Ð¹ÑÐµ)|ÑÐ¾Ð·Ð´Ð°(Ð¹|Ð¹ÑÐµ)|ÑÐ³ÐµÐ½ÐµÑÐ¸ÑÑ(Ð¹|Ð¹ÑÐµ)|Ð½Ð°ÑÐ¸ÑÑ(Ð¹|Ð¹ÑÐµ)|render|generate|create|make)"
-_PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+Ð²Ð¸Ð´ÐµÐ¾", r"^video\b", r"^reels?\b", r"^shorts?\b"]
-_PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:ÐºÐ°ÑÑÐ¸Ð½\w+|Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½\w+|ÑÐ¾ÑÐ¾\w+|ÑÐ¸ÑÑÐ½Ðº\w+)", r"^image\b", r"^picture\b", r"^img\b"]
+_CREATE_CMD = r"(ÃÃÂ´ÃÂµÃÂ»ÃÂ°(ÃÂ¹|ÃÂ¹ÃÃÂµ)|ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°(ÃÂ¹|ÃÂ¹ÃÃÂµ)|ÃÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ¸ÃÃ(ÃÂ¹|ÃÂ¹ÃÃÂµ)|ÃÂ½ÃÂ°ÃÃÂ¸ÃÃ(ÃÂ¹|ÃÂ¹ÃÃÂµ)|render|generate|create|make)"
+_PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾", r"^video\b", r"^reels?\b", r"^shorts?\b"]
+_PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½\w+|ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½\w+|ÃÃÂ¾ÃÃÂ¾\w+|ÃÃÂ¸ÃÃÃÂ½ÃÂº\w+)", r"^image\b", r"^picture\b", r"^img\b"]
 
 def _strip_leading(s: str) -> str:
-    return s.strip(" \n\t:ââ-\"ââ'Â«Â»,.()[]")
+    return s.strip(" \n\t:Ã¢Ã¢-\"Ã¢Ã¢'ÃÂ«ÃÂ»,.()[]")
 
 def _after_match(text: str, match) -> str:
     return _strip_leading(text[match.end():])
@@ -1067,19 +1067,19 @@ def _looks_like_capability_question(tl: str) -> bool:
     if "?" in tl and re.search(_CAPABILITY_RE, tl):
         if not re.search(_CREATE_CMD, tl, re.I):
             return True
-    m = re.search(r"\b(ÑÑ|Ð²Ñ)?\s*Ð¼Ð¾Ð¶(ÐµÑÑ|Ð½Ð¾|ÐµÑÐµ)\b", tl)
+    m = re.search(r"\b(ÃÃ|ÃÂ²Ã)?\s*ÃÂ¼ÃÂ¾ÃÂ¶(ÃÂµÃÃ|ÃÂ½ÃÂ¾|ÃÂµÃÃÂµ)\b", tl)
     if m and re.search(_CAPABILITY_RE, tl) and not re.search(_CREATE_CMD, tl, re.I):
         return True
     return False
 
 def detect_media_intent(text: str):
     """
-    ÐÑÑÐ°ÐµÐ¼ÑÑ Ð¿Ð¾Ð½ÑÑÑ, Ð¿ÑÐ¾ÑÐ¸Ñ Ð»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ:
-    - ÑÐ³ÐµÐ½ÐµÑÐ¸ÑÐ¾Ð²Ð°ÑÑ ÐÐÐÐÐ ("video")
-    - ÑÐ³ÐµÐ½ÐµÑÐ¸ÑÐ¾Ð²Ð°ÑÑ ÐÐÐ Ð¢ÐÐÐÐ£ ("image")
-    ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÐ¼ ÐºÐ¾ÑÑÐµÐ¶ (mtype, rest), Ð³Ð´Ðµ:
-        mtype â {"video", "image", None}
-        rest  â Ð¾ÑÐ¸ÑÐµÐ½Ð½ÑÐ¹ Ð¿ÑÐ¾Ð¼Ð¿Ñ Ð±ÐµÐ· ÑÐ»ÑÐ¶ÐµÐ±Ð½ÑÑ ÑÐ»Ð¾Ð².
+    ÃÃÃÃÂ°ÃÂµÃÂ¼ÃÃ ÃÂ¿ÃÂ¾ÃÂ½ÃÃÃ, ÃÂ¿ÃÃÂ¾ÃÃÂ¸Ã ÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»Ã:
+    - ÃÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÃÃÃÃ ("video")
+    - ÃÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÃÃ ÃÂ¢ÃÃÃÃÂ£ ("image")
+    ÃÃÂ¾ÃÂ·ÃÂ²ÃÃÂ°ÃÃÂ°ÃÂµÃÂ¼ ÃÂºÃÂ¾ÃÃÃÂµÃÂ¶ (mtype, rest), ÃÂ³ÃÂ´ÃÂµ:
+        mtype Ã¢ {"video", "image", None}
+        rest  Ã¢ ÃÂ¾ÃÃÂ¸ÃÃÂµÃÂ½ÃÂ½ÃÃÂ¹ ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿Ã ÃÃÂµÃÂ· ÃÃÂ»ÃÃÂ¶ÃÂµÃÃÂ½ÃÃ ÃÃÂ»ÃÂ¾ÃÂ².
     """
     if not text:
         return (None, "")
@@ -1087,52 +1087,52 @@ def detect_media_intent(text: str):
     t = text.strip()
     tl = t.lower()
 
-    # ÐÐ¾Ð¿ÑÐ¾ÑÑ "ÑÑÐ¾ ÑÑ ÑÐ¼ÐµÐµÑÑ?" Ð¸ Ñ.Ð¿. ÑÑÐ°Ð·Ñ Ð¾ÑÐ±ÑÐ°ÑÑÐ²Ð°ÐµÐ¼
+    # ÃÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃ "ÃÃÃÂ¾ ÃÃ ÃÃÂ¼ÃÂµÃÂµÃÃ?" ÃÂ¸ Ã.ÃÂ¿. ÃÃÃÂ°ÃÂ·Ã ÃÂ¾ÃÃÃÃÂ°ÃÃÃÂ²ÃÂ°ÃÂµÃÂ¼
     if _looks_like_capability_question(tl):
         return (None, "")
 
-    # 1) Ð¯Ð²Ð½ÑÐµ Ð¿Ð°ÑÑÐµÑÐ½Ñ Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾ (Ñ ÑÑÑÑÐ¾Ð¼ Ð½Ð¾Ð²ÑÑ _PREFIXES_VIDEO)
+    # 1) ÃÂ¯ÃÂ²ÃÂ½ÃÃÂµ ÃÂ¿ÃÂ°ÃÃÃÂµÃÃÂ½Ã ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ (Ã ÃÃÃÃÃÂ¾ÃÂ¼ ÃÂ½ÃÂ¾ÃÂ²ÃÃ _PREFIXES_VIDEO)
     for p in _PREFIXES_VIDEO:
         m = re.search(p, tl, re.I)
         if m:
             return ("video", _after_match(t, m))
 
-    # 2) Ð¯Ð²Ð½ÑÐµ Ð¿Ð°ÑÑÐµÑÐ½Ñ Ð´Ð»Ñ ÐºÐ°ÑÑÐ¸Ð½Ð¾Ðº (Ð½Ð¾Ð²ÑÐµ _PREFIXES_IMAGE)
+    # 2) ÃÂ¯ÃÂ²ÃÂ½ÃÃÂµ ÃÂ¿ÃÂ°ÃÃÃÂµÃÃÂ½Ã ÃÂ´ÃÂ»Ã ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂ¾ÃÂº (ÃÂ½ÃÂ¾ÃÂ²ÃÃÂµ _PREFIXES_IMAGE)
     for p in _PREFIXES_IMAGE:
         m = re.search(p, tl, re.I)
         if m:
             return ("image", _after_match(t, m))
 
-    # 3) ÐÐ±ÑÐ¸Ð¹ ÑÐ»ÑÑÐ°Ð¹: ÐµÑÐ»Ð¸ ÐµÑÑÑ Ð³Ð»Ð°Ð³Ð¾Ð» Ð¸Ð· _CREATE_CMD
-    #    Ð¸ Ð¾ÑÐ´ÐµÐ»ÑÐ½Ð¾ ÑÐ»Ð¾Ð²Ð° "Ð²Ð¸Ð´ÐµÐ¾/ÑÐ¾Ð»Ð¸Ðº" Ð¸Ð»Ð¸ "ÐºÐ°ÑÑÐ¸Ð½ÐºÐ°/ÑÐ¾ÑÐ¾/â¦"
+    # 3) ÃÃÃÃÂ¸ÃÂ¹ ÃÃÂ»ÃÃÃÂ°ÃÂ¹: ÃÂµÃÃÂ»ÃÂ¸ ÃÂµÃÃÃ ÃÂ³ÃÂ»ÃÂ°ÃÂ³ÃÂ¾ÃÂ» ÃÂ¸ÃÂ· _CREATE_CMD
+    #    ÃÂ¸ ÃÂ¾ÃÃÂ´ÃÂµÃÂ»ÃÃÂ½ÃÂ¾ ÃÃÂ»ÃÂ¾ÃÂ²ÃÂ° "ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾/ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂº" ÃÂ¸ÃÂ»ÃÂ¸ "ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ°/ÃÃÂ¾ÃÃÂ¾/Ã¢Â¦"
     if re.search(_CREATE_CMD, tl, re.I):
-        # --- Ð²Ð¸Ð´ÐµÐ¾ ---
+        # --- ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ---
         if re.search(_VID_WORDS, tl, re.I):
-            # Ð²ÑÑÐµÐ·Ð°ÐµÐ¼ "Ð²Ð¸Ð´ÐµÐ¾/ÑÐ¾Ð»Ð¸Ðº" Ð¸ Ð³Ð»Ð°Ð³Ð¾Ð» ÐÐ ÐÐ ÐÐÐÐÐÐÐ¬ÐÐÐ Ð¡Ð¢Ð ÐÐÐ t
+            # ÃÂ²ÃÃÃÂµÃÂ·ÃÂ°ÃÂµÃÂ¼ "ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾/ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂº" ÃÂ¸ ÃÂ³ÃÂ»ÃÂ°ÃÂ³ÃÂ¾ÃÂ» ÃÃ ÃÃ ÃÃÃÃÃÃÃÂ¬ÃÃÃ ÃÂ¡ÃÂ¢Ã ÃÃÃ t
             clean = re.sub(_VID_WORDS, "", t, flags=re.I)
             clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
             return ("video", _strip_leading(clean))
 
-        # --- ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸ ---
+        # --- ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸ ---
         if re.search(_IMG_WORDS, tl, re.I):
             clean = re.sub(_IMG_WORDS, "", t, flags=re.I)
             clean = re.sub(_CREATE_CMD, "", clean, flags=re.I)
             return ("image", _strip_leading(clean))
 
-    # 4) Ð¡ÑÐ°ÑÑÐµ ÐºÐ¾ÑÐ¾ÑÐºÐ¸Ðµ ÑÐ¾ÑÐ¼Ð°ÑÑ "img: ..." / "image: ..." / "picture: ..."
+    # 4) ÃÂ¡ÃÃÂ°ÃÃÃÂµ ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃ "img: ..." / "image: ..." / "picture: ..."
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
     if m:
-        # Ð±ÐµÑÑÐ¼ ÑÐ²Ð¾ÑÑ ÑÐ¶Ðµ Ð¸Ð· Ð¾ÑÐ¸Ð³Ð¸Ð½Ð°Ð»ÑÐ½Ð¾Ð¹ ÑÑÑÐ¾ÐºÐ¸ t
+        # ÃÃÂµÃÃÃÂ¼ ÃÃÂ²ÃÂ¾ÃÃ ÃÃÂ¶ÃÂµ ÃÂ¸ÃÂ· ÃÂ¾ÃÃÂ¸ÃÂ³ÃÂ¸ÃÂ½ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ÃÂ¹ ÃÃÃÃÂ¾ÃÂºÃÂ¸ t
         return ("image", _strip_leading(t[m.end(1) + 1:]))
 
-    # 5) Ð¡ÑÐ°ÑÑÐµ ÐºÐ¾ÑÐ¾ÑÐºÐ¸Ðµ ÑÐ¾ÑÐ¼Ð°ÑÑ "video: ..." / "reels: ..." / "shorts: ..."
+    # 5) ÃÂ¡ÃÃÂ°ÃÃÃÂµ ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃ "video: ..." / "reels: ..." / "shorts: ..."
     m = re.match(r"^(video|vid|reels?|shorts?)\s*[:\-]\s*(.+)$", tl)
     if m:
         return ("video", _strip_leading(t[m.end(1) + 1:]))
 
-    # ÐÐ¸ÑÐµÐ³Ð¾ Ð½Ðµ Ð½Ð°ÑÐ»Ð¸ â Ð¾Ð±ÑÑÐ½ÑÐ¹ ÑÐµÐºÑÑ
+    # ÃÃÂ¸ÃÃÂµÃÂ³ÃÂ¾ ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÂ»ÃÂ¸ Ã¢ ÃÂ¾ÃÃÃÃÂ½ÃÃÂ¹ ÃÃÂµÃÂºÃÃ
     return (None, "")
-# âââââââââ OpenAI helpers âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ OpenAI helpers Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _oai_text_client():
     return oai_llm
 
@@ -1145,40 +1145,40 @@ def _pick_vision_model() -> str:
 
 async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     """
-    Ð£Ð½Ð¸Ð²ÐµÑÑÐ°Ð»ÑÐ½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ Ðº LLM:
-    - Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑ OpenRouter (ÑÐµÑÐµÐ· OPENAI_API_KEY = sk-or-...);
-    - Ð¿ÑÐ¸Ð½ÑÐ´Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÐ»ÑÑ JSON Ð² UTF-8, ÑÑÐ¾Ð±Ñ Ð½Ðµ Ð±ÑÐ»Ð¾ ascii-Ð¾ÑÐ¸Ð±Ð¾Ðº;
-    - Ð»Ð¾Ð³Ð¸ÑÑÐµÑ HTTP-ÑÑÐ°ÑÑÑ Ð¸ ÑÐµÐ»Ð¾ Ð¾ÑÐ¸Ð±ÐºÐ¸ Ð² Render-Ð»Ð¾Ð³Ð¸;
-    - Ð´ÐµÐ»Ð°ÐµÑ Ð´Ð¾ 3 Ð¿Ð¾Ð¿ÑÑÐ¾Ðº Ñ Ð½ÐµÐ±Ð¾Ð»ÑÑÐ¾Ð¹ Ð¿Ð°ÑÐ·Ð¾Ð¹.
+    ÃÂ£ÃÂ½ÃÂ¸ÃÂ²ÃÂµÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã ÃÂº LLM:
+    - ÃÂ¿ÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃ OpenRouter (ÃÃÂµÃÃÂµÃÂ· OPENAI_API_KEY = sk-or-...);
+    - ÃÂ¿ÃÃÂ¸ÃÂ½ÃÃÂ´ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ ÃÃÂ»ÃÃ JSON ÃÂ² UTF-8, ÃÃÃÂ¾ÃÃ ÃÂ½ÃÂµ ÃÃÃÂ»ÃÂ¾ ascii-ÃÂ¾ÃÃÂ¸ÃÃÂ¾ÃÂº;
+    - ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸ÃÃÃÂµÃ HTTP-ÃÃÃÂ°ÃÃÃ ÃÂ¸ ÃÃÂµÃÂ»ÃÂ¾ ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ¸ ÃÂ² Render-ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸;
+    - ÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂµÃ ÃÂ´ÃÂ¾ 3 ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÃÂ¾ÃÂº Ã ÃÂ½ÃÂµÃÃÂ¾ÃÂ»ÃÃÃÂ¾ÃÂ¹ ÃÂ¿ÃÂ°ÃÃÂ·ÃÂ¾ÃÂ¹.
     """
     user_text = (user_text or "").strip()
     if not user_text:
-        return "ÐÑÑÑÐ¾Ð¹ Ð·Ð°Ð¿ÑÐ¾Ñ."
+        return "ÃÃÃÃÃÂ¾ÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã."
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if web_ctx:
         messages.append({
             "role": "system",
-            "content": f"ÐÐ¾Ð½ÑÐµÐºÑÑ Ð¸Ð· Ð²ÐµÐ±-Ð¿Ð¾Ð¸ÑÐºÐ°:\n{web_ctx}",
+            "content": f"ÃÃÂ¾ÃÂ½ÃÃÂµÃÂºÃÃ ÃÂ¸ÃÂ· ÃÂ²ÃÂµÃ-ÃÂ¿ÃÂ¾ÃÂ¸ÃÃÂºÃÂ°:\n{web_ctx}",
         })
     messages.append({"role": "user", "content": user_text})
 
-    # ââ ÐÐ°Ð·Ð¾Ð²ÑÐ¹ URL âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-    # ÐÑÐ»Ð¸ ÐºÐ»ÑÑ Ð¾Ñ OpenRouter Ð¸Ð»Ð¸ TEXT_PROVIDER=openrouter â ÑÐ»ÑÐ¼ Ð½Ð° OpenRouter
+    # Ã¢Ã¢ ÃÃÂ°ÃÂ·ÃÂ¾ÃÂ²ÃÃÂ¹ URL Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
+    # ÃÃÃÂ»ÃÂ¸ ÃÂºÃÂ»ÃÃ ÃÂ¾Ã OpenRouter ÃÂ¸ÃÂ»ÃÂ¸ TEXT_PROVIDER=openrouter Ã¢ ÃÃÂ»ÃÃÂ¼ ÃÂ½ÃÂ° OpenRouter
     provider = (TEXT_PROVIDER or "").strip().lower()
     if OPENAI_API_KEY.startswith("sk-or-") or provider == "openrouter":
         base_url = "https://openrouter.ai/api/v1"
     else:
         base_url = (OPENAI_BASE_URL or "").strip() or "https://api.openai.com/v1"
 
-    # ââ ÐÐ°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¸ âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # Ã¢Ã¢ ÃÃÂ°ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂºÃÂ¸ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json; charset=utf-8",
         "Accept-Charset": "utf-8",
     }
 
-    # Ð¡Ð»ÑÐ¶ÐµÐ±Ð½ÑÐµ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¸ OpenRouter
+    # ÃÂ¡ÃÂ»ÃÃÂ¶ÃÂµÃÃÂ½ÃÃÂµ ÃÂ·ÃÂ°ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂºÃÂ¸ OpenRouter
     if "openrouter.ai" in base_url:
         if OPENROUTER_SITE_URL:
             headers["HTTP-Referer"] = OPENROUTER_SITE_URL
@@ -1203,7 +1203,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
                     headers=headers,
                 )
 
-            # ÐÐ¾Ð³Ð¸ÑÑÐµÐ¼ Ð²ÑÑ, ÑÑÐ¾ Ð½Ðµ 2xx
+            # ÃÃÂ¾ÃÂ³ÃÂ¸ÃÃÃÂµÃÂ¼ ÃÂ²ÃÃ, ÃÃÃÂ¾ ÃÂ½ÃÂµ 2xx
             if resp.status_code // 100 != 2:
                 body_preview = resp.text[:800]
                 log.warning(
@@ -1230,12 +1230,12 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
 
     log.error("ask_openai_text failed after 3 attempts: %s", last_err)
     return (
-        "â ï¸ Ð¡ÐµÐ¹ÑÐ°Ñ Ð½Ðµ Ð¿Ð¾Ð»ÑÑÐ¸Ð»Ð¾ÑÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð¾ÑÐ²ÐµÑ Ð¾Ñ Ð¼Ð¾Ð´ÐµÐ»Ð¸. "
-        "Ð¯ Ð½Ð° ÑÐ²ÑÐ·Ð¸ â Ð¿Ð¾Ð¿ÑÐ¾Ð±ÑÐ¹ Ð¿ÐµÑÐµÑÐ¾ÑÐ¼ÑÐ»Ð¸ÑÐ¾Ð²Ð°ÑÑ Ð·Ð°Ð¿ÑÐ¾Ñ Ð¸Ð»Ð¸ Ð¿Ð¾Ð²ÑÐ¾ÑÐ¸ÑÑ ÑÑÑÑ Ð¿Ð¾Ð·Ð¶Ðµ."
+        "Ã¢ Ã¯Â¸ ÃÂ¡ÃÂµÃÂ¹ÃÃÂ°Ã ÃÂ½ÃÂµ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÂ»ÃÂ¾ÃÃ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÂ¾Ã ÃÂ¼ÃÂ¾ÃÂ´ÃÂµÃÂ»ÃÂ¸. "
+        "ÃÂ¯ ÃÂ½ÃÂ° ÃÃÂ²ÃÃÂ·ÃÂ¸ Ã¢ ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÃÂ¹ ÃÂ¿ÃÂµÃÃÂµÃÃÂ¾ÃÃÂ¼ÃÃÂ»ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ²ÃÃÂ¾ÃÃÂ¸ÃÃ ÃÃÃÃ ÃÂ¿ÃÂ¾ÃÂ·ÃÂ¶ÃÂµ."
     )
     
 
-# âââââââââ Gemini (ÑÐµÑÐµÐ· CometAPI, Ð¾Ð¿ÑÐ¸Ð¾Ð½Ð°Ð»ÑÐ½Ð¾) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Gemini (ÃÃÂµÃÃÂµÃÂ· CometAPI, ÃÂ¾ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÂ½ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 GEMINI_API_KEY   = (os.environ.get("GEMINI_API_KEY", "").strip() or COMETAPI_KEY)
 GEMINI_BASE_URL  = os.environ.get("GEMINI_BASE_URL", "https://api.cometapi.com").strip().rstrip("/")
@@ -1244,11 +1244,11 @@ GEMINI_MODEL     = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro").strip()
 
 async def ask_gemini_text(user_text: str) -> str:
     """
-    ÐÐ¸Ð½Ð¸Ð¼Ð°Ð»ÑÐ½Ð°Ñ Ð¸Ð½ÑÐµÐ³ÑÐ°ÑÐ¸Ñ Gemini ÑÐµÑÐµÐ· CometAPI (Ð¸Ð»Ð¸ Ð»ÑÐ±Ð¾Ð¹ ÑÐ¾Ð²Ð¼ÐµÑÑÐ¸Ð¼ÑÐ¹ Ð¿ÑÐ¾ÐºÑÐ¸).
-    ÐÑÐ»Ð¸ ÑÐ½Ð´Ð¿Ð¾Ð¸Ð½Ñ Ð¾ÑÐ»Ð¸ÑÐ°ÐµÑÑÑ â Ð¿Ð¾Ð¿ÑÐ°Ð²Ñ GEMINI_CHAT_PATH/GEMINI_BASE_URL Ð² ENV.
+    ÃÃÂ¸ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÂ°Ã ÃÂ¸ÃÂ½ÃÃÂµÃÂ³ÃÃÂ°ÃÃÂ¸Ã Gemini ÃÃÂµÃÃÂµÃÂ· CometAPI (ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ»ÃÃÃÂ¾ÃÂ¹ ÃÃÂ¾ÃÂ²ÃÂ¼ÃÂµÃÃÃÂ¸ÃÂ¼ÃÃÂ¹ ÃÂ¿ÃÃÂ¾ÃÂºÃÃÂ¸).
+    ÃÃÃÂ»ÃÂ¸ ÃÃÂ½ÃÂ´ÃÂ¿ÃÂ¾ÃÂ¸ÃÂ½Ã ÃÂ¾ÃÃÂ»ÃÂ¸ÃÃÂ°ÃÂµÃÃÃ Ã¢ ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÂ°ÃÂ²Ã GEMINI_CHAT_PATH/GEMINI_BASE_URL ÃÂ² ENV.
     """
     if not GEMINI_API_KEY:
-        return "â ï¸ Gemini: Ð½Ðµ Ð·Ð°Ð´Ð°Ð½ GEMINI_API_KEY/COMETAPI_KEY. ÐÐ¾Ð±Ð°Ð²ÑÑÐµ ÐºÐ»ÑÑ Ð² Environment."
+        return "Ã¢ Ã¯Â¸ Gemini: ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½ GEMINI_API_KEY/COMETAPI_KEY. ÃÃÂ¾ÃÃÂ°ÃÂ²ÃÃÃÂµ ÃÂºÃÂ»ÃÃ ÃÂ² Environment."
     if not user_text.strip():
         return ""
 
@@ -1268,28 +1268,28 @@ async def ask_gemini_text(user_text: str) -> str:
         if r.status_code // 100 != 2:
             txt = (r.text or "")[:1200]
             log.warning("Gemini error %s: %s", r.status_code, txt)
-            return "â ï¸ Gemini: Ð¾ÑÐ¸Ð±ÐºÐ° Ð·Ð°Ð¿ÑÐ¾ÑÐ°. ÐÑÐ¾Ð²ÐµÑÑÑÐµ GEMINI_CHAT_PATH/BASE_URL Ð¸ ÐºÐ»ÑÑ."
+            return "Ã¢ Ã¯Â¸ Gemini: ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ° ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾ÃÃÂ°. ÃÃÃÂ¾ÃÂ²ÃÂµÃÃÃÃÂµ GEMINI_CHAT_PATH/BASE_URL ÃÂ¸ ÃÂºÃÂ»ÃÃ."
         js = r.json()
-        # ÐÑÑÐ°ÐµÐ¼ÑÑ Ð²ÑÑÐ°ÑÐ¸ÑÑ ÑÐµÐºÑÑ Ð¸Ð· ÑÐ°Ð·Ð½ÑÑ ÑÑÐµÐ¼ Ð¾ÑÐ²ÐµÑÐ¾Ð²
+        # ÃÃÃÃÂ°ÃÂµÃÂ¼ÃÃ ÃÂ²ÃÃÃÂ°ÃÃÂ¸ÃÃ ÃÃÂµÃÂºÃÃ ÃÂ¸ÃÂ· ÃÃÂ°ÃÂ·ÃÂ½ÃÃ ÃÃÃÂµÃÂ¼ ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ¾ÃÂ²
         for k in ("text", "output", "result", "content", "message"):
             v = js.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
-        # ÐÐ½Ð¾Ð³Ð´Ð° Ð¾ÑÐ²ÐµÑ Ð±ÑÐ²Ð°ÐµÑ Ð²Ð¸Ð´Ð° {"choices":[{"message":{"content":"..."}}]}
+        # ÃÃÂ½ÃÂ¾ÃÂ³ÃÂ´ÃÂ° ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÃÃÂ²ÃÂ°ÃÂµÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂ° {"choices":[{"message":{"content":"..."}}]}
         ch = js.get("choices")
         if isinstance(ch, list) and ch:
             msg = (ch[0].get("message") or {})
             cont = msg.get("content")
             if isinstance(cont, str) and cont.strip():
                 return cont.strip()
-        return "â ï¸ Gemini: Ð¾ÑÐ²ÐµÑ Ð¿Ð¾Ð»ÑÑÐµÐ½, Ð½Ð¾ ÑÐ¾ÑÐ¼Ð°Ñ Ð½Ðµ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð½. Ð¡Ð¼Ð¾ÑÑÐ¸ÑÐµ Ð»Ð¾Ð³Ð¸."
+        return "Ã¢ Ã¯Â¸ Gemini: ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂµÃÂ½, ÃÂ½ÃÂ¾ ÃÃÂ¾ÃÃÂ¼ÃÂ°Ã ÃÂ½ÃÂµ ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÂ½. ÃÂ¡ÃÂ¼ÃÂ¾ÃÃÃÂ¸ÃÃÂµ ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸."
     except Exception as e:
         log.exception("Gemini request error: %s", e)
-        return "â ï¸ Gemini: Ð¸ÑÐºÐ»ÑÑÐµÐ½Ð¸Ðµ Ð¿ÑÐ¸ Ð·Ð°Ð¿ÑÐ¾ÑÐµ. Ð¡Ð¼Ð¾ÑÑÐ¸ÑÐµ Ð»Ð¾Ð³Ð¸."
+        return "Ã¢ Ã¯Â¸ Gemini: ÃÂ¸ÃÃÂºÃÂ»ÃÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¿ÃÃÂ¸ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾ÃÃÂµ. ÃÂ¡ÃÂ¼ÃÂ¾ÃÃÃÂ¸ÃÃÂµ ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸."
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
-        prompt = (user_text or "ÐÐ¿Ð¸ÑÐ¸, ÑÑÐ¾ Ð½Ð° Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ð¸ Ð¸ ÐºÐ°ÐºÐ¾Ð¹ ÑÐ°Ð¼ ÑÐµÐºÑÑ.").strip()
+        prompt = (user_text or "ÃÃÂ¿ÃÂ¸ÃÃÂ¸, ÃÃÃÂ¾ ÃÂ½ÃÂ° ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂ¸ ÃÂ¸ ÃÂºÃÂ°ÃÂºÃÂ¾ÃÂ¹ ÃÃÂ°ÃÂ¼ ÃÃÂµÃÂºÃÃ.").strip()
         model = _pick_vision_model()
         resp = _oai_text_client().chat.completions.create(
             model=model,
@@ -1305,10 +1305,10 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("Vision error: %s", e)
-        return "ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¿ÑÐ¾Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸ÑÐ¾Ð²Ð°ÑÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ."
+        return "ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ¿ÃÃÂ¾ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ."
 
 
-# âââââââââ ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÑÑÐºÐ¸Ðµ Ð½Ð°ÑÑÑÐ¾Ð¹ÐºÐ¸ (TTS) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»ÃÃÃÂºÃÂ¸ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂ¹ÃÂºÃÂ¸ (TTS) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _db_init_prefs():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -1342,7 +1342,7 @@ def _tts_set(user_id: int, on: bool):
     con.commit(); con.close()
 
 
-# âââââââââ ÐÐ°Ð´ÑÐ¶Ð½ÑÐ¹ TTS ÑÐµÑÐµÐ· REST (OGG/Opus) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ°ÃÂ´ÃÃÂ¶ÃÂ½ÃÃÂ¹ TTS ÃÃÂµÃÃÂµÃÂ· REST (OGG/Opus) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _tts_bytes_sync(text: str) -> bytes | None:
     try:
         if not OPENAI_TTS_KEY:
@@ -1355,7 +1355,7 @@ def _tts_bytes_sync(text: str) -> bytes | None:
             "model": OPENAI_TTS_MODEL,
             "voice": OPENAI_TTS_VOICE,
             "input": text,
-            "format": "ogg"  # OGG/Opus Ð´Ð»Ñ Telegram voice
+            "format": "ogg"  # OGG/Opus ÃÂ´ÃÂ»Ã Telegram voice
         }
         headers = {
             "Authorization": f"Bearer {OPENAI_TTS_KEY}",
@@ -1381,7 +1381,7 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
     if len(text) > TTS_MAX_CHARS:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text(
-                f"ð ÐÐ·Ð²ÑÑÐºÐ° Ð²ÑÐºÐ»ÑÑÐµÐ½Ð° Ð´Ð»Ñ ÑÑÐ¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ: ÑÐµÐºÑÑ Ð´Ð»Ð¸Ð½Ð½ÐµÐµ {TTS_MAX_CHARS} ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð²."
+                f"Ã° ÃÃÂ·ÃÂ²ÃÃÃÂºÃÂ° ÃÂ²ÃÃÂºÃÂ»ÃÃÃÂµÃÂ½ÃÂ° ÃÂ´ÃÂ»Ã ÃÃÃÂ¾ÃÂ³ÃÂ¾ ÃÃÂ¾ÃÂ¾ÃÃÃÂµÃÂ½ÃÂ¸Ã: ÃÃÂµÃÂºÃÃ ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÂµÃÂµ {TTS_MAX_CHARS} ÃÃÂ¸ÃÂ¼ÃÂ²ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²."
             )
         return
     if not OPENAI_TTS_KEY:
@@ -1392,7 +1392,7 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
         audio = await asyncio.to_thread(_tts_bytes_sync, text)
         if not audio:
             with contextlib.suppress(Exception):
-                await update.effective_message.reply_text("ð ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ¸Ð½ÑÐµÐ·Ð¸ÑÐ¾Ð²Ð°ÑÑ Ð³Ð¾Ð»Ð¾Ñ.")
+                await update.effective_message.reply_text("Ã° ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ¸ÃÂ½ÃÃÂµÃÂ·ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾Ã.")
             return
         bio = BytesIO(audio); bio.seek(0); bio.name = "say.ogg"
         await update.effective_message.reply_voice(voice=InputFile(bio), caption=text)
@@ -1401,13 +1401,13 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
 
 async def cmd_voice_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, True)
-    await update.effective_message.reply_text(f"ð ÐÐ·Ð²ÑÑÐºÐ° Ð²ÐºÐ»ÑÑÐµÐ½Ð°. ÐÐ¸Ð¼Ð¸Ñ {TTS_MAX_CHARS} ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð² Ð½Ð° Ð¾ÑÐ²ÐµÑ.")
+    await update.effective_message.reply_text(f"Ã° ÃÃÂ·ÃÂ²ÃÃÃÂºÃÂ° ÃÂ²ÃÂºÃÂ»ÃÃÃÂµÃÂ½ÃÂ°. ÃÃÂ¸ÃÂ¼ÃÂ¸Ã {TTS_MAX_CHARS} ÃÃÂ¸ÃÂ¼ÃÂ²ÃÂ¾ÃÂ»ÃÂ¾ÃÂ² ÃÂ½ÃÂ° ÃÂ¾ÃÃÂ²ÃÂµÃ.")
 
 async def cmd_voice_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _tts_set(update.effective_user.id, False)
-    await update.effective_message.reply_text("ð ÐÐ·Ð²ÑÑÐºÐ° Ð²ÑÐºÐ»ÑÑÐµÐ½Ð°.")
+    await update.effective_message.reply_text("Ã° ÃÃÂ·ÃÂ²ÃÃÃÂºÃÂ° ÃÂ²ÃÃÂºÃÂ»ÃÃÃÂµÃÂ½ÃÂ°.")
 
-# âââââââââ Speech-to-Text (STT) â¢ OpenAI Whisper/4o-mini-transcribe âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Speech-to-Text (STT) Ã¢Â¢ OpenAI Whisper/4o-mini-transcribe Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 from openai import OpenAI as _OpenAI_STT
 
 OPENAI_STT_MODEL    = (os.getenv("OPENAI_STT_MODEL") or "whisper-1").strip()
@@ -1438,17 +1438,17 @@ async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
     log.error("STT failed: %s", last_err)
     return ""
 
-# âââââââââ Ð¥ÐµÐ½Ð´Ð»ÐµÑ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²ÑÑ/Ð°ÑÐ´Ð¸Ð¾ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÂ¥ÃÂµÃÂ½ÃÂ´ÃÂ»ÃÂµÃ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÃ/ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     voice = getattr(msg, "voice", None)
     audio = getattr(msg, "audio", None)
     media = voice or audio
     if not media:
-        await msg.reply_text("ÐÐµ Ð½Ð°ÑÑÐ» Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ð¹ ÑÐ°Ð¹Ð».")
+        await msg.reply_text("ÃÃÂµ ÃÂ½ÃÂ°ÃÃÃÂ» ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂ¹ ÃÃÂ°ÃÂ¹ÃÂ».")
         return
 
-    # Ð¡ÐºÐ°ÑÐ¸Ð²Ð°ÐµÐ¼ ÑÐ°Ð¹Ð»
+    # ÃÂ¡ÃÂºÃÂ°ÃÃÂ¸ÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÃÂ°ÃÂ¹ÃÂ»
     try:
         with contextlib.suppress(Exception):
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
@@ -1472,31 +1472,31 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         log.exception("TG download error: %s", e)
-        await msg.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐºÐ°ÑÐ°ÑÑ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ.")
+        await msg.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂºÃÂ°ÃÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÃÂ¾ÃÂ¾ÃÃÃÂµÃÂ½ÃÂ¸ÃÂµ.")
         return
 
     # STT
     transcript = await _stt_transcribe_bytes(filename, raw)
     if not transcript:
-        await msg.reply_text("ÐÑÐ¸Ð±ÐºÐ° Ð¿ÑÐ¸ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð²Ð°Ð½Ð¸Ð¸ ÑÐµÑÐ¸.")
+        await msg.reply_text("ÃÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ¸ ÃÃÂµÃÃÂ¸.")
         return
 
     transcript = transcript.strip()
 
-    # ÐÐ¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÑÐµÐºÑÑ Ð´Ð»Ñ Ð¾ÑÐ»Ð°Ð´ÐºÐ¸
+    # ÃÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÃÂµÃÂºÃÃ ÃÂ´ÃÂ»Ã ÃÂ¾ÃÃÂ»ÃÂ°ÃÂ´ÃÂºÃÂ¸
     with contextlib.suppress(Exception):
-        await msg.reply_text(f"ð£ï¸ Ð Ð°ÑÐ¿Ð¾Ð·Ð½Ð°Ð»: {transcript}")
+        await msg.reply_text(f"Ã°Â£Ã¯Â¸ Ã ÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÂ»: {transcript}")
 
-    # âââ ÐÐÐ®Ð§ÐÐÐÐ ÐÐÐÐÐÐ¢ âââ
-    # ÐÐ¾Ð»ÑÑÐµ ÐÐ ÑÐ¾Ð·Ð´Ð°ÑÐ¼ ÑÐµÐ¹ÐºÐ¾Ð²ÑÐ¹ Update, Ð½Ðµ Ð»ÐµÐ·ÐµÐ¼ Ð² Message.text â ÑÑÐ¾ Ð·Ð°Ð¿ÑÐµÑÐµÐ½Ð¾ Ð² Telegram API
-    # Ð¢ÐµÐ¿ÐµÑÑ Ð¼Ñ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½ÑÐ¹ Ð¿ÑÐ¾ÐºÑÐ¸-Ð¼ÐµÑÐ¾Ð´, ÐºÐ¾ÑÐ¾ÑÑÐ¹ ÑÐ¾Ð·Ð´Ð°ÑÑ Ð²ÑÐµÐ¼ÐµÐ½Ð½ÑÐ¹ message-Ð¾Ð±ÑÐµÐºÑ
+    # Ã¢Ã¢Ã¢ ÃÃÃÂ®ÃÂ§ÃÃÃÃ ÃÃÃÃÃÃÂ¢ Ã¢Ã¢Ã¢
+    # ÃÃÂ¾ÃÂ»ÃÃÃÂµ ÃÃ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃÂ¼ ÃÃÂµÃÂ¹ÃÂºÃÂ¾ÃÂ²ÃÃÂ¹ Update, ÃÂ½ÃÂµ ÃÂ»ÃÂµÃÂ·ÃÂµÃÂ¼ ÃÂ² Message.text Ã¢ ÃÃÃÂ¾ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂµÃÃÂµÃÂ½ÃÂ¾ ÃÂ² Telegram API
+    # ÃÂ¢ÃÂµÃÂ¿ÃÂµÃÃ ÃÂ¼Ã ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ ÃÃÂµÃÂ·ÃÂ¾ÃÂ¿ÃÂ°ÃÃÂ½ÃÃÂ¹ ÃÂ¿ÃÃÂ¾ÃÂºÃÃÂ¸-ÃÂ¼ÃÂµÃÃÂ¾ÃÂ´, ÃÂºÃÂ¾ÃÃÂ¾ÃÃÃÂ¹ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃ ÃÂ²ÃÃÂµÃÂ¼ÃÂµÃÂ½ÃÂ½ÃÃÂ¹ message-ÃÂ¾ÃÃÃÂµÃÂºÃ
     try:
         await on_text_with_text(update, context, transcript)
     except Exception as e:
         log.exception("Voice->text handler error: %s", e)
-        await msg.reply_text("Ð£Ð¿Ñ, Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð° Ð¾ÑÐ¸Ð±ÐºÐ°. Ð¯ ÑÐ¶Ðµ ÑÐ°Ð·Ð±Ð¸ÑÐ°ÑÑÑ.")
+        await msg.reply_text("ÃÂ£ÃÂ¿Ã, ÃÂ¿ÃÃÂ¾ÃÂ¸ÃÂ·ÃÂ¾ÃÃÂ»ÃÂ° ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ°. ÃÂ¯ ÃÃÂ¶ÃÂµ ÃÃÂ°ÃÂ·ÃÃÂ¸ÃÃÂ°ÃÃÃ.")
         
-# âââââââââ ÐÐ·Ð²Ð»ÐµÑÐµÐ½Ð¸Ðµ ÑÐµÐºÑÑÐ° Ð¸Ð· Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ¾Ð² âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂµÃÂºÃÃÃÂ° ÃÂ¸ÃÂ· ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ¾ÃÂ² Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _safe_decode_txt(b: bytes) -> str:
     for enc in ("utf-8","cp1251","latin-1"):
         try:
@@ -1594,12 +1594,12 @@ def extract_text_from_document(data: bytes, filename: str) -> tuple[str, str]:
     return decoded if decoded else "", "UNKNOWN"
 
 
-# âââââââââ Ð¡ÑÐ¼Ð¼Ð°ÑÐ¸Ð·Ð°ÑÐ¸Ñ Ð´Ð»Ð¸Ð½Ð½ÑÑ ÑÐµÐºÑÑÐ¾Ð² âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÂ¡ÃÃÂ¼ÃÂ¼ÃÂ°ÃÃÂ¸ÃÂ·ÃÂ°ÃÃÂ¸Ã ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÃ ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ² Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def _summarize_chunk(text: str, query: str | None = None) -> str:
-    prefix = "Ð¡ÑÐ¼Ð¼Ð¸ÑÑÐ¹ ÐºÑÐ°ÑÐºÐ¾ Ð¿Ð¾ Ð¿ÑÐ½ÐºÑÐ°Ð¼ Ð¾ÑÐ½Ð¾Ð²Ð½Ð¾Ðµ Ð¸Ð· ÑÑÐ°Ð³Ð¼ÐµÐ½ÑÐ° Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ° Ð½Ð° ÑÑÑÑÐºÐ¾Ð¼:\n"
+    prefix = "ÃÂ¡ÃÃÂ¼ÃÂ¼ÃÂ¸ÃÃÃÂ¹ ÃÂºÃÃÂ°ÃÃÂºÃÂ¾ ÃÂ¿ÃÂ¾ ÃÂ¿ÃÃÂ½ÃÂºÃÃÂ°ÃÂ¼ ÃÂ¾ÃÃÂ½ÃÂ¾ÃÂ²ÃÂ½ÃÂ¾ÃÂµ ÃÂ¸ÃÂ· ÃÃÃÂ°ÃÂ³ÃÂ¼ÃÂµÃÂ½ÃÃÂ° ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ° ÃÂ½ÃÂ° ÃÃÃÃÃÂºÃÂ¾ÃÂ¼:\n"
     if query:
-        prefix = (f"Ð¡ÑÐ¼Ð¼Ð¸ÑÑÐ¹ ÑÑÐ°Ð³Ð¼ÐµÐ½Ñ Ñ ÑÑÑÑÐ¾Ð¼ ÑÐµÐ»Ð¸: {query}\n"
-                  f"ÐÐ°Ð¹ Ð¾ÑÐ½Ð¾Ð²Ð½ÑÐµ ÑÐµÐ·Ð¸ÑÑ, ÑÐ°ÐºÑÑ, ÑÐ¸ÑÑÑ. Ð ÑÑÑÐºÐ¸Ð¹ ÑÐ·ÑÐº.\n")
+        prefix = (f"ÃÂ¡ÃÃÂ¼ÃÂ¼ÃÂ¸ÃÃÃÂ¹ ÃÃÃÂ°ÃÂ³ÃÂ¼ÃÂµÃÂ½Ã Ã ÃÃÃÃÃÂ¾ÃÂ¼ ÃÃÂµÃÂ»ÃÂ¸: {query}\n"
+                  f"ÃÃÂ°ÃÂ¹ ÃÂ¾ÃÃÂ½ÃÂ¾ÃÂ²ÃÂ½ÃÃÂµ ÃÃÂµÃÂ·ÃÂ¸ÃÃ, ÃÃÂ°ÃÂºÃÃ, ÃÃÂ¸ÃÃÃ. Ã ÃÃÃÃÂºÃÂ¸ÃÂ¹ ÃÃÂ·ÃÃÂº.\n")
     prompt = prefix + text
     return await ask_openai_text(prompt)
 
@@ -1613,13 +1613,13 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
     while i < len(text) and len(parts) < 8:
         parts.append(text[i:i+max_chunk]); i += max_chunk
     partials = [await _summarize_chunk(p, query=query) for p in parts]
-    combined = "\n\n".join(f"- Ð¤ÑÐ°Ð³Ð¼ÐµÐ½Ñ {idx+1}:\n{s}" for idx, s in enumerate(partials))
-    final_prompt = ("ÐÐ±ÑÐµÐ´Ð¸Ð½Ð¸ ÑÐµÐ·Ð¸ÑÑ Ð¿Ð¾ ÑÑÐ°Ð³Ð¼ÐµÐ½ÑÐ°Ð¼ Ð² ÑÐµÐ»ÑÐ½Ð¾Ðµ ÑÐµÐ·ÑÐ¼Ðµ Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ°: 1) 5â10 Ð³Ð»Ð°Ð²Ð½ÑÑ Ð¿ÑÐ½ÐºÑÐ¾Ð²; "
-                    "2) ÐºÐ»ÑÑÐµÐ²ÑÐµ ÑÐ¸ÑÑÑ/ÑÑÐ¾ÐºÐ¸; 3) Ð²ÑÐ²Ð¾Ð´/ÑÐµÐºÐ¾Ð¼ÐµÐ½Ð´Ð°ÑÐ¸Ð¸. Ð ÑÑÑÐºÐ¸Ð¹ ÑÐ·ÑÐº.\n\n" + combined)
+    combined = "\n\n".join(f"- ÃÂ¤ÃÃÂ°ÃÂ³ÃÂ¼ÃÂµÃÂ½Ã {idx+1}:\n{s}" for idx, s in enumerate(partials))
+    final_prompt = ("ÃÃÃÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÂ¸ ÃÃÂµÃÂ·ÃÂ¸ÃÃ ÃÂ¿ÃÂ¾ ÃÃÃÂ°ÃÂ³ÃÂ¼ÃÂµÃÂ½ÃÃÂ°ÃÂ¼ ÃÂ² ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÂµ ÃÃÂµÃÂ·ÃÃÂ¼ÃÂµ ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ°: 1) 5Ã¢10 ÃÂ³ÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÃ ÃÂ¿ÃÃÂ½ÃÂºÃÃÂ¾ÃÂ²; "
+                    "2) ÃÂºÃÂ»ÃÃÃÂµÃÂ²ÃÃÂµ ÃÃÂ¸ÃÃÃ/ÃÃÃÂ¾ÃÂºÃÂ¸; 3) ÃÂ²ÃÃÂ²ÃÂ¾ÃÂ´/ÃÃÂµÃÂºÃÂ¾ÃÂ¼ÃÂµÃÂ½ÃÂ´ÃÂ°ÃÃÂ¸ÃÂ¸. Ã ÃÃÃÃÂºÃÂ¸ÃÂ¹ ÃÃÂ·ÃÃÂº.\n\n" + combined)
     return await ask_openai_text(final_prompt)
 
 
-# ======= ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ¾Ð² (PDF/EPUB/DOCX/FB2/TXT) =======
+# ======= ÃÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ· ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ¾ÃÂ² (PDF/EPUB/DOCX/FB2/TXT) =======
 async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.document:
@@ -1629,33 +1629,33 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = await tg_file.download_as_bytearray()
         text, kind = extract_text_from_document(bytes(data), doc.file_name or "file")
         if not text.strip():
-            await update.effective_message.reply_text(f"ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¸Ð·Ð²Ð»ÐµÑÑ ÑÐµÐºÑÑ Ð¸Ð· {kind}.")
+            await update.effective_message.reply_text(f"ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ¸ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃ ÃÃÂµÃÂºÃÃ ÃÂ¸ÃÂ· {kind}.")
             return
         goal = (update.message.caption or "").strip() or None
-        await update.effective_message.reply_text(f"ð ÐÐ·Ð²Ð»ÐµÐºÐ°Ñ ÑÐµÐºÑÑ ({kind}), Ð³Ð¾ÑÐ¾Ð²Ð»Ñ ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑâ¦")
+        await update.effective_message.reply_text(f"Ã° ÃÃÂ·ÃÂ²ÃÂ»ÃÂµÃÂºÃÂ°Ã ÃÃÂµÃÂºÃÃ ({kind}), ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃÃ¢Â¦")
         summary = await summarize_long_text(text, query=goal)
-        summary = summary or "ÐÐ¾ÑÐ¾Ð²Ð¾."
+        summary = summary or "ÃÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾."
         await update.effective_message.reply_text(summary)
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc_analyze error: %s", e)
-    # Ð½Ð¸ÑÐµÐ³Ð¾ Ð½Ðµ Ð±ÑÐ¾ÑÐ°ÐµÐ¼ Ð½Ð°ÑÑÐ¶Ñ
+    # ÃÂ½ÃÂ¸ÃÃÂµÃÂ³ÃÂ¾ ÃÂ½ÃÂµ ÃÃÃÂ¾ÃÃÂ°ÃÂµÃÂ¼ ÃÂ½ÃÂ°ÃÃÃÂ¶Ã
 
-# âââââââââ OpenAI Images (Ð³ÐµÐ½ÐµÑÐ°ÑÐ¸Ñ ÐºÐ°ÑÑÐ¸Ð½Ð¾Ðº) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ OpenAI Images (ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸Ã ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂ¾ÃÂº) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     try:
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
         resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
         b64 = resp.data[0].b64_json
         img_bytes = base64.b64decode(b64)
-        await update.effective_message.reply_photo(photo=img_bytes, caption=f"ÐÐ¾ÑÐ¾Ð²Ð¾ â\nÐÐ°Ð¿ÑÐ¾Ñ: {prompt}")
+        await update.effective_message.reply_photo(photo=img_bytes, caption=f"ÃÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ Ã¢\nÃÃÂ°ÃÂ¿ÃÃÂ¾Ã: {prompt}")
     except Exception as e:
         log.exception("IMG gen error: %s", e)
-        await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ¾Ð·Ð´Ð°ÑÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ.")
+        await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ.")
 
 async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
     if not LUMA_IMG_BASE_URL or not LUMA_API_KEY:
-        # ÑÐ¾Ð»Ð±ÑÐº: OpenAI Images
+        # ÃÃÂ¾ÃÂ»ÃÃÃÂº: OpenAI Images
         try:
             resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
             return base64.b64decode(resp.data[0].b64_json)
@@ -1663,7 +1663,7 @@ async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
             log.exception("OpenAI images fallback error: %s", e)
             return None
     try:
-        # ÐÑÐ¸Ð¼ÐµÑÐ½ÑÐ¹ ÑÐ½Ð´Ð¿Ð¾Ð¸Ð½Ñ; ÐµÑÐ»Ð¸ Ñ ÑÐµÐ±Ñ Ð´ÑÑÐ³Ð¾Ð¹ â Ð·Ð°Ð¼ÐµÐ½Ð¸ path/Ð¿Ð¾Ð»Ñ Ð¿Ð¾Ð´ ÑÐ²Ð¾Ð¹ Ð°ÐºÐºÐ°ÑÐ½Ñ.
+        # ÃÃÃÂ¸ÃÂ¼ÃÂµÃÃÂ½ÃÃÂ¹ ÃÃÂ½ÃÂ´ÃÂ¿ÃÂ¾ÃÂ¸ÃÂ½Ã; ÃÂµÃÃÂ»ÃÂ¸ Ã ÃÃÂµÃÃ ÃÂ´ÃÃÃÂ³ÃÂ¾ÃÂ¹ Ã¢ ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ¸ path/ÃÂ¿ÃÂ¾ÃÂ»Ã ÃÂ¿ÃÂ¾ÃÂ´ ÃÃÂ²ÃÂ¾ÃÂ¹ ÃÂ°ÃÂºÃÂºÃÂ°ÃÃÂ½Ã.
         url = f"{LUMA_IMG_BASE_URL}/v1/images"
         headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"}
         payload = {"model": LUMA_IMG_MODEL, "prompt": prompt, "size": "1024x1024"}
@@ -1682,157 +1682,157 @@ async def _start_luma_img(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
     async def _go():
         img = await _luma_generate_image_bytes(prompt)
         if not img:
-            await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ¾Ð·Ð´Ð°ÑÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ.")
+            await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ.")
             return
-        await update.effective_message.reply_photo(photo=img, caption=f"ð ÐÐ¾ÑÐ¾Ð²Ð¾ â\nÐÐ°Ð¿ÑÐ¾Ñ: {prompt}")
+        await update.effective_message.reply_photo(photo=img, caption=f"Ã° ÃÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ Ã¢\nÃÃÂ°ÃÂ¿ÃÃÂ¾Ã: {prompt}")
     await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go,
                            remember_kind="luma_img", remember_payload={"prompt": prompt})
 
 
-# âââââââââ UI / ÑÐµÐºÑÑÑ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ UI / ÃÃÂµÃÂºÃÃÃ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 START_TEXT = (
-    "ÐÑÐ¸Ð²ÐµÑ! Ð¯ ÐÐµÐ¹ÑÐ¾-Bot â â¡ï¸ Ð¼ÑÐ»ÑÑÐ¸ÑÐµÐ¶Ð¸Ð¼Ð½ÑÐ¹ Ð±Ð¾Ñ Ð¸Ð· 7 Ð½ÐµÐ¹ÑÐ¾ÑÐµÑÐµÐ¹ Ð´Ð»Ñ ð ÑÑÑÐ±Ñ, ð¼ ÑÐ°Ð±Ð¾ÑÑ Ð¸ ð¥ ÑÐ°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ð¹.\n"
-    "Ð¯ ÑÐ¼ÐµÑ ÑÐ°Ð±Ð¾ÑÐ°ÑÑ Ð³Ð¸Ð±ÑÐ¸Ð´Ð½Ð¾: Ð¼Ð¾Ð³Ñ ÑÐ°Ð¼ Ð²ÑÐ±ÑÐ°ÑÑ Ð»ÑÑÑÐ¸Ð¹ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð¿Ð¾Ð´ Ð·Ð°Ð´Ð°ÑÑ Ð¸Ð»Ð¸ Ð´Ð°ÑÑ ÑÐµÐ±Ðµ Ð²ÑÐ±ÑÐ°ÑÑ Ð²ÑÑÑÐ½ÑÑ. ð¤ð§ \n"
+    "ÃÃÃÂ¸ÃÂ²ÃÂµÃ! ÃÂ¯ ÃÃÂµÃÂ¹ÃÃÂ¾-Bot Ã¢ Ã¢Â¡Ã¯Â¸ ÃÂ¼ÃÃÂ»ÃÃÃÂ¸ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ½ÃÃÂ¹ ÃÃÂ¾Ã ÃÂ¸ÃÂ· 7 ÃÂ½ÃÂµÃÂ¹ÃÃÂ¾ÃÃÂµÃÃÂµÃÂ¹ ÃÂ´ÃÂ»Ã Ã° ÃÃÃÃÃ, Ã°Â¼ ÃÃÂ°ÃÃÂ¾ÃÃ ÃÂ¸ Ã°Â¥ ÃÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂ¹.\n"
+    "ÃÂ¯ ÃÃÂ¼ÃÂµÃ ÃÃÂ°ÃÃÂ¾ÃÃÂ°ÃÃ ÃÂ³ÃÂ¸ÃÃÃÂ¸ÃÂ´ÃÂ½ÃÂ¾: ÃÂ¼ÃÂ¾ÃÂ³Ã ÃÃÂ°ÃÂ¼ ÃÂ²ÃÃÃÃÂ°ÃÃ ÃÂ»ÃÃÃÃÂ¸ÃÂ¹ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ¿ÃÂ¾ÃÂ´ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ´ÃÂ°ÃÃ ÃÃÂµÃÃÂµ ÃÂ²ÃÃÃÃÂ°ÃÃ ÃÂ²ÃÃÃÃÂ½ÃÃ. Ã°Â¤Ã°Â§ \n"
     "\n"
-    "â¨ ÐÐ»Ð°Ð²Ð½ÑÐµ ÑÐµÐ¶Ð¸Ð¼Ñ:\n"
+    "Ã¢Â¨ ÃÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÃÂµ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼Ã:\n"
     "\n"
     "\n"
-    "â¢ ð Ð£ÑÑÐ±Ð° â Ð¾Ð±ÑÑÑÐ½ÐµÐ½Ð¸Ñ Ñ Ð¿ÑÐ¸Ð¼ÐµÑÐ°Ð¼Ð¸, Ð¿Ð¾ÑÐ°Ð³Ð¾Ð²ÑÐµ ÑÐµÑÐµÐ½Ð¸Ñ Ð·Ð°Ð´Ð°Ñ, ÑÑÑÐµ/ÑÐµÑÐµÑÐ°Ñ/Ð´Ð¾ÐºÐ»Ð°Ð´, Ð¼Ð¸Ð½Ð¸-ÐºÐ²Ð¸Ð·Ñ.\n"
-    "ð Ð¢Ð°ÐºÐ¶Ðµ: ÑÐ°Ð·Ð±Ð¾Ñ ÑÑÐµÐ±Ð½ÑÑ PDF/ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÑ ÐºÐ½Ð¸Ð³, ÑÐ¿Ð°ÑÐ³Ð°Ð»ÐºÐ¸ Ð¸ ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑÑ, ÐºÐ¾Ð½ÑÑÑÑÐºÑÐ¾Ñ ÑÐµÑÑÐ¾Ð²;\n"
-    "ð§ ÑÐ°Ð¹Ð¼-ÐºÐ¾Ð´Ñ Ð¿Ð¾ Ð°ÑÐ´Ð¸Ð¾ÐºÐ½Ð¸Ð³Ð°Ð¼/Ð»ÐµÐºÑÐ¸ÑÐ¼ Ð¸ ÐºÑÐ°ÑÐºÐ¸Ðµ Ð²ÑÐ¶Ð¸Ð¼ÐºÐ¸. ð§©\n"
+    "Ã¢Â¢ Ã° ÃÂ£ÃÃÃÃÂ° Ã¢ ÃÂ¾ÃÃÃÃÃÂ½ÃÂµÃÂ½ÃÂ¸Ã Ã ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃÃÂ°ÃÂ¼ÃÂ¸, ÃÂ¿ÃÂ¾ÃÃÂ°ÃÂ³ÃÂ¾ÃÂ²ÃÃÂµ ÃÃÂµÃÃÂµÃÂ½ÃÂ¸Ã ÃÂ·ÃÂ°ÃÂ´ÃÂ°Ã, ÃÃÃÃÂµ/ÃÃÂµÃÃÂµÃÃÂ°Ã/ÃÂ´ÃÂ¾ÃÂºÃÂ»ÃÂ°ÃÂ´, ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂºÃÂ²ÃÂ¸ÃÂ·Ã.\n"
+    "Ã° ÃÂ¢ÃÂ°ÃÂºÃÂ¶ÃÂµ: ÃÃÂ°ÃÂ·ÃÃÂ¾Ã ÃÃÃÂµÃÃÂ½ÃÃ PDF/ÃÃÂ»ÃÂµÃÂºÃÃÃÂ¾ÃÂ½ÃÂ½ÃÃ ÃÂºÃÂ½ÃÂ¸ÃÂ³, ÃÃÂ¿ÃÂ°ÃÃÂ³ÃÂ°ÃÂ»ÃÂºÃÂ¸ ÃÂ¸ ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃÃ, ÃÂºÃÂ¾ÃÂ½ÃÃÃÃÃÂºÃÃÂ¾Ã ÃÃÂµÃÃÃÂ¾ÃÂ²;\n"
+    "Ã°Â§ ÃÃÂ°ÃÂ¹ÃÂ¼-ÃÂºÃÂ¾ÃÂ´Ã ÃÂ¿ÃÂ¾ ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾ÃÂºÃÂ½ÃÂ¸ÃÂ³ÃÂ°ÃÂ¼/ÃÂ»ÃÂµÃÂºÃÃÂ¸ÃÃÂ¼ ÃÂ¸ ÃÂºÃÃÂ°ÃÃÂºÃÂ¸ÃÂµ ÃÂ²ÃÃÂ¶ÃÂ¸ÃÂ¼ÃÂºÃÂ¸. Ã°Â§Â©\n"
     "\n"
-    "â¢ ð¼ Ð Ð°Ð±Ð¾ÑÐ° â Ð¿Ð¸ÑÑÐ¼Ð°/Ð±ÑÐ¸ÑÑ/Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÑ, Ð°Ð½Ð°Ð»Ð¸ÑÐ¸ÐºÐ° Ð¸ ÑÐµÐ·ÑÐ¼Ðµ Ð¼Ð°ÑÐµÑÐ¸Ð°Ð»Ð¾Ð², ToDo/Ð¿Ð»Ð°Ð½Ñ, Ð³ÐµÐ½ÐµÑÐ°ÑÐ¾Ñ Ð¸Ð´ÐµÐ¹.\n"
-    "ð ï¸ ÐÐ»Ñ Ð°ÑÑÐ¸ÑÐµÐºÑÐ¾ÑÐ°/Ð´Ð¸Ð·Ð°Ð¹Ð½ÐµÑÐ°/Ð¿ÑÐ¾ÐµÐºÑÐ¸ÑÐ¾Ð²ÑÐ¸ÐºÐ°: ÑÑÑÑÐºÑÑÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ Ð¢Ð, ÑÐµÐº-Ð»Ð¸ÑÑÑ ÑÑÐ°Ð´Ð¸Ð¹,\n"
-    "ðï¸ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ñ/Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ñ Ð»Ð¸ÑÑÐ¾Ð², ÑÐ²Ð¾Ð´Ð½ÑÐµ ÑÐ°Ð±Ð»Ð¸ÑÑ Ð¸Ð· ÑÐµÐºÑÑÐ¾Ð², Ð¾ÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð¸Ðµ Ð¿Ð¾ÑÑÐ½Ð¸ÑÐµÐ»ÑÐ½ÑÑ Ð·Ð°Ð¿Ð¸ÑÐ¾Ðº. ð\n"
+    "Ã¢Â¢ Ã°Â¼ Ã ÃÂ°ÃÃÂ¾ÃÃÂ° Ã¢ ÃÂ¿ÃÂ¸ÃÃÃÂ¼ÃÂ°/ÃÃÃÂ¸ÃÃ/ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ, ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÃÂ¸ÃÂºÃÂ° ÃÂ¸ ÃÃÂµÃÂ·ÃÃÂ¼ÃÂµ ÃÂ¼ÃÂ°ÃÃÂµÃÃÂ¸ÃÂ°ÃÂ»ÃÂ¾ÃÂ², ToDo/ÃÂ¿ÃÂ»ÃÂ°ÃÂ½Ã, ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¾Ã ÃÂ¸ÃÂ´ÃÂµÃÂ¹.\n"
+    "Ã° Ã¯Â¸ ÃÃÂ»Ã ÃÂ°ÃÃÃÂ¸ÃÃÂµÃÂºÃÃÂ¾ÃÃÂ°/ÃÂ´ÃÂ¸ÃÂ·ÃÂ°ÃÂ¹ÃÂ½ÃÂµÃÃÂ°/ÃÂ¿ÃÃÂ¾ÃÂµÃÂºÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÃÂ¸ÃÂºÃÂ°: ÃÃÃÃÃÂºÃÃÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ¢Ã, ÃÃÂµÃÂº-ÃÂ»ÃÂ¸ÃÃÃ ÃÃÃÂ°ÃÂ´ÃÂ¸ÃÂ¹,\n"
+    "Ã°Ã¯Â¸ ÃÂ½ÃÂ°ÃÂ·ÃÂ²ÃÂ°ÃÂ½ÃÂ¸Ã/ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸Ã ÃÂ»ÃÂ¸ÃÃÃÂ¾ÃÂ², ÃÃÂ²ÃÂ¾ÃÂ´ÃÂ½ÃÃÂµ ÃÃÂ°ÃÃÂ»ÃÂ¸ÃÃ ÃÂ¸ÃÂ· ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ², ÃÂ¾ÃÃÂ¾ÃÃÂ¼ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¿ÃÂ¾ÃÃÃÂ½ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¾ÃÂº. Ã°\n"
     "\n"
-    "â¢ ð¥ Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ â ÑÐ¾ÑÐ¾-Ð¼Ð°ÑÑÐµÑÑÐºÐ°Ñ (ÑÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ/Ð·Ð°Ð¼ÐµÐ½Ð° ÑÐ¾Ð½Ð°, Ð´Ð¾ÑÐ¸ÑÐ¾Ð²ÐºÐ°, outpaint), Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ°ÑÑÑ ÑÐ¾ÑÐ¾,\n"
-    "ð¬ Ð²Ð¸Ð´ÐµÐ¾ Ð¿Ð¾ ÑÐµÐºÑÑÑ/Ð³Ð¾Ð»Ð¾ÑÑ, Ð¸Ð´ÐµÐ¸ Ð¸ ÑÐ¾ÑÐ¼Ð°ÑÑ Ð´Ð»Ñ Reels/Shorts, Ð°Ð²ÑÐ¾-Ð½Ð°ÑÐµÐ·ÐºÐ° Ð¸Ð· Ð´Ð»Ð¸Ð½Ð½ÑÑ Ð²Ð¸Ð´ÐµÐ¾\n"
-    "(ÑÑÐµÐ½Ð°ÑÐ¸Ð¹/ÑÐ°Ð¹Ð¼-ÐºÐ¾Ð´Ñ), Ð¼ÐµÐ¼Ñ/ÐºÐ²Ð¸Ð·Ñ. ð¼ï¸ðª\n"
+    "Ã¢Â¢ Ã°Â¥ Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã Ã¢ ÃÃÂ¾ÃÃÂ¾-ÃÂ¼ÃÂ°ÃÃÃÂµÃÃÃÂºÃÂ°Ã (ÃÃÂ´ÃÂ°ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ/ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ° ÃÃÂ¾ÃÂ½ÃÂ°, ÃÂ´ÃÂ¾ÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂºÃÂ°, outpaint), ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÃÂ°ÃÃÃ ÃÃÂ¾ÃÃÂ¾,\n"
+    "Ã°Â¬ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ¿ÃÂ¾ ÃÃÂµÃÂºÃÃÃ/ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃ, ÃÂ¸ÃÂ´ÃÂµÃÂ¸ ÃÂ¸ ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃ ÃÂ´ÃÂ»Ã Reels/Shorts, ÃÂ°ÃÂ²ÃÃÂ¾-ÃÂ½ÃÂ°ÃÃÂµÃÂ·ÃÂºÃÂ° ÃÂ¸ÃÂ· ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾\n"
+    "(ÃÃÃÂµÃÂ½ÃÂ°ÃÃÂ¸ÃÂ¹/ÃÃÂ°ÃÂ¹ÃÂ¼-ÃÂºÃÂ¾ÃÂ´Ã), ÃÂ¼ÃÂµÃÂ¼Ã/ÃÂºÃÂ²ÃÂ¸ÃÂ·Ã. Ã°Â¼Ã¯Â¸Ã°Âª\n"
     "\n"
-    "ð§­ ÐÐ°Ðº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑÑÑ:\n"
-    "Ð¿ÑÐ¾ÑÑÐ¾ Ð²ÑÐ±ÐµÑÐ¸ ÑÐµÐ¶Ð¸Ð¼ ÐºÐ½Ð¾Ð¿ÐºÐ¾Ð¹ Ð½Ð¸Ð¶Ðµ Ð¸Ð»Ð¸ Ð½Ð°Ð¿Ð¸ÑÐ¸ Ð·Ð°Ð¿ÑÐ¾Ñ â Ñ ÑÐ°Ð¼ Ð¾Ð¿ÑÐµÐ´ÐµÐ»Ñ Ð·Ð°Ð´Ð°ÑÑ Ð¸ Ð¿ÑÐµÐ´Ð»Ð¾Ð¶Ñ Ð²Ð°ÑÐ¸Ð°Ð½ÑÑ. âï¸â¨\n"
+    "Ã°Â§Â­ ÃÃÂ°ÃÂº ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÃÃ:\n"
+    "ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ²ÃÃÃÂµÃÃÂ¸ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¾ÃÂ¹ ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã Ã¢ Ã ÃÃÂ°ÃÂ¼ ÃÂ¾ÃÂ¿ÃÃÂµÃÂ´ÃÂµÃÂ»Ã ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ ÃÂ¸ ÃÂ¿ÃÃÂµÃÂ´ÃÂ»ÃÂ¾ÃÂ¶Ã ÃÂ²ÃÂ°ÃÃÂ¸ÃÂ°ÃÂ½ÃÃ. Ã¢Ã¯Â¸Ã¢Â¨\n"
     "\n"
-    "ð§  ÐÐ½Ð¾Ð¿ÐºÐ° Â«ÐÐ²Ð¸Ð¶ÐºÐ¸Â»:\n"
-    "Ð´Ð»Ñ ÑÐ¾ÑÐ½Ð¾Ð³Ð¾ Ð²ÑÐ±Ð¾ÑÐ°, ÐºÐ°ÐºÑÑ Ð½ÐµÐ¹ÑÐ¾ÑÐµÑÑ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Ð¿ÑÐ¸Ð½ÑÐ´Ð¸ÑÐµÐ»ÑÐ½Ð¾. ð¯ð¤"
+    "Ã°Â§  ÃÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ° ÃÂ«ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸ÃÂ»:\n"
+    "ÃÂ´ÃÂ»Ã ÃÃÂ¾ÃÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ²ÃÃÃÂ¾ÃÃÂ°, ÃÂºÃÂ°ÃÂºÃÃ ÃÂ½ÃÂµÃÂ¹ÃÃÂ¾ÃÃÂµÃÃ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂ¿ÃÃÂ¸ÃÂ½ÃÃÂ´ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾. Ã°Â¯Ã°Â¤"
 )
 
 def engines_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("ð¬ GPT (ÑÐµÐºÑÑ/ÑÐ¾ÑÐ¾/Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÑ)", callback_data="engine:gpt")],
-        [InlineKeyboardButton("ð¼ Images (OpenAI)",             callback_data="engine:images")],
-        [InlineKeyboardButton("ð Kling â ÐºÐ»Ð¸Ð¿Ñ / ÑÐ¾ÑÑÑ",       callback_data="engine:kling")],
-        [InlineKeyboardButton("ð¬ Luma â ÐºÐ¾ÑÐ¾ÑÐºÐ¸Ðµ Ð²Ð¸Ð´ÐµÐ¾",       callback_data="engine:luma")],
-        [InlineKeyboardButton("ð¥ Runway â Ð¿ÑÐµÐ¼Ð¸ÑÐ¼-Ð²Ð¸Ð´ÐµÐ¾",      callback_data="engine:runway")],
-        [InlineKeyboardButton("ð¬ Sora â Ð²Ð¸Ð´ÐµÐ¾ (Comet)",        callback_data="engine:sora")],
-        [InlineKeyboardButton("ð§  Gemini (Comet)",             callback_data="engine:gemini")],
-        [InlineKeyboardButton("ðµ Suno (music)",               callback_data="engine:suno")],
-        [InlineKeyboardButton("ð¨ Midjourney (Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ)",    callback_data="engine:midjourney")],
-        [InlineKeyboardButton("ð£ STT/TTS â ÑÐµÑÑâÑÐµÐºÑÑ",        callback_data="engine:stt_tts")],
+        [InlineKeyboardButton("Ã°Â¬ GPT (ÃÃÂµÃÂºÃÃ/ÃÃÂ¾ÃÃÂ¾/ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ)", callback_data="engine:gpt")],
+        [InlineKeyboardButton("Ã°Â¼ Images (OpenAI)",             callback_data="engine:images")],
+        [InlineKeyboardButton("Ã° Kling Ã¢ ÃÂºÃÂ»ÃÂ¸ÃÂ¿Ã / ÃÃÂ¾ÃÃÃ",       callback_data="engine:kling")],
+        [InlineKeyboardButton("Ã°Â¬ Luma Ã¢ ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¸ÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾",       callback_data="engine:luma")],
+        [InlineKeyboardButton("Ã°Â¥ Runway Ã¢ ÃÂ¿ÃÃÂµÃÂ¼ÃÂ¸ÃÃÂ¼-ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾",      callback_data="engine:runway")],
+        [InlineKeyboardButton("Ã°Â¬ Sora Ã¢ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ (Comet)",        callback_data="engine:sora")],
+        [InlineKeyboardButton("Ã°Â§  Gemini (Comet)",             callback_data="engine:gemini")],
+        [InlineKeyboardButton("Ã°Âµ Suno (music)",               callback_data="engine:suno")],
+        [InlineKeyboardButton("Ã°Â¨ Midjourney (ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã)",    callback_data="engine:midjourney")],
+        [InlineKeyboardButton("Ã°Â£ STT/TTS Ã¢ ÃÃÂµÃÃÃ¢ÃÃÂµÃÂºÃÃ",        callback_data="engine:stt_tts")],
     ])
-# âââââââââ MODES (Ð£ÑÑÐ±Ð° / Ð Ð°Ð±Ð¾ÑÐ° / Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ MODES (ÃÂ£ÃÃÃÃÂ° / Ã ÃÂ°ÃÃÂ¾ÃÃÂ° / Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 
-# Ð¢ÐµÐºÑÑ ÐºÐ¾ÑÐ½ÐµÐ²Ð¾Ð³Ð¾ Ð¼ÐµÐ½Ñ ÑÐµÐ¶Ð¸Ð¼Ð¾Ð²
+# ÃÂ¢ÃÂµÃÂºÃÃ ÃÂºÃÂ¾ÃÃÂ½ÃÂµÃÂ²ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ¼ÃÂµÃÂ½Ã ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ¾ÃÂ²
 def _modes_root_text() -> str:
     return (
-        "ÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÐµÐ¶Ð¸Ð¼ ÑÐ°Ð±Ð¾ÑÑ. Ð ÐºÐ°Ð¶Ð´Ð¾Ð¼ ÑÐµÐ¶Ð¸Ð¼Ðµ Ð±Ð¾Ñ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑ Ð³Ð¸Ð±ÑÐ¸Ð´ Ð´Ð²Ð¸Ð¶ÐºÐ¾Ð²:\n"
-        "â¢ GPT-5 (ÑÐµÐºÑÑ/Ð»Ð¾Ð³Ð¸ÐºÐ°) + Vision (ÑÐ¾ÑÐ¾) + STT/TTS (Ð³Ð¾Ð»Ð¾Ñ)\n"
-        "â¢ Luma/Runway â Ð²Ð¸Ð´ÐµÐ¾, Midjourney â Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ\n\n"
-        "ÐÐ¾Ð¶ÐµÑÐµ ÑÐ°ÐºÐ¶Ðµ Ð¿ÑÐ¾ÑÑÐ¾ Ð½Ð°Ð¿Ð¸ÑÐ°ÑÑ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ â Ð±Ð¾Ñ Ð¿Ð¾Ð¹Ð¼ÑÑ."
+        "ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÃÂ°ÃÃÂ¾ÃÃ. Ã ÃÂºÃÂ°ÃÂ¶ÃÂ´ÃÂ¾ÃÂ¼ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂµ ÃÃÂ¾Ã ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃ ÃÂ³ÃÂ¸ÃÃÃÂ¸ÃÂ´ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¾ÃÂ²:\n"
+        "Ã¢Â¢ GPT-5 (ÃÃÂµÃÂºÃÃ/ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸ÃÂºÃÂ°) + Vision (ÃÃÂ¾ÃÃÂ¾) + STT/TTS (ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾Ã)\n"
+        "Ã¢Â¢ Luma/Runway Ã¢ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾, Midjourney Ã¢ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã\n\n"
+        "ÃÃÂ¾ÃÂ¶ÃÂµÃÃÂµ ÃÃÂ°ÃÂºÃÂ¶ÃÂµ ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ ÃÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã Ã¢ ÃÃÂ¾Ã ÃÂ¿ÃÂ¾ÃÂ¹ÃÂ¼ÃÃ."
     )
 
 def modes_root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("ð Ð£ÑÑÐ±Ð°", callback_data="mode:study"),
-            InlineKeyboardButton("ð¼ Ð Ð°Ð±Ð¾ÑÐ°", callback_data="mode:work"),
-            InlineKeyboardButton("ð¥ Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ", callback_data="mode:fun"),
+            InlineKeyboardButton("Ã° ÃÂ£ÃÃÃÃÂ°", callback_data="mode:study"),
+            InlineKeyboardButton("Ã°Â¼ Ã ÃÂ°ÃÃÂ¾ÃÃÂ°", callback_data="mode:work"),
+            InlineKeyboardButton("Ã°Â¥ Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã", callback_data="mode:fun"),
         ],
     ])
 
-# ââ ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¸ Ð¿Ð¾Ð´Ð¼ÐµÐ½Ñ Ð¿Ð¾ ÑÐµÐ¶Ð¸Ð¼Ð°Ð¼
+# Ã¢Ã¢ ÃÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¼ÃÂµÃÂ½Ã ÃÂ¿ÃÂ¾ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ°ÃÂ¼
 def _mode_desc(key: str) -> str:
     if key == "study":
         return (
-            "ð *Ð£ÑÑÐ±Ð°*\n"
-            "ÐÐ¸Ð±ÑÐ¸Ð´: GPT-5 Ð´Ð»Ñ Ð¾Ð±ÑÑÑÐ½ÐµÐ½Ð¸Ð¹/ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑÐ¾Ð², Vision Ð´Ð»Ñ ÑÐ¾ÑÐ¾-Ð·Ð°Ð´Ð°Ñ, "
-            "STT/TTS Ð´Ð»Ñ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²ÑÑ, + Midjourney (Ð¸Ð»Ð»ÑÑÑÑÐ°ÑÐ¸Ð¸) Ð¸ Luma/Runway (ÑÑÐµÐ±Ð½ÑÐµ ÑÐ¾Ð»Ð¸ÐºÐ¸).\n\n"
-            "ÐÑÑÑÑÑÐµ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ Ð½Ð¸Ð¶Ðµ. ÐÐ¾Ð¶Ð½Ð¾ Ð½Ð°Ð¿Ð¸ÑÐ°ÑÑ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ: "
-            "Â«ÑÐ´ÐµÐ»Ð°Ð¹ ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑ Ð¸Ð· PDFÂ», Â«Ð¾Ð±ÑÑÑÐ½Ð¸ Ð¸Ð½ÑÐµÐ³ÑÐ°Ð»Ñ Ñ Ð¿ÑÐ¸Ð¼ÐµÑÐ°Ð¼Ð¸Â»)."
+            "Ã° *ÃÂ£ÃÃÃÃÂ°*\n"
+            "ÃÃÂ¸ÃÃÃÂ¸ÃÂ´: GPT-5 ÃÂ´ÃÂ»Ã ÃÂ¾ÃÃÃÃÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂ¹/ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃÃÂ¾ÃÂ², Vision ÃÂ´ÃÂ»Ã ÃÃÂ¾ÃÃÂ¾-ÃÂ·ÃÂ°ÃÂ´ÃÂ°Ã, "
+            "STT/TTS ÃÂ´ÃÂ»Ã ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÃ, + Midjourney (ÃÂ¸ÃÂ»ÃÂ»ÃÃÃÃÃÂ°ÃÃÂ¸ÃÂ¸) ÃÂ¸ Luma/Runway (ÃÃÃÂµÃÃÂ½ÃÃÂµ ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂºÃÂ¸).\n\n"
+            "ÃÃÃÃÃÃÃÂµ ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸Ã ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ. ÃÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ ÃÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã (ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ: "
+            "ÃÂ«ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃ ÃÂ¸ÃÂ· PDFÃÂ», ÃÂ«ÃÂ¾ÃÃÃÃÃÂ½ÃÂ¸ ÃÂ¸ÃÂ½ÃÃÂµÃÂ³ÃÃÂ°ÃÂ»Ã Ã ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃÃÂ°ÃÂ¼ÃÂ¸ÃÂ»)."
         )
     if key == "work":
         return (
-            "ð¼ *Ð Ð°Ð±Ð¾ÑÐ°*\n"
-            "ÐÐ¸Ð±ÑÐ¸Ð´: GPT-5 (ÑÐµÐ·ÑÐ¼Ðµ/Ð¿Ð¸ÑÑÐ¼Ð°/Ð°Ð½Ð°Ð»Ð¸ÑÐ¸ÐºÐ°), Vision (ÑÐ°Ð±Ð»Ð¸ÑÑ/ÑÐºÑÐ¸Ð½Ñ), "
-            "STT/TTS (Ð´Ð¸ÐºÑÐ¾Ð²ÐºÐ°/Ð¾Ð·Ð²ÑÑÐºÐ°), + Midjourney (Ð²Ð¸Ð·ÑÐ°Ð»Ñ), Luma/Runway (Ð¿ÑÐµÐ·ÐµÐ½ÑÐ°ÑÐ¸Ð¾Ð½Ð½ÑÐµ ÑÐ¾Ð»Ð¸ÐºÐ¸).\n\n"
-            "ÐÑÑÑÑÑÐµ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ Ð½Ð¸Ð¶Ðµ. ÐÐ¾Ð¶Ð½Ð¾ Ð½Ð°Ð¿Ð¸ÑÐ°ÑÑ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ: "
-            "Â«Ð°Ð´Ð°Ð¿ÑÐ¸ÑÑÐ¹ ÑÐµÐ·ÑÐ¼Ðµ Ð¿Ð¾Ð´ Ð²Ð°ÐºÐ°Ð½ÑÐ¸Ñ PMÂ», Â«Ð½Ð°Ð¿Ð¸ÑÐ°ÑÑ ÐºÐ¾Ð¼Ð¼ÐµÑÑÐµÑÐºÐ¾Ðµ Ð¿ÑÐµÐ´Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÂ»)."
+            "Ã°Â¼ *Ã ÃÂ°ÃÃÂ¾ÃÃÂ°*\n"
+            "ÃÃÂ¸ÃÃÃÂ¸ÃÂ´: GPT-5 (ÃÃÂµÃÂ·ÃÃÂ¼ÃÂµ/ÃÂ¿ÃÂ¸ÃÃÃÂ¼ÃÂ°/ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÃÂ¸ÃÂºÃÂ°), Vision (ÃÃÂ°ÃÃÂ»ÃÂ¸ÃÃ/ÃÃÂºÃÃÂ¸ÃÂ½Ã), "
+            "STT/TTS (ÃÂ´ÃÂ¸ÃÂºÃÃÂ¾ÃÂ²ÃÂºÃÂ°/ÃÂ¾ÃÂ·ÃÂ²ÃÃÃÂºÃÂ°), + Midjourney (ÃÂ²ÃÂ¸ÃÂ·ÃÃÂ°ÃÂ»Ã), Luma/Runway (ÃÂ¿ÃÃÂµÃÂ·ÃÂµÃÂ½ÃÃÂ°ÃÃÂ¸ÃÂ¾ÃÂ½ÃÂ½ÃÃÂµ ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂºÃÂ¸).\n\n"
+            "ÃÃÃÃÃÃÃÂµ ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸Ã ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ. ÃÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ ÃÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã (ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ: "
+            "ÃÂ«ÃÂ°ÃÂ´ÃÂ°ÃÂ¿ÃÃÂ¸ÃÃÃÂ¹ ÃÃÂµÃÂ·ÃÃÂ¼ÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ ÃÂ²ÃÂ°ÃÂºÃÂ°ÃÂ½ÃÃÂ¸Ã PMÃÂ», ÃÂ«ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ ÃÂºÃÂ¾ÃÂ¼ÃÂ¼ÃÂµÃÃÃÂµÃÃÂºÃÂ¾ÃÂµ ÃÂ¿ÃÃÂµÃÂ´ÃÂ»ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµÃÂ»)."
         )
     if key == "fun":
         return (
-            "ð¥ *Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ*\n"
-            "ÐÐ¸Ð±ÑÐ¸Ð´: GPT-5 (Ð¸Ð´ÐµÐ¸, ÑÑÐµÐ½Ð°ÑÐ¸Ð¸), Midjourney (ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸), Luma/Runway (ÑÐ¾ÑÑÑ/ÑÐ¸ÐµÐ»ÑÑ), "
-            "STT/TTS (Ð¾Ð·Ð²ÑÑÐºÐ°). ÐÑÑ Ð´Ð»Ñ Ð±ÑÑÑÑÑÑ ÑÐ²Ð¾ÑÑÐµÑÐºÐ¸Ñ ÑÑÑÐº.\n\n"
-            "ÐÑÑÑÑÑÐµ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ Ð½Ð¸Ð¶Ðµ. ÐÐ¾Ð¶Ð½Ð¾ Ð½Ð°Ð¿Ð¸ÑÐ°ÑÑ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ: "
-            "Â«ÑÐ´ÐµÐ»Ð°Ð¹ ÑÑÐµÐ½Ð°ÑÐ¸Ð¹ 30-ÑÐµÐº ÑÐ¾ÑÑÐ° Ð¿ÑÐ¾ ÐºÐ¾ÑÐ°-Ð±Ð°ÑÐ¸ÑÑÐ°Â»)."
+            "Ã°Â¥ *Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã*\n"
+            "ÃÃÂ¸ÃÃÃÂ¸ÃÂ´: GPT-5 (ÃÂ¸ÃÂ´ÃÂµÃÂ¸, ÃÃÃÂµÃÂ½ÃÂ°ÃÃÂ¸ÃÂ¸), Midjourney (ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸), Luma/Runway (ÃÃÂ¾ÃÃÃ/ÃÃÂ¸ÃÂµÃÂ»ÃÃ), "
+            "STT/TTS (ÃÂ¾ÃÂ·ÃÂ²ÃÃÃÂºÃÂ°). ÃÃÃ ÃÂ´ÃÂ»Ã ÃÃÃÃÃÃÃ ÃÃÂ²ÃÂ¾ÃÃÃÂµÃÃÂºÃÂ¸Ã ÃÃÃÃÂº.\n\n"
+            "ÃÃÃÃÃÃÃÂµ ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸Ã ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ. ÃÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ ÃÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã (ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ: "
+            "ÃÂ«ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÃÃÂµÃÂ½ÃÂ°ÃÃÂ¸ÃÂ¹ 30-ÃÃÂµÃÂº ÃÃÂ¾ÃÃÃÂ° ÃÂ¿ÃÃÂ¾ ÃÂºÃÂ¾ÃÃÂ°-ÃÃÂ°ÃÃÂ¸ÃÃÃÂ°ÃÂ»)."
         )
-    return "Ð ÐµÐ¶Ð¸Ð¼ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½."
+    return "Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃÂ½."
 
 def _mode_kb(key: str) -> InlineKeyboardMarkup:
     if key == "study":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("ð ÐÐ¾Ð½ÑÐ¿ÐµÐºÑ Ð¸Ð· PDF/EPUB/DOCX", callback_data="act:study:pdf_summary")],
-            [InlineKeyboardButton("ð ÐÐ±ÑÑÑÐ½ÐµÐ½Ð¸Ðµ ÑÐµÐ¼Ñ",            callback_data="act:study:explain"),
-             InlineKeyboardButton("ð§® Ð ÐµÑÐµÐ½Ð¸Ðµ Ð·Ð°Ð´Ð°Ñ",              callback_data="act:study:tasks")],
-            [InlineKeyboardButton("âï¸ Ð­ÑÑÐµ/ÑÐµÑÐµÑÐ°Ñ/Ð´Ð¾ÐºÐ»Ð°Ð´",       callback_data="act:study:essay"),
-             InlineKeyboardButton("ð ÐÐ»Ð°Ð½ Ðº ÑÐºÐ·Ð°Ð¼ÐµÐ½Ñ",           callback_data="act:study:exam_plan")],
+            [InlineKeyboardButton("Ã° ÃÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃ ÃÂ¸ÃÂ· PDF/EPUB/DOCX", callback_data="act:study:pdf_summary")],
+            [InlineKeyboardButton("Ã° ÃÃÃÃÃÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂµÃÂ¼Ã",            callback_data="act:study:explain"),
+             InlineKeyboardButton("Ã°Â§Â® Ã ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°Ã",              callback_data="act:study:tasks")],
+            [InlineKeyboardButton("Ã¢Ã¯Â¸ ÃÂ­ÃÃÃÂµ/ÃÃÂµÃÃÂµÃÃÂ°Ã/ÃÂ´ÃÂ¾ÃÂºÃÂ»ÃÂ°ÃÂ´",       callback_data="act:study:essay"),
+             InlineKeyboardButton("Ã° ÃÃÂ»ÃÂ°ÃÂ½ ÃÂº ÃÃÂºÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½Ã",           callback_data="act:study:exam_plan")],
             [
-                InlineKeyboardButton("ð¬ Runway",       callback_data="act:open:runway"),
-                InlineKeyboardButton("ð¨ Midjourney",   callback_data="act:open:mj"),
-                InlineKeyboardButton("ð£ STT/TTS",      callback_data="act:open:voice"),
+                InlineKeyboardButton("Ã°Â¬ Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("Ã°Â¨ Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("Ã°Â£ STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("ð Ð¡Ð²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ", callback_data="act:free")],
-            [InlineKeyboardButton("â¬ï¸ ÐÐ°Ð·Ð°Ð´", callback_data="mode:root")],
+            [InlineKeyboardButton("Ã° ÃÂ¡ÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã", callback_data="act:free")],
+            [InlineKeyboardButton("Ã¢Â¬Ã¯Â¸ ÃÃÂ°ÃÂ·ÃÂ°ÃÂ´", callback_data="mode:root")],
         ])
 
     if key == "work":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("ð ÐÐ¸ÑÑÐ¼Ð¾/Ð´Ð¾ÐºÑÐ¼ÐµÐ½Ñ",            callback_data="act:work:doc"),
-             InlineKeyboardButton("ð ÐÐ½Ð°Ð»Ð¸ÑÐ¸ÐºÐ°/ÑÐ²Ð¾Ð´ÐºÐ°",           callback_data="act:work:report")],
-            [InlineKeyboardButton("ð ÐÐ»Ð°Ð½/ToDo",                  callback_data="act:work:plan"),
-             InlineKeyboardButton("ð¡ ÐÐ´ÐµÐ¸/Ð±ÑÐ¸Ñ",                 callback_data="act:work:idea")],
+            [InlineKeyboardButton("Ã° ÃÃÂ¸ÃÃÃÂ¼ÃÂ¾/ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½Ã",            callback_data="act:work:doc"),
+             InlineKeyboardButton("Ã° ÃÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÃÂ¸ÃÂºÃÂ°/ÃÃÂ²ÃÂ¾ÃÂ´ÃÂºÃÂ°",           callback_data="act:work:report")],
+            [InlineKeyboardButton("Ã° ÃÃÂ»ÃÂ°ÃÂ½/ToDo",                  callback_data="act:work:plan"),
+             InlineKeyboardButton("Ã°Â¡ ÃÃÂ´ÃÂµÃÂ¸/ÃÃÃÂ¸Ã",                 callback_data="act:work:idea")],
             [
-                InlineKeyboardButton("ð¬ Runway",       callback_data="act:open:runway"),
-                InlineKeyboardButton("ð¨ Midjourney",   callback_data="act:open:mj"),
-                InlineKeyboardButton("ð£ STT/TTS",      callback_data="act:open:voice"),
+                InlineKeyboardButton("Ã°Â¬ Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("Ã°Â¨ Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("Ã°Â£ STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("ð Ð¡Ð²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ", callback_data="act:free")],
-            [InlineKeyboardButton("â¬ï¸ ÐÐ°Ð·Ð°Ð´", callback_data="mode:root")],
+            [InlineKeyboardButton("Ã° ÃÂ¡ÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã", callback_data="act:free")],
+            [InlineKeyboardButton("Ã¢Â¬Ã¯Â¸ ÃÃÂ°ÃÂ·ÃÂ°ÃÂ´", callback_data="mode:root")],
         ])
 
     if key == "fun":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("ð­ ÐÐ´ÐµÐ¸ Ð´Ð»Ñ Ð´Ð¾ÑÑÐ³Ð°",             callback_data="act:fun:ideas")],
-            [InlineKeyboardButton("ð¬ Ð¡ÑÐµÐ½Ð°ÑÐ¸Ð¹ ÑÐ¾ÑÑÐ°",              callback_data="act:fun:shorts")],
-            [InlineKeyboardButton("ð® ÐÐ³ÑÑ/ÐºÐ²Ð¸Ð·",                   callback_data="act:fun:games")],
+            [InlineKeyboardButton("Ã°Â­ ÃÃÂ´ÃÂµÃÂ¸ ÃÂ´ÃÂ»Ã ÃÂ´ÃÂ¾ÃÃÃÂ³ÃÂ°",             callback_data="act:fun:ideas")],
+            [InlineKeyboardButton("Ã°Â¬ ÃÂ¡ÃÃÂµÃÂ½ÃÂ°ÃÃÂ¸ÃÂ¹ ÃÃÂ¾ÃÃÃÂ°",              callback_data="act:fun:shorts")],
+            [InlineKeyboardButton("Ã°Â® ÃÃÂ³ÃÃ/ÃÂºÃÂ²ÃÂ¸ÃÂ·",                   callback_data="act:fun:games")],
             [
-                InlineKeyboardButton("ð¬ Runway",       callback_data="act:open:runway"),
-                InlineKeyboardButton("ð¨ Midjourney",   callback_data="act:open:mj"),
-                InlineKeyboardButton("ð£ STT/TTS",      callback_data="act:open:voice"),
+                InlineKeyboardButton("Ã°Â¬ Runway",       callback_data="act:open:runway"),
+                InlineKeyboardButton("Ã°Â¨ Midjourney",   callback_data="act:open:mj"),
+                InlineKeyboardButton("Ã°Â£ STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("ð Ð¡Ð²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ", callback_data="act:free")],
-            [InlineKeyboardButton("â¬ï¸ ÐÐ°Ð·Ð°Ð´", callback_data="mode:root")],
+            [InlineKeyboardButton("Ã° ÃÂ¡ÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã", callback_data="act:free")],
+            [InlineKeyboardButton("Ã¢Â¬Ã¯Â¸ ÃÃÂ°ÃÂ·ÃÂ°ÃÂ´", callback_data="mode:root")],
         ])
 
     return modes_root_kb()
 
-# ÐÐ¾ÐºÐ°Ð·Ð°ÑÑ Ð²ÑÐ±ÑÐ°Ð½Ð½ÑÐ¹ ÑÐµÐ¶Ð¸Ð¼ (Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ Ð¸ Ð´Ð»Ñ callback, Ð¸ Ð´Ð»Ñ ÑÐµÐºÑÑÐ°)
+# ÃÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÂ°ÃÃ ÃÂ²ÃÃÃÃÂ°ÃÂ½ÃÂ½ÃÃÂ¹ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ (ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÃÃ ÃÂ¸ ÃÂ´ÃÂ»Ã callback, ÃÂ¸ ÃÂ´ÃÂ»Ã ÃÃÂµÃÂºÃÃÃÂ°)
 async def _send_mode_menu(update, context, key: str):
     text = _mode_desc(key)
     kb = _mode_kb(key)
-    # ÐÑÐ»Ð¸ Ð¿ÑÐ¸ÑÐ»Ð¸ Ð¸Ð· callback â ÑÐµÐ´Ð°ÐºÑÐ¸ÑÑÐµÐ¼; ÐµÑÐ»Ð¸ ÑÐµÐºÑÑÐ¾Ð¼ â ÑÐ»ÑÐ¼ Ð½Ð¾Ð²ÑÐ¼ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸ÐµÐ¼
+    # ÃÃÃÂ»ÃÂ¸ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÂ¸ÃÂ· callback Ã¢ ÃÃÂµÃÂ´ÃÂ°ÃÂºÃÃÂ¸ÃÃÃÂµÃÂ¼; ÃÂµÃÃÂ»ÃÂ¸ ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ¼ Ã¢ ÃÃÂ»ÃÃÂ¼ ÃÂ½ÃÂ¾ÃÂ²ÃÃÂ¼ ÃÃÂ¾ÃÂ¾ÃÃÃÂµÃÂ½ÃÂ¸ÃÂµÃÂ¼
     if getattr(update, "callback_query", None):
         q = update.callback_query
         await q.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
@@ -1840,13 +1840,13 @@ async def _send_mode_menu(update, context, key: str):
     else:
         await update.effective_message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
-# ÐÐ±ÑÐ°Ð±Ð¾ÑÑÐ¸Ðº callback Ð¿Ð¾ ÑÐµÐ¶Ð¸Ð¼Ð°Ð¼
+# ÃÃÃÃÂ°ÃÃÂ¾ÃÃÃÂ¸ÃÂº callback ÃÂ¿ÃÂ¾ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ°ÃÂ¼
 async def on_mode_cb(update, context):
     q = update.callback_query
     data = (q.data or "").strip()
     uid = q.from_user.id
 
-    # ÐÐ°Ð²Ð¸Ð³Ð°ÑÐ¸Ñ
+    # ÃÃÂ°ÃÂ²ÃÂ¸ÃÂ³ÃÂ°ÃÃÂ¸Ã
     if data == "mode:root":
         await q.edit_message_text(_modes_root_text(), reply_markup=modes_root_kb())
         await q.answer(); return
@@ -1856,22 +1856,22 @@ async def on_mode_cb(update, context):
         await _send_mode_menu(update, context, key)
         return
 
-    # Ð¡Ð²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð²Ð²Ð¾Ð´ Ð¸Ð· Ð¿Ð¾Ð´Ð¼ÐµÐ½Ñ
+    # ÃÂ¡ÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ²ÃÂ²ÃÂ¾ÃÂ´ ÃÂ¸ÃÂ· ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¼ÃÂµÃÂ½Ã
     if data == "act:free":
         await q.answer()
         await q.edit_message_text(
-            "ð ÐÐ°Ð¿Ð¸ÑÐ¸ÑÐµ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ Ð½Ð¸Ð¶Ðµ ÑÐµÐºÑÑÐ¾Ð¼ Ð¸Ð»Ð¸ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð¼ â Ñ Ð¿Ð¾Ð´ÑÑÑÐ¾ÑÑÑ.",
+            "Ã° ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ¼ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ¼ Ã¢ Ã ÃÂ¿ÃÂ¾ÃÂ´ÃÃÃÃÂ¾ÃÃÃ.",
             reply_markup=modes_root_kb(),
         )
         return
 
-    # === Ð£ÑÑÐ±Ð°
+    # === ÃÂ£ÃÃÃÃÂ°
     if data == "act:study:pdf_summary":
         await q.answer()
         _mode_track_set(uid, "pdf_summary")
         await q.edit_message_text(
-            "ð ÐÑÐ¸ÑÐ»Ð¸ÑÐµ PDF/EPUB/DOCX/FB2/TXT â ÑÐ´ÐµÐ»Ð°Ñ ÑÑÑÑÐºÑÑÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð½ÑÐ¹ ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑ.\n"
-            "ÐÐ¾Ð¶Ð½Ð¾ Ð² Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ¸ ÑÐºÐ°Ð·Ð°ÑÑ ÑÐµÐ»Ñ (ÐºÐ¾ÑÐ¾ÑÐºÐ¾/Ð¿Ð¾Ð´ÑÐ¾Ð±Ð½Ð¾, ÑÐ·ÑÐº Ð¸ Ñ.Ð¿.).",
+            "Ã° ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ÃÃÂµ PDF/EPUB/DOCX/FB2/TXT Ã¢ ÃÃÂ´ÃÂµÃÂ»ÃÂ°Ã ÃÃÃÃÃÂºÃÃÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÃÂ¹ ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃ.\n"
+            "ÃÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ² ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÃÂºÃÂ°ÃÂ·ÃÂ°ÃÃ ÃÃÂµÃÂ»Ã (ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¾/ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂ¾ÃÃÂ½ÃÂ¾, ÃÃÂ·ÃÃÂº ÃÂ¸ Ã.ÃÂ¿.).",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1881,7 +1881,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "explain")
         _mode_track_set(uid, "explain")
         await q.edit_message_text(
-            "ð ÐÐ°Ð¿Ð¸ÑÐ¸ÑÐµ ÑÐµÐ¼Ñ + ÑÑÐ¾Ð²ÐµÐ½Ñ (ÑÐºÐ¾Ð»Ð°/Ð²ÑÐ·/Ð¿ÑÐ¾ÑÐ¸). ÐÑÐ´ÐµÑ Ð¾Ð±ÑÑÑÐ½ÐµÐ½Ð¸Ðµ Ñ Ð¿ÑÐ¸Ð¼ÐµÑÐ°Ð¼Ð¸.",
+            "Ã° ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÃÂµÃÂ¼Ã + ÃÃÃÂ¾ÃÂ²ÃÂµÃÂ½Ã (ÃÃÂºÃÂ¾ÃÂ»ÃÂ°/ÃÂ²ÃÃÂ·/ÃÂ¿ÃÃÂ¾ÃÃÂ¸). ÃÃÃÂ´ÃÂµÃ ÃÂ¾ÃÃÃÃÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ Ã ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃÃÂ°ÃÂ¼ÃÂ¸.",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1891,7 +1891,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "tasks")
         _mode_track_set(uid, "tasks")
         await q.edit_message_text(
-            "ð§® ÐÑÐ¸ÑÐ»Ð¸ÑÐµ ÑÑÐ»Ð¾Ð²Ð¸Ðµ(Ñ) â ÑÐµÑÑ Ð¿Ð¾ÑÐ°Ð³Ð¾Ð²Ð¾ (ÑÐ¾ÑÐ¼ÑÐ»Ñ, Ð¿Ð¾ÑÑÐ½ÐµÐ½Ð¸Ñ, Ð¸ÑÐ¾Ð³).",
+            "Ã°Â§Â® ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ÃÃÂµ ÃÃÃÂ»ÃÂ¾ÃÂ²ÃÂ¸ÃÂµ(Ã) Ã¢ ÃÃÂµÃÃ ÃÂ¿ÃÂ¾ÃÃÂ°ÃÂ³ÃÂ¾ÃÂ²ÃÂ¾ (ÃÃÂ¾ÃÃÂ¼ÃÃÂ»Ã, ÃÂ¿ÃÂ¾ÃÃÃÂ½ÃÂµÃÂ½ÃÂ¸Ã, ÃÂ¸ÃÃÂ¾ÃÂ³).",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1901,7 +1901,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "essay")
         _mode_track_set(uid, "essay")
         await q.edit_message_text(
-            "âï¸ Ð¢ÐµÐ¼Ð° + ÑÑÐµÐ±Ð¾Ð²Ð°Ð½Ð¸Ñ (Ð¾Ð±ÑÑÐ¼/ÑÑÐ¸Ð»Ñ/ÑÐ·ÑÐº) â Ð¿Ð¾Ð´Ð³Ð¾ÑÐ¾Ð²Ð»Ñ ÑÑÑÐµ/ÑÐµÑÐµÑÐ°Ñ.",
+            "Ã¢Ã¯Â¸ ÃÂ¢ÃÂµÃÂ¼ÃÂ° + ÃÃÃÂµÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸Ã (ÃÂ¾ÃÃÃÃÂ¼/ÃÃÃÂ¸ÃÂ»Ã/ÃÃÂ·ÃÃÂº) Ã¢ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÃÃÃÂµ/ÃÃÂµÃÃÂµÃÃÂ°Ã.",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1911,17 +1911,17 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "quiz")
         _mode_track_set(uid, "exam_plan")
         await q.edit_message_text(
-            "ð Ð£ÐºÐ°Ð¶Ð¸ÑÐµ Ð¿ÑÐµÐ´Ð¼ÐµÑ Ð¸ Ð´Ð°ÑÑ ÑÐºÐ·Ð°Ð¼ÐµÐ½Ð° â ÑÐ¾ÑÑÐ°Ð²Ð»Ñ Ð¿Ð»Ð°Ð½ Ð¿Ð¾Ð´Ð³Ð¾ÑÐ¾Ð²ÐºÐ¸ Ñ Ð²ÐµÑÐ°Ð¼Ð¸.",
+            "Ã° ÃÂ£ÃÂºÃÂ°ÃÂ¶ÃÂ¸ÃÃÂµ ÃÂ¿ÃÃÂµÃÂ´ÃÂ¼ÃÂµÃ ÃÂ¸ ÃÂ´ÃÂ°ÃÃ ÃÃÂºÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ° Ã¢ ÃÃÂ¾ÃÃÃÂ°ÃÂ²ÃÂ»Ã ÃÂ¿ÃÂ»ÃÂ°ÃÂ½ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂºÃÂ¸ Ã ÃÂ²ÃÂµÃÃÂ°ÃÂ¼ÃÂ¸.",
             reply_markup=_mode_kb("study"),
         )
         return
 
-    # === Ð Ð°Ð±Ð¾ÑÐ°
+    # === Ã ÃÂ°ÃÃÂ¾ÃÃÂ°
     if data == "act:work:doc":
         await q.answer()
         _mode_track_set(uid, "work_doc")
         await q.edit_message_text(
-            "ð Ð§ÑÐ¾ Ð·Ð° Ð´Ð¾ÐºÑÐ¼ÐµÐ½Ñ/Ð°Ð´ÑÐµÑÐ°Ñ/ÐºÐ¾Ð½ÑÐµÐºÑÑ? Ð¡ÑÐ¾ÑÐ¼Ð¸ÑÑÑ ÑÐµÑÐ½Ð¾Ð²Ð¸Ðº Ð¿Ð¸ÑÑÐ¼Ð°/Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ°.",
+            "Ã° ÃÂ§ÃÃÂ¾ ÃÂ·ÃÂ° ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½Ã/ÃÂ°ÃÂ´ÃÃÂµÃÃÂ°Ã/ÃÂºÃÂ¾ÃÂ½ÃÃÂµÃÂºÃÃ? ÃÂ¡ÃÃÂ¾ÃÃÂ¼ÃÂ¸ÃÃÃ ÃÃÂµÃÃÂ½ÃÂ¾ÃÂ²ÃÂ¸ÃÂº ÃÂ¿ÃÂ¸ÃÃÃÂ¼ÃÂ°/ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ°.",
             reply_markup=_mode_kb("work"),
         )
         return
@@ -1930,7 +1930,7 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_report")
         await q.edit_message_text(
-            "ð ÐÑÐ¸ÑÐ»Ð¸ÑÐµ ÑÐµÐºÑÑ/ÑÐ°Ð¹Ð»/ÑÑÑÐ»ÐºÑ â ÑÐ´ÐµÐ»Ð°Ñ Ð°Ð½Ð°Ð»Ð¸ÑÐ¸ÑÐµÑÐºÑÑ Ð²ÑÐ¶Ð¸Ð¼ÐºÑ.",
+            "Ã° ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ÃÃÂµ ÃÃÂµÃÂºÃÃ/ÃÃÂ°ÃÂ¹ÃÂ»/ÃÃÃÃÂ»ÃÂºÃ Ã¢ ÃÃÂ´ÃÂµÃÂ»ÃÂ°Ã ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÃÂ¸ÃÃÂµÃÃÂºÃÃ ÃÂ²ÃÃÂ¶ÃÂ¸ÃÂ¼ÃÂºÃ.",
             reply_markup=_mode_kb("work"),
         )
         return
@@ -1939,7 +1939,7 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_plan")
         await q.edit_message_text(
-            "ð ÐÐ¿Ð¸ÑÐ¸ÑÐµ Ð·Ð°Ð´Ð°ÑÑ/ÑÑÐ¾ÐºÐ¸ â ÑÐ¾Ð±ÐµÑÑ ToDo/Ð¿Ð»Ð°Ð½ ÑÐ¾ ÑÑÐ¾ÐºÐ°Ð¼Ð¸ Ð¸ Ð¿ÑÐ¸Ð¾ÑÐ¸ÑÐµÑÐ°Ð¼Ð¸.",
+            "Ã° ÃÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ/ÃÃÃÂ¾ÃÂºÃÂ¸ Ã¢ ÃÃÂ¾ÃÃÂµÃÃ ToDo/ÃÂ¿ÃÂ»ÃÂ°ÃÂ½ ÃÃÂ¾ ÃÃÃÂ¾ÃÂºÃÂ°ÃÂ¼ÃÂ¸ ÃÂ¸ ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÃÂ¸ÃÃÂµÃÃÂ°ÃÂ¼ÃÂ¸.",
             reply_markup=_mode_kb("work"),
         )
         return
@@ -1948,67 +1948,67 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_idea")
         await q.edit_message_text(
-            "ð¡ Ð Ð°ÑÑÐºÐ°Ð¶Ð¸ÑÐµ Ð¿ÑÐ¾Ð´ÑÐºÑ/Ð¦Ð/ÐºÐ°Ð½Ð°Ð»Ñ â Ð¿Ð¾Ð´Ð³Ð¾ÑÐ¾Ð²Ð»Ñ Ð±ÑÐ¸Ñ/Ð¸Ð´ÐµÐ¸.",
+            "Ã°Â¡ Ã ÃÂ°ÃÃÃÂºÃÂ°ÃÂ¶ÃÂ¸ÃÃÂµ ÃÂ¿ÃÃÂ¾ÃÂ´ÃÃÂºÃ/ÃÂ¦Ã/ÃÂºÃÂ°ÃÂ½ÃÂ°ÃÂ»Ã Ã¢ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÃÃÂ¸Ã/ÃÂ¸ÃÂ´ÃÂµÃÂ¸.",
             reply_markup=_mode_kb("work"),
         )
         return
 
-    # === Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ (ÐºÐ°Ðº Ð±ÑÐ»Ð¾)
+    # === Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã (ÃÂºÃÂ°ÃÂº ÃÃÃÂ»ÃÂ¾)
     if data == "act:fun:ideas":
         await q.answer()
         await q.edit_message_text(
-            "ð¥ ÐÑÐ±ÐµÑÐµÐ¼ ÑÐ¾ÑÐ¼Ð°Ñ: Ð´Ð¾Ð¼/ÑÐ»Ð¸ÑÐ°/Ð³Ð¾ÑÐ¾Ð´/Ð² Ð¿Ð¾ÐµÐ·Ð´ÐºÐµ. ÐÐ°Ð¿Ð¸ÑÐ¸ÑÐµ Ð±ÑÐ´Ð¶ÐµÑ/Ð½Ð°ÑÑÑÐ¾ÐµÐ½Ð¸Ðµ.",
+            "Ã°Â¥ ÃÃÃÃÂµÃÃÂµÃÂ¼ ÃÃÂ¾ÃÃÂ¼ÃÂ°Ã: ÃÂ´ÃÂ¾ÃÂ¼/ÃÃÂ»ÃÂ¸ÃÃÂ°/ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ´/ÃÂ² ÃÂ¿ÃÂ¾ÃÂµÃÂ·ÃÂ´ÃÂºÃÂµ. ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÃÃÂ´ÃÂ¶ÃÂµÃ/ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ÃÂ¸ÃÂµ.",
             reply_markup=_mode_kb("fun"),
         )
         return
     if data == "act:fun:shorts":
         await q.answer()
         await q.edit_message_text(
-            "ð¬ Ð¢ÐµÐ¼Ð°, Ð´Ð»Ð¸ÑÐµÐ»ÑÐ½Ð¾ÑÑÑ (15â30 ÑÐµÐº), ÑÑÐ¸Ð»Ñ â ÑÐ´ÐµÐ»Ð°Ñ ÑÑÐµÐ½Ð°ÑÐ¸Ð¹ ÑÐ¾ÑÑÐ° + Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ¸ Ð´Ð»Ñ Ð¾Ð·Ð²ÑÑÐºÐ¸.",
+            "Ã°Â¬ ÃÂ¢ÃÂµÃÂ¼ÃÂ°, ÃÂ´ÃÂ»ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÃÃ (15Ã¢30 ÃÃÂµÃÂº), ÃÃÃÂ¸ÃÂ»Ã Ã¢ ÃÃÂ´ÃÂµÃÂ»ÃÂ°Ã ÃÃÃÂµÃÂ½ÃÂ°ÃÃÂ¸ÃÂ¹ ÃÃÂ¾ÃÃÃÂ° + ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃÂ¸ ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ·ÃÂ²ÃÃÃÂºÃÂ¸.",
             reply_markup=_mode_kb("fun"),
         )
         return
     if data == "act:fun:games":
         await q.answer()
         await q.edit_message_text(
-            "ð® Ð¢ÐµÐ¼Ð°ÑÐ¸ÐºÐ° ÐºÐ²Ð¸Ð·Ð°/Ð¸Ð³ÑÑ? Ð¡Ð³ÐµÐ½ÐµÑÐ¸ÑÑÑ Ð±ÑÑÑÑÑÑ Ð²Ð¸ÐºÑÐ¾ÑÐ¸Ð½Ñ Ð¸Ð»Ð¸ Ð¼Ð¸Ð½Ð¸-Ð¸Ð³ÑÑ Ð² ÑÐ°ÑÐµ.",
+            "Ã°Â® ÃÂ¢ÃÂµÃÂ¼ÃÂ°ÃÃÂ¸ÃÂºÃÂ° ÃÂºÃÂ²ÃÂ¸ÃÂ·ÃÂ°/ÃÂ¸ÃÂ³ÃÃ? ÃÂ¡ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ¸ÃÃÃ ÃÃÃÃÃÃÃ ÃÂ²ÃÂ¸ÃÂºÃÃÂ¾ÃÃÂ¸ÃÂ½Ã ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂ¸ÃÂ³ÃÃ ÃÂ² ÃÃÂ°ÃÃÂµ.",
             reply_markup=_mode_kb("fun"),
         )
         return
 
-    # === ÐÐ¾Ð´ÑÐ»Ð¸ (ÐºÐ°Ðº Ð±ÑÐ»Ð¾)
+    # === ÃÃÂ¾ÃÂ´ÃÃÂ»ÃÂ¸ (ÃÂºÃÂ°ÃÂº ÃÃÃÂ»ÃÂ¾)
     if data == "act:open:runway":
         await q.answer()
         await q.edit_message_text(
-            "ð¬ ÐÐ¾Ð´ÑÐ»Ñ Runway: Ð¿ÑÐ¸ÑÐ»Ð¸ÑÐµ Ð¸Ð´ÐµÑ/ÑÐµÑÐµÑÐµÐ½Ñ â Ð¿Ð¾Ð´Ð³Ð¾ÑÐ¾Ð²Ð»Ñ Ð¿ÑÐ¾Ð¼Ð¿Ñ Ð¸ Ð±ÑÐ´Ð¶ÐµÑ.",
+            "Ã°Â¬ ÃÃÂ¾ÃÂ´ÃÃÂ»Ã Runway: ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ÃÃÂµ ÃÂ¸ÃÂ´ÃÂµÃ/ÃÃÂµÃÃÂµÃÃÂµÃÂ½Ã Ã¢ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿Ã ÃÂ¸ ÃÃÃÂ´ÃÂ¶ÃÂµÃ.",
             reply_markup=modes_root_kb(),
         )
         return
     if data == "act:open:mj":
         await q.answer()
         await q.edit_message_text(
-            "ð¨ ÐÐ¾Ð´ÑÐ»Ñ Midjourney: Ð¾Ð¿Ð¸ÑÐ¸ÑÐµ ÐºÐ°ÑÑÐ¸Ð½ÐºÑ â Ð¿ÑÐµÐ´Ð»Ð¾Ð¶Ñ 3 Ð¿ÑÐ¾Ð¼Ð¿ÑÐ° Ð¸ ÑÐµÑÐºÑ ÑÑÐ¸Ð»ÐµÐ¹.",
+            "Ã°Â¨ ÃÃÂ¾ÃÂ´ÃÃÂ»Ã Midjourney: ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃ Ã¢ ÃÂ¿ÃÃÂµÃÂ´ÃÂ»ÃÂ¾ÃÂ¶Ã 3 ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿ÃÃÂ° ÃÂ¸ ÃÃÂµÃÃÂºÃ ÃÃÃÂ¸ÃÂ»ÃÂµÃÂ¹.",
             reply_markup=modes_root_kb(),
         )
         return
     if data == "act:open:voice":
         await q.answer()
         await q.edit_message_text(
-            "ð£ ÐÐ¾Ð»Ð¾Ñ: /voice_on â Ð¾Ð·Ð²ÑÑÐºÐ° Ð¾ÑÐ²ÐµÑÐ¾Ð², /voice_off â Ð²ÑÐºÐ»ÑÑÐ¸ÑÑ. "
-            "ÐÐ¾Ð¶ÐµÑÐµ Ð¿ÑÐ¸ÑÐ»Ð°ÑÑ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ â ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ñ Ð¸ Ð¾ÑÐ²ÐµÑÑ.",
+            "Ã°Â£ ÃÃÂ¾ÃÂ»ÃÂ¾Ã: /voice_on Ã¢ ÃÂ¾ÃÂ·ÃÂ²ÃÃÃÂºÃÂ° ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ¾ÃÂ², /voice_off Ã¢ ÃÂ²ÃÃÂºÃÂ»ÃÃÃÂ¸ÃÃ. "
+            "ÃÃÂ¾ÃÂ¶ÃÂµÃÃÂµ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ Ã¢ ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°Ã ÃÂ¸ ÃÂ¾ÃÃÂ²ÃÂµÃÃ.",
             reply_markup=modes_root_kb(),
         )
         return
 
     await q.answer()
 
-# Fallback â ÐµÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð°Ð¶Ð¼ÑÑ Â«Ð£ÑÑÐ±Ð°/Ð Ð°Ð±Ð¾ÑÐ°/Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸ÑÂ» Ð¾Ð±ÑÑÐ½Ð¾Ð¹ ÐºÐ½Ð¾Ð¿ÐºÐ¾Ð¹/ÑÐµÐºÑÑÐ¾Ð¼
+# Fallback Ã¢ ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»Ã ÃÂ½ÃÂ°ÃÂ¶ÃÂ¼ÃÃ ÃÂ«ÃÂ£ÃÃÃÃÂ°/Ã ÃÂ°ÃÃÂ¾ÃÃÂ°/Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÃÂ» ÃÂ¾ÃÃÃÃÂ½ÃÂ¾ÃÂ¹ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¾ÃÂ¹/ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ¼
 async def on_mode_text(update, context):
     text = (update.effective_message.text or "").strip().lower()
     mapping = {
-        "ÑÑÑÐ±Ð°": "study", "ÑÑÐµÐ±Ð°": "study",
-        "ÑÐ°Ð±Ð¾ÑÐ°": "work",
-        "ÑÐ°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ": "fun", "ÑÐ°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ðµ": "fun",
+        "ÃÃÃÃÃÂ°": "study", "ÃÃÃÂµÃÃÂ°": "study",
+        "ÃÃÂ°ÃÃÂ¾ÃÃÂ°": "work",
+        "ÃÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã": "fun", "ÃÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂµ": "fun",
     }
     key = mapping.get(text)
     if key:
@@ -2016,27 +2016,27 @@ async def on_mode_text(update, context):
         
 def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
     """
-    ÐÐ»Ð°Ð²Ð½Ð°Ñ ReplyKeyboard, Ð»Ð¾ÐºÐ°Ð»Ð¸Ð·Ð¾Ð²Ð°Ð½Ð½Ð°Ñ Ð¿Ð¾Ð´ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ.
-    ÐÑÐ»Ð¸ user_id Ð½Ðµ Ð·Ð°Ð´Ð°Ð½ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ RU.
+    ÃÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÂ°Ã ReplyKeyboard, ÃÂ»ÃÂ¾ÃÂºÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÂ°Ã ÃÂ¿ÃÂ¾ÃÂ´ ÃÃÂ·ÃÃÂº ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»Ã.
+    ÃÃÃÂ»ÃÂ¸ user_id ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ RU.
     """
     uid = int(user_id) if user_id is not None else 0
-    # ÐÐ½Ð¾Ð¿ÐºÐ¸ ÑÐµÐ¶Ð¸Ð¼Ð¾Ð² (ÑÐ¼Ð¾Ð´Ð·Ð¸ Ð¾ÑÑÐ°Ð²Ð»ÑÐµÐ¼ Ð´Ð»Ñ ÑÐ·Ð½Ð°Ð²Ð°ÐµÐ¼Ð¾ÑÑÐ¸)
-    # ÐÐ¾ÐºÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ñ â ÑÐµÑÐµÐ· I18N (Ð¼Ð¸Ð½Ð¸Ð¼Ð°Ð»ÑÐ½ÑÐ¹ Ð½Ð°Ð±Ð¾Ñ ÑÑÑÐ¾Ðº).
+    # ÃÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ¾ÃÂ² (ÃÃÂ¼ÃÂ¾ÃÂ´ÃÂ·ÃÂ¸ ÃÂ¾ÃÃÃÂ°ÃÂ²ÃÂ»ÃÃÂµÃÂ¼ ÃÂ´ÃÂ»Ã ÃÃÂ·ÃÂ½ÃÂ°ÃÂ²ÃÂ°ÃÂµÃÂ¼ÃÂ¾ÃÃÃÂ¸)
+    # ÃÃÂ¾ÃÂºÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ°ÃÃÂ¸Ã Ã¢ ÃÃÂµÃÃÂµÃÂ· I18N (ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÂ½ÃÂ°ÃÃÂ¾Ã ÃÃÃÃÂ¾ÃÂº).
     try:
         study = t(uid, "btn_study")
         work  = t(uid, "btn_work")
         fun   = t(uid, "btn_fun")
     except Exception:
-        study, work, fun = "ð Ð£ÑÑÐ±Ð°", "ð¼ Ð Ð°Ð±Ð¾ÑÐ°", "ð¥ Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ"
+        study, work, fun = "Ã° ÃÂ£ÃÃÃÃÂ°", "Ã°Â¼ Ã ÃÂ°ÃÃÂ¾ÃÃÂ°", "Ã°Â¥ Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã"
 
     try:
         engines = t(uid, "btn_engines")
         subhelp = t(uid, "btn_sub")
         wallet  = t(uid, "btn_wallet")
     except Exception:
-        engines, subhelp, wallet = "ð§  ÐÐ²Ð¸Ð¶ÐºÐ¸", "â­ ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Â· ÐÐ¾Ð¼Ð¾ÑÑ", "ð§¾ ÐÐ°Ð»Ð°Ð½Ñ"
+        engines, subhelp, wallet = "Ã°Â§  ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸", "Ã¢Â­ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° ÃÂ· ÃÃÂ¾ÃÂ¼ÃÂ¾ÃÃ", "Ã°Â§Â¾ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã"
 
-    placeholder = t(uid, "input_placeholder") if "input_placeholder" in (I18N.get(get_lang(uid), {}) or {}) else "ÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÐµÐ¶Ð¸Ð¼ Ð¸Ð»Ð¸ Ð½Ð°Ð¿Ð¸ÑÐ¸ÑÐµ Ð·Ð°Ð¿ÑÐ¾Ñâ¦"
+    placeholder = t(uid, "input_placeholder") if "input_placeholder" in (I18N.get(get_lang(uid), {}) or {}) else "ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾ÃÃ¢Â¦"
 
     return ReplyKeyboardMarkup(
         [
@@ -2049,22 +2049,22 @@ def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
         input_field_placeholder=placeholder,
     )
 
-# RU-ÐºÐ»Ð°Ð²Ð¸Ð°ÑÑÑÐ° Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ (Ð½Ð° ÑÐ»ÑÑÐ°Ð¹ ÑÐµÐ´ÐºÐ¸Ñ Ð¼ÐµÑÑ Ð±ÐµÐ· user_id)
+# RU-ÃÂºÃÂ»ÃÂ°ÃÂ²ÃÂ¸ÃÂ°ÃÃÃÃÂ° ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÂ¾ÃÂ»ÃÃÂ°ÃÂ½ÃÂ¸Ã (ÃÂ½ÃÂ° ÃÃÂ»ÃÃÃÂ°ÃÂ¹ ÃÃÂµÃÂ´ÃÂºÃÂ¸Ã ÃÂ¼ÃÂµÃÃ ÃÃÂµÃÂ· user_id)
 main_kb = main_keyboard(0)
 
-# âââââââââ /start âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ /start Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    ÐÑÑÐ¸ÑÐ¾Ð²ÐºÐ° Ð³Ð»Ð°Ð²Ð½Ð¾Ð³Ð¾ Ð¼ÐµÐ½Ñ (Ð¿Ð¾ÑÐ»Ðµ Ð²ÑÐ±Ð¾ÑÐ° ÑÐ·ÑÐºÐ° Ð¸ Ð² Ð´ÑÑÐ³Ð¸Ñ Ð¼ÐµÑÑÐ°Ñ).
+    ÃÃÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂºÃÂ° ÃÂ³ÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ¼ÃÂµÃÂ½Ã (ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµ ÃÂ²ÃÃÃÂ¾ÃÃÂ° ÃÃÂ·ÃÃÂºÃÂ° ÃÂ¸ ÃÂ² ÃÂ´ÃÃÃÂ³ÃÂ¸Ã ÃÂ¼ÃÂµÃÃÃÂ°Ã).
     """
     uid = update.effective_user.id
-    # ÐÐ°Ð½Ð½ÐµÑ (ÐµÑÐ»Ð¸ Ð·Ð°Ð´Ð°Ð½)
+    # ÃÃÂ°ÃÂ½ÃÂ½ÃÂµÃ (ÃÂµÃÃÂ»ÃÂ¸ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½)
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(welcome_url)
 
-    # ÐÐ¾ÑÐ¾ÑÐºÐ¾Ðµ Ð¿ÑÐ¸Ð²ÐµÑÑÑÐ²Ð¸Ðµ Ð½Ð° Ð²ÑÐ±ÑÐ°Ð½Ð½Ð¾Ð¼ ÑÐ·ÑÐºÐµ
+    # ÃÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¾ÃÂµ ÃÂ¿ÃÃÂ¸ÃÂ²ÃÂµÃÃÃÃÂ²ÃÂ¸ÃÂµ ÃÂ½ÃÂ° ÃÂ²ÃÃÃÃÂ°ÃÂ½ÃÂ½ÃÂ¾ÃÂ¼ ÃÃÂ·ÃÃÂºÃÂµ
     text = _tr(uid, "welcome")
     with contextlib.suppress(Exception):
         await update.effective_message.reply_text(
@@ -2073,26 +2073,26 @@ async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             disable_web_page_preview=True,
         )
 
-# âââââââââ /start âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ /start Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Ð¢ÑÐµÐ±Ð¾Ð²Ð°Ð½Ð¸Ðµ: Ð²ÑÐ±Ð¾Ñ ÑÐ·ÑÐºÐ° Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð¿ÑÐ¸ ÐºÐ°Ð¶Ð´Ð¾Ð¼ Ð½Ð¾Ð²Ð¾Ð¼ /start (Ð½Ðµ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÐµÑÐ²ÑÐ¹ ÑÐ°Ð·).
-    ÐÐµÐ½Ñ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð¿Ð¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ ÐºÐ½Ð¾Ð¿ÐºÐ¸ ÑÐ·ÑÐºÐ° (Ð¸Ð»Ð¸ Â«ÐÑÐ¾Ð´Ð¾Ð»Ð¶Ð¸ÑÑÂ»).
+    ÃÂ¢ÃÃÂµÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂµ: ÃÂ²ÃÃÃÂ¾Ã ÃÃÂ·ÃÃÂºÃÂ° ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ¿ÃÃÂ¸ ÃÂºÃÂ°ÃÂ¶ÃÂ´ÃÂ¾ÃÂ¼ ÃÂ½ÃÂ¾ÃÂ²ÃÂ¾ÃÂ¼ /start (ÃÂ½ÃÂµ ÃÃÂ¾ÃÂ»ÃÃÂºÃÂ¾ ÃÂ¿ÃÂµÃÃÂ²ÃÃÂ¹ ÃÃÂ°ÃÂ·).
+    ÃÃÂµÃÂ½Ã ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµ ÃÂ½ÃÂ°ÃÂ¶ÃÂ°ÃÃÂ¸Ã ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸ ÃÃÂ·ÃÃÂºÃÂ° (ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ«ÃÃÃÂ¾ÃÂ´ÃÂ¾ÃÂ»ÃÂ¶ÃÂ¸ÃÃÃÂ»).
     """
     uid = update.effective_user.id
 
-    # ÐÐ¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð±Ð°Ð½Ð½ÐµÑ (ÐµÑÐ»Ð¸ Ð·Ð°Ð´Ð°Ð½)
+    # ÃÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÃÂ°ÃÂ½ÃÂ½ÃÂµÃ (ÃÂµÃÃÂ»ÃÂ¸ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½)
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(welcome_url)
 
-    # ÐÐ¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð²ÑÐ±Ð¾Ñ ÑÐ·ÑÐºÐ° Ð²ÑÐµÐ³Ð´Ð°
+    # ÃÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ²ÃÃÃÂ¾Ã ÃÃÂ·ÃÃÂºÃÂ° ÃÂ²ÃÃÂµÃÂ³ÃÂ´ÃÂ°
     await update.effective_message.reply_text(
         t(uid, "choose_lang"),
         reply_markup=_lang_choose_kb(uid),
     )
-# âââââââââ Ð¡ÑÐ°ÑÑ / ÐÐ²Ð¸Ð¶ÐºÐ¸ / ÐÐ¾Ð¼Ð¾ÑÑ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÂ¡ÃÃÂ°ÃÃ / ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸ / ÃÃÂ¾ÃÂ¼ÃÂ¾ÃÃ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -2100,10 +2100,10 @@ async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("ÐÑÐºÑÑÑÑ ÑÐ°ÑÐ¸ÑÑ (WebApp)", web_app=WebAppInfo(url=TARIFF_URL))],
-        [InlineKeyboardButton("ÐÑÐ¾ÑÐ¼Ð¸ÑÑ PRO Ð½Ð° Ð¼ÐµÑÑÑ (Ð®Kassa)", callback_data="buyinv:pro:1")],
+        [InlineKeyboardButton("ÃÃÃÂºÃÃÃÃ ÃÃÂ°ÃÃÂ¸ÃÃ (WebApp)", web_app=WebAppInfo(url=TARIFF_URL))],
+        [InlineKeyboardButton("ÃÃÃÂ¾ÃÃÂ¼ÃÂ¸ÃÃ PRO ÃÂ½ÃÂ° ÃÂ¼ÃÂµÃÃÃ (ÃÂ®Kassa)", callback_data="buyinv:pro:1")],
     ])
-    await update.effective_message.reply_text("â­ Ð¢Ð°ÑÐ¸ÑÑ Ð¸ Ð¿Ð¾Ð¼Ð¾ÑÑ.\n\n" + HELP_TEXT, reply_markup=kb, disable_web_page_preview=True)
+    await update.effective_message.reply_text("Ã¢Â­ ÃÂ¢ÃÂ°ÃÃÂ¸ÃÃ ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ¼ÃÂ¾ÃÃ.\n\n" + HELP_TEXT, reply_markup=kb, disable_web_page_preview=True)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
@@ -2112,110 +2112,110 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
 
 
-# âââââââââ ÐÐ¸Ð°Ð³Ð½Ð¾ÑÑÐ¸ÐºÐ°/Ð»Ð¸Ð¼Ð¸ÑÑ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¸ÃÂ°ÃÂ³ÃÂ½ÃÂ¾ÃÃÃÂ¸ÃÂºÃÂ°/ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     tier = get_subscription_tier(user_id)
     lim = _limits_for(user_id)
     row = _usage_row(user_id, _today_ymd())
     lines = [
-        f"ð¤ Ð¢Ð°ÑÐ¸Ñ: {tier}",
-        f"â¢ Ð¢ÐµÐºÑÑÑ ÑÐµÐ³Ð¾Ð´Ð½Ñ: {row['text_count']} / {lim['text_per_day']}",
-        f"â¢ Luma $: {row['luma_usd']:.2f} / {lim['luma_budget_usd']:.2f}",
-        f"â¢ Runway $: {row['runway_usd']:.2f} / {lim['runway_budget_usd']:.2f}",
-        f"â¢ Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
+        f"Ã°Â¤ ÃÂ¢ÃÂ°ÃÃÂ¸Ã: {tier}",
+        f"Ã¢Â¢ ÃÂ¢ÃÂµÃÂºÃÃÃ ÃÃÂµÃÂ³ÃÂ¾ÃÂ´ÃÂ½Ã: {row['text_count']} / {lim['text_per_day']}",
+        f"Ã¢Â¢ Luma $: {row['luma_usd']:.2f} / {lim['luma_budget_usd']:.2f}",
+        f"Ã¢Â¢ Runway $: {row['runway_usd']:.2f} / {lim['runway_budget_usd']:.2f}",
+        f"Ã¢Â¢ Images $: {row['img_usd']:.2f} / {lim['img_budget_usd']:.2f}",
     ]
     await update.effective_message.reply_text("\n".join(lines))
 
 
-# âââââââââ Capability Q&A âââââââââ
-_CAP_PDF   = re.compile(r"(pdf|Ð´Ð¾ÐºÑÐ¼ÐµÐ½Ñ(Ñ)?|ÑÐ°Ð¹Ð»(Ñ)?)", re.I)
-_CAP_EBOOK = re.compile(r"(ebook|e-?book|ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½(Ð°Ñ|ÑÐµ)\s+ÐºÐ½Ð¸Ð³|epub|fb2|docx|txt|mobi|azw)", re.I)
-_CAP_AUDIO = re.compile(r"(Ð°ÑÐ´Ð¸Ð¾ ?ÐºÐ½Ð¸Ð³|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
-_CAP_IMAGE = re.compile(r"(Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½|ÐºÐ°ÑÑÐ¸Ð½Ðº|ÑÐ¾ÑÐ¾|image|picture|img)", re.I)
-_CAP_VIDEO = re.compile(r"(Ð²Ð¸Ð´ÐµÐ¾|ÑÐ¾Ð»Ð¸Ðº|shorts?|reels?|clip)", re.I)
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Capability Q&A Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
+_CAP_PDF   = re.compile(r"(pdf|ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½Ã(Ã)?|ÃÃÂ°ÃÂ¹ÃÂ»(Ã)?)", re.I)
+_CAP_EBOOK = re.compile(r"(ebook|e-?book|ÃÃÂ»ÃÂµÃÂºÃÃÃÂ¾ÃÂ½ÃÂ½(ÃÂ°Ã|ÃÃÂµ)\s+ÃÂºÃÂ½ÃÂ¸ÃÂ³|epub|fb2|docx|txt|mobi|azw)", re.I)
+_CAP_AUDIO = re.compile(r"(ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾ ?ÃÂºÃÂ½ÃÂ¸ÃÂ³|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
+_CAP_IMAGE = re.compile(r"(ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½|ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂº|ÃÃÂ¾ÃÃÂ¾|image|picture|img)", re.I)
+_CAP_VIDEO = re.compile(r"(ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾|ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂº|shorts?|reels?|clip)", re.I)
 
 def capability_answer(text: str) -> str | None:
     """
-    ÐÐ¾ÑÐ¾ÑÐºÐ¸Ðµ Ð¾ÑÐ²ÐµÑÑ Ð½Ð° Ð²Ð¾Ð¿ÑÐ¾ÑÑ Ð²Ð¸Ð´Ð°:
-    - Â«ÑÑ Ð¼Ð¾Ð¶ÐµÑÑ Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸ÑÐ¾Ð²Ð°ÑÑ PDF?Â»
-    - Â«ÑÑ ÑÐ¼ÐµÐµÑÑ ÑÐ°Ð±Ð¾ÑÐ°ÑÑ Ñ ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐ¼Ð¸ ÐºÐ½Ð¸Ð³Ð°Ð¼Ð¸?Â»
-    - Â«ÑÑ Ð¼Ð¾Ð¶ÐµÑÑ ÑÐ¾Ð·Ð´Ð°Ð²Ð°ÑÑ Ð²Ð¸Ð´ÐµÐ¾?Â»
-    - Â«ÑÑ Ð¼Ð¾Ð¶ÐµÑÑ Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ ÑÐ¾ÑÐ¾Ð³ÑÐ°ÑÐ¸Ñ?Â» Ð¸ Ñ.Ð¿.
+    ÃÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¸ÃÂµ ÃÂ¾ÃÃÂ²ÃÂµÃÃ ÃÂ½ÃÂ° ÃÂ²ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂ°:
+    - ÃÂ«ÃÃ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃÃ ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ PDF?ÃÂ»
+    - ÃÂ«ÃÃ ÃÃÂ¼ÃÂµÃÂµÃÃ ÃÃÂ°ÃÃÂ¾ÃÃÂ°ÃÃ Ã ÃÃÂ»ÃÂµÃÂºÃÃÃÂ¾ÃÂ½ÃÂ½ÃÃÂ¼ÃÂ¸ ÃÂºÃÂ½ÃÂ¸ÃÂ³ÃÂ°ÃÂ¼ÃÂ¸?ÃÂ»
+    - ÃÂ«ÃÃ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃÃ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÂ²ÃÂ°ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾?ÃÂ»
+    - ÃÂ«ÃÃ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃÃ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÂ¾ÃÃÂ¾ÃÂ³ÃÃÂ°ÃÃÂ¸Ã?ÃÂ» ÃÂ¸ Ã.ÃÂ¿.
 
-    ÐÐ°Ð¶Ð½Ð¾: Ð½Ðµ Ð¿ÐµÑÐµÑÐ²Ð°ÑÑÐ²Ð°ÐµÐ¼ ÑÐµÐ°Ð»ÑÐ½ÑÐµ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ
-    Â«ÑÐ´ÐµÐ»Ð°Ð¹ Ð²Ð¸Ð´ÐµÐ¾â¦Â», Â«ÑÐ³ÐµÐ½ÐµÑÐ¸ÑÑÐ¹ ÐºÐ°ÑÑÐ¸Ð½ÐºÑâ¦Â» Ð¸ Ñ.Ð´.
+    ÃÃÂ°ÃÂ¶ÃÂ½ÃÂ¾: ÃÂ½ÃÂµ ÃÂ¿ÃÂµÃÃÂµÃÃÂ²ÃÂ°ÃÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÃÂµÃÂ°ÃÂ»ÃÃÂ½ÃÃÂµ ÃÂºÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´Ã
+    ÃÂ«ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾Ã¢Â¦ÃÂ», ÃÂ«ÃÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ¸ÃÃÃÂ¹ ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÃ¢Â¦ÃÂ» ÃÂ¸ Ã.ÃÂ´.
     """
 
     tl = (text or "").strip().lower()
     if not tl:
         return None
 
-    # --- ÐÐ¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ°ÑÑÑ ÑÐ¾ÑÐ¾ / Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ñ ÑÐ½Ð¸Ð¼ÐºÐ¾Ð² (ÐÐ«Ð¡ÐÐÐÐ ÐÐ ÐÐÐ ÐÐ¢ÐÐ¢) ---
+    # --- ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÃÂ°ÃÃÃ ÃÃÂ¾ÃÃÂ¾ / ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸Ã ÃÃÂ½ÃÂ¸ÃÂ¼ÃÂºÃÂ¾ÃÂ² (ÃÃÂ«ÃÂ¡ÃÃÃÃ ÃÃ ÃÃÃ ÃÃÂ¢ÃÃÂ¢) ---
     if (
-        any(k in tl for k in ("Ð¾Ð¶Ð¸Ð²Ð¸", "Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ", "Ð°Ð½Ð¸Ð¼Ð¸ÑÑÐ¹", "Ð°Ð½Ð¸Ð¼Ð¸ÑÐ¾Ð²Ð°ÑÑ"))
-        and any(k in tl for k in ("ÑÐ¾ÑÐ¾", "ÑÐ¾ÑÐ¾Ð³ÑÐ°Ñ", "ÐºÐ°ÑÑÐ¸Ð½", "Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½", "Ð¿Ð¾ÑÑÑÐµÑ"))
+        any(k in tl for k in ("ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸", "ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ", "ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÃÂ¹", "ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ"))
+        and any(k in tl for k in ("ÃÃÂ¾ÃÃÂ¾", "ÃÃÂ¾ÃÃÂ¾ÃÂ³ÃÃÂ°Ã", "ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½", "ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½", "ÃÂ¿ÃÂ¾ÃÃÃÃÂµÃ"))
     ):
-        # ÐÐµÑÑÐ¾Ð½Ð°Ð»Ð¸Ð·Ð¸ÑÐ¾Ð²Ð°Ð½Ð½ÑÐ¹ Ð¾ÑÐ²ÐµÑ Ð¸Ð¼ÐµÐ½Ð½Ð¾ Ð¿Ð¾Ð´ ÑÑÐ½ÐºÑÐ¸Ñ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ
+        # ÃÃÂµÃÃÃÂ¾ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÃÂ¹ ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÂ¸ÃÂ¼ÃÂµÃÂ½ÃÂ½ÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ´ ÃÃÃÂ½ÃÂºÃÃÂ¸Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã
         return (
-            "ðª Ð¯ ÑÐ¼ÐµÑ Ð¾Ð¶Ð¸Ð²Ð»ÑÑÑ ÑÐ¾ÑÐ¾Ð³ÑÐ°ÑÐ¸Ð¸ Ð¸ Ð´ÐµÐ»Ð°ÑÑ Ð¸Ð· Ð½Ð¸Ñ ÐºÐ¾ÑÐ¾ÑÐºÐ¸Ðµ Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ð¸.\n\n"
-            "Ð§ÑÐ¾ Ð¼Ð¾Ð¶Ð½Ð¾ Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ:\n"
-            "â¢ Ð»ÑÐ³ÐºÐ°Ñ Ð¼Ð¸Ð¼Ð¸ÐºÐ°: Ð¼Ð¾ÑÐ³Ð°Ð½Ð¸Ðµ Ð³Ð»Ð°Ð·, Ð¼ÑÐ³ÐºÐ°Ñ ÑÐ»ÑÐ±ÐºÐ°;\n"
-            "â¢ Ð¿Ð»Ð°Ð²Ð½ÑÐµ Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ Ð³Ð¾Ð»Ð¾Ð²Ñ Ð¸ Ð¿Ð»ÐµÑ, ÑÑÑÐµÐºÑ Ð´ÑÑÐ°Ð½Ð¸Ñ;\n"
-            "â¢ Ð»ÑÐ³ÐºÐ¾Ðµ Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ Ð¸Ð»Ð¸ Ð¿Ð°ÑÐ°Ð»Ð»Ð°ÐºÑ ÑÐ¾Ð½Ð°.\n\n"
-            "ÐÐ¾ÑÑÑÐ¿Ð½ÑÐµ Ð´Ð²Ð¸Ð¶ÐºÐ¸:\n"
-            "â¢ Runway â Ð¼Ð°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½Ð¾ ÑÐµÐ°Ð»Ð¸ÑÑÐ¸ÑÐ½Ð¾Ðµ Ð¿ÑÐµÐ¼Ð¸ÑÐ¼-Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ;\n"
-            "â¢ Kling â Ð¾ÑÐ»Ð¸ÑÐ½Ð¾ Ð¿ÐµÑÐµÐ´Ð°ÑÑ Ð²Ð·Ð³Ð»ÑÐ´, Ð¼Ð¸Ð¼Ð¸ÐºÑ Ð¸ Ð¿Ð¾Ð²Ð¾ÑÐ¾ÑÑ Ð³Ð¾Ð»Ð¾Ð²Ñ;\n"
-            "â¢ Luma â Ð¿Ð»Ð°Ð²Ð½ÑÐµ ÑÑÐ´Ð¾Ð¶ÐµÑÑÐ²ÐµÐ½Ð½ÑÐµ Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ð¸.\n\n"
-            "ÐÑÐ¸ÑÐ»Ð¸ ÑÑÐ´Ð° ÑÐ¾ÑÐ¾ (Ð»ÑÑÑÐµ Ð¿Ð¾ÑÑÑÐµÑ). ÐÐ¾ÑÐ»Ðµ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ Ñ Ð¿ÑÐµÐ´Ð»Ð¾Ð¶Ñ Ð²ÑÐ±ÑÐ°ÑÑ Ð´Ð²Ð¸Ð¶Ð¾Ðº "
-            "Ð¸ Ð¿Ð¾Ð´Ð³Ð¾ÑÐ¾Ð²Ð»Ñ Ð¿ÑÐµÐ²ÑÑ/Ð²Ð¸Ð´ÐµÐ¾."
+            "Ã°Âª ÃÂ¯ ÃÃÂ¼ÃÂµÃ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÃÃ ÃÃÂ¾ÃÃÂ¾ÃÂ³ÃÃÂ°ÃÃÂ¸ÃÂ¸ ÃÂ¸ ÃÂ´ÃÂµÃÂ»ÃÂ°ÃÃ ÃÂ¸ÃÂ· ÃÂ½ÃÂ¸Ã ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¸ÃÂµ ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸ÃÂ¸.\n\n"
+            "ÃÂ§ÃÃÂ¾ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ:\n"
+            "Ã¢Â¢ ÃÂ»ÃÃÂ³ÃÂºÃÂ°Ã ÃÂ¼ÃÂ¸ÃÂ¼ÃÂ¸ÃÂºÃÂ°: ÃÂ¼ÃÂ¾ÃÃÂ³ÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ³ÃÂ»ÃÂ°ÃÂ·, ÃÂ¼ÃÃÂ³ÃÂºÃÂ°Ã ÃÃÂ»ÃÃÃÂºÃÂ°;\n"
+            "Ã¢Â¢ ÃÂ¿ÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²Ã ÃÂ¸ ÃÂ¿ÃÂ»ÃÂµÃ, ÃÃÃÃÂµÃÂºÃ ÃÂ´ÃÃÃÂ°ÃÂ½ÃÂ¸Ã;\n"
+            "Ã¢Â¢ ÃÂ»ÃÃÂ³ÃÂºÃÂ¾ÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÂ°ÃÃÂ°ÃÂ»ÃÂ»ÃÂ°ÃÂºÃ ÃÃÂ¾ÃÂ½ÃÂ°.\n\n"
+            "ÃÃÂ¾ÃÃÃÃÂ¿ÃÂ½ÃÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸:\n"
+            "Ã¢Â¢ Runway Ã¢ ÃÂ¼ÃÂ°ÃÂºÃÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ ÃÃÂµÃÂ°ÃÂ»ÃÂ¸ÃÃÃÂ¸ÃÃÂ½ÃÂ¾ÃÂµ ÃÂ¿ÃÃÂµÃÂ¼ÃÂ¸ÃÃÂ¼-ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ;\n"
+            "Ã¢Â¢ Kling Ã¢ ÃÂ¾ÃÃÂ»ÃÂ¸ÃÃÂ½ÃÂ¾ ÃÂ¿ÃÂµÃÃÂµÃÂ´ÃÂ°ÃÃ ÃÂ²ÃÂ·ÃÂ³ÃÂ»ÃÃÂ´, ÃÂ¼ÃÂ¸ÃÂ¼ÃÂ¸ÃÂºÃ ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ²ÃÂ¾ÃÃÂ¾ÃÃ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²Ã;\n"
+            "Ã¢Â¢ Luma Ã¢ ÃÂ¿ÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÃÂµ ÃÃÃÂ´ÃÂ¾ÃÂ¶ÃÂµÃÃÃÂ²ÃÂµÃÂ½ÃÂ½ÃÃÂµ ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸ÃÂ¸.\n\n"
+            "ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÃÂ´ÃÂ° ÃÃÂ¾ÃÃÂ¾ (ÃÂ»ÃÃÃÃÂµ ÃÂ¿ÃÂ¾ÃÃÃÃÂµÃ). ÃÃÂ¾ÃÃÂ»ÃÂµ ÃÂ·ÃÂ°ÃÂ³ÃÃÃÂ·ÃÂºÃÂ¸ Ã ÃÂ¿ÃÃÂµÃÂ´ÃÂ»ÃÂ¾ÃÂ¶Ã ÃÂ²ÃÃÃÃÂ°ÃÃ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº "
+            "ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÂ¿ÃÃÂµÃÂ²ÃÃ/ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾."
         )
 
-    # --- ÐÐ¾ÐºÑÐ¼ÐµÐ½ÑÑ / ÑÐ°Ð¹Ð»Ñ ---
+    # --- ÃÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ / ÃÃÂ°ÃÂ¹ÃÂ»Ã ---
     if re.search(r"\b(pdf|docx|epub|fb2|txt|mobi|azw)\b", tl) and "?" in tl:
         return (
-            "ÐÐ°, Ð¼Ð¾Ð³Ñ Ð¿Ð¾Ð¼Ð¾ÑÑ Ñ Ð°Ð½Ð°Ð»Ð¸Ð·Ð¾Ð¼ Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ¾Ð² Ð¸ ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÑ ÐºÐ½Ð¸Ð³. "
-            "ÐÑÐ¿ÑÐ°Ð²Ñ ÑÐ°Ð¹Ð» (PDF, EPUB, DOCX, FB2, TXT, MOBI/AZW â Ð¿Ð¾ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑÐ¸) "
-            "Ð¸ Ð½Ð°Ð¿Ð¸ÑÐ¸, ÑÑÐ¾ Ð½ÑÐ¶Ð½Ð¾: ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑ, Ð²ÑÐ¶Ð¸Ð¼ÐºÑ, Ð¿Ð»Ð°Ð½, ÑÐ°Ð·Ð±Ð¾Ñ Ð¿Ð¾ Ð¿ÑÐ½ÐºÑÐ°Ð¼ Ð¸ Ñ.Ð¿."
+            "ÃÃÂ°, ÃÂ¼ÃÂ¾ÃÂ³Ã ÃÂ¿ÃÂ¾ÃÂ¼ÃÂ¾ÃÃ Ã ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ¾ÃÂ¼ ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ¾ÃÂ² ÃÂ¸ ÃÃÂ»ÃÂµÃÂºÃÃÃÂ¾ÃÂ½ÃÂ½ÃÃ ÃÂºÃÂ½ÃÂ¸ÃÂ³. "
+            "ÃÃÃÂ¿ÃÃÂ°ÃÂ²Ã ÃÃÂ°ÃÂ¹ÃÂ» (PDF, EPUB, DOCX, FB2, TXT, MOBI/AZW Ã¢ ÃÂ¿ÃÂ¾ ÃÂ²ÃÂ¾ÃÂ·ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ÃÃÃÂ¸) "
+            "ÃÂ¸ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸, ÃÃÃÂ¾ ÃÂ½ÃÃÂ¶ÃÂ½ÃÂ¾: ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃ, ÃÂ²ÃÃÂ¶ÃÂ¸ÃÂ¼ÃÂºÃ, ÃÂ¿ÃÂ»ÃÂ°ÃÂ½, ÃÃÂ°ÃÂ·ÃÃÂ¾Ã ÃÂ¿ÃÂ¾ ÃÂ¿ÃÃÂ½ÃÂºÃÃÂ°ÃÂ¼ ÃÂ¸ Ã.ÃÂ¿."
         )
 
-    # --- ÐÑÐ´Ð¸Ð¾ / ÑÐµÑÑ ---
-    if ("Ð°ÑÐ´Ð¸Ð¾" in tl or "Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²" in tl or "voice" in tl or "speech" in tl) and (
-        "?" in tl or "Ð¼Ð¾Ð¶ÐµÑÑ" in tl or "ÑÐ¼ÐµÐµÑÑ" in tl
+    # --- ÃÃÃÂ´ÃÂ¸ÃÂ¾ / ÃÃÂµÃÃ ---
+    if ("ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾" in tl or "ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²" in tl or "voice" in tl or "speech" in tl) and (
+        "?" in tl or "ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃÃ" in tl or "ÃÃÂ¼ÃÂµÃÂµÃÃ" in tl
     ):
         return (
-            "ÐÐ°, Ð¼Ð¾Ð³Ñ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð²Ð°ÑÑ ÑÐµÑÑ Ð¸Ð· Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²ÑÑ Ð¸ Ð°ÑÐ´Ð¸Ð¾. "
-            "ÐÑÐ¾ÑÑÐ¾ Ð¿ÑÐ¸ÑÐ»Ð¸ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ â Ñ Ð¿ÐµÑÐµÐ²ÐµÐ´Ñ ÐµÐ³Ð¾ Ð² ÑÐµÐºÑÑ Ð¸ Ð¾ÑÐ²ÐµÑÑ ÐºÐ°Ðº Ð½Ð° Ð¾Ð±ÑÑÐ½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ."
+            "ÃÃÂ°, ÃÂ¼ÃÂ¾ÃÂ³Ã ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÂ²ÃÂ°ÃÃ ÃÃÂµÃÃ ÃÂ¸ÃÂ· ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÃ ÃÂ¸ ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾. "
+            "ÃÃÃÂ¾ÃÃÃÂ¾ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÃÂ¾ÃÂ¾ÃÃÃÂµÃÂ½ÃÂ¸ÃÂµ Ã¢ Ã ÃÂ¿ÃÂµÃÃÂµÃÂ²ÃÂµÃÂ´Ã ÃÂµÃÂ³ÃÂ¾ ÃÂ² ÃÃÂµÃÂºÃÃ ÃÂ¸ ÃÂ¾ÃÃÂ²ÃÂµÃÃ ÃÂºÃÂ°ÃÂº ÃÂ½ÃÂ° ÃÂ¾ÃÃÃÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã."
         )
 
-    # --- ÐÐ¸Ð´ÐµÐ¾ (Ð¾Ð±ÑÐ¸Ðµ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑÐ¸, Ð½Ðµ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ) ---
+    # --- ÃÃÂ¸ÃÂ´ÃÂµÃÂ¾ (ÃÂ¾ÃÃÃÂ¸ÃÂµ ÃÂ²ÃÂ¾ÃÂ·ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ÃÃÃÂ¸, ÃÂ½ÃÂµ ÃÂºÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´Ã) ---
     if (
-        re.search(r"\bÐ²Ð¸Ð´ÐµÐ¾\b", tl)
+        re.search(r"\bÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾\b", tl)
         and "?" in tl
-        and re.search(r"\b(Ð¼Ð¾Ð¶(ÐµÑÑ|ÐµÑÐµ)|ÑÐ¼Ðµ(ÐµÑÑ|ÐµÑÐµ)|ÑÐ¿Ð¾ÑÐ¾Ð±ÐµÐ½)\b", tl)
+        and re.search(r"\b(ÃÂ¼ÃÂ¾ÃÂ¶(ÃÂµÃÃ|ÃÂµÃÃÂµ)|ÃÃÂ¼ÃÂµ(ÃÂµÃÃ|ÃÂµÃÃÂµ)|ÃÃÂ¿ÃÂ¾ÃÃÂ¾ÃÃÂµÃÂ½)\b", tl)
     ):
         return (
-            "ÐÐ°, Ð¼Ð¾Ð³Ñ Ð·Ð°Ð¿ÑÑÐºÐ°ÑÑ Ð³ÐµÐ½ÐµÑÐ°ÑÐ¸Ñ ÐºÐ¾ÑÐ¾ÑÐºÐ¸Ñ Ð²Ð¸Ð´ÐµÐ¾. "
-            "ÐÐ¾Ð¶Ð½Ð¾ ÑÐ´ÐµÐ»Ð°ÑÑ ÑÐ¾Ð»Ð¸Ðº Ð¿Ð¾ ÑÐµÐºÑÑÐ¾Ð²Ð¾Ð¼Ñ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ñ Ð¸Ð»Ð¸ Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ ÑÐ¾ÑÐ¾. "
-            "ÐÐ¾ÑÐ»Ðµ ÑÐ¾Ð³Ð¾ ÐºÐ°Ðº ÑÑ Ð¿ÑÐ¸ÑÐ»ÑÑÑ Ð·Ð°Ð¿ÑÐ¾Ñ Ð¸/Ð¸Ð»Ð¸ ÑÐ°Ð¹Ð», Ñ Ð¿ÑÐµÐ´Ð»Ð¾Ð¶Ñ Ð²ÑÐ±ÑÐ°ÑÑ Ð´Ð²Ð¸Ð¶Ð¾Ðº "
-            "(Runway, Kling, Luma â Ð² Ð·Ð°Ð²Ð¸ÑÐ¸Ð¼Ð¾ÑÑÐ¸ Ð¾Ñ Ð´Ð¾ÑÑÑÐ¿Ð½ÑÑ)."
+            "ÃÃÂ°, ÃÂ¼ÃÂ¾ÃÂ³Ã ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÂºÃÂ°ÃÃ ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸Ã ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¸Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾. "
+            "ÃÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÃ ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂº ÃÂ¿ÃÂ¾ ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ²ÃÂ¾ÃÂ¼Ã ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸Ã ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÂ¾ÃÃÂ¾. "
+            "ÃÃÂ¾ÃÃÂ»ÃÂµ ÃÃÂ¾ÃÂ³ÃÂ¾ ÃÂºÃÂ°ÃÂº ÃÃ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã ÃÂ¸/ÃÂ¸ÃÂ»ÃÂ¸ ÃÃÂ°ÃÂ¹ÃÂ», Ã ÃÂ¿ÃÃÂµÃÂ´ÃÂ»ÃÂ¾ÃÂ¶Ã ÃÂ²ÃÃÃÃÂ°ÃÃ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº "
+            "(Runway, Kling, Luma Ã¢ ÃÂ² ÃÂ·ÃÂ°ÃÂ²ÃÂ¸ÃÃÂ¸ÃÂ¼ÃÂ¾ÃÃÃÂ¸ ÃÂ¾Ã ÃÂ´ÃÂ¾ÃÃÃÃÂ¿ÃÂ½ÃÃ)."
         )
 
-    # --- ÐÐ°ÑÑÐ¸Ð½ÐºÐ¸ / Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ (Ð±ÐµÐ· /img Ð¸ Ð³ÐµÐ½ÐµÑÐ°ÑÐ¸Ð¸ Ð¿Ð¾ Ð¿ÑÐ¾Ð¼Ð¿ÑÑ) ---
+    # --- ÃÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸ / ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã (ÃÃÂµÃÂ· /img ÃÂ¸ ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸ÃÂ¸ ÃÂ¿ÃÂ¾ ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿ÃÃ) ---
     if (
-        re.search(r"(ÐºÐ°ÑÑÐ¸Ð½Ðº|Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½|ÑÐ¾ÑÐ¾|picture|Ð»Ð¾Ð³Ð¾ÑÐ¸Ð¿|Ð±Ð°Ð½Ð½ÐµÑ)", tl)
+        re.search(r"(ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂº|ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½|ÃÃÂ¾ÃÃÂ¾|picture|ÃÂ»ÃÂ¾ÃÂ³ÃÂ¾ÃÃÂ¸ÃÂ¿|ÃÃÂ°ÃÂ½ÃÂ½ÃÂµÃ)", tl)
         and "?" in tl
     ):
         return (
-            "ÐÐ°, Ð¼Ð¾Ð³Ñ ÑÐ°Ð±Ð¾ÑÐ°ÑÑ Ñ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸ÑÐ¼Ð¸: Ð°Ð½Ð°Ð»Ð¸Ð·, ÑÐ»ÑÑÑÐµÐ½Ð¸Ðµ ÐºÐ°ÑÐµÑÑÐ²Ð°, ÑÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð¸Ð»Ð¸ Ð·Ð°Ð¼ÐµÐ½Ð° ÑÐ¾Ð½Ð°, "
-            "ÑÐ°ÑÑÐ¸ÑÐµÐ½Ð¸Ðµ ÐºÐ°Ð´ÑÐ°, Ð¿ÑÐ¾ÑÑÐ°Ñ Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ñ. "
-            "ÐÑÐ¾ÑÑÐ¾ Ð¿ÑÐ¸ÑÐ»Ð¸ ÑÑÐ´Ð° ÑÐ¾ÑÐ¾ Ð¸ ÐºÐ¾ÑÐ¾ÑÐºÐ¾ Ð¾Ð¿Ð¸ÑÐ¸, ÑÑÐ¾ Ð½ÑÐ¶Ð½Ð¾ ÑÐ´ÐµÐ»Ð°ÑÑ."
+            "ÃÃÂ°, ÃÂ¼ÃÂ¾ÃÂ³Ã ÃÃÂ°ÃÃÂ¾ÃÃÂ°ÃÃ Ã ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÃÂ¼ÃÂ¸: ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·, ÃÃÂ»ÃÃÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂºÃÂ°ÃÃÂµÃÃÃÂ²ÃÂ°, ÃÃÂ´ÃÂ°ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ° ÃÃÂ¾ÃÂ½ÃÂ°, "
+            "ÃÃÂ°ÃÃÃÂ¸ÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂºÃÂ°ÃÂ´ÃÃÂ°, ÃÂ¿ÃÃÂ¾ÃÃÃÂ°Ã ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸Ã. "
+            "ÃÃÃÂ¾ÃÃÃÂ¾ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÃÂ´ÃÂ° ÃÃÂ¾ÃÃÂ¾ ÃÂ¸ ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¾ ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ¸, ÃÃÃÂ¾ ÃÂ½ÃÃÂ¶ÃÂ½ÃÂ¾ ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÃ."
         )
 
-    # ÐÐ¸ÑÐµÐ³Ð¾ Ð¿Ð¾Ð´ÑÐ¾Ð´ÑÑÐµÐ³Ð¾ â Ð¿ÑÑÑÑ Ð¾Ð±ÑÐ°Ð±Ð°ÑÑÐ²Ð°ÐµÑÑÑ Ð¾ÑÐ½Ð¾Ð²Ð½Ð¾Ð¹ Ð»Ð¾Ð³Ð¸ÐºÐ¾Ð¹
+    # ÃÃÂ¸ÃÃÂµÃÂ³ÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂ¾ÃÂ´ÃÃÃÂµÃÂ³ÃÂ¾ Ã¢ ÃÂ¿ÃÃÃÃ ÃÂ¾ÃÃÃÂ°ÃÃÂ°ÃÃÃÂ²ÃÂ°ÃÂµÃÃÃ ÃÂ¾ÃÃÂ½ÃÂ¾ÃÂ²ÃÂ½ÃÂ¾ÃÂ¹ ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸ÃÂºÃÂ¾ÃÂ¹
     return None
 
-# âââââââââ ÐÐ¾Ð´Ñ/Ð´Ð²Ð¸Ð¶ÐºÐ¸ Ð´Ð»Ñ study âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ´Ã/ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸ ÃÂ´ÃÂ»Ã study Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _uk(user_id: int, name: str) -> str: return f"user:{user_id}:{name}"
 def mode_set(user_id: int, mode: str):     kv_set(_uk(user_id, "mode"), (mode or "default"))
 def mode_get(user_id: int) -> str:         return kv_get(_uk(user_id, "mode"), "default") or "default"
@@ -2226,34 +2226,34 @@ def study_sub_get(user_id: int) -> str:    return kv_get(_uk(user_id, "study_sub
 
 def modes_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("ð Ð£ÑÑÐ±Ð°", callback_data="mode:set:study"),
-         InlineKeyboardButton("ð¼ Ð¤Ð¾ÑÐ¾",  callback_data="mode:set:photo")],
-        [InlineKeyboardButton("ð ÐÐ¾ÐºÑÐ¼ÐµÐ½ÑÑ", callback_data="mode:set:docs"),
-         InlineKeyboardButton("ð ÐÐ¾Ð»Ð¾Ñ",     callback_data="mode:set:voice")],
-        [InlineKeyboardButton("ð§  ÐÐ²Ð¸Ð¶ÐºÐ¸", callback_data="mode:engines")]
+        [InlineKeyboardButton("Ã° ÃÂ£ÃÃÃÃÂ°", callback_data="mode:set:study"),
+         InlineKeyboardButton("Ã°Â¼ ÃÂ¤ÃÂ¾ÃÃÂ¾",  callback_data="mode:set:photo")],
+        [InlineKeyboardButton("Ã° ÃÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ", callback_data="mode:set:docs"),
+         InlineKeyboardButton("Ã° ÃÃÂ¾ÃÂ»ÃÂ¾Ã",     callback_data="mode:set:voice")],
+        [InlineKeyboardButton("Ã°Â§  ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸", callback_data="mode:engines")]
     ])
 
 def study_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("ð ÐÐ±ÑÑÑÐ½ÐµÐ½Ð¸Ðµ",          callback_data="study:set:explain"),
-         InlineKeyboardButton("ð§® ÐÐ°Ð´Ð°ÑÐ¸",              callback_data="study:set:tasks")],
-        [InlineKeyboardButton("âï¸ Ð­ÑÑÐµ/ÑÐµÑÐµÑÐ°Ñ/Ð´Ð¾ÐºÐ»Ð°Ð´", callback_data="study:set:essay")],
-        [InlineKeyboardButton("ð Ð­ÐºÐ·Ð°Ð¼ÐµÐ½/ÐºÐ²Ð¸Ð·",        callback_data="study:set:quiz")]
+        [InlineKeyboardButton("Ã° ÃÃÃÃÃÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ",          callback_data="study:set:explain"),
+         InlineKeyboardButton("Ã°Â§Â® ÃÃÂ°ÃÂ´ÃÂ°ÃÃÂ¸",              callback_data="study:set:tasks")],
+        [InlineKeyboardButton("Ã¢Ã¯Â¸ ÃÂ­ÃÃÃÂµ/ÃÃÂµÃÃÂµÃÃÂ°Ã/ÃÂ´ÃÂ¾ÃÂºÃÂ»ÃÂ°ÃÂ´", callback_data="study:set:essay")],
+        [InlineKeyboardButton("Ã° ÃÂ­ÃÂºÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½/ÃÂºÃÂ²ÃÂ¸ÃÂ·",        callback_data="study:set:quiz")]
     ])
 
 async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     sub = study_sub_get(update.effective_user.id)
     if sub == "explain":
-        prompt = f"ÐÐ±ÑÑÑÐ½Ð¸ Ð¿ÑÐ¾ÑÑÑÐ¼Ð¸ ÑÐ»Ð¾Ð²Ð°Ð¼Ð¸, Ñ 2â3 Ð¿ÑÐ¸Ð¼ÐµÑÐ°Ð¼Ð¸ Ð¸ Ð¼Ð¸Ð½Ð¸-Ð¸ÑÐ¾Ð³Ð¾Ð¼:\n\n{text}"
+        prompt = f"ÃÃÃÃÃÃÂ½ÃÂ¸ ÃÂ¿ÃÃÂ¾ÃÃÃÃÂ¼ÃÂ¸ ÃÃÂ»ÃÂ¾ÃÂ²ÃÂ°ÃÂ¼ÃÂ¸, Ã 2Ã¢3 ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃÃÂ°ÃÂ¼ÃÂ¸ ÃÂ¸ ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂ¸ÃÃÂ¾ÃÂ³ÃÂ¾ÃÂ¼:\n\n{text}"
     elif sub == "tasks":
-        prompt = ("Ð ÐµÑÐ¸ Ð·Ð°Ð´Ð°ÑÑ(Ð¸) Ð¿Ð¾ÑÐ°Ð³Ð¾Ð²Ð¾: ÑÐ¾ÑÐ¼ÑÐ»Ñ, Ð¿Ð¾ÑÑÐ½ÐµÐ½Ð¸Ñ, Ð¸ÑÐ¾Ð³Ð¾Ð²ÑÐ¹ Ð¾ÑÐ²ÐµÑ. "
-                  "ÐÑÐ»Ð¸ Ð½Ðµ ÑÐ²Ð°ÑÐ°ÐµÑ Ð´Ð°Ð½Ð½ÑÑ â ÑÑÐ¾ÑÐ½ÑÑÑÐ¸Ðµ Ð²Ð¾Ð¿ÑÐ¾ÑÑ Ð² ÐºÐ¾Ð½ÑÐµ.\n\n" + text)
+        prompt = ("Ã ÃÂµÃÃÂ¸ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ(ÃÂ¸) ÃÂ¿ÃÂ¾ÃÃÂ°ÃÂ³ÃÂ¾ÃÂ²ÃÂ¾: ÃÃÂ¾ÃÃÂ¼ÃÃÂ»Ã, ÃÂ¿ÃÂ¾ÃÃÃÂ½ÃÂµÃÂ½ÃÂ¸Ã, ÃÂ¸ÃÃÂ¾ÃÂ³ÃÂ¾ÃÂ²ÃÃÂ¹ ÃÂ¾ÃÃÂ²ÃÂµÃ. "
+                  "ÃÃÃÂ»ÃÂ¸ ÃÂ½ÃÂµ ÃÃÂ²ÃÂ°ÃÃÂ°ÃÂµÃ ÃÂ´ÃÂ°ÃÂ½ÃÂ½ÃÃ Ã¢ ÃÃÃÂ¾ÃÃÂ½ÃÃÃÃÂ¸ÃÂµ ÃÂ²ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃ ÃÂ² ÃÂºÃÂ¾ÃÂ½ÃÃÂµ.\n\n" + text)
     elif sub == "essay":
-        prompt = ("ÐÐ°Ð¿Ð¸ÑÐ¸ ÑÑÑÑÐºÑÑÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð½ÑÐ¹ ÑÐµÐºÑÑ 400â600 ÑÐ»Ð¾Ð² (ÑÑÑÐµ/ÑÐµÑÐµÑÐ°Ñ/Ð´Ð¾ÐºÐ»Ð°Ð´): "
-                  "Ð²Ð²ÐµÐ´ÐµÐ½Ð¸Ðµ, 3â5 ÑÐµÐ·Ð¸ÑÐ¾Ð² Ñ ÑÐ°ÐºÑÐ°Ð¼Ð¸, Ð²ÑÐ²Ð¾Ð´, ÑÐ¿Ð¸ÑÐ¾Ðº Ð¸Ð· 3 Ð¸ÑÑÐ¾ÑÐ½Ð¸ÐºÐ¾Ð² (ÐµÑÐ»Ð¸ ÑÐ¼ÐµÑÑÐ½Ð¾).\n\nÐ¢ÐµÐ¼Ð°:\n" + text)
+        prompt = ("ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÃÃÃÃÂºÃÃÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÃÂ¹ ÃÃÂµÃÂºÃÃ 400Ã¢600 ÃÃÂ»ÃÂ¾ÃÂ² (ÃÃÃÃÂµ/ÃÃÂµÃÃÂµÃÃÂ°Ã/ÃÂ´ÃÂ¾ÃÂºÃÂ»ÃÂ°ÃÂ´): "
+                  "ÃÂ²ÃÂ²ÃÂµÃÂ´ÃÂµÃÂ½ÃÂ¸ÃÂµ, 3Ã¢5 ÃÃÂµÃÂ·ÃÂ¸ÃÃÂ¾ÃÂ² Ã ÃÃÂ°ÃÂºÃÃÂ°ÃÂ¼ÃÂ¸, ÃÂ²ÃÃÂ²ÃÂ¾ÃÂ´, ÃÃÂ¿ÃÂ¸ÃÃÂ¾ÃÂº ÃÂ¸ÃÂ· 3 ÃÂ¸ÃÃÃÂ¾ÃÃÂ½ÃÂ¸ÃÂºÃÂ¾ÃÂ² (ÃÂµÃÃÂ»ÃÂ¸ ÃÃÂ¼ÃÂµÃÃÃÂ½ÃÂ¾).\n\nÃÂ¢ÃÂµÃÂ¼ÃÂ°:\n" + text)
     elif sub == "quiz":
-        prompt = ("Ð¡Ð¾ÑÑÐ°Ð²Ñ Ð¼Ð¸Ð½Ð¸-ÐºÐ²Ð¸Ð· Ð¿Ð¾ ÑÐµÐ¼Ðµ: 10 Ð²Ð¾Ð¿ÑÐ¾ÑÐ¾Ð², Ñ ÐºÐ°Ð¶Ð´Ð¾Ð³Ð¾ 4 Ð²Ð°ÑÐ¸Ð°Ð½ÑÐ° AâD; "
-                  "Ð² ÐºÐ¾Ð½ÑÐµ Ð´Ð°Ð¹ ÐºÐ»ÑÑ Ð¾ÑÐ²ÐµÑÐ¾Ð² (Ð½Ð¾Ð¼ÐµÑâÐ±ÑÐºÐ²Ð°). Ð¢ÐµÐ¼Ð°:\n\n" + text)
+        prompt = ("ÃÂ¡ÃÂ¾ÃÃÃÂ°ÃÂ²Ã ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂºÃÂ²ÃÂ¸ÃÂ· ÃÂ¿ÃÂ¾ ÃÃÂµÃÂ¼ÃÂµ: 10 ÃÂ²ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÂ¾ÃÂ², Ã ÃÂºÃÂ°ÃÂ¶ÃÂ´ÃÂ¾ÃÂ³ÃÂ¾ 4 ÃÂ²ÃÂ°ÃÃÂ¸ÃÂ°ÃÂ½ÃÃÂ° AÃ¢D; "
+                  "ÃÂ² ÃÂºÃÂ¾ÃÂ½ÃÃÂµ ÃÂ´ÃÂ°ÃÂ¹ ÃÂºÃÂ»ÃÃ ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ¾ÃÂ² (ÃÂ½ÃÂ¾ÃÂ¼ÃÂµÃÃ¢ÃÃÃÂºÃÂ²ÃÂ°). ÃÂ¢ÃÂµÃÂ¼ÃÂ°:\n\n" + text)
     else:
         prompt = text
     ans = await ask_openai_text(prompt)
@@ -2261,27 +2261,27 @@ async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE,
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
 
 
-# âââââââââ ÐÐ½Ð¾Ð¿ÐºÐ° Ð¿ÑÐ¸Ð²ÐµÑÑÑÐ²ÐµÐ½Ð½Ð¾Ð¹ ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ÃÂ²ÃÂµÃÃÃÃÂ²ÃÂµÃÂ½ÃÂ½ÃÂ¾ÃÂ¹ ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
-        await update.effective_message.reply_text("ÐÐ¾Ð¼Ð°Ð½Ð´Ð° Ð´Ð¾ÑÑÑÐ¿Ð½Ð° ÑÐ¾Ð»ÑÐºÐ¾ Ð²Ð»Ð°Ð´ÐµÐ»ÑÑÑ.")
+        await update.effective_message.reply_text("ÃÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´ÃÂ° ÃÂ´ÃÂ¾ÃÃÃÃÂ¿ÃÂ½ÃÂ° ÃÃÂ¾ÃÂ»ÃÃÂºÃÂ¾ ÃÂ²ÃÂ»ÃÂ°ÃÂ´ÃÂµÃÂ»ÃÃÃ.")
         return
     if not context.args:
-        await update.effective_message.reply_text("Ð¤Ð¾ÑÐ¼Ð°Ñ: /set_welcome <url_ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸>")
+        await update.effective_message.reply_text("ÃÂ¤ÃÂ¾ÃÃÂ¼ÃÂ°Ã: /set_welcome <url_ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸>")
         return
     url = " ".join(context.args).strip()
     kv_set("welcome_url", url)
-    await update.effective_message.reply_text("ÐÐ°ÑÑÐ¸Ð½ÐºÐ° Ð¿ÑÐ¸Ð²ÐµÑÑÑÐ²Ð¸Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð°. ÐÑÐ¿ÑÐ°Ð²ÑÑÐµ /start Ð´Ð»Ñ Ð¿ÑÐ¾Ð²ÐµÑÐºÐ¸.")
+    await update.effective_message.reply_text("ÃÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ÃÂ²ÃÂµÃÃÃÃÂ²ÃÂ¸Ã ÃÂ¾ÃÃÂ½ÃÂ¾ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ°. ÃÃÃÂ¿ÃÃÂ°ÃÂ²ÃÃÃÂµ /start ÃÂ´ÃÂ»Ã ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂµÃÃÂºÃÂ¸.")
 
 async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = kv_get("welcome_url", BANNER_URL)
     if url:
-        await update.effective_message.reply_photo(url, caption="Ð¢ÐµÐºÑÑÐ°Ñ ÐºÐ°ÑÑÐ¸Ð½ÐºÐ° Ð¿ÑÐ¸Ð²ÐµÑÑÑÐ²Ð¸Ñ")
+        await update.effective_message.reply_photo(url, caption="ÃÂ¢ÃÂµÃÂºÃÃÃÂ°Ã ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ÃÂ²ÃÂµÃÃÃÃÂ²ÃÂ¸Ã")
     else:
-        await update.effective_message.reply_text("ÐÐ°ÑÑÐ¸Ð½ÐºÐ° Ð¿ÑÐ¸Ð²ÐµÑÑÑÐ²Ð¸Ñ Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ð°.")
+        await update.effective_message.reply_text("ÃÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ÃÂ²ÃÂµÃÃÃÃÂ²ÃÂ¸Ã ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½ÃÂ°.")
 
 
-# âââââââââ ÐÐ°Ð»Ð°Ð½Ñ / Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã / ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     w = _wallet_get(user_id)
@@ -2289,30 +2289,30 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     row = _usage_row(user_id)
     lim = _limits_for(user_id)
     msg = (
-        "ð§¾ ÐÐ¾ÑÐµÐ»ÑÐº:\n"
-        f"â¢ ÐÐ´Ð¸Ð½ÑÐ¹ Ð±Ð°Ð»Ð°Ð½Ñ: ${total:.2f}\n"
-        "  (ÑÐ°ÑÑÐ¾Ð´ÑÐµÑÑÑ Ð½Ð° Ð¿ÐµÑÐµÑÐ°ÑÑÐ¾Ð´ Ð¿Ð¾ Luma/Runway/Images)\n\n"
-        "ÐÐµÑÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ñ ÑÐµÐ³Ð¾Ð´Ð½Ñ / Ð»Ð¸Ð¼Ð¸ÑÑ ÑÐ°ÑÐ¸ÑÐ°:\n"
-        f"â¢ Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
-        f"â¢ Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
-        f"â¢ Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
+        "Ã°Â§Â¾ ÃÃÂ¾ÃÃÂµÃÂ»ÃÃÂº:\n"
+        f"Ã¢Â¢ ÃÃÂ´ÃÂ¸ÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã: ${total:.2f}\n"
+        "  (ÃÃÂ°ÃÃÃÂ¾ÃÂ´ÃÃÂµÃÃÃ ÃÂ½ÃÂ° ÃÂ¿ÃÂµÃÃÂµÃÃÂ°ÃÃÃÂ¾ÃÂ´ ÃÂ¿ÃÂ¾ Luma/Runway/Images)\n\n"
+        "ÃÃÂµÃÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ°ÃÃÂ¸Ã ÃÃÂµÃÂ³ÃÂ¾ÃÂ´ÃÂ½Ã / ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃ ÃÃÂ°ÃÃÂ¸ÃÃÂ°:\n"
+        f"Ã¢Â¢ Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
+        f"Ã¢Â¢ Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
+        f"Ã¢Â¢ Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
     )
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("â ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÑ Ð±Ð°Ð»Ð°Ð½Ñ", callback_data="topup")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Ã¢ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã", callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
-# âââââââââ ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° / ÑÐ°ÑÐ¸ÑÑ â UI Ð¸ Ð¾Ð¿Ð»Ð°ÑÑ (PATCH) âââââââââ
-# ÐÐ°Ð²Ð¸ÑÐ¸Ð¼Ð¾ÑÑÐ¸ Ð¾ÐºÑÑÐ¶ÐµÐ½Ð¸Ñ:
-#  - YOOKASSA_PROVIDER_TOKEN  (Ð¿Ð»Ð°ÑÑÐ¶Ð½ÑÐ¹ ÑÐ¾ÐºÐµÐ½ Telegram Payments Ð¾Ñ Ð®Kassa)
-#  - YOOKASSA_CURRENCY        (Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ "RUB")
-#  - CRYPTO_PAY_API_TOKEN     (https://pay.crypt.bot â ÑÐ¾ÐºÐµÐ½ Ð¿ÑÐ¾Ð´Ð°Ð²ÑÐ°)
-#  - CRYPTO_ASSET             (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ "USDT", Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ "USDT")
-#  - PRICE_START_RUB, PRICE_PRO_RUB, PRICE_ULT_RUB  (ÑÐµÐ»Ð¾Ðµ ÑÐ¸ÑÐ»Ð¾, â½)
-#  - PRICE_START_USD, PRICE_PRO_USD, PRICE_ULT_USD  (ÑÐ¸ÑÐ»Ð¾ Ñ ÑÐ¾ÑÐºÐ¾Ð¹, $)
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° / ÃÃÂ°ÃÃÂ¸ÃÃ Ã¢ UI ÃÂ¸ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ (PATCH) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
+# ÃÃÂ°ÃÂ²ÃÂ¸ÃÃÂ¸ÃÂ¼ÃÂ¾ÃÃÃÂ¸ ÃÂ¾ÃÂºÃÃÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã:
+#  - YOOKASSA_PROVIDER_TOKEN  (ÃÂ¿ÃÂ»ÃÂ°ÃÃÃÂ¶ÃÂ½ÃÃÂ¹ ÃÃÂ¾ÃÂºÃÂµÃÂ½ Telegram Payments ÃÂ¾Ã ÃÂ®Kassa)
+#  - YOOKASSA_CURRENCY        (ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÂ¾ÃÂ»ÃÃÂ°ÃÂ½ÃÂ¸Ã "RUB")
+#  - CRYPTO_PAY_API_TOKEN     (https://pay.crypt.bot Ã¢ ÃÃÂ¾ÃÂºÃÂµÃÂ½ ÃÂ¿ÃÃÂ¾ÃÂ´ÃÂ°ÃÂ²ÃÃÂ°)
+#  - CRYPTO_ASSET             (ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ "USDT", ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÂ¾ÃÂ»ÃÃÂ°ÃÂ½ÃÂ¸Ã "USDT")
+#  - PRICE_START_RUB, PRICE_PRO_RUB, PRICE_ULT_RUB  (ÃÃÂµÃÂ»ÃÂ¾ÃÂµ ÃÃÂ¸ÃÃÂ»ÃÂ¾, Ã¢Â½)
+#  - PRICE_START_USD, PRICE_PRO_USD, PRICE_ULT_USD  (ÃÃÂ¸ÃÃÂ»ÃÂ¾ Ã ÃÃÂ¾ÃÃÂºÃÂ¾ÃÂ¹, $)
 #
-# Ð¥ÑÐ°Ð½Ð¸Ð»Ð¸ÑÐµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ Ð¸ ÐºÐ¾ÑÐµÐ»ÑÐºÐ° Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ Ð½Ð° kv_*:
+# ÃÂ¥ÃÃÂ°ÃÂ½ÃÂ¸ÃÂ»ÃÂ¸ÃÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ¸ ÃÂ¸ ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂºÃÂ° ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÃÃ ÃÂ½ÃÂ° kv_*:
 #   sub:tier:{user_id}   -> "start" | "pro" | "ultimate"
-#   sub:until:{user_id}  -> ISO-ÑÑÑÐ¾ÐºÐ° Ð´Ð°ÑÑ Ð¾ÐºÐ¾Ð½ÑÐ°Ð½Ð¸Ñ
-#   wallet:usd:{user_id} -> Ð±Ð°Ð»Ð°Ð½Ñ Ð² USD (float)
+#   sub:until:{user_id}  -> ISO-ÃÃÃÃÂ¾ÃÂºÃÂ° ÃÂ´ÃÂ°ÃÃ ÃÂ¾ÃÂºÃÂ¾ÃÂ½ÃÃÂ°ÃÂ½ÃÂ¸Ã
+#   wallet:usd:{user_id} -> ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã ÃÂ² USD (float)
 
 YOOKASSA_PROVIDER_TOKEN = os.environ.get("YOOKASSA_PROVIDER_TOKEN", "").strip()
 YOOKASSA_CURRENCY = (os.environ.get("YOOKASSA_CURRENCY") or "RUB").upper()
@@ -2321,11 +2321,11 @@ CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
 CRYPTO_ASSET = (os.environ.get("CRYPTO_ASSET") or "USDT").upper()
 
 # === COMPAT with existing vars/DB in your main.py ===
-# 1) Ð®Kassa: ÐµÑÐ»Ð¸ ÑÐ¶Ðµ ÐµÑÑÑ PROVIDER_TOKEN (Ð¸Ð· PROVIDER_TOKEN_YOOKASSA), Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ ÐµÐ³Ð¾:
+# 1) ÃÂ®Kassa: ÃÂµÃÃÂ»ÃÂ¸ ÃÃÂ¶ÃÂµ ÃÂµÃÃÃ PROVIDER_TOKEN (ÃÂ¸ÃÂ· PROVIDER_TOKEN_YOOKASSA), ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ ÃÂµÃÂ³ÃÂ¾:
 if not YOOKASSA_PROVIDER_TOKEN and 'PROVIDER_TOKEN' in globals() and PROVIDER_TOKEN:
     YOOKASSA_PROVIDER_TOKEN = PROVIDER_TOKEN
 
-# 2) ÐÐ¾ÑÐµÐ»ÑÐº: Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ ÑÐ²Ð¾Ð¹ ÐµÐ´Ð¸Ð½ÑÐ¹ USD-ÐºÐ¾ÑÐµÐ»ÑÐº (wallet table) Ð²Ð¼ÐµÑÑÐ¾ kv:
+# 2) ÃÃÂ¾ÃÃÂµÃÂ»ÃÃÂº: ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ ÃÃÂ²ÃÂ¾ÃÂ¹ ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÃÂ¹ USD-ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂº (wallet table) ÃÂ²ÃÂ¼ÃÂµÃÃÃÂ¾ kv:
 def _user_balance_get(user_id: int) -> float:
     return _wallet_total_get(user_id)
 
@@ -2339,7 +2339,7 @@ def _user_balance_add(user_id: int, delta: float) -> float:
 def _user_balance_debit(user_id: int, amount: float) -> bool:
     return _wallet_total_take(user_id, amount)
 
-# 3) ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ°: Ð°ÐºÑÐ¸Ð²Ð¸ÑÑÐµÐ¼ ÑÐµÑÐµÐ· ÑÐ²Ð¾Ð¸ ÑÑÐ½ÐºÑÐ¸Ð¸ Ñ ÐÐ, Ð° Ð½Ðµ kv:
+# 3) ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ°: ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂ¸ÃÃÃÂµÃÂ¼ ÃÃÂµÃÃÂµÃÂ· ÃÃÂ²ÃÂ¾ÃÂ¸ ÃÃÃÂ½ÃÂºÃÃÂ¸ÃÂ¸ Ã ÃÃ, ÃÂ° ÃÂ½ÃÂµ kv:
 def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
     dt = activate_subscription_with_tier(user_id, tier_key, months)
     return dt.isoformat()
@@ -2349,10 +2349,10 @@ def _sub_info_text(user_id: int) -> str:
     dt = get_subscription_until(user_id)
     human_until = dt.strftime("%d.%m.%Y") if dt else ""
     bal = _user_balance_get(user_id)
-    line_until = f"\nâ³ ÐÐºÑÐ¸Ð²Ð½Ð° Ð´Ð¾: {human_until}" if tier != "free" and human_until else ""
-    return f"ð§¾ Ð¢ÐµÐºÑÑÐ°Ñ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ°: {tier.upper() if tier!='free' else 'Ð½ÐµÑ'}{line_until}\nðµ ÐÐ°Ð»Ð°Ð½Ñ: ${bal:.2f}"
+    line_until = f"\nÃ¢Â³ ÃÃÂºÃÃÂ¸ÃÂ²ÃÂ½ÃÂ° ÃÂ´ÃÂ¾: {human_until}" if tier != "free" and human_until else ""
+    return f"Ã°Â§Â¾ ÃÂ¢ÃÂµÃÂºÃÃÃÂ°Ã ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ°: {tier.upper() if tier!='free' else 'ÃÂ½ÃÂµÃ'}{line_until}\nÃ°Âµ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã: ${bal:.2f}"
 
-# Ð¦ÐµÐ½Ñ â Ð¸Ð· env Ñ Ð¾ÑÐ¼ÑÑÐ»ÐµÐ½Ð½ÑÐ¼Ð¸ Ð´ÐµÑÐ¾Ð»ÑÐ°Ð¼Ð¸
+# ÃÂ¦ÃÂµÃÂ½Ã Ã¢ ÃÂ¸ÃÂ· env Ã ÃÂ¾ÃÃÂ¼ÃÃÃÂ»ÃÂµÃÂ½ÃÂ½ÃÃÂ¼ÃÂ¸ ÃÂ´ÃÂµÃÃÂ¾ÃÂ»ÃÃÂ°ÃÂ¼ÃÂ¸
 PRICE_START_RUB = int(os.environ.get("PRICE_START_RUB", "499"))
 PRICE_PRO_RUB = int(os.environ.get("PRICE_PRO_RUB", "1299"))
 PRICE_ULT_RUB = int(os.environ.get("PRICE_ULT_RUB", "2990"))
@@ -2367,9 +2367,9 @@ SUBS_TIERS = {
         "rub": PRICE_START_RUB,
         "usd": PRICE_START_USD,
         "features": [
-            "ð¬ GPT-ÑÐ°Ñ Ð¸ Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÑ (Ð±Ð°Ð·Ð¾Ð²ÑÐµ Ð»Ð¸Ð¼Ð¸ÑÑ)",
-            "ð¼ Ð¤Ð¾ÑÐ¾-Ð¼Ð°ÑÑÐµÑÑÐºÐ°Ñ: ÑÐ¾Ð½, Ð»ÑÐ³ÐºÐ°Ñ Ð´Ð¾ÑÐ¸ÑÐ¾Ð²ÐºÐ°",
-            "ð§ ÐÐ·Ð²ÑÑÐºÐ° Ð¾ÑÐ²ÐµÑÐ¾Ð² (TTS)",
+            "Ã°Â¬ GPT-ÃÃÂ°Ã ÃÂ¸ ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ (ÃÃÂ°ÃÂ·ÃÂ¾ÃÂ²ÃÃÂµ ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃ)",
+            "Ã°Â¼ ÃÂ¤ÃÂ¾ÃÃÂ¾-ÃÂ¼ÃÂ°ÃÃÃÂµÃÃÃÂºÃÂ°Ã: ÃÃÂ¾ÃÂ½, ÃÂ»ÃÃÂ³ÃÂºÃÂ°Ã ÃÂ´ÃÂ¾ÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂºÃÂ°",
+            "Ã°Â§ ÃÃÂ·ÃÂ²ÃÃÃÂºÃÂ° ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ¾ÃÂ² (TTS)",
         ],
     },
     "pro": {
@@ -2377,9 +2377,9 @@ SUBS_TIERS = {
         "rub": PRICE_PRO_RUB,
         "usd": PRICE_PRO_USD,
         "features": [
-            "ð ÐÐ»ÑÐ±Ð¾ÐºÐ¸Ð¹ ÑÐ°Ð·Ð±Ð¾Ñ PDF/DOCX/EPUB",
-            "ð¬ Reels/Shorts Ð¿Ð¾ ÑÐ¼ÑÑÐ»Ñ, Ð²Ð¸Ð´ÐµÐ¾ Ð¸Ð· ÑÐ¾ÑÐ¾",
-            "ð¼ Outpaint Ð¸ Â«Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸ÐµÂ» ÑÑÐ°ÑÑÑ ÑÐ¾ÑÐ¾",
+            "Ã° ÃÃÂ»ÃÃÃÂ¾ÃÂºÃÂ¸ÃÂ¹ ÃÃÂ°ÃÂ·ÃÃÂ¾Ã PDF/DOCX/EPUB",
+            "Ã°Â¬ Reels/Shorts ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÃÃÂ»Ã, ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ¸ÃÂ· ÃÃÂ¾ÃÃÂ¾",
+            "Ã°Â¼ Outpaint ÃÂ¸ ÃÂ«ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµÃÂ» ÃÃÃÂ°ÃÃÃ ÃÃÂ¾ÃÃÂ¾",
         ],
     },
     "ultimate": {
@@ -2387,21 +2387,21 @@ SUBS_TIERS = {
         "rub": PRICE_ULT_RUB,
         "usd": PRICE_ULT_USD,
         "features": [
-            "ð Runway/Luma â Ð¿ÑÐµÐ¼Ð¸ÑÐ¼-ÑÐµÐ½Ð´ÐµÑÑ",
-            "ð§  Ð Ð°ÑÑÐ¸ÑÐµÐ½Ð½ÑÐµ Ð»Ð¸Ð¼Ð¸ÑÑ Ð¸ Ð¿ÑÐ¸Ð¾ÑÐ¸ÑÐµÑÐ½Ð°Ñ Ð¾ÑÐµÑÐµÐ´Ñ",
-            "ð  PRO-Ð¸Ð½ÑÑÑÑÐ¼ÐµÐ½ÑÑ (Ð°ÑÑÐ¸ÑÐµÐºÑÑÑÐ°/Ð´Ð¸Ð·Ð°Ð¹Ð½)",
+            "Ã° Runway/Luma Ã¢ ÃÂ¿ÃÃÂµÃÂ¼ÃÂ¸ÃÃÂ¼-ÃÃÂµÃÂ½ÃÂ´ÃÂµÃÃ",
+            "Ã°Â§  Ã ÃÂ°ÃÃÃÂ¸ÃÃÂµÃÂ½ÃÂ½ÃÃÂµ ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃ ÃÂ¸ ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÃÂ¸ÃÃÂµÃÃÂ½ÃÂ°Ã ÃÂ¾ÃÃÂµÃÃÂµÃÂ´Ã",
+            "Ã°  PRO-ÃÂ¸ÃÂ½ÃÃÃÃÃÂ¼ÃÂµÃÂ½ÃÃ (ÃÂ°ÃÃÃÂ¸ÃÃÂµÃÂºÃÃÃÃÂ°/ÃÂ´ÃÂ¸ÃÂ·ÃÂ°ÃÂ¹ÃÂ½)",
         ],
     },
 }
 
 def _money_fmt_rub(v: int) -> str:
-    return f"{v:,}".replace(",", " ") + " â½"
+    return f"{v:,}".replace(",", " ") + " Ã¢Â½"
 
 def _money_fmt_usd(v: float) -> str:
     return f"${v:.2f}"
 
 def _user_balance_get(user_id: int) -> float:
-    # ÐÑÑÐ°ÐµÐ¼ÑÑ Ð²Ð·ÑÑÑ Ð¸Ð· ÑÐ²Ð¾ÐµÐ³Ð¾ ÐºÐ¾ÑÐµÐ»ÑÐºÐ°, ÐµÑÐ»Ð¸ ÐµÑÑÑ, Ð¸Ð½Ð°ÑÐµ â kv
+    # ÃÃÃÃÂ°ÃÂµÃÂ¼ÃÃ ÃÂ²ÃÂ·ÃÃÃ ÃÂ¸ÃÂ· ÃÃÂ²ÃÂ¾ÃÂµÃÂ³ÃÂ¾ ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂºÃÂ°, ÃÂµÃÃÂ»ÃÂ¸ ÃÂµÃÃÃ, ÃÂ¸ÃÂ½ÃÂ°ÃÃÂµ Ã¢ kv
     get_fn = _pick_first_defined("wallet_get_balance", "get_balance", "balance_get")
     if get_fn:
         try:
@@ -2441,7 +2441,7 @@ def _sub_activate(user_id: int, tier_key: str, months: int = 1) -> str:
     return until
 
 def _sub_info_text(user_id: int) -> str:
-    tier = kv_get(f"sub:tier:{user_id}", "") or "Ð½ÐµÑ"
+    tier = kv_get(f"sub:tier:{user_id}", "") or "ÃÂ½ÃÂµÃ"
     until = kv_get(f"sub:until:{user_id}", "")
     human_until = ""
     if until:
@@ -2451,70 +2451,70 @@ def _sub_info_text(user_id: int) -> str:
         except Exception:
             human_until = until
     bal = _user_balance_get(user_id)
-    line_until = f"\nâ³ ÐÐºÑÐ¸Ð²Ð½Ð° Ð´Ð¾: {human_until}" if tier != "Ð½ÐµÑ" and human_until else ""
-    return f"ð§¾ Ð¢ÐµÐºÑÑÐ°Ñ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ°: {tier.upper() if tier!='Ð½ÐµÑ' else 'Ð½ÐµÑ'}{line_until}\nðµ ÐÐ°Ð»Ð°Ð½Ñ: {_money_fmt_usd(bal)}"
+    line_until = f"\nÃ¢Â³ ÃÃÂºÃÃÂ¸ÃÂ²ÃÂ½ÃÂ° ÃÂ´ÃÂ¾: {human_until}" if tier != "ÃÂ½ÃÂµÃ" and human_until else ""
+    return f"Ã°Â§Â¾ ÃÂ¢ÃÂµÃÂºÃÃÃÂ°Ã ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ°: {tier.upper() if tier!='ÃÂ½ÃÂµÃ' else 'ÃÂ½ÃÂµÃ'}{line_until}\nÃ°Âµ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã: {_money_fmt_usd(bal)}"
 
 def _plan_card_text(key: str) -> str:
     p = SUBS_TIERS[key]
-    fs = "\n".join("â¢ " + f for f in p["features"])
+    fs = "\n".join("Ã¢Â¢ " + f for f in p["features"])
     return (
-        f"â­ Ð¢Ð°ÑÐ¸Ñ {p['title']}\n"
-        f"Ð¦ÐµÐ½Ð°: {_money_fmt_rub(p['rub'])} / {_money_fmt_usd(p['usd'])} Ð² Ð¼ÐµÑ.\n\n"
+        f"Ã¢Â­ ÃÂ¢ÃÂ°ÃÃÂ¸Ã {p['title']}\n"
+        f"ÃÂ¦ÃÂµÃÂ½ÃÂ°: {_money_fmt_rub(p['rub'])} / {_money_fmt_usd(p['usd'])} ÃÂ² ÃÂ¼ÃÂµÃ.\n\n"
         f"{fs}\n"
     )
 
 def _plans_overview_text(user_id: int) -> str:
     parts = [
-        "â­ ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Ð¸ ÑÐ°ÑÐ¸ÑÑ",
-        "ÐÑÐ±ÐµÑÐ¸ Ð¿Ð¾Ð´ÑÐ¾Ð´ÑÑÐ¸Ð¹ ÑÑÐ¾Ð²ÐµÐ½Ñ â Ð´Ð¾ÑÑÑÐ¿ Ð¾ÑÐºÑÐ¾ÐµÑÑÑ ÑÑÐ°Ð·Ñ Ð¿Ð¾ÑÐ»Ðµ Ð¾Ð¿Ð»Ð°ÑÑ.",
+        "Ã¢Â­ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° ÃÂ¸ ÃÃÂ°ÃÃÂ¸ÃÃ",
+        "ÃÃÃÃÂµÃÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂ¾ÃÂ´ÃÃÃÂ¸ÃÂ¹ ÃÃÃÂ¾ÃÂ²ÃÂµÃÂ½Ã Ã¢ ÃÂ´ÃÂ¾ÃÃÃÃÂ¿ ÃÂ¾ÃÃÂºÃÃÂ¾ÃÂµÃÃÃ ÃÃÃÂ°ÃÂ·Ã ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ.",
         _sub_info_text(user_id),
-        "â â â",
+        "Ã¢ Ã¢ Ã¢",
         _plan_card_text("start"),
         _plan_card_text("pro"),
         _plan_card_text("ultimate"),
-        "ÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÐ°ÑÐ¸Ñ ÐºÐ½Ð¾Ð¿ÐºÐ¾Ð¹ Ð½Ð¸Ð¶Ðµ.",
+        "ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÂ°ÃÃÂ¸Ã ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¾ÃÂ¹ ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ.",
     ]
     return "\n".join(parts)
 
 def plans_root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("â­ START",    callback_data="plan:start"),
-            InlineKeyboardButton("ð PRO",      callback_data="plan:pro"),
-            InlineKeyboardButton("ð ULTIMATE", callback_data="plan:ultimate"),
+            InlineKeyboardButton("Ã¢Â­ START",    callback_data="plan:start"),
+            InlineKeyboardButton("Ã° PRO",      callback_data="plan:pro"),
+            InlineKeyboardButton("Ã° ULTIMATE", callback_data="plan:ultimate"),
         ]
     ])
 
 def plan_pay_kb(plan_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("ð³ ÐÐ¿Ð»Ð°ÑÐ¸ÑÑ â Ð®Kassa", callback_data=f"pay:yookassa:{plan_key}"),
+            InlineKeyboardButton("Ã°Â³ ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ Ã¢ ÃÂ®Kassa", callback_data=f"pay:yookassa:{plan_key}"),
         ],
         [
-            InlineKeyboardButton("ð  ÐÐ¿Ð»Ð°ÑÐ¸ÑÑ â CryptoBot", callback_data=f"pay:cryptobot:{plan_key}"),
+            InlineKeyboardButton("Ã°  ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ Ã¢ CryptoBot", callback_data=f"pay:cryptobot:{plan_key}"),
         ],
         [
-            InlineKeyboardButton("ð§¾ Ð¡Ð¿Ð¸ÑÐ°ÑÑ Ñ Ð±Ð°Ð»Ð°Ð½ÑÐ°", callback_data=f"pay:balance:{plan_key}"),
+            InlineKeyboardButton("Ã°Â§Â¾ ÃÂ¡ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ Ã ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ°", callback_data=f"pay:balance:{plan_key}"),
         ],
         [
-            InlineKeyboardButton("â¬ï¸ Ð ÑÐ°ÑÐ¸ÑÐ°Ð¼", callback_data="plan:root"),
+            InlineKeyboardButton("Ã¢Â¬Ã¯Â¸ Ã ÃÃÂ°ÃÃÂ¸ÃÃÂ°ÃÂ¼", callback_data="plan:root"),
         ]
     ])
 
-# ÐÐ½Ð¾Ð¿ÐºÐ° Â«â­ ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Â· ÐÐ¾Ð¼Ð¾ÑÑÂ»
+# ÃÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ° ÃÂ«Ã¢Â­ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° ÃÂ· ÃÃÂ¾ÃÂ¼ÃÂ¾ÃÃÃÂ»
 async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = _plans_overview_text(user_id)
     await update.effective_chat.send_message(text, reply_markup=plans_root_kb())
 
-# ÐÐ±ÑÐ°Ð±Ð¾ÑÑÐ¸Ðº Ð½Ð°ÑÐ¸Ñ ÐºÐ¾Ð»Ð±ÑÐºÐ¾Ð² Ð¿Ð¾ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐµ/Ð¾Ð¿Ð»Ð°ÑÐ°Ð¼ (Ð·Ð°ÑÐµÐ³Ð¸ÑÑÑÐ¸ÑÐ¾Ð²Ð°ÑÑ ÐÐ Ð¾Ð±ÑÐµÐ³Ð¾ on_cb!)
+# ÃÃÃÃÂ°ÃÃÂ¾ÃÃÃÂ¸ÃÂº ÃÂ½ÃÂ°ÃÃÂ¸Ã ÃÂºÃÂ¾ÃÂ»ÃÃÃÂºÃÂ¾ÃÂ² ÃÂ¿ÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂµ/ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÂ°ÃÂ¼ (ÃÂ·ÃÂ°ÃÃÂµÃÂ³ÃÂ¸ÃÃÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÃ ÃÂ¾ÃÃÃÂµÃÂ³ÃÂ¾ on_cb!)
 async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data or ""
     user_id = q.from_user.id
-    chat_id = q.message.chat.id  # FIX: ÐºÐ¾ÑÑÐµÐºÑÐ½Ð¾Ðµ Ð¿Ð¾Ð»Ðµ Ð² PTB v21+
+    chat_id = q.message.chat.id  # FIX: ÃÂºÃÂ¾ÃÃÃÂµÃÂºÃÃÂ½ÃÂ¾ÃÂµ ÃÂ¿ÃÂ¾ÃÂ»ÃÂµ ÃÂ² PTB v21+
 
-    # ÐÐ°Ð²Ð¸Ð³Ð°ÑÐ¸Ñ Ð¼ÐµÐ¶Ð´Ñ ÑÐ°ÑÐ¸ÑÐ°Ð¼Ð¸
+    # ÃÃÂ°ÃÂ²ÃÂ¸ÃÂ³ÃÂ°ÃÃÂ¸Ã ÃÂ¼ÃÂµÃÂ¶ÃÂ´Ã ÃÃÂ°ÃÃÂ¸ÃÃÂ°ÃÂ¼ÃÂ¸
     if data.startswith("plan:"):
         _, arg = data.split(":", 1)
         if arg == "root":
@@ -2523,43 +2523,43 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if arg in SUBS_TIERS:
             await q.edit_message_text(
-                _plan_card_text(arg) + "\nÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÐ¿Ð¾ÑÐ¾Ð± Ð¾Ð¿Ð»Ð°ÑÑ:",
+                _plan_card_text(arg) + "\nÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÂ¿ÃÂ¾ÃÃÂ¾Ã ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ:",
                 reply_markup=plan_pay_kb(arg)
             )
             await q.answer()
             return
 
-    # ÐÐ»Ð°ÑÐµÐ¶Ð¸
+    # ÃÃÂ»ÃÂ°ÃÃÂµÃÂ¶ÃÂ¸
     if data.startswith("pay:"):
-        # Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½ÑÐ¹ Ð¿Ð°ÑÑÐ¸Ð½Ð³
+        # ÃÃÂµÃÂ·ÃÂ¾ÃÂ¿ÃÂ°ÃÃÂ½ÃÃÂ¹ ÃÂ¿ÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂ³
         try:
             _, method, plan_key = data.split(":", 2)
         except ValueError:
-            await q.answer("ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐµ Ð´Ð°Ð½Ð½ÑÐµ ÐºÐ½Ð¾Ð¿ÐºÐ¸.", show_alert=True)
+            await q.answer("ÃÃÂµÃÂºÃÂ¾ÃÃÃÂµÃÂºÃÃÂ½ÃÃÂµ ÃÂ´ÃÂ°ÃÂ½ÃÂ½ÃÃÂµ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸.", show_alert=True)
             return
 
         plan = SUBS_TIERS.get(plan_key)
         if not plan:
-            await q.answer("ÐÐµÐ¸Ð·Ð²ÐµÑÑÐ½ÑÐ¹ ÑÐ°ÑÐ¸Ñ.", show_alert=True)
+            await q.answer("ÃÃÂµÃÂ¸ÃÂ·ÃÂ²ÃÂµÃÃÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÃÂ¸Ã.", show_alert=True)
             return
 
-        # Ð®Kassa ÑÐµÑÐµÐ· Telegram Payments
+        # ÃÂ®Kassa ÃÃÂµÃÃÂµÃÂ· Telegram Payments
         if method == "yookassa":
             if not YOOKASSA_PROVIDER_TOKEN:
-                await q.answer("Ð®Kassa Ð½Ðµ Ð¿Ð¾Ð´ÐºÐ»ÑÑÐµÐ½Ð° (Ð½ÐµÑ YOOKASSA_PROVIDER_TOKEN).", show_alert=True)
+                await q.answer("ÃÂ®Kassa ÃÂ½ÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ÃÂºÃÂ»ÃÃÃÂµÃÂ½ÃÂ° (ÃÂ½ÃÂµÃ YOOKASSA_PROVIDER_TOKEN).", show_alert=True)
                 return
 
-            title = f"ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {plan['title']} â¢ 1 Ð¼ÐµÑÑÑ"
-            desc = "ÐÐ¾ÑÑÑÐ¿ Ðº ÑÑÐ½ÐºÑÐ¸ÑÐ¼ Ð±Ð¾ÑÐ° ÑÐ¾Ð³Ð»Ð°ÑÐ½Ð¾ Ð²ÑÐ±ÑÐ°Ð½Ð½Ð¾Ð¼Ñ ÑÐ°ÑÐ¸ÑÑ. ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Ð°ÐºÑÐ¸Ð²Ð¸ÑÑÐµÑÑÑ ÑÑÐ°Ð·Ñ Ð¿Ð¾ÑÐ»Ðµ Ð¾Ð¿Ð»Ð°ÑÑ."
+            title = f"ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {plan['title']} Ã¢Â¢ 1 ÃÂ¼ÃÂµÃÃÃ"
+            desc = "ÃÃÂ¾ÃÃÃÃÂ¿ ÃÂº ÃÃÃÂ½ÃÂºÃÃÂ¸ÃÃÂ¼ ÃÃÂ¾ÃÃÂ° ÃÃÂ¾ÃÂ³ÃÂ»ÃÂ°ÃÃÂ½ÃÂ¾ ÃÂ²ÃÃÃÃÂ°ÃÂ½ÃÂ½ÃÂ¾ÃÂ¼Ã ÃÃÂ°ÃÃÂ¸ÃÃ. ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂ¸ÃÃÃÂµÃÃÃ ÃÃÃÂ°ÃÂ·Ã ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ."
             payload = json.dumps({"tier": plan_key, "months": 1})
 
-            # Telegram Ð¾Ð¶Ð¸Ð´Ð°ÐµÑ ÑÑÐ¼Ð¼Ñ Ð² Ð¼Ð¸Ð½Ð¾ÑÐ½ÑÑ ÐµÐ´Ð¸Ð½Ð¸ÑÐ°Ñ (ÐºÐ¾Ð¿ÐµÐ¹ÐºÐ¸/ÑÐµÐ½ÑÑ)
+            # Telegram ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂµÃ ÃÃÃÂ¼ÃÂ¼Ã ÃÂ² ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¾ÃÃÂ½ÃÃ ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÂ¸ÃÃÂ°Ã (ÃÂºÃÂ¾ÃÂ¿ÃÂµÃÂ¹ÃÂºÃÂ¸/ÃÃÂµÃÂ½ÃÃ)
             if YOOKASSA_CURRENCY == "RUB":
                 total_minor = int(round(float(plan["rub"]) * 100))
             else:
                 total_minor = int(round(float(plan["usd"]) * 100))
 
-            prices = [LabeledPrice(label=f"{plan['title']} 1 Ð¼ÐµÑ.", amount=total_minor)]
+            prices = [LabeledPrice(label=f"{plan['title']} 1 ÃÂ¼ÃÂµÃ.", amount=total_minor)]
             await context.bot.send_invoice(
                 chat_id=chat_id,
                 title=title,
@@ -2571,13 +2571,13 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 need_email=True,
                 is_flexible=False,
             )
-            await q.answer("Ð¡ÑÑÑ Ð²ÑÑÑÐ°Ð²Ð»ÐµÐ½ â")
+            await q.answer("ÃÂ¡ÃÃÃ ÃÂ²ÃÃÃÃÂ°ÃÂ²ÃÂ»ÃÂµÃÂ½ Ã¢")
             return
 
-        # CryptoBot (Crypto Pay API: ÑÐ¾Ð·Ð´Ð°ÑÐ¼ Ð¸Ð½Ð²Ð¾Ð¹Ñ Ð¸ Ð¾ÑÐ´Ð°ÑÐ¼ ÑÑÑÐ»ÐºÑ)
-        if method == "cryptobot":  # FIX: Ð²ÑÑÐ¾Ð²Ð½ÐµÐ½ Ð¾ÑÑÑÑÐ¿
+        # CryptoBot (Crypto Pay API: ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃÂ¼ ÃÂ¸ÃÂ½ÃÂ²ÃÂ¾ÃÂ¹Ã ÃÂ¸ ÃÂ¾ÃÃÂ´ÃÂ°ÃÃÂ¼ ÃÃÃÃÂ»ÃÂºÃ)
+        if method == "cryptobot":  # FIX: ÃÂ²ÃÃÃÂ¾ÃÂ²ÃÂ½ÃÂµÃÂ½ ÃÂ¾ÃÃÃÃÃÂ¿
             if not CRYPTO_PAY_API_TOKEN:
-                await q.answer("CryptoBot Ð½Ðµ Ð¿Ð¾Ð´ÐºÐ»ÑÑÑÐ½ (Ð½ÐµÑ CRYPTO_PAY_API_TOKEN).", show_alert=True)
+                await q.answer("CryptoBot ÃÂ½ÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ÃÂºÃÂ»ÃÃÃÃÂ½ (ÃÂ½ÃÂµÃ CRYPTO_PAY_API_TOKEN).", show_alert=True)
                 return
             try:
                 amount = float(plan["usd"])
@@ -2588,7 +2588,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         json={
                             "asset": CRYPTO_ASSET,
                             "amount": f"{amount:.2f}",
-                            "description": f"Subscription {plan['title']} â¢ 1 month",
+                            "description": f"Subscription {plan['title']} Ã¢Â¢ 1 month",
                             "allow_comments": False,
                             "allow_anonymous": True,
                         },
@@ -2601,46 +2601,46 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     inv_id = str(res["invoice_id"])
 
                 kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("ð  ÐÐ¿Ð»Ð°ÑÐ¸ÑÑ Ð² CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("â¬ï¸ Ð ÑÐ°ÑÐ¸ÑÑ", callback_data=f"plan:{plan_key}")],
+                    [InlineKeyboardButton("Ã°  ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ ÃÂ² CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("Ã¢Â¬Ã¯Â¸ Ã ÃÃÂ°ÃÃÂ¸ÃÃ", callback_data=f"plan:{plan_key}")],
                 ])
                 msg = await q.edit_message_text(
-                    _plan_card_text(plan_key) + "\nÐÑÐºÑÐ¾Ð¹ÑÐµ ÑÑÑÐ»ÐºÑ Ð´Ð»Ñ Ð¾Ð¿Ð»Ð°ÑÑ:",
+                    _plan_card_text(plan_key) + "\nÃÃÃÂºÃÃÂ¾ÃÂ¹ÃÃÂµ ÃÃÃÃÂ»ÃÂºÃ ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ:",
                     reply_markup=kb
                 )
-                # Ð°Ð²ÑÐ¾Ð¿ÑÐ» ÑÑÐ°ÑÑÑÐ° Ð¸Ð¼ÐµÐ½Ð½Ð¾ Ð´Ð»Ñ ÐÐÐÐÐÐ¡ÐÐ
+                # ÃÂ°ÃÂ²ÃÃÂ¾ÃÂ¿ÃÃÂ» ÃÃÃÂ°ÃÃÃÃÂ° ÃÂ¸ÃÂ¼ÃÂµÃÂ½ÃÂ½ÃÂ¾ ÃÂ´ÃÂ»Ã ÃÃÃÃÃÃÂ¡ÃÃ
                 context.application.create_task(_poll_crypto_sub_invoice(
                     context, msg.chat.id, msg.message_id, user_id, inv_id, plan_key, 1  # FIX: msg.chat.id
                 ))
                 await q.answer()
             except Exception as e:
-                await q.answer("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ¾Ð·Ð´Ð°ÑÑ ÑÑÑÑ Ð² CryptoBot.", show_alert=True)
+                await q.answer("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃ ÃÃÃÃ ÃÂ² CryptoBot.", show_alert=True)
                 log.exception("CryptoBot invoice error: %s", e)
             return
 
-        # Ð¡Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ñ Ð²Ð½ÑÑÑÐµÐ½Ð½ÐµÐ³Ð¾ Ð±Ð°Ð»Ð°Ð½ÑÐ° (USD)
+        # ÃÂ¡ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸ÃÂµ Ã ÃÂ²ÃÂ½ÃÃÃÃÂµÃÂ½ÃÂ½ÃÂµÃÂ³ÃÂ¾ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ° (USD)
         if method == "balance":
             price_usd = float(plan["usd"])
             if not _user_balance_debit(user_id, price_usd):
-                await q.answer("ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ ÑÑÐµÐ´ÑÑÐ² Ð½Ð° Ð²Ð½ÑÑÑÐµÐ½Ð½ÐµÐ¼ Ð±Ð°Ð»Ð°Ð½ÑÐµ.", show_alert=True)
+                await q.answer("ÃÃÂµÃÂ´ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂ½ÃÂ¾ ÃÃÃÂµÃÂ´ÃÃÃÂ² ÃÂ½ÃÂ° ÃÂ²ÃÂ½ÃÃÃÃÂµÃÂ½ÃÂ½ÃÂµÃÂ¼ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂµ.", show_alert=True)
                 return
             until = _sub_activate(user_id, plan_key, months=1)
             await q.edit_message_text(
-                f"â ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {plan['title']} Ð°ÐºÑÐ¸Ð²Ð¸ÑÐ¾Ð²Ð°Ð½Ð° Ð´Ð¾ {until[:10]}.\n"
-                f"ðµ Ð¡Ð¿Ð¸ÑÐ°Ð½Ð¾: {_money_fmt_usd(price_usd)}. "
-                f"Ð¢ÐµÐºÑÑÐ¸Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ: {_money_fmt_usd(_user_balance_get(user_id))}",
+                f"Ã¢ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {plan['title']} ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ° ÃÂ´ÃÂ¾ {until[:10]}.\n"
+                f"Ã°Âµ ÃÂ¡ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¾: {_money_fmt_usd(price_usd)}. "
+                f"ÃÂ¢ÃÂµÃÂºÃÃÃÂ¸ÃÂ¹ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã: {_money_fmt_usd(_user_balance_get(user_id))}",
                 reply_markup=plans_root_kb(),
             )
             await q.answer()
             return
 
-    # ÐÑÐ»Ð¸ ÐºÐ¾Ð»Ð±ÑÐº Ð½Ðµ Ð½Ð°Ñ â Ð¿ÑÐ¾Ð¿ÑÑÐºÐ°ÐµÐ¼ Ð´Ð°Ð»ÑÑÐµ
+    # ÃÃÃÂ»ÃÂ¸ ÃÂºÃÂ¾ÃÂ»ÃÃÃÂº ÃÂ½ÃÂµ ÃÂ½ÃÂ°Ã Ã¢ ÃÂ¿ÃÃÂ¾ÃÂ¿ÃÃÃÂºÃÂ°ÃÂµÃÂ¼ ÃÂ´ÃÂ°ÃÂ»ÃÃÃÂµ
     await q.answer()
     return
 
 
-# ÐÑÐ»Ð¸ Ñ ÑÐµÐ±Ñ ÑÐ¶Ðµ ÐµÑÑÑ on_precheckout / on_successful_payment â Ð¾ÑÑÐ°Ð²Ñ Ð¸Ñ.
-# ÐÑÐ»Ð¸ Ð½ÐµÑ, Ð¼Ð¾Ð¶ÐµÑÑ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ ÑÑÐ¸ Ð¿ÑÐ¾ÑÑÑÐµ ÑÐµÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ð¸:
+# ÃÃÃÂ»ÃÂ¸ Ã ÃÃÂµÃÃ ÃÃÂ¶ÃÂµ ÃÂµÃÃÃ on_precheckout / on_successful_payment Ã¢ ÃÂ¾ÃÃÃÂ°ÃÂ²Ã ÃÂ¸Ã.
+# ÃÃÃÂ»ÃÂ¸ ÃÂ½ÃÂµÃ, ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃÃ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÃÃÂ¸ ÃÂ¿ÃÃÂ¾ÃÃÃÃÂµ ÃÃÂµÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ°ÃÃÂ¸ÃÂ¸:
 
 async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -2650,11 +2650,11 @@ async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Ð£Ð½Ð¸Ð²ÐµÑÑÐ°Ð»ÑÐ½ÑÐ¹ Ð¾Ð±ÑÐ°Ð±Ð¾ÑÑÐ¸Ðº Telegram Payments:
-    - ÐÐ¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑ payload Ð² Ð´Ð²ÑÑ ÑÐ¾ÑÐ¼Ð°ÑÐ°Ñ:
+    ÃÂ£ÃÂ½ÃÂ¸ÃÂ²ÃÂµÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÃÂ¸ÃÂº Telegram Payments:
+    - ÃÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃ payload ÃÂ² ÃÂ´ÃÂ²ÃÃ ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃÂ°Ã:
         1) JSON: {"tier":"pro","months":1}
-        2) Ð¡ÑÑÐ¾ÐºÐ°: "sub:pro:1"
-    - ÐÐ½Ð°ÑÐµ ÑÑÐ°ÐºÑÑÐµÑ ÐºÐ°Ðº Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ ÐµÐ´Ð¸Ð½Ð¾Ð³Ð¾ USD-ÐºÐ¾ÑÐµÐ»ÑÐºÐ°.
+        2) ÃÂ¡ÃÃÃÂ¾ÃÂºÃÂ°: "sub:pro:1"
+    - ÃÃÂ½ÃÂ°ÃÃÂµ ÃÃÃÂ°ÃÂºÃÃÃÂµÃ ÃÂºÃÂ°ÃÂº ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ USD-ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂºÃÂ°.
     """
     try:
         sp = update.message.successful_payment
@@ -2663,7 +2663,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
         rub = total_minor / 100.0
         uid = update.effective_user.id
 
-        # 1) ÐÑÑÐ°ÐµÐ¼ÑÑ ÑÐ°ÑÐ¿Ð°ÑÑÐ¸ÑÑ JSON
+        # 1) ÃÃÃÃÂ°ÃÂµÃÂ¼ÃÃ ÃÃÂ°ÃÃÂ¿ÃÂ°ÃÃÃÂ¸ÃÃ JSON
         tier, months = None, None
         try:
             if payload_raw.strip().startswith("{"):
@@ -2673,7 +2673,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
 
-        # 2) ÐÑÑÐ°ÐµÐ¼ÑÑ ÑÐ°ÑÐ¿Ð°ÑÑÐ¸ÑÑ ÑÑÑÐ¾ÐºÐ¾Ð²ÑÐ¹ ÑÐ¾ÑÐ¼Ð°Ñ "sub:tier:months"
+        # 2) ÃÃÃÃÂ°ÃÂµÃÂ¼ÃÃ ÃÃÂ°ÃÃÂ¿ÃÂ°ÃÃÃÂ¸ÃÃ ÃÃÃÃÂ¾ÃÂºÃÂ¾ÃÂ²ÃÃÂ¹ ÃÃÂ¾ÃÃÂ¼ÃÂ°Ã "sub:tier:months"
         if not tier and payload_raw.startswith("sub:"):
             try:
                 _, t, m = payload_raw.split(":", 2)
@@ -2685,29 +2685,29 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
         if tier and months:
             until = activate_subscription_with_tier(uid, tier, months)
             await update.effective_message.reply_text(
-                f"ð ÐÐ¿Ð»Ð°ÑÐ° Ð¿ÑÐ¾ÑÐ»Ð° ÑÑÐ¿ÐµÑÐ½Ð¾!\n"
-                f"â ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {tier.upper()} Ð°ÐºÑÐ¸Ð²Ð¸ÑÐ¾Ð²Ð°Ð½Ð° Ð´Ð¾ {until.strftime('%Y-%m-%d')}."
+                f"Ã° ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ° ÃÂ¿ÃÃÂ¾ÃÃÂ»ÃÂ° ÃÃÃÂ¿ÃÂµÃÃÂ½ÃÂ¾!\n"
+                f"Ã¢ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {tier.upper()} ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ° ÃÂ´ÃÂ¾ {until.strftime('%Y-%m-%d')}."
             )
             return
 
-        # ÐÐ½Ð°ÑÐµ ÑÑÐ¸ÑÐ°ÐµÐ¼, ÑÑÐ¾ ÑÑÐ¾ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ ÐºÐ¾ÑÐµÐ»ÑÐºÐ° Ð² ÑÑÐ±Ð»ÑÑ
+        # ÃÃÂ½ÃÂ°ÃÃÂµ ÃÃÃÂ¸ÃÃÂ°ÃÂµÃÂ¼, ÃÃÃÂ¾ ÃÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂºÃÂ° ÃÂ² ÃÃÃÃÂ»ÃÃ
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
         await update.effective_message.reply_text(
-            f"ð³ ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ: {rub:.0f} â½ â ${usd:.2f} Ð·Ð°ÑÐ¸ÑÐ»ÐµÐ½Ð¾ Ð½Ð° ÐµÐ´Ð¸Ð½ÑÐ¹ Ð±Ð°Ð»Ð°Ð½Ñ."
+            f"Ã°Â³ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ: {rub:.0f} Ã¢Â½ Ã¢ ${usd:.2f} ÃÂ·ÃÂ°ÃÃÂ¸ÃÃÂ»ÃÂµÃÂ½ÃÂ¾ ÃÂ½ÃÂ° ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã."
         )
 
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("â ï¸ ÐÑÐ¸Ð±ÐºÐ° Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐºÐ¸ Ð¿Ð»Ð°ÑÐµÐ¶Ð°. ÐÑÐ»Ð¸ Ð´ÐµÐ½ÑÐ³Ð¸ ÑÐ¿Ð¸ÑÐ°Ð»Ð¸ÑÑ â Ð½Ð°Ð¿Ð¸ÑÐ¸ÑÐµ Ð² Ð¿Ð¾Ð´Ð´ÐµÑÐ¶ÐºÑ.")
-# âââââââââ ÐÐ¾Ð½ÐµÑ PATCH âââââââââ
+            await update.effective_message.reply_text("Ã¢ Ã¯Â¸ ÃÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂºÃÂ¸ ÃÂ¿ÃÂ»ÃÂ°ÃÃÂµÃÂ¶ÃÂ°. ÃÃÃÂ»ÃÂ¸ ÃÂ´ÃÂµÃÂ½ÃÃÂ³ÃÂ¸ ÃÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ»ÃÂ¸ÃÃ Ã¢ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂ² ÃÂ¿ÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂºÃ.")
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ½ÃÂµÃ PATCH Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
         
-# âââââââââ ÐÐ¾Ð¼Ð°Ð½Ð´Ð° /img âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´ÃÂ° /img Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
-        await update.effective_message.reply_text("Ð¤Ð¾ÑÐ¼Ð°Ñ: /img <Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ>")
+        await update.effective_message.reply_text("ÃÂ¤ÃÂ¾ÃÃÂ¼ÃÂ°Ã: /img <ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸ÃÂµ>")
         return
 
     async def _go():
@@ -2721,22 +2721,22 @@ async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# âââââââââ Photo quick actions âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Photo quick actions Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def photo_quick_actions_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("â¨ ÐÐ¶Ð¸Ð²Ð¸ÑÑ ÑÐ¾ÑÐ¾", callback_data="pedit:revive")],
-        [InlineKeyboardButton("ð§¼ Ð£Ð´Ð°Ð»Ð¸ÑÑ ÑÐ¾Ð½",  callback_data="pedit:removebg"),
-         InlineKeyboardButton("ð¼ ÐÐ°Ð¼ÐµÐ½Ð¸ÑÑ ÑÐ¾Ð½", callback_data="pedit:replacebg")],
-        [InlineKeyboardButton("ð§­ Ð Ð°ÑÑÐ¸ÑÐ¸ÑÑ ÐºÐ°Ð´Ñ (outpaint)", callback_data="pedit:outpaint"),
-         InlineKeyboardButton("ð½ Ð Ð°ÑÐºÐ°Ð´ÑÐ¾Ð²ÐºÐ°", callback_data="pedit:story")],
-        [InlineKeyboardButton("ð ÐÐ°ÑÑÐ¸Ð½ÐºÐ° Ð¿Ð¾ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ñ (Luma)", callback_data="pedit:lumaimg")],
-        [InlineKeyboardButton("ð ÐÐ½Ð°Ð»Ð¸Ð· ÑÐ¾ÑÐ¾", callback_data="pedit:vision")],
+        [InlineKeyboardButton("Ã¢Â¨ ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÂ¾ÃÃÂ¾", callback_data="pedit:revive")],
+        [InlineKeyboardButton("Ã°Â§Â¼ ÃÂ£ÃÂ´ÃÂ°ÃÂ»ÃÂ¸ÃÃ ÃÃÂ¾ÃÂ½",  callback_data="pedit:removebg"),
+         InlineKeyboardButton("Ã°Â¼ ÃÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ¸ÃÃ ÃÃÂ¾ÃÂ½", callback_data="pedit:replacebg")],
+        [InlineKeyboardButton("Ã°Â§Â­ Ã ÃÂ°ÃÃÃÂ¸ÃÃÂ¸ÃÃ ÃÂºÃÂ°ÃÂ´Ã (outpaint)", callback_data="pedit:outpaint"),
+         InlineKeyboardButton("Ã°Â½ Ã ÃÂ°ÃÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²ÃÂºÃÂ°", callback_data="pedit:story")],
+        [InlineKeyboardButton("Ã° ÃÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ° ÃÂ¿ÃÂ¾ ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸Ã (Luma)", callback_data="pedit:lumaimg")],
+        [InlineKeyboardButton("Ã° ÃÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ· ÃÃÂ¾ÃÃÂ¾", callback_data="pedit:vision")],
     ])
 
 
 def revive_engine_kb() -> InlineKeyboardMarkup:
     """
-    ÐÐ½Ð¾Ð¿ÐºÐ¸ Ð²ÑÐ±Ð¾ÑÐ° Ð´Ð²Ð¸Ð¶ÐºÐ° Ð´Ð»Ñ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ ÑÐ¾ÑÐ¾.
+    ÃÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸ ÃÂ²ÃÃÃÂ¾ÃÃÂ° ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ° ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã ÃÃÂ¾ÃÃÂ¾.
     """
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Runway", callback_data="revive_engine:runway")],
@@ -2756,32 +2756,32 @@ def _get_cached_photo(user_id: int) -> bytes | None:
 
 async def _pedit_removebg(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     if rembg_remove is None:
-        await update.effective_message.reply_text("rembg Ð½Ðµ ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½. Ð£ÑÑÐ°Ð½Ð¾Ð²Ð¸ÑÐµ rembg/onnxruntime.")
+        await update.effective_message.reply_text("rembg ÃÂ½ÃÂµ ÃÃÃÃÂ°ÃÂ½ÃÂ¾ÃÂ²ÃÂ»ÃÂµÃÂ½. ÃÂ£ÃÃÃÂ°ÃÂ½ÃÂ¾ÃÂ²ÃÂ¸ÃÃÂµ rembg/onnxruntime.")
         return
     try:
         out = rembg_remove(img_bytes)
         bio = BytesIO(out); bio.name = "no_bg.png"
-        await update.effective_message.reply_document(InputFile(bio), caption="Ð¤Ð¾Ð½ ÑÐ´Ð°Ð»ÑÐ½ â")
+        await update.effective_message.reply_document(InputFile(bio), caption="ÃÂ¤ÃÂ¾ÃÂ½ ÃÃÂ´ÃÂ°ÃÂ»ÃÃÂ½ Ã¢")
     except Exception as e:
         log.exception("removebg error: %s", e)
-        await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ´Ð°Ð»Ð¸ÑÑ ÑÐ¾Ð½.")
+        await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¸ÃÃ ÃÃÂ¾ÃÂ½.")
 
 async def _pedit_replacebg(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     if Image is None:
-        await update.effective_message.reply_text("Pillow Ð½Ðµ ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½.")
+        await update.effective_message.reply_text("Pillow ÃÂ½ÃÂµ ÃÃÃÃÂ°ÃÂ½ÃÂ¾ÃÂ²ÃÂ»ÃÂµÃÂ½.")
         return
     try:
         im = Image.open(BytesIO(img_bytes)).convert("RGBA")
         bg = im.convert("RGB").filter(ImageFilter.GaussianBlur(radius=22)) if ImageFilter else im.convert("RGB")
         bio = BytesIO(); bg.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name = "bg_blur.jpg"
-        await update.effective_message.reply_photo(InputFile(bio), caption="ÐÐ°Ð¼ÐµÐ½Ð¸Ð» ÑÐ¾Ð½ Ð½Ð° ÑÐ°Ð·Ð¼ÑÑÑÐ¹ Ð²Ð°ÑÐ¸Ð°Ð½Ñ.")
+        await update.effective_message.reply_photo(InputFile(bio), caption="ÃÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ¸ÃÂ» ÃÃÂ¾ÃÂ½ ÃÂ½ÃÂ° ÃÃÂ°ÃÂ·ÃÂ¼ÃÃÃÃÂ¹ ÃÂ²ÃÂ°ÃÃÂ¸ÃÂ°ÃÂ½Ã.")
     except Exception as e:
         log.exception("replacebg error: %s", e)
-        await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¼ÐµÐ½Ð¸ÑÑ ÑÐ¾Ð½.")
+        await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ¸ÃÃ ÃÃÂ¾ÃÂ½.")
 
 async def _pedit_outpaint(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     if Image is None:
-        await update.effective_message.reply_text("Pillow Ð½Ðµ ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½.")
+        await update.effective_message.reply_text("Pillow ÃÂ½ÃÂµ ÃÃÃÃÂ°ÃÂ½ÃÂ¾ÃÂ²ÃÂ»ÃÂµÃÂ½.")
         return
     try:
         im = Image.open(BytesIO(img_bytes)).convert("RGB")
@@ -2790,26 +2790,26 @@ async def _pedit_outpaint(update: Update, context: ContextTypes.DEFAULT_TYPE, im
         bg = im.resize(big.size, Image.LANCZOS).filter(ImageFilter.GaussianBlur(radius=24)) if ImageFilter else im.resize(big.size)
         big.paste(bg, (0, 0)); big.paste(im, (pad, pad))
         bio = BytesIO(); big.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name = "outpaint.jpg"
-        await update.effective_message.reply_photo(InputFile(bio), caption="ÐÑÐ¾ÑÑÐ¾Ð¹ outpaint: ÑÐ°ÑÑÐ¸ÑÐ¸Ð» Ð¿Ð¾Ð»Ð¾ÑÐ½Ð¾ Ñ Ð¼ÑÐ³ÐºÐ¸Ð¼Ð¸ ÐºÑÐ°ÑÐ¼Ð¸.")
+        await update.effective_message.reply_photo(InputFile(bio), caption="ÃÃÃÂ¾ÃÃÃÂ¾ÃÂ¹ outpaint: ÃÃÂ°ÃÃÃÂ¸ÃÃÂ¸ÃÂ» ÃÂ¿ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ½ÃÂ¾ Ã ÃÂ¼ÃÃÂ³ÃÂºÃÂ¸ÃÂ¼ÃÂ¸ ÃÂºÃÃÂ°ÃÃÂ¼ÃÂ¸.")
     except Exception as e:
         log.exception("outpaint error: %s", e)
-        await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ´ÐµÐ»Ð°ÑÑ outpaint.")
+        await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÃ outpaint.")
 
 async def _pedit_storyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
     try:
         b64 = base64.b64encode(img_bytes).decode("ascii")
-        desc = await ask_openai_vision("ÐÐ¿Ð¸ÑÐ¸ ÐºÐ»ÑÑÐµÐ²ÑÐµ ÑÐ»ÐµÐ¼ÐµÐ½ÑÑ ÐºÐ°Ð´ÑÐ° Ð¾ÑÐµÐ½Ñ ÐºÑÐ°ÑÐºÐ¾.", b64, sniff_image_mime(img_bytes))
+        desc = await ask_openai_vision("ÃÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÂºÃÂ»ÃÃÃÂµÃÂ²ÃÃÂµ ÃÃÂ»ÃÂµÃÂ¼ÃÂµÃÂ½ÃÃ ÃÂºÃÂ°ÃÂ´ÃÃÂ° ÃÂ¾ÃÃÂµÃÂ½Ã ÃÂºÃÃÂ°ÃÃÂºÃÂ¾.", b64, sniff_image_mime(img_bytes))
         plan = await ask_openai_text(
-            "Ð¡Ð´ÐµÐ»Ð°Ð¹ ÑÐ°ÑÐºÐ°Ð´ÑÐ¾Ð²ÐºÑ (6 ÐºÐ°Ð´ÑÐ¾Ð²) Ð¿Ð¾Ð´ 6â10 ÑÐµÐºÑÐ½Ð´Ð½ÑÐ¹ ÐºÐ»Ð¸Ð¿. "
-            "ÐÐ°Ð¶Ð´ÑÐ¹ ÐºÐ°Ð´Ñ â 1 ÑÑÑÐ¾ÐºÐ°: ÐºÐ°Ð´Ñ/Ð´ÐµÐ¹ÑÑÐ²Ð¸Ðµ/ÑÐ°ÐºÑÑÑ/ÑÐ²ÐµÑ. ÐÑÐ½Ð¾Ð²Ð°:\n" + (desc or "")
+            "ÃÂ¡ÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÃÂ°ÃÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²ÃÂºÃ (6 ÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²) ÃÂ¿ÃÂ¾ÃÂ´ 6Ã¢10 ÃÃÂµÃÂºÃÃÂ½ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂºÃÂ»ÃÂ¸ÃÂ¿. "
+            "ÃÃÂ°ÃÂ¶ÃÂ´ÃÃÂ¹ ÃÂºÃÂ°ÃÂ´Ã Ã¢ 1 ÃÃÃÃÂ¾ÃÂºÃÂ°: ÃÂºÃÂ°ÃÂ´Ã/ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸ÃÂµ/ÃÃÂ°ÃÂºÃÃÃ/ÃÃÂ²ÃÂµÃ. ÃÃÃÂ½ÃÂ¾ÃÂ²ÃÂ°:\n" + (desc or "")
         )
-        await update.effective_message.reply_text("Ð Ð°ÑÐºÐ°Ð´ÑÐ¾Ð²ÐºÐ°:\Ð½" + plan)
+        await update.effective_message.reply_text("Ã ÃÂ°ÃÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²ÃÂºÃÂ°:\ÃÂ½" + plan)
     except Exception as e:
         log.exception("storyboard error: %s", e)
-        await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¿Ð¾ÑÑÑÐ¾Ð¸ÑÑ ÑÐ°ÑÐºÐ°Ð´ÑÐ¾Ð²ÐºÑ.")
+        await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ¿ÃÂ¾ÃÃÃÃÂ¾ÃÂ¸ÃÃ ÃÃÂ°ÃÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²ÃÂºÃ.")
 
 
-# âââââââââ WebApp data (ÑÐ°ÑÐ¸ÑÑ/Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ WebApp data (ÃÃÂ°ÃÃÂ¸ÃÃ/ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸Ã) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         wad = update.effective_message.web_app_data
@@ -2827,12 +2827,12 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if typ in ("subscribe", "buy", "buy_sub", "sub"):
             tier = (data.get("tier") or "pro").lower()
             months = int(data.get("months") or 1)
-            desc = f"ÐÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ {tier.upper()} Ð½Ð° {months} Ð¼ÐµÑ."
+            desc = f"ÃÃÃÂ¾ÃÃÂ¼ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ¸ {tier.upper()} ÃÂ½ÃÂ° {months} ÃÂ¼ÃÂµÃ."
             await update.effective_message.reply_text(
-                f"{desc}\nÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÐ¿Ð¾ÑÐ¾Ð±:",
+                f"{desc}\nÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÂ¿ÃÂ¾ÃÃÂ¾Ã:",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("ÐÐ¿Ð»Ð°ÑÐ¸ÑÑ ÐºÐ°ÑÑÐ¾Ð¹ (Ð®Kassa)", callback_data=f"buyinv:{tier}:{months}")],
-                    [InlineKeyboardButton("Ð¡Ð¿Ð¸ÑÐ°ÑÑ Ñ Ð±Ð°Ð»Ð°Ð½ÑÐ° (USD)",  callback_data=f"buywallet:{tier}:{months}")],
+                    [InlineKeyboardButton("ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ ÃÂºÃÂ°ÃÃÃÂ¾ÃÂ¹ (ÃÂ®Kassa)", callback_data=f"buyinv:{tier}:{months}")],
+                    [InlineKeyboardButton("ÃÂ¡ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ Ã ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ° (USD)",  callback_data=f"buywallet:{tier}:{months}")],
                 ])
             )
             return
@@ -2840,25 +2840,25 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if typ in ("topup_rub", "rub_topup"):
             amount_rub = int(data.get("amount") or 0)
             if amount_rub < MIN_RUB_FOR_INVOICE:
-                await update.effective_message.reply_text(f"ÐÐ¸Ð½Ð¸Ð¼Ð°Ð»ÑÐ½Ð°Ñ ÑÑÐ¼Ð¼Ð°: {MIN_RUB_FOR_INVOICE} â½")
+                await update.effective_message.reply_text(f"ÃÃÂ¸ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÂ°Ã ÃÃÃÂ¼ÃÂ¼ÃÂ°: {MIN_RUB_FOR_INVOICE} Ã¢Â½")
                 return
-            await _send_invoice_rub("ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ Ð±Ð°Ð»Ð°Ð½ÑÐ°", "ÐÐ´Ð¸Ð½ÑÐ¹ ÐºÐ¾ÑÐµÐ»ÑÐº", amount_rub, "t=3", update)
+            await _send_invoice_rub("ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ°", "ÃÃÂ´ÃÂ¸ÃÂ½ÃÃÂ¹ ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂº", amount_rub, "t=3", update)
             return
 
         if typ in ("topup_crypto", "crypto_topup"):
             if not CRYPTO_PAY_API_TOKEN:
-                await update.effective_message.reply_text("CryptoBot Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½.")
+                await update.effective_message.reply_text("CryptoBot ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½.")
                 return
             usd = float(data.get("usd") or 0)
             inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT")
             if not inv_id or not pay_url:
-                await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ¾Ð·Ð´Ð°ÑÑ ÑÑÑÑ Ð² CryptoBot.")
+                await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃ ÃÃÃÃ ÃÂ² CryptoBot.")
                 return
             msg = await update.effective_message.reply_text(
-                f"ÐÐ¿Ð»Ð°ÑÐ¸ÑÐµ ÑÐµÑÐµÐ· CryptoBot: â ${usd_amount:.2f} ({asset}).",
+                f"ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃÂµ ÃÃÂµÃÃÂµÃÂ· CryptoBot: Ã¢ ${usd_amount:.2f} ({asset}).",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("ÐÐ¿Ð»Ð°ÑÐ¸ÑÑ Ð² CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("ÐÑÐ¾Ð²ÐµÑÐ¸ÑÑ Ð¾Ð¿Ð»Ð°ÑÑ", callback_data=f"crypto:check:{inv_id}")]
+                    [InlineKeyboardButton("ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ ÃÂ² CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton("ÃÃÃÂ¾ÃÂ²ÃÂµÃÃÂ¸ÃÃ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ", callback_data=f"crypto:check:{inv_id}")]
                 ])
             )
             context.application.create_task(_poll_crypto_invoice(
@@ -2866,13 +2866,13 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ))
             return
 
-        await update.effective_message.reply_text("ÐÐ¾Ð»ÑÑÐµÐ½Ñ Ð´Ð°Ð½Ð½ÑÐµ Ð¸Ð· Ð¼Ð¸Ð½Ð¸-Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ, Ð½Ð¾ ÐºÐ¾Ð¼Ð°Ð½Ð´Ð° Ð½Ðµ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð½Ð°.")
+        await update.effective_message.reply_text("ÃÃÂ¾ÃÂ»ÃÃÃÂµÃÂ½Ã ÃÂ´ÃÂ°ÃÂ½ÃÂ½ÃÃÂµ ÃÂ¸ÃÂ· ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂ¿ÃÃÂ¸ÃÂ»ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã, ÃÂ½ÃÂ¾ ÃÂºÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´ÃÂ° ÃÂ½ÃÂµ ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÂ½ÃÂ°.")
     except Exception as e:
         log.exception("on_webapp_data error: %s", e)
-        await update.effective_message.reply_text("ÐÑÐ¸Ð±ÐºÐ° Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐºÐ¸ Ð´Ð°Ð½Ð½ÑÑ Ð¼Ð¸Ð½Ð¸-Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ.")
+        await update.effective_message.reply_text("ÃÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂºÃÂ¸ ÃÂ´ÃÂ°ÃÂ½ÃÂ½ÃÃ ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂ¿ÃÃÂ¸ÃÂ»ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã.")
 
 
-# âââââââââ CallbackQuery (Ð²ÑÑ Ð¾ÑÑÐ°Ð»ÑÐ½Ð¾Ðµ) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ CallbackQuery (ÃÂ²ÃÃ ÃÂ¾ÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ÃÂµ) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 _pending_actions = {}
 
@@ -2894,7 +2894,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await q.answer()
 
-        # ÐÐ¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð³Ð»Ð°Ð²Ð½Ð¾Ðµ Ð¼ÐµÐ½Ñ Ð¿Ð¾ÑÐ»Ðµ Ð²ÑÐ±Ð¾ÑÐ° ÑÐ·ÑÐºÐ°
+        # ÃÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ³ÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÂ¾ÃÂµ ÃÂ¼ÃÂµÃÂ½Ã ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµ ÃÂ²ÃÃÃÂ¾ÃÃÂ° ÃÃÂ·ÃÃÂºÃÂ°
         try:
             await q.message.reply_text(t(uid, "lang_set"), reply_markup=main_keyboard(uid))
         except Exception:
@@ -2912,57 +2912,57 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         eng = data.split(":", 1)[1].strip() if ":" in data else "gpt"
         engine_set(uid, eng)
 
-        # ÐÐ¾ÑÐ¾ÑÐºÐ¾Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ðµ + Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ°
+        # ÃÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¾ÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂ²ÃÂµÃÃÂ¶ÃÂ´ÃÂµÃÂ½ÃÂ¸ÃÂµ + ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃÂ°
         hint = {
-            "gpt": "Ð¢ÐµÐ¿ÐµÑÑ Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ Ð¾ÑÐ²ÐµÑÐ°Ñ ÑÐµÐºÑÑÐ¾Ð¼ (GPT).",
-            "images": "Ð¢ÐµÐ¿ÐµÑÑ Ð»ÑÐ±Ð¾Ð¹ ÑÐµÐºÑÑ Ð±ÑÐ´ÐµÑ ÑÑÐ°ÐºÑÐ¾Ð²Ð°ÑÑÑÑ ÐºÐ°Ðº Ð¿ÑÐ¾Ð¼Ð¿Ñ Ð´Ð»Ñ ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸ (Images).",
-            "kling": "Ð¢ÐµÐ¿ÐµÑÑ Ð»ÑÐ±Ð¾Ð¹ ÑÐµÐºÑÑ Ð±ÑÐ´ÐµÑ ÑÑÐ°ÐºÑÐ¾Ð²Ð°ÑÑÑÑ ÐºÐ°Ðº Ð¿ÑÐ¾Ð¼Ð¿Ñ Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾ Ð² Kling.",
-            "luma": "Ð¢ÐµÐ¿ÐµÑÑ Ð»ÑÐ±Ð¾Ð¹ ÑÐµÐºÑÑ Ð±ÑÐ´ÐµÑ ÑÑÐ°ÐºÑÐ¾Ð²Ð°ÑÑÑÑ ÐºÐ°Ðº Ð¿ÑÐ¾Ð¼Ð¿Ñ Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾ Ð² Luma.",
-            "runway": "Runway Ð²ÑÐ±ÑÐ°Ð½. ÐÐ»Ñ Ð²Ð¸Ð´ÐµÐ¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ Â«ÑÐ´ÐµÐ»Ð°Ð¹ Ð²Ð¸Ð´ÐµÐ¾â¦Â» (ÑÐµÐºÑÑâÐ²Ð¸Ð´ÐµÐ¾ Ð¼Ð¾Ð¶ÐµÑ Ð±ÑÑÑ Ð¾ÑÐºÐ»ÑÑÑÐ½).",
-            "sora": "Sora Ð²ÑÐ±ÑÐ°Ð½ (ÑÐµÑÐµÐ· Comet). ÐÑÐ»Ð¸ ÐºÐ»ÑÑÐ¸/ÑÐ½Ð´Ð¿Ð¾Ð¸Ð½Ñ Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ñ â Ð¿Ð¾ÐºÐ°Ð¶Ñ Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÑ.",
-            "gemini": "Gemini Ð²ÑÐ±ÑÐ°Ð½ (ÑÐµÑÐµÐ· Comet). ÐÑÐ»Ð¸ ÐºÐ»ÑÑÐ¸/ÑÐ½Ð´Ð¿Ð¾Ð¸Ð½Ñ Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ñ â Ð±ÑÐ´ÐµÑ Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ°/ÑÐ¾Ð»Ð±ÑÐº.",
-            "suno": "Suno Ð²ÑÐ±ÑÐ°Ð½ (Ð¼ÑÐ·ÑÐºÐ°). Ð¡ÐµÐ¹ÑÐ°Ñ Ð²ÐºÐ»ÑÑÑÐ½ ÐºÐ°Ðº ÑÐµÐ¶Ð¸Ð¼-Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ°.",
-            "midjourney": "Midjourney Ð²ÑÐ±ÑÐ°Ð½. Ð¡ÐµÐ¹ÑÐ°Ñ Ð²ÐºÐ»ÑÑÑÐ½ ÐºÐ°Ðº ÑÐµÐ¶Ð¸Ð¼-Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ°.",
-            "stt_tts": "Ð ÐµÐ¶Ð¸Ð¼ STT/TTS: Ð¼Ð¾Ð¶Ð½Ð¾ Ð¿ÑÐ¸ÑÐ»Ð°ÑÑ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ Ð¸Ð»Ð¸ Ð²ÐºÐ»ÑÑÐ¸ÑÑ Ð¾Ð·Ð²ÑÑÐºÑ Ð¾ÑÐ²ÐµÑÐ¾Ð².",
-        }.get(eng, f"ÐÐ²Ð¸Ð¶Ð¾Ðº Ð²ÑÐ±ÑÐ°Ð½: {eng}")
+            "gpt": "ÃÂ¢ÃÂµÃÂ¿ÃÂµÃÃ ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÂ¾ÃÂ»ÃÃÂ°ÃÂ½ÃÂ¸Ã ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ°Ã ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ¼ (GPT).",
+            "images": "ÃÂ¢ÃÂµÃÂ¿ÃÂµÃÃ ÃÂ»ÃÃÃÂ¾ÃÂ¹ ÃÃÂµÃÂºÃÃ ÃÃÃÂ´ÃÂµÃ ÃÃÃÂ°ÃÂºÃÃÂ¾ÃÂ²ÃÂ°ÃÃÃÃ ÃÂºÃÂ°ÃÂº ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿Ã ÃÂ´ÃÂ»Ã ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸ (Images).",
+            "kling": "ÃÂ¢ÃÂµÃÂ¿ÃÂµÃÃ ÃÂ»ÃÃÃÂ¾ÃÂ¹ ÃÃÂµÃÂºÃÃ ÃÃÃÂ´ÃÂµÃ ÃÃÃÂ°ÃÂºÃÃÂ¾ÃÂ²ÃÂ°ÃÃÃÃ ÃÂºÃÂ°ÃÂº ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿Ã ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ² Kling.",
+            "luma": "ÃÂ¢ÃÂµÃÂ¿ÃÂµÃÃ ÃÂ»ÃÃÃÂ¾ÃÂ¹ ÃÃÂµÃÂºÃÃ ÃÃÃÂ´ÃÂµÃ ÃÃÃÂ°ÃÂºÃÃÂ¾ÃÂ²ÃÂ°ÃÃÃÃ ÃÂºÃÂ°ÃÂº ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿Ã ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ² Luma.",
+            "runway": "Runway ÃÂ²ÃÃÃÃÂ°ÃÂ½. ÃÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂ¹ÃÃÂµ ÃÂ«ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾Ã¢Â¦ÃÂ» (ÃÃÂµÃÂºÃÃÃ¢ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃ ÃÃÃÃ ÃÂ¾ÃÃÂºÃÂ»ÃÃÃÃÂ½).",
+            "sora": "Sora ÃÂ²ÃÃÃÃÂ°ÃÂ½ (ÃÃÂµÃÃÂµÃÂ· Comet). ÃÃÃÂ»ÃÂ¸ ÃÂºÃÂ»ÃÃÃÂ¸/ÃÃÂ½ÃÂ´ÃÂ¿ÃÂ¾ÃÂ¸ÃÂ½Ã ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½Ã Ã¢ ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ¶Ã ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃ.",
+            "gemini": "Gemini ÃÂ²ÃÃÃÃÂ°ÃÂ½ (ÃÃÂµÃÃÂµÃÂ· Comet). ÃÃÃÂ»ÃÂ¸ ÃÂºÃÂ»ÃÃÃÂ¸/ÃÃÂ½ÃÂ´ÃÂ¿ÃÂ¾ÃÂ¸ÃÂ½Ã ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½Ã Ã¢ ÃÃÃÂ´ÃÂµÃ ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃÂ°/ÃÃÂ¾ÃÂ»ÃÃÃÂº.",
+            "suno": "Suno ÃÂ²ÃÃÃÃÂ°ÃÂ½ (ÃÂ¼ÃÃÂ·ÃÃÂºÃÂ°). ÃÂ¡ÃÂµÃÂ¹ÃÃÂ°Ã ÃÂ²ÃÂºÃÂ»ÃÃÃÃÂ½ ÃÂºÃÂ°ÃÂº ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼-ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃÂ°.",
+            "midjourney": "Midjourney ÃÂ²ÃÃÃÃÂ°ÃÂ½. ÃÂ¡ÃÂµÃÂ¹ÃÃÂ°Ã ÃÂ²ÃÂºÃÂ»ÃÃÃÃÂ½ ÃÂºÃÂ°ÃÂº ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼-ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃÂ°.",
+            "stt_tts": "Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼ STT/TTS: ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ²ÃÂºÃÂ»ÃÃÃÂ¸ÃÃ ÃÂ¾ÃÂ·ÃÂ²ÃÃÃÂºÃ ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ¾ÃÂ².",
+        }.get(eng, f"ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ²ÃÃÃÃÂ°ÃÂ½: {eng}")
 
         with contextlib.suppress(Exception):
             await q.message.reply_text(hint, reply_markup=main_keyboard(uid))
         return
 
     try:
-        # ð ÐÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ° Ð´Ð»Ñ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ ÑÐ¾ÑÐ¾ (Runway/Kling/Luma)
+        # Ã° ÃÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ° ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã ÃÃÂ¾ÃÃÂ¾ (Runway/Kling/Luma)
         if data.startswith("revive_engine:"):
             await q.answer()
             engine = data.split(":", 1)[1] if ":" in data else ""
             await revive_old_photo_flow(update, context, engine=engine)
             return
 
-        # Photo edit / Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ñ Ð¿Ð¾ inline-ÐºÐ½Ð¾Ð¿ÐºÐ°Ð¼ pedit:...
+        # Photo edit / ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÃÂ¸Ã ÃÂ¿ÃÂ¾ inline-ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ°ÃÂ¼ pedit:...
         if data.startswith("pedit:"):
             await q.answer()
             action = data.split(":", 1)[1] if ":" in data else ""
             user_id = update.effective_user.id
 
-            # Ð¡Ð¿ÐµÑÐ¸Ð°Ð»ÑÐ½ÑÐ¹ ÑÐ»ÑÑÐ°Ð¹: Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾ â Ð¿Ð¾ÐºÐ°Ð·Ð°ÑÑ Ð²ÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ°
+            # ÃÂ¡ÃÂ¿ÃÂµÃÃÂ¸ÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÃÂ»ÃÃÃÂ°ÃÂ¹: ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾ Ã¢ ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÂ°ÃÃ ÃÂ²ÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ°
             if action == "revive":
                 if user_id not in _LAST_ANIM_PHOTO:
                     await q.edit_message_text(
-                        "ÐÐµ Ð½Ð°ÑÑÐ» ÑÐ¾ÑÐ¾ Ð² ÐºÑÑÐµ. ÐÑÐ¸ÑÐ»Ð¸ ÑÐ¾ÑÐ¾ ÐµÑÑ ÑÐ°Ð·, Ð¿Ð¾Ð¶Ð°Ð»ÑÐ¹ÑÑÐ°."
+                        "ÃÃÂµ ÃÂ½ÃÂ°ÃÃÃÂ» ÃÃÂ¾ÃÃÂ¾ ÃÂ² ÃÂºÃÃÃÂµ. ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¾ ÃÂµÃÃ ÃÃÂ°ÃÂ·, ÃÂ¿ÃÂ¾ÃÂ¶ÃÂ°ÃÂ»ÃÃÂ¹ÃÃÃÂ°."
                     )
                     return
 
                 await q.edit_message_text(
-                    "ÐÑÐ±ÐµÑÐ¸ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð´Ð»Ñ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ ÑÐ¾ÑÐ¾:",
+                    "ÃÃÃÃÂµÃÃÂ¸ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã ÃÃÂ¾ÃÃÂ¾:",
                     reply_markup=revive_engine_kb(),
                 )
                 return
 
-            # ÐÐ»Ñ Ð¾ÑÑÐ°Ð»ÑÐ½ÑÑ pedit:* Ð½ÑÐ¶ÐµÐ½ Ð±Ð°Ð¹ÑÐ¾Ð²ÑÐ¹ Ð¾Ð±ÑÐ°Ð· ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸
+            # ÃÃÂ»Ã ÃÂ¾ÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÃ pedit:* ÃÂ½ÃÃÂ¶ÃÂµÃÂ½ ÃÃÂ°ÃÂ¹ÃÃÂ¾ÃÂ²ÃÃÂ¹ ÃÂ¾ÃÃÃÂ°ÃÂ· ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸
             img = _get_cached_photo(user_id)
             if not img:
                 await q.edit_message_text(
-                    "ÐÐµ Ð½Ð°ÑÑÐ» ÑÐ¾ÑÐ¾ Ð² ÐºÑÑÐµ. ÐÑÐ¸ÑÐ»Ð¸ ÑÐ¾ÑÐ¾ ÐµÑÑ ÑÐ°Ð·, Ð¿Ð¾Ð¶Ð°Ð»ÑÐ¹ÑÑÐ°."
+                    "ÃÃÂµ ÃÂ½ÃÂ°ÃÃÃÂ» ÃÃÂ¾ÃÃÂ¾ ÃÂ² ÃÂºÃÃÃÂµ. ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¾ ÃÂµÃÃ ÃÃÂ°ÃÂ·, ÃÂ¿ÃÂ¾ÃÂ¶ÃÂ°ÃÂ»ÃÃÂ¹ÃÃÃÂ°."
                 )
                 return
 
@@ -2986,10 +2986,10 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _start_luma_img(update, context, "")
                 return
 
-            # Ð½ÐµÐ¸Ð·Ð²ÐµÑÑÐ½ÑÐ¹ pedit:* â Ð¿ÑÐ¾ÑÑÐ¾ Ð²ÑÑÐ¾Ð´Ð¸Ð¼
+            # ÃÂ½ÃÂµÃÂ¸ÃÂ·ÃÂ²ÃÂµÃÃÃÂ½ÃÃÂ¹ pedit:* Ã¢ ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ²ÃÃÃÂ¾ÃÂ´ÃÂ¸ÃÂ¼
             return
 
-        # TOPUP Ð¼ÐµÐ½Ñ
+        # TOPUP ÃÂ¼ÃÂµÃÂ½Ã
         if data == "topup":
             await q.answer()
             await _send_topup_menu(update, context)
@@ -3004,23 +3004,23 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 amount_rub = 0
             if amount_rub < MIN_RUB_FOR_INVOICE:
                 await q.edit_message_text(
-                    f"ÐÐ¸Ð½Ð¸Ð¼Ð°Ð»ÑÐ½Ð°Ñ ÑÑÐ¼Ð¼Ð° Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ {MIN_RUB_FOR_INVOICE} â½."
+                    f"ÃÃÂ¸ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÂ»ÃÃÂ½ÃÂ°Ã ÃÃÃÂ¼ÃÂ¼ÃÂ° ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸Ã {MIN_RUB_FOR_INVOICE} Ã¢Â½."
                 )
                 return
-            title = "ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ Ð±Ð°Ð»Ð°Ð½ÑÐ° (ÐºÐ°ÑÑÐ°)"
-            desc = f"ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ USD-Ð±Ð°Ð»Ð°Ð½ÑÐ° Ð±Ð¾ÑÐ° Ð½Ð° ÑÑÐ¼Ð¼Ñ â {amount_rub} â½"
+            title = "ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ° (ÃÂºÃÂ°ÃÃÃÂ°)"
+            desc = f"ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ USD-ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ° ÃÃÂ¾ÃÃÂ° ÃÂ½ÃÂ° ÃÃÃÂ¼ÃÂ¼Ã Ã¢ {amount_rub} Ã¢Â½"
             payload = f"topup:{amount_rub}"
             ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
             if not ok:
-                await q.answer("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð²ÑÑÑÐ°Ð²Ð¸ÑÑ ÑÑÑÑ", show_alert=True)
+                await q.answer("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ²ÃÃÃÃÂ°ÃÂ²ÃÂ¸ÃÃ ÃÃÃÃ", show_alert=True)
             return
 
-        # TOPUP CRYPTO: Ð²ÑÐ±Ð¾Ñ ÑÑÐ¼Ð¼Ñ
+        # TOPUP CRYPTO: ÃÂ²ÃÃÃÂ¾Ã ÃÃÃÂ¼ÃÂ¼Ã
         if data == "topup:crypto":
             await q.answer()
             await q.edit_message_text(
-                "ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ ÑÐµÑÐµÐ· CryptoBot (USDT):\n\n"
-                "ÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÑÐ¼Ð¼Ñ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ ($):",
+                "ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂµÃÃÂµÃÂ· CryptoBot (USDT):\n\n"
+                "ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÃÂ¼ÃÂ¼Ã ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸Ã ($):",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3032,13 +3032,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             InlineKeyboardButton("$50",  callback_data="topup:crypto:50"),
                             InlineKeyboardButton("$100", callback_data="topup:crypto:100"),
                         ],
-                        [InlineKeyboardButton("ÐÑÐ¼ÐµÐ½Ð°", callback_data="topup:cancel")],
+                        [InlineKeyboardButton("ÃÃÃÂ¼ÃÂµÃÂ½ÃÂ°", callback_data="topup:cancel")],
                     ]
                 ),
             )
             return
 
-        # TOPUP CRYPTO: ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ðµ Ð¸Ð½Ð²Ð¾Ð¹ÑÐ°
+        # TOPUP CRYPTO: ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ¸ÃÂ½ÃÂ²ÃÂ¾ÃÂ¹ÃÃÂ°
         if data.startswith("topup:crypto:"):
             await q.answer()
             try:
@@ -3046,7 +3046,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 usd = 0.0
             if usd <= 0.0:
-                await q.edit_message_text("ÐÐµÐ²ÐµÑÐ½Ð°Ñ ÑÑÐ¼Ð¼Ð°.")
+                await q.edit_message_text("ÃÃÂµÃÂ²ÃÂµÃÃÂ½ÃÂ°Ã ÃÃÃÂ¼ÃÂ¼ÃÂ°.")
                 return
 
             inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(
@@ -3054,21 +3054,21 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if not inv_id or not pay_url:
                 await q.edit_message_text(
-                    "ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ¾Ð·Ð´Ð°ÑÑ ÑÑÑÑ Ð² CryptoBot. ÐÐ¾Ð¿ÑÐ¾Ð±ÑÐ¹ÑÐµ Ð¿Ð¾Ð·Ð¶Ðµ."
+                    "ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°ÃÃ ÃÃÃÃ ÃÂ² CryptoBot. ÃÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÃÂ¹ÃÃÂµ ÃÂ¿ÃÂ¾ÃÂ·ÃÂ¶ÃÂµ."
                 )
                 return
 
             msg = await update.effective_message.reply_text(
-                f"ÐÐ¿Ð»Ð°ÑÐ¸ÑÐµ ÑÐµÑÐµÐ· CryptoBot: â ${usd_amount:.2f} ({asset}).\n"
-                "ÐÐ¾ÑÐ»Ðµ Ð¾Ð¿Ð»Ð°ÑÑ Ð±Ð°Ð»Ð°Ð½Ñ Ð¿Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÑÑ Ð°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐµÑÐºÐ¸.",
+                f"ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃÂµ ÃÃÂµÃÃÂµÃÂ· CryptoBot: Ã¢ ${usd_amount:.2f} ({asset}).\n"
+                "ÃÃÂ¾ÃÃÂ»ÃÂµ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃÃ ÃÂ°ÃÂ²ÃÃÂ¾ÃÂ¼ÃÂ°ÃÃÂ¸ÃÃÂµÃÃÂºÃÂ¸.",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("ÐÐ¿Ð»Ð°ÑÐ¸ÑÑ Ð² CryptoBot", url=pay_url)],
-                        [InlineKeyboardButton("ÐÑÐ¾Ð²ÐµÑÐ¸ÑÑ Ð¾Ð¿Ð»Ð°ÑÑ", callback_data=f"crypto:check:{inv_id}")],
+                        [InlineKeyboardButton("ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ ÃÂ² CryptoBot", url=pay_url)],
+                        [InlineKeyboardButton("ÃÃÃÂ¾ÃÂ²ÃÂµÃÃÂ¸ÃÃ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ", callback_data=f"crypto:check:{inv_id}")],
                     ]
                 ),
             )
-            # Ð·Ð°Ð¿ÑÑÑÐ¸Ð¼ ÑÐ¾Ð½Ð¾Ð²ÑÐ¹ Ð¿Ð¾Ð»Ð»Ð¸Ð½Ð³ Ð¸Ð½Ð²Ð¾Ð¹ÑÐ°
+            # ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÃÂ¸ÃÂ¼ ÃÃÂ¾ÃÂ½ÃÂ¾ÃÂ²ÃÃÂ¹ ÃÂ¿ÃÂ¾ÃÂ»ÃÂ»ÃÂ¸ÃÂ½ÃÂ³ ÃÂ¸ÃÂ½ÃÂ²ÃÂ¾ÃÂ¹ÃÃÂ°
             context.application.create_task(
                 _poll_crypto_invoice(
                     context,
@@ -3081,7 +3081,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # CryptoBot: ÑÑÑÐ½Ð°Ñ Ð¿ÑÐ¾Ð²ÐµÑÐºÐ° Ð¸Ð½Ð²Ð¾Ð¹ÑÐ°
+        # CryptoBot: ÃÃÃÃÂ½ÃÂ°Ã ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂµÃÃÂºÃÂ° ÃÂ¸ÃÂ½ÃÂ²ÃÂ¾ÃÂ¹ÃÃÂ°
         if data.startswith("crypto:check:"):
             await q.answer()
             inv_id = data.split(":", 2)[-1]
@@ -3092,46 +3092,46 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if status == "paid":
                 await q.edit_message_text(
-                    f"â ÐÐ»Ð°ÑÑÐ¶ Ð¿Ð¾Ð»ÑÑÐµÐ½: {paid_amount} {asset}.\n"
-                    "ÐÐ°Ð»Ð°Ð½Ñ Ð±ÑÐ´ÐµÑ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½ Ð² ÑÐµÑÐµÐ½Ð¸Ðµ Ð¼Ð¸Ð½ÑÑÑ."
+                    f"Ã¢ ÃÃÂ»ÃÂ°ÃÃÃÂ¶ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂµÃÂ½: {paid_amount} {asset}.\n"
+                    "ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã ÃÃÃÂ´ÃÂµÃ ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ ÃÂ² ÃÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¼ÃÂ¸ÃÂ½ÃÃÃ."
                 )
             elif status == "active":
-                await q.edit_message_text("Ð¡ÑÑÑ ÐµÑÑ Ð½Ðµ Ð¾Ð¿Ð»Ð°ÑÐµÐ½.")
+                await q.edit_message_text("ÃÂ¡ÃÃÃ ÃÂµÃÃ ÃÂ½ÃÂµ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÂµÃÂ½.")
             else:
-                await q.edit_message_text("Ð¡ÑÑÑ Ð½Ðµ Ð°ÐºÑÐ¸Ð²ÐµÐ½ Ð¸Ð»Ð¸ Ð¸ÑÑÑÐº.")
+                await q.edit_message_text("ÃÂ¡ÃÃÃ ÃÂ½ÃÂµ ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂµÃÂ½ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¸ÃÃÃÃÂº.")
             return
 
         # TOPUP cancel
         if data == "topup:cancel":
             await q.answer()
-            await q.edit_message_text("ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð¾.")
+            await q.edit_message_text("ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¾ÃÃÂ¼ÃÂµÃÂ½ÃÂµÃÂ½ÃÂ¾.")
             return
 
-        # ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ°: ÑÑÐ°ÑÐ¾Ðµ Ð¼ÐµÐ½Ñ /plans (ÐµÑÐ»Ð¸ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑ)
+        # ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ°: ÃÃÃÂ°ÃÃÂ¾ÃÂµ ÃÂ¼ÃÂµÃÂ½Ã /plans (ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÃ)
         if data == "plans":
             await q.answer()
             await cmd_plans(update, context)
             return
 
-        # ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ°: Ð²ÑÐ±Ð¾Ñ ÑÐ°ÑÐ¸ÑÐ° Ð¸ ÑÑÐ¾ÐºÐ°
+        # ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ°: ÃÂ²ÃÃÃÂ¾Ã ÃÃÂ°ÃÃÂ¸ÃÃÂ° ÃÂ¸ ÃÃÃÂ¾ÃÂºÃÂ°
         if data.startswith("buy:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
             months = int(months)
-            desc = f"ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {tier.upper()} Ð½Ð° {months} Ð¼ÐµÑ."
+            desc = f"ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {tier.upper()} ÃÂ½ÃÂ° {months} ÃÂ¼ÃÂµÃ."
             await q.edit_message_text(
-                f"{desc}\nÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÐ¿Ð¾ÑÐ¾Ð± Ð¾Ð¿Ð»Ð°ÑÑ:",
+                f"{desc}\nÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÂ¿ÃÂ¾ÃÃÂ¾Ã ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃ:",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
                             InlineKeyboardButton(
-                                "ÐÐ¿Ð»Ð°ÑÐ¸ÑÑ ÐºÐ°ÑÑÐ¾Ð¹ (Ð®Kassa)",
+                                "ÃÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ ÃÂºÃÂ°ÃÃÃÂ¾ÃÂ¹ (ÃÂ®Kassa)",
                                 callback_data=f"buyinv:{tier}:{months}",
                             )
                         ],
                         [
                             InlineKeyboardButton(
-                                "Ð¡Ð¿Ð¸ÑÐ°ÑÑ Ñ Ð±Ð°Ð»Ð°Ð½ÑÐ° (USD)",
+                                "ÃÂ¡ÃÂ¿ÃÂ¸ÃÃÂ°ÃÃ Ã ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ° (USD)",
                                 callback_data=f"buywallet:{tier}:{months}",
                             )
                         ],
@@ -3140,19 +3140,19 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° ÑÐµÑÐµÐ· Ð®Kassa
+        # ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° ÃÃÂµÃÃÂµÃÂ· ÃÂ®Kassa
         if data.startswith("buyinv:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
             months = int(months)
             payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-            desc = f"ÐÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ {tier.upper()} Ð½Ð° {months} Ð¼ÐµÑ."
+            desc = f"ÃÃÃÂ¾ÃÃÂ¼ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ¸ {tier.upper()} ÃÂ½ÃÂ° {months} ÃÂ¼ÃÂµÃ."
             ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
             if not ok:
-                await q.answer("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð²ÑÑÑÐ°Ð²Ð¸ÑÑ ÑÑÑÑ", show_alert=True)
+                await q.answer("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ²ÃÃÃÃÂ°ÃÂ²ÃÂ¸ÃÃ ÃÃÃÃ", show_alert=True)
             return
 
-        # ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° ÑÐ¿Ð¸ÑÐ°Ð½Ð¸ÐµÐ¼ Ð¸Ð· USD-Ð±Ð°Ð»Ð°Ð½ÑÐ°
+        # ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° ÃÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸ÃÂµÃÂ¼ ÃÂ¸ÃÂ· USD-ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ°
         if data.startswith("buywallet:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
@@ -3163,31 +3163,31 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if bal < usd_price:
                 need = usd_price - bal
                 await q.edit_message_text(
-                    f"ÐÐ° Ð±Ð°Ð»Ð°Ð½ÑÐµ Ð½ÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ ÑÑÐµÐ´ÑÑÐ².\n"
-                    f"Ð¢ÑÐµÐ±ÑÐµÑÑÑ ÐµÑÑ â ${need:.2f}.\n\n"
-                    "ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµ Ð±Ð°Ð»Ð°Ð½Ñ ÑÐµÑÐµÐ· Ð¼ÐµÐ½Ñ Â«ð§¾ ÐÐ°Ð»Ð°Ð½ÑÂ».",
+                    f"ÃÃÂ° ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂµ ÃÂ½ÃÂµÃÂ´ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂ½ÃÂ¾ ÃÃÃÂµÃÂ´ÃÃÃÂ².\n"
+                    f"ÃÂ¢ÃÃÂµÃÃÃÂµÃÃÃ ÃÂµÃÃ Ã¢ ${need:.2f}.\n\n"
+                    "ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃÂµ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã ÃÃÂµÃÃÂµÃÂ· ÃÂ¼ÃÂµÃÂ½Ã ÃÂ«Ã°Â§Â¾ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ».",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("â ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÑ Ð±Ð°Ð»Ð°Ð½Ñ", callback_data="topup")]]
+                        [[InlineKeyboardButton("Ã¢ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã", callback_data="topup")]]
                     ),
                 )
                 return
-            # ÑÐ¿Ð¸ÑÑÐ²Ð°ÐµÐ¼ Ð¸ Ð°ÐºÑÐ¸Ð²Ð¸ÑÑÐµÐ¼
+            # ÃÃÂ¿ÃÂ¸ÃÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ¸ ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂ¸ÃÃÃÂµÃÂ¼
             _user_balance_debit(update.effective_user.id, usd_price)
             tier_name = payload.split(":", 1)[-1]
             activate_subscription_with_tier(update.effective_user.id, tier_name, months)
             await q.edit_message_text(
-                f"â ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {tier_name.upper()} Ð½Ð° {months} Ð¼ÐµÑ. Ð¾ÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð°.\n"
-                f"ÐÐ°Ð»Ð°Ð½Ñ: ${_user_balance_get(update.effective_user.id):.2f}"
+                f"Ã¢ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {tier_name.upper()} ÃÂ½ÃÂ° {months} ÃÂ¼ÃÂµÃ. ÃÂ¾ÃÃÂ¾ÃÃÂ¼ÃÂ»ÃÂµÃÂ½ÃÂ°.\n"
+                f"ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã: ${_user_balance_get(update.effective_user.id):.2f}"
             )
             return
 
-        # ÐÐ°Ð»Ð°Ð½Ñ: Ð¿ÑÐ¾ÑÑÐ¾ Ð¾ÑÐºÑÑÑÑ Ð¼ÐµÐ½Ñ
+        # ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã: ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ¾ÃÃÂºÃÃÃÃ ÃÂ¼ÃÂµÃÂ½Ã
         if data == "balance:open":
             await q.answer()
             await cmd_balance(update, context)
             return
 
-        # ÐÑÑÐµÑ Ð½Ð° Ð´Ð¾Ð¿.ÑÐ°ÑÑÐ¾Ð´ (ÐºÐ¾Ð³Ð´Ð° Ð½Ðµ ÑÐ²Ð°ÑÐ¸Ð»Ð¾ Ð»Ð¸Ð¼Ð¸ÑÐ°)
+        # ÃÃÃÃÂµÃ ÃÂ½ÃÂ° ÃÂ´ÃÂ¾ÃÂ¿.ÃÃÂ°ÃÃÃÂ¾ÃÂ´ (ÃÂºÃÂ¾ÃÂ³ÃÂ´ÃÂ° ÃÂ½ÃÂµ ÃÃÂ²ÃÂ°ÃÃÂ¸ÃÂ»ÃÂ¾ ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÂ°)
         if data.startswith("offer:"):
             await q.answer()
             _, engine, offer = data.split(":", 2)
@@ -3202,21 +3202,21 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             amount_rub = _calc_oneoff_price_rub(grp, need_usd or 0.0)
             await q.edit_message_text(
-                f"ÐÐ°Ñ Ð´Ð½ÐµÐ²Ð½Ð¾Ð¹ Ð»Ð¸Ð¼Ð¸Ñ Ð¿Ð¾ Â«{engine}Â» Ð¸ÑÑÐµÑÐ¿Ð°Ð½. Ð Ð°Ð·Ð¾Ð²Ð°Ñ Ð¿Ð¾ÐºÑÐ¿ÐºÐ° â {amount_rub} â½ "
-                "Ð¸Ð»Ð¸ Ð¿Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµ Ð±Ð°Ð»Ð°Ð½Ñ Ð² Â«ð§¾ ÐÐ°Ð»Ð°Ð½ÑÂ».",
+                f"ÃÃÂ°Ã ÃÂ´ÃÂ½ÃÂµÃÂ²ÃÂ½ÃÂ¾ÃÂ¹ ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸Ã ÃÂ¿ÃÂ¾ ÃÂ«{engine}ÃÂ» ÃÂ¸ÃÃÃÂµÃÃÂ¿ÃÂ°ÃÂ½. Ã ÃÂ°ÃÂ·ÃÂ¾ÃÂ²ÃÂ°Ã ÃÂ¿ÃÂ¾ÃÂºÃÃÂ¿ÃÂºÃÂ° Ã¢ {amount_rub} Ã¢Â½ "
+                "ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃÂµ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã ÃÂ² ÃÂ«Ã°Â§Â¾ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½ÃÃÂ».",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("â­ Ð¢Ð°ÑÐ¸ÑÑ", web_app=WebAppInfo(url=TARIFF_URL))],
-                        [InlineKeyboardButton("â ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÑ Ð±Ð°Ð»Ð°Ð½Ñ", callback_data="topup")],
+                        [InlineKeyboardButton("Ã¢Â­ ÃÂ¢ÃÂ°ÃÃÂ¸ÃÃ", web_app=WebAppInfo(url=TARIFF_URL))],
+                        [InlineKeyboardButton("Ã¢ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã", callback_data="topup")],
                     ]
                 ),
             )
             return
 
-        # Ð ÐµÐ¶Ð¸Ð¼Ñ / ÐÐ²Ð¸Ð¶ÐºÐ¸
+        # Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼Ã / ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸
         if data == "mode:engines":
             await q.answer()
-            await q.edit_message_text("ÐÐ²Ð¸Ð¶ÐºÐ¸:", reply_markup=engines_kb())
+            await q.edit_message_text("ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸:", reply_markup=engines_kb())
             return
 
         if data.startswith("mode:set:"):
@@ -3224,20 +3224,20 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _, _, mode = data.split(":", 2)
             _mode_set(update.effective_user.id, mode)
             if mode == "none":
-                await q.edit_message_text("Ð ÐµÐ¶Ð¸Ð¼ Ð²ÑÐºÐ»ÑÑÐµÐ½.")
+                await q.edit_message_text("Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÂ²ÃÃÂºÃÂ»ÃÃÃÂµÃÂ½.")
             else:
                 await q.edit_message_text(
-                    f"Ð ÐµÐ¶Ð¸Ð¼ Â«{mode}Â» Ð²ÐºÐ»ÑÑÑÐ½. ÐÐ°Ð¿Ð¸ÑÐ¸ÑÐµ Ð·Ð°Ð´Ð°Ð½Ð¸Ðµ."
+                    f"Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÂ«{mode}ÃÂ» ÃÂ²ÃÂºÃÂ»ÃÃÃÃÂ½. ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½ÃÂ¸ÃÂµ."
                 )
             return
 
-        # ÐÐ¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ðµ Ð²ÑÐ±Ð¾ÑÐ° Ð´Ð²Ð¸Ð¶ÐºÐ° Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾ (Kling / Luma / Runway)
+        # ÃÃÂ¾ÃÂ´ÃÃÂ²ÃÂµÃÃÂ¶ÃÂ´ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ²ÃÃÃÂ¾ÃÃÂ° ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ° ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ (Kling / Luma / Runway)
         if data.startswith("choose:"):
             await q.answer()
             _, engine, aid = data.split(":", 2)
             meta = _pending_actions.pop(aid, None)
             if not meta:
-                await q.answer("ÐÐ°Ð´Ð°ÑÐ° ÑÑÑÐ°ÑÐµÐ»Ð°", show_alert=True)
+                await q.answer("ÃÃÂ°ÃÂ´ÃÂ°ÃÃÂ° ÃÃÃÃÂ°ÃÃÂµÃÂ»ÃÂ°", show_alert=True)
                 return
 
             prompt   = (meta.get("prompt") or "").strip()
@@ -3247,9 +3247,9 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             uid = update.effective_user.id
             tier = get_subscription_tier(uid)
 
-            # Runway Ð´Ð»Ñ text/voiceâvideo Ð¾ÑÐºÐ»ÑÑÑÐ½ (Ð¾ÑÑÐ°Ð²Ð»ÑÐµÐ¼ ÑÐ¾Ð»ÑÐºÐ¾ Kling/Luma/Sora)
+            # Runway ÃÂ´ÃÂ»Ã text/voiceÃ¢video ÃÂ¾ÃÃÂºÃÂ»ÃÃÃÃÂ½ (ÃÂ¾ÃÃÃÂ°ÃÂ²ÃÂ»ÃÃÂµÃÂ¼ ÃÃÂ¾ÃÂ»ÃÃÂºÃÂ¾ Kling/Luma/Sora)
             if engine == "runway":
-                await q.message.reply_text("â ï¸ Runway Ð¾ÑÐºÐ»ÑÑÑÐ½ Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾ Ð¿Ð¾ ÑÐµÐºÑÑÑ/Ð³Ð¾Ð»Ð¾ÑÑ. ÐÑÐ±ÐµÑÐ¸ÑÐµ Kling, Luma Ð¸Ð»Ð¸ Sora.")
+                await q.message.reply_text("Ã¢ Ã¯Â¸ Runway ÃÂ¾ÃÃÂºÃÂ»ÃÃÃÃÂ½ ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ¿ÃÂ¾ ÃÃÂµÃÂºÃÃÃ/ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃ. ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ Kling, Luma ÃÂ¸ÃÂ»ÃÂ¸ Sora.")
                 return
 
             # Estimate
@@ -3263,7 +3263,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 est = float(SORA_UNIT_COST_USD or 0.40) * duration
                 map_engine = "sora"
             else:
-                await q.answer("ÐÐµÐ¸Ð·Ð²ÐµÑÑÐ½ÑÐ¹ Ð´Ð²Ð¸Ð¶Ð¾Ðº", show_alert=True)
+                await q.answer("ÃÃÂµÃÂ¸ÃÂ·ÃÂ²ÃÂµÃÃÃÂ½ÃÃÂ¹ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº", show_alert=True)
                 return
 
             async def _start_real_render():
@@ -3295,8 +3295,8 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # ÐÑÐ»Ð¸ Ð½Ðµ Ð¿Ð¾Ð´Ð¾ÑÐ»Ð° Ð½Ð¸ Ð¾Ð´Ð½Ð° Ð²ÐµÑÐºÐ°
-        await q.answer("ÐÐµÐ¸Ð·Ð²ÐµÑÑÐ½Ð°Ñ ÐºÐ¾Ð¼Ð°Ð½Ð´Ð°", show_alert=True)
+        # ÃÃÃÂ»ÃÂ¸ ÃÂ½ÃÂµ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¾ÃÃÂ»ÃÂ° ÃÂ½ÃÂ¸ ÃÂ¾ÃÂ´ÃÂ½ÃÂ° ÃÂ²ÃÂµÃÃÂºÃÂ°
+        await q.answer("ÃÃÂµÃÂ¸ÃÂ·ÃÂ²ÃÂµÃÃÃÂ½ÃÂ°Ã ÃÂºÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´ÃÂ°", show_alert=True)
 
     except Exception as e:
         log.exception("on_cb error: %s", e)
@@ -3306,7 +3306,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-# âââââââââ STT âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ STT Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _mime_from_filename(fn: str) -> str:
     fnl = (fn or "").lower()
     if fnl.endswith((".ogg", ".oga")): return "audio/ogg"
@@ -3340,13 +3340,13 @@ async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> st
     return ""
 
 
-# âââââââââ ÐÐ¸Ð°Ð³Ð½Ð¾ÑÑÐ¸ÐºÐ° Ð´Ð²Ð¸Ð¶ÐºÐ¾Ð² âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¸ÃÂ°ÃÂ³ÃÂ½ÃÂ¾ÃÃÃÂ¸ÃÂºÃÂ° ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¾ÃÂ² Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = []
-    lines.append("ð STT Ð´Ð¸Ð°Ð³Ð½Ð¾ÑÑÐ¸ÐºÐ°:")
-    lines.append(f"â¢ OpenAI Whisper: {'â ÐºÐ»Ð¸ÐµÐ½Ñ Ð°ÐºÑÐ¸Ð²ÐµÐ½' if oai_stt else 'â Ð½ÐµÐ´Ð¾ÑÑÑÐ¿ÐµÐ½'}")
-    lines.append(f"â¢ ÐÐ¾Ð´ÐµÐ»Ñ Whisper: {TRANSCRIBE_MODEL}")
-    lines.append("â¢ ÐÐ¾Ð´Ð´ÐµÑÐ¶ÐºÐ° ÑÐ¾ÑÐ¼Ð°ÑÐ¾Ð²: ogg/oga, mp3, m4a/mp4, wav, webm")
+    lines.append("Ã° STT ÃÂ´ÃÂ¸ÃÂ°ÃÂ³ÃÂ½ÃÂ¾ÃÃÃÂ¸ÃÂºÃÂ°:")
+    lines.append(f"Ã¢Â¢ OpenAI Whisper: {'Ã¢ ÃÂºÃÂ»ÃÂ¸ÃÂµÃÂ½Ã ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂµÃÂ½' if oai_stt else 'Ã¢ ÃÂ½ÃÂµÃÂ´ÃÂ¾ÃÃÃÃÂ¿ÃÂµÃÂ½'}")
+    lines.append(f"Ã¢Â¢ ÃÃÂ¾ÃÂ´ÃÂµÃÂ»Ã Whisper: {TRANSCRIBE_MODEL}")
+    lines.append("Ã¢Â¢ ÃÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂºÃÂ° ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃÂ¾ÃÂ²: ogg/oga, mp3, m4a/mp4, wav, webm")
     await update.effective_message.reply_text("\n".join(lines))
 
 async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3354,41 +3354,41 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key_used = key_env or OPENAI_API_KEY
     base     = IMAGES_BASE_URL
     lines = [
-        "ð§ª Images (OpenAI) Ð´Ð¸Ð°Ð³Ð½Ð¾ÑÑÐ¸ÐºÐ°:",
-        f"â¢ OPENAI_IMAGE_KEY: {'â Ð½Ð°Ð¹Ð´ÐµÐ½' if key_used else 'â Ð½ÐµÑ'}",
-        f"â¢ BASE_URL: {base}",
-        f"â¢ MODEL: {IMAGES_MODEL}",
+        "Ã°Â§Âª Images (OpenAI) ÃÂ´ÃÂ¸ÃÂ°ÃÂ³ÃÂ½ÃÂ¾ÃÃÃÂ¸ÃÂºÃÂ°:",
+        f"Ã¢Â¢ OPENAI_IMAGE_KEY: {'Ã¢ ÃÂ½ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃÂ½' if key_used else 'Ã¢ ÃÂ½ÃÂµÃ'}",
+        f"Ã¢Â¢ BASE_URL: {base}",
+        f"Ã¢Â¢ MODEL: {IMAGES_MODEL}",
     ]
     if "openrouter" in (base or "").lower():
-        lines.append("â ï¸ BASE_URL ÑÐºÐ°Ð·ÑÐ²Ð°ÐµÑ Ð½Ð° OpenRouter â ÑÐ°Ð¼ Ð½ÐµÑ gpt-image-1.")
-        lines.append("   Ð£ÐºÐ°Ð¶Ð¸ https://api.openai.com/v1 (Ð¸Ð»Ð¸ ÑÐ²Ð¾Ð¹ Ð¿ÑÐ¾ÐºÑÐ¸) Ð² OPENAI_IMAGE_BASE_URL.")
+        lines.append("Ã¢ Ã¯Â¸ BASE_URL ÃÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃ ÃÂ½ÃÂ° OpenRouter Ã¢ ÃÃÂ°ÃÂ¼ ÃÂ½ÃÂµÃ gpt-image-1.")
+        lines.append("   ÃÂ£ÃÂºÃÂ°ÃÂ¶ÃÂ¸ https://api.openai.com/v1 (ÃÂ¸ÃÂ»ÃÂ¸ ÃÃÂ²ÃÂ¾ÃÂ¹ ÃÂ¿ÃÃÂ¾ÃÂºÃÃÂ¸) ÃÂ² OPENAI_IMAGE_BASE_URL.")
     await update.effective_message.reply_text("\n".join(lines))
 
 async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
 
     lines = [
-        "ð¬ ÐÐ¸Ð´ÐµÐ¾-Ð´Ð²Ð¸Ð¶ÐºÐ¸:",
+        "Ã°Â¬ ÃÃÂ¸ÃÂ´ÃÂµÃÂ¾-ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸:",
         # Luma
-        f"â¢ Luma key: {'â' if bool(LUMA_API_KEY) else 'â'}  base={LUMA_BASE_URL}",
+        f"Ã¢Â¢ Luma key: {'Ã¢' if bool(LUMA_API_KEY) else 'Ã¢'}  base={LUMA_BASE_URL}",
         f"  create={LUMA_CREATE_PATH}  status={LUMA_STATUS_PATH}",
         f"  model={LUMA_MODEL}  durations=['5s','9s','10s']  aspect=['16:9','9:16','1:1']",
         "",
-        # Kling ÑÐµÑÐµÐ· CometAPI
-        f"â¢ Kling key (COMETAPI_KEY): {'â' if bool(COMETAPI_KEY) else 'â'}  base={KLING_BASE_URL}",
+        # Kling ÃÃÂµÃÃÂµÃÂ· CometAPI
+        f"Ã¢Â¢ Kling key (COMETAPI_KEY): {'Ã¢' if bool(COMETAPI_KEY) else 'Ã¢'}  base={KLING_BASE_URL}",
         f"  model_name={KLING_MODEL_NAME}  mode={KLING_MODE}  aspect={KLING_ASPECT}  duration={KLING_DURATION_S}s",
         "",
-        # Runway (ÑÐµÐºÑÑÐ¸Ð¹ DEV Ð¸Ð»Ð¸ Comet â Ð½ÐµÐ²Ð°Ð¶Ð½Ð¾, Ð¿ÑÐ¾ÑÑÐ¾ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÐºÐ¾Ð½ÑÐ¸Ð³)
-        f"â¢ Runway key: {'â' if bool(RUNWAY_API_KEY) else 'â'}  base={RUNWAY_BASE_URL}",
+        # Runway (ÃÃÂµÃÂºÃÃÃÂ¸ÃÂ¹ DEV ÃÂ¸ÃÂ»ÃÂ¸ Comet Ã¢ ÃÂ½ÃÂµÃÂ²ÃÂ°ÃÂ¶ÃÂ½ÃÂ¾, ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂºÃÂ¾ÃÂ½ÃÃÂ¸ÃÂ³)
+        f"Ã¢Â¢ Runway key: {'Ã¢' if bool(RUNWAY_API_KEY) else 'Ã¢'}  base={RUNWAY_BASE_URL}",
         f"  text2video={RUNWAY_TEXT2VIDEO_PATH}  image2video={RUNWAY_IMAGE2VIDEO_PATH}",
         f"  api_version={RUNWAY_API_VERSION}",
         "",
-        f"â¢ ÐÐ¾Ð»Ð»Ð¸Ð½Ð³ ÐºÐ°Ð¶Ð´ÑÐµ {VIDEO_POLL_DELAY_S:.1f} c",
+        f"Ã¢Â¢ ÃÃÂ¾ÃÂ»ÃÂ»ÃÂ¸ÃÂ½ÃÂ³ ÃÂºÃÂ°ÃÂ¶ÃÂ´ÃÃÂµ {VIDEO_POLL_DELAY_S:.1f} c",
     ]
 
     await msg.reply_text("\n".join(lines))
 
-# âââââââââ MIME Ð´Ð»Ñ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ð¹ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ MIME ÃÂ´ÃÂ»Ã ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂ¹ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def sniff_image_mime(data: bytes) -> str:
     if not data or len(data) < 12:
         return "application/octet-stream"
@@ -3401,7 +3401,7 @@ def sniff_image_mime(data: bytes) -> str:
         return "image/webp"
     return "application/octet-stream"
 
-# âââââââââ ÐÐ°ÑÑ Ð¾Ð¿ÑÐ¸Ð¹ Ð²Ð¸Ð´ÐµÐ¾ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ°ÃÃ ÃÂ¾ÃÂ¿ÃÃÂ¸ÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 _ASPECTS = {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"}
 
 
@@ -3437,7 +3437,7 @@ def normalize_aspect(aspect: str) -> str:
 
 def parse_video_opts(text: str) -> tuple[int, str]:
     tl = (text or "").lower()
-    m = re.search(r"(\d+)\s*(?:ÑÐµÐº|Ñ)\b", tl)
+    m = re.search(r"(\d+)\s*(?:ÃÃÂµÃÂº|Ã)\b", tl)
     duration = int(m.group(1)) if m else LUMA_DURATION_S
     duration = max(3, min(20, duration))
     asp = None
@@ -3459,33 +3459,33 @@ async def _run_kling_video(
     aspect: str,
 ) -> bool:
     """
-    ÐÐ°Ð¿ÑÑÐº ÑÐµÐ½Ð´ÐµÑÐ° Ð²Ð¸Ð´ÐµÐ¾ Ð² Kling (ÑÐµÑÐµÐ· CometAPI) Ð¸ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ° ÑÐµÐ·ÑÐ»ÑÑÐ°ÑÐ°
-    Ð² Telegram ÑÐ¶Ðµ ÐºÐ°Ðº mp4-ÑÐ°Ð¹Ð»Ð°, Ð° Ð½Ðµ Ð¿ÑÐ¾ÑÑÐ¾ ÑÑÑÐ»ÐºÐ¾Ð¹.
+    ÃÃÂ°ÃÂ¿ÃÃÃÂº ÃÃÂµÃÂ½ÃÂ´ÃÂµÃÃÂ° ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ² Kling (ÃÃÂµÃÃÂµÃÂ· CometAPI) ÃÂ¸ ÃÂ¾ÃÃÂ¿ÃÃÂ°ÃÂ²ÃÂºÃÂ° ÃÃÂµÃÂ·ÃÃÂ»ÃÃÃÂ°ÃÃÂ°
+    ÃÂ² Telegram ÃÃÂ¶ÃÂµ ÃÂºÃÂ°ÃÂº mp4-ÃÃÂ°ÃÂ¹ÃÂ»ÃÂ°, ÃÂ° ÃÂ½ÃÂµ ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÃÃÃÂ»ÃÂºÃÂ¾ÃÂ¹.
     """
     msg = update.effective_message
 
     if not COMETAPI_KEY:
-        await msg.reply_text("â ï¸ Kling ÑÐµÑÐµÐ· CometAPI Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ (Ð½ÐµÑ COMETAPI_KEY).")
+        await msg.reply_text("Ã¢ Ã¯Â¸ Kling ÃÃÂµÃÃÂµÃÂ· CometAPI ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ (ÃÂ½ÃÂµÃ COMETAPI_KEY).")
         return False
 
-    # ÐÐ¾ÑÐ¼Ð°Ð»Ð¸Ð·ÑÐµÐ¼ Ð´Ð»Ð¸ÑÐµÐ»ÑÐ½Ð¾ÑÑÑ Ð¸ Ð°ÑÐ¿ÐµÐºÑ
-    dur = str(max(1, min(duration, 10)))   # Kling Ð¶Ð´ÑÑ ÑÑÑÐ¾ÐºÑ "5" / "10"
-    aspect_ratio = aspect.replace(" ", "") # "16:9", "9:16" Ð¸ Ñ.Ð¿.
+    # ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÃÂµÃÂ¼ ÃÂ´ÃÂ»ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÃÃ ÃÂ¸ ÃÂ°ÃÃÂ¿ÃÂµÃÂºÃ
+    dur = str(max(1, min(duration, 10)))   # Kling ÃÂ¶ÃÂ´ÃÃ ÃÃÃÃÂ¾ÃÂºÃ "5" / "10"
+    aspect_ratio = aspect.replace(" ", "") # "16:9", "9:16" ÃÂ¸ Ã.ÃÂ¿.
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             create_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video"
 
             headers = {
-                "Authorization": f"Bearer {COMETAPI_KEY}",  # ÐºÐ»ÑÑ CometAPI
+                "Authorization": f"Bearer {COMETAPI_KEY}",  # ÃÂºÃÂ»ÃÃ CometAPI
                 "Content-Type": "application/json",
             }
 
             payload = {
                 "prompt": prompt.strip(),
-                "model_name": KLING_MODEL_NAME,   # Ð½Ð°Ð¿Ñ. "kling-v1-6"
-                "mode": KLING_MODE,              # "std" Ð¸Ð»Ð¸ "pro"
-                "duration": dur,                 # "5" Ð¸Ð»Ð¸ "10"
+                "model_name": KLING_MODEL_NAME,   # ÃÂ½ÃÂ°ÃÂ¿Ã. "kling-v1-6"
+                "mode": KLING_MODE,              # "std" ÃÂ¸ÃÂ»ÃÂ¸ "pro"
+                "duration": dur,                 # "5" ÃÂ¸ÃÂ»ÃÂ¸ "10"
                 "aspect_ratio": aspect_ratio,    # "16:9", "9:16", "1:1" ...
             }
 
@@ -3495,8 +3495,8 @@ async def _run_kling_video(
                 txt = (r.text or "")[:800]
                 log.warning("Kling create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    f"â ï¸ Kling (textâvideo) Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð» Ð·Ð°Ð´Ð°ÑÑ ({r.status_code}).\n"
-                    f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{txt}`",
+                    f"Ã¢ Ã¯Â¸ Kling (textÃ¢video) ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ» ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ ({r.status_code}).\n"
+                    f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return False
@@ -3509,20 +3509,20 @@ async def _run_kling_video(
             task_id = js.get("id") or js.get("task_id") or js.get("data", {}).get("task_id")
             if not task_id:
                 await msg.reply_text(
-                    "â ï¸ Kling: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ task_id Ð¸Ð· Ð¾ÑÐ²ÐµÑÐ°.\n"
-                    f"Ð¡ÑÑÐ¾Ð¹ Ð¾ÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°: {js}"
+                    "Ã¢ Ã¯Â¸ Kling: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ task_id ÃÂ¸ÃÂ· ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ°.\n"
+                    f"ÃÂ¡ÃÃÃÂ¾ÃÂ¹ ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°: {js}"
                 )
                 return False
 
-            await msg.reply_text("â³ Kling: Ð·Ð°Ð´Ð°ÑÐ° Ð¿ÑÐ¸Ð½ÑÑÐ°, Ð½Ð°ÑÐ¸Ð½Ð°Ñ ÑÐµÐ½Ð´ÐµÑ Ð²Ð¸Ð´ÐµÐ¾â¦")
+            await msg.reply_text("Ã¢Â³ Kling: ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ° ÃÂ¿ÃÃÂ¸ÃÂ½ÃÃÃÂ°, ÃÂ½ÃÂ°ÃÃÂ¸ÃÂ½ÃÂ°Ã ÃÃÂµÃÂ½ÃÂ´ÃÂµÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾Ã¢Â¦")
 
-            # ÐÑÐ»Ð¸Ð¼ ÑÑÐ°ÑÑÑ Ð¿Ð¾ GET /kling/v1/videos/text2video/{task_id}
+            # ÃÃÃÂ»ÃÂ¸ÃÂ¼ ÃÃÃÂ°ÃÃÃ ÃÂ¿ÃÂ¾ GET /kling/v1/videos/text2video/{task_id}
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
             started = time.time()
 
             while True:
-                if time.time() - started > 600:  # 10 Ð¼Ð¸Ð½ÑÑ
-                    await msg.reply_text("â ï¸ Kling: Ð¿ÑÐµÐ²ÑÑÐµÐ½ Ð»Ð¸Ð¼Ð¸Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ ÑÐµÐ½Ð´ÐµÑÐ° (>10 Ð¼Ð¸Ð½ÑÑ).")
+                if time.time() - started > 600:  # 10 ÃÂ¼ÃÂ¸ÃÂ½ÃÃ
+                    await msg.reply_text("Ã¢ Ã¯Â¸ Kling: ÃÂ¿ÃÃÂµÃÂ²ÃÃÃÂµÃÂ½ ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã ÃÃÂµÃÂ½ÃÂ´ÃÂµÃÃÂ° (>10 ÃÂ¼ÃÂ¸ÃÂ½ÃÃ).")
                     return False
 
                 sr = await client.get(status_url, headers=headers)
@@ -3530,8 +3530,8 @@ async def _run_kling_video(
                     txt = (sr.text or "")[:500]
                     log.warning("Kling status error %s: %s", sr.status_code, txt)
                     await msg.reply_text(
-                        f"â ï¸ Kling status error ({sr.status_code}).\n"
-                        f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{txt}`",
+                        f"Ã¢ Ã¯Â¸ Kling status error ({sr.status_code}).\n"
+                        f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{txt}`",
                         parse_mode="Markdown",
                     )
                     return False
@@ -3551,13 +3551,13 @@ async def _run_kling_video(
                 )
 
                 if status in ("succeed", "success", "completed") and video_url:
-                    # ÐÐ°ÑÐ°ÐµÐ¼ Ð³Ð¾ÑÐ¾Ð²Ð¾Ðµ Ð²Ð¸Ð´ÐµÐ¾
+                    # ÃÃÂ°ÃÃÂ°ÃÂµÃÂ¼ ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾
                     vr = await client.get(video_url, timeout=300)
                     try:
                         vr.raise_for_status()
                     except Exception:
                         await msg.reply_text(
-                            "â ï¸ Kling: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐºÐ°ÑÐ°ÑÑ Ð³Ð¾ÑÐ¾Ð²Ð¾Ðµ Ð²Ð¸Ð´ÐµÐ¾ "
+                            "Ã¢ Ã¯Â¸ Kling: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂºÃÂ°ÃÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ "
                             f"({vr.status_code})."
                         )
                         return False
@@ -3580,22 +3580,22 @@ async def _run_kling_video(
                         or str(sjs)[:500]
                     )
                     await msg.reply_text(
-                        f"â Kling Ð·Ð°Ð²ÐµÑÑÐ¸Ð»ÑÑ Ñ Ð¾ÑÐ¸Ð±ÐºÐ¾Ð¹: `{err}`",
+                        f"Ã¢ Kling ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÃ Ã ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ¾ÃÂ¹: `{err}`",
                         parse_mode="Markdown",
                     )
                     return False
 
-                # ÐÐ½Ð°ÑÐµ â Ð¶Ð´ÑÐ¼ Ð´Ð°Ð»ÑÑÐµ
+                # ÃÃÂ½ÃÂ°ÃÃÂµ Ã¢ ÃÂ¶ÃÂ´ÃÃÂ¼ ÃÂ´ÃÂ°ÃÂ»ÃÃÃÂµ
                 await asyncio.sleep(5.0)
 
     except Exception as e:
         log.exception("Kling text2video exception: %s", e)
-        await msg.reply_text("â Kling: Ð²Ð½ÑÑÑÐµÐ½Ð½ÑÑ Ð¾ÑÐ¸Ð±ÐºÐ° Ð¿ÑÐ¸ ÑÐµÐ½Ð´ÐµÑÐµ Ð²Ð¸Ð´ÐµÐ¾.")
+        await msg.reply_text("Ã¢ Kling: ÃÂ²ÃÂ½ÃÃÃÃÂµÃÂ½ÃÂ½ÃÃ ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ ÃÃÂµÃÂ½ÃÂ´ÃÂµÃÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.")
     return False
 def _normalize_luma_aspect(aspect: str | None) -> str:
     """
-    Luma Dream Machine Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑ Ð¾Ð³ÑÐ°Ð½Ð¸ÑÐµÐ½Ð½ÑÐ¹ Ð½Ð°Ð±Ð¾Ñ Ð°ÑÐ¿ÐµÐºÑÐ¾Ð².
-    ÐÑÐ¸Ð²Ð¾Ð´Ð¸Ð¼ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÑÑÐºÐ¸Ð¹ Ð°ÑÐ¿ÐµÐºÑ Ðº Ð´Ð¾Ð¿ÑÑÑÐ¸Ð¼Ð¾Ð¼Ñ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ.
+    Luma Dream Machine ÃÂ¿ÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃ ÃÂ¾ÃÂ³ÃÃÂ°ÃÂ½ÃÂ¸ÃÃÂµÃÂ½ÃÂ½ÃÃÂ¹ ÃÂ½ÃÂ°ÃÃÂ¾Ã ÃÂ°ÃÃÂ¿ÃÂµÃÂºÃÃÂ¾ÃÂ².
+    ÃÃÃÂ¸ÃÂ²ÃÂ¾ÃÂ´ÃÂ¸ÃÂ¼ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»ÃÃÃÂºÃÂ¸ÃÂ¹ ÃÂ°ÃÃÂ¿ÃÂµÃÂºÃ ÃÂº ÃÂ´ÃÂ¾ÃÂ¿ÃÃÃÃÂ¸ÃÂ¼ÃÂ¾ÃÂ¼Ã ÃÂ·ÃÂ½ÃÂ°ÃÃÂµÃÂ½ÃÂ¸Ã.
     """
     allowed = {"16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21"}
     if not aspect:
@@ -3606,7 +3606,7 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
     if a in allowed:
         return a
 
-    # ÐÑÐ³ÐºÐ°Ñ ÐºÐ¾ÑÑÐµÐºÑÐ¸Ñ Â«Ð¿Ð¾ÑÐ¾Ð¶Ð¸ÑÂ» ÑÐ¾ÑÐ¼Ð°ÑÐ¾Ð²
+    # ÃÃÃÂ³ÃÂºÃÂ°Ã ÃÂºÃÂ¾ÃÃÃÂµÃÂºÃÃÂ¸Ã ÃÂ«ÃÂ¿ÃÂ¾ÃÃÂ¾ÃÂ¶ÃÂ¸ÃÃÂ» ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃÂ¾ÃÂ²
     mapping = {
         "4:5": "3:4",
         "5:4": "4:3",
@@ -3616,7 +3616,7 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
 
     return "16:9"
 
-# âââââââââ ÐÐ¾ÐºÑÐ¿ÐºÐ¸/Ð¸Ð½Ð²Ð¾Ð¹ÑÑ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂºÃÃÂ¿ÃÂºÃÂ¸/ÃÂ¸ÃÂ½ÃÂ²ÃÂ¾ÃÂ¹ÃÃ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _plan_rub(tier: str, term: str) -> int:
     tier = (tier or "pro").lower()
     term = (term or "month").lower()
@@ -3625,18 +3625,18 @@ def _plan_rub(tier: str, term: str) -> int:
 def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
     term = {1: "month", 3: "quarter", 12: "year"}.get(months, "month")
     amount = _plan_rub(tier, term)
-    title = f"ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {tier.upper()} ({term})"
+    title = f"ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {tier.upper()} ({term})"
     payload = f"sub:{tier}:{months}"
     return payload, amount, title
 
 async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
     try:
-        # Ð±ÐµÑÑÐ¼ ÑÐ¾ÐºÐµÐ½ Ð¸ Ð²Ð°Ð»ÑÑÑ Ð¸Ð· Ð´Ð²ÑÑ Ð¸ÑÑÐ¾ÑÐ½Ð¸ÐºÐ¾Ð² (ÑÑÐ°ÑÑÐ¹ PROVIDER_TOKEN ÐÐÐ Ð½Ð¾Ð²ÑÐ¹ YOOKASSA_PROVIDER_TOKEN)
+        # ÃÃÂµÃÃÃÂ¼ ÃÃÂ¾ÃÂºÃÂµÃÂ½ ÃÂ¸ ÃÂ²ÃÂ°ÃÂ»ÃÃÃ ÃÂ¸ÃÂ· ÃÂ´ÃÂ²ÃÃ ÃÂ¸ÃÃÃÂ¾ÃÃÂ½ÃÂ¸ÃÂºÃÂ¾ÃÂ² (ÃÃÃÂ°ÃÃÃÂ¹ PROVIDER_TOKEN ÃÃÃ ÃÂ½ÃÂ¾ÃÂ²ÃÃÂ¹ YOOKASSA_PROVIDER_TOKEN)
         token = (PROVIDER_TOKEN or YOOKASSA_PROVIDER_TOKEN)
         curr  = (CURRENCY if (CURRENCY and CURRENCY != "RUB") else YOOKASSA_CURRENCY) or "RUB"
 
         if not token:
-            await update.effective_message.reply_text("â ï¸ Ð®Kassa Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½Ð° (Ð½ÐµÑ ÑÐ¾ÐºÐµÐ½Ð°).")
+            await update.effective_message.reply_text("Ã¢ Ã¯Â¸ ÃÂ®Kassa ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ÃÂ° (ÃÂ½ÃÂµÃ ÃÃÂ¾ÃÂºÃÂµÃÂ½ÃÂ°).")
             return False
 
         prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub) * 100)]
@@ -3659,7 +3659,7 @@ async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str
     except Exception as e:
         log.exception("send_invoice error: %s", e)
         try:
-            await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð²ÑÑÑÐ°Ð²Ð¸ÑÑ ÑÑÑÑ.")
+            await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ²ÃÃÃÃÂ°ÃÂ²ÃÂ¸ÃÃ ÃÃÃÃ.")
         except Exception:
             pass
         return False
@@ -3683,21 +3683,21 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             _, tier, months = payload.split(":", 2)
             months = int(months)
             until = activate_subscription_with_tier(uid, tier, months)
-            await update.effective_message.reply_text(f"â ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {tier.upper()} Ð°ÐºÑÐ¸Ð²Ð¸ÑÐ¾Ð²Ð°Ð½Ð° Ð´Ð¾ {until.strftime('%Y-%m-%d')}.")
+            await update.effective_message.reply_text(f"Ã¢ ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {tier.upper()} ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ° ÃÂ´ÃÂ¾ {until.strftime('%Y-%m-%d')}.")
             return
 
-        # ÐÑÐ±Ð¾Ðµ Ð¸Ð½Ð¾Ðµ payload â Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ ÐµÐ´Ð¸Ð½Ð¾Ð³Ð¾ ÐºÐ¾ÑÐµÐ»ÑÐºÐ°
+        # ÃÃÃÃÂ¾ÃÂµ ÃÂ¸ÃÂ½ÃÂ¾ÃÂµ payload Ã¢ ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂºÃÂ¾ÃÃÂµÃÂ»ÃÃÂºÃÂ°
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
-        await update.effective_message.reply_text(f"ð³ ÐÐ¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ: {rub:.0f} â½ â ${usd:.2f} Ð·Ð°ÑÐ¸ÑÐ»ÐµÐ½Ð¾ Ð½Ð° ÐµÐ´Ð¸Ð½ÑÐ¹ Ð±Ð°Ð»Ð°Ð½Ñ.")
+        await update.effective_message.reply_text(f"Ã°Â³ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ: {rub:.0f} Ã¢Â½ Ã¢ ${usd:.2f} ÃÂ·ÃÂ°ÃÃÂ¸ÃÃÂ»ÃÂµÃÂ½ÃÂ¾ ÃÂ½ÃÂ° ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã.")
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
 
 
-# âââââââââ CryptoBot âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ CryptoBot Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
 CRYPTO_BASE = "https://pay.crypt.bot/api"
-TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # Ð·Ð°Ð¿Ð°ÑÐ½Ð¾Ð¹ ÐºÑÑÑ
+TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # ÃÂ·ÃÂ°ÃÂ¿ÃÂ°ÃÃÂ½ÃÂ¾ÃÂ¹ ÃÂºÃÃÃ
 
 async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str|None, str|None, float, str]:
     if not CRYPTO_PAY_API_TOKEN:
@@ -3735,24 +3735,24 @@ async def _crypto_get_invoice(invoice_id: str) -> dict | None:
 
 async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, user_id: int, invoice_id: str, usd_amount: float):
     try:
-        for _ in range(120):  # ~12 Ð¼Ð¸Ð½ÑÑ Ð¿ÑÐ¸ 6Ñ Ð·Ð°Ð´ÐµÑÐ¶ÐºÐµ
+        for _ in range(120):  # ~12 ÃÂ¼ÃÂ¸ÃÂ½ÃÃ ÃÂ¿ÃÃÂ¸ 6Ã ÃÂ·ÃÂ°ÃÂ´ÃÂµÃÃÂ¶ÃÂºÃÂµ
             inv = await _crypto_get_invoice(invoice_id)
             st = (inv or {}).get("status", "").lower() if inv else ""
             if st == "paid":
                 _wallet_total_add(user_id, float(usd_amount))
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"â CryptoBot: Ð¿Ð»Ð°ÑÑÐ¶ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½. ÐÐ°Ð»Ð°Ð½Ñ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½ Ð½Ð° ${float(usd_amount):.2f}.")
+                        text=f"Ã¢ CryptoBot: ÃÂ¿ÃÂ»ÃÂ°ÃÃÃÂ¶ ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂ²ÃÂµÃÃÂ¶ÃÂ´ÃÃÂ½. ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ ÃÂ½ÃÂ° ${float(usd_amount):.2f}.")
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"â CryptoBot: Ð¿Ð»Ð°ÑÑÐ¶ Ð½Ðµ Ð·Ð°Ð²ÐµÑÑÑÐ½ (ÑÑÐ°ÑÑÑ: {st}).")
+                        text=f"Ã¢ CryptoBot: ÃÂ¿ÃÂ»ÃÂ°ÃÃÃÂ¶ ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÃÂ½ (ÃÃÃÂ°ÃÃÃ: {st}).")
                 return
             await asyncio.sleep(6.0)
         with contextlib.suppress(Exception):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                text="â CryptoBot: Ð²ÑÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ Ð²ÑÑÐ»Ð¾. ÐÐ°Ð¶Ð¼Ð¸ÑÐµ Â«ÐÑÐ¾Ð²ÐµÑÐ¸ÑÑ Ð¾Ð¿Ð»Ð°ÑÑÂ» Ð¿Ð¾Ð·Ð¶Ðµ.")
+                text="Ã¢ CryptoBot: ÃÂ²ÃÃÂµÃÂ¼Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã ÃÂ²ÃÃÃÂ»ÃÂ¾. ÃÃÂ°ÃÂ¶ÃÂ¼ÃÂ¸ÃÃÂµ ÃÂ«ÃÃÃÂ¾ÃÂ²ÃÂµÃÃÂ¸ÃÃ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÃÂ» ÃÂ¿ÃÂ¾ÃÂ·ÃÂ¶ÃÂµ.")
     except Exception as e:
         log.exception("crypto poll error: %s", e)
 
@@ -3766,7 +3766,7 @@ async def _poll_crypto_sub_invoice(
     months: int
 ):
     try:
-        for _ in range(120):  # ~12 Ð¼Ð¸Ð½ÑÑ Ð¿ÑÐ¸ Ð·Ð°Ð´ÐµÑÐ¶ÐºÐµ 6Ñ
+        for _ in range(120):  # ~12 ÃÂ¼ÃÂ¸ÃÂ½ÃÃ ÃÂ¿ÃÃÂ¸ ÃÂ·ÃÂ°ÃÂ´ÃÂµÃÃÂ¶ÃÂºÃÂµ 6Ã
             inv = await _crypto_get_invoice(invoice_id)
             st = (inv or {}).get("status", "").lower() if inv else ""
             if st == "paid":
@@ -3774,43 +3774,43 @@ async def _poll_crypto_sub_invoice(
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f"â CryptoBot: Ð¿Ð»Ð°ÑÑÐ¶ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½.\n"
-                             f"ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° {tier.upper()} Ð°ÐºÑÐ¸Ð²Ð½Ð° Ð´Ð¾ {until.strftime('%Y-%m-%d')}."
+                        text=f"Ã¢ CryptoBot: ÃÂ¿ÃÂ»ÃÂ°ÃÃÃÂ¶ ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂ²ÃÂµÃÃÂ¶ÃÂ´ÃÃÂ½.\n"
+                             f"ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° {tier.upper()} ÃÂ°ÃÂºÃÃÂ¸ÃÂ²ÃÂ½ÃÂ° ÃÂ´ÃÂ¾ {until.strftime('%Y-%m-%d')}."
                     )
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
                 with contextlib.suppress(Exception):
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f"â CryptoBot: Ð¾Ð¿Ð»Ð°ÑÐ° Ð½Ðµ Ð·Ð°Ð²ÐµÑÑÐµÐ½Ð° (ÑÑÐ°ÑÑÑ: {st})."
+                        text=f"Ã¢ CryptoBot: ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÂ° ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂµÃÂ½ÃÂ° (ÃÃÃÂ°ÃÃÃ: {st})."
                     )
                 return
             await asyncio.sleep(6.0)
 
-        # Ð¢Ð°Ð¹Ð¼Ð°ÑÑ
+        # ÃÂ¢ÃÂ°ÃÂ¹ÃÂ¼ÃÂ°ÃÃ
         with contextlib.suppress(Exception):
             await context.bot.edit_message_text(
                 chat_id=chat_id, message_id=message_id,
-                text="â CryptoBot: Ð²ÑÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ Ð²ÑÑÐ»Ð¾. ÐÐ°Ð¶Ð¼Ð¸ÑÐµ Â«ÐÑÐ¾Ð²ÐµÑÐ¸ÑÑ Ð¾Ð¿Ð»Ð°ÑÑÂ» Ð¸Ð»Ð¸ Ð¾Ð¿Ð»Ð°ÑÐ¸ÑÐµ Ð·Ð°Ð½Ð¾Ð²Ð¾."
+                text="Ã¢ CryptoBot: ÃÂ²ÃÃÂµÃÂ¼Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã ÃÂ²ÃÃÃÂ»ÃÂ¾. ÃÃÂ°ÃÂ¶ÃÂ¼ÃÂ¸ÃÃÂµ ÃÂ«ÃÃÃÂ¾ÃÂ²ÃÂµÃÃÂ¸ÃÃ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÃÂ» ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃÂµ ÃÂ·ÃÂ°ÃÂ½ÃÂ¾ÃÂ²ÃÂ¾."
             )
     except Exception as e:
         log.exception("crypto poll (subscription) error: %s", e)
 
 
-# âââââââââ ÐÑÐµÐ´Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÃÂµÃÂ´ÃÂ»ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸Ã Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("500 â½",  callback_data="topup:rub:500"),
-         InlineKeyboardButton("1000 â½", callback_data="topup:rub:1000"),
-         InlineKeyboardButton("2000 â½", callback_data="topup:rub:2000")],
+        [InlineKeyboardButton("500 Ã¢Â½",  callback_data="topup:rub:500"),
+         InlineKeyboardButton("1000 Ã¢Â½", callback_data="topup:rub:1000"),
+         InlineKeyboardButton("2000 Ã¢Â½", callback_data="topup:rub:2000")],
         [InlineKeyboardButton("Crypto $5",  callback_data="topup:crypto:5"),
          InlineKeyboardButton("Crypto $10", callback_data="topup:crypto:10"),
          InlineKeyboardButton("Crypto $20", callback_data="topup:crypto:20")],
     ])
-    await update.effective_message.reply_text("ÐÑÐ±ÐµÑÐ¸ÑÐµ ÑÑÐ¼Ð¼Ñ Ð¿Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ:", reply_markup=kb)
+    await update.effective_message.reply_text("ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÃÃÂ¼ÃÂ¼Ã ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸Ã:", reply_markup=kb)
 
 
-# âââââââââ ÐÐ¾Ð¿ÑÑÐºÐ° Ð¾Ð¿Ð»Ð°ÑÐ¸ÑÑ â Ð²ÑÐ¿Ð¾Ð»Ð½Ð¸ÑÑ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ¿ÃÃÃÂºÃÂ° ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÂ¸ÃÃ Ã¢ ÃÂ²ÃÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def _try_pay_then_do(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -3828,10 +3828,10 @@ async def _try_pay_then_do(
         return
     if offer == "ASK_SUBSCRIBE":
         await update.effective_message.reply_text(
-            "ÐÐ»Ñ Ð²ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ Ð½ÑÐ¶ÐµÐ½ ÑÐ°ÑÐ¸Ñ Ð¸Ð»Ð¸ ÐµÐ´Ð¸Ð½ÑÐ¹ Ð±Ð°Ð»Ð°Ð½Ñ.",
+            "ÃÃÂ»Ã ÃÂ²ÃÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸Ã ÃÂ½ÃÃÂ¶ÃÂµÃÂ½ ÃÃÂ°ÃÃÂ¸Ã ÃÂ¸ÃÂ»ÃÂ¸ ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÃÂ¹ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("â­ Ð¢Ð°ÑÐ¸ÑÑ", web_app=WebAppInfo(url=TARIFF_URL))],
-                 [InlineKeyboardButton("â ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÑ Ð±Ð°Ð»Ð°Ð½Ñ", callback_data="topup")]]
+                [[InlineKeyboardButton("Ã¢Â­ ÃÂ¢ÃÂ°ÃÃÂ¸ÃÃ", web_app=WebAppInfo(url=TARIFF_URL))],
+                 [InlineKeyboardButton("Ã¢ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã", callback_data="topup")]]
             )
         )
         return
@@ -3841,82 +3841,82 @@ async def _try_pay_then_do(
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
     await update.effective_message.reply_text(
-        f"ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ Ð»Ð¸Ð¼Ð¸ÑÐ°. Ð Ð°Ð·Ð¾Ð²Ð°Ñ Ð¿Ð¾ÐºÑÐ¿ÐºÐ° â {amount_rub} â½ Ð¸Ð»Ð¸ Ð¿Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµ Ð±Ð°Ð»Ð°Ð½Ñ:",
+        f"ÃÃÂµÃÂ´ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂ½ÃÂ¾ ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÂ°. Ã ÃÂ°ÃÂ·ÃÂ¾ÃÂ²ÃÂ°Ã ÃÂ¿ÃÂ¾ÃÂºÃÃÂ¿ÃÂºÃÂ° Ã¢ {amount_rub} Ã¢Â½ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃÂµ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã:",
         reply_markup=InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("â­ Ð¢Ð°ÑÐ¸ÑÑ", web_app=WebAppInfo(url=TARIFF_URL))],
-                [InlineKeyboardButton("â ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÑ Ð±Ð°Ð»Ð°Ð½Ñ", callback_data="topup")],
+                [InlineKeyboardButton("Ã¢Â­ ÃÂ¢ÃÂ°ÃÃÂ¸ÃÃ", web_app=WebAppInfo(url=TARIFF_URL))],
+                [InlineKeyboardButton("Ã¢ ÃÃÂ¾ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂ¸ÃÃ ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã", callback_data="topup")],
             ]
         ),
     )
 
 
-# âââââââââ /plans âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ /plans Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = ["â­ Ð¢Ð°ÑÐ¸ÑÑ:"]
+    lines = ["Ã¢Â­ ÃÂ¢ÃÂ°ÃÃÂ¸ÃÃ:"]
     for tier, terms in PLAN_PRICE_TABLE.items():
-        lines.append(f"â {tier.upper()}: "
-                     f"{terms['month']}â½/Ð¼ÐµÑ â¢ {terms['quarter']}â½/ÐºÐ²Ð°ÑÑÐ°Ð» â¢ {terms['year']}â½/Ð³Ð¾Ð´")
+        lines.append(f"Ã¢ {tier.upper()}: "
+                     f"{terms['month']}Ã¢Â½/ÃÂ¼ÃÂµÃ Ã¢Â¢ {terms['quarter']}Ã¢Â½/ÃÂºÃÂ²ÃÂ°ÃÃÃÂ°ÃÂ» Ã¢Â¢ {terms['year']}Ã¢Â½/ÃÂ³ÃÂ¾ÃÂ´")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("ÐÑÐ¿Ð¸ÑÑ START (1 Ð¼ÐµÑ)",    callback_data="buy:start:1"),
-         InlineKeyboardButton("ÐÑÐ¿Ð¸ÑÑ PRO (1 Ð¼ÐµÑ)",      callback_data="buy:pro:1")],
-        [InlineKeyboardButton("ÐÑÐ¿Ð¸ÑÑ ULTIMATE (1 Ð¼ÐµÑ)", callback_data="buy:ultimate:1")],
-        [InlineKeyboardButton("ÐÑÐºÑÑÑÑ Ð¼Ð¸Ð½Ð¸-Ð²Ð¸ÑÑÐ¸Ð½Ñ",    web_app=WebAppInfo(url=TARIFF_URL))]
+        [InlineKeyboardButton("ÃÃÃÂ¿ÃÂ¸ÃÃ START (1 ÃÂ¼ÃÂµÃ)",    callback_data="buy:start:1"),
+         InlineKeyboardButton("ÃÃÃÂ¿ÃÂ¸ÃÃ PRO (1 ÃÂ¼ÃÂµÃ)",      callback_data="buy:pro:1")],
+        [InlineKeyboardButton("ÃÃÃÂ¿ÃÂ¸ÃÃ ULTIMATE (1 ÃÂ¼ÃÂµÃ)", callback_data="buy:ultimate:1")],
+        [InlineKeyboardButton("ÃÃÃÂºÃÃÃÃ ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂ²ÃÂ¸ÃÃÃÂ¸ÃÂ½Ã",    web_app=WebAppInfo(url=TARIFF_URL))]
     ])
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
 
 
-# âââââââââ ÐÐ±ÑÑÑÐºÐ° Ð´Ð»Ñ Ð¿ÐµÑÐµÐ´Ð°ÑÐ¸ Ð¿ÑÐ¾Ð¸Ð·Ð²Ð¾Ð»ÑÐ½Ð¾Ð³Ð¾ ÑÐµÐºÑÑÐ° (Ð½Ð°Ð¿Ñ. Ð¸Ð· STT) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÃÃÃÃÂºÃÂ° ÃÂ´ÃÂ»Ã ÃÂ¿ÃÂµÃÃÂµÃÂ´ÃÂ°ÃÃÂ¸ ÃÂ¿ÃÃÂ¾ÃÂ¸ÃÂ·ÃÂ²ÃÂ¾ÃÂ»ÃÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÃÂµÃÂºÃÃÃÂ° (ÃÂ½ÃÂ°ÃÂ¿Ã. ÃÂ¸ÃÂ· STT) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def on_text_with_text(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     text: str,
 ):
     """
-    ÐÐ±ÑÑÑÐºÐ° Ð´Ð»Ñ Ð¿ÐµÑÐµÐ´Ð°ÑÐ¸ ÑÐµÐºÑÑÐ° (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ, Ð¿Ð¾ÑÐ»Ðµ STT) Ð² on_text,
-    Ð±ÐµÐ· Ð¿Ð¾Ð¿ÑÑÐ¾Ðº Ð¸Ð·Ð¼ÐµÐ½Ð¸ÑÑ update.message (read-only!).
+    ÃÃÃÃÃÃÂºÃÂ° ÃÂ´ÃÂ»Ã ÃÂ¿ÃÂµÃÃÂµÃÂ´ÃÂ°ÃÃÂ¸ ÃÃÂµÃÂºÃÃÃÂ° (ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ, ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµ STT) ÃÂ² on_text,
+    ÃÃÂµÃÂ· ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÃÂ¾ÃÂº ÃÂ¸ÃÂ·ÃÂ¼ÃÂµÃÂ½ÃÂ¸ÃÃ update.message (read-only!).
     """
     text = (text or "").strip()
     if not text:
-        await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°ÑÑ ÑÐµÐºÑÑ.")
+        await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÃ ÃÃÂµÃÂºÃÃ.")
         return
 
     await on_text(update, context, manual_text=text)
 
 
-# âââââââââ Ð¢ÐµÐºÑÑÐ¾Ð²ÑÐ¹ Ð²ÑÐ¾Ð´ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÂ¢ÃÂµÃÂºÃÃÃÂ¾ÃÂ²ÃÃÂ¹ ÃÂ²ÃÃÂ¾ÃÂ´ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def on_text(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     manual_text: str | None = None,
 ):
-    # ÐÑÐ»Ð¸ ÑÐµÐºÑÑ Ð¿ÐµÑÐµÐ´Ð°Ð½ Ð¸Ð·Ð²Ð½Ðµ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ ÐµÐ³Ð¾
-    # Ð¸Ð½Ð°ÑÐµ â Ð¾Ð±ÑÑÐ½ÑÐ¹ ÑÐµÐºÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ
+    # ÃÃÃÂ»ÃÂ¸ ÃÃÂµÃÂºÃÃ ÃÂ¿ÃÂµÃÃÂµÃÂ´ÃÂ°ÃÂ½ ÃÂ¸ÃÂ·ÃÂ²ÃÂ½ÃÂµ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÂ¼ ÃÂµÃÂ³ÃÂ¾
+    # ÃÂ¸ÃÂ½ÃÂ°ÃÃÂµ Ã¢ ÃÂ¾ÃÃÃÃÂ½ÃÃÂ¹ ÃÃÂµÃÂºÃÃ ÃÃÂ¾ÃÂ¾ÃÃÃÂµÃÂ½ÃÂ¸Ã
     if manual_text is not None:
         text = manual_text.strip()
     else:
         text = (update.message.text or "").strip()
 
-    # ÐÐ¾Ð¿ÑÐ¾ÑÑ Ð¾ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑÑÑ
+    # ÃÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃ ÃÂ¾ ÃÂ²ÃÂ¾ÃÂ·ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ÃÃÃÃ
     cap = capability_answer(text)
     if cap:
         await update.effective_message.reply_text(cap)
         return
 
-    # ÐÐ°Ð¼ÑÐº Ð½Ð° Ð³ÐµÐ½ÐµÑÐ°ÑÐ¸Ñ Ð²Ð¸Ð´ÐµÐ¾ÑÐ¾Ð»Ð¸ÐºÐ°
+    # ÃÃÂ°ÃÂ¼ÃÃÂº ÃÂ½ÃÂ° ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ÃÃÂ¾ÃÂ»ÃÂ¸ÃÂºÃÂ°
     mtype, rest = detect_media_intent(text)
-    # ÐÑÐ¸Ð½ÑÐ´Ð¸ÑÐµÐ»ÑÐ½ÑÐ¹ Ð²ÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ° (ÑÐµÑÐµÐ· Ð¼ÐµÐ½Ñ Â«ÐÐ²Ð¸Ð¶ÐºÐ¸Â»)
+    # ÃÃÃÂ¸ÃÂ½ÃÃÂ´ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÂ²ÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ° (ÃÃÂµÃÃÂµÃÂ· ÃÂ¼ÃÂµÃÂ½Ã ÃÂ«ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸ÃÂ»)
     user_id = update.effective_user.id
     forced_engine = "gpt"
     with contextlib.suppress(Exception):
         forced_engine = engine_get(user_id)
 
-    # ÐÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð²ÑÐ±ÑÐ°Ð» Ð²Ð¸Ð´ÐµÐ¾-Ð´Ð²Ð¸Ð¶Ð¾Ðº, Ð° ÑÐ²Ð½Ð¾Ð³Ð¾ Ð¿ÑÐµÑÐ¸ÐºÑÐ° Ð½ÐµÑ â ÑÑÐ°ÐºÑÑÐµÐ¼ ÑÐµÐºÑÑ ÐºÐ°Ðº Ð²Ð¸Ð´ÐµÐ¾-Ð·Ð°Ð¿ÑÐ¾Ñ
+    # ÃÃÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»Ã ÃÂ²ÃÃÃÃÂ°ÃÂ» ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾-ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº, ÃÂ° ÃÃÂ²ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ¿ÃÃÂµÃÃÂ¸ÃÂºÃÃÂ° ÃÂ½ÃÂµÃ Ã¢ ÃÃÃÂ°ÃÂºÃÃÃÂµÃÂ¼ ÃÃÂµÃÂºÃÃ ÃÂºÃÂ°ÃÂº ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾-ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã
     if (mtype is None) and forced_engine in ("kling", "luma", "runway", "sora"):
         prompt = text.strip()
         duration, aspect = parse_video_opts(text)
 
-        # Runway textâvideo Ð¼Ð¾Ð¶ÐµÑ Ð±ÑÑÑ Ð²ÑÐºÐ»ÑÑÐµÐ½ (Ð¾ÑÑÐ°Ð²Ð»ÑÐµÐ¼ Ð·Ð°ÑÐ¸ÑÑ ÐºÐ°Ðº ÑÐ°Ð½ÑÑÐµ)
+        # Runway textÃ¢video ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃ ÃÃÃÃ ÃÂ²ÃÃÂºÃÂ»ÃÃÃÂµÃÂ½ (ÃÂ¾ÃÃÃÂ°ÃÂ²ÃÂ»ÃÃÂµÃÂ¼ ÃÂ·ÃÂ°ÃÃÂ¸ÃÃ ÃÂºÃÂ°ÃÂº ÃÃÂ°ÃÂ½ÃÃÃÂµ)
         if forced_engine == "runway" and RUNWAY_DISABLE_TEXTVIDEO:
             await update.effective_message.reply_text(_tr(user_id, "runway_disabled_textvideo"))
             return
@@ -3932,7 +3932,7 @@ async def on_text(
                 return await _run_sora_video(update, context, prompt, duration, aspect)
             return False
 
-        # ÐÐ»Ð°ÑÑÐ¶/Ð»Ð¸Ð¼Ð¸ÑÑ â ÑÑÐ¸ÑÑÐ²Ð°ÐµÐ¼ ÐºÐ°Ðº Â«oneoffÂ» Ð²Ð¸Ð´ÐµÐ¾
+        # ÃÃÂ»ÃÂ°ÃÃÃÂ¶/ÃÂ»ÃÂ¸ÃÂ¼ÃÂ¸ÃÃ Ã¢ ÃÃÃÂ¸ÃÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂºÃÂ°ÃÂº ÃÂ«oneoffÃÂ» ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾
         est = float(KLING_UNIT_COST_USD or 0.40) * duration
         if forced_engine == "luma":
             est = float(LUMA_UNIT_COST_USD or 0.40) * duration
@@ -3944,11 +3944,11 @@ async def on_text(
         await _try_pay_then_do(update, context, user_id, forced_engine, est, _go_video)
         return
 
-    # ÐÑÐ»Ð¸ Ð²ÑÐ±ÑÐ°Ð½ Images, Ð° Ð¿ÑÐµÑÐ¸ÐºÑÐ° Ð½ÐµÑ â ÑÑÐ°ÐºÑÑÐµÐ¼ ÑÐµÐºÑÑ ÐºÐ°Ðº Ð¿ÑÐ¾Ð¼Ð¿Ñ Ð´Ð»Ñ ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸
+    # ÃÃÃÂ»ÃÂ¸ ÃÂ²ÃÃÃÃÂ°ÃÂ½ Images, ÃÂ° ÃÂ¿ÃÃÂµÃÃÂ¸ÃÂºÃÃÂ° ÃÂ½ÃÂµÃ Ã¢ ÃÃÃÂ°ÃÂºÃÃÃÂµÃÂ¼ ÃÃÂµÃÂºÃÃ ÃÂºÃÂ°ÃÂº ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿Ã ÃÂ´ÃÂ»Ã ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸
     if (mtype is None) and forced_engine == "images":
         prompt = text.strip()
         if not prompt:
-            await update.effective_message.reply_text("Ð¤Ð¾ÑÐ¼Ð°Ñ: /img <Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ>")
+            await update.effective_message.reply_text("ÃÂ¤ÃÂ¾ÃÃÂ¼ÃÂ°Ã: /img <ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã>")
             return
 
         async def _go_img():
@@ -3957,28 +3957,28 @@ async def on_text(
         await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go_img)
         return
 
-    # ÐÑÐ»Ð¸ Ð²ÑÐ±ÑÐ°Ð½ Gemini â Ð¾Ð±ÑÐ°Ð±Ð°ÑÑÐ²Ð°ÐµÐ¼ Ð¾Ð±ÑÑÐ½ÑÐ¹ ÑÐµÐºÑÑ ÑÐµÑÐµÐ· Gemini (Comet) Ð²Ð¼ÐµÑÑÐ¾ OpenAI
+    # ÃÃÃÂ»ÃÂ¸ ÃÂ²ÃÃÃÃÂ°ÃÂ½ Gemini Ã¢ ÃÂ¾ÃÃÃÂ°ÃÃÂ°ÃÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ¾ÃÃÃÃÂ½ÃÃÂ¹ ÃÃÂµÃÂºÃÃ ÃÃÂµÃÃÂµÃÂ· Gemini (Comet) ÃÂ²ÃÂ¼ÃÂµÃÃÃÂ¾ OpenAI
     if (mtype is None) and forced_engine == "gemini":
         reply = await ask_gemini_text(text)
         await update.effective_message.reply_text(reply)
         await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
         return
 
-    # Suno / Midjourney Ð¿Ð¾ÐºÐ° ÐºÐ°Ðº Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ° (Ð±ÐµÐ· Ð¿ÑÑÐ¼Ð¾Ð³Ð¾ API Ð² ÑÑÐ¾Ð¼ ÑÐ°Ð¹Ð»Ðµ)
+    # Suno / Midjourney ÃÂ¿ÃÂ¾ÃÂºÃÂ° ÃÂºÃÂ°ÃÂº ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃÂ° (ÃÃÂµÃÂ· ÃÂ¿ÃÃÃÂ¼ÃÂ¾ÃÂ³ÃÂ¾ API ÃÂ² ÃÃÃÂ¾ÃÂ¼ ÃÃÂ°ÃÂ¹ÃÂ»ÃÂµ)
     if (mtype is None) and forced_engine in ("suno", "midjourney"):
         if forced_engine == "suno":
             await update.effective_message.reply_text(
-                "ðµ Suno Ð²ÑÐ±ÑÐ°Ð½. ÐÐ°Ð¿Ð¸ÑÐ¸ÑÐµ: Â«Ð¿ÐµÑÐ½Ñ: Ð¶Ð°Ð½Ñ, Ð½Ð°ÑÑÑÐ¾ÐµÐ½Ð¸Ðµ, ÑÐµÐ¼Ð°, Ð´Ð»Ð¸ÑÐµÐ»ÑÐ½Ð¾ÑÑÑÂ» â Ð¸ Ñ Ð¿Ð¾Ð´Ð³Ð¾ÑÐ¾Ð²Ð»Ñ ÑÐµÐºÑÑ/ÑÑÑÑÐºÑÑÑÑ.\n"
-                "ÐÑÐ»Ð¸ Ñ Ð²Ð°Ñ ÐµÑÑÑ API/Ð¿ÑÐ¾Ð²Ð°Ð¹Ð´ÐµÑ â Ð´Ð¾Ð±Ð°Ð²ÑÑÐµ ÐºÐ»ÑÑÐ¸, Ð¸ Ñ Ð¿Ð¾Ð´ÐºÐ»ÑÑÑ Ð³ÐµÐ½ÐµÑÐ°ÑÐ¸Ñ."
+                "Ã°Âµ Suno ÃÂ²ÃÃÃÃÂ°ÃÂ½. ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ: ÃÂ«ÃÂ¿ÃÂµÃÃÂ½Ã: ÃÂ¶ÃÂ°ÃÂ½Ã, ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ÃÂ¸ÃÂµ, ÃÃÂµÃÂ¼ÃÂ°, ÃÂ´ÃÂ»ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÃÃÃÂ» Ã¢ ÃÂ¸ Ã ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÃÂµÃÂºÃÃ/ÃÃÃÃÃÂºÃÃÃÃ.\n"
+                "ÃÃÃÂ»ÃÂ¸ Ã ÃÂ²ÃÂ°Ã ÃÂµÃÃÃ API/ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃ Ã¢ ÃÂ´ÃÂ¾ÃÃÂ°ÃÂ²ÃÃÃÂµ ÃÂºÃÂ»ÃÃÃÂ¸, ÃÂ¸ Ã ÃÂ¿ÃÂ¾ÃÂ´ÃÂºÃÂ»ÃÃÃ ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸Ã."
             )
         else:
             await update.effective_message.reply_text(
-                "ð¨ Midjourney Ð²ÑÐ±ÑÐ°Ð½. ÐÐ¿Ð¸ÑÐ¸ÑÐµ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ â Ñ Ð¿Ð¾Ð´Ð³Ð¾ÑÐ¾Ð²Ð»Ñ Ð¿ÑÐ¾Ð¼Ð¿Ñ. "
-                "ÐÐ°Ð»ÑÑÐµ Ð²Ñ Ð¼Ð¾Ð¶ÐµÑÐµ Ð¾ÑÐ¿ÑÐ°Ð²Ð¸ÑÑ ÐµÐ³Ð¾ Ð² Midjourney/Discord."
+                "Ã°Â¨ Midjourney ÃÂ²ÃÃÃÃÂ°ÃÂ½. ÃÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ Ã¢ Ã ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÂ¿ÃÃÂ¾ÃÂ¼ÃÂ¿Ã. "
+                "ÃÃÂ°ÃÂ»ÃÃÃÂµ ÃÂ²Ã ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃÃÂµ ÃÂ¾ÃÃÂ¿ÃÃÂ°ÃÂ²ÃÂ¸ÃÃ ÃÂµÃÂ³ÃÂ¾ ÃÂ² Midjourney/Discord."
             )
         return
     if mtype == "video":
-        # ÐÐÐ ÐÐÐ¢ÐÐ ÐÐÐÐÐÐ Ð·Ð°Ð´Ð°ÑÐ¼ prompt Ð´Ð»Ñ ÑÐµÐºÑÑÐ° Ð¸ Ð´Ð»Ñ Ð³Ð¾Ð»Ð¾ÑÐ°
+        # ÃÃÃ ÃÃÃÂ¢ÃÃ ÃÃÃÃÃÃ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ¼ prompt ÃÂ´ÃÂ»Ã ÃÃÂµÃÂºÃÃÃÂ° ÃÂ¸ ÃÂ´ÃÂ»Ã ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÃÂ°
         prompt = (rest or text).strip()
 
         duration, aspect = parse_video_opts(text)
@@ -3998,32 +3998,32 @@ async def on_text(
 
         rows = []
         rows.append([InlineKeyboardButton(
-            f"ð Kling (~${est_kling:.2f})",
+            f"Ã° Kling (~${est_kling:.2f})",
             callback_data=f"choose:kling:{aid}",
         )])
         rows.append([InlineKeyboardButton(
-            f"ð¬ Luma (~${est_luma:.2f})",
+            f"Ã°Â¬ Luma (~${est_luma:.2f})",
             callback_data=f"choose:luma:{aid}",
         )])
 
         # Sora: show Pro label for pro/ultimate tiers
         if SORA_ENABLED:
             if tier in ("pro", "ultimate"):
-                rows.append([InlineKeyboardButton("â¨ Sora 2 Pro", callback_data=f"choose:sora:{aid}")])
+                rows.append([InlineKeyboardButton("Ã¢Â¨ Sora 2 Pro", callback_data=f"choose:sora:{aid}")])
             else:
-                rows.append([InlineKeyboardButton("â¨ Sora 2", callback_data=f"choose:sora:{aid}")])
+                rows.append([InlineKeyboardButton("Ã¢Â¨ Sora 2", callback_data=f"choose:sora:{aid}")])
 
         kb = InlineKeyboardMarkup(rows)
 
         await update.effective_message.reply_text(
-            f"Ð§ÑÐ¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ?\n"
-            f"ÐÐ»Ð¸ÑÐµÐ»ÑÐ½Ð¾ÑÑÑ: {duration} c â¢ ÐÑÐ¿ÐµÐºÑ: {aspect}\n"
-            f"ÐÐ°Ð¿ÑÐ¾Ñ: Â«{prompt}Â»",
+            f"ÃÂ§ÃÃÂ¾ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃ?\n"
+            f"ÃÃÂ»ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÃÃ: {duration} c Ã¢Â¢ ÃÃÃÂ¿ÃÂµÃÂºÃ: {aspect}\n"
+            f"ÃÃÂ°ÃÂ¿ÃÃÂ¾Ã: ÃÂ«{prompt}ÃÂ»",
             reply_markup=kb,
         )
         return
 
-    # ÐÐ°Ð¼ÑÐº Ð½Ð° ÐºÐ°ÑÑÐ¸Ð½ÐºÑ
+    # ÃÃÂ°ÃÂ¼ÃÃÂº ÃÂ½ÃÂ° ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃ
     if mtype == "image":
         prompt = rest or re.sub(
             r"^(img|image|picture)\s*[:\-]\s*",
@@ -4034,7 +4034,7 @@ async def on_text(
 
         if not prompt:
             await update.effective_message.reply_text(
-                "Ð¤Ð¾ÑÐ¼Ð°Ñ: /img <Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ>"
+                "ÃÂ¤ÃÂ¾ÃÃÂ¼ÃÂ°Ã: /img <ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã>"
             )
             return
 
@@ -4051,7 +4051,7 @@ async def on_text(
         )
         return
 
-    # ÐÐ±ÑÑÐ½ÑÐ¹ ÑÐµÐºÑÑ â GPT
+    # ÃÃÃÃÃÂ½ÃÃÂ¹ ÃÃÂµÃÂºÃÃ Ã¢ GPT
     ok, _, _ = check_text_and_inc(
         update.effective_user.id,
         update.effective_user.username or "",
@@ -4059,14 +4059,14 @@ async def on_text(
 
     if not ok:
         await update.effective_message.reply_text(
-            "ÐÐ¸Ð¼Ð¸Ñ ÑÐµÐºÑÑÐ¾Ð²ÑÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ¾Ð² Ð½Ð° ÑÐµÐ³Ð¾Ð´Ð½Ñ Ð¸ÑÑÐµÑÐ¿Ð°Ð½. "
-            "ÐÑÐ¾ÑÐ¼Ð¸ÑÐµ â­ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÑ Ð¸Ð»Ð¸ Ð¿Ð¾Ð¿ÑÐ¾Ð±ÑÐ¹ÑÐµ Ð·Ð°Ð²ÑÑÐ°."
+            "ÃÃÂ¸ÃÂ¼ÃÂ¸Ã ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ²ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾ÃÃÂ¾ÃÂ² ÃÂ½ÃÂ° ÃÃÂµÃÂ³ÃÂ¾ÃÂ´ÃÂ½Ã ÃÂ¸ÃÃÃÂµÃÃÂ¿ÃÂ°ÃÂ½. "
+            "ÃÃÃÂ¾ÃÃÂ¼ÃÂ¸ÃÃÂµ Ã¢Â­ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÃÂ¹ÃÃÂµ ÃÂ·ÃÂ°ÃÂ²ÃÃÃÂ°."
         )
         return
 
     user_id = update.effective_user.id
 
-    # Ð ÐµÐ¶Ð¸Ð¼Ñ
+    # Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼Ã
     try:
         mode = _mode_get(user_id)
         track = _mode_track_get(user_id)
@@ -4074,11 +4074,11 @@ async def on_text(
         mode, track = "none", ""
 
     if mode and mode != "none":
-        text_for_llm = f"[Ð ÐµÐ¶Ð¸Ð¼: {mode}; ÐÐ¾Ð´ÑÐµÐ¶Ð¸Ð¼: {track or '-'}]\n{text}"
+        text_for_llm = f"[Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼: {mode}; ÃÃÂ¾ÃÂ´ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼: {track or '-'}]\n{text}"
     else:
         text_for_llm = text
 
-    if mode == "Ð£ÑÑÐ±Ð°" and track:
+    if mode == "ÃÂ£ÃÃÃÃÂ°" and track:
         await study_process_text(update, context, text)
         return
 
@@ -4086,7 +4086,7 @@ async def on_text(
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
     
-# âââââââââ Ð¤Ð¾ÑÐ¾ / ÐÐ¾ÐºÑÐ¼ÐµÐ½ÑÑ / ÐÐ¾Ð»Ð¾Ñ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÂ¤ÃÂ¾ÃÃÂ¾ / ÃÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ / ÃÃÂ¾ÃÂ»ÃÂ¾Ã Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.photo:
@@ -4097,85 +4097,85 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = await f.download_as_bytearray()
         img = bytes(data)
 
-        # --- Ð¡Ð¢ÐÐ Ð«Ð ÐÐ­Ð¨ (ÐºÐ°Ðº ÑÐ°Ð½ÑÑÐµ) ---
+        # --- ÃÂ¡ÃÂ¢ÃÃ ÃÂ«Ã ÃÃÂ­ÃÂ¨ (ÃÂºÃÂ°ÃÂº ÃÃÂ°ÃÂ½ÃÃÃÂµ) ---
         _cache_photo(update.effective_user.id, img)
 
-        # --- ÐÐÐÐ«Ð ÐÐ­Ð¨ ÐÐÐ¯ ÐÐÐÐÐÐÐÐÐ¯ / LUMA / KLING ---
-        # Ð¡Ð¾ÑÑÐ°Ð½ÑÐµÐ¼ Ð¸ bytes, Ð¸ Ð¿ÑÐ±Ð»Ð¸ÑÐ½ÑÐ¹ URL Telegram (Ð¿Ð¾Ð´ÑÐ¾Ð´Ð¸Ñ Ð´Ð»Ñ Luma/Comet)
+        # --- ÃÃÃÃÂ«Ã ÃÃÂ­ÃÂ¨ ÃÃÃÂ¯ ÃÃÃÃÃÃÃÃÃÂ¯ / LUMA / KLING ---
+        # ÃÂ¡ÃÂ¾ÃÃÃÂ°ÃÂ½ÃÃÂµÃÂ¼ ÃÂ¸ bytes, ÃÂ¸ ÃÂ¿ÃÃÃÂ»ÃÂ¸ÃÃÂ½ÃÃÂ¹ URL Telegram (ÃÂ¿ÃÂ¾ÃÂ´ÃÃÂ¾ÃÂ´ÃÂ¸Ã ÃÂ´ÃÂ»Ã Luma/Comet)
         with contextlib.suppress(Exception):
             _LAST_ANIM_PHOTO[update.effective_user.id] = {
                 "bytes": img,
-                "url": (f.file_path or "").strip(),   # Ð¿ÑÐ±Ð»Ð¸ÑÐ½ÑÐ¹ HTTPS-URL Telegram API
+                "url": (f.file_path or "").strip(),   # ÃÂ¿ÃÃÃÂ»ÃÂ¸ÃÃÂ½ÃÃÂ¹ HTTPS-URL Telegram API
             }
 
         caption = (update.message.caption or "").strip()
         if caption:
             tl = caption.lower()
 
-            # ââ ÐÐÐÐÐÐÐÐÐ Ð¤ÐÐ¢Ð (ÑÐµÑÐµÐ· Ð²ÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ°) ââ
-            if any(k in tl for k in ("Ð¾Ð¶Ð¸Ð²Ð¸", "Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ", "Ð°Ð½Ð¸Ð¼Ð¸ÑÑ", "Ð°Ð½Ð¸Ð¼Ð¸ÑÐ¾Ð²Ð°ÑÑ", "ÑÐ´ÐµÐ»Ð°Ð¹ Ð²Ð¸Ð´ÐµÐ¾", "revive", "animate")):
+            # Ã¢Ã¢ ÃÃÃÃÃÃÃÃÃ ÃÂ¤ÃÃÂ¢Ã (ÃÃÂµÃÃÂµÃÂ· ÃÂ²ÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ°) Ã¢Ã¢
+            if any(k in tl for k in ("ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸", "ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ", "ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃ", "ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ", "ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾", "revive", "animate")):
                 dur, asp = parse_video_opts(caption)
 
-                # Ð¾ÑÐ¸ÑÐ°ÐµÐ¼ prompt Ð¾Ñ ÑÑÐ¸Ð³Ð³ÐµÑ-ÑÐ»Ð¾Ð²
+                # ÃÂ¾ÃÃÂ¸ÃÃÂ°ÃÂµÃÂ¼ prompt ÃÂ¾Ã ÃÃÃÂ¸ÃÂ³ÃÂ³ÃÂµÃ-ÃÃÂ»ÃÂ¾ÃÂ²
                 prompt = re.sub(
-                    r"\b(Ð¾Ð¶Ð¸Ð²Ð¸|Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ|Ð°Ð½Ð¸Ð¼Ð¸ÑÑÐ¹|Ð°Ð½Ð¸Ð¼Ð¸ÑÐ¾Ð²Ð°ÑÑ|ÑÐ´ÐµÐ»Ð°Ð¹ Ð²Ð¸Ð´ÐµÐ¾|revive|animate)\b",
+                    r"\b(ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸|ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ|ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÃÂ¹|ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ|ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾|revive|animate)\b",
                     "",
                     caption,
                     flags=re.I
                 ).strip(" ,.")
 
-                # ÑÐ¾ÑÑÐ°Ð½ÑÐµÐ¼ Ð²ÑÐ¾Ð´Ð½ÑÐµ Ð¿Ð°ÑÐ°Ð¼ÐµÑÑÑ Ð² user_data (Ð±ÐµÐ· Ð³Ð»Ð¾Ð±Ð°Ð»ÑÐ½ÑÑ pending)
+                # ÃÃÂ¾ÃÃÃÂ°ÃÂ½ÃÃÂµÃÂ¼ ÃÂ²ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂµ ÃÂ¿ÃÂ°ÃÃÂ°ÃÂ¼ÃÂµÃÃÃ ÃÂ² user_data (ÃÃÂµÃÂ· ÃÂ³ÃÂ»ÃÂ¾ÃÃÂ°ÃÂ»ÃÃÂ½ÃÃ pending)
                 context.user_data["revive_photo"] = {
                     "duration": int(dur),
                     "aspect": asp,
                     "prompt": prompt,
                 }
 
-                # Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð²ÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ°
+                # ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ²ÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ°
                 await update.effective_message.reply_text(
-                    "ÐÑÐ±ÐµÑÐ¸ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð´Ð»Ñ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ ÑÐ¾ÑÐ¾:",
+                    "ÃÃÃÃÂµÃÃÂ¸ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã ÃÃÂ¾ÃÃÂ¾:",
                     reply_markup=revive_engine_kb()
                 )
                 return
 
-            # ââ ÑÐ´Ð°Ð»Ð¸ÑÑ ÑÐ¾Ð½ ââ
-            if any(k in tl for k in ("ÑÐ´Ð°Ð»Ð¸ ÑÐ¾Ð½", "removebg", "ÑÐ±ÑÐ°ÑÑ ÑÐ¾Ð½")):
+            # Ã¢Ã¢ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¸ÃÃ ÃÃÂ¾ÃÂ½ Ã¢Ã¢
+            if any(k in tl for k in ("ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¸ ÃÃÂ¾ÃÂ½", "removebg", "ÃÃÃÃÂ°ÃÃ ÃÃÂ¾ÃÂ½")):
                 await _pedit_removebg(update, context, img)
                 return
 
-            # ââ Ð·Ð°Ð¼ÐµÐ½Ð¸ÑÑ ÑÐ¾Ð½ ââ
-            if any(k in tl for k in ("Ð·Ð°Ð¼ÐµÐ½Ð¸ ÑÐ¾Ð½", "replacebg", "ÑÐ°Ð·Ð¼ÑÑÑÐ¹", "blur")):
+            # Ã¢Ã¢ ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ¸ÃÃ ÃÃÂ¾ÃÂ½ Ã¢Ã¢
+            if any(k in tl for k in ("ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ¸ ÃÃÂ¾ÃÂ½", "replacebg", "ÃÃÂ°ÃÂ·ÃÂ¼ÃÃÃÃÂ¹", "blur")):
                 await _pedit_replacebg(update, context, img)
                 return
 
-            # ââ outpaint ââ
-            if "outpaint" in tl or "ÑÐ°ÑÑÐ¸Ñ" in tl:
+            # Ã¢Ã¢ outpaint Ã¢Ã¢
+            if "outpaint" in tl or "ÃÃÂ°ÃÃÃÂ¸Ã" in tl:
                 await _pedit_outpaint(update, context, img)
                 return
 
-            # ââ ÑÐ°ÑÐºÐ°Ð´ÑÐ¾Ð²ÐºÐ° ââ
-            if "ÑÐ°ÑÐºÐ°Ð´ÑÐ¾Ð²" in tl or "storyboard" in tl:
+            # Ã¢Ã¢ ÃÃÂ°ÃÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²ÃÂºÃÂ° Ã¢Ã¢
+            if "ÃÃÂ°ÃÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²" in tl or "storyboard" in tl:
                 await _pedit_storyboard(update, context, img)
                 return
 
-            # ââ ÐºÐ°ÑÑÐ¸Ð½ÐºÐ° Ð¿Ð¾ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ñ (Luma / fallback OpenAI) ââ
+            # Ã¢Ã¢ ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ° ÃÂ¿ÃÂ¾ ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸Ã (Luma / fallback OpenAI) Ã¢Ã¢
             if (
-                any(k in tl for k in ("ÐºÐ°ÑÑÐ¸Ð½", "Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½", "image", "img"))
-                and any(k in tl for k in ("ÑÐ³ÐµÐ½ÐµÑÐ¸ÑÑ", "ÑÐ¾Ð·Ð´Ð°", "ÑÐ´ÐµÐ»Ð°Ð¹"))
+                any(k in tl for k in ("ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½", "ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½", "image", "img"))
+                and any(k in tl for k in ("ÃÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ¸ÃÃ", "ÃÃÂ¾ÃÂ·ÃÂ´ÃÂ°", "ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂ¹"))
             ):
                 await _start_luma_img(update, context, caption)
                 return
 
-        # ÐµÑÐ»Ð¸ ÑÐ²Ð½Ð¾Ð¹ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ Ð½ÐµÑ â Ð±ÑÑÑÑÑÐµ ÐºÐ½Ð¾Ð¿ÐºÐ¸
+        # ÃÂµÃÃÂ»ÃÂ¸ ÃÃÂ²ÃÂ½ÃÂ¾ÃÂ¹ ÃÂºÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´Ã ÃÂ½ÃÂµÃ Ã¢ ÃÃÃÃÃÃÃÂµ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸
         await update.effective_message.reply_text(
-            "Ð¤Ð¾ÑÐ¾ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¾. Ð§ÑÐ¾ ÑÐ´ÐµÐ»Ð°ÑÑ?",
+            "ÃÂ¤ÃÂ¾ÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂµÃÂ½ÃÂ¾. ÃÂ§ÃÃÂ¾ ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÃ?",
             reply_markup=photo_quick_actions_kb()
         )
 
     except Exception as e:
         log.exception("on_photo error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("ÐÐµ ÑÐ¼Ð¾Ð³ Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐ°ÑÑ ÑÐ¾ÑÐ¾.")
+            await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ¼ÃÂ¾ÃÂ³ ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂ°ÃÃ ÃÃÂ¾ÃÃÂ¾.")
             
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -4188,11 +4188,11 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = await tg_file.download_as_bytearray()
         raw = bytes(data)
 
-        # Ð´Ð¾ÐºÑÐ¼ÐµÐ½Ñ Ð¾ÐºÐ°Ð·Ð°Ð»ÑÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸ÐµÐ¼
+        # ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½Ã ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÂ°ÃÂ»ÃÃ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµÃÂ¼
         if mt.startswith("image/"):
             _cache_photo(update.effective_user.id, raw)
 
-            # --- ÐÐÐÐ«Ð ÐÐ­Ð¨ ÐÐÐ¯ ÐÐÐÐÐÐÐÐÐ¯ ---
+            # --- ÃÃÃÃÂ«Ã ÃÃÂ­ÃÂ¨ ÃÃÃÂ¯ ÃÃÃÃÃÃÃÃÃÂ¯ ---
             try:
                 _LAST_ANIM_PHOTO[update.effective_user.id] = {
                     "bytes": raw,
@@ -4202,22 +4202,22 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
 
             await update.effective_message.reply_text(
-                "ÐÐ·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¾ ÐºÐ°Ðº Ð´Ð¾ÐºÑÐ¼ÐµÐ½Ñ. Ð§ÑÐ¾ ÑÐ´ÐµÐ»Ð°ÑÑ?",
+                "ÃÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂµÃÂ½ÃÂ¾ ÃÂºÃÂ°ÃÂº ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½Ã. ÃÂ§ÃÃÂ¾ ÃÃÂ´ÃÂµÃÂ»ÃÂ°ÃÃ?",
                 reply_markup=photo_quick_actions_kb()
             )
             return
 
-        # Ð¾ÑÑÐ°Ð»ÑÐ½ÑÐµ Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÑ â Ð¸Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ðµ ÑÐµÐºÑÑÐ°
+        # ÃÂ¾ÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÃÂµ ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ Ã¢ ÃÂ¸ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂµÃÂºÃÃÃÂ°
         text, kind = extract_text_from_document(raw, doc.file_name or "file")
         if not (text or "").strip():
-            await update.effective_message.reply_text(f"ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¸Ð·Ð²Ð»ÐµÑÑ ÑÐµÐºÑÑ Ð¸Ð· {kind}.")
+            await update.effective_message.reply_text(f"ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ¸ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃ ÃÃÂµÃÂºÃÃ ÃÂ¸ÃÂ· {kind}.")
             return
 
-        goal = (update.message.caption or "").strip() or NoneÐ±Ñ
-        await update.effective_message.reply_text(f"ð ÐÐ·Ð²Ð»ÐµÐºÐ°Ñ ÑÐµÐºÑÑ ({kind}), Ð³Ð¾ÑÐ¾Ð²Ð»Ñ ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑâ¦")
+        goal = (update.message.caption or "").strip() or NoneÃÃ
+        await update.effective_message.reply_text(f"Ã° ÃÃÂ·ÃÂ²ÃÂ»ÃÂµÃÂºÃÂ°Ã ÃÃÂµÃÂºÃÃ ({kind}), ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ»Ã ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃÃ¢Â¦")
 
         summary = await summarize_long_text(text, query=goal)
-        summary = summary or "ÐÐ¾ÑÐ¾Ð²Ð¾."
+        summary = summary or "ÃÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾."
         await update.effective_message.reply_text(summary)
 
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
@@ -4225,15 +4225,15 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("on_doc error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("ÐÑÐ¸Ð±ÐºÐ° Ð¿ÑÐ¸ Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐºÐµ Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ°.")
+            await update.effective_message.reply_text("ÃÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂºÃÂµ ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ°.")
             
-# âââââââââ Ð¥ÐµÐ»Ð¿ÐµÑÑ Ð´Ð»Ñ Ð°ÑÐ¿ÐµÐºÑÐ¾Ð² âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÂ¥ÃÂµÃÂ»ÃÂ¿ÃÂµÃÃ ÃÂ´ÃÂ»Ã ÃÂ°ÃÃÂ¿ÃÂµÃÂºÃÃÂ¾ÃÂ² Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 def _runway_aspect_to_ratio(aspect_str: str | None) -> str:
     """
-    ÐÐµÑÐµÐ²Ð¾Ð´Ð¸Ñ "16:9"/"9:16"/"1:1" Ð² Ð´Ð¾Ð¿ÑÑÑÐ¸Ð¼ÑÐµ ratio Runway:
+    ÃÃÂµÃÃÂµÃÂ²ÃÂ¾ÃÂ´ÃÂ¸Ã "16:9"/"9:16"/"1:1" ÃÂ² ÃÂ´ÃÂ¾ÃÂ¿ÃÃÃÃÂ¸ÃÂ¼ÃÃÂµ ratio Runway:
     1280:720, 720:1280, 960:960, 1104:832, 832:1104, 1584:672, 1280:768, 768:1280.
-    ÐÑÐ»Ð¸ Ð¿ÑÐ¸ÑÐ»Ð¾ ÑÐ¶Ðµ "1280:720" Ð¸ Ñ.Ð¿. â Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÐ¼ ÐºÐ°Ðº ÐµÑÑÑ.
+    ÃÃÃÂ»ÃÂ¸ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¾ ÃÃÂ¶ÃÂµ "1280:720" ÃÂ¸ Ã.ÃÂ¿. Ã¢ ÃÂ²ÃÂ¾ÃÂ·ÃÂ²ÃÃÂ°ÃÃÂ°ÃÂµÃÂ¼ ÃÂºÃÂ°ÃÂº ÃÂµÃÃÃ.
     """
     default_ratio = RUNWAY_RATIO or "1280:720"
     mapping = {
@@ -4242,7 +4242,7 @@ def _runway_aspect_to_ratio(aspect_str: str | None) -> str:
         "1:1": "960:960",
         "4:3": "1104:832",
         "3:4": "832:1104",
-        # ÑÐ¸ÑÐ¾ÐºÐ¸Ðµ ÑÐ¾ÑÐ¼Ð°ÑÑ Ð¼Ð¾Ð¶Ð½Ð¾ Ð¿ÑÐ¸Ð²ÑÐ·Ð°ÑÑ Ðº ÑÐ°Ð¼ÑÐ¼ Ð±Ð»Ð¸Ð·ÐºÐ¸Ð¼
+        # ÃÃÂ¸ÃÃÂ¾ÃÂºÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ¿ÃÃÂ¸ÃÂ²ÃÃÂ·ÃÂ°ÃÃ ÃÂº ÃÃÂ°ÃÂ¼ÃÃÂ¼ ÃÃÂ»ÃÂ¸ÃÂ·ÃÂºÃÂ¸ÃÂ¼
         "21:9": "1584:672",
         "9:21": "768:1280",
     }
@@ -4251,7 +4251,7 @@ def _runway_aspect_to_ratio(aspect_str: str | None) -> str:
     a = aspect_str.replace(" ", "")
     if a in mapping:
         return mapping[a]
-    # ÐµÑÐ»Ð¸ ÑÐ¶Ðµ Ð¿Ð¾ÑÐ¾Ð¶Ðµ Ð½Ð° "1280:720"
+    # ÃÂµÃÃÂ»ÃÂ¸ ÃÃÂ¶ÃÂµ ÃÂ¿ÃÂ¾ÃÃÂ¾ÃÂ¶ÃÂµ ÃÂ½ÃÂ° "1280:720"
     if re.match(r"^\d+:\d+$", a):
         return a
     return default_ratio
@@ -4259,8 +4259,8 @@ def _runway_aspect_to_ratio(aspect_str: str | None) -> str:
 
 def _normalize_luma_aspect(aspect: str | None) -> str:
     """
-    Luma Dream Machine Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑ Ð¾Ð³ÑÐ°Ð½Ð¸ÑÐµÐ½Ð½ÑÐ¹ Ð½Ð°Ð±Ð¾Ñ Ð°ÑÐ¿ÐµÐºÑÐ¾Ð².
-    ÐÑÐ¸Ð²Ð¾Ð´Ð¸Ð¼ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÑÑÐºÐ¸Ð¹ Ð°ÑÐ¿ÐµÐºÑ Ðº Ð´Ð¾Ð¿ÑÑÑÐ¸Ð¼Ð¾Ð¼Ñ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ.
+    Luma Dream Machine ÃÂ¿ÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃ ÃÂ¾ÃÂ³ÃÃÂ°ÃÂ½ÃÂ¸ÃÃÂµÃÂ½ÃÂ½ÃÃÂ¹ ÃÂ½ÃÂ°ÃÃÂ¾Ã ÃÂ°ÃÃÂ¿ÃÂµÃÂºÃÃÂ¾ÃÂ².
+    ÃÃÃÂ¸ÃÂ²ÃÂ¾ÃÂ´ÃÂ¸ÃÂ¼ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÃÂµÃÂ»ÃÃÃÂºÃÂ¸ÃÂ¹ ÃÂ°ÃÃÂ¿ÃÂµÃÂºÃ ÃÂº ÃÂ´ÃÂ¾ÃÂ¿ÃÃÃÃÂ¸ÃÂ¼ÃÂ¾ÃÂ¼Ã ÃÂ·ÃÂ½ÃÂ°ÃÃÂµÃÂ½ÃÂ¸Ã.
     """
     allowed = {"16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21"}
     if not aspect:
@@ -4271,7 +4271,7 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
     if a in allowed:
         return a
 
-    # ÐÑÐ³ÐºÐ°Ñ ÐºÐ¾ÑÑÐµÐºÑÐ¸Ñ Â«Ð¿Ð¾ÑÐ¾Ð¶Ð¸ÑÂ» ÑÐ¾ÑÐ¼Ð°ÑÐ¾Ð²
+    # ÃÃÃÂ³ÃÂºÃÂ°Ã ÃÂºÃÂ¾ÃÃÃÂµÃÂºÃÃÂ¸Ã ÃÂ«ÃÂ¿ÃÂ¾ÃÃÂ¾ÃÂ¶ÃÂ¸ÃÃÂ» ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÃÂ¾ÃÂ²
     mapping = {
         "4:5": "3:4",
         "5:4": "4:3",
@@ -4282,7 +4282,7 @@ def _normalize_luma_aspect(aspect: str | None) -> str:
     return "16:9"
 
 
-# âââââââââ RUNWAY: IMAGE â VIDEO (CometAPI) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ RUNWAY: IMAGE Ã¢ VIDEO (CometAPI) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 async def _run_runway_animate_photo(
     update: Update,
@@ -4293,29 +4293,29 @@ async def _run_runway_animate_photo(
     aspect: str = "16:9",
 ):
     """
-    Image -> Video ÑÐµÑÐµÐ· CometAPI (runwayml wrapper).
-    ÐÐµÐ»Ð°ÐµÑ create -> poll status -> download mp4 -> send_video
-    + ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ, ÐµÑÐ»Ð¸ ÑÑÐ¸ÑÐ°ÐµÑ > 3 Ð¼Ð¸Ð½ÑÑ.
+    Image -> Video ÃÃÂµÃÃÂµÃÂ· CometAPI (runwayml wrapper).
+    ÃÃÂµÃÂ»ÃÂ°ÃÂµÃ create -> poll status -> download mp4 -> send_video
+    + ÃÃÂ²ÃÂµÃÂ´ÃÂ¾ÃÂ¼ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ, ÃÂµÃÃÂ»ÃÂ¸ ÃÃÃÂ¸ÃÃÂ°ÃÂµÃ > 3 ÃÂ¼ÃÂ¸ÃÂ½ÃÃ.
     """
     chat_id = update.effective_chat.id
     msg = update.effective_message
 
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
 
-    # ÐÐµÑÑÐ¼ ÐºÐ»ÑÑ: Ð¿ÑÐ¸Ð¾ÑÐ¸ÑÐµÑ COMETAPI_KEY, Ð¸Ð½Ð°ÑÐµ RUNWAY_API_KEY
+    # ÃÃÂµÃÃÃÂ¼ ÃÂºÃÂ»ÃÃ: ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÃÂ¸ÃÃÂµÃ COMETAPI_KEY, ÃÂ¸ÃÂ½ÃÂ°ÃÃÂµ RUNWAY_API_KEY
     api_key = (COMETAPI_KEY or RUNWAY_API_KEY or "").strip()
     if not api_key:
-        await msg.reply_text("â ï¸ Runway/Comet: Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ ÐºÐ»ÑÑ (COMETAPI_KEY Ð¸Ð»Ð¸ RUNWAY_API_KEY).")
+        await msg.reply_text("Ã¢ Ã¯Â¸ Runway/Comet: ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ ÃÂºÃÂ»ÃÃ (COMETAPI_KEY ÃÂ¸ÃÂ»ÃÂ¸ RUNWAY_API_KEY).")
         return
 
-    # ÐÐ¾ÑÐ¼Ð°Ð»Ð¸Ð·ÑÐµÐ¼ duration
+    # ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÃÂµÃÂ¼ duration
     try:
         duration_val = int(duration_s or RUNWAY_DURATION_S or 5)
     except Exception:
         duration_val = RUNWAY_DURATION_S or 5
     duration_val = max(3, min(20, duration_val))
 
-    ratio = _runway_aspect_to_ratio(aspect)  # Ñ ÑÐµÐ±Ñ ÑÐ¶Ðµ ÐµÑÑÑ ÑÑÐ° ÑÑÐ½ÐºÑÐ¸Ñ/Ð¼Ð°Ð¿Ð¿Ð¸Ð½Ð³
+    ratio = _runway_aspect_to_ratio(aspect)  # Ã ÃÃÂµÃÃ ÃÃÂ¶ÃÂµ ÃÂµÃÃÃ ÃÃÃÂ° ÃÃÃÂ½ÃÂºÃÃÂ¸Ã/ÃÂ¼ÃÂ°ÃÂ¿ÃÂ¿ÃÂ¸ÃÂ½ÃÂ³
     prompt_clean = (prompt or "").strip()
 
     # Paths (Comet)
@@ -4346,9 +4346,9 @@ async def _run_runway_animate_photo(
                 txt = (r.text or "")[:1200]
                 log.warning("Runway/Comet image2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    "â ï¸ Runway/Comet imageâvideo Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð» Ð·Ð°Ð´Ð°ÑÑ.\n"
-                    f"ÐÐ¾Ð´: {r.status_code}\n"
-                    f"ÐÑÐ²ÐµÑ:\n`{txt}`",
+                    "Ã¢ Ã¯Â¸ Runway/Comet imageÃ¢video ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ» ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ.\n"
+                    f"ÃÃÂ¾ÃÂ´: {r.status_code}\n"
+                    f"ÃÃÃÂ²ÃÂµÃ:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return
@@ -4358,7 +4358,7 @@ async def _run_runway_animate_photo(
             except Exception:
                 js = {}
 
-            # Comet: id Ð¼Ð¾Ð¶ÐµÑ Ð»ÐµÐ¶Ð°ÑÑ Ð³Ð»ÑÐ±Ð¾ÐºÐ¾
+            # Comet: id ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃ ÃÂ»ÃÂµÃÂ¶ÃÂ°ÃÃ ÃÂ³ÃÂ»ÃÃÃÂ¾ÃÂºÃÂ¾
             task_id = None
             for d in _dicts_bfs(js):
                 v = d.get("id") or d.get("task_id") or d.get("taskId")
@@ -4368,12 +4368,12 @@ async def _run_runway_animate_photo(
 
             if not task_id:
                 await msg.reply_text(
-                    f"â ï¸ Runway/Comet: Ð½Ðµ Ð²ÐµÑÐ½ÑÐ» id Ð·Ð°Ð´Ð°ÑÐ¸.\n`{str(js)[:1200]}`",
+                    f"Ã¢ Ã¯Â¸ Runway/Comet: ÃÂ½ÃÂµ ÃÂ²ÃÂµÃÃÂ½ÃÃÂ» id ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ¸.\n`{str(js)[:1200]}`",
                     parse_mode="Markdown",
                 )
                 return
 
-            await msg.reply_text("â³ Runway: Ð°Ð½Ð¸Ð¼Ð¸ÑÑÑ ÑÐ¾ÑÐ¾â¦")
+            await msg.reply_text("Ã¢Â³ Runway: ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÃ ÃÃÂ¾ÃÃÂ¾Ã¢Â¦")
 
             status_url = f"{RUNWAY_BASE_URL}{status_tpl.format(id=task_id)}"
             started = time.time()
@@ -4386,9 +4386,9 @@ async def _run_runway_animate_photo(
                     txt = (rs.text or "")[:1200]
                     log.warning("Runway/Comet status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        "â ï¸ Runway: Ð¾ÑÐ¸Ð±ÐºÐ° ÑÑÐ°ÑÑÑÐ°.\n"
-                        f"ÐÐ¾Ð´: {rs.status_code}\n"
-                        f"ÐÑÐ²ÐµÑ:\n`{txt}`",
+                        "Ã¢ Ã¯Â¸ Runway: ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ° ÃÃÃÂ°ÃÃÃÃÂ°.\n"
+                        f"ÃÃÂ¾ÃÂ´: {rs.status_code}\n"
+                        f"ÃÃÃÂ²ÃÂµÃ:\n`{txt}`",
                         parse_mode="Markdown",
                     )
                     return
@@ -4400,20 +4400,20 @@ async def _run_runway_animate_photo(
 
                 status = _pick_status(sjs)
 
-                # Ð£Ð²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ Ð¿ÑÐ¸ Ð´Ð¾Ð»Ð³Ð¾Ð¼ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ð¸ (1 ÑÐ°Ð·)
+                # ÃÂ£ÃÂ²ÃÂµÃÂ´ÃÂ¾ÃÂ¼ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ¿ÃÃÂ¸ ÃÂ´ÃÂ¾ÃÂ»ÃÂ³ÃÂ¾ÃÂ¼ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸ÃÂ¸ (1 ÃÃÂ°ÃÂ·)
                 elapsed = time.time() - started
                 if elapsed > 180 and not notified_long_wait:
                     notified_long_wait = True
                     await msg.reply_text(
-                        "â³ Runway ÑÑÐ¸ÑÐ°ÐµÑ Ð´Ð¾Ð»ÑÑÐµ Ð¾Ð±ÑÑÐ½Ð¾Ð³Ð¾.\n"
-                        "Ð¯ Ð¿ÑÐ¸ÑÐ»Ñ Ð²Ð¸Ð´ÐµÐ¾ ÑÑÐ°Ð·Ñ, ÐºÐ°Ðº Ð¾Ð½Ð¾ Ð±ÑÐ´ÐµÑ Ð³Ð¾ÑÐ¾Ð²Ð¾."
+                        "Ã¢Â³ Runway ÃÃÃÂ¸ÃÃÂ°ÃÂµÃ ÃÂ´ÃÂ¾ÃÂ»ÃÃÃÂµ ÃÂ¾ÃÃÃÃÂ½ÃÂ¾ÃÂ³ÃÂ¾.\n"
+                        "ÃÂ¯ ÃÂ¿ÃÃÂ¸ÃÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÃÃÂ°ÃÂ·Ã, ÃÂºÃÂ°ÃÂº ÃÂ¾ÃÂ½ÃÂ¾ ÃÃÃÂ´ÃÂµÃ ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾."
                     )
 
                 if status in ("succeeded", "success", "completed", "finished", "ready", "done"):
                     video_url = _pick_video_url(sjs)
                     if not video_url:
                         await msg.reply_text(
-                            f"â ï¸ Runway: Ð·Ð°Ð´Ð°ÑÐ° Ð·Ð°Ð²ÐµÑÑÐ¸Ð»Ð°ÑÑ, Ð½Ð¾ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ URL Ð²Ð¸Ð´ÐµÐ¾.\n`{str(sjs)[:1200]}`",
+                            f"Ã¢ Ã¯Â¸ Runway: ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ° ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÂ°ÃÃ, ÃÂ½ÃÂ¾ ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃÂ½ URL ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.\n`{str(sjs)[:1200]}`",
                             parse_mode="Markdown",
                         )
                         return
@@ -4422,7 +4422,7 @@ async def _run_runway_animate_photo(
                     try:
                         vr.raise_for_status()
                     except Exception:
-                        await msg.reply_text(f"â ï¸ Runway: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐºÐ°ÑÐ°ÑÑ Ð²Ð¸Ð´ÐµÐ¾ ({vr.status_code}).")
+                        await msg.reply_text(f"Ã¢ Ã¯Â¸ Runway: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂºÃÂ°ÃÃÂ°ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ({vr.status_code}).")
                         return
 
                     bio = BytesIO(vr.content)
@@ -4436,25 +4436,25 @@ async def _run_runway_animate_photo(
 
                 if status in ("failed", "error", "cancelled", "canceled", "rejected"):
                     err = _pick_error(sjs) or str(sjs)[:700]
-                    await msg.reply_text(f"â Runway (imageâvideo) Ð¾ÑÐ¸Ð±ÐºÐ°: `{err}`", parse_mode="Markdown")
+                    await msg.reply_text(f"Ã¢ Runway (imageÃ¢video) ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ°: `{err}`", parse_mode="Markdown")
                     return
 
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
                     await msg.reply_text(
-                        "â Runway ÑÑÐ¸ÑÐ°ÐµÑ ÑÐ»Ð¸ÑÐºÐ¾Ð¼ Ð´Ð¾Ð»Ð³Ð¾.\n"
-                        "ÐÑÐ»Ð¸ Ð²Ð¸Ð´ÐµÐ¾ Ð±ÑÐ´ÐµÑ Ð³Ð¾ÑÐ¾Ð²Ð¾ Ð¿Ð¾Ð·Ð¶Ðµ â Ñ Ð¿ÑÐ¸ÑÐ»Ñ ÐµÐ³Ð¾ Ð°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐµÑÐºÐ¸."
+                        "Ã¢ Runway ÃÃÃÂ¸ÃÃÂ°ÃÂµÃ ÃÃÂ»ÃÂ¸ÃÃÂºÃÂ¾ÃÂ¼ ÃÂ´ÃÂ¾ÃÂ»ÃÂ³ÃÂ¾.\n"
+                        "ÃÃÃÂ»ÃÂ¸ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÃÃÂ´ÃÂµÃ ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ·ÃÂ¶ÃÂµ Ã¢ Ã ÃÂ¿ÃÃÂ¸ÃÃÂ»Ã ÃÂµÃÂ³ÃÂ¾ ÃÂ°ÃÂ²ÃÃÂ¾ÃÂ¼ÃÂ°ÃÃÂ¸ÃÃÂµÃÃÂºÃÂ¸."
                     )
-                    # ÐÐÐÐÐ: ÑÐµÐ¹ÑÐ°Ñ Ð¼Ñ Ð¿ÑÐ¾ÑÑÐ¾ Ð²ÑÑÐ¾Ð´Ð¸Ð¼.
-                    # ÐÑÐ»Ð¸ ÑÐ¾ÑÐµÑÑ ÑÐµÐ°Ð»ÑÐ½Ð¾ âÐ°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐµÑÐºÐ¸ Ð¿Ð¾Ð·Ð¶Ðµâ â Ð´Ð¾Ð±Ð°Ð²Ð»Ñ background-poller (ÑÐµÑÐµÐ· create_task)
+                    # ÃÃÃÃÃ: ÃÃÂµÃÂ¹ÃÃÂ°Ã ÃÂ¼Ã ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ²ÃÃÃÂ¾ÃÂ´ÃÂ¸ÃÂ¼.
+                    # ÃÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂµÃÃ ÃÃÂµÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ Ã¢ÃÂ°ÃÂ²ÃÃÂ¾ÃÂ¼ÃÂ°ÃÃÂ¸ÃÃÂµÃÃÂºÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ·ÃÂ¶ÃÂµÃ¢ Ã¢ ÃÂ´ÃÂ¾ÃÃÂ°ÃÂ²ÃÂ»Ã background-poller (ÃÃÂµÃÃÂµÃÂ· create_task)
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Runway image2video exception: %s", e)
-        await msg.reply_text("â Runway: Ð¾ÑÐ¸Ð±ÐºÐ° Ð²ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ imageâvideo.")
+        await msg.reply_text("Ã¢ Runway: ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ° ÃÂ²ÃÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸Ã imageÃ¢video.")
 
-# ---------------- helpers -----------------def-_dicts_bfs(cts_bfs(root: object, max_depth6)int = """Ð¡Ð¾Ð±Ð¸ÑÐ°ÐµÐ¼ ÑÐ»Ð¾Ð²Ð°ÑÐ¸ Ð² ÑÐ¸ÑÐ¸Ð½Ñ, ÑÑÐ¾Ð±Ñ Ð½Ð°Ð¹ÑÐ¸ status/video_url Ð² Ð»ÑÐ±Ð¾Ð¼ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ð¸."""ÐµÐ½Ð¸Ð¸.""" = []
+# ---------------- helpers -----------------def-_dicts_bfs(cts_bfs(root: object, max_depth6)int = """ÃÂ¡ÃÂ¾ÃÃÂ¸ÃÃÂ°ÃÂµÃÂ¼ ÃÃÂ»ÃÂ¾ÃÂ²ÃÂ°ÃÃÂ¸ ÃÂ² ÃÃÂ¸ÃÃÂ¸ÃÂ½Ã, ÃÃÃÂ¾ÃÃ ÃÂ½ÃÂ°ÃÂ¹ÃÃÂ¸ status/video_url ÃÂ² ÃÂ»ÃÃÃÂ¾ÃÂ¼ ÃÂ²ÃÂ»ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂ¸."""ÃÂµÃÂ½ÃÂ¸ÃÂ¸.""" = []
     q = [(root, 0)]
     seen = set()
     while q:
@@ -4504,8 +4504,8 @@ def _pick_error(sjs: dict) -> str:
 
 def _dicts_bfs(root, max_depth: int = 12):
     """
-    ÐÐ±ÑÐ¾Ð´ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð½ÑÑ dict/list Ð² ÑÐ¸ÑÐ¸Ð½Ñ.
-    ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð²ÑÐµ dict, ÑÑÐ¾Ð±Ñ Ð»ÐµÐ³ÐºÐ¾ Ð½Ð°Ð¹ÑÐ¸ id/status/url Ð³Ð´Ðµ ÑÐ³Ð¾Ð´Ð½Ð¾ Ð² Ð¾ÑÐ²ÐµÑÐµ.
+    ÃÃÃÃÂ¾ÃÂ´ ÃÂ²ÃÂ»ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ½ÃÃ dict/list ÃÂ² ÃÃÂ¸ÃÃÂ¸ÃÂ½Ã.
+    ÃÃÂ¾ÃÂ·ÃÂ²ÃÃÂ°ÃÃÂ°ÃÂµÃ ÃÂ²ÃÃÂµ dict, ÃÃÃÂ¾ÃÃ ÃÂ»ÃÂµÃÂ³ÃÂºÃÂ¾ ÃÂ½ÃÂ°ÃÂ¹ÃÃÂ¸ id/status/url ÃÂ³ÃÂ´ÃÂµ ÃÃÂ³ÃÂ¾ÃÂ´ÃÂ½ÃÂ¾ ÃÂ² ÃÂ¾ÃÃÂ²ÃÂµÃÃÂµ.
     """
     q = [(root, 0)]
     seen = set()
@@ -4538,8 +4538,8 @@ def _dicts_bfs(root, max_depth: int = 12):
     
 def _pick_video_url(obj):
     """
-    ÐÐ¾ÑÑÐ°ÑÑ URL Ð²Ð¸Ð´ÐµÐ¾ Ð¸Ð· Ð»ÑÐ±ÑÑ ÑÐ¾ÑÐ¼ Ð¾ÑÐ²ÐµÑÐ¾Ð² (Comet/Runway/Luma/etc).
-    Ð§Ð°ÑÑÐ¾ Comet: data -> data -> output: [ "https://...mp4" ]
+    ÃÃÂ¾ÃÃÃÂ°ÃÃ URL ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ¸ÃÂ· ÃÂ»ÃÃÃÃ ÃÃÂ¾ÃÃÂ¼ ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ¾ÃÂ² (Comet/Runway/Luma/etc).
+    ÃÂ§ÃÂ°ÃÃÃÂ¾ Comet: data -> data -> output: [ "https://...mp4" ]
     """
     if not obj:
         return None
@@ -4556,7 +4556,7 @@ def _pick_video_url(obj):
         return None
 
     if isinstance(obj, dict):
-        # Ð±ÑÑÑÑÑÐµ ÐºÐ»ÑÑÐ¸
+        # ÃÃÃÃÃÃÃÂµ ÃÂºÃÂ»ÃÃÃÂ¸
         for k in (
             "video_url", "videoUrl",
             "download_url", "downloadUrl",
@@ -4574,13 +4574,13 @@ def _pick_video_url(obj):
             if u:
                 return u
 
-        # ÑÐ¸Ð¿Ð¸ÑÐ½ÑÐµ ÐºÐ¾Ð½ÑÐµÐ¹Ð½ÐµÑÑ
+        # ÃÃÂ¸ÃÂ¿ÃÂ¸ÃÃÂ½ÃÃÂµ ÃÂºÃÂ¾ÃÂ½ÃÃÂµÃÂ¹ÃÂ½ÃÂµÃÃ
         for k in ("data", "result", "response", "payload", "assets"):
             u = _pick_video_url(obj.get(k))
             if u:
                 return u
 
-        # Ð¾Ð±ÑÐ¸Ð¹ Ð¾Ð±ÑÐ¾Ð´
+        # ÃÂ¾ÃÃÃÂ¸ÃÂ¹ ÃÂ¾ÃÃÃÂ¾ÃÂ´
         for v in obj.values():
             u = _pick_video_url(v)
             if u:
@@ -4588,7 +4588,7 @@ def _pick_video_url(obj):
 
     return None
 
-# âââââââââ RUNWAY: TEXT â VIDEO âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ RUNWAY: TEXT Ã¢ VIDEO Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def _run_runway_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -4597,7 +4597,7 @@ async def _run_runway_video(
     aspect: str,
 ) -> bool:
     """
-    Ð¢ÐµÐºÑÑ â Ð²Ð¸Ð´ÐµÐ¾ Ð² Runway (ÑÐµÑÐµÐ· CometAPI /runwayml/v1/text_to_video).
+    ÃÂ¢ÃÂµÃÂºÃÃ Ã¢ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ² Runway (ÃÃÂµÃÃÂµÃÂ· CometAPI /runwayml/v1/text_to_video).
     """
     msg = update.effective_message
     chat_id = update.effective_chat.id
@@ -4607,7 +4607,7 @@ async def _run_runway_video(
         api_key = (os.environ.get("RUNWAY_API_KEY") or RUNWAY_API_KEY or "").strip()
 
     if not api_key:
-        await msg.reply_text("â ï¸ Runway: Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ API-ÐºÐ»ÑÑ (COMETAPI_KEY / RUNWAY_API_KEY).")
+        await msg.reply_text("Ã¢ Ã¯Â¸ Runway: ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ API-ÃÂºÃÂ»ÃÃ (COMETAPI_KEY / RUNWAY_API_KEY).")
         return False
 
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
@@ -4649,8 +4649,8 @@ async def _run_runway_video(
                 txt = (r.text or "")[:800]
                 log.warning("Runway text2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    "â ï¸ Runway (textâvideo) Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð» Ð·Ð°Ð´Ð°ÑÑ "
-                    f"({r.status_code}).\nÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{txt}`",
+                    "Ã¢ Ã¯Â¸ Runway (textÃ¢video) ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ» ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ "
+                    f"({r.status_code}).\nÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return False
@@ -4669,8 +4669,8 @@ async def _run_runway_video(
             if not task_id:
                 snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
                 await msg.reply_text(
-                    "â ï¸ Runway (textâvideo) Ð½Ðµ Ð²ÐµÑÐ½ÑÐ» ID Ð·Ð°Ð´Ð°ÑÐ¸.\n"
-                    f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{snippet}`",
+                    "Ã¢ Ã¯Â¸ Runway (textÃ¢video) ÃÂ½ÃÂµ ÃÂ²ÃÂµÃÃÂ½ÃÃÂ» ID ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ¸.\n"
+                    f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{snippet}`",
                     parse_mode="Markdown",
                 )
                 return False
@@ -4684,9 +4684,9 @@ async def _run_runway_video(
                     txt = (rs.text or "")[:800]
                     log.warning("Runway text2video status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        "â ï¸ Runway (textâvideo) ÑÑÐ°ÑÑÑ-Ð·Ð°ÐºÐ°Ð· Ð²ÐµÑÐ½ÑÐ» Ð¾ÑÐ¸Ð±ÐºÑ.\n"
-                        f"ÐÐ¾Ð´: {rs.status_code}\n"
-                        f"ÐÑÐ²ÐµÑ:\n`{txt}`",
+                        "Ã¢ Ã¯Â¸ Runway (textÃ¢video) ÃÃÃÂ°ÃÃÃ-ÃÂ·ÃÂ°ÃÂºÃÂ°ÃÂ· ÃÂ²ÃÂµÃÃÂ½ÃÃÂ» ÃÂ¾ÃÃÂ¸ÃÃÂºÃ.\n"
+                        f"ÃÃÂ¾ÃÂ´: {rs.status_code}\n"
+                        f"ÃÃÃÂ²ÃÂµÃ:\n`{txt}`",
                         parse_mode="Markdown",
                     )
                     return False
@@ -4740,8 +4740,8 @@ async def _run_runway_video(
                     if not video_url:
                         snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
                         await msg.reply_text(
-                            "â ï¸ Runway (textâvideo): Ð·Ð°Ð´Ð°ÑÐ° Ð·Ð°Ð²ÐµÑÑÐ¸Ð»Ð°ÑÑ, Ð½Ð¾ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ URL Ð²Ð¸Ð´ÐµÐ¾.\n"
-                            f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{snippet}`",
+                            "Ã¢ Ã¯Â¸ Runway (textÃ¢video): ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ° ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÂ°ÃÃ, ÃÂ½ÃÂ¾ ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃÂ½ URL ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.\n"
+                            f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{snippet}`",
                             parse_mode="Markdown",
                         )
                         return False
@@ -4751,7 +4751,7 @@ async def _run_runway_video(
                         vr.raise_for_status()
                     except Exception:
                         await msg.reply_text(
-                            "â ï¸ Runway: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐºÐ°ÑÐ°ÑÑ Ð³Ð¾ÑÐ¾Ð²Ð¾Ðµ Ð²Ð¸Ð´ÐµÐ¾ "
+                            "Ã¢ Ã¯Â¸ Runway: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂºÃÂ°ÃÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ "
                             f"({vr.status_code})."
                         )
                         return False
@@ -4773,13 +4773,13 @@ async def _run_runway_video(
                         or str(sjs)[:500]
                     )
                     await msg.reply_text(
-                        f"â Runway (textâvideo) Ð·Ð°Ð²ÐµÑÑÐ¸Ð»Ð°ÑÑ Ñ Ð¾ÑÐ¸Ð±ÐºÐ¾Ð¹: `{err}`",
+                        f"Ã¢ Runway (textÃ¢video) ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÂ°ÃÃ Ã ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ¾ÃÂ¹: `{err}`",
                         parse_mode="Markdown",
                     )
                     return False
 
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
-                    await msg.reply_text("â Runway (textâvideo): Ð¿ÑÐµÐ²ÑÑÐµÐ½Ð¾ Ð²ÑÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ.")
+                    await msg.reply_text("Ã¢ Runway (textÃ¢video): ÃÂ¿ÃÃÂµÃÂ²ÃÃÃÂµÃÂ½ÃÂ¾ ÃÂ²ÃÃÂµÃÂ¼Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã.")
                     return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
@@ -4788,13 +4788,13 @@ async def _run_runway_video(
         log.exception("Runway text2video exception: %s", e)
         err = str(e)[:400]
         await msg.reply_text(
-            "â Runway: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ/Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð²Ð¸Ð´ÐµÐ¾ (textâvideo).\n"
-            f"Ð¢ÐµÐºÑÑ Ð¾ÑÐ¸Ð±ÐºÐ¸:\n`{err}`",
+            "Ã¢ Runway: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÃÂ¸ÃÃ/ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ (textÃ¢video).\n"
+            f"ÃÂ¢ÃÂµÃÂºÃÃ ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ¸:\n`{err}`",
             parse_mode="Markdown",
         )
 
 
-# âââââââââ KLING: IMAGE â VIDEO (Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ KLING: IMAGE Ã¢ VIDEO (ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
     return False
 async def _run_kling_animate_photo(
     update: Update,
@@ -4805,14 +4805,14 @@ async def _run_kling_animate_photo(
     aspect: str,
 ):
     """
-    ÐÐ¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾ ÑÐµÑÐµÐ· Kling image2video (CometAPI /kling/v1/videos/image2video).
+    ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾ ÃÃÂµÃÃÂµÃÂ· Kling image2video (CometAPI /kling/v1/videos/image2video).
     """
     msg = update.effective_message
     chat_id = update.effective_chat.id
 
     api_key = (os.environ.get("COMETAPI_KEY") or COMETAPI_KEY or "").strip()
     if not api_key:
-        await msg.reply_text("â ï¸ Kling: Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ COMETAPI_KEY.")
+        await msg.reply_text("Ã¢ Ã¯Â¸ Kling: ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ COMETAPI_KEY.")
         return
 
     await context.bot.send_chat_action(chat_id, ChatAction.RECORD_VIDEO)
@@ -4854,8 +4854,8 @@ async def _run_kling_animate_photo(
                 txt = (r.text or "")[:800]
                 log.warning("Kling image2video create error %s: %s", r.status_code, txt)
                 await msg.reply_text(
-                    "â ï¸ Kling (imageâvideo) Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð» Ð·Ð°Ð´Ð°ÑÑ "
-                    f"({r.status_code}).\nÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{txt}`",
+                    "Ã¢ Ã¯Â¸ Kling (imageÃ¢video) ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ» ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ "
+                    f"({r.status_code}).\nÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return
@@ -4870,13 +4870,13 @@ async def _run_kling_animate_photo(
             if not task_id:
                 snippet = (json.dumps(js, ensure_ascii=False) if js else r.text)[:800]
                 await msg.reply_text(
-                    "â ï¸ Kling (imageâvideo) Ð½Ðµ Ð²ÐµÑÐ½ÑÐ» ID Ð·Ð°Ð´Ð°ÑÐ¸.\n"
-                    f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{snippet}`",
+                    "Ã¢ Ã¯Â¸ Kling (imageÃ¢video) ÃÂ½ÃÂµ ÃÂ²ÃÂµÃÃÂ½ÃÃÂ» ID ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ¸.\n"
+                    f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{snippet}`",
                     parse_mode="Markdown",
                 )
                 return
 
-            await msg.reply_text("â³ Kling: Ð°Ð½Ð¸Ð¼Ð¸ÑÑÑ ÑÐ¾ÑÐ¾â¦")
+            await msg.reply_text("Ã¢Â³ Kling: ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ÃÃÃ ÃÃÂ¾ÃÃÂ¾Ã¢Â¦")
 
             status_url = f"{KLING_BASE_URL}{status_tpl.format(id=task_id)}"
             started = time.time()
@@ -4899,8 +4899,8 @@ async def _run_kling_animate_photo(
                     if not video_url:
                         snippet = (json.dumps(sjs, ensure_ascii=False) if sjs else rs.text)[:800]
                         await msg.reply_text(
-                            "â ï¸ Kling (imageâvideo): Ð·Ð°Ð´Ð°ÑÐ° Ð·Ð°Ð²ÐµÑÑÐ¸Ð»Ð°ÑÑ, Ð½Ð¾ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ URL Ð²Ð¸Ð´ÐµÐ¾.\n"
-                            f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{snippet}`",
+                            "Ã¢ Ã¯Â¸ Kling (imageÃ¢video): ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ° ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÂ°ÃÃ, ÃÂ½ÃÂ¾ ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃÂ½ URL ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.\n"
+                            f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{snippet}`",
                             parse_mode="Markdown",
                         )
                         return
@@ -4910,7 +4910,7 @@ async def _run_kling_animate_photo(
                         vr.raise_for_status()
                     except Exception:
                         await msg.reply_text(
-                            "â ï¸ Kling: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐºÐ°ÑÐ°ÑÑ Ð³Ð¾ÑÐ¾Ð²Ð¾Ðµ Ð²Ð¸Ð´ÐµÐ¾ "
+                            "Ã¢ Ã¯Â¸ Kling: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂºÃÂ°ÃÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ "
                             f"({vr.status_code})."
                         )
                         return
@@ -4927,13 +4927,13 @@ async def _run_kling_animate_photo(
                 if status in ("failed", "error"):
                     err = d.get("task_status_msg") or str(sjs)[:500]
                     await msg.reply_text(
-                        f"â Kling (imageâvideo) Ð·Ð°Ð²ÐµÑÑÐ¸Ð»Ð°ÑÑ Ñ Ð¾ÑÐ¸Ð±ÐºÐ¾Ð¹: `{err}`",
+                        f"Ã¢ Kling (imageÃ¢video) ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÂ°ÃÃ Ã ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ¾ÃÂ¹: `{err}`",
                         parse_mode="Markdown",
                     )
                     return
 
                 if time.time() - started > KLING_MAX_WAIT_S:
-                    await msg.reply_text("â Kling (imageâvideo): Ð¿ÑÐµÐ²ÑÑÐµÐ½Ð¾ Ð²ÑÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ.")
+                    await msg.reply_text("Ã¢ Kling (imageÃ¢video): ÃÂ¿ÃÃÂµÃÂ²ÃÃÃÂµÃÂ½ÃÂ¾ ÃÂ²ÃÃÂµÃÂ¼Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã.")
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
@@ -4941,11 +4941,11 @@ async def _run_kling_animate_photo(
     except Exception as e:
         log.exception("Kling image2video exception: %s", e)
         await msg.reply_text(
-            "â Kling: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ/Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð²Ð¸Ð´ÐµÐ¾ (imageâvideo)."
+            "Ã¢ Kling: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÃÂ¸ÃÃ/ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ (imageÃ¢video)."
         )
 
 
-# âââââââââ KLING: TEXT â VIDEO âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ KLING: TEXT Ã¢ VIDEO Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 async def _run_kling_video(
     update: Update,
@@ -4955,12 +4955,12 @@ async def _run_kling_video(
     aspect: str,
 ):
     """
-    Ð¢ÐµÐºÑÑ â Ð²Ð¸Ð´ÐµÐ¾ Ð² Kling (ÑÐµÑÐµÐ· CometAPI /kling/v1/videos/text2video).
+    ÃÂ¢ÃÂµÃÂºÃÃ Ã¢ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ² Kling (ÃÃÂµÃÃÂµÃÂ· CometAPI /kling/v1/videos/text2video).
     """
     msg = update.effective_message
 
     if not COMETAPI_KEY:
-        await msg.reply_text("â ï¸ Kling ÑÐµÑÐµÐ· CometAPI Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ (Ð½ÐµÑ COMETAPI_KEY).")
+        await msg.reply_text("Ã¢ Ã¯Â¸ Kling ÃÃÂµÃÃÂµÃÂ· CometAPI ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ (ÃÂ½ÃÂµÃ COMETAPI_KEY).")
         return
 
     try:
@@ -5007,8 +5007,8 @@ async def _run_kling_video(
             if r.status_code != 200:
                 txt = (r.text or "")[:800]
                 await msg.reply_text(
-                    "â ï¸ Kling (textâvideo) Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð» Ð·Ð°Ð´Ð°ÑÑ "
-                    f"({r.status_code}).\nÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{txt}`",
+                    "Ã¢ Ã¯Â¸ Kling (textÃ¢video) ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ» ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ "
+                    f"({r.status_code}).\nÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return
@@ -5019,13 +5019,13 @@ async def _run_kling_video(
 
             if not task_id:
                 await msg.reply_text(
-                    "â ï¸ Kling: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ task_id Ð¸Ð· Ð¾ÑÐ²ÐµÑÐ°.\n"
-                    f"Ð¡ÑÑÐ¾Ð¹ Ð¾ÑÐ²ÐµÑ: `{js}`",
+                    "Ã¢ Ã¯Â¸ Kling: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ task_id ÃÂ¸ÃÂ· ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ°.\n"
+                    f"ÃÂ¡ÃÃÃÂ¾ÃÂ¹ ÃÂ¾ÃÃÂ²ÃÂµÃ: `{js}`",
                     parse_mode="Markdown",
                 )
                 return
 
-            await msg.reply_text("â³ Kling: Ð·Ð°Ð´Ð°ÑÐ° Ð¿ÑÐ¸Ð½ÑÑÐ°, Ð½Ð°ÑÐ¸Ð½Ð°Ñ ÑÐµÐ½Ð´ÐµÑ Ð²Ð¸Ð´ÐµÐ¾â¦")
+            await msg.reply_text("Ã¢Â³ Kling: ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ° ÃÂ¿ÃÃÂ¸ÃÂ½ÃÃÃÂ°, ÃÂ½ÃÂ°ÃÃÂ¸ÃÂ½ÃÂ°Ã ÃÃÂµÃÂ½ÃÂ´ÃÂµÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾Ã¢Â¦")
 
             status_url = f"{KLING_BASE_URL}/kling/v1/videos/text2video/{task_id}"
             started = time.time()
@@ -5068,8 +5068,8 @@ async def _run_kling_video(
 
                     if not video_url:
                         await msg.reply_text(
-                            "â ï¸ Kling: Ð·Ð°Ð´Ð°ÑÐ° Ð·Ð°Ð²ÐµÑÑÐ¸Ð»Ð°ÑÑ, Ð½Ð¾ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ URL Ð²Ð¸Ð´ÐµÐ¾.\n"
-                            f"Ð¡ÑÑÐ¾Ð¹ Ð¾ÑÐ²ÐµÑ: `{sjs}`",
+                            "Ã¢ Ã¯Â¸ Kling: ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃÂ° ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÂ°ÃÃ, ÃÂ½ÃÂ¾ ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃÂ½ URL ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.\n"
+                            f"ÃÂ¡ÃÃÃÂ¾ÃÂ¹ ÃÂ¾ÃÃÂ²ÃÂµÃ: `{sjs}`",
                             parse_mode="Markdown",
                         )
                         return
@@ -5079,7 +5079,7 @@ async def _run_kling_video(
                         vr.raise_for_status()
                     except Exception:
                         await msg.reply_text(
-                            "â ï¸ Kling: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐºÐ°ÑÐ°ÑÑ Ð³Ð¾ÑÐ¾Ð²Ð¾Ðµ Ð²Ð¸Ð´ÐµÐ¾ "
+                            "Ã¢ Ã¯Â¸ Kling: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂºÃÂ°ÃÃÂ°ÃÃ ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ "
                             f"({vr.status_code})."
                         )
                         return
@@ -5101,13 +5101,13 @@ async def _run_kling_video(
                         or str(sjs)[:500]
                     )
                     await msg.reply_text(
-                        f"â Kling (textâvideo) Ð·Ð°Ð²ÐµÑÑÐ¸Ð»ÑÑ Ñ Ð¾ÑÐ¸Ð±ÐºÐ¾Ð¹: `{err}`",
+                        f"Ã¢ Kling (textÃ¢video) ÃÂ·ÃÂ°ÃÂ²ÃÂµÃÃÃÂ¸ÃÂ»ÃÃ Ã ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ¾ÃÂ¹: `{err}`",
                         parse_mode="Markdown",
                     )
                     return
 
                 if time.time() - started > KLING_MAX_WAIT_S:
-                    await msg.reply_text("â Kling (textâvideo): Ð¿ÑÐµÐ²ÑÑÐµÐ½Ð¾ Ð²ÑÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ.")
+                    await msg.reply_text("Ã¢ Kling (textÃ¢video): ÃÂ¿ÃÃÂµÃÂ²ÃÃÃÂµÃÂ½ÃÂ¾ ÃÂ²ÃÃÂµÃÂ¼Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã.")
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
@@ -5116,13 +5116,13 @@ async def _run_kling_video(
         log.exception("Kling text2video exception: %s", e)
         err = str(e)[:400]
         await msg.reply_text(
-            "â Kling: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ/Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð²Ð¸Ð´ÐµÐ¾ (textâvideo).\n"
-            f"Ð¢ÐµÐºÑÑ Ð¾ÑÐ¸Ð±ÐºÐ¸:\n`{err}`",
+            "Ã¢ Kling: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÃÂ¸ÃÃ/ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ (textÃ¢video).\n"
+            f"ÃÂ¢ÃÂµÃÂºÃÃ ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ¸:\n`{err}`",
             parse_mode="Markdown",
         )
 
 
-# âââââââââ LUMA: IMAGE â VIDEO (Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ LUMA: IMAGE Ã¢ VIDEO (ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 async def _run_luma_video(
     update: Update,
@@ -5132,12 +5132,12 @@ async def _run_luma_video(
     aspect: str,
 ) -> bool:
     """
-    Ð¢ÐµÐºÑÑ â Ð²Ð¸Ð´ÐµÐ¾ Ð² Luma Dream Machine (ray-2).
+    ÃÂ¢ÃÂµÃÂºÃÃ Ã¢ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÂ² Luma Dream Machine (ray-2).
     """
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
 
     if not LUMA_API_KEY:
-        await update.effective_message.reply_text("â ï¸ Luma: Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ LUMA_API_KEY.")
+        await update.effective_message.reply_text("Ã¢ Ã¯Â¸ Luma: ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ LUMA_API_KEY.")
         return False
 
     # duration
@@ -5174,9 +5174,9 @@ async def _run_luma_video(
             if r.status_code >= 400:
                 txt = (r.text or "")[:800]
                 await update.effective_message.reply_text(
-                    "â ï¸ Luma (textâvideo) Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð»Ð° Ð·Ð°Ð´Ð°ÑÑ.\n"
-                    f"ÐÐ¾Ð´: {r.status_code}\n"
-                    f"ÐÑÐ²ÐµÑ:\n`{txt}`",
+                    "Ã¢ Ã¯Â¸ Luma (textÃ¢video) ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ»ÃÂ° ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ.\n"
+                    f"ÃÃÂ¾ÃÂ´: {r.status_code}\n"
+                    f"ÃÃÃÂ²ÃÂµÃ:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return False
@@ -5190,13 +5190,13 @@ async def _run_luma_video(
             if not gen_id:
                 snippet = (json.dumps(gen, ensure_ascii=False) if gen else (r.text or ""))[:800]
                 await update.effective_message.reply_text(
-                    "â ï¸ Luma: Ð½Ðµ Ð²ÐµÑÐ½ÑÐ»Ð° id Ð³ÐµÐ½ÐµÑÐ°ÑÐ¸Ð¸.\n"
-                    f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{snippet}`",
+                    "Ã¢ Ã¯Â¸ Luma: ÃÂ½ÃÂµ ÃÂ²ÃÂµÃÃÂ½ÃÃÂ»ÃÂ° id ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸ÃÂ¸.\n"
+                    f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{snippet}`",
                     parse_mode="Markdown",
                 )
                 return False
 
-            # ÐÐÐÐÐ: status_url Ð´Ð¾Ð»Ð¶ÐµÐ½ Ð±ÑÑÑ Ð¡Ð¢Ð ÐÐÐÐ, Ð° Ð½Ðµ .format-Ð¼ÐµÑÐ¾Ð´Ð¾Ð¼
+            # ÃÃÃÃÃ: status_url ÃÂ´ÃÂ¾ÃÂ»ÃÂ¶ÃÂµÃÂ½ ÃÃÃÃ ÃÂ¡ÃÂ¢Ã ÃÃÃÃ, ÃÂ° ÃÂ½ÃÂµ .format-ÃÂ¼ÃÂµÃÃÂ¾ÃÂ´ÃÂ¾ÃÂ¼
             status_url = f"{base}{LUMA_STATUS_PATH}".format(id=gen_id)
 
             started = time.time()
@@ -5242,8 +5242,8 @@ async def _run_luma_video(
                             break
 
                     if not url:
-                        log.error("Luma: Ð¾ÑÐ²ÐµÑ Ð±ÐµÐ· ÑÑÑÐ»ÐºÐ¸ Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾: %s", js)
-                        await update.effective_message.reply_text("â Luma: Ð¾ÑÐ²ÐµÑ Ð¿ÑÐ¸ÑÑÐ» Ð±ÐµÐ· ÑÑÑÐ»ÐºÐ¸ Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾.")
+                        log.error("Luma: ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÃÂµÃÂ· ÃÃÃÃÂ»ÃÂºÃÂ¸ ÃÂ½ÃÂ° ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾: %s", js)
+                        await update.effective_message.reply_text("Ã¢ Luma: ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÂ¿ÃÃÂ¸ÃÃÃÂ» ÃÃÂµÃÂ· ÃÃÃÃÂ»ÃÂºÃÂ¸ ÃÂ½ÃÂ° ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.")
                         return False
 
                     try:
@@ -5258,32 +5258,32 @@ async def _run_luma_video(
                         )
                     except Exception as e:
                         log.exception("Luma download/send error: %s", e)
-                        await update.effective_message.reply_text("â ï¸ Luma: Ð¾ÑÐ¸Ð±ÐºÐ° Ð¿ÑÐ¸ ÑÐºÐ°ÑÐ¸Ð²Ð°Ð½Ð¸Ð¸/Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐµ Ð²Ð¸Ð´ÐµÐ¾.")
+                        await update.effective_message.reply_text("Ã¢ Ã¯Â¸ Luma: ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ ÃÃÂºÃÂ°ÃÃÂ¸ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ¸/ÃÂ¾ÃÃÂ¿ÃÃÂ°ÃÂ²ÃÂºÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.")
                     return True
 
                 if st in ("failed", "error"):
                     if _is_luma_ip_error(js):
                         await update.effective_message.reply_text(
-                            "â Luma Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð»Ð° Ð·Ð°Ð¿ÑÐ¾Ñ Ð¸Ð·-Ð·Ð° IP (Ð·Ð°ÑÐ¸ÑÑÐ½Ð½ÑÐ¹ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶/Ð±ÑÐµÐ½Ð´ Ð² ÑÐµÐºÑÑÐµ).\n"
-                            "ÐÐµÑÐµÑÐ¾ÑÐ¼ÑÐ»Ð¸ÑÑÐ¹ Ð±ÐµÐ· Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ð¹ (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ: Â«Ð¿Ð»ÑÑÐµÐ²ÑÐ¹ Ð¼ÐµÐ´Ð²ÐµÐ¶Ð¾Ð½Ð¾Ðºâ¦Â») Ð¸ Ð¿Ð¾Ð¿ÑÐ¾Ð±ÑÐ¹ ÐµÑÑ ÑÐ°Ð·."
+                            "Ã¢ Luma ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ»ÃÂ° ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã ÃÂ¸ÃÂ·-ÃÂ·ÃÂ° IP (ÃÂ·ÃÂ°ÃÃÂ¸ÃÃÃÂ½ÃÂ½ÃÃÂ¹ ÃÂ¿ÃÂµÃÃÃÂ¾ÃÂ½ÃÂ°ÃÂ¶/ÃÃÃÂµÃÂ½ÃÂ´ ÃÂ² ÃÃÂµÃÂºÃÃÃÂµ).\n"
+                            "ÃÃÂµÃÃÂµÃÃÂ¾ÃÃÂ¼ÃÃÂ»ÃÂ¸ÃÃÃÂ¹ ÃÃÂµÃÂ· ÃÂ½ÃÂ°ÃÂ·ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ¹ (ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ: ÃÂ«ÃÂ¿ÃÂ»ÃÃÃÂµÃÂ²ÃÃÂ¹ ÃÂ¼ÃÂµÃÂ´ÃÂ²ÃÂµÃÂ¶ÃÂ¾ÃÂ½ÃÂ¾ÃÂºÃ¢Â¦ÃÂ») ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÃÂ¹ ÃÂµÃÃ ÃÃÂ°ÃÂ·."
                         )
                     else:
                         await update.effective_message.reply_text(
-                            f"â Luma (textâvideo) Ð¾ÑÐ¸Ð±ÐºÐ°: {_short_luma_error(js)}"
+                            f"Ã¢ Luma (textÃ¢video) ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ°: {_short_luma_error(js)}"
                         )
                     return False
 
                 if time.time() - started > LUMA_MAX_WAIT_S:
-                    await update.effective_message.reply_text("â Luma (textâvideo): Ð¿ÑÐµÐ²ÑÑÐµÐ½Ð¾ Ð²ÑÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ.")
+                    await update.effective_message.reply_text("Ã¢ Luma (textÃ¢video): ÃÂ¿ÃÃÂµÃÂ²ÃÃÃÂµÃÂ½ÃÂ¾ ÃÂ²ÃÃÂµÃÂ¼Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã.")
                     return False
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Luma error: %s", e)
-        await update.effective_message.reply_text("â Luma: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ/Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð²Ð¸Ð´ÐµÐ¾.")
+        await update.effective_message.reply_text("Ã¢ Luma: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÃÂ¸ÃÃ/ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.")
                             
-# âââââââââ LUMA: TEXT â VIDEO âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ LUMA: TEXT Ã¢ VIDEO Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
     return False
 async def _run_sora_video(
     update: Update,
@@ -5300,12 +5300,12 @@ async def _run_sora_video(
     """
     msg = update.effective_message
     if not SORA_ENABLED or not SORA_COMET_BASE_URL or not SORA_COMET_API_KEY:
-        await msg.reply_text("â ï¸ Sora ÑÐµÐ¹ÑÐ°Ñ Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½Ð° (Ð½ÐµÑ ÐºÐ»ÑÑÐµÐ¹/URL).")
+        await msg.reply_text("Ã¢ Ã¯Â¸ Sora ÃÃÂµÃÂ¹ÃÃÂ°Ã ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ÃÂ° (ÃÂ½ÃÂµÃ ÃÂºÃÂ»ÃÃÃÂµÃÂ¹/URL).")
         return False
 
     # NOTE: This is an intentionally conservative placeholder.
     # Replace with your Comet aggregator endpoint when ready.
-    await msg.reply_text("â ï¸ Sora Ð¸Ð½ÑÐµÐ³ÑÐ°ÑÐ¸Ñ Ð²ÐºÐ»ÑÑÐµÐ½Ð°, Ð½Ð¾ ÑÐ½Ð´Ð¿Ð¾Ð¸Ð½Ñ ÐµÑÑ Ð½Ðµ Ð·Ð°Ð´Ð°Ð½. ÐÐ¾Ð±Ð°Ð²Ñ Ð²ÑÐ·Ð¾Ð² Comet API.")
+    await msg.reply_text("Ã¢ Ã¯Â¸ Sora ÃÂ¸ÃÂ½ÃÃÂµÃÂ³ÃÃÂ°ÃÃÂ¸Ã ÃÂ²ÃÂºÃÂ»ÃÃÃÂµÃÂ½ÃÂ°, ÃÂ½ÃÂ¾ ÃÃÂ½ÃÂ´ÃÂ¿ÃÂ¾ÃÂ¸ÃÂ½Ã ÃÂµÃÃ ÃÂ½ÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½. ÃÃÂ¾ÃÃÂ°ÃÂ²Ã ÃÂ²ÃÃÂ·ÃÂ¾ÃÂ² Comet API.")
     return False
 def _is_luma_ip_error(obj: dict) -> bool:
     fr = (obj.get("failure_reason") or "")
@@ -5317,7 +5317,7 @@ def _short_luma_error(obj: dict) -> str:
     fr = obj.get("failure_reason") or obj.get("message") or obj.get("error") or ""
     fr = str(fr).strip()
     if len(fr) > 400:
-        fr = fr[:400].rstrip() + "â¦"
+        fr = fr[:400].rstrip() + "Ã¢Â¦"
     return fr or "unknown error"
 
 
@@ -5329,8 +5329,8 @@ async def _run_luma_image2video(
     aspect: str,
 ):
     """
-    Luma: IMAGE â VIDEO (Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾).
-    ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑ /generations + keyframes (frame0=image).
+    Luma: IMAGE Ã¢ VIDEO (ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾).
+    ÃÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃ /generations + keyframes (frame0=image).
     """
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
 
@@ -5338,7 +5338,7 @@ async def _run_luma_image2video(
     chat_id = update.effective_chat.id
 
     if not LUMA_API_KEY:
-        await msg.reply_text("â ï¸ Luma: Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½ LUMA_API_KEY.")
+        await msg.reply_text("Ã¢ Ã¯Â¸ Luma: ÃÂ½ÃÂµ ÃÂ½ÃÂ°ÃÃÃÃÂ¾ÃÂµÃÂ½ LUMA_API_KEY.")
         return
 
     base_timeout = 60.0
@@ -5372,9 +5372,9 @@ async def _run_luma_image2video(
             if r.status_code >= 400:
                 txt = (r.text or "")[:1200]
                 await msg.reply_text(
-                    "â ï¸ Luma (imageâvideo) Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð»Ð° Ð·Ð°Ð´Ð°ÑÑ.\n"
-                    f"ÐÐ¾Ð´: {r.status_code}\n"
-                    f"ÐÑÐ²ÐµÑ:\n`{txt}`",
+                    "Ã¢ Ã¯Â¸ Luma (imageÃ¢video) ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ»ÃÂ° ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ.\n"
+                    f"ÃÃÂ¾ÃÂ´: {r.status_code}\n"
+                    f"ÃÃÃÂ²ÃÂµÃ:\n`{txt}`",
                     parse_mode="Markdown",
                 )
                 return
@@ -5388,13 +5388,13 @@ async def _run_luma_image2video(
             if not gen_id:
                 snippet = (json.dumps(gen, ensure_ascii=False) if gen else r.text)[:1200]
                 await msg.reply_text(
-                    "â ï¸ Luma: Ð½Ðµ Ð²ÐµÑÐ½ÑÐ»Ð° id Ð³ÐµÐ½ÐµÑÐ°ÑÐ¸Ð¸.\n"
-                    f"ÐÑÐ²ÐµÑ ÑÐµÑÐ²ÐµÑÐ°:\n`{snippet}`",
+                    "Ã¢ Ã¯Â¸ Luma: ÃÂ½ÃÂµ ÃÂ²ÃÂµÃÃÂ½ÃÃÂ»ÃÂ° id ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸ÃÂ¸.\n"
+                    f"ÃÃÃÂ²ÃÂµÃ ÃÃÂµÃÃÂ²ÃÂµÃÃÂ°:\n`{snippet}`",
                     parse_mode="Markdown",
                 )
                 return
 
-            await msg.reply_text("â³ Luma: Ð¾Ð¶Ð¸Ð²Ð»ÑÑ ÑÐ¾ÑÐ¾â¦")
+            await msg.reply_text("Ã¢Â³ Luma: ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÃ ÃÃÂ¾ÃÃÂ¾Ã¢Â¦")
 
             status_url = f"{base}{LUMA_STATUS_PATH}".format(id=gen_id)
             started = time.time()
@@ -5441,7 +5441,7 @@ async def _run_luma_image2video(
 
                     if not url:
                         log.error("Luma: completed but no video URL: %s", js)
-                        await msg.reply_text("â Luma: Ð¾ÑÐ²ÐµÑ Ð¿ÑÐ¸ÑÑÐ» Ð±ÐµÐ· ÑÑÑÐ»ÐºÐ¸ Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾.")
+                        await msg.reply_text("Ã¢ Luma: ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÂ¿ÃÃÂ¸ÃÃÃÂ» ÃÃÂµÃÂ· ÃÃÃÃÂ»ÃÂºÃÂ¸ ÃÂ½ÃÂ° ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.")
                         return
 
                     try:
@@ -5456,28 +5456,28 @@ async def _run_luma_image2video(
                         )
                     except Exception as e:
                         log.exception("Luma download/send error: %s", e)
-                        await msg.reply_text("â ï¸ Luma: Ð¾ÑÐ¸Ð±ÐºÐ° Ð¿ÑÐ¸ ÑÐºÐ°ÑÐ¸Ð²Ð°Ð½Ð¸Ð¸/Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐµ Ð²Ð¸Ð´ÐµÐ¾.")
+                        await msg.reply_text("Ã¢ Ã¯Â¸ Luma: ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ ÃÃÂºÃÂ°ÃÃÂ¸ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ¸/ÃÂ¾ÃÃÂ¿ÃÃÂ°ÃÂ²ÃÂºÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.")
                     return
 
                 if st in ("failed", "error"):
                     if _is_luma_ip_error(js):
                         await msg.reply_text(
-                            "â Luma Ð¾ÑÐºÐ»Ð¾Ð½Ð¸Ð»Ð° Ð·Ð°Ð¿ÑÐ¾Ñ Ð¸Ð·-Ð·Ð° IP (Ð·Ð°ÑÐ¸ÑÑÐ½Ð½ÑÐ¹ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶/Ð±ÑÐµÐ½Ð´ Ð² ÑÐµÐºÑÑÐµ).\n"
-                            "ÐÐµÑÐµÑÐ¾ÑÐ¼ÑÐ»Ð¸ÑÑÐ¹ Ð±ÐµÐ· Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ð¹ (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ: Â«Ð¿Ð»ÑÑÐµÐ²ÑÐ¹ Ð¼ÐµÐ´Ð²ÐµÐ¶Ð¾Ð½Ð¾Ðºâ¦Â») Ð¸ Ð¿Ð¾Ð¿ÑÐ¾Ð±ÑÐ¹ ÐµÑÑ ÑÐ°Ð·."
+                            "Ã¢ Luma ÃÂ¾ÃÃÂºÃÂ»ÃÂ¾ÃÂ½ÃÂ¸ÃÂ»ÃÂ° ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã ÃÂ¸ÃÂ·-ÃÂ·ÃÂ° IP (ÃÂ·ÃÂ°ÃÃÂ¸ÃÃÃÂ½ÃÂ½ÃÃÂ¹ ÃÂ¿ÃÂµÃÃÃÂ¾ÃÂ½ÃÂ°ÃÂ¶/ÃÃÃÂµÃÂ½ÃÂ´ ÃÂ² ÃÃÂµÃÂºÃÃÃÂµ).\n"
+                            "ÃÃÂµÃÃÂµÃÃÂ¾ÃÃÂ¼ÃÃÂ»ÃÂ¸ÃÃÃÂ¹ ÃÃÂµÃÂ· ÃÂ½ÃÂ°ÃÂ·ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ¹ (ÃÂ½ÃÂ°ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃ: ÃÂ«ÃÂ¿ÃÂ»ÃÃÃÂµÃÂ²ÃÃÂ¹ ÃÂ¼ÃÂµÃÂ´ÃÂ²ÃÂµÃÂ¶ÃÂ¾ÃÂ½ÃÂ¾ÃÂºÃ¢Â¦ÃÂ») ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÃÂ¹ ÃÂµÃÃ ÃÃÂ°ÃÂ·."
                         )
                     else:
-                        await msg.reply_text(f"â Luma (imageâvideo) Ð¾ÑÐ¸Ð±ÐºÐ°: {_short_luma_error(js)}")
+                        await msg.reply_text(f"Ã¢ Luma (imageÃ¢video) ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ°: {_short_luma_error(js)}")
                     return
 
                 if time.time() - started > LUMA_MAX_WAIT_S:
-                    await msg.reply_text("â Luma (imageâvideo): Ð¿ÑÐµÐ²ÑÑÐµÐ½Ð¾ Ð²ÑÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ.")
+                    await msg.reply_text("Ã¢ Luma (imageÃ¢video): ÃÂ¿ÃÃÂµÃÂ²ÃÃÃÂµÃÂ½ÃÂ¾ ÃÂ²ÃÃÂµÃÂ¼Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ¸Ã.")
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Luma image2video error: %s", e)
-        await msg.reply_text("â Luma: Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ/Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð²Ð¸Ð´ÐµÐ¾.")
+        await msg.reply_text("Ã¢ Luma: ÃÂ½ÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÃÂ¸ÃÃ/ÃÂ¿ÃÂ¾ÃÂ»ÃÃÃÂ¸ÃÃ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾.")
             
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -5490,14 +5490,14 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
         text = await transcribe_audio(bio, "voice.ogg")
         if not text:
-            await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°ÑÑ ÑÐµÑÑ.")
+            await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÃ ÃÃÂµÃÃ.")
             return
         update.message.text = text
         await on_text(update, context)
     except Exception as e:
         log.exception("on_voice error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("ÐÑÐ¸Ð±ÐºÐ° Ð¿ÑÐ¸ Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐºÐµ voice.")
+            await update.effective_message.reply_text("ÃÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂºÃÂµ voice.")
 
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -5511,27 +5511,27 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
         text = await transcribe_audio(bio, filename)
         if not text:
-            await update.effective_message.reply_text("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°ÑÑ ÑÐµÑÑ Ð¸Ð· Ð°ÑÐ´Ð¸Ð¾.")
+            await update.effective_message.reply_text("ÃÃÂµ ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÃ ÃÃÂ°ÃÃÂ¿ÃÂ¾ÃÂ·ÃÂ½ÃÂ°ÃÃ ÃÃÂµÃÃ ÃÂ¸ÃÂ· ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾.")
             return
         update.message.text = text
         await on_text(update, context)
     except Exception as e:
         log.exception("on_audio error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("ÐÑÐ¸Ð±ÐºÐ° Ð¿ÑÐ¸ Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐºÐµ Ð°ÑÐ´Ð¸Ð¾.")
+            await update.effective_message.reply_text("ÃÃÃÂ¸ÃÃÂºÃÂ° ÃÂ¿ÃÃÂ¸ ÃÂ¾ÃÃÃÂ°ÃÃÂ¾ÃÃÂºÃÂµ ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾.")
 
 
-# âââââââââ ÐÐ±ÑÐ°Ð±Ð¾ÑÑÐ¸Ðº Ð¾ÑÐ¸Ð±Ð¾Ðº PTB âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÃÃÂ°ÃÃÂ¾ÃÃÃÂ¸ÃÂº ÃÂ¾ÃÃÂ¸ÃÃÂ¾ÃÂº PTB Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
     log.exception("Unhandled error: %s", context_.error)
     try:
         if isinstance(update, Update) and update.effective_message:
-            await update.effective_message.reply_text("Ð£Ð¿Ñ, Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð° Ð¾ÑÐ¸Ð±ÐºÐ°. Ð¯ ÑÐ¶Ðµ ÑÐ°Ð·Ð±Ð¸ÑÐ°ÑÑÑ.")
+            await update.effective_message.reply_text("ÃÂ£ÃÂ¿Ã, ÃÂ¿ÃÃÂ¾ÃÂ¸ÃÂ·ÃÂ¾ÃÃÂ»ÃÂ° ÃÂ¾ÃÃÂ¸ÃÃÂºÃÂ°. ÃÂ¯ ÃÃÂ¶ÃÂµ ÃÃÂ°ÃÂ·ÃÃÂ¸ÃÃÂ°ÃÃÃ.")
     except Exception:
         pass
 
 
-# âââââââââ Ð Ð¾ÑÑÐµÑÑ Ð´Ð»Ñ ÑÐµÐºÑÑÐ¾Ð²ÑÑ ÐºÐ½Ð¾Ð¿Ð¾Ðº/ÑÐµÐ¶Ð¸Ð¼Ð¾Ð² âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Ã ÃÂ¾ÃÃÃÂµÃÃ ÃÂ´ÃÂ»Ã ÃÃÂµÃÂºÃÃÃÂ¾ÃÂ²ÃÃ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂ¾ÃÂº/ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ¾ÃÂ² Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def on_btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await cmd_engines(update, context)
 
@@ -5545,71 +5545,71 @@ async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_mode_school_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "ð *Ð£ÑÑÐ±Ð°*\n"
-        "ÐÐ¾Ð¼Ð¾Ð³Ñ: ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑÑ Ð¸Ð· PDF/EPUB/DOCX/TXT, ÑÐ°Ð·Ð±Ð¾Ñ Ð·Ð°Ð´Ð°Ñ Ð¿Ð¾ÑÐ°Ð³Ð¾Ð²Ð¾, ÑÑÑÐµ/ÑÐµÑÐµÑÐ°ÑÑ, Ð¼Ð¸Ð½Ð¸-ÐºÐ²Ð¸Ð·Ñ.\n\n"
-        "_ÐÑÑÑÑÑÐµ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ:_\n"
-        "â¢ Ð Ð°Ð·Ð¾Ð±ÑÐ°ÑÑ PDF â ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑ\n"
-        "â¢ Ð¡Ð¾ÐºÑÐ°ÑÐ¸ÑÑ Ð² ÑÐ¿Ð°ÑÐ³Ð°Ð»ÐºÑ\n"
-        "â¢ ÐÐ±ÑÑÑÐ½Ð¸ÑÑ ÑÐµÐ¼Ñ Ñ Ð¿ÑÐ¸Ð¼ÐµÑÐ°Ð¼Ð¸\n"
-        "â¢ ÐÐ»Ð°Ð½ Ð¾ÑÐ²ÐµÑÐ° / Ð¿ÑÐµÐ·ÐµÐ½ÑÐ°ÑÐ¸Ð¸"
+        "Ã° *ÃÂ£ÃÃÃÃÂ°*\n"
+        "ÃÃÂ¾ÃÂ¼ÃÂ¾ÃÂ³Ã: ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃÃ ÃÂ¸ÃÂ· PDF/EPUB/DOCX/TXT, ÃÃÂ°ÃÂ·ÃÃÂ¾Ã ÃÂ·ÃÂ°ÃÂ´ÃÂ°Ã ÃÂ¿ÃÂ¾ÃÃÂ°ÃÂ³ÃÂ¾ÃÂ²ÃÂ¾, ÃÃÃÃÂµ/ÃÃÂµÃÃÂµÃÃÂ°ÃÃ, ÃÂ¼ÃÂ¸ÃÂ½ÃÂ¸-ÃÂºÃÂ²ÃÂ¸ÃÂ·Ã.\n\n"
+        "_ÃÃÃÃÃÃÃÂµ ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸Ã:_\n"
+        "Ã¢Â¢ Ã ÃÂ°ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÃ PDF Ã¢ ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃ\n"
+        "Ã¢Â¢ ÃÂ¡ÃÂ¾ÃÂºÃÃÂ°ÃÃÂ¸ÃÃ ÃÂ² ÃÃÂ¿ÃÂ°ÃÃÂ³ÃÂ°ÃÂ»ÃÂºÃ\n"
+        "Ã¢Â¢ ÃÃÃÃÃÃÂ½ÃÂ¸ÃÃ ÃÃÂµÃÂ¼Ã Ã ÃÂ¿ÃÃÂ¸ÃÂ¼ÃÂµÃÃÂ°ÃÂ¼ÃÂ¸\n"
+        "Ã¢Â¢ ÃÃÂ»ÃÂ°ÃÂ½ ÃÂ¾ÃÃÂ²ÃÂµÃÃÂ° / ÃÂ¿ÃÃÂµÃÂ·ÃÂµÃÂ½ÃÃÂ°ÃÃÂ¸ÃÂ¸"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown")
 
 async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "ð¼ *Ð Ð°Ð±Ð¾ÑÐ°*\n"
-        "ÐÐ¸ÑÑÐ¼Ð°/Ð±ÑÐ¸ÑÑ/ÑÐµÐ·ÑÐ¼Ðµ/Ð°Ð½Ð°Ð»Ð¸ÑÐ¸ÐºÐ°, ToDo/Ð¿Ð»Ð°Ð½Ñ, ÑÐ²Ð¾Ð´Ð½ÑÐµ ÑÐ°Ð±Ð»Ð¸ÑÑ Ð¸Ð· Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ¾Ð².\n"
-        "ÐÐ»Ñ Ð°ÑÑÐ¸ÑÐµÐºÑÐ¾ÑÐ°/Ð´Ð¸Ð·Ð°Ð¹Ð½ÐµÑÐ°/Ð¿ÑÐ¾ÐµÐºÑÐ¸ÑÐ¾Ð²ÑÐ¸ÐºÐ° â ÑÑÑÑÐºÑÑÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ Ð¢Ð, ÑÐµÐº-Ð»Ð¸ÑÑÑ ÑÑÐ°Ð´Ð¸Ð¹, "
-        "ÑÐ²Ð¾Ð´Ð½ÑÐµ ÑÐ°Ð±Ð»Ð¸ÑÑ Ð»Ð¸ÑÑÐ¾Ð², Ð¿Ð¾ÑÑÐ½Ð¸ÑÐµÐ»ÑÐ½ÑÐµ Ð·Ð°Ð¿Ð¸ÑÐºÐ¸.\n\n"
-        "_ÐÐ¸Ð±ÑÐ¸Ð´Ñ:_ GPT-5 (ÑÐµÐºÑÑ/Ð»Ð¾Ð³Ð¸ÐºÐ°) + Images (Ð¸Ð»Ð»ÑÑÑÑÐ°ÑÐ¸Ð¸) + Luma/Runway (ÐºÐ»Ð¸Ð¿Ñ/Ð¼Ð¾ÐºÐ°Ð¿Ñ).\n\n"
-        "_ÐÑÑÑÑÑÐµ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ:_\n"
-        "â¢ Ð¡ÑÐ¾ÑÐ¼Ð¸ÑÐ¾Ð²Ð°ÑÑ Ð±ÑÐ¸Ñ/Ð¢Ð\n"
-        "â¢ Ð¡Ð²ÐµÑÑÐ¸ ÑÑÐµÐ±Ð¾Ð²Ð°Ð½Ð¸Ñ Ð² ÑÐ°Ð±Ð»Ð¸ÑÑ\n"
-        "â¢ Ð¡Ð³ÐµÐ½ÐµÑÐ¸ÑÐ¾Ð²Ð°ÑÑ Ð¿Ð¸ÑÑÐ¼Ð¾/ÑÐµÐ·ÑÐ¼Ðµ\n"
-        "â¢ Ð§ÐµÑÐ½Ð¾Ð²Ð¸Ðº Ð¿ÑÐµÐ·ÐµÐ½ÑÐ°ÑÐ¸Ð¸"
+        "Ã°Â¼ *Ã ÃÂ°ÃÃÂ¾ÃÃÂ°*\n"
+        "ÃÃÂ¸ÃÃÃÂ¼ÃÂ°/ÃÃÃÂ¸ÃÃ/ÃÃÂµÃÂ·ÃÃÂ¼ÃÂµ/ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÃÂ¸ÃÂºÃÂ°, ToDo/ÃÂ¿ÃÂ»ÃÂ°ÃÂ½Ã, ÃÃÂ²ÃÂ¾ÃÂ´ÃÂ½ÃÃÂµ ÃÃÂ°ÃÃÂ»ÃÂ¸ÃÃ ÃÂ¸ÃÂ· ÃÂ´ÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃÂ¾ÃÂ².\n"
+        "ÃÃÂ»Ã ÃÂ°ÃÃÃÂ¸ÃÃÂµÃÂºÃÃÂ¾ÃÃÂ°/ÃÂ´ÃÂ¸ÃÂ·ÃÂ°ÃÂ¹ÃÂ½ÃÂµÃÃÂ°/ÃÂ¿ÃÃÂ¾ÃÂµÃÂºÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÃÂ¸ÃÂºÃÂ° Ã¢ ÃÃÃÃÃÂºÃÃÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ¢Ã, ÃÃÂµÃÂº-ÃÂ»ÃÂ¸ÃÃÃ ÃÃÃÂ°ÃÂ´ÃÂ¸ÃÂ¹, "
+        "ÃÃÂ²ÃÂ¾ÃÂ´ÃÂ½ÃÃÂµ ÃÃÂ°ÃÃÂ»ÃÂ¸ÃÃ ÃÂ»ÃÂ¸ÃÃÃÂ¾ÃÂ², ÃÂ¿ÃÂ¾ÃÃÃÂ½ÃÂ¸ÃÃÂµÃÂ»ÃÃÂ½ÃÃÂµ ÃÂ·ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂºÃÂ¸.\n\n"
+        "_ÃÃÂ¸ÃÃÃÂ¸ÃÂ´Ã:_ GPT-5 (ÃÃÂµÃÂºÃÃ/ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸ÃÂºÃÂ°) + Images (ÃÂ¸ÃÂ»ÃÂ»ÃÃÃÃÃÂ°ÃÃÂ¸ÃÂ¸) + Luma/Runway (ÃÂºÃÂ»ÃÂ¸ÃÂ¿Ã/ÃÂ¼ÃÂ¾ÃÂºÃÂ°ÃÂ¿Ã).\n\n"
+        "_ÃÃÃÃÃÃÃÂµ ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸Ã:_\n"
+        "Ã¢Â¢ ÃÂ¡ÃÃÂ¾ÃÃÂ¼ÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÃÃÂ¸Ã/ÃÂ¢Ã\n"
+        "Ã¢Â¢ ÃÂ¡ÃÂ²ÃÂµÃÃÃÂ¸ ÃÃÃÂµÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸Ã ÃÂ² ÃÃÂ°ÃÃÂ»ÃÂ¸ÃÃ\n"
+        "Ã¢Â¢ ÃÂ¡ÃÂ³ÃÂµÃÂ½ÃÂµÃÃÂ¸ÃÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂ¿ÃÂ¸ÃÃÃÂ¼ÃÂ¾/ÃÃÂµÃÂ·ÃÃÂ¼ÃÂµ\n"
+        "Ã¢Â¢ ÃÂ§ÃÂµÃÃÂ½ÃÂ¾ÃÂ²ÃÂ¸ÃÂº ÃÂ¿ÃÃÂµÃÂ·ÃÂµÃÂ½ÃÃÂ°ÃÃÂ¸ÃÂ¸"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown")
 
 async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "ð¥ *Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ*\n"
-        "Ð¤Ð¾ÑÐ¾-Ð¼Ð°ÑÑÐµÑÑÐºÐ°Ñ: ÑÐ´Ð°Ð»Ð¸ÑÑ/Ð·Ð°Ð¼ÐµÐ½Ð¸ÑÑ ÑÐ¾Ð½, Ð´Ð¾Ð±Ð°Ð²Ð¸ÑÑ/ÑÐ±ÑÐ°ÑÑ Ð¾Ð±ÑÐµÐºÑ/ÑÐµÐ»Ð¾Ð²ÐµÐºÐ°, outpaint, "
-        "*Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ°ÑÑÑ ÑÐ¾ÑÐ¾*.\n"
-        "ÐÐ¸Ð´ÐµÐ¾: Luma/Runway â ÐºÐ»Ð¸Ð¿Ñ Ð¿Ð¾Ð´ Reels/Shorts; *Reels Ð¿Ð¾ ÑÐ¼ÑÑÐ»Ñ Ð¸Ð· ÑÐµÐ»ÑÐ½Ð¾Ð³Ð¾ Ð²Ð¸Ð´ÐµÐ¾* "
-        "(ÑÐ¼Ð½Ð°Ñ Ð½Ð°ÑÐµÐ·ÐºÐ°), Ð°Ð²ÑÐ¾-ÑÐ°Ð¹Ð¼ÐºÐ¾Ð´Ñ. ÐÐµÐ¼Ñ/ÐºÐ²Ð¸Ð·Ñ.\n\n"
-        "ÐÑÐ±ÐµÑÐ¸ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ðµ Ð½Ð¸Ð¶Ðµ:"
+        "Ã°Â¥ *Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã*\n"
+        "ÃÂ¤ÃÂ¾ÃÃÂ¾-ÃÂ¼ÃÂ°ÃÃÃÂµÃÃÃÂºÃÂ°Ã: ÃÃÂ´ÃÂ°ÃÂ»ÃÂ¸ÃÃ/ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃÂ½ÃÂ¸ÃÃ ÃÃÂ¾ÃÂ½, ÃÂ´ÃÂ¾ÃÃÂ°ÃÂ²ÃÂ¸ÃÃ/ÃÃÃÃÂ°ÃÃ ÃÂ¾ÃÃÃÂµÃÂºÃ/ÃÃÂµÃÂ»ÃÂ¾ÃÂ²ÃÂµÃÂºÃÂ°, outpaint, "
+        "*ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÃÂ°ÃÃÃ ÃÃÂ¾ÃÃÂ¾*.\n"
+        "ÃÃÂ¸ÃÂ´ÃÂµÃÂ¾: Luma/Runway Ã¢ ÃÂºÃÂ»ÃÂ¸ÃÂ¿Ã ÃÂ¿ÃÂ¾ÃÂ´ Reels/Shorts; *Reels ÃÂ¿ÃÂ¾ ÃÃÂ¼ÃÃÃÂ»Ã ÃÂ¸ÃÂ· ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾* "
+        "(ÃÃÂ¼ÃÂ½ÃÂ°Ã ÃÂ½ÃÂ°ÃÃÂµÃÂ·ÃÂºÃÂ°), ÃÂ°ÃÂ²ÃÃÂ¾-ÃÃÂ°ÃÂ¹ÃÂ¼ÃÂºÃÂ¾ÃÂ´Ã. ÃÃÂµÃÂ¼Ã/ÃÂºÃÂ²ÃÂ¸ÃÂ·Ã.\n\n"
+        "ÃÃÃÃÂµÃÃÂ¸ ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸ÃÂµ ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ:"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# âââââ ÐÐ»Ð°Ð²Ð¸Ð°ÑÑÑÐ° Â«Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸ÑÂ» Ñ Ð½Ð¾Ð²ÑÐ¼Ð¸ ÐºÐ½Ð¾Ð¿ÐºÐ°Ð¼Ð¸ âââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ»ÃÂ°ÃÂ²ÃÂ¸ÃÂ°ÃÃÃÃÂ° ÃÂ«Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÃÂ» Ã ÃÂ½ÃÂ¾ÃÂ²ÃÃÂ¼ÃÂ¸ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ°ÃÂ¼ÃÂ¸ Ã¢Ã¢Ã¢Ã¢Ã¢
 def _fun_quick_kb() -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton("ð­ ÐÐ´ÐµÐ¸ Ð´Ð»Ñ Ð´Ð¾ÑÑÐ³Ð°", callback_data="fun:ideas")],
-        [InlineKeyboardButton("ð¬ Ð¡ÑÐµÐ½Ð°ÑÐ¸Ð¹ ÑÐ¾ÑÑÐ°", callback_data="fun:storyboard")],
-        [InlineKeyboardButton("ð® ÐÐ³ÑÑ/ÐºÐ²Ð¸Ð·",       callback_data="fun:quiz")],
-        # ÐÐ¾Ð²ÑÐµ ÐºÐ»ÑÑÐµÐ²ÑÐµ ÐºÐ½Ð¾Ð¿ÐºÐ¸
+        [InlineKeyboardButton("Ã°Â­ ÃÃÂ´ÃÂµÃÂ¸ ÃÂ´ÃÂ»Ã ÃÂ´ÃÂ¾ÃÃÃÂ³ÃÂ°", callback_data="fun:ideas")],
+        [InlineKeyboardButton("Ã°Â¬ ÃÂ¡ÃÃÂµÃÂ½ÃÂ°ÃÃÂ¸ÃÂ¹ ÃÃÂ¾ÃÃÃÂ°", callback_data="fun:storyboard")],
+        [InlineKeyboardButton("Ã°Â® ÃÃÂ³ÃÃ/ÃÂºÃÂ²ÃÂ¸ÃÂ·",       callback_data="fun:quiz")],
+        # ÃÃÂ¾ÃÂ²ÃÃÂµ ÃÂºÃÂ»ÃÃÃÂµÃÂ²ÃÃÂµ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸
         [
-            InlineKeyboardButton("ðª ÐÐ¶Ð¸Ð²Ð¸ÑÑ ÑÑÐ°ÑÐ¾Ðµ ÑÐ¾ÑÐ¾", callback_data="fun:revive"),
-            InlineKeyboardButton("ð¬ Reels Ð¸Ð· Ð´Ð»Ð¸Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¸Ð´ÐµÐ¾", callback_data="fun:smartreels"),
+            InlineKeyboardButton("Ã°Âª ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÃÂ°ÃÃÂ¾ÃÂµ ÃÃÂ¾ÃÃÂ¾", callback_data="fun:revive"),
+            InlineKeyboardButton("Ã°Â¬ Reels ÃÂ¸ÃÂ· ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾", callback_data="fun:smartreels"),
         ],
         [
-            InlineKeyboardButton("ð¥ Runway",      callback_data="fun:clip"),
-            InlineKeyboardButton("ð¨ Midjourney",  callback_data="fun:img"),
-            InlineKeyboardButton("ð STT/TTS",     callback_data="fun:speech"),
+            InlineKeyboardButton("Ã°Â¥ Runway",      callback_data="fun:clip"),
+            InlineKeyboardButton("Ã°Â¨ Midjourney",  callback_data="fun:img"),
+            InlineKeyboardButton("Ã° STT/TTS",     callback_data="fun:speech"),
         ],
-        [InlineKeyboardButton("ð Ð¡Ð²Ð¾Ð±Ð¾Ð´Ð½ÑÐ¹ Ð·Ð°Ð¿ÑÐ¾Ñ", callback_data="fun:free")],
-        [InlineKeyboardButton("â¬ï¸ ÐÐ°Ð·Ð°Ð´", callback_data="fun:back")],
+        [InlineKeyboardButton("Ã° ÃÂ¡ÃÂ²ÃÂ¾ÃÃÂ¾ÃÂ´ÃÂ½ÃÃÂ¹ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã", callback_data="fun:free")],
+        [InlineKeyboardButton("Ã¢Â¬Ã¯Â¸ ÃÃÂ°ÃÂ·ÃÂ°ÃÂ´", callback_data="fun:back")],
     ]
     return InlineKeyboardMarkup(rows)
     if SORA_ENABLED:
-        rows.append([InlineKeyboardButton("â¨ Sora", callback_data="engine:sora")])
+        rows.append([InlineKeyboardButton("Ã¢Â¨ Sora", callback_data="engine:sora")])
 
 
-# âââââââââ ÐÐ¾ÑÐ¼Ð°Ð»Ð¸Ð·Ð°ÑÐ¸Ñ duration Ð´Ð»Ñ Runway/Comet (image_to_video) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÃÂ¼ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ°ÃÃÂ¸Ã duration ÃÂ´ÃÂ»Ã Runway/Comet (image_to_video) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _normalize_runway_duration_for_comet(seconds: int | float | None) -> int:
     """
-    Comet/Runway Ð¿ÑÐ¸Ð½Ð¸Ð¼Ð°ÐµÑ ÑÑÑÐ¾Ð³Ð¾ 5 Ð¸Ð»Ð¸ 10 ÑÐµÐºÑÐ½Ð´.
-    Ð¢ÑÐµÐ±Ð¾Ð²Ð°Ð½Ð¸Ðµ: 7â9 ÑÐµÐºÑÐ½Ð´ => 10, Ð²ÑÑ Ð¾ÑÑÐ°Ð»ÑÐ½Ð¾Ðµ => 5.
+    Comet/Runway ÃÂ¿ÃÃÂ¸ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÂµÃ ÃÃÃÃÂ¾ÃÂ³ÃÂ¾ 5 ÃÂ¸ÃÂ»ÃÂ¸ 10 ÃÃÂµÃÂºÃÃÂ½ÃÂ´.
+    ÃÂ¢ÃÃÂµÃÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂµ: 7Ã¢9 ÃÃÂµÃÂºÃÃÂ½ÃÂ´ => 10, ÃÂ²ÃÃ ÃÂ¾ÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ÃÂµ => 5.
     """
     try:
         d = int(round(float(seconds or 0)))
@@ -5620,7 +5620,7 @@ def _normalize_runway_duration_for_comet(seconds: int | float | None) -> int:
         return 10
     return 5
 
-# âââââââââ ÐÐ¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾: ÑÐ½Ð¸Ð²ÐµÑÑÐ°Ð»ÑÐ½ÑÐ¹ Ð¿Ð°Ð¹Ð¿Ð»Ð°Ð¹Ð½ (Runway / Kling / Luma) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾: ÃÃÂ½ÃÂ¸ÃÂ²ÃÂµÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÂ¿ÃÂ°ÃÂ¹ÃÂ¿ÃÂ»ÃÂ°ÃÂ¹ÃÂ½ (Runway / Kling / Luma) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
 async def revive_old_photo_flow(
     update: Update,
@@ -5628,11 +5628,11 @@ async def revive_old_photo_flow(
     engine: str | None = None,
 ):
     """
-    Ð£Ð½Ð¸Ð²ÐµÑÑÐ°Ð»ÑÐ½ÑÐ¹ Ð¿Ð°Ð¹Ð¿Ð»Ð°Ð¹Ð½ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ ÑÐ¾ÑÐ¾.
+    ÃÂ£ÃÂ½ÃÂ¸ÃÂ²ÃÂµÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÃÂ¹ ÃÂ¿ÃÂ°ÃÂ¹ÃÂ¿ÃÂ»ÃÂ°ÃÂ¹ÃÂ½ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã ÃÃÂ¾ÃÃÂ¾.
 
-    1) ÐÐµÑÑÐ¼ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐµ ÑÐ¾ÑÐ¾ Ð¸Ð· _LAST_ANIM_PHOTO.
-    2) ÐÑÐ»Ð¸ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð½Ðµ Ð²ÑÐ±ÑÐ°Ð½ â Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð¼ÐµÐ½Ñ Ð²ÑÐ±Ð¾ÑÐ° (Runway/Kling/Luma).
-    3) ÐÑÐ»Ð¸ Ð²ÑÐ±ÑÐ°Ð½ Ð´Ð²Ð¸Ð¶Ð¾Ðº â ÑÑÐ¸ÑÐ°ÐµÐ¼ ÑÐµÐ½Ñ Ð¸ Ð·Ð°Ð¿ÑÑÐºÐ°ÐµÐ¼ ÑÐ¾Ð¾ÑÐ²ÐµÑÑÑÐ²ÑÑÑÐ¸Ð¹ backend.
+    1) ÃÃÂµÃÃÃÂ¼ ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµÃÂ´ÃÂ½ÃÂµÃÂµ ÃÃÂ¾ÃÃÂ¾ ÃÂ¸ÃÂ· _LAST_ANIM_PHOTO.
+    2) ÃÃÃÂ»ÃÂ¸ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ½ÃÂµ ÃÂ²ÃÃÃÃÂ°ÃÂ½ Ã¢ ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ¼ÃÂµÃÂ½Ã ÃÂ²ÃÃÃÂ¾ÃÃÂ° (Runway/Kling/Luma).
+    3) ÃÃÃÂ»ÃÂ¸ ÃÂ²ÃÃÃÃÂ°ÃÂ½ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº Ã¢ ÃÃÃÂ¸ÃÃÂ°ÃÂµÃÂ¼ ÃÃÂµÃÂ½Ã ÃÂ¸ ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÂºÃÂ°ÃÂµÃÂ¼ ÃÃÂ¾ÃÂ¾ÃÃÂ²ÃÂµÃÃÃÃÂ²ÃÃÃÃÂ¸ÃÂ¹ backend.
     """
     msg = update.effective_message
     user_id = update.effective_user.id
@@ -5643,31 +5643,31 @@ async def revive_old_photo_flow(
 
     if not img_bytes:
         await msg.reply_text(
-            "Ð¡Ð½Ð°ÑÐ°Ð»Ð° Ð¿ÑÐ¸ÑÐ»Ð¸ ÑÐ¾ÑÐ¾ (Ð¶ÐµÐ»Ð°ÑÐµÐ»ÑÐ½Ð¾ Ð¿Ð¾ÑÑÑÐµÑ), "
-            "Ð° Ð¿Ð¾ÑÐ¾Ð¼ Ð½Ð°Ð¶Ð¼Ð¸ Â«ðª ÐÐ¶Ð¸Ð²Ð¸ÑÑ ÑÑÐ°ÑÐ¾Ðµ ÑÐ¾ÑÐ¾Â» Ð¸Ð»Ð¸ ÐºÐ½Ð¾Ð¿ÐºÑ Ð¿Ð¾Ð´ ÑÐ¾ÑÐ¾Ð³ÑÐ°ÑÐ¸ÐµÐ¹."
+            "ÃÂ¡ÃÂ½ÃÂ°ÃÃÂ°ÃÂ»ÃÂ° ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¾ (ÃÂ¶ÃÂµÃÂ»ÃÂ°ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ ÃÂ¿ÃÂ¾ÃÃÃÃÂµÃ), "
+            "ÃÂ° ÃÂ¿ÃÂ¾ÃÃÂ¾ÃÂ¼ ÃÂ½ÃÂ°ÃÂ¶ÃÂ¼ÃÂ¸ ÃÂ«Ã°Âª ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÃÂ°ÃÃÂ¾ÃÂµ ÃÃÂ¾ÃÃÂ¾ÃÂ» ÃÂ¸ÃÂ»ÃÂ¸ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃ ÃÂ¿ÃÂ¾ÃÂ´ ÃÃÂ¾ÃÃÂ¾ÃÂ³ÃÃÂ°ÃÃÂ¸ÃÂµÃÂ¹."
         )
         return True
 
-    # Ð¿Ð°ÑÐ°Ð¼ÐµÑÑÑ (Ð¿ÑÐ¸ÑÐ»Ð¸ Ð¸Ð· on_photo ÑÐµÑÐµÐ· context.user_data["revive_photo"])
+    # ÃÂ¿ÃÂ°ÃÃÂ°ÃÂ¼ÃÂµÃÃÃ (ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÂ¸ÃÂ· on_photo ÃÃÂµÃÃÂµÃÂ· context.user_data["revive_photo"])
     rp = context.user_data.get("revive_photo") or {}
     dur = int(rp.get("duration") or RUNWAY_DURATION_S or 5)
     asp = (rp.get("aspect") or RUNWAY_RATIO or "720:1280")
     prompt = (rp.get("prompt") or "").strip()
 
-    # ÑÐ°Ð³ 1: Ð²ÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ°
+    # ÃÃÂ°ÃÂ³ 1: ÃÂ²ÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ°
     if not engine:
-        await msg.reply_text("ÐÑÐ±ÐµÑÐ¸ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð´Ð»Ñ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ ÑÐ¾ÑÐ¾:", reply_markup=revive_engine_kb())
+        await msg.reply_text("ÃÃÃÃÂµÃÃÂ¸ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã ÃÃÂ¾ÃÃÂ¾:", reply_markup=revive_engine_kb())
         return True
 
     engine = engine.lower().strip()
 
-    # --- Ð³Ð¾ÑÐ¾Ð²Ð¸Ð¼ ÑÑÐ½ÐºÑÐ¸Ð¸, ÐºÐ¾ÑÐ¾ÑÑÐµ Ð±ÑÐ´ÐµÐ¼ Ð¾ÑÐ´Ð°Ð²Ð°ÑÑ Ð² Ð±Ð¸Ð»Ð»Ð¸Ð½Ð³ ---
+    # --- ÃÂ³ÃÂ¾ÃÃÂ¾ÃÂ²ÃÂ¸ÃÂ¼ ÃÃÃÂ½ÃÂºÃÃÂ¸ÃÂ¸, ÃÂºÃÂ¾ÃÃÂ¾ÃÃÃÂµ ÃÃÃÂ´ÃÂµÃÂ¼ ÃÂ¾ÃÃÂ´ÃÂ°ÃÂ²ÃÂ°ÃÃ ÃÂ² ÃÃÂ¸ÃÂ»ÃÂ»ÃÂ¸ÃÂ½ÃÂ³ ---
     async def _go_runway():
-        # Runway/Comet ÑÑÐµÐ±ÑÐµÑ Ð¿ÑÐ±Ð»Ð¸ÑÐ½ÑÐ¹ URL ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸
+        # Runway/Comet ÃÃÃÂµÃÃÃÂµÃ ÃÂ¿ÃÃÃÂ»ÃÂ¸ÃÃÂ½ÃÃÂ¹ URL ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸
         if not image_url or not image_url.startswith("http"):
             await msg.reply_text(
-                "ÐÐ»Ñ Runway Ð½ÑÐ¶ÐµÐ½ Ð¿ÑÐ±Ð»Ð¸ÑÐ½ÑÐ¹ URL Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ (Telegram file_path). "
-                "ÐÑÐ¸ÑÐ»Ð¸ ÑÐ¾ÑÐ¾ ÐµÑÑ ÑÐ°Ð·."
+                "ÃÃÂ»Ã Runway ÃÂ½ÃÃÂ¶ÃÂµÃÂ½ ÃÂ¿ÃÃÃÂ»ÃÂ¸ÃÃÂ½ÃÃÂ¹ URL ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã (Telegram file_path). "
+                "ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¾ ÃÂµÃÃ ÃÃÂ°ÃÂ·."
             )
             return
         await _run_runway_animate_photo(update, context, image_url, prompt, dur, asp)
@@ -5678,13 +5678,13 @@ async def revive_old_photo_flow(
     async def _go_luma():
         if not image_url or not image_url.startswith("http"):
             await msg.reply_text(
-                "ÐÐ»Ñ Luma Ð½ÑÐ¶ÐµÐ½ Ð¿ÑÐ±Ð»Ð¸ÑÐ½ÑÐ¹ URL Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ (Telegram file_path). "
-                "ÐÑÐ¸ÑÐ»Ð¸ ÑÐ¾ÑÐ¾ ÐµÑÑ ÑÐ°Ð·."
+                "ÃÃÂ»Ã Luma ÃÂ½ÃÃÂ¶ÃÂµÃÂ½ ÃÂ¿ÃÃÃÂ»ÃÂ¸ÃÃÂ½ÃÃÂ¹ URL ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã (Telegram file_path). "
+                "ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¾ ÃÂµÃÃ ÃÃÂ°ÃÂ·."
             )
             return
         await _run_luma_image2video(update, context, image_url, prompt, asp)
 
-    # ÑÑÐ¾Ð¸Ð¼Ð¾ÑÑÑ (ÑÐµÑÐ½Ð¾Ð²Ð°Ñ)
+    # ÃÃÃÂ¾ÃÂ¸ÃÂ¼ÃÂ¾ÃÃÃ (ÃÃÂµÃÃÂ½ÃÂ¾ÃÂ²ÃÂ°Ã)
     est_runway = max(1.0, float(RUNWAY_UNIT_COST_USD or 1.0) * (dur / max(1, int(RUNWAY_DURATION_S or 5))))
     est_kling  = max(1.0, float(globals().get("KLING_UNIT_COST_USD", RUNWAY_UNIT_COST_USD) or 1.0))
     est_luma   = max(1.0, float(globals().get("LUMA_UNIT_COST_USD", RUNWAY_UNIT_COST_USD) or 1.0))
@@ -5713,17 +5713,17 @@ async def revive_old_photo_flow(
         )
         return True
 
-    await msg.reply_text("ÐÐµÐ¸Ð·Ð²ÐµÑÑÐ½ÑÐ¹ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ. ÐÐ¾Ð¿ÑÐ¾Ð±ÑÐ¹ ÐµÑÑ ÑÐ°Ð·.")
+    await msg.reply_text("ÃÃÂµÃÂ¸ÃÂ·ÃÂ²ÃÂµÃÃÃÂ½ÃÃÂ¹ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã. ÃÃÂ¾ÃÂ¿ÃÃÂ¾ÃÃÃÂ¹ ÃÂµÃÃ ÃÃÂ°ÃÂ·.")
     return True
 
 
-# âââââ ÐÐ±ÑÐ°Ð±Ð¾ÑÑÐ¸Ðº Ð±ÑÑÑÑÑÑ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ð¹ Â«Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸ÑÂ» (revive + Ð²ÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ°) âââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÃÃÂ°ÃÃÂ¾ÃÃÃÂ¸ÃÂº ÃÃÃÃÃÃÃ ÃÂ´ÃÂµÃÂ¹ÃÃÃÂ²ÃÂ¸ÃÂ¹ ÃÂ«Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÃÂ» (revive + ÃÂ²ÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ°) Ã¢Ã¢Ã¢Ã¢Ã¢
 
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
 
-    # action â ÑÐ°ÑÑÑ Ð¿Ð¾ÑÐ»Ðµ Ð¿ÐµÑÐ²Ð¾Ð³Ð¾ "fun:" Ð¸Ð»Ð¸ "something:"
+    # action Ã¢ ÃÃÂ°ÃÃÃ ÃÂ¿ÃÂ¾ÃÃÂ»ÃÂµ ÃÂ¿ÃÂµÃÃÂ²ÃÂ¾ÃÂ³ÃÂ¾ "fun:" ÃÂ¸ÃÂ»ÃÂ¸ "something:"
     action = data.split(":", 1)[1] if ":" in data else ""
 
     async def _try_call(*fn_names, **kwargs):
@@ -5733,50 +5733,50 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
 
     # ---------------------------------------------------------------------
-    # ÐÐ½Ð¾Ð¿ÐºÐ° Ð¿Ð¾Ð´ ÑÐ¾ÑÐ¾ "â¨ Ð¾Ð¶Ð¸Ð²Ð¸ÑÑ ÑÐ¾ÑÐ¾" (pedit:revive)
+    # ÃÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ° ÃÂ¿ÃÂ¾ÃÂ´ ÃÃÂ¾ÃÃÂ¾ "Ã¢Â¨ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÂ¾ÃÃÂ¾" (pedit:revive)
     # ---------------------------------------------------------------------
     if data.startswith("pedit:revive"):
         with contextlib.suppress(Exception):
-            await q.answer("ÐÐ¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾")
-        # Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð²ÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ°
+            await q.answer("ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾")
+        # ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ²ÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ°
         with contextlib.suppress(Exception):
-            await q.edit_message_text("ÐÑÐ±ÐµÑÐ¸ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð´Ð»Ñ Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ ÑÐ¾ÑÐ¾:", reply_markup=revive_engine_kb())
+            await q.edit_message_text("ÃÃÃÃÂµÃÃÂ¸ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ´ÃÂ»Ã ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã ÃÃÂ¾ÃÃÂ¾:", reply_markup=revive_engine_kb())
         return
 
     # ---------------------------------------------------------------------
-    # ÐÑÐ±Ð¾Ñ Ð´Ð²Ð¸Ð¶ÐºÐ° Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ñ: revive_engine:runway / kling / luma
+    # ÃÃÃÃÂ¾Ã ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ° ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã: revive_engine:runway / kling / luma
     # ---------------------------------------------------------------------
     if data.startswith("revive_engine:"):
         with contextlib.suppress(Exception):
             await q.answer()
         engine = data.split(":", 1)[1].strip().lower() if ":" in data else ""
 
-        # ÐÐ°Ð¶Ð½Ð¾: Ð·Ð°Ð¿ÑÑÐºÐ°ÐµÐ¼ Ð¿Ð°Ð¹Ð¿Ð»Ð°Ð¹Ð½ Ð¸ ÐÐ Ð¿ÑÑÐ°ÐµÐ¼ÑÑ edit-Ð¸ÑÑ ÑÑÐ°ÑÐ¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð´Ð°Ð»ÑÑÐµ
+        # ÃÃÂ°ÃÂ¶ÃÂ½ÃÂ¾: ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÂºÃÂ°ÃÂµÃÂ¼ ÃÂ¿ÃÂ°ÃÂ¹ÃÂ¿ÃÂ»ÃÂ°ÃÂ¹ÃÂ½ ÃÂ¸ ÃÃ ÃÂ¿ÃÃÃÂ°ÃÂµÃÂ¼ÃÃ edit-ÃÂ¸ÃÃ ÃÃÃÂ°ÃÃÂ¾ÃÂµ ÃÃÂ¾ÃÂ¾ÃÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÂ´ÃÂ°ÃÂ»ÃÃÃÂµ
         await revive_old_photo_flow(update, context, engine=engine)
         return
 
     # ---------------------------------------------------------------------
-    # ÐÐµÐ½Ñ "Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ" â Ð¾Ð¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ
+    # ÃÃÂµÃÂ½Ã "Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã" Ã¢ ÃÂ¾ÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ
     # ---------------------------------------------------------------------
     if action == "revive":
         with contextlib.suppress(Exception):
-            await q.answer("ÐÐ¶Ð¸Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾ÑÐ¾")
+            await q.answer("ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ¾ÃÃÂ¾")
         await revive_old_photo_flow(update, context, engine=None)
         return
 
     # ---------------------------------------------------------------------
-    # ÐÑÑÐ°Ð»ÑÐ½Ð¾Ðµ â ÐºÐ°Ðº Ñ ÑÐµÐ±Ñ Ð±ÑÐ»Ð¾ (Ð¾ÑÑÐ°Ð²Ð»ÑÑ ÑÑÑÑÐºÑÑÑÑ)
+    # ÃÃÃÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ÃÂµ Ã¢ ÃÂºÃÂ°ÃÂº Ã ÃÃÂµÃÃ ÃÃÃÂ»ÃÂ¾ (ÃÂ¾ÃÃÃÂ°ÃÂ²ÃÂ»ÃÃ ÃÃÃÃÃÂºÃÃÃÃ)
     # ---------------------------------------------------------------------
     if action == "smartreels":
         if await _try_call("smart_reels_from_video", "video_sense_reels"):
             return
         with contextlib.suppress(Exception):
-            await q.answer("Reels Ð¸Ð· Ð´Ð»Ð¸Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¸Ð´ÐµÐ¾")
+            await q.answer("Reels ÃÂ¸ÃÂ· ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾")
         await q.edit_message_text(
-            "ð¬ *Reels Ð¸Ð· Ð´Ð»Ð¸Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¸Ð´ÐµÐ¾*\n"
-            "ÐÑÐ¸ÑÐ»Ð¸ Ð´Ð»Ð¸Ð½Ð½Ð¾Ðµ Ð²Ð¸Ð´ÐµÐ¾ (Ð¸Ð»Ð¸ ÑÑÑÐ»ÐºÑ) + ÑÐµÐ¼Ñ/Ð¦Ð. "
-            "Ð¡Ð´ÐµÐ»Ð°Ñ ÑÐ¼Ð½ÑÑ Ð½Ð°ÑÐµÐ·ÐºÑ (hook â value â CTA), ÑÑÐ±ÑÐ¸ÑÑÑ Ð¸ ÑÐ°Ð¹Ð¼ÐºÐ¾Ð´Ñ. "
-            "Ð¡ÐºÐ°Ð¶Ð¸ ÑÐ¾ÑÐ¼Ð°Ñ: 9:16 Ð¸Ð»Ð¸ 1:1.",
+            "Ã°Â¬ *Reels ÃÂ¸ÃÂ· ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾*\n"
+            "ÃÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÂ¾ÃÂµ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ (ÃÂ¸ÃÂ»ÃÂ¸ ÃÃÃÃÂ»ÃÂºÃ) + ÃÃÂµÃÂ¼Ã/ÃÂ¦Ã. "
+            "ÃÂ¡ÃÂ´ÃÂµÃÂ»ÃÂ°Ã ÃÃÂ¼ÃÂ½ÃÃ ÃÂ½ÃÂ°ÃÃÂµÃÂ·ÃÂºÃ (hook Ã¢ value Ã¢ CTA), ÃÃÃÃÃÂ¸ÃÃÃ ÃÂ¸ ÃÃÂ°ÃÂ¹ÃÂ¼ÃÂºÃÂ¾ÃÂ´Ã. "
+            "ÃÂ¡ÃÂºÃÂ°ÃÂ¶ÃÂ¸ ÃÃÂ¾ÃÃÂ¼ÃÂ°Ã: 9:16 ÃÂ¸ÃÂ»ÃÂ¸ 1:1.",
             parse_mode="Markdown",
             reply_markup=_fun_quick_kb()
         )
@@ -5788,7 +5788,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
         await q.edit_message_text(
-            "ÐÐ°Ð¿ÑÑÑÐ¸ /diag_video ÑÑÐ¾Ð±Ñ Ð¿ÑÐ¾Ð²ÐµÑÐ¸ÑÑ ÐºÐ»ÑÑÐ¸ Luma/Runway.",
+            "ÃÃÂ°ÃÂ¿ÃÃÃÃÂ¸ /diag_video ÃÃÃÂ¾ÃÃ ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂµÃÃÂ¸ÃÃ ÃÂºÃÂ»ÃÃÃÂ¸ Luma/Runway.",
             reply_markup=_fun_quick_kb()
         )
         return
@@ -5799,7 +5799,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
         await q.edit_message_text(
-            "ÐÐ²ÐµÐ´Ð¸ /img Ð¸ ÑÐµÐ¼Ñ ÐºÐ°ÑÑÐ¸Ð½ÐºÐ¸, Ð¸Ð»Ð¸ Ð¿ÑÐ¸ÑÐ»Ð¸ ÑÐµÑÑ.",
+            "ÃÃÂ²ÃÂµÃÂ´ÃÂ¸ /img ÃÂ¸ ÃÃÂµÃÂ¼Ã ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½ÃÂºÃÂ¸, ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ ÃÃÂµÃÃ.",
             reply_markup=_fun_quick_kb()
         )
         return
@@ -5810,7 +5810,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
         await q.edit_message_text(
-            "ÐÐ°Ð¿Ð¸ÑÐ¸ ÑÐµÐ¼Ñ ÑÐ¾ÑÑÐ° â Ð½Ð°ÐºÐ¸Ð´Ð°Ñ ÑÑÑÑÐºÑÑÑÑ Ð¸ ÑÐ°ÑÐºÐ°Ð´ÑÐ¾Ð²ÐºÑ.",
+            "ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÃÂµÃÂ¼Ã ÃÃÂ¾ÃÃÃÂ° Ã¢ ÃÂ½ÃÂ°ÃÂºÃÂ¸ÃÂ´ÃÂ°Ã ÃÃÃÃÃÂºÃÃÃÃ ÃÂ¸ ÃÃÂ°ÃÃÂºÃÂ°ÃÂ´ÃÃÂ¾ÃÂ²ÃÂºÃ.",
             reply_markup=_fun_quick_kb()
         )
         return
@@ -5819,7 +5819,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
         await q.edit_message_text(
-            "ÐÐ¾ÑÐ¾Ð²! ÐÐ°Ð¿Ð¸ÑÐ¸ Ð·Ð°Ð´Ð°ÑÑ Ð¸Ð»Ð¸ Ð²ÑÐ±ÐµÑÐ¸ ÐºÐ½Ð¾Ð¿ÐºÑ Ð²ÑÑÐµ.",
+            "ÃÃÂ¾ÃÃÂ¾ÃÂ²! ÃÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÃ ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ²ÃÃÃÂµÃÃÂ¸ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃ ÃÂ²ÃÃÃÂµ.",
             reply_markup=_fun_quick_kb()
         )
         return
@@ -5828,7 +5828,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
 
 
-# âââââââââ Ð Ð¾ÑÑÐµÑÑ-ÐºÐ½Ð¾Ð¿ÐºÐ¸ ÑÐµÐ¶Ð¸Ð¼Ð¾Ð² (ÐµÐ´Ð¸Ð½Ð°Ñ ÑÐ¾ÑÐºÐ° Ð²ÑÐ¾Ð´Ð°) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Ã ÃÂ¾ÃÃÃÂµÃÃ-ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸ ÃÃÂµÃÂ¶ÃÂ¸ÃÂ¼ÃÂ¾ÃÂ² (ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÂ°Ã ÃÃÂ¾ÃÃÂºÃÂ° ÃÂ²ÃÃÂ¾ÃÂ´ÃÂ°) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fn = globals().get("_send_mode_menu")
     if callable(fn):
@@ -5847,26 +5847,26 @@ async def on_btn_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await fn(update, context, "fun")
     return await on_mode_fun_text(update, context)
 
-# âââââââââ ÐÐ¾Ð·Ð¸ÑÐ¸Ð²Ð½ÑÐ¹ Ð°Ð²ÑÐ¾-Ð¾ÑÐ²ÐµÑ Ð¿ÑÐ¾ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑÐ¸ (ÑÐµÐºÑÑ/Ð³Ð¾Ð»Ð¾Ñ) âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ·ÃÂ¸ÃÃÂ¸ÃÂ²ÃÂ½ÃÃÂ¹ ÃÂ°ÃÂ²ÃÃÂ¾-ÃÂ¾ÃÃÂ²ÃÂµÃ ÃÂ¿ÃÃÂ¾ ÃÂ²ÃÂ¾ÃÂ·ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ÃÃÃÂ¸ (ÃÃÂµÃÂºÃÃ/ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾Ã) Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 _CAPS_PATTERN = (
-    r"(?is)(ÑÐ¼ÐµÐµÑÑ|Ð¼Ð¾Ð¶ÐµÑÑ|Ð´ÐµÐ»Ð°ÐµÑÑ|Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸ÑÑÐµÑÑ|ÑÐ°Ð±Ð¾ÑÐ°ÐµÑÑ|Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑ|ÑÐ¼ÐµÐµÑ Ð»Ð¸|Ð¼Ð¾Ð¶ÐµÑ Ð»Ð¸)"
+    r"(?is)(ÃÃÂ¼ÃÂµÃÂµÃÃ|ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃÃ|ÃÂ´ÃÂµÃÂ»ÃÂ°ÃÂµÃÃ|ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ¸ÃÃÃÂµÃÃ|ÃÃÂ°ÃÃÂ¾ÃÃÂ°ÃÂµÃÃ|ÃÂ¿ÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃÃ|ÃÃÂ¼ÃÂµÃÂµÃ ÃÂ»ÃÂ¸|ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃ ÃÂ»ÃÂ¸)"
     r".{0,120}"
-    r"(pdf|epub|fb2|docx|txt|ÐºÐ½Ð¸Ð³|ÐºÐ½Ð¸Ð³Ð°|Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½|ÑÐ¾ÑÐ¾|ÐºÐ°ÑÑÐ¸Ð½|image|jpeg|png|video|Ð²Ð¸Ð´ÐµÐ¾|mp4|mov|Ð°ÑÐ´Ð¸Ð¾|audio|mp3|wav)"
+    r"(pdf|epub|fb2|docx|txt|ÃÂºÃÂ½ÃÂ¸ÃÂ³|ÃÂºÃÂ½ÃÂ¸ÃÂ³ÃÂ°|ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½|ÃÃÂ¾ÃÃÂ¾|ÃÂºÃÂ°ÃÃÃÂ¸ÃÂ½|image|jpeg|png|video|ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾|mp4|mov|ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾|audio|mp3|wav)"
 )
 
 async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "ÐÐ°, ÑÐ¼ÐµÑ ÑÐ°Ð±Ð¾ÑÐ°ÑÑ Ñ ÑÐ°Ð¹Ð»Ð°Ð¼Ð¸ Ð¸ Ð¼ÐµÐ´Ð¸Ð°:\n"
-        "â¢ ð ÐÐ¾ÐºÑÐ¼ÐµÐ½ÑÑ: PDF/EPUB/FB2/DOCX/TXT â ÐºÐ¾Ð½ÑÐ¿ÐµÐºÑ, ÑÐµÐ·ÑÐ¼Ðµ, Ð¸Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ðµ ÑÐ°Ð±Ð»Ð¸Ñ, Ð¿ÑÐ¾Ð²ÐµÑÐºÐ° ÑÐ°ÐºÑÐ¾Ð².\n"
-        "â¢ ð¼ ÐÐ·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ: Ð°Ð½Ð°Ð»Ð¸Ð·/Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ, ÑÐ»ÑÑÑÐµÐ½Ð¸Ðµ, ÑÐ¾Ð½, ÑÐ°Ð·Ð¼ÐµÑÐºÐ°, Ð¼ÐµÐ¼Ñ, outpaint.\n"
-        "â¢ ð ÐÐ¸Ð´ÐµÐ¾: ÑÐ°Ð·Ð±Ð¾Ñ ÑÐ¼ÑÑÐ»Ð°, ÑÐ°Ð¹Ð¼ÐºÐ¾Ð´Ñ, *Reels Ð¸Ð· Ð´Ð»Ð¸Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¸Ð´ÐµÐ¾*, Ð¸Ð´ÐµÐ¸/ÑÐºÑÐ¸Ð¿Ñ, ÑÑÐ±ÑÐ¸ÑÑÑ.\n"
-        "â¢ ð§ ÐÑÐ´Ð¸Ð¾/ÐºÐ½Ð¸Ð³Ð¸: ÑÑÐ°Ð½ÑÐºÑÐ¸Ð¿ÑÐ¸Ñ, ÑÐµÐ·Ð¸ÑÑ, Ð¿Ð»Ð°Ð½.\n\n"
-        "_ÐÐ¾Ð´ÑÐºÐ°Ð·ÐºÐ¸:_ Ð¿ÑÐ¾ÑÑÐ¾ Ð·Ð°Ð³ÑÑÐ·Ð¸ÑÐµ ÑÐ°Ð¹Ð» Ð¸Ð»Ð¸ Ð¿ÑÐ¸ÑÐ»Ð¸ÑÐµ ÑÑÑÐ»ÐºÑ + ÐºÐ¾ÑÐ¾ÑÐºÐ¾Ðµ Ð¢Ð. "
-        "ÐÐ»Ñ ÑÐ¾ÑÐ¾ â Ð¼Ð¾Ð¶Ð½Ð¾ Ð½Ð°Ð¶Ð°ÑÑ Â«ðª ÐÐ¶Ð¸Ð²Ð¸ÑÑ ÑÑÐ°ÑÐ¾Ðµ ÑÐ¾ÑÐ¾Â», Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾ â Â«ð¬ Reels Ð¸Ð· Ð´Ð»Ð¸Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¸Ð´ÐµÐ¾Â»."
+        "ÃÃÂ°, ÃÃÂ¼ÃÂµÃ ÃÃÂ°ÃÃÂ¾ÃÃÂ°ÃÃ Ã ÃÃÂ°ÃÂ¹ÃÂ»ÃÂ°ÃÂ¼ÃÂ¸ ÃÂ¸ ÃÂ¼ÃÂµÃÂ´ÃÂ¸ÃÂ°:\n"
+        "Ã¢Â¢ Ã° ÃÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ: PDF/EPUB/FB2/DOCX/TXT Ã¢ ÃÂºÃÂ¾ÃÂ½ÃÃÂ¿ÃÂµÃÂºÃ, ÃÃÂµÃÂ·ÃÃÂ¼ÃÂµ, ÃÂ¸ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸ÃÂµ ÃÃÂ°ÃÃÂ»ÃÂ¸Ã, ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂµÃÃÂºÃÂ° ÃÃÂ°ÃÂºÃÃÂ¾ÃÂ².\n"
+        "Ã¢Â¢ Ã°Â¼ ÃÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã: ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÂ·/ÃÂ¾ÃÂ¿ÃÂ¸ÃÃÂ°ÃÂ½ÃÂ¸ÃÂµ, ÃÃÂ»ÃÃÃÃÂµÃÂ½ÃÂ¸ÃÂµ, ÃÃÂ¾ÃÂ½, ÃÃÂ°ÃÂ·ÃÂ¼ÃÂµÃÃÂºÃÂ°, ÃÂ¼ÃÂµÃÂ¼Ã, outpaint.\n"
+        "Ã¢Â¢ Ã° ÃÃÂ¸ÃÂ´ÃÂµÃÂ¾: ÃÃÂ°ÃÂ·ÃÃÂ¾Ã ÃÃÂ¼ÃÃÃÂ»ÃÂ°, ÃÃÂ°ÃÂ¹ÃÂ¼ÃÂºÃÂ¾ÃÂ´Ã, *Reels ÃÂ¸ÃÂ· ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾*, ÃÂ¸ÃÂ´ÃÂµÃÂ¸/ÃÃÂºÃÃÂ¸ÃÂ¿Ã, ÃÃÃÃÃÂ¸ÃÃÃ.\n"
+        "Ã¢Â¢ Ã°Â§ ÃÃÃÂ´ÃÂ¸ÃÂ¾/ÃÂºÃÂ½ÃÂ¸ÃÂ³ÃÂ¸: ÃÃÃÂ°ÃÂ½ÃÃÂºÃÃÂ¸ÃÂ¿ÃÃÂ¸Ã, ÃÃÂµÃÂ·ÃÂ¸ÃÃ, ÃÂ¿ÃÂ»ÃÂ°ÃÂ½.\n\n"
+        "_ÃÃÂ¾ÃÂ´ÃÃÂºÃÂ°ÃÂ·ÃÂºÃÂ¸:_ ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ·ÃÂ°ÃÂ³ÃÃÃÂ·ÃÂ¸ÃÃÂµ ÃÃÂ°ÃÂ¹ÃÂ» ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÃÂ¸ÃÃÂ»ÃÂ¸ÃÃÂµ ÃÃÃÃÂ»ÃÂºÃ + ÃÂºÃÂ¾ÃÃÂ¾ÃÃÂºÃÂ¾ÃÂµ ÃÂ¢Ã. "
+        "ÃÃÂ»Ã ÃÃÂ¾ÃÃÂ¾ Ã¢ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¾ ÃÂ½ÃÂ°ÃÂ¶ÃÂ°ÃÃ ÃÂ«Ã°Âª ÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ¸ÃÃ ÃÃÃÂ°ÃÃÂ¾ÃÂµ ÃÃÂ¾ÃÃÂ¾ÃÂ», ÃÂ´ÃÂ»Ã ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ Ã¢ ÃÂ«Ã°Â¬ Reels ÃÂ¸ÃÂ· ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ÃÂ»."
     )
     await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# âââââââââ ÐÑÐ¿Ð¾Ð¼Ð¾Ð³Ð°ÑÐµÐ»ÑÐ½Ð¾Ðµ: Ð²Ð·ÑÑÑ Ð¿ÐµÑÐ²ÑÑ Ð¾Ð±ÑÑÐ²Ð»ÐµÐ½Ð½ÑÑ ÑÑÐ½ÐºÑÐ¸Ñ Ð¿Ð¾ Ð¸Ð¼ÐµÐ½Ð¸ âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÃÂ¿ÃÂ¾ÃÂ¼ÃÂ¾ÃÂ³ÃÂ°ÃÃÂµÃÂ»ÃÃÂ½ÃÂ¾ÃÂµ: ÃÂ²ÃÂ·ÃÃÃ ÃÂ¿ÃÂµÃÃÂ²ÃÃ ÃÂ¾ÃÃÃÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ½ÃÃ ÃÃÃÂ½ÃÂºÃÃÂ¸Ã ÃÂ¿ÃÂ¾ ÃÂ¸ÃÂ¼ÃÂµÃÂ½ÃÂ¸ Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def _pick_first_defined(*names):
     for n in names:
         fn = globals().get(n)
@@ -5875,14 +5875,14 @@ def _pick_first_defined(*names):
     return None
 
 
-# âââââââââ Ð ÐµÐ³Ð¸ÑÑÑÐ°ÑÐ¸Ñ ÑÐµÐ½Ð´Ð»ÐµÑÐ¾Ð² Ð¸ Ð·Ð°Ð¿ÑÑÐº âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ Ã ÃÂµÃÂ³ÃÂ¸ÃÃÃÃÂ°ÃÃÂ¸Ã ÃÃÂµÃÂ½ÃÂ´ÃÂ»ÃÂµÃÃÂ¾ÃÂ² ÃÂ¸ ÃÂ·ÃÂ°ÃÂ¿ÃÃÃÂº Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def build_application() -> "Application":
     if not BOT_TOKEN:
-        raise RuntimeError("ÐÐµ Ð·Ð°Ð´Ð°Ð½ BOT_TOKEN Ð² Ð¿ÐµÑÐµÐ¼ÐµÐ½Ð½ÑÑ Ð¾ÐºÑÑÐ¶ÐµÐ½Ð¸Ñ.")
+        raise RuntimeError("ÃÃÂµ ÃÂ·ÃÂ°ÃÂ´ÃÂ°ÃÂ½ BOT_TOKEN ÃÂ² ÃÂ¿ÃÂµÃÃÂµÃÂ¼ÃÂµÃÂ½ÃÂ½ÃÃ ÃÂ¾ÃÂºÃÃÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # âââââ ÐÐ¾Ð¼Ð°Ð½Ð´Ñ âââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ¾ÃÂ¼ÃÂ°ÃÂ½ÃÂ´Ã Ã¢Ã¢Ã¢Ã¢Ã¢
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
@@ -5899,23 +5899,23 @@ def build_application() -> "Application":
     app.add_handler(CommandHandler("voice_on",     cmd_voice_on))
     app.add_handler(CommandHandler("voice_off",    cmd_voice_off))
 
-    # âââââ ÐÐ»Ð°ÑÐµÐ¶Ð¸ âââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢ ÃÃÂ»ÃÂ°ÃÃÂµÃÂ¶ÃÂ¸ Ã¢Ã¢Ã¢Ã¢Ã¢
     app.add_handler(PreCheckoutQueryHandler(on_precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
 
-    # >>> PATCH START â Handlers wiring (callbacks / media / text) >>>
+    # >>> PATCH START Ã¢ Handlers wiring (callbacks / media / text) >>>
 
-    # âââââ WebApp âââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢ WebApp Ã¢Ã¢Ã¢Ã¢Ã¢
     with contextlib.suppress(Exception):
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     with contextlib.suppress(Exception):
         if hasattr(filters, "WEB_APP_DATA"):
             app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
 
-    # âââââââââââââââââ CALLBACK QUERY HANDLERS âââââââââââââââââ
-    # ÐÐÐÐÐ: Ð¿Ð¾ÑÑÐ´Ð¾Ðº = Ð¾Ñ ÑÐ·ÐºÐ¸Ñ Ðº ÑÐ¸ÑÐ¾ÐºÐ¸Ð¼
+    # Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ CALLBACK QUERY HANDLERS Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
+    # ÃÃÃÃÃ: ÃÂ¿ÃÂ¾ÃÃÃÂ´ÃÂ¾ÃÂº = ÃÂ¾Ã ÃÃÂ·ÃÂºÃÂ¸Ã ÃÂº ÃÃÂ¸ÃÃÂ¾ÃÂºÃÂ¸ÃÂ¼
 
-    # 1) ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° / Ð¾Ð¿Ð»Ð°ÑÐ°
+    # 1) ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ° / ÃÂ¾ÃÂ¿ÃÂ»ÃÂ°ÃÃÂ°
     app.add_handler(
         CallbackQueryHandler(
             on_cb_plans,
@@ -5923,7 +5923,7 @@ def build_application() -> "Application":
         )
     )
 
-    # 2) Ð ÐµÐ¶Ð¸Ð¼Ñ / Ð¿Ð¾Ð´Ð¼ÐµÐ½Ñ
+    # 2) Ã ÃÂµÃÂ¶ÃÂ¸ÃÂ¼Ã / ÃÂ¿ÃÂ¾ÃÂ´ÃÂ¼ÃÂµÃÂ½Ã
     app.add_handler(
         CallbackQueryHandler(
             on_mode_cb,
@@ -5931,7 +5931,7 @@ def build_application() -> "Application":
         )
     )
 
-    # 3) Fun + Photo Edit + Revive (ÐÐ ÐÐ¢ÐÐ§ÐÐ¡ÐÐÐ ÐÐÐ¢Ð§)
+    # 3) Fun + Photo Edit + Revive (ÃÃ ÃÃÂ¢ÃÃÂ§ÃÃÂ¡ÃÃÃ ÃÃÃÂ¢ÃÂ§)
     app.add_handler(
         CallbackQueryHandler(
             on_cb_fun,
@@ -5945,30 +5945,30 @@ def build_application() -> "Application":
         )
     )
 
-    # 4) Catch-all (ÐÐ¡Ð ÐÐ¡Ð¢ÐÐÐ¬ÐÐÐ)
+    # 4) Catch-all (ÃÃÂ¡Ã ÃÃÂ¡ÃÂ¢ÃÃÃÂ¬ÃÃÃ)
     app.add_handler(
         CallbackQueryHandler(on_cb),
         group=0
     )
 
-    # âââââââââââââââââ MEDIA HANDLERS âââââââââââââââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ MEDIA HANDLERS Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 
-    # ÐÐ¾Ð»Ð¾Ñ / Ð°ÑÐ´Ð¸Ð¾
+    # ÃÃÂ¾ÃÂ»ÃÂ¾Ã / ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
         app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn), group=1)
 
-    # Ð¤Ð¾ÑÐ¾
+    # ÃÂ¤ÃÂ¾ÃÃÂ¾
     photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
     if photo_fn:
         app.add_handler(MessageHandler(filters.PHOTO, photo_fn), group=1)
 
-    # ÐÐ¾ÐºÑÐ¼ÐµÐ½ÑÑ
+    # ÃÃÂ¾ÃÂºÃÃÂ¼ÃÂµÃÂ½ÃÃ
     doc_fn = _pick_first_defined("handle_doc", "on_document", "handle_document", "doc_handler")
     if doc_fn:
         app.add_handler(MessageHandler(filters.Document.ALL, doc_fn), group=1)
 
-    # ÐÐ¸Ð´ÐµÐ¾
+    # ÃÃÂ¸ÃÂ´ÃÂµÃÂ¾
     video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
     if video_fn:
         app.add_handler(MessageHandler(filters.VIDEO, video_fn), group=1)
@@ -5978,15 +5978,15 @@ def build_application() -> "Application":
     if gif_fn:
         app.add_handler(MessageHandler(filters.ANIMATION, gif_fn), group=1)
 
-    # âââââââââââââââââ TEXT BUTTONS âââââââââââââââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ TEXT BUTTONS Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
     import re
 
-    BTN_ENGINES = re.compile(r"^\s*(?:ð§ \s*)?ÐÐ²Ð¸Ð¶ÐºÐ¸\s*$")
-    BTN_BALANCE = re.compile(r"^\s*(?:ð³|ð§¾)?\s*ÐÐ°Ð»Ð°Ð½Ñ\s*$")
-    BTN_PLANS   = re.compile(r"^\s*(?:â­\s*)?ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ°(?:\s*[Â·â¢]\s*ÐÐ¾Ð¼Ð¾ÑÑ)?\s*$")
-    BTN_STUDY   = re.compile(r"^\s*(?:ð\s*)?Ð£Ñ[ÐµÑ]Ð±Ð°\s*$")
-    BTN_WORK    = re.compile(r"^\s*(?:ð¼\s*)?Ð Ð°Ð±Ð¾ÑÐ°\s*$")
-    BTN_FUN     = re.compile(r"^\s*(?:ð¥\s*)?Ð Ð°Ð·Ð²Ð»ÐµÑÐµÐ½Ð¸Ñ\s*$")
+    BTN_ENGINES = re.compile(r"^\s*(?:Ã°Â§ \s*)?ÃÃÂ²ÃÂ¸ÃÂ¶ÃÂºÃÂ¸\s*$")
+    BTN_BALANCE = re.compile(r"^\s*(?:Ã°Â³|Ã°Â§Â¾)?\s*ÃÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã\s*$")
+    BTN_PLANS   = re.compile(r"^\s*(?:Ã¢Â­\s*)?ÃÃÂ¾ÃÂ´ÃÂ¿ÃÂ¸ÃÃÂºÃÂ°(?:\s*[ÃÂ·Ã¢Â¢]\s*ÃÃÂ¾ÃÂ¼ÃÂ¾ÃÃ)?\s*$")
+    BTN_STUDY   = re.compile(r"^\s*(?:Ã°\s*)?ÃÂ£Ã[ÃÂµÃ]ÃÃÂ°\s*$")
+    BTN_WORK    = re.compile(r"^\s*(?:Ã°Â¼\s*)?Ã ÃÂ°ÃÃÂ¾ÃÃÂ°\s*$")
+    BTN_FUN     = re.compile(r"^\s*(?:Ã°Â¥\s*)?Ã ÃÂ°ÃÂ·ÃÂ²ÃÂ»ÃÂµÃÃÂµÃÂ½ÃÂ¸Ã\s*$")
 
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
@@ -5995,13 +5995,13 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(BTN_WORK),    on_btn_work),    group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_FUN),     on_btn_fun),     group=0)
 
-    # âââââââââââââââââ CAPABILITIES Q/A âââââââââââââââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ CAPABILITIES Q/A Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
     app.add_handler(
         MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa),
         group=1
     )
 
-    # âââââââââââââââââ FALLBACK TEXT âââââââââââââââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ FALLBACK TEXT Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
     text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
     if text_fn:
         btn_filters = (
@@ -6017,7 +6017,7 @@ def build_application() -> "Application":
             group=2
         )
 
-    # âââââââââââââââââ ERRORS âââââââââââââââââ
+    # Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ ERRORS Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
     err_fn = _pick_first_defined("on_error", "handle_error")
     if err_fn:
         app.add_error_handler(err_fn)
@@ -6025,7 +6025,7 @@ def build_application() -> "Application":
     return app
 
 
-# âââââââââ main() âââââââââ
+# Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢ main() Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢Ã¢
 def main():
     with contextlib.suppress(Exception):
         db_init()
@@ -6037,7 +6037,7 @@ def main():
     app = build_application()
 
     if USE_WEBHOOK:
-        log.info("ð WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
+        log.info("Ã° WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -6047,7 +6047,7 @@ def main():
             allowed_updates=Update.ALL_TYPES,
         )
     else:
-        log.info("ð POLLING mode.")
+        log.info("Ã° POLLING mode.")
         with contextlib.suppress(Exception):
             asyncio.get_event_loop().run_until_complete(
                 app.bot.delete_webhook(drop_pending_updates=True)
@@ -6064,7 +6064,7 @@ if __name__ == "__main__":
 # === END PATCH ===
 
 
-# ================== GPT5 PRO ADDITIONS â STEP 1 ==================
+# ================== GPT5 PRO ADDITIONS Ã¢ STEP 1 ==================
 # Language selection (RU/EN) + Welcome + Engine registry stubs
 # These are REAL, WORKING additions and will be extended in next steps.
 
@@ -6091,29 +6091,29 @@ def set_user_lang(user_id: int, lang: str):
         c.commit()
 
 LANG_WELCOME = {
-    "ru": "ð ÐÐ¾Ð±ÑÐ¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°ÑÑ Ð² GPTâ5 PRO Bot!\nÐÑÐ±ÐµÑÐ¸ÑÐµ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð¸Ð»Ð¸ Ð½Ð°Ð¿Ð¸ÑÐ¸ÑÐµ Ð·Ð°Ð¿ÑÐ¾Ñ.",
-    "en": "ð Welcome to GPTâ5 PRO Bot!\nChoose an engine or type a prompt."
+    "ru": "Ã° ÃÃÂ¾ÃÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ¶ÃÂ°ÃÂ»ÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂ² GPTÃ¢5 PRO Bot!\nÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã.",
+    "en": "Ã° Welcome to GPTÃ¢5 PRO Bot!\nChoose an engine or type a prompt."
 }
 
 ENGINE_REGISTRY = {
     "gemini": {
         "title": "Gemini",
-        "desc": "ÐÐ½Ð°Ð»Ð¸ÑÐ¸ÐºÐ°, ÐºÐ¾Ð´, ÑÐ»Ð¾Ð¶Ð½ÑÐµ ÑÐ°ÑÑÑÐ¶Ð´ÐµÐ½Ð¸Ñ"
+        "desc": "ÃÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÃÂ¸ÃÂºÃÂ°, ÃÂºÃÂ¾ÃÂ´, ÃÃÂ»ÃÂ¾ÃÂ¶ÃÂ½ÃÃÂµ ÃÃÂ°ÃÃÃÃÂ¶ÃÂ´ÃÂµÃÂ½ÃÂ¸Ã"
     },
     "midjourney": {
         "title": "Midjourney",
-        "desc": "ÐÐµÐ½ÐµÑÐ°ÑÐ¸Ñ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ð¹ Ð¸ Ð´Ð¸Ð·Ð°Ð¹Ð½Ð°"
+        "desc": "ÃÃÂµÃÂ½ÃÂµÃÃÂ°ÃÃÂ¸Ã ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸ÃÂ¹ ÃÂ¸ ÃÂ´ÃÂ¸ÃÂ·ÃÂ°ÃÂ¹ÃÂ½ÃÂ°"
     },
     "suno": {
         "title": "Suno",
-        "desc": "ÐÑÐ·ÑÐºÐ° Ð¸ Ð°ÑÐ´Ð¸Ð¾"
+        "desc": "ÃÃÃÂ·ÃÃÂºÃÂ° ÃÂ¸ ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾"
     }
 }
 
 # ================== END STEP 1 ==================
 
 
-# ================== GPT5 PRO ADDITIONS â STEP 2 ==================
+# ================== GPT5 PRO ADDITIONS Ã¢ STEP 2 ==================
 # Gemini integration via CometAPI (REAL REQUEST LOGIC)
 
 import httpx
@@ -6159,7 +6159,7 @@ async def dispatch_engine(engine: str, prompt: str):
 # ================== END STEP 2 ==================
 
 
-# ================== GPT5 PRO ADDITIONS â STEP 3 ==================
+# ================== GPT5 PRO ADDITIONS Ã¢ STEP 3 ==================
 # Suno integration via CometAPI (music generation)
 
 import asyncio
@@ -6216,7 +6216,7 @@ async def dispatch_engine(engine: str, prompt: str):
 # ================== END STEP 3 ==================
 
 
-# ================== GPT5 PRO ADDITIONS â STEP 4 ==================
+# ================== GPT5 PRO ADDITIONS Ã¢ STEP 4 ==================
 # Midjourney integration via CometAPI (imagine / fetch / action)
 
 MJ_DEFAULT_MODE = os.getenv("MJ_DEFAULT_MODE", "FAST")
@@ -6284,7 +6284,7 @@ async def dispatch_engine(engine: str, prompt: str):
 # ================== END STEP 4 ==================
 
 
-# ================== GPT5 PRO ADDITIONS â STEP 5 (FINAL) ==================
+# ================== GPT5 PRO ADDITIONS Ã¢ STEP 5 (FINAL) ==================
 # Final unification: single dispatcher, language-first guard, welcome hooks
 # NOTE: Hooks are designed to be connected to existing Telegram handlers.
 
@@ -6307,17 +6307,17 @@ def require_language(user_id: int) -> bool:
 def get_welcome_text(lang: str) -> str:
     if lang == "ru":
         return (
-            "ð ÐÐ¾Ð±ÑÐ¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°ÑÑ Ð² GPT-5 PRO Bot!\n\n"
-            "ð§  Gemini â Ð°Ð½Ð°Ð»Ð¸ÑÐ¸ÐºÐ°, ÐºÐ¾Ð´, ÑÐ»Ð¾Ð¶Ð½ÑÐµ ÑÐ°ÑÑÑÐ¶Ð´ÐµÐ½Ð¸Ñ\n"
-            "ð¨ Midjourney â Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ Ð¸ Ð´Ð¸Ð·Ð°Ð¹Ð½\n"
-            "ðµ Suno â Ð¼ÑÐ·ÑÐºÐ° Ð¸ Ð°ÑÐ´Ð¸Ð¾\n\n"
-            "ÐÑÐ±ÐµÑÐ¸ÑÐµ Ð´Ð²Ð¸Ð¶Ð¾Ðº Ð¸Ð»Ð¸ Ð¿ÑÐ¾ÑÑÐ¾ Ð½Ð°Ð¿Ð¸ÑÐ¸ÑÐµ Ð·Ð°Ð¿ÑÐ¾Ñ."
+            "Ã° ÃÃÂ¾ÃÃÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ¶ÃÂ°ÃÂ»ÃÂ¾ÃÂ²ÃÂ°ÃÃ ÃÂ² GPT-5 PRO Bot!\n\n"
+            "Ã°Â§  Gemini Ã¢ ÃÂ°ÃÂ½ÃÂ°ÃÂ»ÃÂ¸ÃÃÂ¸ÃÂºÃÂ°, ÃÂºÃÂ¾ÃÂ´, ÃÃÂ»ÃÂ¾ÃÂ¶ÃÂ½ÃÃÂµ ÃÃÂ°ÃÃÃÃÂ¶ÃÂ´ÃÂµÃÂ½ÃÂ¸Ã\n"
+            "Ã°Â¨ Midjourney Ã¢ ÃÂ¸ÃÂ·ÃÂ¾ÃÃÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ¸Ã ÃÂ¸ ÃÂ´ÃÂ¸ÃÂ·ÃÂ°ÃÂ¹ÃÂ½\n"
+            "Ã°Âµ Suno Ã¢ ÃÂ¼ÃÃÂ·ÃÃÂºÃÂ° ÃÂ¸ ÃÂ°ÃÃÂ´ÃÂ¸ÃÂ¾\n\n"
+            "ÃÃÃÃÂµÃÃÂ¸ÃÃÂµ ÃÂ´ÃÂ²ÃÂ¸ÃÂ¶ÃÂ¾ÃÂº ÃÂ¸ÃÂ»ÃÂ¸ ÃÂ¿ÃÃÂ¾ÃÃÃÂ¾ ÃÂ½ÃÂ°ÃÂ¿ÃÂ¸ÃÃÂ¸ÃÃÂµ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂ¾Ã."
         )
     return (
-        "ð Welcome to GPT-5 PRO Bot!\n\n"
-        "ð§  Gemini â analysis & reasoning\n"
-        "ð¨ Midjourney â images & design\n"
-        "ðµ Suno â music generation\n\n"
+        "Ã° Welcome to GPT-5 PRO Bot!\n\n"
+        "Ã°Â§  Gemini Ã¢ analysis & reasoning\n"
+        "Ã°Â¨ Midjourney Ã¢ images & design\n"
+        "Ã°Âµ Suno Ã¢ music generation\n\n"
         "Choose an engine or type a prompt."
     )
 
@@ -6325,27 +6325,27 @@ def get_welcome_text(lang: str) -> str:
 
 
 # ================== ENV VARIABLES TO ADD / UPDATE ==================
-# ÐÐ¾Ð±Ð°Ð²ÑÑÐµ/Ð¿ÑÐ¾Ð²ÐµÑÑÑÐµ ÑÑÐ¸ Ð¿ÐµÑÐµÐ¼ÐµÐ½Ð½ÑÐµ Ð² Environment (Render):
+# ÃÃÂ¾ÃÃÂ°ÃÂ²ÃÃÃÂµ/ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂµÃÃÃÃÂµ ÃÃÃÂ¸ ÃÂ¿ÃÂµÃÃÂµÃÂ¼ÃÂµÃÂ½ÃÂ½ÃÃÂµ ÃÂ² Environment (Render):
 #
 # --- Language ---
-# (ÑÐ·ÑÐº ÑÑÐ°Ð½Ð¸ÑÑÑ Ð² SQLite kv_store Ð°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐµÑÐºÐ¸, Ð´Ð¾Ð¿. ENV Ð½Ðµ Ð½ÑÐ¶Ð½Ð¾)
+# (ÃÃÂ·ÃÃÂº ÃÃÃÂ°ÃÂ½ÃÂ¸ÃÃÃ ÃÂ² SQLite kv_store ÃÂ°ÃÂ²ÃÃÂ¾ÃÂ¼ÃÂ°ÃÃÂ¸ÃÃÂµÃÃÂºÃÂ¸, ÃÂ´ÃÂ¾ÃÂ¿. ENV ÃÂ½ÃÂµ ÃÂ½ÃÃÂ¶ÃÂ½ÃÂ¾)
 #
-# --- CometAPI shared key (ÐµÑÐ»Ð¸ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÐµ ÑÐµÑÐµÐ· Comet) ---
+# --- CometAPI shared key (ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂµÃÃÂµ ÃÃÂµÃÃÂµÃÂ· Comet) ---
 # COMETAPI_KEY=...
 #
 # --- Kling (CometAPI) ---
 # KLING_BASE_URL=https://api.cometapi.com
 # KLING_MODEL_NAME=kling-v1-6
-# KLING_MODE=std               # std|pro (ÐµÑÐ»Ð¸ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ Ð²Ð°ÑÐ¸Ð¼ Ð°ÐºÐºÐ°ÑÐ½ÑÐ¾Ð¼)
+# KLING_MODE=std               # std|pro (ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ´ÃÂ´ÃÂµÃÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃÃÃ ÃÂ²ÃÂ°ÃÃÂ¸ÃÂ¼ ÃÂ°ÃÂºÃÂºÃÂ°ÃÃÂ½ÃÃÂ¾ÃÂ¼)
 # KLING_ASPECT=9:16
 # KLING_DURATION_S=5
-# KLING_UNIT_COST_USD=0.80     # Ð¾Ð¿ÑÐ¸Ð¾Ð½Ð°Ð»ÑÐ½Ð¾ Ð´Ð»Ñ ÑÐ°ÑÑÑÑÐ°/Ð¸Ð½Ð²Ð¾Ð¹ÑÐ¾Ð²
+# KLING_UNIT_COST_USD=0.80     # ÃÂ¾ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÂ½ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾ ÃÂ´ÃÂ»Ã ÃÃÂ°ÃÃÃÃÃÂ°/ÃÂ¸ÃÂ½ÃÂ²ÃÂ¾ÃÂ¹ÃÃÂ¾ÃÂ²
 #
 # --- Runway ---
-# RUNWAY_API_KEY=...           # ÐµÑÐ»Ð¸ Ð¿ÑÑÑÐ¾ â Ð±ÑÐ´ÐµÑ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°Ð½ COMETAPI_KEY
+# RUNWAY_API_KEY=...           # ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¿ÃÃÃÃÂ¾ Ã¢ ÃÃÃÂ´ÃÂµÃ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÂ½ COMETAPI_KEY
 # RUNWAY_MODEL=gen3a_turbo
 # RUNWAY_API_VERSION=2024-11-06
-# RUNWAY_DISABLE_TEXTVIDEO=1   # ÐµÑÐ»Ð¸ ÑÐ¾ÑÐ¸ÑÐµ Ð·Ð°Ð¿ÑÐµÑÐ¸ÑÑ ÑÐµÐºÑÑâÐ²Ð¸Ð´ÐµÐ¾ ÑÐµÑÐµÐ· Runway
+# RUNWAY_DISABLE_TEXTVIDEO=1   # ÃÂµÃÃÂ»ÃÂ¸ ÃÃÂ¾ÃÃÂ¸ÃÃÂµ ÃÂ·ÃÂ°ÃÂ¿ÃÃÂµÃÃÂ¸ÃÃ ÃÃÂµÃÂºÃÃÃ¢ÃÂ²ÃÂ¸ÃÂ´ÃÂµÃÂ¾ ÃÃÂµÃÃÂµÃÂ· Runway
 #
 # --- Luma ---
 # LUMA_API_KEY=...
@@ -6353,20 +6353,20 @@ def get_welcome_text(lang: str) -> str:
 # LUMA_MODEL=ray-2
 # LUMA_ASPECT=16:9
 # LUMA_DURATION_S=5
-# LUMA_UNIT_COST_USD=0.40      # Ð¾Ð¿ÑÐ¸Ð¾Ð½Ð°Ð»ÑÐ½Ð¾
+# LUMA_UNIT_COST_USD=0.40      # ÃÂ¾ÃÂ¿ÃÃÂ¸ÃÂ¾ÃÂ½ÃÂ°ÃÂ»ÃÃÂ½ÃÂ¾
 #
-# --- Sora (ÑÐµÑÐµÐ· Comet / Ð²Ð°Ñ Ð¿ÑÐ¾ÐºÑÐ¸) ---
+# --- Sora (ÃÃÂµÃÃÂµÃÂ· Comet / ÃÂ²ÃÂ°Ã ÃÂ¿ÃÃÂ¾ÃÂºÃÃÂ¸) ---
 # SORA_ENABLED=0|1
 # SORA_COMET_BASE_URL=https://api.cometapi.com
-# SORA_COMET_API_KEY=...       # ÐµÑÐ»Ð¸ Ð¿ÑÑÑÐ¾ â Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ COMETAPI_KEY
+# SORA_COMET_API_KEY=...       # ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¿ÃÃÃÃÂ¾ Ã¢ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÃÂ¹ÃÃÂµ COMETAPI_KEY
 # SORA_MODEL_FREE=sora
 # SORA_MODEL_PRO=sora
 # SORA_UNIT_COST_USD=0.40
 #
-# --- Gemini (ÑÐµÑÐµÐ· Comet / Ð²Ð°Ñ Ð¿ÑÐ¾ÐºÑÐ¸) ---
-# GEMINI_API_KEY=...           # ÐµÑÐ»Ð¸ Ð¿ÑÑÑÐ¾ â Ð±ÑÐ´ÐµÑ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°Ð½ COMETAPI_KEY
+# --- Gemini (ÃÃÂµÃÃÂµÃÂ· Comet / ÃÂ²ÃÂ°Ã ÃÂ¿ÃÃÂ¾ÃÂºÃÃÂ¸) ---
+# GEMINI_API_KEY=...           # ÃÂµÃÃÂ»ÃÂ¸ ÃÂ¿ÃÃÃÃÂ¾ Ã¢ ÃÃÃÂ´ÃÂµÃ ÃÂ¸ÃÃÂ¿ÃÂ¾ÃÂ»ÃÃÂ·ÃÂ¾ÃÂ²ÃÂ°ÃÂ½ COMETAPI_KEY
 # GEMINI_BASE_URL=https://api.cometapi.com
-# GEMINI_CHAT_PATH=/gemini/v1/chat   # ÐÐÐÐÐ: Ð¿ÑÑÑ Ð·Ð°Ð²Ð¸ÑÐ¸Ñ Ð¾Ñ Ð²Ð°ÑÐµÐ³Ð¾ Ð¿ÑÐ¾Ð²Ð°Ð¹Ð´ÐµÑÐ°/Comet. ÐÑÐ¿ÑÐ°Ð²ÑÑÐµ Ð¿ÑÐ¸ Ð½ÐµÐ¾Ð±ÑÐ¾Ð´Ð¸Ð¼Ð¾ÑÑÐ¸.
+# GEMINI_CHAT_PATH=/gemini/v1/chat   # ÃÃÃÃÃ: ÃÂ¿ÃÃÃ ÃÂ·ÃÂ°ÃÂ²ÃÂ¸ÃÃÂ¸Ã ÃÂ¾Ã ÃÂ²ÃÂ°ÃÃÂµÃÂ³ÃÂ¾ ÃÂ¿ÃÃÂ¾ÃÂ²ÃÂ°ÃÂ¹ÃÂ´ÃÂµÃÃÂ°/Comet. ÃÃÃÂ¿ÃÃÂ°ÃÂ²ÃÃÃÂµ ÃÂ¿ÃÃÂ¸ ÃÂ½ÃÂµÃÂ¾ÃÃÃÂ¾ÃÂ´ÃÂ¸ÃÂ¼ÃÂ¾ÃÃÃÂ¸.
 # GEMINI_MODEL=gemini-1.5-pro
 #
 # --- Optional placeholders (no direct API in this file yet) ---
