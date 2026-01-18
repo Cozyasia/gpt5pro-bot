@@ -5937,12 +5937,19 @@ def build_application() -> "Application":
     # ───────────────── TEXT BUTTONS ─────────────────
     import re
 
-    BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
-    BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
-    BTN_PLANS   = re.compile(r"^\s*(?:⭐\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
-    BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
-    BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Работа\s*$")
-    BTN_FUN     = re.compile(r"^\s*(?:🔥\s*)?Развлечения\s*$")
+    # NOTE:
+    # Users see different button captions depending on language and UI (and some captions include emojis).
+    # The previous regexes matched only RU captions (e.g., "Движки"), so EN buttons like "🧠 Engines"
+    # fell through into the generic text handler, which then tried to treat them as a normal prompt.
+    # That is why you were seeing "Упс, произошла ошибка" on Balance/Help/Modes.
+    #
+    # We now match both RU and EN captions, with optional leading emojis.
+    BTN_ENGINES = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Движки|Engines)\s*$", re.I)
+    BTN_BALANCE = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Баланс|Balance)\s*$", re.I)
+    BTN_PLANS   = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Подписка|Subscription)(?:\s*[·•]\s*(?:Помощь|Help))?\s*$", re.I)
+    BTN_STUDY   = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Уч[её]ба|Study)\s*$", re.I)
+    BTN_WORK    = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Работа|Work)\s*$", re.I)
+    BTN_FUN     = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Развлечения|Fun)\s*$", re.I)
 
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
