@@ -10,17 +10,6 @@
 
 # -*- coding: utf-8 -*-
 import os
-
-# ===================== BOT TOKEN (ENV FALLBACKS) =====================
-# Accept multiple env var names for compatibility with Render/legacy setups
-TELEGRAM_BOT_TOKEN = (
-    os.environ.get('TELEGRAM_BOT_TOKEN')
-    or os.environ.get('TELEGRAM_TOKEN')
-    or os.environ.get('BOT_TOKEN')
-    or os.environ.get('TOKEN')
-    or ''
-).strip()
-
 import re
 import json
 import time
@@ -1280,7 +1269,7 @@ async def ask_gemini_text(user_text: str) -> str:
         if r.status_code // 100 != 2:
             txt = (r.text or "")[:1200]
             log.warning("Gemini error %s: %s", r.status_code, txt)
-            return "⚠️ Gemini: ошика запроса. Проверьте GEMINI_CHAT_PATH/BASE_URL и ключ."
+            return "⚠️ Gemini: ошибка запроса. Проверьте GEMINI_CHAT_PATH/BASE_URL и ключ."
         js = r.json()
         # Пытаемся вытащить текст из разных схем ответов
         for k in ("text", "output", "result", "content", "message"):
@@ -1506,7 +1495,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await on_text_with_text(update, context, transcript)
     except Exception as e:
         log.exception("Voice->text handler error: %s", e)
-        await msg.reply_text("Упс, произошла ошика. Я уже разираюсь.")
+        await msg.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
         
 # ───────── Извлечение текста из документов ─────────
 def _safe_decode_txt(b: bytes) -> str:
@@ -2894,6 +2883,7 @@ def _new_aid() -> str:
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
+    uid = update.effective_user.id
     
         # Language selection (lang:<code>)
     if data.startswith("lang:"):
@@ -3602,7 +3592,7 @@ async def _run_kling_video(
 
     except Exception as e:
         log.exception("Kling text2video exception: %s", e)
-        await msg.reply_text("❌ Kling: внутренняя ошика при рендере видео.")
+        await msg.reply_text("❌ Kling: внутренняя ошибка при рендере видео.")
     return False
 def _normalize_luma_aspect(aspect: str | None) -> str:
     """
@@ -4398,7 +4388,7 @@ async def _run_runway_animate_photo(
                     txt = (rs.text or "")[:1200]
                     log.warning("Runway/Comet status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        "⚠️ Runway: ошика статуса.\n"
+                        "⚠️ Runway: ошибка статуса.\n"
                         f"Код: {rs.status_code}\n"
                         f"Ответ:\n`{txt}`",
                         parse_mode="Markdown",
@@ -4448,7 +4438,7 @@ async def _run_runway_animate_photo(
 
                 if status in ("failed", "error", "cancelled", "canceled", "rejected"):
                     err = _pick_error(sjs) or str(sjs)[:700]
-                    await msg.reply_text(f"❌ Runway (image→video) ошика: `{err}`", parse_mode="Markdown")
+                    await msg.reply_text(f"❌ Runway (image→video) ошибка: `{err}`", parse_mode="Markdown")
                     return
 
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
@@ -4464,7 +4454,7 @@ async def _run_runway_animate_photo(
 
     except Exception as e:
         log.exception("Runway image2video exception: %s", e)
-        await msg.reply_text("❌ Runway: ошика выполнения image→video.")
+        await msg.reply_text("❌ Runway: ошибка выполнения image→video.")
 
 # ---------------- helpers -----------------def-_dicts_bfs(cts_bfs(root: object, max_depth6)int = """Соираем словари в ширину, чтоы найти status/video_url в люом вложении."""ении.""" = []
     q = [(root, 0)]
@@ -5270,7 +5260,7 @@ async def _run_luma_video(
                         )
                     except Exception as e:
                         log.exception("Luma download/send error: %s", e)
-                        await update.effective_message.reply_text("⚠️ Luma: ошика при скачивании/отправке видео.")
+                        await update.effective_message.reply_text("⚠️ Luma: ошибка при скачивании/отправке видео.")
                     return True
 
                 if st in ("failed", "error"):
@@ -5281,7 +5271,7 @@ async def _run_luma_video(
                         )
                     else:
                         await update.effective_message.reply_text(
-                            f"❌ Luma (text→video) ошика: {_short_luma_error(js)}"
+                            f"❌ Luma (text→video) ошибка: {_short_luma_error(js)}"
                         )
                     return False
 
@@ -5468,7 +5458,7 @@ async def _run_luma_image2video(
                         )
                     except Exception as e:
                         log.exception("Luma download/send error: %s", e)
-                        await msg.reply_text("⚠️ Luma: ошика при скачивании/отправке видео.")
+                        await msg.reply_text("⚠️ Luma: ошибка при скачивании/отправке видео.")
                     return
 
                 if st in ("failed", "error"):
@@ -5478,7 +5468,7 @@ async def _run_luma_image2video(
                             "Переформулируй ез названий (например: «плюшевый медвежонок…») и попроуй ещё раз."
                         )
                     else:
-                        await msg.reply_text(f"❌ Luma (image→video) ошика: {_short_luma_error(js)}")
+                        await msg.reply_text(f"❌ Luma (image→video) ошибка: {_short_luma_error(js)}")
                     return
 
                 if time.time() - started > LUMA_MAX_WAIT_S:
@@ -5538,7 +5528,7 @@ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
     log.exception("Unhandled error: %s", context_.error)
     try:
         if isinstance(update, Update) and update.effective_message:
-            await update.effective_message.reply_text("Упс, произошла ошика. Я уже разираюсь.")
+            await update.effective_message.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
     except Exception:
         pass
 
@@ -5992,14 +5982,12 @@ def build_application() -> "Application":
 
     # ───────────────── TEXT BUTTONS ─────────────────
     import re
-
-    BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
-    BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
-    BTN_PLANS   = re.compile(r"^\s*(?:\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
-    BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]а\s*$")
-    BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Раота\s*$")
-    BTN_FUN     = re.compile(r"^\s*(?:🔥\s*)?Развлечения\s*$")
-
+    BTN_ENGINES = re.compile(r"^\\s*(?:🧠\\s*)?(?:Движки|Engines)\\s*$")
+    BTN_BALANCE = re.compile(r"^\\s*(?:💳|🧾)?\\s*(?:Баланс|Balance)\\s*$")
+    BTN_PLANS = re.compile(r"^\\s*(?:Подписка(?:\\s*[·•]\\s*Помощь)?|Plans)\\s*$")
+    BTN_STUDY = re.compile(r"^\\s*(?:🎓\\s*)?(?:Уч[её]ба|Study)\\s*$")
+    BTN_WORK = re.compile(r"^\\s*(?:💼\\s*)?(?:Работа|Work)\\s*$")
+    BTN_FUN = re.compile(r"^\\s*(?:🔥\\s*)?(?:Развлечения|Fun)\\s*$")
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
