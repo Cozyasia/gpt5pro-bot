@@ -534,241 +534,6 @@ def kv_set(key: str, value: str):
     cur.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?,?)", (key, value))
     con.commit(); con.close()
 
-# =============================
-# Language / i18n
-# =============================
-
-LANGS: list[str] = ["ru", "be", "uk", "de", "en", "fr", "th"]
-LANG_NAMES: dict[str, str] = {
-    "ru": "Русский",
-    "be": "Белорусский",
-    "uk": "Украинский",
-    "de": "Deutsch",
-    "en": "English",
-    "fr": "Français",
-    "th": "ไทย",
-}
-
-def _lang_key(user_id: int) -> str:
-    return f"lang:{user_id}"
-
-def has_lang(user_id: int) -> bool:
-    return bool((kv_get(_lang_key(user_id), "") or "").strip())
-
-def get_lang(user_id: int) -> str:
-    lang = (kv_get(_lang_key(user_id), "") or "").strip()
-    return lang if lang in LANGS else "ru"
-
-def set_lang(user_id: int, lang: str) -> None:
-    if lang not in LANGS:
-        lang = "ru"
-    kv_set(_lang_key(user_id), lang)
-
-# Mini-dictionary (menus/buttons)
-I18N: dict[str, dict[str, str]] = {
-    "ru": {
-        "choose_lang": "🌍 Выберите язык",
-        "lang_set": "✅ Язык установлен",
-        "menu_title": "Главное меню",
-        "btn_engines": "🧠 Движки",
-        "btn_sub": "⭐ Подписка • Помощь",
-        "btn_wallet": "🧾 Баланс",
-        "btn_video": "🎞 Создать видео",
-        "btn_photo": "🖼 Оживить фото",
-        "btn_help": "❓ Помощь",
-        "btn_back": "⬅️ Назад",
-    },
-    "be": {
-        "choose_lang": "🌍 Абярыце мову",
-        "lang_set": "✅ Мова ўсталявана",
-        "menu_title": "Галоўнае меню",
-        "btn_engines": "🧠 Рухавікі",
-        "btn_sub": "⭐ Падпіска • Дапамога",
-        "btn_wallet": "🧾 Баланс",
-        "btn_video": "🎞 Стварыць відэа",
-        "btn_photo": "🖼 Ажывіць фота",
-        "btn_help": "❓ Дапамога",
-        "btn_back": "⬅️ Назад",
-    },
-    "uk": {
-        "choose_lang": "🌍 Оберіть мову",
-        "lang_set": "✅ Мову встановлено",
-        "menu_title": "Головне меню",
-        "btn_engines": "🧠 Рушії",
-        "btn_sub": "⭐ Підписка • Допомога",
-        "btn_wallet": "🧾 Баланс",
-        "btn_video": "🎞 Створити відео",
-        "btn_photo": "🖼 Оживити фото",
-        "btn_help": "❓ Допомога",
-        "btn_back": "⬅️ Назад",
-        "btn_study": "🎓 Навчання",
-        "btn_work": "💼 Робота",
-        "btn_fun": "🔥 Розваги",
-        "input_placeholder": "Оберіть режим або напишіть запит…",
-    
-    },
-    "de": {
-        "choose_lang": "🌍 Sprache wählen",
-        "lang_set": "✅ Sprache gesetzt",
-        "menu_title": "Hauptmenü",
-        "btn_engines": "🧠 Engines",
-        "btn_sub": "⭐ Abo • Hilfe",
-        "btn_wallet": "🧾 Guthaben",
-        "btn_video": "🎞 Video erstellen",
-        "btn_photo": "🖼 Foto animieren",
-        "btn_help": "❓ Hilfe",
-        "btn_back": "⬅️ Zurück",
-    },
-    "en": {
-        "choose_lang": "🌍 Choose language",
-        "lang_set": "✅ Language set",
-        "menu_title": "Main menu",
-        "btn_engines": "🧠 Engines",
-        "btn_sub": "⭐ Subscription • Help",
-        "btn_wallet": "🧾 Balance",
-        "btn_video": "🎞 Create video",
-        "btn_photo": "🖼 Animate photo",
-        "btn_help": "❓ Help",
-        "btn_back": "⬅️ Back",
-    },
-    "fr": {
-        "choose_lang": "🌍 Choisir la langue",
-        "lang_set": "✅ Langue définie",
-        "menu_title": "Menu principal",
-        "btn_engines": "🧠 Moteurs",
-        "btn_sub": "⭐ Abonnement • Aide",
-        "btn_wallet": "🧾 Solde",
-        "btn_video": "🎞 Créer une vidéo",
-        "btn_photo": "🖼 Animer une photo",
-        "btn_help": "❓ Aide",
-        "btn_back": "⬅️ Retour",
-    },
-    "th": {
-        "choose_lang": "🌍 เลือกภาษา",
-        "lang_set": "✅ ตั้งค่าภาษาแล้ว",
-        "menu_title": "เมนูหลัก",
-        "btn_engines": "🧠 เอนจิน",
-        "btn_sub": "⭐ สมัครสมาชิก • ช่วยเหลือ",
-        "btn_wallet": "🧾 ยอดคงเหลือ",
-        "btn_video": "🎞 สร้างวิดีโอ",
-        "btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
-        "btn_help": "❓ ช่วยเหลือ",
-        "btn_back": "⬅️ กลับ",
-    },
-}
-
-def t(user_id: int, key: str) -> str:
-    lang = get_lang(user_id)
-    return (I18N.get(lang) or I18N["ru"]).get(key, key)
-
-def system_prompt_for(lang: str) -> str:
-    mapping = {
-        "ru": "Отвечай на русском языке.",
-        "be": "Адказвай па-беларуску.",
-        "uk": "Відповідай українською мовою.",
-        "de": "Antworte auf Deutsch.",
-        "en": "Answer in English.",
-        "fr": "Réponds en français.",
-        "th": "ตอบเป็นภาษาไทย",
-    }
-    return mapping.get(lang, mapping["ru"])
-
-# Extended pack (long UI texts / hints)
-I18N_PACK: dict[str, dict[str, str]] = {
-    "welcome": {
-        "ru": "Привет! Я Нейро‑Bot — ⚡ мультирежимный бот из 7 нейросетей для учёбы, работы и развлечений.",
-        "be": "Прывітанне! Я Нейро‑Bot — ⚡ шматрэжымны бот з 7 нейрасетак для вучобы, працы і забаў.",
-        "uk": "Привіт! Я Нейро‑Bot — ⚡ мультирежимний бот із 7 нейромереж для навчання, роботи та розваг.",
-        "de": "Hallo! Ich bin Neuro‑Bot — ⚡ ein Multimode‑Bot mit 7 KI‑Engines für Lernen, Arbeit und Spaß.",
-        "en": "Hi! I’m Neuro‑Bot — ⚡ a multi‑mode bot with 7 AI engines for study, work and fun.",
-        "fr": "Salut ! Je suis Neuro‑Bot — ⚡ un bot multi‑modes avec 7 moteurs IA pour étudier, travailler et se divertir.",
-        "th": "สวัสดี! ฉันคือ Neuro‑Bot — ⚡ บอทหลายโหมดพร้อมเอนจิน AI 7 ตัว สำหรับเรียน งาน และความบันเทิง",
-    },
-    "ask_video_prompt": {
-        "ru": "🎞 Напиши запрос для видео, например:\n«Сделай видео: закат над морем, 7 сек, 16:9»",
-        "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зрабі відэа: захад сонца над морам, 7 сек, 16:9»",
-        "uk": "🎞 Напиши запит для відео, наприклад:\n«Зроби відео: захід над морем, 7 с, 16:9»",
-        "de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
-        "en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
-        "fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n« Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 »",
-        "th": "🎞 พิมพ์คำสั่งทำวิดีโอ เช่น:\n“ทำวิดีโอ: พระอาทิตย์ตกเหนือทะเล 7วิ 16:9”",
-    },
-    "ask_send_photo": {
-        "ru": "🖼 Пришли фото, затем выбери «Оживить фото».",
-        "be": "🖼 Дашлі фота, затым выберы «Ажывіць фота».",
-        "uk": "🖼 Надішли фото, потім обери «Оживити фото».",
-        "de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
-        "en": "🖼 Send a photo, then choose “Animate photo”.",
-        "fr": "🖼 Envoyez une photo, puis choisissez « Animer la photo ».",
-        "th": "🖼 ส่งรูป จากนั้นเลือก “ทำให้รูปเคลื่อนไหว”",
-    },
-    "photo_received": {
-        "ru": "🖼 Фото получено. Хотите оживить?",
-        "be": "🖼 Фота атрымана. Ажывіць?",
-        "uk": "🖼 Фото отримано. Оживити?",
-        "de": "🖼 Foto erhalten. Animieren?",
-        "en": "🖼 Photo received. Animate it?",
-        "fr": "🖼 Photo reçue. L’animer ?",
-        "th": "🖼 ได้รับรูปแล้ว ต้องการทำให้เคลื่อนไหวไหม?",
-    },
-    "animate_btn": {
-        "ru": "🎬 Оживить фото",
-        "be": "🎬 Ажывіць фота",
-        "uk": "🎬 Оживити фото",
-        "de": "🎬 Foto animieren",
-        "en": "🎬 Animate photo",
-        "fr": "🎬 Animer la photo",
-        "th": "🎬 ทำให้รูปเคลื่อนไหว",
-    },
-    "choose_engine": {
-        "ru": "Выберите движок:",
-        "be": "Абярыце рухавік:",
-        "uk": "Оберіть рушій:",
-        "de": "Wähle die Engine:",
-        "en": "Choose engine:",
-        "fr": "Choisissez le moteur:",
-        "th": "เลือกเอนจิน:",
-    },
-    "runway_disabled_textvideo": {
-        "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выберите Kling, Luma или Sora.",
-        "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Абярыце Kling, Luma або Sora.",
-        "uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оберіть Kling, Luma або Sora.",
-        "de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
-        "en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
-        "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
-        "th": "⚠️ ปิด Runway สำหรับข้อความ/เสียง→วิดีโอ เลือก Kling, Luma หรือ Sora",
-    },
-}
-
-def _tr(user_id: int, key: str, **kwargs) -> str:
-    lang = get_lang(user_id)
-    pack = I18N_PACK.get(key) or {}
-    s = pack.get(lang) or pack.get("ru") or key
-    if kwargs:
-        try:
-            return s.format(**kwargs)
-        except Exception:
-            return s
-    return s
-
-def _lang_choose_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
-    """
-    Клавиатура выбора языка.
-    Требование: показывать при каждом /start.
-    Для удобства добавляем «Продолжить» с текущим языком, если он уже выбран.
-    """
-    uid = int(user_id) if user_id is not None else 0
-    rows = []
-    if uid and has_lang(uid):
-        cur = get_lang(uid)
-        cur_name = LANG_NAMES.get(cur, cur)
-        rows.append([InlineKeyboardButton(f"➡️ Продолжить ({cur_name})", callback_data="lang:__keep__")])
-    for code in LANGS:
-        rows.append([InlineKeyboardButton(LANG_NAMES[code], callback_data=f"lang:{code}")])
-    return InlineKeyboardMarkup(rows)
-
-
-
 def _today_ymd() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -1190,59 +955,6 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         "Я на связи — попробуй переформулировать запрос или повторить чуть позже."
     )
     
-
-# ───────── Gemini (через CometAPI, опционально) ─────────
-
-GEMINI_API_KEY   = (os.environ.get("GEMINI_API_KEY", "").strip() or COMETAPI_KEY)
-GEMINI_BASE_URL  = os.environ.get("GEMINI_BASE_URL", "https://api.cometapi.com").strip().rstrip("/")
-GEMINI_CHAT_PATH = os.environ.get("GEMINI_CHAT_PATH", "/gemini/v1/chat").strip()
-GEMINI_MODEL     = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro").strip()
-
-async def ask_gemini_text(user_text: str) -> str:
-    """
-    Минимальная интеграция Gemini через CometAPI (или любой совместимый прокси).
-    Если эндпоинт отличается — поправь GEMINI_CHAT_PATH/GEMINI_BASE_URL в ENV.
-    """
-    if not GEMINI_API_KEY:
-        return "⚠️ Gemini: не задан GEMINI_API_KEY/COMETAPI_KEY. Добавьте ключ в Environment."
-    if not user_text.strip():
-        return ""
-
-    headers = {
-        "Authorization": f"Bearer {GEMINI_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": GEMINI_MODEL,
-        "prompt": user_text.strip(),
-    }
-
-    try:
-        async with httpx.AsyncClient(base_url=GEMINI_BASE_URL, timeout=60.0) as client:
-            r = await client.post(GEMINI_CHAT_PATH, headers=headers, json=payload)
-        if r.status_code // 100 != 2:
-            txt = (r.text or "")[:1200]
-            log.warning("Gemini error %s: %s", r.status_code, txt)
-            return "⚠️ Gemini: ошибка запроса. Проверьте GEMINI_CHAT_PATH/BASE_URL и ключ."
-        js = r.json()
-        # Пытаемся вытащить текст из разных схем ответов
-        for k in ("text", "output", "result", "content", "message"):
-            v = js.get(k)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-        # Иногда ответ бывает вида {"choices":[{"message":{"content":"..."}}]}
-        ch = js.get("choices")
-        if isinstance(ch, list) and ch:
-            msg = (ch[0].get("message") or {})
-            cont = msg.get("content")
-            if isinstance(cont, str) and cont.strip():
-                return cont.strip()
-        return "⚠️ Gemini: ответ получен, но формат не распознан. Смотрите логи."
-    except Exception as e:
-        log.exception("Gemini request error: %s", e)
-        return "⚠️ Gemini: исключение при запросе. Смотрите логи."
-
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
         prompt = (user_text or "Опиши, что на изображении и какой там текст.").strip()
@@ -1676,12 +1388,9 @@ def engines_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💬 GPT (текст/фото/документы)", callback_data="engine:gpt")],
         [InlineKeyboardButton("🖼 Images (OpenAI)",             callback_data="engine:images")],
-        [InlineKeyboardButton("🎞 Kling — клипы / шорты",       callback_data="engine:kling")],
+        [InlineKeyboardButton("🎞 Kling — клипы / шорты",      callback_data="engine:kling")],  # NEW
         [InlineKeyboardButton("🎬 Luma — короткие видео",       callback_data="engine:luma")],
         [InlineKeyboardButton("🎥 Runway — премиум-видео",      callback_data="engine:runway")],
-        [InlineKeyboardButton("🎬 Sora — видео (Comet)",        callback_data="engine:sora")],
-        [InlineKeyboardButton("🧠 Gemini (Comet)",             callback_data="engine:gemini")],
-        [InlineKeyboardButton("🎵 Suno (music)",               callback_data="engine:suno")],
         [InlineKeyboardButton("🎨 Midjourney (изображения)",    callback_data="engine:midjourney")],
         [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
     ])
@@ -1970,89 +1679,126 @@ async def on_mode_text(update, context):
     if key:
         await _send_mode_menu(update, context, key)
         
-def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
-    """
-    Главная ReplyKeyboard, локализованная под язык пользователя.
-    Если user_id не задан — используем RU.
-    """
-    uid = int(user_id) if user_id is not None else 0
-    # Кнопки режимов (эмодзи оставляем для узнаваемости)
-    # Локализация — через I18N (минимальный набор строк).
-    try:
-        study = t(uid, "btn_study")
-        work  = t(uid, "btn_work")
-        fun   = t(uid, "btn_fun")
-    except Exception:
-        study, work, fun = "🎓 Учёба", "💼 Работа", "🔥 Развлечения"
-
-    try:
-        engines = t(uid, "btn_engines")
-        subhelp = t(uid, "btn_sub")
-        wallet  = t(uid, "btn_wallet")
-    except Exception:
-        engines, subhelp, wallet = "🧠 Движки", "⭐ Подписка · Помощь", "🧾 Баланс"
-
-    placeholder = t(uid, "input_placeholder") if "input_placeholder" in (I18N.get(get_lang(uid), {}) or {}) else "Выберите режим или напишите запрос…"
-
+def main_keyboard():
     return ReplyKeyboardMarkup(
         [
-            [KeyboardButton(study), KeyboardButton(work), KeyboardButton(fun)],
-            [KeyboardButton(engines), KeyboardButton(subhelp), KeyboardButton(wallet)],
+            [KeyboardButton("🎓 Учёба"), KeyboardButton("💼 Работа"), KeyboardButton("🔥 Развлечения")],
+            [KeyboardButton("🧠 Движки"), KeyboardButton("⭐ Подписка · Помощь"), KeyboardButton("🧾 Баланс")],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
         selective=False,
-        input_field_placeholder=placeholder,
+        input_field_placeholder="Выберите режим или напишите запрос…",
     )
 
-# RU-клавиатура по умолчанию (на случай редких мест без user_id)
-main_kb = main_keyboard(0)
-
-# ───────── /start ─────────
-async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Отрисовка главного меню (после выбора языка и в других местах).
-    """
-    uid = update.effective_user.id
-    # Баннер (если задан)
-    welcome_url = kv_get("welcome_url", BANNER_URL)
-    if welcome_url:
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_photo(welcome_url)
-
-    # Короткое приветствие на выбранном языке
-    text = _tr(uid, "welcome")
-    with contextlib.suppress(Exception):
-        await update.effective_message.reply_text(
-            text,
-            reply_markup=main_keyboard(uid),
-            disable_web_page_preview=True,
-        )
+main_kb = main_keyboard()
 
 # ───────── /start ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Требование: выбор языка показываем при каждом новом /start (не только первый раз).
-    Меню показываем после нажатия кнопки языка (или «Продолжить»).
-    """
-    uid = update.effective_user.id
+    await update.effective_chat.send_message(
+        START_TEXT,
+        reply_markup=main_kb,
+        disable_web_page_preview=True,
+    )
 
-    # Показываем баннер (если задан)
+# ───────── сохранение выбранного режима/подрежима (SQLite kv) ─────────
+def _mode_set(user_id: int, mode: str):
+    kv_set(f"mode:{user_id}", mode)
+
+def _mode_get(user_id: int) -> str:
+    return (kv_get(f"mode:{user_id}", "none") or "none")
+
+def _mode_track_set(user_id: int, track: str):
+    kv_set(f"mode_track:{user_id}", track)
+
+def _mode_track_get(user_id: int) -> str:
+    return kv_get(f"mode_track:{user_id}", "") or ""
+
+
+# ───────── Подменю режимов ─────────
+def _school_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔎 Объяснение",          callback_data="school:explain"),
+         InlineKeyboardButton("🧮 Задачи",              callback_data="school:tasks")],
+        [InlineKeyboardButton("✍️ Эссе/реферат/доклад", callback_data="school:essay"),
+         InlineKeyboardButton("📝 Экзамен/квиз",        callback_data="school:quiz")],
+    ])
+
+def _work_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📧 Письмо/документ",  callback_data="work:doc"),
+         InlineKeyboardButton("📊 Аналитика/сводка", callback_data="work:report")],
+        [InlineKeyboardButton("🗂 План/ToDo",        callback_data="work:plan"),
+         InlineKeyboardButton("💡 Идеи/бриф",       callback_data="work:idea")],
+    ])
+
+def _fun_quick_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Оживить фото (анимация)", callback_data="fun:revive")],
+        [InlineKeyboardButton("Клип из текста/голоса",    callback_data="fun:clip")],
+        [InlineKeyboardButton("Сгенерировать изображение /img", callback_data="fun:img")],
+        [InlineKeyboardButton("Раскадровка под Reels",    callback_data="fun:storyboard")],
+        [
+    InlineKeyboardButton("🪄 Оживить старое фото", callback_data="fun:revive"),
+    InlineKeyboardButton("🎬 Reels из длинного видео", callback_data="fun:smartreels"),
+],
+[
+    InlineKeyboardButton("🎞 Kling клипы",  callback_data="fun:kling"),  # NEW
+    InlineKeyboardButton("🎥 Runway",       callback_data="fun:clip"),
+    InlineKeyboardButton("🎨 Midjourney",   callback_data="fun:img"),
+    InlineKeyboardButton("🔊 STT/TTS",      callback_data="fun:speech"),
+],
+    ])
+
+def _fun_kb():
+    # оставим и старое подменю — не используется сейчас
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🖼 Фото-мастерская", callback_data="fun:photo"),
+         InlineKeyboardButton("🎬 Видео-идеи",      callback_data="fun:video")],
+        [InlineKeyboardButton("🎲 Квизы/игры",      callback_data="fun:quiz"),
+         InlineKeyboardButton("😆 Мемы/шутки",      callback_data="fun:meme")],
+    ])
+
+
+# ───────── Команды/кнопки режимов ─────────
+async def cmd_mode_school(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _mode_set(update.effective_user.id, "Учёба")
+    _mode_track_set(update.effective_user.id, "")
+    # показываем НОВОЕ подменю «Учёба»
+    await _send_mode_menu(update, context, "study")
+
+async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _mode_set(update.effective_user.id, "Работа")
+    _mode_track_set(update.effective_user.id, "")
+    # показываем НОВОЕ подменю «Работа»
+    await _send_mode_menu(update, context, "work")
+
+async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _mode_set(update.effective_user.id, "Развлечения")
+    _mode_track_set(update.effective_user.id, "")
+    await update.effective_message.reply_text(
+        "🔥 Развлечения — быстрые действия:",
+        reply_markup=_fun_quick_kb()
+    )
+
+    # НОВАЯ КНОПКА: Kling
+    if data == "fun:kling":
+        return await q.edit_message_text(
+            "🎞 Kling — быстрые клипы и шорты\n\n"
+            "Пришли тему, длительность (обычно 5–10 секунд) и формат (например, 9:16). "
+            "Я подготовлю сценарий и запущу генерацию клипа в Kling."
+        )
+
+# ───────── Старт / Движки / Помощь ─────────
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(welcome_url)
-
-    # Показываем выбор языка всегда
-    await update.effective_message.reply_text(
-        t(uid, "choose_lang"),
-        reply_markup=_lang_choose_kb(uid),
-    )
-# ───────── Старт / Движки / Помощь ─────────
+    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
 
 async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    await update.effective_message.reply_text(_tr(uid, "choose_engine"), reply_markup=engines_kb())
+    await update.effective_message.reply_text("Выберите движок:", reply_markup=engines_kb())
 
 async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
@@ -2838,54 +2584,6 @@ def _new_aid() -> str:
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
-    
-        # Language selection (lang:<code>)
-    if data.startswith("lang:"):
-        code = data.split(":", 1)[1].strip()
-        uid = update.effective_user.id
-
-        # "keep current" shortcut
-        if code != "__keep__":
-            set_lang(uid, code)
-
-        await q.answer()
-
-        # Показываем главное меню после выбора языка
-        try:
-            await q.message.reply_text(t(uid, "lang_set"), reply_markup=main_keyboard(uid))
-        except Exception:
-            pass
-
-        try:
-            await _send_main_menu(update, context)
-        except Exception:
-            pass
-        return
-
-    # Engine selection (engine:<name>)
-    if data.startswith("engine:"):
-        await q.answer()
-        eng = data.split(":", 1)[1].strip() if ":" in data else "gpt"
-        engine_set(uid, eng)
-
-        # Короткое подтверждение + подсказка
-        hint = {
-            "gpt": "Теперь по умолчанию отвечаю текстом (GPT).",
-            "images": "Теперь любой текст будет трактоваться как промпт для картинки (Images).",
-            "kling": "Теперь любой текст будет трактоваться как промпт для видео в Kling.",
-            "luma": "Теперь любой текст будет трактоваться как промпт для видео в Luma.",
-            "runway": "Runway выбран. Для видео используйте «сделай видео…» (текст→видео может быть отключён).",
-            "sora": "Sora выбран (через Comet). Если ключи/эндпоинт не заданы — покажу подсказку.",
-            "gemini": "Gemini выбран (через Comet). Если ключи/эндпоинт не заданы — будет подсказка/фолбэк.",
-            "suno": "Suno выбран (музыка). Сейчас включён как режим-подсказка.",
-            "midjourney": "Midjourney выбран. Сейчас включён как режим-подсказка.",
-            "stt_tts": "Режим STT/TTS: можно прислать голосовое или включить озвучку ответов.",
-        }.get(eng, f"Движок выбран: {eng}")
-
-        with contextlib.suppress(Exception):
-            await q.message.reply_text(hint, reply_markup=main_keyboard(uid))
-        return
-
     try:
         # 🆕 Выбор движка для оживления фото (Runway/Kling/Luma)
         if data.startswith("revive_engine:"):
@@ -3861,78 +3559,6 @@ async def on_text(
 
     # Намёк на генерацию видеоролика
     mtype, rest = detect_media_intent(text)
-    # Принудительный выбор движка (через меню «Движки»)
-    user_id = update.effective_user.id
-    forced_engine = "gpt"
-    with contextlib.suppress(Exception):
-        forced_engine = engine_get(user_id)
-
-    # Если пользователь выбрал видео-движок, а явного префикса нет — трактуем текст как видео-запрос
-    if (mtype is None) and forced_engine in ("kling", "luma", "runway", "sora"):
-        prompt = text.strip()
-        duration, aspect = parse_video_opts(text)
-
-        # Runway text→video может быть выключен (оставляем защиту как раньше)
-        if forced_engine == "runway" and RUNWAY_DISABLE_TEXTVIDEO:
-            await update.effective_message.reply_text(_tr(user_id, "runway_disabled_textvideo"))
-            return
-
-        async def _go_video():
-            if forced_engine == "kling":
-                return await _run_kling_video(update, context, prompt, duration, aspect)
-            if forced_engine == "luma":
-                return await _run_luma_video(update, context, prompt, duration, aspect)
-            if forced_engine == "runway":
-                return await _run_runway_video(update, context, prompt, duration, aspect)
-            if forced_engine == "sora":
-                return await _run_sora_video(update, context, prompt, duration, aspect)
-            return False
-
-        # Платёж/лимиты — учитываем как «oneoff» видео
-        est = float(KLING_UNIT_COST_USD or 0.40) * duration
-        if forced_engine == "luma":
-            est = float(LUMA_UNIT_COST_USD or 0.40) * duration
-        elif forced_engine == "runway":
-            est = float(RUNWAY_UNIT_COST_USD or 1.00) * duration
-        elif forced_engine == "sora":
-            est = float(SORA_UNIT_COST_USD or 0.40) * duration
-
-        await _try_pay_then_do(update, context, user_id, forced_engine, est, _go_video)
-        return
-
-    # Если выбран Images, а префикса нет — трактуем текст как промпт для картинки
-    if (mtype is None) and forced_engine == "images":
-        prompt = text.strip()
-        if not prompt:
-            await update.effective_message.reply_text("Формат: /img <описание изображения>")
-            return
-
-        async def _go_img():
-            await _do_img_generate(update, context, prompt)
-
-        await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go_img)
-        return
-
-    # Если выбран Gemini — обрабатываем обычный текст через Gemini (Comet) вместо OpenAI
-    if (mtype is None) and forced_engine == "gemini":
-        reply = await ask_gemini_text(text)
-        await update.effective_message.reply_text(reply)
-        await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
-        return
-
-    # Suno / Midjourney пока как подсказка (без прямого API в этом файле)
-    if (mtype is None) and forced_engine in ("suno", "midjourney"):
-        if forced_engine == "suno":
-            await update.effective_message.reply_text(
-                "🎵 Suno выбран. Напишите: «песня: жанр, настроение, тема, длительность» — и я подготовлю текст/структуру.\n"
-                "Если у вас есть API/провайдер — добавьте ключи, и я подключу генерацию."
-            )
-        else:
-            await update.effective_message.reply_text(
-                "🎨 Midjourney выбран. Опишите изображение — я подготовлю промпт. "
-                "Дальше вы можете отправить его в Midjourney/Discord."
-            )
-        return
     if mtype == "video":
         # ГАРАНТИРОВАННО задаём prompt для текста и для голоса
         prompt = (rest or text).strip()
@@ -5557,9 +5183,6 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")],
     ]
     return InlineKeyboardMarkup(rows)
-    if SORA_ENABLED:
-        rows.append([InlineKeyboardButton("✨ Sora", callback_data="engine:sora")])
-
 
 # ───────── Нормализация duration для Runway/Comet (image_to_video) ─────────
 def _normalize_runway_duration_for_comet(seconds: int | float | None) -> int:
@@ -5937,19 +5560,12 @@ def build_application() -> "Application":
     # ───────────────── TEXT BUTTONS ─────────────────
     import re
 
-    # NOTE:
-    # Users see different button captions depending on language and UI (and some captions include emojis).
-    # The previous regexes matched only RU captions (e.g., "Движки"), so EN buttons like "🧠 Engines"
-    # fell through into the generic text handler, which then tried to treat them as a normal prompt.
-    # That is why you were seeing "Упс, произошла ошибка" on Balance/Help/Modes.
-    #
-    # We now match both RU and EN captions, with optional leading emojis.
-    BTN_ENGINES = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Движки|Engines)\s*$", re.I)
-    BTN_BALANCE = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Баланс|Balance)\s*$", re.I)
-    BTN_PLANS   = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Подписка|Subscription)(?:\s*[·•]\s*(?:Помощь|Help))?\s*$", re.I)
-    BTN_STUDY   = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Уч[её]ба|Study)\s*$", re.I)
-    BTN_WORK    = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Работа|Work)\s*$", re.I)
-    BTN_FUN     = re.compile(r"^\s*(?:[^\w]{0,6}\s*)?(?:Развлечения|Fun)\s*$", re.I)
+    BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
+    BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
+    BTN_PLANS   = re.compile(r"^\s*(?:⭐\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
+    BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]ба\s*$")
+    BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Работа\s*$")
+    BTN_FUN     = re.compile(r"^\s*(?:🔥\s*)?Развлечения\s*$")
 
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
@@ -6025,384 +5641,3 @@ def main():
 if __name__ == "__main__":
     main()
 # === END PATCH ===
-
-
-# ================== GPT5 PRO ADDITIONS — STEP 1 ==================
-# Language selection (RU/EN) + Welcome + Engine registry stubs
-# These are REAL, WORKING additions and will be extended in next steps.
-
-import sqlite3
-
-_DB_LANG = "lang.db"
-
-def _lang_db():
-    return sqlite3.connect(_DB_LANG)
-
-def init_lang_db():
-    with _lang_db() as c:
-        c.execute("CREATE TABLE IF NOT EXISTS user_lang (user_id INTEGER PRIMARY KEY, lang TEXT)")
-        c.commit()
-
-def get_user_lang(user_id: int):
-    with _lang_db() as c:
-        r = c.execute("SELECT lang FROM user_lang WHERE user_id=?", (user_id,)).fetchone()
-        return r[0] if r else None
-
-def set_user_lang(user_id: int, lang: str):
-    with _lang_db() as c:
-        c.execute("INSERT OR REPLACE INTO user_lang(user_id, lang) VALUES (?,?)", (user_id, lang))
-        c.commit()
-
-LANG_WELCOME = {
-    "ru": "👋 Добро пожаловать в GPT‑5 PRO Bot!\nВыберите движок или напишите запрос.",
-    "en": "👋 Welcome to GPT‑5 PRO Bot!\nChoose an engine or type a prompt."
-}
-
-ENGINE_REGISTRY = {
-    "gemini": {
-        "title": "Gemini",
-        "desc": "Аналитика, код, сложные рассуждения"
-    },
-    "midjourney": {
-        "title": "Midjourney",
-        "desc": "Генерация изображений и дизайна"
-    },
-    "suno": {
-        "title": "Suno",
-        "desc": "Музыка и аудио"
-    }
-}
-
-# ================== END STEP 1 ==================
-
-
-# ================== GPT5 PRO ADDITIONS — STEP 2 ==================
-# Gemini integration via CometAPI (REAL REQUEST LOGIC)
-
-import httpx
-import os
-
-COMETAPI_KEY = os.getenv("COMETAPI_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
-
-async def run_gemini_comet(prompt: str) -> str:
-    """
-    Gemini text generation via CometAPI.
-    """
-    if not COMETAPI_KEY:
-        raise RuntimeError("COMETAPI_KEY is not set")
-
-    url = f"https://api.cometapi.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    headers = {
-        "x-goog-api-key": COMETAPI_KEY,
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "contents": [
-            {"parts": [{"text": prompt}]}
-        ]
-    }
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        r.raise_for_status()
-        data = r.json()
-
-    try:
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        return str(data)
-
-# Engine dispatcher extension
-async def dispatch_engine(engine: str, prompt: str):
-    if engine == "gemini":
-        return await run_gemini_comet(prompt)
-    raise RuntimeError(f"Engine not supported yet: {engine}")
-
-# ================== END STEP 2 ==================
-
-
-# ================== GPT5 PRO ADDITIONS — STEP 3 ==================
-# Suno integration via CometAPI (music generation)
-
-import asyncio
-
-SUNO_DEFAULT_MODEL = os.getenv("SUNO_DEFAULT_MODEL", "chirp-auk")
-
-async def run_suno_comet(prompt: str) -> str:
-    """
-    Generate music via Suno (CometAPI).
-    Returns audio URL when ready.
-    """
-    if not COMETAPI_KEY:
-        raise RuntimeError("COMETAPI_KEY is not set")
-
-    submit_url = "https://api.cometapi.com/suno/submit/music"
-    headers = {
-        "Authorization": f"Bearer {COMETAPI_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "mv": SUNO_DEFAULT_MODEL,
-        "gpt_description_prompt": prompt,
-    }
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(submit_url, headers=headers, json=payload)
-        r.raise_for_status()
-        task_id = r.json().get("task_id")
-
-        if not task_id:
-            raise RuntimeError("Suno task_id not returned")
-
-        # Polling
-        for _ in range(40):
-            await asyncio.sleep(3)
-            s = await client.get(
-                f"https://api.cometapi.com/suno/fetch/{task_id}",
-                headers=headers,
-            )
-            data = s.json()
-            if data.get("status") == "SUCCESS":
-                return data["data"].get("audio_url")
-
-    raise RuntimeError("Suno generation timeout")
-
-# Extend dispatcher
-async def dispatch_engine(engine: str, prompt: str):
-    if engine == "gemini":
-        return await run_gemini_comet(prompt)
-    if engine == "suno":
-        return await run_suno_comet(prompt)
-    raise RuntimeError(f"Engine not supported yet: {engine}")
-
-# ================== END STEP 3 ==================
-
-
-# ================== GPT5 PRO ADDITIONS — STEP 4 ==================
-# Midjourney integration via CometAPI (imagine / fetch / action)
-
-MJ_DEFAULT_MODE = os.getenv("MJ_DEFAULT_MODE", "FAST")
-
-async def mj_imagine(prompt: str) -> str:
-    """Submit Midjourney imagine task. Returns task_id."""
-    if not COMETAPI_KEY:
-        raise RuntimeError("COMETAPI_KEY is not set")
-
-    url = "https://api.cometapi.com/mj/submit/imagine"
-    headers = {
-        "Authorization": f"Bearer {COMETAPI_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "botType": "MID_JOURNEY",
-        "prompt": prompt,
-        "accountFilter": {"modes": [MJ_DEFAULT_MODE]},
-    }
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        r.raise_for_status()
-        data = r.json()
-        return data.get("task_id")
-
-async def mj_fetch(task_id: str) -> dict:
-    """Fetch Midjourney task status and result."""
-    url = f"https://api.cometapi.com/mj/task/{task_id}/fetch"
-    headers = {"Authorization": f"Bearer {COMETAPI_KEY}"}
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.get(url, headers=headers)
-        r.raise_for_status()
-        return r.json()
-
-async def mj_action(task_id: str, custom_id: str) -> str:
-    """Perform Midjourney action (U/V/Reroll/Zoom). Returns new task_id."""
-    url = "https://api.cometapi.com/mj/submit/action"
-    headers = {
-        "Authorization": f"Bearer {COMETAPI_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "taskId": task_id,
-        "customId": custom_id,
-    }
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        r.raise_for_status()
-        data = r.json()
-        return data.get("task_id")
-
-# Extend dispatcher
-async def dispatch_engine(engine: str, prompt: str):
-    if engine == "gemini":
-        return await run_gemini_comet(prompt)
-    if engine == "suno":
-        return await run_suno_comet(prompt)
-    if engine == "midjourney":
-        return await mj_imagine(prompt)
-    raise RuntimeError(f"Engine not supported yet: {engine}")
-
-# ================== END STEP 4 ==================
-
-
-# ================== GPT5 PRO ADDITIONS — STEP 5 (FINAL) ==================
-# Final unification: single dispatcher, language-first guard, welcome hooks
-# NOTE: Hooks are designed to be connected to existing Telegram handlers.
-
-# ---- Unified engine dispatcher ----
-async def dispatch_engine(engine: str, prompt: str):
-    if engine == "gemini":
-        return await run_gemini_comet(prompt)
-    if engine == "suno":
-        return await run_suno_comet(prompt)
-    if engine == "midjourney":
-        return await mj_imagine(prompt)
-    raise RuntimeError(f"Unknown engine: {engine}")
-
-# ---- Language-first guard ----
-def require_language(user_id: int) -> bool:
-    """Return True if language already selected."""
-    return get_user_lang(user_id) is not None
-
-# ---- Welcome text provider ----
-def get_welcome_text(lang: str) -> str:
-    if lang == "ru":
-        return (
-            "👋 Добро пожаловать в GPT-5 PRO Bot!\n\n"
-            "🧠 Gemini — аналитика, код, сложные рассуждения\n"
-            "🎨 Midjourney — изображения и дизайн\n"
-            "🎵 Suno — музыка и аудио\n\n"
-            "Выберите движок или просто напишите запрос."
-        )
-    return (
-        "👋 Welcome to GPT-5 PRO Bot!\n\n"
-        "🧠 Gemini — analysis & reasoning\n"
-        "🎨 Midjourney — images & design\n"
-        "🎵 Suno — music generation\n\n"
-        "Choose an engine or type a prompt."
-    )
-
-# ================== END FINAL STEP ==================
-
-
-# ================== ENV VARIABLES TO ADD / UPDATE ==================
-# Добавьте/проверьте эти переменные в Environment (Render):
-#
-# --- Language ---
-# (язык хранится в SQLite kv_store автоматически, доп. ENV не нужно)
-#
-# --- CometAPI shared key (если используете через Comet) ---
-# COMETAPI_KEY=...
-#
-# --- Kling (CometAPI) ---
-# KLING_BASE_URL=https://api.cometapi.com
-# KLING_MODEL_NAME=kling-v1-6
-# KLING_MODE=std               # std|pro (если поддерживается вашим аккаунтом)
-# KLING_ASPECT=9:16
-# KLING_DURATION_S=5
-# KLING_UNIT_COST_USD=0.80     # опционально для расчёта/инвойсов
-#
-# --- Runway ---
-# RUNWAY_API_KEY=...           # если пусто — будет использован COMETAPI_KEY
-# RUNWAY_MODEL=gen3a_turbo
-# RUNWAY_API_VERSION=2024-11-06
-# RUNWAY_DISABLE_TEXTVIDEO=1   # если хотите запретить текст→видео через Runway
-#
-# --- Luma ---
-# LUMA_API_KEY=...
-# LUMA_BASE_URL=https://api.lumalabs.ai/dream-machine/v1
-# LUMA_MODEL=ray-2
-# LUMA_ASPECT=16:9
-# LUMA_DURATION_S=5
-# LUMA_UNIT_COST_USD=0.40      # опционально
-#
-# --- Sora (через Comet / ваш прокси) ---
-# SORA_ENABLED=0|1
-# SORA_COMET_BASE_URL=https://api.cometapi.com
-# SORA_COMET_API_KEY=...       # если пусто — используйте COMETAPI_KEY
-# SORA_MODEL_FREE=sora
-# SORA_MODEL_PRO=sora
-# SORA_UNIT_COST_USD=0.40
-#
-# --- Gemini (через Comet / ваш прокси) ---
-# GEMINI_API_KEY=...           # если пусто — будет использован COMETAPI_KEY
-# GEMINI_BASE_URL=https://api.cometapi.com
-# GEMINI_CHAT_PATH=/gemini/v1/chat   # ВАЖНО: путь зависит от вашего провайдера/Comet. Исправьте при необходимости.
-# GEMINI_MODEL=gemini-1.5-pro
-#
-# --- Optional placeholders (no direct API in this file yet) ---
-# SUNO_API_KEY=...
-# MIDJOURNEY_API_KEY=...
-# ================================================================
-
-
-
-# ===== PATCH: i18n mode labels =====
-I18N.setdefault("ru", {}).update({
-    "mode_study": "📚 Учёба",
-    "mode_work": "💼 Работа",
-    "mode_fun": "🔥 Развлечения",
-})
-I18N.setdefault("en", {}).update({
-    "mode_study": "📚 Study",
-    "mode_work": "💼 Work",
-    "mode_fun": "🔥 Fun",
-})
-I18N.setdefault("de", {}).update({
-    "mode_study": "📚 Lernen",
-    "mode_work": "💼 Arbeit",
-    "mode_fun": "🔥 Unterhaltung",
-})
-I18N.setdefault("fr", {}).update({
-    "mode_study": "📚 Études",
-    "mode_work": "💼 Travail",
-    "mode_fun": "🔥 Divertissement",
-})
-I18N.setdefault("th", {}).update({
-    "mode_study": "📚 การเรียน",
-    "mode_work": "💼 งาน",
-    "mode_fun": "🔥 ความบันเทิง",
-})
-# ===== END PATCH =====
-
-
-
-# ===== PATCH: mode buttons callback routing =====
-def _handle_mode_callback(update, context):
-    try:
-        q = update.callback_query
-        data = q.data
-        uid = q.from_user.id
-
-        if data in ("btn_study", "btn_work", "btn_fun"):
-            mode = data.replace("btn_", "")
-            kv_set(f"user:{uid}:mode", mode)
-            q.answer()
-
-            text = {
-                "study": t(uid, "mode_study"),
-                "work": t(uid, "mode_work"),
-                "fun": t(uid, "mode_fun"),
-            }.get(mode, "")
-
-            context.bot.send_message(
-                chat_id=uid,
-                text=f"✅ {text}",
-                reply_markup=main_keyboard(uid),
-            )
-            return True
-    except Exception as e:
-        log.exception("mode callback error: %s", e)
-    return False
-# ===== END PATCH =====
-
-
-
-# ===== PATCH: register mode callback handler =====
-try:
-    application.add_handler(CallbackQueryHandler(_handle_mode_callback, pattern="^btn_"))
-except Exception:
-    pass
-# ===== END PATCH =====
