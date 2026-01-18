@@ -2769,7 +2769,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
-try:
+    try:
         # 🆕 Выбор движка для оживления фото (Runway/Kling/Luma)
         if data.startswith("revive_engine:"):
             await q.answer()
