@@ -1144,7 +1144,27 @@ def _pick_vision_model() -> str:
     except Exception:
         return OPENAI_MODEL
 
-async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
+def _system_prompt_with_lang(lang: str | None) -> str:
+    """SYSTEM_PROMPT + директива отвечать на выбранном языке."""
+    base = (SYSTEM_PROMPT or "").strip()
+    if not lang:
+        return base
+    lang = lang.lower().strip()
+    # Поддерживаем основные языки из панели.
+    if lang == "ru":
+        return base
+    lang_name = {
+        "en": "English",
+        "de": "German",
+        "fr": "French",
+        "th": "Thai",
+        "be": "Belarusian",
+        "uk": "Ukrainian",
+    }.get(lang, lang)
+    return (base + "\n\n" + f"IMPORTANT: Reply ONLY in {lang_name}.").strip()
+
+
+async def ask_openai_text(user_text: str, web_ctx: str = "", lang: str | None = None) -> str:
     """
     Универсальный запрос к LLM:
     - поддерживает OpenRouter (через OPENAI_API_KEY = sk-or-...);
@@ -1156,7 +1176,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     if not user_text:
         return "Пустой запрос."
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": _system_prompt_with_lang(lang)}]
     if web_ctx:
         messages.append({
             "role": "system",
@@ -2285,20 +2305,52 @@ async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── Баланс / пополнение ─────────
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    lang = get_user_lang(user_id)
     w = _wallet_get(user_id)
     total = _wallet_total_get(user_id)
     row = _usage_row(user_id)
     lim = _limits_for(user_id)
+    if lang == "ru":
+        title = "🧾 Кошелёк"
+        total_line = f"• Единый баланс: ${total:.2f}"
+        note = "  (расходуется на перерасход по Luma/Runway/Images)"
+        details = "Детализация сегодня / лимиты тарифа:"
+        topup_btn = "➕ Пополнить баланс"
+    elif lang == "de":
+        title = "🧾 Guthaben"
+        total_line = f"• Gesamtguthaben: ${total:.2f}"
+        note = "  (wird für Überverbrauch bei Luma/Runway/Images genutzt)"
+        details = "Heute / Tariflimits:"
+        topup_btn = "➕ Guthaben aufladen"
+    elif lang == "fr":
+        title = "🧾 Solde"
+        total_line = f"• Solde global: ${total:.2f}"
+        note = "  (utilisé pour le dépassement Luma/Runway/Images)"
+        details = "Aujourd’hui / limites du forfait :"
+        topup_btn = "➕ Recharger le solde"
+    elif lang == "th":
+        title = "🧾 ยอดคงเหลือ"
+        total_line = f"• ยอดรวม: ${total:.2f}"
+        note = "  (ใช้สำหรับการเกินโควตา Luma/Runway/Images)"
+        details = "วันนี้ / ขีดจำกัดแพ็กเกจ:"
+        topup_btn = "➕ เติมยอด"
+    else:
+        title = "🧾 Balance"
+        total_line = f"• Unified balance: ${total:.2f}"
+        note = "  (used for overages on Luma/Runway/Images)"
+        details = "Today / plan limits:"
+        topup_btn = "➕ Top up"
+
     msg = (
-        "🧾 Кошелёк:\n"
-        f"• Единый аланс: ${total:.2f}\n"
-        "  (расходуется на перерасход по Luma/Runway/Images)\n\n"
-        "Детализация сегодня / лимиты тарифа:\n"
+        f"{title}:\n"
+        f"{total_line}\n"
+        f"{note}\n\n"
+        f"{details}\n"
         f"• Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
         f"• Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
         f"• Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
     )
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить аланс", callback_data="topup")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(topup_btn, callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
 # ───────── Подписка / тарифы — UI и оплаты (PATCH) ─────────
@@ -3899,6 +3951,41 @@ async def on_text(
     else:
         text = (update.message.text or "").strip()
 
+    # --- Router for ReplyKeyboard buttons ---
+    # Иногда emoji/вариационные селекторы ломают Regex-фильтры на кнопках.
+    # Поэтому дублируем маршрутизацию здесь, до ухода в «свободный чат».
+    try:
+        import re as _re
+
+        def _btn_norm(s: str) -> str:
+            # только буквы, без emoji/пунктуации
+            return "".join(_re.findall(r"[A-Za-zА-Яа-яЁё]+", s)).lower()
+
+        n = _btn_norm(text)
+        user_id = update.effective_user.id
+
+        if n in ("engines", "движки"):
+            await cmd_engines(update, context)
+            return
+        if n in ("balance", "баланс"):
+            await cmd_balance(update, context)
+            return
+        if n in ("plans", "подписка", "subscriptionhelp", "subscription", "help"):
+            await cmd_plans(update, context)
+            return
+        if n in ("study", "учеба", "учёба"):
+            await cmd_mode_study(update, context)
+            return
+        if n in ("work", "работа"):
+            await cmd_mode_work(update, context)
+            return
+        if n in ("fun", "развлечения"):
+            await cmd_mode_fun(update, context)
+            return
+    except Exception:
+        # Никогда не падаем из-за роутера
+        pass
+
     # Вопросы о возможностях
     cap = capability_answer(text)
     if cap:
@@ -4080,11 +4167,11 @@ async def on_text(
     else:
         text_for_llm = text
 
-    if mode == "Учёа" and track:
+    if mode == "Учёба" and track:
         await study_process_text(update, context, text)
         return
 
-    reply = await ask_openai_text(text_for_llm)
+    reply = await ask_openai_text(text_for_llm, lang=get_user_lang(user_id))
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
     
@@ -5981,13 +6068,17 @@ def build_application() -> "Application":
         app.add_handler(MessageHandler(filters.ANIMATION, gif_fn), group=1)
 
     # ───────────────── TEXT BUTTONS ─────────────────
+    # Telegram often sends emojis with variation selectors (U+FE0F) and other
+    # invisible chars. These patterns are intentionally permissive.
     import re
-    BTN_ENGINES = re.compile(r"^\\s*(?:🧠\\s*)?(?:Движки|Engines)\\s*$")
-    BTN_BALANCE = re.compile(r"^\\s*(?:💳|🧾)?\\s*(?:Баланс|Balance)\\s*$")
-    BTN_PLANS = re.compile(r"^\\s*(?:Подписка(?:\\s*[·•]\\s*Помощь)?|Plans)\\s*$")
-    BTN_STUDY = re.compile(r"^\\s*(?:🎓\\s*)?(?:Уч[её]ба|Study)\\s*$")
-    BTN_WORK = re.compile(r"^\\s*(?:💼\\s*)?(?:Работа|Work)\\s*$")
-    BTN_FUN = re.compile(r"^\\s*(?:🔥\\s*)?(?:Развлечения|Fun)\\s*$")
+    _EMO = r"(?:[\u200d\ufe0f\s]|[\U0001F000-\U0001FAFF])*"  # joiners/VS/emoji-ish
+    BTN_ENGINES = re.compile(rf"^\\s*{_EMO}(?:Движки|Engines)\\s*$", re.I)
+    BTN_BALANCE = re.compile(rf"^\\s*{_EMO}(?:Баланс|Balance)\\s*$", re.I)
+    # In UI this is often "Subscription • Help" (not "Plans").
+    BTN_PLANS = re.compile(rf"^\\s*{_EMO}(?:Подписка(?:\\s*[·•]\\s*Помощь)?|Subscription(?:\\s*[·•]\\s*Help)?|Plans)\\s*$", re.I)
+    BTN_STUDY = re.compile(rf"^\\s*{_EMO}(?:Уч[её]ба|Study)\\s*$", re.I)
+    BTN_WORK = re.compile(rf"^\\s*{_EMO}(?:Работа|Work)\\s*$", re.I)
+    BTN_FUN = re.compile(rf"^\\s*{_EMO}(?:Развлечения|Fun)\\s*$", re.I)
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
