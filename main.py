@@ -10,6 +10,17 @@
 
 # -*- coding: utf-8 -*-
 import os
+
+# ===================== BOT TOKEN (ENV FALLBACKS) =====================
+# Accept multiple env var names for compatibility with Render/legacy setups
+TELEGRAM_BOT_TOKEN = (
+    os.environ.get('TELEGRAM_BOT_TOKEN')
+    or os.environ.get('TELEGRAM_TOKEN')
+    or os.environ.get('BOT_TOKEN')
+    or os.environ.get('TOKEN')
+    or ''
+).strip()
+
 import re
 import json
 import time
@@ -36,7 +47,7 @@ from telegram.ext import (
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
 # ───────── TTS imports ─────────
-import contextlib  # уже у те+/-я выше есть, ду+/-лировать НЕ надо, если импорт стоит
+import contextlib  # уже у тея выше есть, дулировать НЕ надо, если импорт стоит
 
 # Optional PIL / rembg for photo tools
 try:
@@ -63,7 +74,7 @@ def _env_float(name: str, default: float) -> float:
     """
     Безопасное чтение float из ENV:
     - поддерживает и '4,99', и '4.99'
-    - при оши+/-ке возвращает default
+    - при ошике возвращает default
     """
     raw = os.environ.get(name)
     if not raw:
@@ -94,7 +105,7 @@ WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
 TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
-# О+/-щий ключ CometAPI (используется и для Kling, и для Runway)
+# Ощий ключ CometAPI (используется и для Kling, и для Runway)
 COMETAPI_KEY     = os.environ.get("COMETAPI_KEY", "").strip()
 
 # ВАЖНО: провайдер текста (openai / openrouter и т.п.)
@@ -111,7 +122,7 @@ OPENAI_TTS_MODEL     = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts").str
 OPENAI_TTS_VOICE     = os.environ.get("OPENAI_TTS_VOICE", "alloy").strip()
 TTS_MAX_CHARS        = int((os.environ.get("TTS_MAX_CHARS") or "1000").strip() or "1000")
 
-# Images (фол+/-эк — OpenAI Images)
+# Images (фолэк — OpenAI Images)
 OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
 IMAGES_MODEL        = "gpt-image-1"
@@ -136,7 +147,7 @@ RUNWAY_DURATION_S = int((os.environ.get("RUNWAY_DURATION_S") or "5").strip() or 
 RUNWAY_MAX_WAIT_S = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or "1200")
 
 # База API:
-# ВАЖНО: Runway image→video корректно ра+/-отает ТОЛЬКО через официальную +/-азу:
+# ВАЖНО: Runway image→video корректно раотает ТОЛЬКО через официальную азу:
 #   https://api.runwayml.com
 # CometAPI остаётся как fallback (через env), но по умолчанию ставим официальный URL
 RUNWAY_BASE_URL = (
@@ -150,7 +161,7 @@ RUNWAY_IMAGE2VIDEO_PATH = "/v1/image_to_video"      # новый коррект�
 RUNWAY_TEXT2VIDEO_PATH  = "/v1/text_to_video"       # универсальный endpoint Runway
 RUNWAY_STATUS_PATH      = "/v1/tasks/{id}"          # единый статусный endpoint Runway
 
-# Версия Runway API (о+/-язательно!)
+# Версия Runway API (оязательно!)
 RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 
 # ───────── Luma ─────────
@@ -166,7 +177,7 @@ LUMA_ASPECT      = _LUMA_ASPECT_ENV or "16:9"
 
 LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
 
-# База уже содержит /dream-machine/v1 → дальше до+/-авляем /generations
+# База уже содержит /dream-machine/v1 → дальше доавляем /generations
 LUMA_BASE_URL    = (
     os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1")
     .strip()
@@ -178,11 +189,11 @@ LUMA_STATUS_PATH = "/generations/{id}"
 # Максимальный таймаут ожидания Luma
 LUMA_MAX_WAIT_S  = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
 
-# Luma Images (опционально: если нет — используем OpenAI Images как фол+/-эк)
+# Luma Images (опционально: если нет — используем OpenAI Images как фолэк)
 LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
 LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
 
-# Фол+/-эки Luma
+# Фолэки Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
     os.environ.get("LUMA_FALLBACK_BASE_URL", ""),
@@ -205,7 +216,7 @@ KLING_DURATION_S = int((os.environ.get("KLING_DURATION_S") or "5").strip() or 5)
 KLING_MAX_WAIT_S = int((os.environ.get("KLING_MAX_WAIT_S") or "900").strip() or 900)
 KLING_UNIT_COST_USD = float((os.environ.get("KLING_UNIT_COST_USD") or "0.80").replace(",", ".") or "0.80")
 
-# О+/-щий интервал между опросами статуса задач видео
+# Ощий интервал между опросами статуса задач видео
 VIDEO_POLL_DELAY_S = _env_float("VIDEO_POLL_DELAY_S", 6.0)
 
 # ───────── КШИ / ГЛОБАЛЬНОЕ СОСТОЯНИЕ ─────────
@@ -215,7 +226,7 @@ VIDEO_POLL_DELAY_S = _env_float("VIDEO_POLL_DELAY_S", 6.0)
 _LAST_ANIM_PHOTO: dict[int, dict] = {}
 # ───────── Runway через CometAPI ─────────
 
-# Ключ +/-ерём из RUNWAY_API_KEY, а если он пустой — используем о+/-щий COMETAPI_KEY
+# Ключ ерём из RUNWAY_API_KEY, а если он пустой — используем ощий COMETAPI_KEY
 RUNWAY_API_KEY     = (os.environ.get("RUNWAY_API_KEY", "").strip() or COMETAPI_KEY)
 
 # Модель Runway, которая идёт через CometAPI
@@ -236,7 +247,7 @@ RUNWAY_IMAGE2VIDEO_PATH  = "/runwayml/v1/image_to_video"
 RUNWAY_TEXT2VIDEO_PATH   = "/runwayml/v1/text_to_video"
 RUNWAY_STATUS_PATH       = "/runwayml/v1/tasks/{id}"
 
-# Версия Runway API — о+/-язательно 2024-11-06 (как в их доке)
+# Версия Runway API — оязательно 2024-11-06 (как в их доке)
 RUNWAY_API_VERSION = os.environ.get("RUNWAY_API_VERSION", "2024-11-06").strip()
 
 # ───────── Luma ─────────
@@ -252,7 +263,7 @@ LUMA_ASPECT      = _LUMA_ASPECT_ENV or "16:9"
 
 LUMA_DURATION_S  = int((os.environ.get("LUMA_DURATION_S") or "5").strip() or 5)
 
-# База уже содержит /dream-machine/v1 → дальше до+/-авляем /generations
+# База уже содержит /dream-machine/v1 → дальше доавляем /generations
 LUMA_BASE_URL    = (
     os.environ.get("LUMA_BASE_URL", "https://api.lumalabs.ai/dream-machine/v1")
     .strip()
@@ -264,11 +275,11 @@ LUMA_STATUS_PATH = "/generations/{id}"
 # Максимальный таймаут ожидания Luma
 LUMA_MAX_WAIT_S  = int((os.environ.get("LUMA_MAX_WAIT_S") or "900").strip() or 900)
 
-# Luma Images (опционально: если нет — используем OpenAI Images как фол+/-эк)
+# Luma Images (опционально: если нет — используем OpenAI Images как фолэк)
 LUMA_IMG_BASE_URL = os.environ.get("LUMA_IMG_BASE_URL", "").strip().rstrip("/")
 LUMA_IMG_MODEL    = os.environ.get("LUMA_IMG_MODEL", "imagine-image-1").strip()
 
-# Фол+/-эки Luma
+# Фолэки Luma
 _fallbacks_raw = ",".join([
     os.environ.get("LUMA_FALLBACKS", ""),
     os.environ.get("LUMA_FALLBACK_BASE_URL", ""),
@@ -291,7 +302,7 @@ KLING_DURATION_S = int((os.environ.get("KLING_DURATION_S") or "5").strip() or 5)
 KLING_MAX_WAIT_S = int((os.environ.get("KLING_MAX_WAIT_S") or "900").strip() or 900)
 KLING_UNIT_COST_USD = float((os.environ.get("KLING_UNIT_COST_USD") or "0.80").replace(",", ".") or "0.80")
 
-# О+/-щий интервал между опросами статуса задач видео
+# Ощий интервал между опросами статуса задач видео
 VIDEO_POLL_DELAY_S = _env_float("VIDEO_POLL_DELAY_S", 6.0)
 
 # ───────── КШИ / ГЛОБАЛЬНОЕ СОСТОЯНИЕ ─────────
@@ -301,7 +312,7 @@ VIDEO_POLL_DELAY_S = _env_float("VIDEO_POLL_DELAY_S", 6.0)
 _LAST_ANIM_PHOTO: dict[int, dict] = {}
 
 # ───────── UTILS ---------
-_LUMA_ACTIVE_BASE = None  # кэш последнего живого +/-азового URL
+_LUMA_ACTIVE_BASE = None  # кэш последнего живого азового URL
 
 async def _pick_luma_base(client: httpx.AsyncClient) -> str:
     global _LUMA_ACTIVE_BASE
@@ -597,7 +608,7 @@ def set_lang(user_id: int, lang: str) -> None:
 # Mini-dictionary (menus/buttons)
 I18N: dict[str, dict[str, str]] = {
     "ru": {
-        "choose_lang": "🌍 Вы+/-ерите язык",
+        "choose_lang": "🌍 Выерите язык",
         "lang_set": "✅ Язык установлен",
         "menu_title": "Главное меню",
         "btn_engines": "🧠 Движки",
@@ -607,12 +618,12 @@ I18N: dict[str, dict[str, str]] = {
         "btn_photo": "🖼 Оживить фото",
         "btn_help": "❓ Помощь",
         "btn_back": "⬅️ Назад",
-        "btn_study": "📚 Учё+/-а",
-        "btn_work": "💼 Ра+/-ота",
+        "btn_study": "📚 Учёа",
+        "btn_work": "💼 Раота",
         "btn_fun": "🎉 Развлечения",
     },
     "be": {
-        "choose_lang": "🌍 А+/-ярыце мову",
+        "choose_lang": "🌍 Аярыце мову",
         "lang_set": "✅ Мова ўсталявана",
         "menu_title": "Галоўнае меню",
         "btn_engines": "🧠 Рухавікі",
@@ -624,7 +635,7 @@ I18N: dict[str, dict[str, str]] = {
         "btn_back": "⬅️ Назад",
     },
     "uk": {
-        "choose_lang": "🌍 О+/-еріть мову",
+        "choose_lang": "🌍 Оеріть мову",
         "lang_set": "✅ Мову встановлено",
         "menu_title": "Головне меню",
         "btn_engines": "🧠 Рушії",
@@ -635,9 +646,9 @@ I18N: dict[str, dict[str, str]] = {
         "btn_help": "❓ Допомога",
         "btn_back": "⬅️ Назад",
         "btn_study": "🎓 Навчання",
-        "btn_work": "💼 Ро+/-ота",
+        "btn_work": "💼 Роота",
         "btn_fun": "🔥 Розваги",
-        "input_placeholder": "О+/-еріть режим а+/-о напишіть запит…",
+        "input_placeholder": "Оеріть режим ао напишіть запит…",
     
     },
     "de": {
@@ -687,15 +698,15 @@ I18N: dict[str, dict[str, str]] = {
     },
     "th": {
         "choose_lang": "🌍 เลืกภาษา",
-        "lang_set": "✅ ต+/-้งค่าภาษาแล้ว",
-        "menu_title": "เมนูหล+/-ก",
+        "lang_set": "✅ ต้งค่าภาษาแล้ว",
+        "menu_title": "เมนูหลก",
         "btn_engines": "🧠 เนจิน",
-        "btn_sub": " สม+/-ครสมาชิก • ช่วยเหลื",
+        "btn_sub": " สมครสมาชิก • ช่วยเหลื",
         "btn_wallet": "🧾 ยดคงเหลื",
         "btn_video": "🎞 สร้างวิดีโ",
         "btn_photo": "🖼 ทำให้รูปเคลื่นไหว",
         "btn_help": "❓ ช่วยเหลื",
-        "btn_back": "⬅️ กล+/-บ",
+        "btn_back": "⬅️ กลบ",
         "btn_study": "📚 เรียน",
         "btn_work": "💼 งาน",
         "btn_fun": "🎉 สนุก",
@@ -709,7 +720,7 @@ def t(user_id: int, key: str) -> str:
 def system_prompt_for(lang: str) -> str:
     mapping = {
         "ru": "Отвечай на русском языке.",
-        "be": "Адказвай па-+/-еларуску.",
+        "be": "Адказвай па-еларуску.",
         "uk": "Відповідай українською мовою.",
         "de": "Antworte auf Deutsch.",
         "en": "Answer in English.",
@@ -721,31 +732,31 @@ def system_prompt_for(lang: str) -> str:
 # Extended pack (long UI texts / hints)
 I18N_PACK: dict[str, dict[str, str]] = {
     "welcome": {
-        "ru": "Привет! Я Нейро‑Bot — ⚡ мультирежимный +/-от из 7 нейросетей для учё+/-ы, ра+/-оты и развлечений.",
-        "be": "Прывітанне! Я Нейро‑Bot — ⚡ шматрэжымны +/-от з 7 нейрасетак для вучо+/-ы, працы і за+/-аў.",
-        "uk": "Привіт! Я Нейро‑Bot — ⚡ мультирежимний +/-от із 7 нейромереж для навчання, ро+/-оти та розваг.",
+        "ru": "Привет! Я Нейро‑Bot — ⚡ мультирежимный от из 7 нейросетей для учёы, раоты и развлечений.",
+        "be": "Прывітанне! Я Нейро‑Bot — ⚡ шматрэжымны от з 7 нейрасетак для вучоы, працы і зааў.",
+        "uk": "Привіт! Я Нейро‑Bot — ⚡ мультирежимний от із 7 нейромереж для навчання, рооти та розваг.",
         "de": "Hallo! Ich bin Neuro‑Bot — ⚡ ein Multimode‑Bot mit 7 KI‑Engines für Lernen, Arbeit und Spaß.",
         "en": "Hi! I’m Neuro‑Bot — ⚡ a multi‑mode bot with 7 AI engines for study, work and fun.",
         "fr": "Salut ! Je suis Neuro‑Bot — ⚡ un bot multi‑modes avec 7 moteurs IA pour étudier, travailler et se divertir.",
-        "th": "สว+/-สดี! ฉ+/-นคื Neuro‑Bot — ⚡ บทหลายโหมดพร้มเนจิน AI 7 ต+/-ว สำหร+/-บเรียน งาน และความบ+/-นเทิง",
+        "th": "สวสดี! ฉนคื Neuro‑Bot — ⚡ บทหลายโหมดพร้มเนจิน AI 7 ตว สำหรบเรียน งาน และความบนเทิง",
     },
     "ask_video_prompt": {
         "ru": "🎞 Напиши запрос для видео, например:\n«Сделай видео: закат над морем, 7 сек, 16:9»",
-        "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зра+/-і відэа: захад сонца над морам, 7 сек, 16:9»",
-        "uk": "🎞 Напиши запит для відео, наприклад:\n«Зро+/-и відео: захід над морем, 7 с, 16:9»",
+        "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зраі відэа: захад сонца над морам, 7 сек, 16:9»",
+        "uk": "🎞 Напиши запит для відео, наприклад:\n«Зрои відео: захід над морем, 7 с, 16:9»",
         "de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
         "en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
         "fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n« Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 »",
-        "th": "🎞 พิมพ์คำส+/-่งทำวิดีโ เช่น:\n“ทำวิดีโ: พระาทิตย์ตกเหนืทะเล 7วิ 16:9”",
+        "th": "🎞 พิมพ์คำส่งทำวิดีโ เช่น:\n“ทำวิดีโ: พระาทิตย์ตกเหนืทะเล 7วิ 16:9”",
     },
     "ask_send_photo": {
-        "ru": "🖼 Пришли фото, затем вы+/-ери «Оживить фото».",
-        "be": "🖼 Дашлі фота, затым вы+/-еры «Ажывіць фота».",
-        "uk": "🖼 Надішли фото, потім о+/-ери «Оживити фото».",
+        "ru": "🖼 Пришли фото, затем выери «Оживить фото».",
+        "be": "🖼 Дашлі фота, затым выеры «Ажывіць фота».",
+        "uk": "🖼 Надішли фото, потім оери «Оживити фото».",
         "de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
         "en": "🖼 Send a photo, then choose “Animate photo”.",
         "fr": "🖼 Envoyez une photo, puis choisissez « Animer la photo ».",
-        "th": "🖼 ส่งรูป จากน+/-้นเลืก “ทำให้รูปเคลื่นไหว”",
+        "th": "🖼 ส่งรูป จากน้นเลืก “ทำให้รูปเคลื่นไหว”",
     },
     "photo_received": {
         "ru": "🖼 Фото получено. Хотите оживить?",
@@ -754,7 +765,7 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "de": "🖼 Foto erhalten. Animieren?",
         "en": "🖼 Photo received. Animate it?",
         "fr": "🖼 Photo reçue. L’animer ?",
-        "th": "🖼 ได้ร+/-บรูปแล้ว ต้งการทำให้เคลื่นไหวไหม?",
+        "th": "🖼 ได้รบรูปแล้ว ต้งการทำให้เคลื่นไหวไหม?",
     },
     "animate_btn": {
         "ru": "🎬 Оживить фото",
@@ -766,22 +777,22 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "th": "🎬 ทำให้รูปเคลื่นไหว",
     },
     "choose_engine": {
-        "ru": "Вы+/-ерите движок:",
-        "be": "А+/-ярыце рухавік:",
-        "uk": "О+/-еріть рушій:",
+        "ru": "Выерите движок:",
+        "be": "Аярыце рухавік:",
+        "uk": "Оеріть рушій:",
         "de": "Wähle die Engine:",
         "en": "Choose engine:",
         "fr": "Choisissez le moteur:",
         "th": "เลืกเนจิน:",
     },
     "runway_disabled_textvideo": {
-        "ru": "⚠️ Runway отключён для видео по тексту/голосу. Вы+/-ерите Kling, Luma или Sora.",
-        "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. А+/-ярыце Kling, Luma а+/-о Sora.",
-        "uk": "⚠️ Runway вимкнено для відео з тексту/голосу. О+/-еріть Kling, Luma а+/-о Sora.",
+        "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выерите Kling, Luma или Sora.",
+        "be": "⚠️ Runway адключаны для відэа па тэксце/голасе. Аярыце Kling, Luma ао Sora.",
+        "uk": "⚠️ Runway вимкнено для відео з тексту/голосу. Оеріть Kling, Luma ао Sora.",
         "de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
         "en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
         "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
-        "th": "⚠️ ปิด Runway สำหร+/-บข้ความ/เสียง→วิดีโ เลืก Kling, Luma หรื Sora",
+        "th": "⚠️ ปิด Runway สำหรบข้ความ/เสียง→วิดีโ เลืก Kling, Luma หรื Sora",
     },
 }
 
@@ -798,9 +809,9 @@ def _tr(user_id: int, key: str, **kwargs) -> str:
 
 def _lang_choose_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
     """
-    Клавиатура вы+/-ора языка.
-    Тре+/-ование: показывать при каждом /start.
-    Для удо+/-ства до+/-авляем «Продолжить» с текущим языком, если он уже вы+/-ран.
+    Клавиатура выора языка.
+    Треование: показывать при каждом /start.
+    Для удоства доавляем «Продолжить» с текущим языком, если он уже выран.
     """
     uid = int(user_id) if user_id is not None else 0
     rows = []
@@ -912,7 +923,7 @@ SORA_MODEL_PRO = os.environ.get("SORA_MODEL_PRO", "sora-2-pro").strip()
 SORA_UNIT_COST_USD = float(os.environ.get("SORA_UNIT_COST_USD", "0.40"))  # fallback estimate per second
 
 
-# DEMO: free даёт попро+/-овать ключевые движки
+# DEMO: free даёт попроовать ключевые движки
 LIMITS = {
     "free":      {"text_per_day": 5,    "luma_budget_usd": 0.40, "runway_budget_usd": 0.0,  "img_budget_usd": 0.05, "allow_engines": ["gpt","luma","images"]},
     "start":     {"text_per_day": 200,  "luma_budget_usd": 0.8,  "runway_budget_usd": 0.0,  "img_budget_usd": 0.2,  "allow_engines": ["gpt","luma","midjourney","images"]},
@@ -928,7 +939,7 @@ def _limits_for(user_id: int) -> dict:
 
     ENGINE_BUDGET_GROUP = {
     "luma":   "luma",
-    "kling":  "luma",    # <– Kling сидит на том же +/-юджете
+    "kling":  "luma",    # <– Kling сидит на том же юджете
     "runway": "runway",
     "img":    "img",
 }
@@ -951,10 +962,10 @@ def _calc_oneoff_price_rub(engine: str, usd_cost: float) -> int:
     val = int(rub + 0.999)
     return max(MIN_RUB_FOR_INVOICE, val)
 
-# какие движки на какой +/-юджет садятся
+# какие движки на какой юджет садятся
 ENGINE_BUDGET_GROUP = {
     "luma": "luma",
-    "kling": "luma",   # Kling и Luma делят один +/-юджет
+    "kling": "luma",   # Kling и Luma делят один юджет
     "runway": "runway",
     "img": "img",
 }
@@ -974,7 +985,7 @@ def _can_spend_or_offer(
     """
     group = ENGINE_BUDGET_GROUP.get(engine, engine)
 
-    # +/-езлимитные пользователи
+    # езлимитные пользователи
     if is_unlimited(user_id, username):
         if group in ("luma", "runway", "img"):
             _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
@@ -991,7 +1002,7 @@ def _can_spend_or_offer(
     spent = row[f"{group}_usd"]
     budget = lim[f"{group}_budget_usd"]
 
-    # если влезаем в дневной +/-юджет по группе (luma/runway/img)
+    # если влезаем в дневной юджет по группе (luma/runway/img)
     if spent + est_cost_usd <= budget + 1e-9:
         _usage_update(user_id, **{f"{group}_usd": est_cost_usd})
         return True, ""
@@ -1017,7 +1028,7 @@ def _register_engine_spend(user_id: int, engine: str, usd: float):
     """
     Регистрируем уже совершённый расход по движку.
     Используется для тех вызовов, где стоимость известна постфактум
-    или когда пользователь +/-езлимитный.
+    или когда пользователь езлимитный.
     """
     group = ENGINE_BUDGET_GROUP.get(engine, engine)
     if group in ("luma", "runway", "img"):
@@ -1025,21 +1036,21 @@ def _register_engine_spend(user_id: int, engine: str, usd: float):
         
 # ───────── Prompts ─────────
 SYSTEM_PROMPT = (
-    "Ты дружелю+/-ный и лаконичный ассистент на русском. "
+    "Ты дружелюный и лаконичный ассистент на русском. "
     "Отвечай по сути, структурируй списками/шагами, не выдумывай факты. "
     "Если ссылаешься на источники — в конце дай короткий список ссылок."
 )
 VISION_SYSTEM_PROMPT = (
-    "Ты чётко описываешь содержимое изо+/-ражений: о+/-ъекты, текст, схемы, графики. "
-    "Не идентифицируй личности людей и не пиши имена, если они не напечатаны на изо+/-ражении."
+    "Ты чётко описываешь содержимое изоражений: оъекты, текст, схемы, графики. "
+    "Не идентифицируй личности людей и не пиши имена, если они не напечатаны на изоражении."
 )
 
 # ───────── Heuristics / intent ─────────
-_SMALLTALK_RE = re.compile(r"^(привет|здравствуй|до+/-рый\s*(день|вечер|утро)|хи|hi|hello|как дела|спаси+/-о|пока)\b", re.I)
+_SMALLTALK_RE = re.compile(r"^(привет|здравствуй|дорый\s*(день|вечер|утро)|хи|hi|hello|как дела|спасио|пока)\b", re.I)
 _NEWSY_RE     = re.compile(r"(когда|дата|выйдет|релиз|новост|курс|цена|прогноз|найди|официал|погода|сегодня|тренд|адрес|телефон)", re.I)
-_CAPABILITY_RE= re.compile(r"(мож(ешь|но|ете).{0,16}(анализ|распозн|читать|созда(ва)?т|дела(ть)?).{0,24}(фото|картинк|изо+/-ражен|pdf|docx|epub|fb2|аудио|книг))", re.I)
+_CAPABILITY_RE= re.compile(r"(мож(ешь|но|ете).{0,16}(анализ|распозн|читать|созда(ва)?т|дела(ть)?).{0,24}(фото|картинк|изоражен|pdf|docx|epub|fb2|аудио|книг))", re.I)
 
-_IMG_WORDS = r"(картин\w+|изо+/-ражен\w+|фото\w*|рисунк\w+|image|picture|img\b|logo|banner|poster)"
+_IMG_WORDS = r"(картин\w+|изоражен\w+|фото\w*|рисунк\w+|image|picture|img\b|logo|banner|poster)"
 _VID_WORDS = r"(видео|ролик\w*|анимаци\w*|shorts?|reels?|clip|video|vid\b)"
 
 def is_smalltalk(text: str) -> bool:
@@ -1056,7 +1067,7 @@ def should_browse(text: str) -> bool:
 
 _CREATE_CMD = r"(сдела(й|йте)|созда(й|йте)|сгенериру(й|йте)|нарису(й|йте)|render|generate|create|make)"
 _PREFIXES_VIDEO = [r"^" + _CREATE_CMD + r"\s+видео", r"^video\b", r"^reels?\b", r"^shorts?\b"]
-_PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:картин\w+|изо+/-ражен\w+|фото\w+|рисунк\w+)", r"^image\b", r"^picture\b", r"^img\b"]
+_PREFIXES_IMAGE = [r"^" + _CREATE_CMD + r"\s+(?:картин\w+|изоражен\w+|фото\w+|рисунк\w+)", r"^image\b", r"^picture\b", r"^img\b"]
 
 def _strip_leading(s: str) -> str:
     return s.strip(" \n\t:—–-\"“”'«»,.()[]")
@@ -1080,7 +1091,7 @@ def detect_media_intent(text: str):
     - сгенерировать КАРТИНКУ ("image")
     Возвращаем кортеж (mtype, rest), где:
         mtype ∈ {"video", "image", None}
-        rest  — очищенный промпт +/-ез служе+/-ных слов.
+        rest  — очищенный промпт ез служеных слов.
     """
     if not text:
         return (None, "")
@@ -1088,7 +1099,7 @@ def detect_media_intent(text: str):
     t = text.strip()
     tl = t.lower()
 
-    # Вопросы "что ты умеешь?" и т.п. сразу от+/-расываем
+    # Вопросы "что ты умеешь?" и т.п. сразу отрасываем
     if _looks_like_capability_question(tl):
         return (None, "")
 
@@ -1104,7 +1115,7 @@ def detect_media_intent(text: str):
         if m:
             return ("image", _after_match(t, m))
 
-    # 3) О+/-щий случай: если есть глагол из _CREATE_CMD
+    # 3) Ощий случай: если есть глагол из _CREATE_CMD
     #    и отдельно слова "видео/ролик" или "картинка/фото/…"
     if re.search(_CREATE_CMD, tl, re.I):
         # --- видео ---
@@ -1123,7 +1134,7 @@ def detect_media_intent(text: str):
     # 4) Старые короткие форматы "img: ..." / "image: ..." / "picture: ..."
     m = re.match(r"^(img|image|picture)\s*[:\-]\s*(.+)$", tl)
     if m:
-        # +/-ерём хвост уже из оригинальной строки t
+        # ерём хвост уже из оригинальной строки t
         return ("image", _strip_leading(t[m.end(1) + 1:]))
 
     # 5) Старые короткие форматы "video: ..." / "reels: ..." / "shorts: ..."
@@ -1131,7 +1142,7 @@ def detect_media_intent(text: str):
     if m:
         return ("video", _strip_leading(t[m.end(1) + 1:]))
 
-    # Ничего не нашли — о+/-ычный текст
+    # Ничего не нашли — оычный текст
     return (None, "")
 # ───────── OpenAI helpers ─────────
 def _oai_text_client():
@@ -1148,9 +1159,9 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     """
     Универсальный запрос к LLM:
     - поддерживает OpenRouter (через OPENAI_API_KEY = sk-or-...);
-    - принудительно шлёт JSON в UTF-8, что+/-ы не +/-ыло ascii-оши+/-ок;
-    - логирует HTTP-статус и тело оши+/-ки в Render-логи;
-    - делает до 3 попыток с не+/-ольшой паузой.
+    - принудительно шлёт JSON в UTF-8, чтоы не ыло ascii-ошиок;
+    - логирует HTTP-статус и тело ошики в Render-логи;
+    - делает до 3 попыток с неольшой паузой.
     """
     user_text = (user_text or "").strip()
     if not user_text:
@@ -1160,7 +1171,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     if web_ctx:
         messages.append({
             "role": "system",
-            "content": f"Контекст из ве+/--поиска:\n{web_ctx}",
+            "content": f"Контекст из ве-поиска:\n{web_ctx}",
         })
     messages.append({"role": "user", "content": user_text})
 
@@ -1179,7 +1190,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
         "Accept-Charset": "utf-8",
     }
 
-    # Служе+/-ные заголовки OpenRouter
+    # Служеные заголовки OpenRouter
     if "openrouter.ai" in base_url:
         if OPENROUTER_SITE_URL:
             headers["HTTP-Referer"] = OPENROUTER_SITE_URL
@@ -1232,7 +1243,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     log.error("ask_openai_text failed after 3 attempts: %s", last_err)
     return (
         "⚠️ Сейчас не получилось получить ответ от модели. "
-        "Я на связи — попро+/-уй переформулировать запрос или повторить чуть позже."
+        "Я на связи — попроуй переформулировать запрос или повторить чуть позже."
     )
     
 
@@ -1245,11 +1256,11 @@ GEMINI_MODEL     = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro").strip()
 
 async def ask_gemini_text(user_text: str) -> str:
     """
-    Минимальная интеграция Gemini через CometAPI (или лю+/-ой совместимый прокси).
+    Минимальная интеграция Gemini через CometAPI (или люой совместимый прокси).
     Если эндпоинт отличается — поправь GEMINI_CHAT_PATH/GEMINI_BASE_URL в ENV.
     """
     if not GEMINI_API_KEY:
-        return "⚠️ Gemini: не задан GEMINI_API_KEY/COMETAPI_KEY. До+/-авьте ключ в Environment."
+        return "⚠️ Gemini: не задан GEMINI_API_KEY/COMETAPI_KEY. Доавьте ключ в Environment."
     if not user_text.strip():
         return ""
 
@@ -1269,14 +1280,14 @@ async def ask_gemini_text(user_text: str) -> str:
         if r.status_code // 100 != 2:
             txt = (r.text or "")[:1200]
             log.warning("Gemini error %s: %s", r.status_code, txt)
-            return "⚠️ Gemini: оши+/-ка запроса. Проверьте GEMINI_CHAT_PATH/BASE_URL и ключ."
+            return "⚠️ Gemini: ошика запроса. Проверьте GEMINI_CHAT_PATH/BASE_URL и ключ."
         js = r.json()
         # Пытаемся вытащить текст из разных схем ответов
         for k in ("text", "output", "result", "content", "message"):
             v = js.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
-        # Иногда ответ +/-ывает вида {"choices":[{"message":{"content":"..."}}]}
+        # Иногда ответ ывает вида {"choices":[{"message":{"content":"..."}}]}
         ch = js.get("choices")
         if isinstance(ch, list) and ch:
             msg = (ch[0].get("message") or {})
@@ -1290,7 +1301,7 @@ async def ask_gemini_text(user_text: str) -> str:
 
 async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
     try:
-        prompt = (user_text or "Опиши, что на изо+/-ражении и какой там текст.").strip()
+        prompt = (user_text or "Опиши, что на изоражении и какой там текст.").strip()
         model = _pick_vision_model()
         resp = _oai_text_client().chat.completions.create(
             model=model,
@@ -1306,7 +1317,7 @@ async def ask_openai_vision(user_text: str, img_b64: str, mime: str) -> str:
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         log.exception("Vision error: %s", e)
-        return "Не удалось проанализировать изо+/-ражение."
+        return "Не удалось проанализировать изоражение."
 
 
 # ───────── Пользовательские настройки (TTS) ─────────
@@ -1382,7 +1393,7 @@ async def maybe_tts_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, te
     if len(text) > TTS_MAX_CHARS:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text(
-                f"🔇 Озвучка выключена для этого соо+/-щения: текст длиннее {TTS_MAX_CHARS} символов."
+                f"🔇 Озвучка выключена для этого соощения: текст длиннее {TTS_MAX_CHARS} символов."
             )
         return
     if not OPENAI_TTS_KEY:
@@ -1473,13 +1484,13 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         log.exception("TG download error: %s", e)
-        await msg.reply_text("Не удалось скачать голосовое соо+/-щение.")
+        await msg.reply_text("Не удалось скачать голосовое соощение.")
         return
 
     # STT
     transcript = await _stt_transcribe_bytes(filename, raw)
     if not transcript:
-        await msg.reply_text("Оши+/-ка при распознавании речи.")
+        await msg.reply_text("Ошика при распознавании речи.")
         return
 
     transcript = transcript.strip()
@@ -1490,12 +1501,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ——— КЛЮЧЕВОЙ МОМЕНТ ———
     # Больше НЕ создаём фейковый Update, не лезем в Message.text — это запрещено в Telegram API
-    # Теперь мы используем +/-езопасный прокси-метод, который создаёт временный message-о+/-ъект
+    # Теперь мы используем езопасный прокси-метод, который создаёт временный message-оъект
     try:
         await on_text_with_text(update, context, transcript)
     except Exception as e:
         log.exception("Voice->text handler error: %s", e)
-        await msg.reply_text("Упс, произошла оши+/-ка. Я уже раз+/-ираюсь.")
+        await msg.reply_text("Упс, произошла ошика. Я уже разираюсь.")
         
 # ───────── Извлечение текста из документов ─────────
 def _safe_decode_txt(b: bytes) -> str:
@@ -1615,7 +1626,7 @@ async def summarize_long_text(full_text: str, query: str | None = None) -> str:
         parts.append(text[i:i+max_chunk]); i += max_chunk
     partials = [await _summarize_chunk(p, query=query) for p in parts]
     combined = "\n\n".join(f"- Фрагмент {idx+1}:\n{s}" for idx, s in enumerate(partials))
-    final_prompt = ("О+/-ъедини тезисы по фрагментам в цельное резюме документа: 1) 5–10 главных пунктов; "
+    final_prompt = ("Оъедини тезисы по фрагментам в цельное резюме документа: 1) 5–10 главных пунктов; "
                     "2) ключевые цифры/сроки; 3) вывод/рекомендации. Русский язык.\n\n" + combined)
     return await ask_openai_text(final_prompt)
 
@@ -1640,7 +1651,7 @@ async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
     except Exception as e:
         log.exception("on_doc_analyze error: %s", e)
-    # ничего не +/-росаем наружу
+    # ничего не росаем наружу
 
 # ───────── OpenAI Images (генерация картинок) ─────────
 async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
@@ -1652,11 +1663,11 @@ async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         await update.effective_message.reply_photo(photo=img_bytes, caption=f"Готово ✅\nЗапрос: {prompt}")
     except Exception as e:
         log.exception("IMG gen error: %s", e)
-        await update.effective_message.reply_text("Не удалось создать изо+/-ражение.")
+        await update.effective_message.reply_text("Не удалось создать изоражение.")
 
 async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
     if not LUMA_IMG_BASE_URL or not LUMA_API_KEY:
-        # фол+/-эк: OpenAI Images
+        # фолэк: OpenAI Images
         try:
             resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
             return base64.b64decode(resp.data[0].b64_json)
@@ -1664,7 +1675,7 @@ async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
             log.exception("OpenAI images fallback error: %s", e)
             return None
     try:
-        # Примерный эндпоинт; если у те+/-я другой — замени path/поля под свой аккаунт.
+        # Примерный эндпоинт; если у тея другой — замени path/поля под свой аккаунт.
         url = f"{LUMA_IMG_BASE_URL}/v1/images"
         headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"}
         payload = {"model": LUMA_IMG_MODEL, "prompt": prompt, "size": "1024x1024"}
@@ -1683,7 +1694,7 @@ async def _start_luma_img(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
     async def _go():
         img = await _luma_generate_image_bytes(prompt)
         if not img:
-            await update.effective_message.reply_text("Не удалось создать изо+/-ражение.")
+            await update.effective_message.reply_text("Не удалось создать изоражение.")
             return
         await update.effective_message.reply_photo(photo=img, caption=f"🖌 Готово ✅\nЗапрос: {prompt}")
     await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go,
@@ -1692,29 +1703,29 @@ async def _start_luma_img(update: Update, context: ContextTypes.DEFAULT_TYPE, pr
 
 # ───────── UI / тексты ─────────
 START_TEXT = (
-    "Привет! Я Нейро-Bot — ⚡️ мультирежимный +/-от из 7 нейросетей для 🎓 учё+/-ы, 💼 ра+/-оты и 🔥 развлечений.\n"
-    "Я умею ра+/-отать ги+/-ридно: могу сам вы+/-рать лучший движок под задачу или дать те+/-е вы+/-рать вручную. 🤝🧠\n"
+    "Привет! Я Нейро-Bot — ⚡️ мультирежимный от из 7 нейросетей для 🎓 учёы, 💼 раоты и 🔥 развлечений.\n"
+    "Я умею раотать гиридно: могу сам вырать лучший движок под задачу или дать тее вырать вручную. 🤝🧠\n"
     "\n"
     "✨ Главные режимы:\n"
     "\n"
     "\n"
-    "• 🎓 Учё+/-а — о+/-ъяснения с примерами, пошаговые решения задач, эссе/реферат/доклад, мини-квизы.\n"
-    "📚 Также: раз+/-ор уче+/-ных PDF/электронных книг, шпаргалки и конспекты, конструктор тестов;\n"
+    "• 🎓 Учёа — оъяснения с примерами, пошаговые решения задач, эссе/реферат/доклад, мини-квизы.\n"
+    "📚 Также: разор ученых PDF/электронных книг, шпаргалки и конспекты, конструктор тестов;\n"
     "🎧 тайм-коды по аудиокнигам/лекциям и краткие выжимки. 🧩\n"
     "\n"
-    "• 💼 Ра+/-ота — письма/+/-рифы/документы, аналитика и резюме материалов, ToDo/планы, генератор идей.\n"
+    "• 💼 Раота — письма/рифы/документы, аналитика и резюме материалов, ToDo/планы, генератор идей.\n"
     "🛠️ Для архитектора/дизайнера/проектировщика: структурирование ТЗ, чек-листы стадий,\n"
-    "🗂️ названия/описания листов, сводные та+/-лицы из текстов, оформление пояснительных записок. 📊\n"
+    "🗂️ названия/описания листов, сводные талицы из текстов, оформление пояснительных записок. 📊\n"
     "\n"
     "• 🔥 Развлечения — фото-мастерская (удаление/замена фона, дорисовка, outpaint), оживление старых фото,\n"
     "🎬 видео по тексту/голосу, идеи и форматы для Reels/Shorts, авто-нарезка из длинных видео\n"
     "(сценарий/тайм-коды), мемы/квизы. 🖼️🪄\n"
     "\n"
     " Как пользоваться:\n"
-    "просто вы+/-ери режим кнопкой ниже или напиши запрос — я сам определю задачу и предложу варианты. ✍️✨\n"
+    "просто выери режим кнопкой ниже или напиши запрос — я сам определю задачу и предложу варианты. ✍️✨\n"
     "\n"
     "🧠 Кнопка «Движки»:\n"
-    "для точного вы+/-ора, какую нейросеть использовать принудительно. 🎯🤖"
+    "для точного выора, какую нейросеть использовать принудительно. 🎯🤖"
 )
 
 def engines_kb():
@@ -1727,10 +1738,10 @@ def engines_kb():
         [InlineKeyboardButton("🎬 Sora — видео (Comet)",        callback_data="engine:sora")],
         [InlineKeyboardButton("🧠 Gemini (Comet)",             callback_data="engine:gemini")],
         [InlineKeyboardButton("🎵 Suno (music)",               callback_data="engine:suno")],
-        [InlineKeyboardButton("🎨 Midjourney (изо+/-ражения)",    callback_data="engine:midjourney")],
+        [InlineKeyboardButton("🎨 Midjourney (изоражения)",    callback_data="engine:midjourney")],
         [InlineKeyboardButton("🗣 STT/TTS — речь↔текст",        callback_data="engine:stt_tts")],
     ])
-# ───────── MODES (Учё+/-а / Ра+/-ота / Развлечения) ─────────
+# ───────── MODES (Учёа / Раота / Развлечения) ─────────
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
@@ -1738,17 +1749,17 @@ from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 # Текст корневого меню режимов
 def _modes_root_text() -> str:
     return (
-        "Вы+/-ерите режим ра+/-оты. В каждом режиме +/-от использует ги+/-рид движков:\n"
+        "Выерите режим раоты. В каждом режиме от использует гирид движков:\n"
         "• GPT-5 (текст/логика) + Vision (фото) + STT/TTS (голос)\n"
-        "• Luma/Runway — видео, Midjourney — изо+/-ражения\n\n"
-        "Можете также просто написать сво+/-одный запрос — +/-от поймёт."
+        "• Luma/Runway — видео, Midjourney — изоражения\n\n"
+        "Можете также просто написать своодный запрос — от поймёт."
     )
 
 def modes_root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🎓 Учё+/-а", callback_data="mode:study"),
-            InlineKeyboardButton("💼 Ра+/-ота", callback_data="mode:work"),
+            InlineKeyboardButton("🎓 Учёа", callback_data="mode:study"),
+            InlineKeyboardButton("💼 Раота", callback_data="mode:work"),
             InlineKeyboardButton("🔥 Развлечения", callback_data="mode:fun"),
         ],
     ])
@@ -1757,27 +1768,27 @@ def modes_root_kb() -> InlineKeyboardMarkup:
 def _mode_desc(key: str) -> str:
     if key == "study":
         return (
-            "🎓 *Учё+/-а*\n"
-            "Ги+/-рид: GPT-5 для о+/-ъяснений/конспектов, Vision для фото-задач, "
-            "STT/TTS для голосовых, + Midjourney (иллюстрации) и Luma/Runway (уче+/-ные ролики).\n\n"
-            "Быстрые действия ниже. Можно написать сво+/-одный запрос (например: "
-            "«сделай конспект из PDF», «о+/-ъясни интегралы с примерами»)."
+            "🎓 *Учёа*\n"
+            "Гирид: GPT-5 для оъяснений/конспектов, Vision для фото-задач, "
+            "STT/TTS для голосовых, + Midjourney (иллюстрации) и Luma/Runway (ученые ролики).\n\n"
+            "Быстрые действия ниже. Можно написать своодный запрос (например: "
+            "«сделай конспект из PDF», «оъясни интегралы с примерами»)."
         )
     if key == "work":
         return (
-            "💼 *Ра+/-ота*\n"
-            "Ги+/-рид: GPT-5 (резюме/письма/аналитика), Vision (та+/-лицы/скрины), "
+            "💼 *Раота*\n"
+            "Гирид: GPT-5 (резюме/письма/аналитика), Vision (талицы/скрины), "
             "STT/TTS (диктовка/озвучка), + Midjourney (визуалы), Luma/Runway (презентационные ролики).\n\n"
-            "Быстрые действия ниже. Можно написать сво+/-одный запрос (например: "
+            "Быстрые действия ниже. Можно написать своодный запрос (например: "
             "«адаптируй резюме под вакансию PM», «написать коммерческое предложение»)."
         )
     if key == "fun":
         return (
             "🔥 *Развлечения*\n"
-            "Ги+/-рид: GPT-5 (идеи, сценарии), Midjourney (картинки), Luma/Runway (шорты/риелсы), "
-            "STT/TTS (озвучка). Всё для +/-ыстрых творческих штук.\n\n"
-            "Быстрые действия ниже. Можно написать сво+/-одный запрос (например: "
-            "«сделай сценарий 30-сек шорта про кота-+/-ариста»)."
+            "Гирид: GPT-5 (идеи, сценарии), Midjourney (картинки), Luma/Runway (шорты/риелсы), "
+            "STT/TTS (озвучка). Всё для ыстрых творческих штук.\n\n"
+            "Быстрые действия ниже. Можно написать своодный запрос (например: "
+            "«сделай сценарий 30-сек шорта про кота-ариста»)."
         )
     return "Режим не найден."
 
@@ -1785,7 +1796,7 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
     if key == "study":
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("📚 Конспект из PDF/EPUB/DOCX", callback_data="act:study:pdf_summary")],
-            [InlineKeyboardButton("🔍 О+/-ъяснение темы",            callback_data="act:study:explain"),
+            [InlineKeyboardButton("🔍 Оъяснение темы",            callback_data="act:study:explain"),
              InlineKeyboardButton("🧮 Решение задач",              callback_data="act:study:tasks")],
             [InlineKeyboardButton("✍️ ссе/реферат/доклад",       callback_data="act:study:essay"),
              InlineKeyboardButton("📝 План к экзамену",           callback_data="act:study:exam_plan")],
@@ -1794,7 +1805,7 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
                 InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("📝 Сво+/-одный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("📝 Своодный запрос", callback_data="act:free")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
         ])
 
@@ -1803,13 +1814,13 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📄 Письмо/документ",            callback_data="act:work:doc"),
              InlineKeyboardButton("📊 Аналитика/сводка",           callback_data="act:work:report")],
             [InlineKeyboardButton("🗂 План/ToDo",                  callback_data="act:work:plan"),
-             InlineKeyboardButton("💡 Идеи/+/-риф",                 callback_data="act:work:idea")],
+             InlineKeyboardButton("💡 Идеи/риф",                 callback_data="act:work:idea")],
             [
                 InlineKeyboardButton("🎬 Runway",       callback_data="act:open:runway"),
                 InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
                 InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("📝 Сво+/-одный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("📝 Своодный запрос", callback_data="act:free")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
         ])
 
@@ -1823,17 +1834,17 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("🎨 Midjourney",   callback_data="act:open:mj"),
                 InlineKeyboardButton("🗣 STT/TTS",      callback_data="act:open:voice"),
             ],
-            [InlineKeyboardButton("📝 Сво+/-одный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("📝 Своодный запрос", callback_data="act:free")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
         ])
 
     return modes_root_kb()
 
-# Показать вы+/-ранный режим (используется и для callback, и для текста)
+# Показать выранный режим (используется и для callback, и для текста)
 async def _send_mode_menu(update, context, key: str):
     text = _mode_desc(key)
     kb = _mode_kb(key)
-    # Если пришли из callback — редактируем; если текстом — шлём новым соо+/-щением
+    # Если пришли из callback — редактируем; если текстом — шлём новым соощением
     if getattr(update, "callback_query", None):
         q = update.callback_query
         await q.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
@@ -1841,7 +1852,7 @@ async def _send_mode_menu(update, context, key: str):
     else:
         await update.effective_message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
-# О+/-ра+/-отчик callback по режимам
+# Ораотчик callback по режимам
 async def on_mode_cb(update, context):
     q = update.callback_query
     data = (q.data or "").strip()
@@ -1857,22 +1868,22 @@ async def on_mode_cb(update, context):
         await _send_mode_menu(update, context, key)
         return
 
-    # Сво+/-одный ввод из подменю
+    # Своодный ввод из подменю
     if data == "act:free":
         await q.answer()
         await q.edit_message_text(
-            "📝 Напишите сво+/-одный запрос ниже текстом или голосом — я подстроюсь.",
+            "📝 Напишите своодный запрос ниже текстом или голосом — я подстроюсь.",
             reply_markup=modes_root_kb(),
         )
         return
 
-    # === Учё+/-а
+    # === Учёа
     if data == "act:study:pdf_summary":
         await q.answer()
         _mode_track_set(uid, "pdf_summary")
         await q.edit_message_text(
             "📚 Пришлите PDF/EPUB/DOCX/FB2/TXT — сделаю структурированный конспект.\n"
-            "Можно в подписи указать цель (коротко/подро+/-но, язык и т.п.).",
+            "Можно в подписи указать цель (коротко/подроно, язык и т.п.).",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1882,7 +1893,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "explain")
         _mode_track_set(uid, "explain")
         await q.edit_message_text(
-            "🔍 Напишите тему + уровень (школа/вуз/профи). Будет о+/-ъяснение с примерами.",
+            "🔍 Напишите тему + уровень (школа/вуз/профи). Будет оъяснение с примерами.",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1902,7 +1913,7 @@ async def on_mode_cb(update, context):
         study_sub_set(uid, "essay")
         _mode_track_set(uid, "essay")
         await q.edit_message_text(
-            "✍️ Тема + тре+/-ования (о+/-ъём/стиль/язык) — подготовлю эссе/реферат.",
+            "✍️ Тема + треования (оъём/стиль/язык) — подготовлю эссе/реферат.",
             reply_markup=_mode_kb("study"),
         )
         return
@@ -1917,7 +1928,7 @@ async def on_mode_cb(update, context):
         )
         return
 
-    # === Ра+/-ота
+    # === Раота
     if data == "act:work:doc":
         await q.answer()
         _mode_track_set(uid, "work_doc")
@@ -1940,7 +1951,7 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_plan")
         await q.edit_message_text(
-            "🗂 Опишите задачу/сроки — со+/-еру ToDo/план со сроками и приоритетами.",
+            "🗂 Опишите задачу/сроки — соеру ToDo/план со сроками и приоритетами.",
             reply_markup=_mode_kb("work"),
         )
         return
@@ -1949,16 +1960,16 @@ async def on_mode_cb(update, context):
         await q.answer()
         _mode_track_set(uid, "work_idea")
         await q.edit_message_text(
-            "💡 Расскажите продукт/ЦА/каналы — подготовлю +/-риф/идеи.",
+            "💡 Расскажите продукт/ЦА/каналы — подготовлю риф/идеи.",
             reply_markup=_mode_kb("work"),
         )
         return
 
-    # === Развлечения (как +/-ыло)
+    # === Развлечения (как ыло)
     if data == "act:fun:ideas":
         await q.answer()
         await q.edit_message_text(
-            "🔥 Вы+/-ерем формат: дом/улица/город/в поездке. Напишите +/-юджет/настроение.",
+            "🔥 Выерем формат: дом/улица/город/в поездке. Напишите юджет/настроение.",
             reply_markup=_mode_kb("fun"),
         )
         return
@@ -1972,16 +1983,16 @@ async def on_mode_cb(update, context):
     if data == "act:fun:games":
         await q.answer()
         await q.edit_message_text(
-            "🎮 Тематика квиза/игры? Сгенерирую +/-ыструю викторину или мини-игру в чате.",
+            "🎮 Тематика квиза/игры? Сгенерирую ыструю викторину или мини-игру в чате.",
             reply_markup=_mode_kb("fun"),
         )
         return
 
-    # === Модули (как +/-ыло)
+    # === Модули (как ыло)
     if data == "act:open:runway":
         await q.answer()
         await q.edit_message_text(
-            "🎬 Модуль Runway: пришлите идею/референс — подготовлю промпт и +/-юджет.",
+            "🎬 Модуль Runway: пришлите идею/референс — подготовлю промпт и юджет.",
             reply_markup=modes_root_kb(),
         )
         return
@@ -2003,12 +2014,12 @@ async def on_mode_cb(update, context):
 
     await q.answer()
 
-# Fallback — если пользователь нажмёт «Учё+/-а/Ра+/-ота/Развлечения» о+/-ычной кнопкой/текстом
+# Fallback — если пользователь нажмёт «Учёа/Раота/Развлечения» оычной кнопкой/текстом
 async def on_mode_text(update, context):
     text = (update.effective_message.text or "").strip().lower()
     mapping = {
-        "учё+/-а": "study", "уче+/-а": "study",
-        "ра+/-ота": "work",
+        "учёа": "study", "учеа": "study",
+        "раота": "work",
         "развлечения": "fun", "развлечение": "fun",
     }
     key = mapping.get(text)
@@ -2022,13 +2033,13 @@ def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
     """
     uid = int(user_id) if user_id is not None else 0
     # Кнопки режимов (эмодзи оставляем для узнаваемости)
-    # Локализация — через I18N (минимальный на+/-ор строк).
+    # Локализация — через I18N (минимальный наор строк).
     try:
         study = t(uid, "btn_study")
         work  = t(uid, "btn_work")
         fun   = t(uid, "btn_fun")
     except Exception:
-        study, work, fun = "🎓 Учё+/-а", "💼 Ра+/-ота", "🔥 Развлечения"
+        study, work, fun = "🎓 Учёа", "💼 Раота", "🔥 Развлечения"
 
     try:
         engines = t(uid, "btn_engines")
@@ -2037,7 +2048,7 @@ def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
     except Exception:
         engines, subhelp, wallet = "🧠 Движки", " Подписка · Помощь", "🧾 Баланс"
 
-    placeholder = t(uid, "input_placeholder") if "input_placeholder" in (I18N.get(get_lang(uid), {}) or {}) else "Вы+/-ерите режим или напишите запрос…"
+    placeholder = t(uid, "input_placeholder") if "input_placeholder" in (I18N.get(get_lang(uid), {}) or {}) else "Выерите режим или напишите запрос…"
 
     return ReplyKeyboardMarkup(
         [
@@ -2050,13 +2061,13 @@ def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
         input_field_placeholder=placeholder,
     )
 
-# RU-клавиатура по умолчанию (на случай редких мест +/-ез user_id)
+# RU-клавиатура по умолчанию (на случай редких мест ез user_id)
 main_kb = main_keyboard(0)
 
 # ───────── /start ─────────
 async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Отрисовка главного меню (после вы+/-ора языка и в других местах).
+    Отрисовка главного меню (после выора языка и в других местах).
     """
     uid = update.effective_user.id
     # Баннер (если задан)
@@ -2065,7 +2076,7 @@ async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(welcome_url)
 
-    # Короткое приветствие на вы+/-ранном языке
+    # Короткое приветствие на выранном языке
     text = _tr(uid, "welcome")
     with contextlib.suppress(Exception):
         await update.effective_message.reply_text(
@@ -2077,18 +2088,18 @@ async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── /start ─────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Тре+/-ование: вы+/-ор языка показываем при каждом новом /start (не только первый раз).
+    Треование: выор языка показываем при каждом новом /start (не только первый раз).
     Меню показываем после нажатия кнопки языка (или «Продолжить»).
     """
     uid = update.effective_user.id
 
-    # Показываем +/-аннер (если задан)
+    # Показываем аннер (если задан)
     welcome_url = kv_get("welcome_url", BANNER_URL)
     if welcome_url:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_photo(welcome_url)
 
-    # Показываем вы+/-ор языка всегда
+    # Показываем выор языка всегда
     await update.effective_message.reply_text(
         t(uid, "choose_lang"),
         reply_markup=_lang_choose_kb(uid),
@@ -2133,14 +2144,14 @@ async def cmd_diag_limits(update: Update, context: ContextTypes.DEFAULT_TYPE):
 _CAP_PDF   = re.compile(r"(pdf|документ(ы)?|файл(ы)?)", re.I)
 _CAP_EBOOK = re.compile(r"(ebook|e-?book|электронн(ая|ые)\s+книг|epub|fb2|docx|txt|mobi|azw)", re.I)
 _CAP_AUDIO = re.compile(r"(аудио ?книг|audiobook|audio ?book|mp3|m4a|wav|ogg|webm|voice)", re.I)
-_CAP_IMAGE = re.compile(r"(изо+/-ражен|картинк|фото|image|picture|img)", re.I)
+_CAP_IMAGE = re.compile(r"(изоражен|картинк|фото|image|picture|img)", re.I)
 _CAP_VIDEO = re.compile(r"(видео|ролик|shorts?|reels?|clip)", re.I)
 
 def capability_answer(text: str) -> str | None:
     """
     Короткие ответы на вопросы вида:
     - «ты можешь анализировать PDF?»
-    - «ты умеешь ра+/-отать с электронными книгами?»
+    - «ты умеешь раотать с электронными книгами?»
     - «ты можешь создавать видео?»
     - «ты можешь оживить фотографию?» и т.п.
 
@@ -2155,20 +2166,20 @@ def capability_answer(text: str) -> str | None:
     # --- Оживление старых фото / анимация снимков (ВЫСОКИЙ ПРИОРИТЕТ) ---
     if (
         any(k in tl for k in ("оживи", "оживить", "анимируй", "анимировать"))
-        and any(k in tl for k in ("фото", "фотограф", "картин", "изо+/-ражен", "портрет"))
+        and any(k in tl for k in ("фото", "фотограф", "картин", "изоражен", "портрет"))
     ):
         # Персонализированный ответ именно под функцию оживления
         return (
             "🪄 Я умею оживлять фотографии и делать из них короткие анимации.\n\n"
             "Что можно оживить:\n"
-            "• лёгкая мимика: моргание глаз, мягкая улы+/-ка;\n"
+            "• лёгкая мимика: моргание глаз, мягкая улыка;\n"
             "• плавные движения головы и плеч, эффект дыхания;\n"
             "• лёгкое движение или параллакс фона.\n\n"
             "Доступные движки:\n"
             "• Runway — максимально реалистичное премиум-движение;\n"
             "• Kling — отлично передаёт взгляд, мимику и повороты головы;\n"
             "• Luma — плавные художественные анимации.\n\n"
-            "Пришли сюда фото (лучше портрет). После загрузки я предложу вы+/-рать движок "
+            "Пришли сюда фото (лучше портрет). После загрузки я предложу вырать движок "
             "и подготовлю превью/видео."
         )
 
@@ -2177,7 +2188,7 @@ def capability_answer(text: str) -> str | None:
         return (
             "Да, могу помочь с анализом документов и электронных книг. "
             "Отправь файл (PDF, EPUB, DOCX, FB2, TXT, MOBI/AZW — по возможности) "
-            "и напиши, что нужно: конспект, выжимку, план, раз+/-ор по пунктам и т.п."
+            "и напиши, что нужно: конспект, выжимку, план, разор по пунктам и т.п."
         )
 
     # --- Аудио / речь ---
@@ -2186,34 +2197,34 @@ def capability_answer(text: str) -> str | None:
     ):
         return (
             "Да, могу распознавать речь из голосовых и аудио. "
-            "Просто пришли голосовое соо+/-щение — я переведу его в текст и отвечу как на о+/-ычный запрос."
+            "Просто пришли голосовое соощение — я переведу его в текст и отвечу как на оычный запрос."
         )
 
-    # --- Видео (о+/-щие возможности, не команды) ---
+    # --- Видео (ощие возможности, не команды) ---
     if (
         re.search(r"\bвидео\b", tl)
         and "?" in tl
-        and re.search(r"\b(мож(ешь|ете)|уме(ешь|ете)|спосо+/-ен)\b", tl)
+        and re.search(r"\b(мож(ешь|ете)|уме(ешь|ете)|спосоен)\b", tl)
     ):
         return (
             "Да, могу запускать генерацию коротких видео. "
             "Можно сделать ролик по текстовому описанию или оживить фото. "
-            "После того как ты пришлёшь запрос и/или файл, я предложу вы+/-рать движок "
+            "После того как ты пришлёшь запрос и/или файл, я предложу вырать движок "
             "(Runway, Kling, Luma — в зависимости от доступных)."
         )
 
-    # --- Картинки / изо+/-ражения (+/-ез /img и генерации по промпту) ---
+    # --- Картинки / изоражения (ез /img и генерации по промпту) ---
     if (
-        re.search(r"(картинк|изо+/-ражен|фото|picture|логотип|+/-аннер)", tl)
+        re.search(r"(картинк|изоражен|фото|picture|логотип|аннер)", tl)
         and "?" in tl
     ):
         return (
-            "Да, могу ра+/-отать с изо+/-ражениями: анализ, улучшение качества, удаление или замена фона, "
+            "Да, могу раотать с изоражениями: анализ, улучшение качества, удаление или замена фона, "
             "расширение кадра, простая анимация. "
             "Просто пришли сюда фото и коротко опиши, что нужно сделать."
         )
 
-    # Ничего подходящего — пусть о+/-ра+/-атывается основной логикой
+    # Ничего подходящего — пусть ораатывается основной логикой
     return None
 
 # ───────── Моды/движки для study ─────────
@@ -2227,7 +2238,7 @@ def study_sub_get(user_id: int) -> str:    return kv_get(_uk(user_id, "study_sub
 
 def modes_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎓 Учё+/-а", callback_data="mode:set:study"),
+        [InlineKeyboardButton("🎓 Учёа", callback_data="mode:set:study"),
          InlineKeyboardButton("🖼 Фото",  callback_data="mode:set:photo")],
         [InlineKeyboardButton("📄 Документы", callback_data="mode:set:docs"),
          InlineKeyboardButton("🎙 Голос",     callback_data="mode:set:voice")],
@@ -2236,7 +2247,7 @@ def modes_kb():
 
 def study_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 О+/-ъяснение",          callback_data="study:set:explain"),
+        [InlineKeyboardButton("🔍 Оъяснение",          callback_data="study:set:explain"),
          InlineKeyboardButton("🧮 Задачи",              callback_data="study:set:tasks")],
         [InlineKeyboardButton("✍️ ссе/реферат/доклад", callback_data="study:set:essay")],
         [InlineKeyboardButton("📝 кзамен/квиз",        callback_data="study:set:quiz")]
@@ -2245,7 +2256,7 @@ def study_kb():
 async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     sub = study_sub_get(update.effective_user.id)
     if sub == "explain":
-        prompt = f"О+/-ъясни простыми словами, с 2–3 примерами и мини-итогом:\n\n{text}"
+        prompt = f"Оъясни простыми словами, с 2–3 примерами и мини-итогом:\n\n{text}"
     elif sub == "tasks":
         prompt = ("Реши задачу(и) пошагово: формулы, пояснения, итоговый ответ. "
                   "Если не хватает данных — уточняющие вопросы в конце.\n\n" + text)
@@ -2254,7 +2265,7 @@ async def study_process_text(update: Update, context: ContextTypes.DEFAULT_TYPE,
                   "введение, 3–5 тезисов с фактами, вывод, список из 3 источников (если уместно).\n\nТема:\n" + text)
     elif sub == "quiz":
         prompt = ("Составь мини-квиз по теме: 10 вопросов, у каждого 4 варианта A–D; "
-                  "в конце дай ключ ответов (номер→+/-уква). Тема:\n\n" + text)
+                  "в конце дай ключ ответов (номер→уква). Тема:\n\n" + text)
     else:
         prompt = text
     ans = await ask_openai_text(prompt)
@@ -2272,7 +2283,7 @@ async def cmd_set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     url = " ".join(context.args).strip()
     kv_set("welcome_url", url)
-    await update.effective_message.reply_text("Картинка приветствия о+/-новлена. Отправьте /start для проверки.")
+    await update.effective_message.reply_text("Картинка приветствия оновлена. Отправьте /start для проверки.")
 
 async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = kv_get("welcome_url", BANNER_URL)
@@ -2291,14 +2302,14 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lim = _limits_for(user_id)
     msg = (
         "🧾 Кошелёк:\n"
-        f"• Единый +/-аланс: ${total:.2f}\n"
+        f"• Единый аланс: ${total:.2f}\n"
         "  (расходуется на перерасход по Luma/Runway/Images)\n\n"
         "Детализация сегодня / лимиты тарифа:\n"
         f"• Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
         f"• Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
         f"• Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
     )
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить +/-аланс", callback_data="topup")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить аланс", callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
 # ───────── Подписка / тарифы — UI и оплаты (PATCH) ─────────
@@ -2313,7 +2324,7 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Хранилище подписки и кошелька используется на kv_*:
 #   sub:tier:{user_id}   -> "start" | "pro" | "ultimate"
 #   sub:until:{user_id}  -> ISO-строка даты окончания
-#   wallet:usd:{user_id} -> +/-аланс в USD (float)
+#   wallet:usd:{user_id} -> аланс в USD (float)
 
 YOOKASSA_PROVIDER_TOKEN = os.environ.get("YOOKASSA_PROVIDER_TOKEN", "").strip()
 YOOKASSA_CURRENCY = (os.environ.get("YOOKASSA_CURRENCY") or "RUB").upper()
@@ -2368,7 +2379,7 @@ SUBS_TIERS = {
         "rub": PRICE_START_RUB,
         "usd": PRICE_START_USD,
         "features": [
-            "💬 GPT-чат и документы (+/-азовые лимиты)",
+            "💬 GPT-чат и документы (азовые лимиты)",
             "🖼 Фото-мастерская: фон, лёгкая дорисовка",
             "🎧 Озвучка ответов (TTS)",
         ],
@@ -2378,7 +2389,7 @@ SUBS_TIERS = {
         "rub": PRICE_PRO_RUB,
         "usd": PRICE_PRO_USD,
         "features": [
-            "📚 Глу+/-окий раз+/-ор PDF/DOCX/EPUB",
+            "📚 Глуокий разор PDF/DOCX/EPUB",
             "🎬 Reels/Shorts по смыслу, видео из фото",
             "🖼 Outpaint и «оживление» старых фото",
         ],
@@ -2467,13 +2478,13 @@ def _plan_card_text(key: str) -> str:
 def _plans_overview_text(user_id: int) -> str:
     parts = [
         " Подписка и тарифы",
-        "Вы+/-ери подходящий уровень — доступ откроется сразу после оплаты.",
+        "Выери подходящий уровень — доступ откроется сразу после оплаты.",
         _sub_info_text(user_id),
         "— — —",
         _plan_card_text("start"),
         _plan_card_text("pro"),
         _plan_card_text("ultimate"),
-        "Вы+/-ерите тариф кнопкой ниже.",
+        "Выерите тариф кнопкой ниже.",
     ]
     return "\n".join(parts)
 
@@ -2495,7 +2506,7 @@ def plan_pay_kb(plan_key: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("💠 Оплатить — CryptoBot", callback_data=f"pay:cryptobot:{plan_key}"),
         ],
         [
-            InlineKeyboardButton("🧾 Списать с +/-аланса", callback_data=f"pay:balance:{plan_key}"),
+            InlineKeyboardButton("🧾 Списать с аланса", callback_data=f"pay:balance:{plan_key}"),
         ],
         [
             InlineKeyboardButton("⬅️ К тарифам", callback_data="plan:root"),
@@ -2508,7 +2519,7 @@ async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = _plans_overview_text(user_id)
     await update.effective_chat.send_message(text, reply_markup=plans_root_kb())
 
-# О+/-ра+/-отчик наших кол+/-эков по подписке/оплатам (зарегистрировать ДО о+/-щего on_cb!)
+# Ораотчик наших колэков по подписке/оплатам (зарегистрировать ДО ощего on_cb!)
 async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data or ""
@@ -2524,7 +2535,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if arg in SUBS_TIERS:
             await q.edit_message_text(
-                _plan_card_text(arg) + "\nВы+/-ерите спосо+/- оплаты:",
+                _plan_card_text(arg) + "\nВыерите спосо оплаты:",
                 reply_markup=plan_pay_kb(arg)
             )
             await q.answer()
@@ -2532,7 +2543,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Платежи
     if data.startswith("pay:"):
-        # +/-езопасный парсинг
+        # езопасный парсинг
         try:
             _, method, plan_key = data.split(":", 2)
         except ValueError:
@@ -2551,7 +2562,7 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             title = f"Подписка {plan['title']} • 1 месяц"
-            desc = "Доступ к функциям +/-ота согласно вы+/-ранному тарифу. Подписка активируется сразу после оплаты."
+            desc = "Доступ к функциям ота согласно выранному тарифу. Подписка активируется сразу после оплаты."
             payload = json.dumps({"tier": plan_key, "months": 1})
 
             # Telegram ожидает сумму в минорных единицах (копейки/центы)
@@ -2619,28 +2630,28 @@ async def on_cb_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 log.exception("CryptoBot invoice error: %s", e)
             return
 
-        # Списание с внутреннего +/-аланса (USD)
+        # Списание с внутреннего аланса (USD)
         if method == "balance":
             price_usd = float(plan["usd"])
             if not _user_balance_debit(user_id, price_usd):
-                await q.answer("Недостаточно средств на внутреннем +/-алансе.", show_alert=True)
+                await q.answer("Недостаточно средств на внутреннем алансе.", show_alert=True)
                 return
             until = _sub_activate(user_id, plan_key, months=1)
             await q.edit_message_text(
                 f"✅ Подписка {plan['title']} активирована до {until[:10]}.\n"
                 f"💵 Списано: {_money_fmt_usd(price_usd)}. "
-                f"Текущий +/-аланс: {_money_fmt_usd(_user_balance_get(user_id))}",
+                f"Текущий аланс: {_money_fmt_usd(_user_balance_get(user_id))}",
                 reply_markup=plans_root_kb(),
             )
             await q.answer()
             return
 
-    # Если кол+/-эк не наш — пропускаем дальше
+    # Если колэк не наш — пропускаем дальше
     await q.answer()
     return
 
 
-# Если у те+/-я уже есть on_precheckout / on_successful_payment — оставь их.
+# Если у тея уже есть on_precheckout / on_successful_payment — оставь их.
 # Если нет, можешь использовать эти простые реализации:
 
 async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2651,7 +2662,7 @@ async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Универсальный о+/-ра+/-отчик Telegram Payments:
+    Универсальный ораотчик Telegram Payments:
     - Поддерживает payload в двух форматах:
         1) JSON: {"tier":"pro","months":1}
         2) Строка: "sub:pro:1"
@@ -2691,17 +2702,17 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             )
             return
 
-        # Иначе считаем, что это пополнение кошелька в ру+/-лях
+        # Иначе считаем, что это пополнение кошелька в рулях
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
         await update.effective_message.reply_text(
-            f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый +/-аланс."
+            f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый аланс."
         )
 
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("⚠️ Оши+/-ка о+/-ра+/-отки платежа. Если деньги списались — напишите в поддержку.")
+            await update.effective_message.reply_text("⚠️ Ошика ораотки платежа. Если деньги списались — напишите в поддержку.")
 # ───────── Конец PATCH ─────────
         
 # ───────── Команда /img ─────────
@@ -2737,7 +2748,7 @@ def photo_quick_actions_kb() -> InlineKeyboardMarkup:
 
 def revive_engine_kb() -> InlineKeyboardMarkup:
     """
-    Кнопки вы+/-ора движка для оживления фото.
+    Кнопки выора движка для оживления фото.
     """
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Runway", callback_data="revive_engine:runway")],
@@ -2830,10 +2841,10 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             months = int(data.get("months") or 1)
             desc = f"Оформление подписки {tier.upper()} на {months} мес."
             await update.effective_message.reply_text(
-                f"{desc}\nВы+/-ерите спосо+/-:",
+                f"{desc}\nВыерите спосо:",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("Оплатить картой (ЮKassa)", callback_data=f"buyinv:{tier}:{months}")],
-                    [InlineKeyboardButton("Списать с +/-аланса (USD)",  callback_data=f"buywallet:{tier}:{months}")],
+                    [InlineKeyboardButton("Списать с аланса (USD)",  callback_data=f"buywallet:{tier}:{months}")],
                 ])
             )
             return
@@ -2843,7 +2854,7 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if amount_rub < MIN_RUB_FOR_INVOICE:
                 await update.effective_message.reply_text(f"Минимальная сумма: {MIN_RUB_FOR_INVOICE} ₽")
                 return
-            await _send_invoice_rub("Пополнение +/-аланса", "Единый кошелёк", amount_rub, "t=3", update)
+            await _send_invoice_rub("Пополнение аланса", "Единый кошелёк", amount_rub, "t=3", update)
             return
 
         if typ in ("topup_crypto", "crypto_topup"):
@@ -2870,7 +2881,7 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("Получены данные из мини-приложения, но команда не распознана.")
     except Exception as e:
         log.exception("on_webapp_data error: %s", e)
-        await update.effective_message.reply_text("Оши+/-ка о+/-ра+/-отки данных мини-приложения.")
+        await update.effective_message.reply_text("Ошика ораотки данных мини-приложения.")
 
 
 # ───────── CallbackQuery (всё остальное) ─────────
@@ -2895,7 +2906,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await q.answer()
 
-        # Показываем главное меню после вы+/-ора языка
+        # Показываем главное меню после выора языка
         try:
             await q.message.reply_text(t(uid, "lang_set"), reply_markup=main_keyboard(uid))
         except Exception:
@@ -2916,23 +2927,23 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Короткое подтверждение + подсказка
         hint = {
             "gpt": "Теперь по умолчанию отвечаю текстом (GPT).",
-            "images": "Теперь лю+/-ой текст +/-удет трактоваться как промпт для картинки (Images).",
-            "kling": "Теперь лю+/-ой текст +/-удет трактоваться как промпт для видео в Kling.",
-            "luma": "Теперь лю+/-ой текст +/-удет трактоваться как промпт для видео в Luma.",
-            "runway": "Runway вы+/-ран. Для видео используйте «сделай видео…» (текст→видео может +/-ыть отключён).",
-            "sora": "Sora вы+/-ран (через Comet). Если ключи/эндпоинт не заданы — покажу подсказку.",
-            "gemini": "Gemini вы+/-ран (через Comet). Если ключи/эндпоинт не заданы — +/-удет подсказка/фол+/-эк.",
-            "suno": "Suno вы+/-ран (музыка). Сейчас включён как режим-подсказка.",
-            "midjourney": "Midjourney вы+/-ран. Сейчас включён как режим-подсказка.",
+            "images": "Теперь люой текст удет трактоваться как промпт для картинки (Images).",
+            "kling": "Теперь люой текст удет трактоваться как промпт для видео в Kling.",
+            "luma": "Теперь люой текст удет трактоваться как промпт для видео в Luma.",
+            "runway": "Runway выран. Для видео используйте «сделай видео…» (текст→видео может ыть отключён).",
+            "sora": "Sora выран (через Comet). Если ключи/эндпоинт не заданы — покажу подсказку.",
+            "gemini": "Gemini выран (через Comet). Если ключи/эндпоинт не заданы — удет подсказка/фолэк.",
+            "suno": "Suno выран (музыка). Сейчас включён как режим-подсказка.",
+            "midjourney": "Midjourney выран. Сейчас включён как режим-подсказка.",
             "stt_tts": "Режим STT/TTS: можно прислать голосовое или включить озвучку ответов.",
-        }.get(eng, f"Движок вы+/-ран: {eng}")
+        }.get(eng, f"Движок выран: {eng}")
 
         with contextlib.suppress(Exception):
             await q.message.reply_text(hint, reply_markup=main_keyboard(uid))
         return
 
     try:
-        # 🆕 Вы+/-ор движка для оживления фото (Runway/Kling/Luma)
+        # 🆕 Выор движка для оживления фото (Runway/Kling/Luma)
         if data.startswith("revive_engine:"):
             await q.answer()
             engine = data.split(":", 1)[1] if ":" in data else ""
@@ -2945,7 +2956,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action = data.split(":", 1)[1] if ":" in data else ""
             user_id = update.effective_user.id
 
-            # Специальный случай: оживление фото → показать вы+/-ор движка
+            # Специальный случай: оживление фото → показать выор движка
             if action == "revive":
                 if user_id not in _LAST_ANIM_PHOTO:
                     await q.edit_message_text(
@@ -2954,12 +2965,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
                 await q.edit_message_text(
-                    "Вы+/-ери движок для оживления фото:",
+                    "Выери движок для оживления фото:",
                     reply_markup=revive_engine_kb(),
                 )
                 return
 
-            # Для остальных pedit:* нужен +/-айтовый о+/-раз картинки
+            # Для остальных pedit:* нужен айтовый ораз картинки
             img = _get_cached_photo(user_id)
             if not img:
                 await q.edit_message_text(
@@ -3008,20 +3019,20 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Минимальная сумма пополнения {MIN_RUB_FOR_INVOICE} ₽."
                 )
                 return
-            title = "Пополнение +/-аланса (карта)"
-            desc = f"Пополнение USD-+/-аланса +/-ота на сумму ≈ {amount_rub} ₽"
+            title = "Пополнение аланса (карта)"
+            desc = f"Пополнение USD-аланса ота на сумму ≈ {amount_rub} ₽"
             payload = f"topup:{amount_rub}"
             ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
             if not ok:
                 await q.answer("Не удалось выставить счёт", show_alert=True)
             return
 
-        # TOPUP CRYPTO: вы+/-ор суммы
+        # TOPUP CRYPTO: выор суммы
         if data == "topup:crypto":
             await q.answer()
             await q.edit_message_text(
                 "Пополнение через CryptoBot (USDT):\n\n"
-                "Вы+/-ерите сумму пополнения ($):",
+                "Выерите сумму пополнения ($):",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3055,13 +3066,13 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if not inv_id or not pay_url:
                 await q.edit_message_text(
-                    "Не удалось создать счёт в CryptoBot. Попро+/-уйте позже."
+                    "Не удалось создать счёт в CryptoBot. Попроуйте позже."
                 )
                 return
 
             msg = await update.effective_message.reply_text(
                 f"Оплатите через CryptoBot: ≈ ${usd_amount:.2f} ({asset}).\n"
-                "После оплаты +/-аланс пополнится автоматически.",
+                "После оплаты аланс пополнится автоматически.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [InlineKeyboardButton("Оплатить в CryptoBot", url=pay_url)],
@@ -3094,7 +3105,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if status == "paid":
                 await q.edit_message_text(
                     f"✅ Платёж получен: {paid_amount} {asset}.\n"
-                    "Баланс +/-удет пополнен в течение минуты."
+                    "Баланс удет пополнен в течение минуты."
                 )
             elif status == "active":
                 await q.edit_message_text("Счёт ещё не оплачен.")
@@ -3114,14 +3125,14 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await cmd_plans(update, context)
             return
 
-        # Подписка: вы+/-ор тарифа и срока
+        # Подписка: выор тарифа и срока
         if data.startswith("buy:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
             months = int(months)
             desc = f"Подписка {tier.upper()} на {months} мес."
             await q.edit_message_text(
-                f"{desc}\nВы+/-ерите спосо+/- оплаты:",
+                f"{desc}\nВыерите спосо оплаты:",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3132,7 +3143,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ],
                         [
                             InlineKeyboardButton(
-                                "Списать с +/-аланса (USD)",
+                                "Списать с аланса (USD)",
                                 callback_data=f"buywallet:{tier}:{months}",
                             )
                         ],
@@ -3153,7 +3164,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("Не удалось выставить счёт", show_alert=True)
             return
 
-        # Подписка списанием из USD-+/-аланса
+        # Подписка списанием из USD-аланса
         if data.startswith("buywallet:"):
             await q.answer()
             _, tier, months = data.split(":", 2)
@@ -3164,11 +3175,11 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if bal < usd_price:
                 need = usd_price - bal
                 await q.edit_message_text(
-                    f"На +/-алансе недостаточно средств.\n"
-                    f"Тре+/-уется ещё ≈ ${need:.2f}.\n\n"
-                    "Пополните +/-аланс через меню «🧾 Баланс».",
+                    f"На алансе недостаточно средств.\n"
+                    f"Треуется ещё ≈ ${need:.2f}.\n\n"
+                    "Пополните аланс через меню «🧾 Баланс».",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("➕ Пополнить +/-аланс", callback_data="topup")]]
+                        [[InlineKeyboardButton("➕ Пополнить аланс", callback_data="topup")]]
                     ),
                 )
                 return
@@ -3204,11 +3215,11 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             amount_rub = _calc_oneoff_price_rub(grp, need_usd or 0.0)
             await q.edit_message_text(
                 f"Ваш дневной лимит по «{engine}» исчерпан. Разовая покупка ≈ {amount_rub} ₽ "
-                "или пополните +/-аланс в «🧾 Баланс».",
+                "или пополните аланс в «🧾 Баланс».",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [InlineKeyboardButton(" Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                        [InlineKeyboardButton("➕ Пополнить +/-аланс", callback_data="topup")],
+                        [InlineKeyboardButton("➕ Пополнить аланс", callback_data="topup")],
                     ]
                 ),
             )
@@ -3232,7 +3243,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
 
-        # Подтверждение вы+/-ора движка для видео (Kling / Luma / Runway)
+        # Подтверждение выора движка для видео (Kling / Luma / Runway)
         if data.startswith("choose:"):
             await q.answer()
             _, engine, aid = data.split(":", 2)
@@ -3250,7 +3261,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Runway для text/voice→video отключён (оставляем только Kling/Luma/Sora)
             if engine == "runway":
-                await q.message.reply_text("⚠️ Runway отключён для видео по тексту/голосу. Вы+/-ерите Kling, Luma или Sora.")
+                await q.message.reply_text("⚠️ Runway отключён для видео по тексту/голосу. Выерите Kling, Luma или Sora.")
                 return
 
             # Estimate
@@ -3389,7 +3400,7 @@ async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await msg.reply_text("\n".join(lines))
 
-# ───────── MIME для изо+/-ражений ─────────
+# ───────── MIME для изоражений ─────────
 def sniff_image_mime(data: bytes) -> str:
     if not data or len(data) < 12:
         return "application/octet-stream"
@@ -3581,7 +3592,7 @@ async def _run_kling_video(
                         or str(sjs)[:500]
                     )
                     await msg.reply_text(
-                        f"❌ Kling завершился с оши+/-кой: `{err}`",
+                        f"❌ Kling завершился с ошикой: `{err}`",
                         parse_mode="Markdown",
                     )
                     return False
@@ -3591,11 +3602,11 @@ async def _run_kling_video(
 
     except Exception as e:
         log.exception("Kling text2video exception: %s", e)
-        await msg.reply_text("❌ Kling: внутренняя оши+/-ка при рендере видео.")
+        await msg.reply_text("❌ Kling: внутренняя ошика при рендере видео.")
     return False
 def _normalize_luma_aspect(aspect: str | None) -> str:
     """
-    Luma Dream Machine поддерживает ограниченный на+/-ор аспектов.
+    Luma Dream Machine поддерживает ограниченный наор аспектов.
     Приводим пользовательский аспект к допустимому значению.
     """
     allowed = {"16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21"}
@@ -3632,7 +3643,7 @@ def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
 
 async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
     try:
-        # +/-ерём токен и валюту из двух источников (старый PROVIDER_TOKEN ИЛИ новый YOOKASSA_PROVIDER_TOKEN)
+        # ерём токен и валюту из двух источников (старый PROVIDER_TOKEN ИЛИ новый YOOKASSA_PROVIDER_TOKEN)
         token = (PROVIDER_TOKEN or YOOKASSA_PROVIDER_TOKEN)
         curr  = (CURRENCY if (CURRENCY and CURRENCY != "RUB") else YOOKASSA_CURRENCY) or "RUB"
 
@@ -3687,10 +3698,10 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.")
             return
 
-        # Лю+/-ое иное payload — пополнение единого кошелька
+        # Люое иное payload — пополнение единого кошелька
         usd = rub / max(1e-9, USD_RUB)
         _wallet_total_add(uid, usd)
-        await update.effective_message.reply_text(f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый +/-аланс.")
+        await update.effective_message.reply_text(f"💳 Пополнение: {rub:.0f} ₽ ≈ ${usd:.2f} зачислено на единый аланс.")
     except Exception as e:
         log.exception("successful_payment handler error: %s", e)
 
@@ -3808,7 +3819,7 @@ async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("Crypto $10", callback_data="topup:crypto:10"),
          InlineKeyboardButton("Crypto $20", callback_data="topup:crypto:20")],
     ])
-    await update.effective_message.reply_text("Вы+/-ерите сумму пополнения:", reply_markup=kb)
+    await update.effective_message.reply_text("Выерите сумму пополнения:", reply_markup=kb)
 
 
 # ───────── Попытка оплатить → выполнить ─────────
@@ -3829,10 +3840,10 @@ async def _try_pay_then_do(
         return
     if offer == "ASK_SUBSCRIBE":
         await update.effective_message.reply_text(
-            "Для выполнения нужен тариф или единый +/-аланс.",
+            "Для выполнения нужен тариф или единый аланс.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton(" Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                 [InlineKeyboardButton("➕ Пополнить +/-аланс", callback_data="topup")]]
+                 [InlineKeyboardButton("➕ Пополнить аланс", callback_data="topup")]]
             )
         )
         return
@@ -3842,11 +3853,11 @@ async def _try_pay_then_do(
         need_usd = est_cost_usd
     amount_rub = _calc_oneoff_price_rub(engine, need_usd)
     await update.effective_message.reply_text(
-        f"Недостаточно лимита. Разовая покупка ≈ {amount_rub} ₽ или пополните +/-аланс:",
+        f"Недостаточно лимита. Разовая покупка ≈ {amount_rub} ₽ или пополните аланс:",
         reply_markup=InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton(" Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],
-                [InlineKeyboardButton("➕ Пополнить +/-аланс", callback_data="topup")],
+                [InlineKeyboardButton("➕ Пополнить аланс", callback_data="topup")],
             ]
         ),
     )
@@ -3867,15 +3878,15 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
 
 
-# ───────── О+/-ёртка для передачи произвольного текста (напр. из STT) ─────────
+# ───────── Оёртка для передачи произвольного текста (напр. из STT) ─────────
 async def on_text_with_text(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     text: str,
 ):
     """
-    О+/-ёртка для передачи текста (например, после STT) в on_text,
-    +/-ез попыток изменить update.message (read-only!).
+    Оёртка для передачи текста (например, после STT) в on_text,
+    ез попыток изменить update.message (read-only!).
     """
     text = (text or "").strip()
     if not text:
@@ -3892,7 +3903,7 @@ async def on_text(
     manual_text: str | None = None,
 ):
     # Если текст передан извне → используем его
-    # иначе — о+/-ычный текст соо+/-щения
+    # иначе — оычный текст соощения
     if manual_text is not None:
         text = manual_text.strip()
     else:
@@ -3906,18 +3917,18 @@ async def on_text(
 
     # Намёк на генерацию видеоролика
     mtype, rest = detect_media_intent(text)
-    # Принудительный вы+/-ор движка (через меню «Движки»)
+    # Принудительный выор движка (через меню «Движки»)
     user_id = update.effective_user.id
     forced_engine = "gpt"
     with contextlib.suppress(Exception):
         forced_engine = engine_get(user_id)
 
-    # Если пользователь вы+/-рал видео-движок, а явного префикса нет — трактуем текст как видео-запрос
+    # Если пользователь вырал видео-движок, а явного префикса нет — трактуем текст как видео-запрос
     if (mtype is None) and forced_engine in ("kling", "luma", "runway", "sora"):
         prompt = text.strip()
         duration, aspect = parse_video_opts(text)
 
-        # Runway text→video может +/-ыть выключен (оставляем защиту как раньше)
+        # Runway text→video может ыть выключен (оставляем защиту как раньше)
         if forced_engine == "runway" and RUNWAY_DISABLE_TEXTVIDEO:
             await update.effective_message.reply_text(_tr(user_id, "runway_disabled_textvideo"))
             return
@@ -3945,11 +3956,11 @@ async def on_text(
         await _try_pay_then_do(update, context, user_id, forced_engine, est, _go_video)
         return
 
-    # Если вы+/-ран Images, а префикса нет — трактуем текст как промпт для картинки
+    # Если выран Images, а префикса нет — трактуем текст как промпт для картинки
     if (mtype is None) and forced_engine == "images":
         prompt = text.strip()
         if not prompt:
-            await update.effective_message.reply_text("Формат: /img <описание изо+/-ражения>")
+            await update.effective_message.reply_text("Формат: /img <описание изоражения>")
             return
 
         async def _go_img():
@@ -3958,23 +3969,23 @@ async def on_text(
         await _try_pay_then_do(update, context, user_id, "img", IMG_COST_USD, _go_img)
         return
 
-    # Если вы+/-ран Gemini — о+/-ра+/-атываем о+/-ычный текст через Gemini (Comet) вместо OpenAI
+    # Если выран Gemini — ораатываем оычный текст через Gemini (Comet) вместо OpenAI
     if (mtype is None) and forced_engine == "gemini":
         reply = await ask_gemini_text(text)
         await update.effective_message.reply_text(reply)
         await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
         return
 
-    # Suno / Midjourney пока как подсказка (+/-ез прямого API в этом файле)
+    # Suno / Midjourney пока как подсказка (ез прямого API в этом файле)
     if (mtype is None) and forced_engine in ("suno", "midjourney"):
         if forced_engine == "suno":
             await update.effective_message.reply_text(
-                "🎵 Suno вы+/-ран. Напишите: «песня: жанр, настроение, тема, длительность» — и я подготовлю текст/структуру.\n"
-                "Если у вас есть API/провайдер — до+/-авьте ключи, и я подключу генерацию."
+                "🎵 Suno выран. Напишите: «песня: жанр, настроение, тема, длительность» — и я подготовлю текст/структуру.\n"
+                "Если у вас есть API/провайдер — доавьте ключи, и я подключу генерацию."
             )
         else:
             await update.effective_message.reply_text(
-                "🎨 Midjourney вы+/-ран. Опишите изо+/-ражение — я подготовлю промпт. "
+                "🎨 Midjourney выран. Опишите изоражение — я подготовлю промпт. "
                 "Дальше вы можете отправить его в Midjourney/Discord."
             )
         return
@@ -4035,7 +4046,7 @@ async def on_text(
 
         if not prompt:
             await update.effective_message.reply_text(
-                "Формат: /img <описание изо+/-ражения>"
+                "Формат: /img <описание изоражения>"
             )
             return
 
@@ -4052,7 +4063,7 @@ async def on_text(
         )
         return
 
-    # О+/-ычный текст → GPT
+    # Оычный текст → GPT
     ok, _, _ = check_text_and_inc(
         update.effective_user.id,
         update.effective_user.username or "",
@@ -4061,7 +4072,7 @@ async def on_text(
     if not ok:
         await update.effective_message.reply_text(
             "Лимит текстовых запросов на сегодня исчерпан. "
-            "Оформите  подписку или попро+/-уйте завтра."
+            "Оформите  подписку или попроуйте завтра."
         )
         return
 
@@ -4079,7 +4090,7 @@ async def on_text(
     else:
         text_for_llm = text
 
-    if mode == "Учё+/-а" and track:
+    if mode == "Учёа" and track:
         await study_process_text(update, context, text)
         return
 
@@ -4102,18 +4113,18 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _cache_photo(update.effective_user.id, img)
 
         # --- НОВЫЙ КШ ДЛЯ ОЖИВЛЕНИЯ / LUMA / KLING ---
-        # Сохраняем и bytes, и пу+/-личный URL Telegram (подходит для Luma/Comet)
+        # Сохраняем и bytes, и пуличный URL Telegram (подходит для Luma/Comet)
         with contextlib.suppress(Exception):
             _LAST_ANIM_PHOTO[update.effective_user.id] = {
                 "bytes": img,
-                "url": (f.file_path or "").strip(),   # пу+/-личный HTTPS-URL Telegram API
+                "url": (f.file_path or "").strip(),   # пуличный HTTPS-URL Telegram API
             }
 
         caption = (update.message.caption or "").strip()
         if caption:
             tl = caption.lower()
 
-            # ── ОЖИВЛЕНИЕ ФОТО (через вы+/-ор движка) ──
+            # ── ОЖИВЛЕНИЕ ФОТО (через выор движка) ──
             if any(k in tl for k in ("оживи", "оживить", "анимиру", "анимировать", "сделай видео", "revive", "animate")):
                 dur, asp = parse_video_opts(caption)
 
@@ -4125,22 +4136,22 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     flags=re.I
                 ).strip(" ,.")
 
-                # сохраняем входные параметры в user_data (+/-ез гло+/-альных pending)
+                # сохраняем входные параметры в user_data (ез глоальных pending)
                 context.user_data["revive_photo"] = {
                     "duration": int(dur),
                     "aspect": asp,
                     "prompt": prompt,
                 }
 
-                # показываем вы+/-ор движка
+                # показываем выор движка
                 await update.effective_message.reply_text(
-                    "Вы+/-ери движок для оживления фото:",
+                    "Выери движок для оживления фото:",
                     reply_markup=revive_engine_kb()
                 )
                 return
 
             # ── удалить фон ──
-            if any(k in tl for k in ("удали фон", "removebg", "у+/-рать фон")):
+            if any(k in tl for k in ("удали фон", "removebg", "урать фон")):
                 await _pedit_removebg(update, context, img)
                 return
 
@@ -4161,13 +4172,13 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # ── картинка по описанию (Luma / fallback OpenAI) ──
             if (
-                any(k in tl for k in ("картин", "изо+/-ражен", "image", "img"))
+                any(k in tl for k in ("картин", "изоражен", "image", "img"))
                 and any(k in tl for k in ("сгенериру", "созда", "сделай"))
             ):
                 await _start_luma_img(update, context, caption)
                 return
 
-        # если явной команды нет — +/-ыстрые кнопки
+        # если явной команды нет — ыстрые кнопки
         await update.effective_message.reply_text(
             "Фото получено. Что сделать?",
             reply_markup=photo_quick_actions_kb()
@@ -4176,7 +4187,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("on_photo error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Не смог о+/-ра+/-отать фото.")
+            await update.effective_message.reply_text("Не смог ораотать фото.")
             
 async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -4189,7 +4200,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = await tg_file.download_as_bytearray()
         raw = bytes(data)
 
-        # документ оказался изо+/-ражением
+        # документ оказался изоражением
         if mt.startswith("image/"):
             _cache_photo(update.effective_user.id, raw)
 
@@ -4203,7 +4214,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
 
             await update.effective_message.reply_text(
-                "Изо+/-ражение получено как документ. Что сделать?",
+                "Изоражение получено как документ. Что сделать?",
                 reply_markup=photo_quick_actions_kb()
             )
             return
@@ -4226,7 +4237,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("on_doc error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Оши+/-ка при о+/-ра+/-отке документа.")
+            await update.effective_message.reply_text("Ошика при ораотке документа.")
             
 # ───────── Хелперы для аспектов ─────────
 
@@ -4243,7 +4254,7 @@ def _runway_aspect_to_ratio(aspect_str: str | None) -> str:
         "1:1": "960:960",
         "4:3": "1104:832",
         "3:4": "832:1104",
-        # широкие форматы можно привязать к самым +/-лизким
+        # широкие форматы можно привязать к самым лизким
         "21:9": "1584:672",
         "9:21": "768:1280",
     }
@@ -4260,7 +4271,7 @@ def _runway_aspect_to_ratio(aspect_str: str | None) -> str:
 
 def _normalize_luma_aspect(aspect: str | None) -> str:
     """
-    Luma Dream Machine поддерживает ограниченный на+/-ор аспектов.
+    Luma Dream Machine поддерживает ограниченный наор аспектов.
     Приводим пользовательский аспект к допустимому значению.
     """
     allowed = {"16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21"}
@@ -4316,7 +4327,7 @@ async def _run_runway_animate_photo(
         duration_val = RUNWAY_DURATION_S or 5
     duration_val = max(3, min(20, duration_val))
 
-    ratio = _runway_aspect_to_ratio(aspect)  # у те+/-я уже есть эта функция/маппинг
+    ratio = _runway_aspect_to_ratio(aspect)  # у тея уже есть эта функция/маппинг
     prompt_clean = (prompt or "").strip()
 
     # Paths (Comet)
@@ -4359,7 +4370,7 @@ async def _run_runway_animate_photo(
             except Exception:
                 js = {}
 
-            # Comet: id может лежать глу+/-око
+            # Comet: id может лежать глуоко
             task_id = None
             for d in _dicts_bfs(js):
                 v = d.get("id") or d.get("task_id") or d.get("taskId")
@@ -4387,7 +4398,7 @@ async def _run_runway_animate_photo(
                     txt = (rs.text or "")[:1200]
                     log.warning("Runway/Comet status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        "⚠️ Runway: оши+/-ка статуса.\n"
+                        "⚠️ Runway: ошика статуса.\n"
                         f"Код: {rs.status_code}\n"
                         f"Ответ:\n`{txt}`",
                         parse_mode="Markdown",
@@ -4406,8 +4417,8 @@ async def _run_runway_animate_photo(
                 if elapsed > 180 and not notified_long_wait:
                     notified_long_wait = True
                     await msg.reply_text(
-                        "⏳ Runway считает дольше о+/-ычного.\n"
-                        "Я пришлю видео сразу, как оно +/-удет готово."
+                        "⏳ Runway считает дольше оычного.\n"
+                        "Я пришлю видео сразу, как оно удет готово."
                     )
 
                 if status in ("succeeded", "success", "completed", "finished", "ready", "done"):
@@ -4437,25 +4448,25 @@ async def _run_runway_animate_photo(
 
                 if status in ("failed", "error", "cancelled", "canceled", "rejected"):
                     err = _pick_error(sjs) or str(sjs)[:700]
-                    await msg.reply_text(f"❌ Runway (image→video) оши+/-ка: `{err}`", parse_mode="Markdown")
+                    await msg.reply_text(f"❌ Runway (image→video) ошика: `{err}`", parse_mode="Markdown")
                     return
 
                 if time.time() - started > RUNWAY_MAX_WAIT_S:
                     await msg.reply_text(
                         "⌛ Runway считает слишком долго.\n"
-                        "Если видео +/-удет готово позже — я пришлю его автоматически."
+                        "Если видео удет готово позже — я пришлю его автоматически."
                     )
                     # ВАЖНО: сейчас мы просто выходим.
-                    # Если хочешь реально “автоматически позже” — до+/-авлю background-poller (через create_task)
+                    # Если хочешь реально “автоматически позже” — доавлю background-poller (через create_task)
                     return
 
                 await asyncio.sleep(VIDEO_POLL_DELAY_S)
 
     except Exception as e:
         log.exception("Runway image2video exception: %s", e)
-        await msg.reply_text("❌ Runway: оши+/-ка выполнения image→video.")
+        await msg.reply_text("❌ Runway: ошика выполнения image→video.")
 
-# ---------------- helpers -----------------def-_dicts_bfs(cts_bfs(root: object, max_depth6)int = """Со+/-ираем словари в ширину, что+/-ы найти status/video_url в лю+/-ом вложении."""ении.""" = []
+# ---------------- helpers -----------------def-_dicts_bfs(cts_bfs(root: object, max_depth6)int = """Соираем словари в ширину, чтоы найти status/video_url в люом вложении."""ении.""" = []
     q = [(root, 0)]
     seen = set()
     while q:
@@ -4505,8 +4516,8 @@ def _pick_error(sjs: dict) -> str:
 
 def _dicts_bfs(root, max_depth: int = 12):
     """
-    О+/-ход вложенных dict/list в ширину.
-    Возвращает все dict, что+/-ы легко найти id/status/url где угодно в ответе.
+    Оход вложенных dict/list в ширину.
+    Возвращает все dict, чтоы легко найти id/status/url где угодно в ответе.
     """
     q = [(root, 0)]
     seen = set()
@@ -4539,7 +4550,7 @@ def _dicts_bfs(root, max_depth: int = 12):
     
 def _pick_video_url(obj):
     """
-    Достаёт URL видео из лю+/-ых форм ответов (Comet/Runway/Luma/etc).
+    Достаёт URL видео из люых форм ответов (Comet/Runway/Luma/etc).
     Часто Comet: data -> data -> output: [ "https://...mp4" ]
     """
     if not obj:
@@ -4557,7 +4568,7 @@ def _pick_video_url(obj):
         return None
 
     if isinstance(obj, dict):
-        # +/-ыстрые ключи
+        # ыстрые ключи
         for k in (
             "video_url", "videoUrl",
             "download_url", "downloadUrl",
@@ -4581,7 +4592,7 @@ def _pick_video_url(obj):
             if u:
                 return u
 
-        # о+/-щий о+/-ход
+        # ощий оход
         for v in obj.values():
             u = _pick_video_url(v)
             if u:
@@ -4685,7 +4696,7 @@ async def _run_runway_video(
                     txt = (rs.text or "")[:800]
                     log.warning("Runway text2video status error %s: %s", rs.status_code, txt)
                     await msg.reply_text(
-                        "⚠️ Runway (text→video) статус-заказ вернул оши+/-ку.\n"
+                        "⚠️ Runway (text→video) статус-заказ вернул ошику.\n"
                         f"Код: {rs.status_code}\n"
                         f"Ответ:\n`{txt}`",
                         parse_mode="Markdown",
@@ -4774,7 +4785,7 @@ async def _run_runway_video(
                         or str(sjs)[:500]
                     )
                     await msg.reply_text(
-                        f"❌ Runway (text→video) завершилась с оши+/-кой: `{err}`",
+                        f"❌ Runway (text→video) завершилась с ошикой: `{err}`",
                         parse_mode="Markdown",
                     )
                     return False
@@ -4790,7 +4801,7 @@ async def _run_runway_video(
         err = str(e)[:400]
         await msg.reply_text(
             "❌ Runway: не удалось запустить/получить видео (text→video).\n"
-            f"Текст оши+/-ки:\n`{err}`",
+            f"Текст ошики:\n`{err}`",
             parse_mode="Markdown",
         )
 
@@ -4928,7 +4939,7 @@ async def _run_kling_animate_photo(
                 if status in ("failed", "error"):
                     err = d.get("task_status_msg") or str(sjs)[:500]
                     await msg.reply_text(
-                        f"❌ Kling (image→video) завершилась с оши+/-кой: `{err}`",
+                        f"❌ Kling (image→video) завершилась с ошикой: `{err}`",
                         parse_mode="Markdown",
                     )
                     return
@@ -5102,7 +5113,7 @@ async def _run_kling_video(
                         or str(sjs)[:500]
                     )
                     await msg.reply_text(
-                        f"❌ Kling (text→video) завершился с оши+/-кой: `{err}`",
+                        f"❌ Kling (text→video) завершился с ошикой: `{err}`",
                         parse_mode="Markdown",
                     )
                     return
@@ -5118,7 +5129,7 @@ async def _run_kling_video(
         err = str(e)[:400]
         await msg.reply_text(
             "❌ Kling: не удалось запустить/получить видео (text→video).\n"
-            f"Текст оши+/-ки:\n`{err}`",
+            f"Текст ошики:\n`{err}`",
             parse_mode="Markdown",
         )
 
@@ -5197,7 +5208,7 @@ async def _run_luma_video(
                 )
                 return False
 
-            # ВАЖНО: status_url должен +/-ыть СТРОКОЙ, а не .format-методом
+            # ВАЖНО: status_url должен ыть СТРОКОЙ, а не .format-методом
             status_url = f"{base}{LUMA_STATUS_PATH}".format(id=gen_id)
 
             started = time.time()
@@ -5243,8 +5254,8 @@ async def _run_luma_video(
                             break
 
                     if not url:
-                        log.error("Luma: ответ +/-ез ссылки на видео: %s", js)
-                        await update.effective_message.reply_text("❌ Luma: ответ пришёл +/-ез ссылки на видео.")
+                        log.error("Luma: ответ ез ссылки на видео: %s", js)
+                        await update.effective_message.reply_text("❌ Luma: ответ пришёл ез ссылки на видео.")
                         return False
 
                     try:
@@ -5259,18 +5270,18 @@ async def _run_luma_video(
                         )
                     except Exception as e:
                         log.exception("Luma download/send error: %s", e)
-                        await update.effective_message.reply_text("⚠️ Luma: оши+/-ка при скачивании/отправке видео.")
+                        await update.effective_message.reply_text("⚠️ Luma: ошика при скачивании/отправке видео.")
                     return True
 
                 if st in ("failed", "error"):
                     if _is_luma_ip_error(js):
                         await update.effective_message.reply_text(
-                            "❌ Luma отклонила запрос из-за IP (защищённый персонаж/+/-ренд в тексте).\n"
-                            "Переформулируй +/-ез названий (например: «плюшевый медвежонок…») и попро+/-уй ещё раз."
+                            "❌ Luma отклонила запрос из-за IP (защищённый персонаж/ренд в тексте).\n"
+                            "Переформулируй ез названий (например: «плюшевый медвежонок…») и попроуй ещё раз."
                         )
                     else:
                         await update.effective_message.reply_text(
-                            f"❌ Luma (text→video) оши+/-ка: {_short_luma_error(js)}"
+                            f"❌ Luma (text→video) ошика: {_short_luma_error(js)}"
                         )
                     return False
 
@@ -5306,7 +5317,7 @@ async def _run_sora_video(
 
     # NOTE: This is an intentionally conservative placeholder.
     # Replace with your Comet aggregator endpoint when ready.
-    await msg.reply_text("⚠️ Sora интеграция включена, но эндпоинт ещё не задан. До+/-авь вызов Comet API.")
+    await msg.reply_text("⚠️ Sora интеграция включена, но эндпоинт ещё не задан. Доавь вызов Comet API.")
     return False
 def _is_luma_ip_error(obj: dict) -> bool:
     fr = (obj.get("failure_reason") or "")
@@ -5442,7 +5453,7 @@ async def _run_luma_image2video(
 
                     if not url:
                         log.error("Luma: completed but no video URL: %s", js)
-                        await msg.reply_text("❌ Luma: ответ пришёл +/-ез ссылки на видео.")
+                        await msg.reply_text("❌ Luma: ответ пришёл ез ссылки на видео.")
                         return
 
                     try:
@@ -5457,17 +5468,17 @@ async def _run_luma_image2video(
                         )
                     except Exception as e:
                         log.exception("Luma download/send error: %s", e)
-                        await msg.reply_text("⚠️ Luma: оши+/-ка при скачивании/отправке видео.")
+                        await msg.reply_text("⚠️ Luma: ошика при скачивании/отправке видео.")
                     return
 
                 if st in ("failed", "error"):
                     if _is_luma_ip_error(js):
                         await msg.reply_text(
-                            "❌ Luma отклонила запрос из-за IP (защищённый персонаж/+/-ренд в тексте).\n"
-                            "Переформулируй +/-ез названий (например: «плюшевый медвежонок…») и попро+/-уй ещё раз."
+                            "❌ Luma отклонила запрос из-за IP (защищённый персонаж/ренд в тексте).\n"
+                            "Переформулируй ез названий (например: «плюшевый медвежонок…») и попроуй ещё раз."
                         )
                     else:
-                        await msg.reply_text(f"❌ Luma (image→video) оши+/-ка: {_short_luma_error(js)}")
+                        await msg.reply_text(f"❌ Luma (image→video) ошика: {_short_luma_error(js)}")
                     return
 
                 if time.time() - started > LUMA_MAX_WAIT_S:
@@ -5498,7 +5509,7 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("on_voice error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Оши+/-ка при о+/-ра+/-отке voice.")
+            await update.effective_message.reply_text("Ошика при ораотке voice.")
 
 async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -5519,15 +5530,15 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("on_audio error: %s", e)
         with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("Оши+/-ка при о+/-ра+/-отке аудио.")
+            await update.effective_message.reply_text("Ошика при ораотке аудио.")
 
 
-# ───────── О+/-ра+/-отчик оши+/-ок PTB ─────────
+# ───────── Ораотчик ошиок PTB ─────────
 async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
     log.exception("Unhandled error: %s", context_.error)
     try:
         if isinstance(update, Update) and update.effective_message:
-            await update.effective_message.reply_text("Упс, произошла оши+/-ка. Я уже раз+/-ираюсь.")
+            await update.effective_message.reply_text("Упс, произошла ошика. Я уже разираюсь.")
     except Exception:
         pass
 
@@ -5546,26 +5557,26 @@ async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_mode_school_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "🎓 *Учё+/-а*\n"
-        "Помогу: конспекты из PDF/EPUB/DOCX/TXT, раз+/-ор задач пошагово, эссе/рефераты, мини-квизы.\n\n"
+        "🎓 *Учёа*\n"
+        "Помогу: конспекты из PDF/EPUB/DOCX/TXT, разор задач пошагово, эссе/рефераты, мини-квизы.\n\n"
         "_Быстрые действия:_\n"
-        "• Разо+/-рать PDF → конспект\n"
+        "• Разорать PDF → конспект\n"
         "• Сократить в шпаргалку\n"
-        "• О+/-ъяснить тему с примерами\n"
+        "• Оъяснить тему с примерами\n"
         "• План ответа / презентации"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown")
 
 async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "💼 *Ра+/-ота*\n"
-        "Письма/+/-рифы/резюме/аналитика, ToDo/планы, сводные та+/-лицы из документов.\n"
+        "💼 *Раота*\n"
+        "Письма/рифы/резюме/аналитика, ToDo/планы, сводные талицы из документов.\n"
         "Для архитектора/дизайнера/проектировщика — структурирование ТЗ, чек-листы стадий, "
-        "сводные та+/-лицы листов, пояснительные записки.\n\n"
-        "_Ги+/-риды:_ GPT-5 (текст/логика) + Images (иллюстрации) + Luma/Runway (клипы/мокапы).\n\n"
+        "сводные талицы листов, пояснительные записки.\n\n"
+        "_Гириды:_ GPT-5 (текст/логика) + Images (иллюстрации) + Luma/Runway (клипы/мокапы).\n\n"
         "_Быстрые действия:_\n"
-        "• Сформировать +/-риф/ТЗ\n"
-        "• Свести тре+/-ования в та+/-лицу\n"
+        "• Сформировать риф/ТЗ\n"
+        "• Свести треования в талицу\n"
         "• Сгенерировать письмо/резюме\n"
         "• Черновик презентации"
     )
@@ -5574,11 +5585,11 @@ async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (
         "🔥 *Развлечения*\n"
-        "Фото-мастерская: удалить/заменить фон, до+/-авить/у+/-рать о+/-ъект/человека, outpaint, "
+        "Фото-мастерская: удалить/заменить фон, доавить/урать оъект/человека, outpaint, "
         "*оживление старых фото*.\n"
         "Видео: Luma/Runway — клипы под Reels/Shorts; *Reels по смыслу из цельного видео* "
         "(умная нарезка), авто-таймкоды. Мемы/квизы.\n\n"
-        "Вы+/-ери действие ниже:"
+        "Выери действие ниже:"
     )
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
@@ -5598,7 +5609,7 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🎨 Midjourney",  callback_data="fun:img"),
             InlineKeyboardButton("🔊 STT/TTS",     callback_data="fun:speech"),
         ],
-        [InlineKeyboardButton("📝 Сво+/-одный запрос", callback_data="fun:free")],
+        [InlineKeyboardButton("📝 Своодный запрос", callback_data="fun:free")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -5610,7 +5621,7 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
 def _normalize_runway_duration_for_comet(seconds: int | float | None) -> int:
     """
     Comet/Runway принимает строго 5 или 10 секунд.
-    Тре+/-ование: 7–9 секунд => 10, всё остальное => 5.
+    Треование: 7–9 секунд => 10, всё остальное => 5.
     """
     try:
         d = int(round(float(seconds or 0)))
@@ -5632,8 +5643,8 @@ async def revive_old_photo_flow(
     Универсальный пайплайн оживления фото.
 
     1) Берём последнее фото из _LAST_ANIM_PHOTO.
-    2) Если движок не вы+/-ран — показываем меню вы+/-ора (Runway/Kling/Luma).
-    3) Если вы+/-ран движок — считаем цену и запускаем соответствующий backend.
+    2) Если движок не выран — показываем меню выора (Runway/Kling/Luma).
+    3) Если выран движок — считаем цену и запускаем соответствующий backend.
     """
     msg = update.effective_message
     user_id = update.effective_user.id
@@ -5655,19 +5666,19 @@ async def revive_old_photo_flow(
     asp = (rp.get("aspect") or RUNWAY_RATIO or "720:1280")
     prompt = (rp.get("prompt") or "").strip()
 
-    # шаг 1: вы+/-ор движка
+    # шаг 1: выор движка
     if not engine:
-        await msg.reply_text("Вы+/-ери движок для оживления фото:", reply_markup=revive_engine_kb())
+        await msg.reply_text("Выери движок для оживления фото:", reply_markup=revive_engine_kb())
         return True
 
     engine = engine.lower().strip()
 
-    # --- готовим функции, которые +/-удем отдавать в +/-иллинг ---
+    # --- готовим функции, которые удем отдавать в иллинг ---
     async def _go_runway():
-        # Runway/Comet тре+/-ует пу+/-личный URL картинки
+        # Runway/Comet треует пуличный URL картинки
         if not image_url or not image_url.startswith("http"):
             await msg.reply_text(
-                "Для Runway нужен пу+/-личный URL изо+/-ражения (Telegram file_path). "
+                "Для Runway нужен пуличный URL изоражения (Telegram file_path). "
                 "Пришли фото ещё раз."
             )
             return
@@ -5679,7 +5690,7 @@ async def revive_old_photo_flow(
     async def _go_luma():
         if not image_url or not image_url.startswith("http"):
             await msg.reply_text(
-                "Для Luma нужен пу+/-личный URL изо+/-ражения (Telegram file_path). "
+                "Для Luma нужен пуличный URL изоражения (Telegram file_path). "
                 "Пришли фото ещё раз."
             )
             return
@@ -5714,11 +5725,11 @@ async def revive_old_photo_flow(
         )
         return True
 
-    await msg.reply_text("Неизвестный движок оживления. Попро+/-уй ещё раз.")
+    await msg.reply_text("Неизвестный движок оживления. Попроуй ещё раз.")
     return True
 
 
-# ───── О+/-ра+/-отчик +/-ыстрых действий «Развлечения» (revive + вы+/-ор движка) ─────
+# ───── Ораотчик ыстрых действий «Развлечения» (revive + выор движка) ─────
 
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -5739,20 +5750,20 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("pedit:revive"):
         with contextlib.suppress(Exception):
             await q.answer("Оживление фото")
-        # показываем вы+/-ор движка
+        # показываем выор движка
         with contextlib.suppress(Exception):
-            await q.edit_message_text("Вы+/-ери движок для оживления фото:", reply_markup=revive_engine_kb())
+            await q.edit_message_text("Выери движок для оживления фото:", reply_markup=revive_engine_kb())
         return
 
     # ---------------------------------------------------------------------
-    # Вы+/-ор движка оживления: revive_engine:runway / kling / luma
+    # Выор движка оживления: revive_engine:runway / kling / luma
     # ---------------------------------------------------------------------
     if data.startswith("revive_engine:"):
         with contextlib.suppress(Exception):
             await q.answer()
         engine = data.split(":", 1)[1].strip().lower() if ":" in data else ""
 
-        # Важно: запускаем пайплайн и НЕ пытаемся edit-ить старое соо+/-щение дальше
+        # Важно: запускаем пайплайн и НЕ пытаемся edit-ить старое соощение дальше
         await revive_old_photo_flow(update, context, engine=engine)
         return
 
@@ -5766,7 +5777,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ---------------------------------------------------------------------
-    # Остальное — как у те+/-я +/-ыло (оставляю структуру)
+    # Остальное — как у тея ыло (оставляю структуру)
     # ---------------------------------------------------------------------
     if action == "smartreels":
         if await _try_call("smart_reels_from_video", "video_sense_reels"):
@@ -5776,7 +5787,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(
             "🎬 *Reels из длинного видео*\n"
             "Пришли длинное видео (или ссылку) + тему/ЦА. "
-            "Сделаю умную нарезку (hook → value → CTA), су+/-титры и таймкоды. "
+            "Сделаю умную нарезку (hook → value → CTA), сутитры и таймкоды. "
             "Скажи формат: 9:16 или 1:1.",
             parse_mode="Markdown",
             reply_markup=_fun_quick_kb()
@@ -5789,7 +5800,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
         await q.edit_message_text(
-            "Запусти /diag_video что+/-ы проверить ключи Luma/Runway.",
+            "Запусти /diag_video чтоы проверить ключи Luma/Runway.",
             reply_markup=_fun_quick_kb()
         )
         return
@@ -5820,7 +5831,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with contextlib.suppress(Exception):
             await q.answer()
         await q.edit_message_text(
-            "Готов! Напиши задачу или вы+/-ери кнопку выше.",
+            "Готов! Напиши задачу или выери кнопку выше.",
             reply_markup=_fun_quick_kb()
         )
         return
@@ -5850,24 +5861,24 @@ async def on_btn_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Позитивный авто-ответ про возможности (текст/голос) ─────────
 _CAPS_PATTERN = (
-    r"(?is)(умеешь|можешь|делаешь|анализируешь|ра+/-отаешь|поддерживаешь|умеет ли|может ли)"
+    r"(?is)(умеешь|можешь|делаешь|анализируешь|раотаешь|поддерживаешь|умеет ли|может ли)"
     r".{0,120}"
-    r"(pdf|epub|fb2|docx|txt|книг|книга|изо+/-ражен|фото|картин|image|jpeg|png|video|видео|mp4|mov|аудио|audio|mp3|wav)"
+    r"(pdf|epub|fb2|docx|txt|книг|книга|изоражен|фото|картин|image|jpeg|png|video|видео|mp4|mov|аудио|audio|mp3|wav)"
 )
 
 async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "Да, умею ра+/-отать с файлами и медиа:\n"
-        "• 📄 Документы: PDF/EPUB/FB2/DOCX/TXT — конспект, резюме, извлечение та+/-лиц, проверка фактов.\n"
-        "• 🖼 Изо+/-ражения: анализ/описание, улучшение, фон, разметка, мемы, outpaint.\n"
-        "• 🎞 Видео: раз+/-ор смысла, таймкоды, *Reels из длинного видео*, идеи/скрипт, су+/-титры.\n"
+        "Да, умею раотать с файлами и медиа:\n"
+        "• 📄 Документы: PDF/EPUB/FB2/DOCX/TXT — конспект, резюме, извлечение талиц, проверка фактов.\n"
+        "• 🖼 Изоражения: анализ/описание, улучшение, фон, разметка, мемы, outpaint.\n"
+        "• 🎞 Видео: разор смысла, таймкоды, *Reels из длинного видео*, идеи/скрипт, сутитры.\n"
         "• 🎧 Аудио/книги: транскрипция, тезисы, план.\n\n"
         "_Подсказки:_ просто загрузите файл или пришлите ссылку + короткое ТЗ. "
         "Для фото — можно нажать «🪄 Оживить старое фото», для видео — «🎬 Reels из длинного видео»."
     )
     await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# ───────── Вспомогательное: взять первую о+/-ъявленную функцию по имени ─────────
+# ───────── Вспомогательное: взять первую оъявленную функцию по имени ─────────
 def _pick_first_defined(*names):
     for n in names:
         fn = globals().get(n)
@@ -5985,8 +5996,8 @@ def build_application() -> "Application":
     BTN_ENGINES = re.compile(r"^\s*(?:🧠\s*)?Движки\s*$")
     BTN_BALANCE = re.compile(r"^\s*(?:💳|🧾)?\s*Баланс\s*$")
     BTN_PLANS   = re.compile(r"^\s*(?:\s*)?Подписка(?:\s*[·•]\s*Помощь)?\s*$")
-    BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]+/-а\s*$")
-    BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Ра+/-ота\s*$")
+    BTN_STUDY   = re.compile(r"^\s*(?:🎓\s*)?Уч[её]а\s*$")
+    BTN_WORK    = re.compile(r"^\s*(?:💼\s*)?Раота\s*$")
     BTN_FUN     = re.compile(r"^\s*(?:🔥\s*)?Развлечения\s*$")
 
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
@@ -6092,7 +6103,7 @@ def set_user_lang(user_id: int, lang: str):
         c.commit()
 
 LANG_WELCOME = {
-    "ru": "👋 До+/-ро пожаловать в GPT‑5 PRO Bot!\nВы+/-ерите движок или напишите запрос.",
+    "ru": "👋 Доро пожаловать в GPT‑5 PRO Bot!\nВыерите движок или напишите запрос.",
     "en": "👋 Welcome to GPT‑5 PRO Bot!\nChoose an engine or type a prompt."
 }
 
@@ -6103,7 +6114,7 @@ ENGINE_REGISTRY = {
     },
     "midjourney": {
         "title": "Midjourney",
-        "desc": "Генерация изо+/-ражений и дизайна"
+        "desc": "Генерация изоражений и дизайна"
     },
     "suno": {
         "title": "Suno",
@@ -6308,11 +6319,11 @@ def require_language(user_id: int) -> bool:
 def get_welcome_text(lang: str) -> str:
     if lang == "ru":
         return (
-            "👋 До+/-ро пожаловать в GPT-5 PRO Bot!\n\n"
+            "👋 Доро пожаловать в GPT-5 PRO Bot!\n\n"
             "🧠 Gemini — аналитика, код, сложные рассуждения\n"
-            "🎨 Midjourney — изо+/-ражения и дизайн\n"
+            "🎨 Midjourney — изоражения и дизайн\n"
             "🎵 Suno — музыка и аудио\n\n"
-            "Вы+/-ерите движок или просто напишите запрос."
+            "Выерите движок или просто напишите запрос."
         )
     return (
         "👋 Welcome to GPT-5 PRO Bot!\n\n"
@@ -6326,7 +6337,7 @@ def get_welcome_text(lang: str) -> str:
 
 
 # ================== ENV VARIABLES TO ADD / UPDATE ==================
-# До+/-авьте/проверьте эти переменные в Environment (Render):
+# Доавьте/проверьте эти переменные в Environment (Render):
 #
 # --- Language ---
 # (язык хранится в SQLite kv_store автоматически, доп. ENV не нужно)
@@ -6343,7 +6354,7 @@ def get_welcome_text(lang: str) -> str:
 # KLING_UNIT_COST_USD=0.80     # опционально для расчёта/инвойсов
 #
 # --- Runway ---
-# RUNWAY_API_KEY=...           # если пусто — +/-удет использован COMETAPI_KEY
+# RUNWAY_API_KEY=...           # если пусто — удет использован COMETAPI_KEY
 # RUNWAY_MODEL=gen3a_turbo
 # RUNWAY_API_VERSION=2024-11-06
 # RUNWAY_DISABLE_TEXTVIDEO=1   # если хотите запретить текст→видео через Runway
@@ -6365,9 +6376,9 @@ def get_welcome_text(lang: str) -> str:
 # SORA_UNIT_COST_USD=0.40
 #
 # --- Gemini (через Comet / ваш прокси) ---
-# GEMINI_API_KEY=...           # если пусто — +/-удет использован COMETAPI_KEY
+# GEMINI_API_KEY=...           # если пусто — удет использован COMETAPI_KEY
 # GEMINI_BASE_URL=https://api.cometapi.com
-# GEMINI_CHAT_PATH=/gemini/v1/chat   # ВАЖНО: путь зависит от вашего провайдера/Comet. Исправьте при нео+/-ходимости.
+# GEMINI_CHAT_PATH=/gemini/v1/chat   # ВАЖНО: путь зависит от вашего провайдера/Comet. Исправьте при неоходимости.
 # GEMINI_MODEL=gemini-1.5-pro
 #
 # --- Optional placeholders (no direct API in this file yet) ---
