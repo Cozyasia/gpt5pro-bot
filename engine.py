@@ -585,6 +585,119 @@ def _lang_key(user_id: int) -> str:
 def has_lang(user_id: int) -> bool:
     return bool((kv_get(_lang_key(user_id), "") or "").strip())
 
+
+# ===================== I18N CANONICAL OVERRIDES =====================
+# The project had multiple historical versions of button labels.
+# To ensure a stable Ops router, we canonicalize the visible button texts here.
+
+I18N_PACK.setdefault("ru", {}).update({
+    "choose_lang": "🌍 Выберите язык",
+    "lang_set": "✅ Язык установлен",
+    "btn_study": "📚 Study",
+    "btn_work": "💼 Work",
+    "btn_fun": "🎉 Fun",
+    "btn_engines": "🧠 Engines",
+    "btn_sub": "📎 Subscription • Help",
+    "btn_balance": "🧾 Balance",
+    "choose_engine": "Выберите движок:",
+    "engine_set": "✅ Движок выбран: {engine}",
+    "mode_set": "✅ Режим: {mode}",
+    "mode_study_text": "Режим Study включён. Отправьте задачу: объяснить, конспект, разбор PDF/DOCX, вопросы по теме.",
+    "mode_work_text": "Режим Work включён. Отправьте задачу: текст, письмо, коммерческое предложение, план, таблица, код.",
+    "mode_fun_text": "Режим Fun включён. Отправьте идею или запрос: сценарий, шутка, игра, креатив, мем, сторителлинг.",
+    "plans_title": "Тарифы и подписка",
+    "plans_text": "Тарифы:\n— START: 499₽/мес • 1299₽/квартал • 4490₽/год\n— PRO: 999₽/мес • 2799₽/квартал • 8490₽/год\n— ULTIMATE: 1999₽/мес • 5490₽/квартал • 15990₽/год",
+    "balance_text": "Баланс/статус:\n• Текущий движок: {engine}\n• Режим: {mode}\n\nЕсли нужен реальный баланс по подписке — подключите мини‑витрину (кнопка ниже).",
+    "open_shop": "Открыть мини‑витрину",
+})
+
+I18N_PACK.setdefault("en", {}).update({
+    "choose_lang": "🌍 Choose language",
+    "lang_set": "✅ Language set",
+    "btn_study": "📚 Study",
+    "btn_work": "💼 Work",
+    "btn_fun": "🎉 Fun",
+    "btn_engines": "🧠 Engines",
+    "btn_sub": "📎 Subscription • Help",
+    "btn_balance": "🧾 Balance",
+    "choose_engine": "Choose engine:",
+    "engine_set": "✅ Engine set: {engine}",
+    "mode_set": "✅ Mode: {mode}",
+    "mode_study_text": "Study mode is on. Send a task: explain, summarize, analyze PDF/DOCX, answer questions.",
+    "mode_work_text": "Work mode is on. Send a task: email, proposal, plan, table, code, business text.",
+    "mode_fun_text": "Fun mode is on. Send an idea: story, joke, game, creative prompt, meme.",
+    "plans_title": "Plans & subscription",
+    "plans_text": "Plans:\n— START: 499₽/mo • 1299₽/quarter • 4490₽/year\n— PRO: 999₽/mo • 2799₽/quarter • 8490₽/year\n— ULTIMATE: 1999₽/mo • 5490₽/quarter • 15990₽/year",
+    "balance_text": "Balance / status:\n• Current engine: {engine}\n• Mode: {mode}\n\nFor subscription billing info, open the mini‑shop.",
+    "open_shop": "Open mini‑shop",
+})
+
+I18N_PACK.setdefault("de", {}).update({
+    "choose_lang": "🌍 Sprache wählen",
+    "lang_set": "✅ Sprache gesetzt",
+    "btn_study": "📚 Study",
+    "btn_work": "💼 Work",
+    "btn_fun": "🎉 Fun",
+    "btn_engines": "🧠 Engines",
+    "btn_sub": "📎 Subscription • Help",
+    "btn_balance": "🧾 Balance",
+    "choose_engine": "Engine wählen:",
+    "engine_set": "✅ Engine gesetzt: {engine}",
+    "mode_set": "✅ Modus: {mode}",
+    "mode_study_text": "Study‑Modus aktiv. Senden Sie eine Aufgabe: erklären, zusammenfassen, PDF/DOCX analysieren.",
+    "mode_work_text": "Work‑Modus aktiv. Senden Sie eine Aufgabe: E‑Mail, Angebot, Plan, Tabelle, Code.",
+    "mode_fun_text": "Fun‑Modus aktiv. Senden Sie eine Idee: Story, Witz, Spiel, Kreativ‑Prompt.",
+    "plans_title": "Tarife & Abo",
+    "plans_text": "Tarife:\n— START: 499₽/Monat • 1299₽/Quartal • 4490₽/Jahr\n— PRO: 999₽/Monat • 2799₽/Quartal • 8490₽/Jahr\n— ULTIMATE: 1999₽/Monat • 5490₽/Quartal • 15990₽/Jahr",
+    "balance_text": "Status:\n• Aktuelle Engine: {engine}\n• Modus: {mode}\n\nFür Abo‑Infos: Mini‑Shop öffnen.",
+    "open_shop": "Mini‑Shop öffnen",
+})
+
+I18N_PACK.setdefault("fr", {}).update({
+    "choose_lang": "🌍 Choisir la langue",
+    "lang_set": "✅ Langue définie",
+    "btn_study": "📚 Study",
+    "btn_work": "💼 Work",
+    "btn_fun": "🎉 Fun",
+    "btn_engines": "🧠 Engines",
+    "btn_sub": "📎 Subscription • Help",
+    "btn_balance": "🧾 Balance",
+    "choose_engine": "Choisir un moteur :",
+    "engine_set": "✅ Moteur sélectionné : {engine}",
+    "mode_set": "✅ Mode : {mode}",
+    "mode_study_text": "Mode Study activé. Envoyez une tâche : expliquer, résumer, analyser PDF/DOCX.",
+    "mode_work_text": "Mode Work activé. Envoyez une tâche : email, proposition, plan, tableau, code.",
+    "mode_fun_text": "Mode Fun activé. Envoyez une idée : histoire, blague, jeu, prompt créatif.",
+    "plans_title": "Abonnement",
+    "plans_text": "Tarifs :\n— START: 499₽/mois • 1299₽/trimestre • 4490₽/an\n— PRO: 999₽/mois • 2799₽/trimestre • 8490₽/an\n— ULTIMATE: 1999₽/mois • 5490₽/trimestre • 15990₽/an",
+    "balance_text": "Statut :\n• Moteur actuel : {engine}\n• Mode : {mode}\n\nPour les infos d’abonnement, ouvrez la mini‑boutique.",
+    "open_shop": "Ouvrir la mini‑boutique",
+})
+
+I18N_PACK.setdefault("th", {}).update({
+    "choose_lang": "🌍 เลือกภาษา",
+    "lang_set": "✅ ตั้งค่าภาษาแล้ว",
+    "btn_study": "📚 Study",
+    "btn_work": "💼 Work",
+    "btn_fun": "🎉 Fun",
+    "btn_engines": "🧠 Engines",
+    "btn_sub": "📎 Subscription • Help",
+    "btn_balance": "🧾 Balance",
+    "choose_engine": "เลือกเอนจิน:",
+    "engine_set": "✅ ตั้งค่าเอนจิน: {engine}",
+    "mode_set": "✅ โหมด: {mode}",
+    "mode_study_text": "เปิดโหมด Study แล้ว ส่งงานได้เลย: อธิบาย สรุป วิเคราะห์ PDF/DOCX",
+    "mode_work_text": "เปิดโหมด Work แล้ว ส่งงานได้เลย: อีเมล ข้อเสนอ แผน ตาราง โค้ด",
+    "mode_fun_text": "เปิดโหมด Fun แล้ว ส่งไอเดียได้เลย: เรื่องตลก เกม งานครีเอทีฟ",
+    "plans_title": "แพ็กเกจและสมาชิก",
+    "plans_text": "แพ็กเกจ:\n— START: 499₽/เดือน • 1299₽/ไตรมาส • 4490₽/ปี\n— PRO: 999₽/เดือน • 2799₽/ไตรมาส • 8490₽/ปี\n— ULTIMATE: 1999₽/เดือน • 5490₽/ไตรมาส • 15990₽/ปี",
+    "balance_text": "สถานะ:\n• เอนจินปัจจุบัน: {engine}\n• โหมด: {mode}\n\nดูข้อมูลบิลสมาชิก: เปิดมินิช็อป",
+    "open_shop": "เปิดมินิช็อป",
+})
+
+# Keep legacy languages if present
+I18N_PACK.setdefault("be", {}).setdefault("btn_study", "📚 Study")
+I18N_PACK.setdefault("uk", {}).setdefault("btn_study", "📚 Study")
 def get_lang(user_id: int) -> str:
     lang = (kv_get(_lang_key(user_id), "") or "").strip()
     return lang if lang in LANGS else "ru"
@@ -597,18 +710,18 @@ def set_lang(user_id: int, lang: str) -> None:
 # Mini-dictionary (menus/buttons)
 I18N: dict[str, dict[str, str]] = {
     "ru": {
-        "choose_lang": "🌍 Выберите язык",
+        "choose_lang": "🌍 Выерите язык",
         "lang_set": "✅ Язык установлен",
         "menu_title": "Главное меню",
         "btn_engines": "🧠 Движки",
-        "btn_sub": "🧩 Подписка • Помощь",
+        "btn_sub": " Подписка • Помощь",
         "btn_wallet": "🧾 Баланс",
         "btn_video": "🎞 Создать видео",
         "btn_photo": "🖼 Оживить фото",
         "btn_help": "❓ Помощь",
         "btn_back": "⬅️ Назад",
-        "btn_study": "📚 Учёба",
-        "btn_work": "💼 Работа",
+        "btn_study": "📚 Учёа",
+        "btn_work": "💼 Раота",
         "btn_fun": "🎉 Развлечения",
     },
     "be": {
@@ -616,7 +729,7 @@ I18N: dict[str, dict[str, str]] = {
         "lang_set": "✅ Мова ўсталявана",
         "menu_title": "Галоўнае меню",
         "btn_engines": "🧠 Рухавікі",
-        "btn_sub": "🧩 Падпіска • Дапамога",
+        "btn_sub": " Падпіска • Дапамога",
         "btn_wallet": "🧾 Баланс",
         "btn_video": "🎞 Стварыць відэа",
         "btn_photo": "🖼 Ажывіць фота",
@@ -624,20 +737,20 @@ I18N: dict[str, dict[str, str]] = {
         "btn_back": "⬅️ Назад",
     },
     "uk": {
-        "choose_lang": "🌍 Оберіть мову",
+        "choose_lang": "🌍 Оеріть мову",
         "lang_set": "✅ Мову встановлено",
         "menu_title": "Головне меню",
         "btn_engines": "🧠 Рушії",
-        "btn_sub": "🧩 Підписка • Допомога",
+        "btn_sub": " Підписка • Допомога",
         "btn_wallet": "🧾 Баланс",
         "btn_video": "🎞 Створити відео",
         "btn_photo": "🖼 Оживити фото",
         "btn_help": "❓ Допомога",
         "btn_back": "⬅️ Назад",
         "btn_study": "🎓 Навчання",
-        "btn_work": "💼 Робота",
+        "btn_work": "💼 Роота",
         "btn_fun": "🔥 Розваги",
-        "input_placeholder": "Оберіть режим або напишіть запит…",
+        "input_placeholder": "Оеріть режим ао напишіть запит…",
     
     },
     "de": {
@@ -645,7 +758,7 @@ I18N: dict[str, dict[str, str]] = {
         "lang_set": "✅ Sprache gesetzt",
         "menu_title": "Hauptmenü",
         "btn_engines": "🧠 Engines",
-        "btn_sub": "🧩 Abo • Hilfe",
+        "btn_sub": " Abo • Hilfe",
         "btn_wallet": "🧾 Guthaben",
         "btn_video": "🎞 Video erstellen",
         "btn_photo": "🖼 Foto animieren",
@@ -660,7 +773,7 @@ I18N: dict[str, dict[str, str]] = {
         "lang_set": "✅ Language set",
         "menu_title": "Main menu",
         "btn_engines": "🧠 Engines",
-        "btn_sub": "🧩 Subscription • Help",
+        "btn_sub": " Subscription • Help",
         "btn_wallet": "🧾 Balance",
         "btn_video": "🎞 Create video",
         "btn_photo": "🖼 Animate photo",
@@ -675,7 +788,7 @@ I18N: dict[str, dict[str, str]] = {
         "lang_set": "✅ Langue définie",
         "menu_title": "Menu principal",
         "btn_engines": "🧠 Moteurs",
-        "btn_sub": "🧩 Abonnement • Aide",
+        "btn_sub": " Abonnement • Aide",
         "btn_wallet": "🧾 Solde",
         "btn_video": "🎞 Créer une vidéo",
         "btn_photo": "🖼 Animer une photo",
@@ -686,16 +799,16 @@ I18N: dict[str, dict[str, str]] = {
         "btn_fun": "🎉 Divertissement",
     },
     "th": {
-        "choose_lang": "🌍 เลือกภาษา",
-        "lang_set": "✅ ตั้งค่าภาษาแล้ว",
-        "menu_title": "เมนูหลัก",
-        "btn_engines": "🧠 เอนจิน",
-        "btn_sub": "🧩 สมัครสมาชิก • ช่วยเหลืออ",
-        "btn_wallet": "🧾 ยอดคงเหลือ",
-        "btn_video": "🎞 สร้างวิดีโอ",
-        "btn_photo": "🖼 ทำให้รูปเคลื่อนไหว",
-        "btn_help": "❓ ช่วยเหลือ",
-        "btn_back": "⬅️ กลับ",
+        "choose_lang": "🌍 เลืกภาษา",
+        "lang_set": "✅ ต้งค่าภาษาแล้ว",
+        "menu_title": "เมนูหลก",
+        "btn_engines": "🧠 เนจิน",
+        "btn_sub": " สมครสมาชิก • ช่วยเหลื",
+        "btn_wallet": "🧾 ยดคงเหลื",
+        "btn_video": "🎞 สร้างวิดีโ",
+        "btn_photo": "🖼 ทำให้รูปเคลื่นไหว",
+        "btn_help": "❓ ช่วยเหลื",
+        "btn_back": "⬅️ กลบ",
         "btn_study": "📚 เรียน",
         "btn_work": "💼 งาน",
         "btn_fun": "🎉 สนุก",
@@ -727,36 +840,8 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "de": "Hallo! Ich bin Neuro‑Bot — ⚡ ein Multimode‑Bot mit 7 KI‑Engines für Lernen, Arbeit und Spaß.",
         "en": "Hi! I’m Neuro‑Bot — ⚡ a multi‑mode bot with 7 AI engines for study, work and fun.",
         "fr": "Salut ! Je suis Neuro‑Bot — ⚡ un bot multi‑modes avec 7 moteurs IA pour étudier, travailler et se divertir.",
-        "th": "สวสดี! ฉนคื Neuro‑Bot — ⚡ บทหลายโหมดพร้มเอนจิน AI 7 ตว สำหรบเรียน งาน และความบนเทิง",
+        "th": "สวสดี! ฉนคื Neuro‑Bot — ⚡ บทหลายโหมดพร้มเนจิน AI 7 ตว สำหรบเรียน งาน และความบนเทิง",
     },
-    "mode_study_menu": {
-        "ru": "Привет! Чем помочь в учёбе? Выберите: краткий конспект, разбор темы, решение задач, план обучения — или просто напишите запрос.",
-        "be": "Прывітанне! Чым дапамагчы ў вучобе? Выберыце: кароткі канспект, разбор тэмы, рашэнне задач, план навучання — або проста напішыце запыт.",
-        "uk": "Привіт! Чим допомогти з навчанням? Оберіть: короткий конспект, розбір теми, задачі, план навчання — або просто напишіть запит.",
-        "de": "Hallo! Wobei soll ich beim Lernen helfen? Wähle: Kurz-Zusammenfassung, Themenanalyse, Aufgaben lösen, Lernplan — oder schreibe einfach deine Frage.",
-        "en": "Hi! How can I help you study? Choose: summary, topic breakdown, problem solving, study plan — or just type your request.",
-        "fr": "Salut ! Comment puis‑je aider pour les études ? Choisis : résumé, analyse d’un sujet, résolution d’exercices, plan d’étude — ou écris simplement ta demande.",
-        "th": "สวัสดี! ต้องการให้ช่วยเรื่องเรียนอะไร? เลือก: สรุป, อธิบายหัวข้อ, แก้โจทย์, วางแผนการเรียน — หรือพิมพ์คำถามได้เลย"
-    },
-    "mode_work_menu": {
-        "ru": "💼 Работа: могу помочь с текстами, письмами, резюме, идеями, аналитикой, таблицами и кодом. Напишите задачу.",
-        "be": "💼 Праца: дапамагу з тэкстамі, лістамі, рэзюмэ, ідэямі, аналітыкай, табліцамі і кодам. Напішыце задачу.",
-        "uk": "💼 Робота: допоможу з текстами, листами, резюме, ідеями, аналітикою, таблицями та кодом. Напишіть задачу.",
-        "de": "💼 Arbeit: Ich helfe bei Texten, E‑Mails, CV, Ideen, Analysen, Tabellen und Code. Schreib deine Aufgabe.",
-        "en": "💼 Work: I can help with texts, emails, resumes, ideas, analytics, spreadsheets and code. Describe your task.",
-        "fr": "💼 Travail : je peux aider avec des textes, emails, CV, idées, analyses, tableaux et code. Décris ta tâche.",
-        "th": "💼 งาน: ช่วยเรื่องข้อความ อีเมล เรซูเม่ ไอเดีย วิเคราะห์ ตาราง และโค้ดได้ พิมพ์งานที่ต้องการเลย"
-    },
-    "mode_fun_menu": {
-        "ru": "🎉 Развлечения: идеи, сценарии, викторины, тексты, шутки, игры и креатив. Что хотите сделать?",
-        "be": "🎉 Забавы: ідэі, сцэнары, віктарыны, тэксты, жарты, гульні і крэатыў. Што хочаш зрабіць?",
-        "uk": "🎉 Розваги: ідеї, сценарії, вікторини, тексти, жарти, ігри та креатив. Що зробимо?",
-        "de": "🎉 Spaß: Ideen, Skripte, Quiz, Texte, Witze, Spiele und Kreatives. Was machen wir?",
-        "en": "🎉 Fun: ideas, scripts, quizzes, writing, jokes, games and creative stuff. What do you want to do?",
-        "fr": "🎉 Divertissement : idées, scénarios, quiz, textes, blagues, jeux et créativité. On fait quoi ?",
-        "th": "🎉 สนุก: ไอเดีย บท/สคริปต์ ควิซ ข้อความ มุก เกม และงานครีเอทีฟ อยากทำอะไรดี?"
-    },
-
     "ask_video_prompt": {
         "ru": "🎞 Напиши запрос для видео, например:\n«Сделай видео: закат над морем, 7 сек, 16:9»",
         "be": "🎞 Напішы запыт для відэа, напрыклад:\n«Зраі відэа: захад сонца над морам, 7 сек, 16:9»",
@@ -764,7 +849,7 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "de": "🎞 Schreibe einen Prompt für das Video, z.B.:\n„Erstelle ein Video: Sonnenuntergang am Meer, 7s, 16:9“",
         "en": "🎞 Type a video prompt, e.g.:\n“Make a video: sunset over the sea, 7s, 16:9”",
         "fr": "🎞 Écris un prompt pour la vidéo, par ex. :\n« Fais une vidéo : coucher de soleil sur la mer, 7s, 16:9 »",
-        "th": "🎞 พิมพ์คำส่งทำวิดีโอ เช่น:\n“ทำวิดีโอ: พระาทิตย์ตกเหนืทะเล 7วิ 16:9”",
+        "th": "🎞 พิมพ์คำส่งทำวิดีโ เช่น:\n“ทำวิดีโ: พระาทิตย์ตกเหนืทะเล 7วิ 16:9”",
     },
     "ask_send_photo": {
         "ru": "🖼 Пришли фото, затем выери «Оживить фото».",
@@ -773,7 +858,7 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "de": "🖼 Sende ein Foto, dann wähle „Foto animieren“.",
         "en": "🖼 Send a photo, then choose “Animate photo”.",
         "fr": "🖼 Envoyez une photo, puis choisissez « Animer la photo ».",
-        "th": "🖼 ส่งรูป จากน้นเลืก “ทำให้รูปเคลื่อนไหว”",
+        "th": "🖼 ส่งรูป จากน้นเลืก “ทำให้รูปเคลื่นไหว”",
     },
     "photo_received": {
         "ru": "🖼 Фото получено. Хотите оживить?",
@@ -782,7 +867,7 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "de": "🖼 Foto erhalten. Animieren?",
         "en": "🖼 Photo received. Animate it?",
         "fr": "🖼 Photo reçue. L’animer ?",
-        "th": "🖼 ได้รบรูปแล้ว ต้งการทำให้เคลื่อนไหวไหม?",
+        "th": "🖼 ได้รบรูปแล้ว ต้งการทำให้เคลื่นไหวไหม?",
     },
     "animate_btn": {
         "ru": "🎬 Оживить фото",
@@ -791,7 +876,7 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "de": "🎬 Foto animieren",
         "en": "🎬 Animate photo",
         "fr": "🎬 Animer la photo",
-        "th": "🎬 ทำให้รูปเคลื่อนไหว",
+        "th": "🎬 ทำให้รูปเคลื่นไหว",
     },
     "choose_engine": {
         "ru": "Выерите движок:",
@@ -800,59 +885,7 @@ I18N_PACK: dict[str, dict[str, str]] = {
         "de": "Wähle die Engine:",
         "en": "Choose engine:",
         "fr": "Choisissez le moteur:",
-        "th": "เลืกเอนจิน:",
-    },
-
-        "mode_menu_study": {
-        "ru": """Привет! Вы в режиме *Учёба*.
-
-Отправьте вопрос/тему — помогу с объяснением, конспектом, задачами и разбором материалов.""",
-        "en": """Hi! You are in *Study* mode.
-
-Send a topic/question — I can explain, summarise, solve tasks, and help with learning materials.""",
-        "de": """Hallo! Du bist im Modus *Study*.
-
-Schicke ein Thema/eine Frage — ich erkläre, fasse zusammen und helfe beim Lernen.""",
-        "fr": """Salut ! Vous êtes en mode *Study*.
-
-Envoyez un sujet/une question — je peux expliquer, résumer et aider à apprendre.""",
-        "th": """สวัสดี! คุณอยู่ในโหมด *Study*.
-
-ส่งหัวข้อ/คำถามมาได้เลย — ฉันช่วยอธิบาย สรุป และช่วยเรียนได้""",
-    },
-        "mode_menu_work": {
-        "ru": """Вы в режиме *Работа*.
-
-Напишите задачу — помогу с текстом, письмом, анализом, планом, идеями и документацией.""",
-        "en": """You are in *Work* mode.
-
-Describe the task — I will help with writing, analysis, planning, ideas, and docs.""",
-        "de": """Du bist im Modus *Work*.
-
-Beschreibe die Aufgabe — ich helfe beim Schreiben, Analysieren und Planen.""",
-        "fr": """Vous êtes en mode *Work*.
-
-Décrivez la tâche — je vous aide à rédiger, analyser et planifier.""",
-        "th": """คุณอยู่ในโหมด *Work*.
-
-อธิบายงานที่ต้องทำ — ฉันช่วยเขียน วิเคราะห์ วางแผน และทำเอกสารได้""",
-    },
-        "mode_menu_fun": {
-        "ru": """Вы в режиме *Fun*.
-
-Хотите идеи, игры, шутки, сценарии, истории или креатив? Напишите, что нужно.""",
-        "en": """You are in *Fun* mode.
-
-Want ideas, games, jokes, scripts, stories, or creative content? Tell me what you need.""",
-        "de": """Du bist im Modus *Fun*.
-
-Du willst Ideen, Spiele, Witze, Storys oder Kreatives? Sag mir, was du brauchst.""",
-        "fr": """Vous êtes en mode *Fun*.
-
-Envie d’idées, de jeux, de blagues, de scénarios ou de créativité ? Dites-moi.""",
-        "th": """คุณอยู่ในโหมด *Fun*.
-
-อยากได้ไอเดีย เกม มุกตลก สคริปต์ หรือคอนเทนต์สร้างสรรค์? บอกได้เลย""",
+        "th": "เลืกเนจิน:",
     },
     "runway_disabled_textvideo": {
         "ru": "⚠️ Runway отключён для видео по тексту/голосу. Выерите Kling, Luma или Sora.",
@@ -861,7 +894,7 @@ Envie d’idées, de jeux, de blagues, de scénarios ou de créativité ? Dites-
         "de": "⚠️ Runway ist für Text/Voice→Video deaktiviert. Wähle Kling, Luma oder Sora.",
         "en": "⚠️ Runway is disabled for text/voice→video. Choose Kling, Luma or Sora.",
         "fr": "⚠️ Runway est désactivé pour texte/voix→vidéo. Choisissez Kling, Luma ou Sora.",
-        "th": "⚠️ ปิด Runway สำหรบข้ความ/เสียง→วิดีโอ เลืก Kling, Luma หรื Sora",
+        "th": "⚠️ ปิด Runway สำหรบข้ความ/เสียง→วิดีโ เลืก Kling, Luma หรื Sora",
     },
 }
 
@@ -1224,7 +1257,27 @@ def _pick_vision_model() -> str:
     except Exception:
         return OPENAI_MODEL
 
-async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
+def _system_prompt_with_lang(lang: str | None) -> str:
+    """SYSTEM_PROMPT + директива отвечать на выбранном языке."""
+    base = (SYSTEM_PROMPT or "").strip()
+    if not lang:
+        return base
+    lang = lang.lower().strip()
+    # Поддерживаем основные языки из панели.
+    if lang == "ru":
+        return base
+    lang_name = {
+        "en": "English",
+        "de": "German",
+        "fr": "French",
+        "th": "Thai",
+        "be": "Belarusian",
+        "uk": "Ukrainian",
+    }.get(lang, lang)
+    return (base + "\n\n" + f"IMPORTANT: Reply ONLY in {lang_name}.").strip()
+
+
+async def ask_openai_text(user_text: str, web_ctx: str = "", lang: str | None = None) -> str:
     """
     Универсальный запрос к LLM:
     - поддерживает OpenRouter (через OPENAI_API_KEY = sk-or-...);
@@ -1236,7 +1289,7 @@ async def ask_openai_text(user_text: str, web_ctx: str = "") -> str:
     if not user_text:
         return "Пустой запрос."
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": _system_prompt_with_lang(lang)}]
     if web_ctx:
         messages.append({
             "role": "system",
@@ -1782,7 +1835,7 @@ START_TEXT = (
     "📚 Также: разор ученых PDF/электронных книг, шпаргалки и конспекты, конструктор тестов;\n"
     "🎧 тайм-коды по аудиокнигам/лекциям и краткие выжимки. 🧩\n"
     "\n"
-    "• 💼 Работа — письма/рифы/документы, аналитика и резюме материалов, ToDo/планы, генератор идей.\n"
+    "• 💼 Раота — письма/рифы/документы, аналитика и резюме материалов, ToDo/планы, генератор идей.\n"
     "🛠️ Для архитектора/дизайнера/проектировщика: структурирование ТЗ, чек-листы стадий,\n"
     "🗂️ названия/описания листов, сводные талицы из текстов, оформление пояснительных записок. 📊\n"
     "\n"
@@ -1828,7 +1881,7 @@ def modes_root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🎓 Учёа", callback_data="mode:study"),
-            InlineKeyboardButton("💼 Работа", callback_data="mode:work"),
+            InlineKeyboardButton("💼 Раота", callback_data="mode:work"),
             InlineKeyboardButton("🔥 Развлечения", callback_data="mode:fun"),
         ],
     ])
@@ -1910,41 +1963,472 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
     return modes_root_kb()
 
 # Показать выранный режим (используется и для callback, и для текста)
-async def _send_mode_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str):
-    """Send selected mode intro in the user language and switch chat mode."""
-    uid = update.effective_user.id if update.effective_user else 0
-    kind = (kind or '').lower().strip()
+async def _send_mode_menu(update, context, key: str):
+    text = _mode_desc(key)
+    kb = _mode_kb(key)
+    # Если пришли из callback — редактируем; если текстом — шлём новым соощением
+    if getattr(update, "callback_query", None):
+        q = update.callback_query
+        await q.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+        await q.answer()
+    else:
+        await update.effective_message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
-    # Persist mode
-    _db_set_mode(uid, kind)
+# Ораотчик callback по режимам
+async def on_mode_cb(update, context):
+    q = update.callback_query
+    data = (q.data or "").strip()
+    uid = q.from_user.id
 
-    # Pick localized intro
-    key = {
-        'study': 'mode_menu_study',
-        'work': 'mode_menu_work',
-        'fun': 'mode_menu_fun',
-    }.get(kind, 'mode_menu_fun')
+    # Навигация
+    if data == "mode:root":
+        await q.edit_message_text(_modes_root_text(), reply_markup=modes_root_kb())
+        await q.answer(); return
 
-    txt = _tr(uid, key)
-    # Always show main menu keyboard
-    await update.effective_message.reply_text(
-        txt,
-        parse_mode='Markdown',
-        reply_markup=_main_kb(uid),
-        disable_web_page_preview=True,
+    if data.startswith("mode:"):
+        _, key = data.split(":", 1)
+        await _send_mode_menu(update, context, key)
+        return
+
+    # Своодный ввод из подменю
+    if data == "act:free":
+        await q.answer()
+        await q.edit_message_text(
+            "📝 Напишите своодный запрос ниже текстом или голосом — я подстроюсь.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+
+    # === Учёа
+    if data == "act:study:pdf_summary":
+        await q.answer()
+        _mode_track_set(uid, "pdf_summary")
+        await q.edit_message_text(
+            "📚 Пришлите PDF/EPUB/DOCX/FB2/TXT — сделаю структурированный конспект.\n"
+            "Можно в подписи указать цель (коротко/подроно, язык и т.п.).",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
+    if data == "act:study:explain":
+        await q.answer()
+        study_sub_set(uid, "explain")
+        _mode_track_set(uid, "explain")
+        await q.edit_message_text(
+            "🔍 Напишите тему + уровень (школа/вуз/профи). Будет оъяснение с примерами.",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
+    if data == "act:study:tasks":
+        await q.answer()
+        study_sub_set(uid, "tasks")
+        _mode_track_set(uid, "tasks")
+        await q.edit_message_text(
+            "🧮 Пришлите условие(я) — решу пошагово (формулы, пояснения, итог).",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
+    if data == "act:study:essay":
+        await q.answer()
+        study_sub_set(uid, "essay")
+        _mode_track_set(uid, "essay")
+        await q.edit_message_text(
+            "✍️ Тема + треования (оъём/стиль/язык) — подготовлю эссе/реферат.",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
+    if data == "act:study:exam_plan":
+        await q.answer()
+        study_sub_set(uid, "quiz")
+        _mode_track_set(uid, "exam_plan")
+        await q.edit_message_text(
+            "📝 Укажите предмет и дату экзамена — составлю план подготовки с вехами.",
+            reply_markup=_mode_kb("study"),
+        )
+        return
+
+    # === Раота
+    if data == "act:work:doc":
+        await q.answer()
+        _mode_track_set(uid, "work_doc")
+        await q.edit_message_text(
+            "📄 Что за документ/адресат/контекст? Сформирую черновик письма/документа.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    if data == "act:work:report":
+        await q.answer()
+        _mode_track_set(uid, "work_report")
+        await q.edit_message_text(
+            "📊 Пришлите текст/файл/ссылку — сделаю аналитическую выжимку.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    if data == "act:work:plan":
+        await q.answer()
+        _mode_track_set(uid, "work_plan")
+        await q.edit_message_text(
+            "🗂 Опишите задачу/сроки — соеру ToDo/план со сроками и приоритетами.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    if data == "act:work:idea":
+        await q.answer()
+        _mode_track_set(uid, "work_idea")
+        await q.edit_message_text(
+            "💡 Расскажите продукт/ЦА/каналы — подготовлю риф/идеи.",
+            reply_markup=_mode_kb("work"),
+        )
+        return
+
+    # === Развлечения (как ыло)
+    if data == "act:fun:ideas":
+        await q.answer()
+        await q.edit_message_text(
+            "🔥 Выерем формат: дом/улица/город/в поездке. Напишите юджет/настроение.",
+            reply_markup=_mode_kb("fun"),
+        )
+        return
+    if data == "act:fun:shorts":
+        await q.answer()
+        await q.edit_message_text(
+            "🎬 Тема, длительность (15–30 сек), стиль — сделаю сценарий шорта + подсказки для озвучки.",
+            reply_markup=_mode_kb("fun"),
+        )
+        return
+    if data == "act:fun:games":
+        await q.answer()
+        await q.edit_message_text(
+            "🎮 Тематика квиза/игры? Сгенерирую ыструю викторину или мини-игру в чате.",
+            reply_markup=_mode_kb("fun"),
+        )
+        return
+
+    # === Модули (как ыло)
+    if data == "act:open:runway":
+        await q.answer()
+        await q.edit_message_text(
+            "🎬 Модуль Runway: пришлите идею/референс — подготовлю промпт и юджет.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+    if data == "act:open:mj":
+        await q.answer()
+        await q.edit_message_text(
+            "🎨 Модуль Midjourney: опишите картинку — предложу 3 промпта и сетку стилей.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+    if data == "act:open:voice":
+        await q.answer()
+        await q.edit_message_text(
+            "🗣 Голос: /voice_on — озвучка ответов, /voice_off — выключить. "
+            "Можете прислать голосовое — распознаю и отвечу.",
+            reply_markup=modes_root_kb(),
+        )
+        return
+
+    await q.answer()
+
+# Fallback — если пользователь нажмёт «Учёа/Раота/Развлечения» оычной кнопкой/текстом
+async def on_mode_text(update, context):
+    text = (update.effective_message.text or "").strip().lower()
+    mapping = {
+        "учёа": "study", "учеа": "study",
+        "раота": "work",
+        "развлечения": "fun", "развлечение": "fun",
+    }
+    key = mapping.get(text)
+    if key:
+        await _send_mode_menu(update, context, key)
+        
+def main_keyboard(user_id: int | None = None) -> ReplyKeyboardMarkup:
+    """
+    Главная ReplyKeyboard, локализованная под язык пользователя.
+    Если user_id не задан — используем RU.
+    """
+    uid = int(user_id) if user_id is not None else 0
+    # Кнопки режимов (эмодзи оставляем для узнаваемости)
+    # Локализация — через I18N (минимальный наор строк).
+    try:
+        study = t(uid, "btn_study")
+        work  = t(uid, "btn_work")
+        fun   = t(uid, "btn_fun")
+    except Exception:
+        study, work, fun = "🎓 Учёа", "💼 Раота", "🔥 Развлечения"
+
+    try:
+        engines = t(uid, "btn_engines")
+        subhelp = t(uid, "btn_sub")
+        wallet  = t(uid, "btn_wallet")
+    except Exception:
+        engines, subhelp, wallet = "🧠 Движки", " Подписка · Помощь", "🧾 Баланс"
+
+    placeholder = t(uid, "input_placeholder") if "input_placeholder" in (I18N.get(get_lang(uid), {}) or {}) else "Выерите режим или напишите запрос…"
+
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton(study), KeyboardButton(work), KeyboardButton(fun)],
+            [KeyboardButton(engines), KeyboardButton(subhelp), KeyboardButton(wallet)],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        selective=False,
+        input_field_placeholder=placeholder,
     )
 
+# RU-клавиатура по умолчанию (на случай редких мест ез user_id)
+main_kb = main_keyboard(0)
+
+# ───────── /start ─────────
+async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Отрисовка главного меню (после выора языка и в других местах).
+    """
+    uid = update.effective_user.id
+    # Баннер (если задан)
+    welcome_url = kv_get("welcome_url", BANNER_URL)
+    if welcome_url:
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_photo(welcome_url)
+
+    # Короткое приветствие на выранном языке
+    text = _tr(uid, "welcome")
+    with contextlib.suppress(Exception):
+        await update.effective_message.reply_text(
+            text,
+            reply_markup=main_keyboard(uid),
+            disable_web_page_preview=True,
+        )
+
+# ───────── /start ─────────
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Треование: выор языка показываем при каждом новом /start (не только первый раз).
+    Меню показываем после нажатия кнопки языка (или «Продолжить»).
+    """
+    uid = update.effective_user.id
+
+    # Показываем аннер (если задан)
+    welcome_url = kv_get("welcome_url", BANNER_URL)
+    if welcome_url:
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_photo(welcome_url)
+
+    # Показываем выор языка всегда
+    await update.effective_message.reply_text(
+        t(uid, "choose_lang"),
+        reply_markup=_lang_choose_kb(uid),
+    )
+# ───────── Старт / Движки / Помощь ─────────
 
 async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    await update.effective_message.reply_text(_tr(uid, "choose_engine"), reply_markup=engines_kb())
+    await update.effective_message.reply_text(_tr(uid, "choose_engine"), reply_markup=engines_kb(uid))
+
+# ===================== OPS (MENU ROUTER) =====================
+
+def _norm_btn(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip()).lower()
+
+def _get_mode(uid: int) -> str:
+    return (kv_get(f"mode:{uid}") or "study").strip() or "study"
+
+def _set_mode(uid: int, mode: str) -> None:
+    kv_set(f"mode:{uid}", mode)
+
+def _get_engine(uid: int) -> str:
+    return (kv_get(f"engine:{uid}") or "gpt").strip() or "gpt"
+
+def _set_engine(uid: int, engine: str) -> None:
+    kv_set(f"engine:{uid}", engine)
+
+def engines_kb(uid: int) -> ReplyKeyboardMarkup:
+    # Visible labels are stable (engine names), language‑agnostic.
+    rows = [
+        ["💬 GPT (text/photo/docs)", "🖼️ Images (OpenAI)"],
+        ["📼 Kling", "🎬 Luma"],
+        ["🎞️ Runway", "🛰️ Sora (Comet)"],
+        ["🧠 Gemini (Comet)", "🎵 Suno"],
+        ["🎨 Midjourney", "🗣️ STT/TTS"],
+    ]
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+
+# Build a reverse lookup for menu buttons in all supported langs.
+# This avoids hardcoding english/russian strings and fixes the issue where
+# the bot treated menu clicks as free chat.
+
+def _build_ops_aliases() -> dict:
+    aliases = {}
+    keys = {
+        "btn_study": "mode:study",
+        "btn_work": "mode:work",
+        "btn_fun": "mode:fun",
+        "btn_engines": "ops:engines",
+        "btn_sub": "ops:plans",
+        "btn_balance": "ops:balance",
+    }
+    for lang, pack in I18N_PACK.items():
+        if not isinstance(pack, dict):
+            continue
+        for k, action in keys.items():
+            v = pack.get(k)
+            if v:
+                aliases[_norm_btn(v)] = action
+    # legacy / fallback
+    aliases.update({
+        _norm_btn("Study"): "mode:study",
+        _norm_btn("Work"): "mode:work",
+        _norm_btn("Fun"): "mode:fun",
+        _norm_btn("Engines"): "ops:engines",
+        _norm_btn("Balance"): "ops:balance",
+        _norm_btn("Subscription • Help"): "ops:plans",
+    })
+    return aliases
+
+OPS_ALIASES = _build_ops_aliases()
+
+async def cmd_mode_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    _set_mode(uid, "study")
+    await update.effective_message.reply_text(
+        _tr(uid, "mode_set").format(mode="Study") + "\n" + _tr(uid, "mode_study_text"),
+        reply_markup=main_keyboard(uid),
+    )
+
+async def cmd_mode_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    _set_mode(uid, "work")
+    await update.effective_message.reply_text(
+        _tr(uid, "mode_set").format(mode="Work") + "\n" + _tr(uid, "mode_work_text"),
+        reply_markup=main_keyboard(uid),
+    )
+
+async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    _set_mode(uid, "fun")
+    await update.effective_message.reply_text(
+        _tr(uid, "mode_set").format(mode="Fun") + "\n" + _tr(uid, "mode_fun_text"),
+        reply_markup=main_keyboard(uid),
+    )
+
+async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    txt = _tr(uid, "balance_text").format(engine=_get_engine(uid), mode=_get_mode(uid))
+
+    mini_url = (os.environ.get("MINI_APP_URL") or os.environ.get("MINI_VITRINA_URL") or "").strip()
+    kb = None
+    if mini_url:
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(_tr(uid, "open_shop"), url=mini_url)]])
+
+    await update.effective_message.reply_text(txt, reply_markup=kb)
+
+async def cmd_engine_select(update: Update, context: ContextTypes.DEFAULT_TYPE, engine_label: str):
+    uid = update.effective_user.id
+    # Map label to internal engine id
+    label = (engine_label or "").strip()
+    mapping = {
+        "gpt": ["gpt"],
+        "images": ["images"],
+        "kling": ["kling"],
+        "luma": ["luma"],
+        "runway": ["runway"],
+        "sora": ["sora"],
+        "gemini": ["gemini"],
+        "suno": ["suno"],
+        "midjourney": ["midjourney"],
+        "stt": ["stt", "tts", "stt/tts"],
+    }
+    low = label.lower()
+    engine = None
+    if "gpt" in low and "text" in low:
+        engine = "gpt"
+    elif "images" in low or "openai" in low and "image" in low:
+        engine = "images"
+    elif "kling" in low:
+        engine = "kling"
+    elif "luma" in low:
+        engine = "luma"
+    elif "runway" in low:
+        engine = "runway"
+    elif "sora" in low:
+        engine = "sora"
+    elif "gemini" in low:
+        engine = "gemini"
+    elif "suno" in low:
+        engine = "suno"
+    elif "midjourney" in low:
+        engine = "midjourney"
+    elif "stt" in low or "tts" in low:
+        engine = "stt"
+
+    if not engine:
+        await update.effective_message.reply_text(_tr(uid, "choose_engine"), reply_markup=engines_kb(uid))
+        return
+
+    _set_engine(uid, engine)
+    await update.effective_message.reply_text(
+        _tr(uid, "engine_set").format(engine=engine),
+        reply_markup=main_keyboard(uid),
+    )
+
+async def try_handle_ops(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
+    uid = update.effective_user.id
+    n = _norm_btn(text)
+
+    # Engine selection (engine keyboard)
+    if any(k in n for k in ["gpt", "images", "kling", "luma", "runway", "sora", "gemini", "suno", "midjourney", "stt", "tts"]):
+        # only treat it as engine select if engines keyboard is likely used
+        # (heuristic: contains an engine name and user previously opened engines menu)
+        if any(x in n for x in ["gpt", "images", "kling", "luma", "runway", "sora", "gemini", "suno", "midjourney", "stt", "tts"]):
+            if n.startswith("💬") or n.startswith("🖼️") or n.startswith("📼") or n.startswith("🎬") or n.startswith("🎞") or n.startswith("🛰") or n.startswith("🧠") or n.startswith("🎵") or n.startswith("🎨") or n.startswith("🗣") or "(comet" in n or "openai" in n:
+                await cmd_engine_select(update, context, text)
+                return True
+
+    action = OPS_ALIASES.get(n)
+    if not action:
+        return False
+
+    if action == "mode:study":
+        await cmd_mode_study(update, context)
+        return True
+    if action == "mode:work":
+        await cmd_mode_work(update, context)
+        return True
+    if action == "mode:fun":
+        await cmd_mode_fun(update, context)
+        return True
+    if action == "ops:engines":
+        await cmd_engines(update, context)
+        return True
+    if action == "ops:plans":
+        await cmd_subs_help(update, context)
+        return True
+    if action == "ops:balance":
+        await cmd_balance(update, context)
+        return True
+
+    return False
+
 
 async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Открыть тарифы (WebApp)", web_app=WebAppInfo(url=TARIFF_URL))],
-        [InlineKeyboardButton("Оформить PRO на месяц (ЮKassa)", callback_data="buyinv:pro:1")],
-    ])
-    await update.effective_message.reply_text(" Тарифы и помощь.\n\n" + HELP_TEXT, reply_markup=kb, disable_web_page_preview=True)
+    uid = update.effective_user.id
+    title = _tr(uid, "plans_title")
+    txt = _tr(uid, "plans_text")
+
+    mini_url = (os.environ.get("MINI_APP_URL") or os.environ.get("MINI_VITRINA_URL") or "").strip()
+    kb = None
+    if mini_url:
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(_tr(uid, "open_shop"), url=mini_url)]])
+
+    await update.effective_message.reply_text(f"{title}\n\n{txt}", reply_markup=kb)
+
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
@@ -2125,20 +2609,52 @@ async def cmd_show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ───────── Баланс / пополнение ─────────
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    lang = get_user_lang(user_id)
     w = _wallet_get(user_id)
     total = _wallet_total_get(user_id)
     row = _usage_row(user_id)
     lim = _limits_for(user_id)
+    if lang == "ru":
+        title = "🧾 Кошелёк"
+        total_line = f"• Единый баланс: ${total:.2f}"
+        note = "  (расходуется на перерасход по Luma/Runway/Images)"
+        details = "Детализация сегодня / лимиты тарифа:"
+        topup_btn = "➕ Пополнить баланс"
+    elif lang == "de":
+        title = "🧾 Guthaben"
+        total_line = f"• Gesamtguthaben: ${total:.2f}"
+        note = "  (wird für Überverbrauch bei Luma/Runway/Images genutzt)"
+        details = "Heute / Tariflimits:"
+        topup_btn = "➕ Guthaben aufladen"
+    elif lang == "fr":
+        title = "🧾 Solde"
+        total_line = f"• Solde global: ${total:.2f}"
+        note = "  (utilisé pour le dépassement Luma/Runway/Images)"
+        details = "Aujourd’hui / limites du forfait :"
+        topup_btn = "➕ Recharger le solde"
+    elif lang == "th":
+        title = "🧾 ยอดคงเหลือ"
+        total_line = f"• ยอดรวม: ${total:.2f}"
+        note = "  (ใช้สำหรับการเกินโควตา Luma/Runway/Images)"
+        details = "วันนี้ / ขีดจำกัดแพ็กเกจ:"
+        topup_btn = "➕ เติมยอด"
+    else:
+        title = "🧾 Balance"
+        total_line = f"• Unified balance: ${total:.2f}"
+        note = "  (used for overages on Luma/Runway/Images)"
+        details = "Today / plan limits:"
+        topup_btn = "➕ Top up"
+
     msg = (
-        "🧾 Кошелёк:\n"
-        f"• Единый аланс: ${total:.2f}\n"
-        "  (расходуется на перерасход по Luma/Runway/Images)\n\n"
-        "Детализация сегодня / лимиты тарифа:\n"
+        f"{title}:\n"
+        f"{total_line}\n"
+        f"{note}\n\n"
+        f"{details}\n"
         f"• Luma: ${row['luma_usd']:.2f} / ${lim['luma_budget_usd']:.2f}\n"
         f"• Runway: ${row['runway_usd']:.2f} / ${lim['runway_budget_usd']:.2f}\n"
         f"• Images: ${row['img_usd']:.2f} / ${lim['img_budget_usd']:.2f}\n"
     )
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Пополнить аланс", callback_data="topup")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(topup_btn, callback_data="topup")]])
     await update.effective_message.reply_text(msg, reply_markup=kb)
 
 # ───────── Подписка / тарифы — UI и оплаты (PATCH) ─────────
@@ -3710,23 +4226,31 @@ async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Оёртка для передачи произвольного текста (напр. из STT) ─────────
 async def on_text_with_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    text: str,
+    update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
 ):
-    """
-    Оёртка для передачи текста (например, после STT) в on_text,
-    ез попыток изменить update.message (read-only!).
-    """
-    text = (text or "").strip()
-    if not text:
-        await update.effective_message.reply_text("Не удалось распознать текст.")
+    uid = update.effective_user.id
+
+    # 1) Capability question shortcut
+    if _looks_like_capability_question((text or "").lower()):
+        await cmd_capabilities(update, context)
         return
 
-    await on_text(update, context, manual_text=text)
+    # 2) Ops/menu router (modes, engines, balance, subscription)
+    try:
+        if await try_handle_ops(update, context, text or ""):
+            return
+    except Exception:
+        # Never break the chat due to a menu issue; fall back to main flow.
+        log.exception("OPS router error")
+
+    # 3) Continue with the normal intent detection / LLM routing
+    try:
+        await route_user_text(update, context, text)
+    except Exception:
+        log.exception("route_user_text failed")
+        await update.effective_message.reply_text(_tr(uid, "oops"))
 
 
-# ───────── Текстовый вход ─────────
 async def on_text(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -3738,6 +4262,41 @@ async def on_text(
         text = manual_text.strip()
     else:
         text = (update.message.text or "").strip()
+
+    # --- Router for ReplyKeyboard buttons ---
+    # Иногда emoji/вариационные селекторы ломают Regex-фильтры на кнопках.
+    # Поэтому дублируем маршрутизацию здесь, до ухода в «свободный чат».
+    try:
+        import re as _re
+
+        def _btn_norm(s: str) -> str:
+            # только буквы, без emoji/пунктуации
+            return "".join(_re.findall(r"[A-Za-zА-Яа-яЁё]+", s)).lower()
+
+        n = _btn_norm(text)
+        user_id = update.effective_user.id
+
+        if n in ("engines", "движки"):
+            await cmd_engines(update, context)
+            return
+        if n in ("balance", "баланс"):
+            await cmd_balance(update, context)
+            return
+        if n in ("plans", "подписка", "subscriptionhelp", "subscription", "help"):
+            await cmd_plans(update, context)
+            return
+        if n in ("study", "учеба", "учёба"):
+            await cmd_mode_study(update, context)
+            return
+        if n in ("work", "работа"):
+            await cmd_mode_work(update, context)
+            return
+        if n in ("fun", "развлечения"):
+            await cmd_mode_fun(update, context)
+            return
+    except Exception:
+        # Никогда не падаем из-за роутера
+        pass
 
     # Вопросы о возможностях
     cap = capability_answer(text)
@@ -3920,11 +4479,11 @@ async def on_text(
     else:
         text_for_llm = text
 
-    if mode == "Учёа" and track:
+    if mode == "Учёба" and track:
         await study_process_text(update, context, text)
         return
 
-    reply = await ask_openai_text(text_for_llm)
+    reply = await ask_openai_text(text_for_llm, lang=get_user_lang(user_id))
     await update.effective_message.reply_text(reply)
     await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
     
@@ -5821,13 +6380,17 @@ def build_application() -> "Application":
         app.add_handler(MessageHandler(filters.ANIMATION, gif_fn), group=1)
 
     # ───────────────── TEXT BUTTONS ─────────────────
+    # Telegram often sends emojis with variation selectors (U+FE0F) and other
+    # invisible chars. These patterns are intentionally permissive.
     import re
-    BTN_ENGINES = re.compile(r"^\\s*(?:🧠\\s*)?(?:Движки|Engines)\\s*$")
-    BTN_BALANCE = re.compile(r"^\\s*(?:💳|🧾)?\\s*(?:Баланс|Balance)\\s*$")
-    BTN_PLANS = re.compile(r"^\\s*(?:Подписка(?:\\s*[·•]\\s*Помощь)?|Plans)\\s*$")
-    BTN_STUDY = re.compile(r"^\\s*(?:🎓\\s*)?(?:Уч[её]ба|Study)\\s*$")
-    BTN_WORK = re.compile(r"^\\s*(?:💼\\s*)?(?:Работа|Work)\\s*$")
-    BTN_FUN = re.compile(r"^\\s*(?:🔥\\s*)?(?:Развлечения|Fun)\\s*$")
+    _EMO = r"(?:[\u200d\ufe0f\s]|[\U0001F000-\U0001FAFF])*"  # joiners/VS/emoji-ish
+    BTN_ENGINES = re.compile(rf"^\\s*{_EMO}(?:Движки|Engines)\\s*$", re.I)
+    BTN_BALANCE = re.compile(rf"^\\s*{_EMO}(?:Баланс|Balance)\\s*$", re.I)
+    # In UI this is often "Subscription • Help" (not "Plans").
+    BTN_PLANS = re.compile(rf"^\\s*{_EMO}(?:Подписка(?:\\s*[·•]\\s*Помощь)?|Subscription(?:\\s*[·•]\\s*Help)?|Plans)\\s*$", re.I)
+    BTN_STUDY = re.compile(rf"^\\s*{_EMO}(?:Уч[её]ба|Study)\\s*$", re.I)
+    BTN_WORK = re.compile(rf"^\\s*{_EMO}(?:Работа|Work)\\s*$", re.I)
+    BTN_FUN = re.compile(rf"^\\s*{_EMO}(?:Развлечения|Fun)\\s*$", re.I)
     app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
