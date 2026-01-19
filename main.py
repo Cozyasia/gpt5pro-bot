@@ -1,3 +1,54 @@
+
+
+# ===================== COMET API HELPERS =====================
+
+async def comet_post_json(path: str, payload: dict, timeout: float = 60.0) -> dict:
+    if not COMET_KEY:
+        raise RuntimeError('COMET_API_KEY/COMETAPI_KEY is not set')
+    url = f"{COMET_API_BASE}{path}"
+    headers = {"Authorization": COMET_KEY, "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r = await client.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        return r.json()
+
+async def comet_post_multipart(path: str, data: dict, files: dict | None = None, timeout: float = 300.0) -> dict:
+    if not COMET_KEY:
+        raise RuntimeError('COMET_API_KEY/COMETAPI_KEY is not set')
+    url = f"{COMET_API_BASE}{path}"
+    headers = {"Authorization": f"Bearer {COMET_KEY}"}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r = await client.post(url, headers=headers, data=data, files=files)
+        r.raise_for_status()
+        return r.json()
+
+async def sora2_create_video(prompt: str, seconds: str = '10', size: str = '720x1280', model: str = 'sora-2-all') -> dict:
+    # CometAPI Sora-2 self-developed endpoint uses multipart/form-data
+    form = {
+        'prompt': prompt,
+        'model': model,
+        'seconds': seconds,
+        'size': size,
+    }
+    return await comet_post_multipart('/v1/videos', form, files=None, timeout=300.0)
+
+async def mj_submit_imagine(prompt: str, notify_hook: str = '') -> dict:
+    payload = {
+        'base64Array': [],
+        'notifyHook': notify_hook or '',
+        'prompt': prompt,
+        'state': '',
+    }
+    return await comet_post_json('/mj/submit/imagine', payload, timeout=60.0)
+
+async def suno_submit_music(prompt: str, notify_hook: str = '') -> dict:
+    # Based on CometAPI blog: POST /suno/submit/music
+    payload = {
+        'prompt': prompt,
+        'notifyHook': notify_hook or '',
+        'mv': 'chirp-bluejay',
+    }
+    return await comet_post_json('/suno/submit/music', payload, timeout=60.0)
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -86,7 +137,9 @@ TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
 
 # Общий ключ CometAPI (используется и для Kling, и для Runway)
 COMETAPI_KEY     = os.environ.get("COMETAPI_KEY", "").strip()
-
+COMET_API_KEY = os.environ.get("COMET_API_KEY", "").strip()
+# Backward/forward compatible: prefer COMET_API_KEY if set, else COMETAPI_KEY
+COMET_KEY = COMET_API_KEY or COMETAPI_KEY
 # ВАЖНО: провайдер текста (openai / openrouter и т.п.)
 TEXT_PROVIDER    = os.environ.get("TEXT_PROVIDER", "").strip()
 
@@ -865,14 +918,6 @@ def _limits_for(user_id: int) -> dict:
     d = LIMITS.get(tier, LIMITS["free"]).copy()
     d["tier"] = tier
     return d
-
-    ENGINE_BUDGET_GROUP = {
-    "luma":   "luma",
-    "kling":  "luma",    # <– Kling сидит на том же бюджете
-    "runway": "runway",
-    "img":    "img",
-}
-
 def check_text_and_inc(user_id: int, username: str | None = None) -> tuple[bool, int, str]:
     if is_unlimited(user_id, username):
         _usage_update(user_id, text_count=1)
