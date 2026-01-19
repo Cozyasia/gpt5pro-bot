@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: gpt5pro-bot
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: COMET_API_KEY
+        sync: false
+      - key: WEBHOOK_BASE
+        sync: false
+      - key: DB_PATH
+        value: /data/bot.db
+    disk:
+      name: data
+      mountPath: /data
