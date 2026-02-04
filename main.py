@@ -2657,7 +2657,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _cached = _get_cached_photo(update.effective_user.id)
             if not _cached:
                 await q.edit_message_text("Сначала пришлите фото, затем выберите действие.", reply_markup=photo_quick_actions_kb(update.effective_user.id))
-                    return
+                return
             img = _cached[0]
             if data == "pedit:removebg":
                 await _pedit_removebg(update, context, img); return
