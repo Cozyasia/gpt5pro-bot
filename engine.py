@@ -110,8 +110,7 @@ class CometClient:
             except Exception:
                 raise CometError(f"Comet submit returned non-JSON: {txt}")
 
-    async def _get_json(self, url_or_path: str) -> Dict[str, Any]:
-        url = _join(self.base_url, url_or_path)
+    async def _get(self, url: str) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.get(url, headers=self._headers())
             txt = (r.text or "")[:2000]
@@ -122,153 +121,97 @@ class CometClient:
             except Exception:
                 raise CometError(f"Comet status returned non-JSON: {txt}")
 
-    async def _download(self, url: str) -> bytes:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            r = await client.get(url, follow_redirects=True)
-            if r.status_code >= 400:
-                raise CometError(f"Failed to download result (HTTP {r.status_code})")
-            return r.content
+    def _status_url(self, task_id: str) -> str:
+        path = self.status_tmpl.format(id=task_id)
+        return _join(self.base_url, path)
 
-    def _parse_task(self, data: Dict[str, Any]) -> TaskInfo:
-        # Common shapes:
-        # { "id": "...", "status_url": "..." }
-        # { "task_id": "...", "status_url": "..." }
-        # { "data": { "id": "...", "status_url": "..." } }
-        inner = data.get("data") if isinstance(data.get("data"), dict) else data
-        tid = _first(inner, ["task_id", "id", "uuid"])
-        if not tid:
-            raise CometError(f"Comet did not return task id. Response keys: {list(data.keys())[:30]}")
-        status_url = _first(inner, ["status_url", "statusUrl", "poll_url", "pollUrl"])
-        if not status_url:
-            status_url = self.status_tmpl.replace("{id}", str(tid))
-        return TaskInfo(task_id=str(tid), status_url=str(status_url))
+    def _parse_task(self, d: Dict[str, Any]) -> TaskInfo:
+        task_id = d.get("id") or d.get("task_id") or d.get("taskId")
+        if not task_id:
+            raise CometError(f"Comet did not return task id. Keys: {list(d.keys())}")
+        return TaskInfo(task_id=str(task_id), status_url=self._status_url(str(task_id)))
 
-    def _parse_done_url(self, data: Dict[str, Any]) -> Optional[str]:
-        # Dive into "data" if present
-        inner = data.get("data") if isinstance(data.get("data"), dict) else data
-
+    def _extract_result_url(self, d: Dict[str, Any]) -> Optional[str]:
         # direct fields
-        url = _first(inner, self.result_fields)
-        if isinstance(url, str) and url:
-            return url
+        direct = _first(d, self.result_fields)
+        if isinstance(direct, str) and direct.startswith(("http://", "https://")):
+            return direct
 
-        # nested outputs
-        outputs = inner.get("outputs") or inner.get("output") or inner.get("result")
-        if isinstance(outputs, dict):
-            u = _first(outputs, self.result_fields)
-            if isinstance(u, str) and u:
-                return u
-        if isinstance(outputs, list):
-            # try first dict entry
-            for it in outputs:
-                if isinstance(it, dict):
-                    u = _first(it, self.result_fields)
-                    if isinstance(u, str) and u:
-                        return u
-                elif isinstance(it, str) and it.startswith("http"):
-                    return it
-
-        # some providers return "assets": [{"url": "..."}]
-        assets = inner.get("assets")
-        if isinstance(assets, list):
-            for it in assets:
-                if isinstance(it, dict) and isinstance(it.get("url"), str):
-                    return it["url"]
+        # nested common containers
+        for container_key in ("result", "output", "data", "asset", "assets"):
+            obj = d.get(container_key)
+            if isinstance(obj, dict):
+                direct2 = _first(obj, self.result_fields)
+                if isinstance(direct2, str) and direct2.startswith(("http://", "https://")):
+                    return direct2
+            if isinstance(obj, list) and obj:
+                first = obj[0]
+                if isinstance(first, dict):
+                    direct3 = _first(first, self.result_fields)
+                    if isinstance(direct3, str) and direct3.startswith(("http://", "https://")):
+                        return direct3
 
         return None
 
-    async def _poll_until_done(self, status_url: str, max_wait: float = 600.0) -> Dict[str, Any]:
-        start = time.time()
-        delay = 2.0
-        last_json: Dict[str, Any] = {}
-        while True:
-            last_json = await self._get_json(status_url)
+    async def submit_sora2_text_to_video(self, prompt: str, **kwargs) -> TaskInfo:
+        payload = {"prompt": prompt}
+        payload.update(kwargs or {})
+        d = await self._post(self.sora2_endpoint, payload)
+        return self._parse_task(d)
 
-            inner = last_json.get("data") if isinstance(last_json.get("data"), dict) else last_json
-            status = str(_first(inner, ["status", "state"]) or "").lower()
+    async def submit_sora2_image_to_video(self, image_url: str, prompt: str = "", **kwargs) -> TaskInfo:
+        payload = {"image": image_url, "prompt": prompt}
+        payload.update(kwargs or {})
+        d = await self._post(self.sora2_i2v_endpoint, payload)
+        return self._parse_task(d)
 
-            if status in ("succeeded", "success", "completed", "complete", "done", "finished"):
-                return last_json
+    async def submit_kling_text_to_video(self, prompt: str, **kwargs) -> TaskInfo:
+        payload = {"prompt": prompt}
+        payload.update(kwargs or {})
+        d = await self._post(self.kling_t2v_endpoint, payload)
+        return self._parse_task(d)
+
+    async def submit_kling_image_to_video(self, image_url: str, prompt: str = "", **kwargs) -> TaskInfo:
+        payload = {"image": image_url, "prompt": prompt}
+        payload.update(kwargs or {})
+        d = await self._post(self.kling_i2v_endpoint, payload)
+        return self._parse_task(d)
+
+    async def submit_suno_text_to_music(self, prompt: str, **kwargs) -> TaskInfo:
+        payload = {"prompt": prompt}
+        payload.update(kwargs or {})
+        d = await self._post(self.suno_endpoint, payload)
+        return self._parse_task(d)
+
+    async def submit_midjourney_imagine(self, prompt: str, **kwargs) -> TaskInfo:
+        payload = {"prompt": prompt}
+        payload.update(kwargs or {})
+        d = await self._post(self.mj_endpoint, payload)
+        return self._parse_task(d)
+
+    async def wait_result_url(
+        self,
+        task: TaskInfo,
+        poll_interval: float = 5.0,
+        timeout_s: float = 900.0,
+    ) -> Tuple[str, Dict[str, Any]]:
+        deadline = time.time() + timeout_s
+        last_status = None
+
+        while time.time() < deadline:
+            d = await self._get(task.status_url)
+
+            status = (d.get("status") or d.get("state") or "").lower().strip()
+            if status and status != last_status:
+                last_status = status
+
+            url = self._extract_result_url(d)
+            if url:
+                return url, d
+
             if status in ("failed", "error", "canceled", "cancelled"):
-                # include best effort error text
-                err = _first(inner, ["error", "message", "detail"])
-                raise CometError(f"Task failed: {err or 'unknown error'}")
+                raise CometError(f"Comet task failed: {json.dumps(d, ensure_ascii=False)[:2000]}")
 
-            if time.time() - start > max_wait:
-                raise CometError("Task timeout: too long waiting for result")
+            await asyncio.sleep(poll_interval)
 
-            await asyncio.sleep(delay)
-            delay = min(delay * 1.3, 10.0)
-
-    async def sora2_text_to_video(self, prompt: str) -> Tuple[bytes, str]:
-        payload = {"prompt": prompt}
-        data = await self._post(self.sora2_endpoint, payload)
-        task = self._parse_task(data)
-        done = await self._poll_until_done(task.status_url)
-        url = self._parse_done_url(done)
-        if not url:
-            raise CometError("Sora 2: completed but no result URL in response")
-        content = await self._download(url)
-        return content, "sora2.mp4"
-
-
-    async def sora2_image_to_video(self, prompt: str, image_b64: str, mime: str = "image/jpeg") -> Tuple[bytes, str]:
-        """Image → Video (if your Comet account exposes an i2v endpoint)."""
-        payload = {"prompt": prompt, "image": f"data:{mime};base64,{image_b64}"}
-        data = await self._post(self.sora2_i2v_endpoint, payload)
-        task = self._parse_task(data)
-        done = await self._poll_until_done(task.status_url)
-        url = self._parse_done_url(done)
-        if not url:
-            raise CometError("Sora 2 (i2v): completed but no result URL in response")
-        content = await self._download(url)
-        return content, "sora2_i2v.mp4"
-
-    async def kling_text_to_video(self, prompt: str) -> Tuple[bytes, str]:
-        """Text → Video via Comet (Kling), if configured."""
-        payload = {"prompt": prompt}
-        data = await self._post(self.kling_t2v_endpoint, payload)
-        task = self._parse_task(data)
-        done = await self._poll_until_done(task.status_url)
-        url = self._parse_done_url(done)
-        if not url:
-            raise CometError("Kling: completed but no result URL in response")
-        content = await self._download(url)
-        return content, "kling.mp4"
-
-    async def kling_image_to_video(self, prompt: str, image_b64: str, mime: str = "image/jpeg") -> Tuple[bytes, str]:
-        """Image → Video via Comet (Kling), if configured."""
-        payload = {"prompt": prompt, "image": f"data:{mime};base64,{image_b64}"}
-        data = await self._post(self.kling_i2v_endpoint, payload)
-        task = self._parse_task(data)
-        done = await self._poll_until_done(task.status_url)
-        url = self._parse_done_url(done)
-        if not url:
-            raise CometError("Kling (i2v): completed but no result URL in response")
-        content = await self._download(url)
-        return content, "kling_i2v.mp4"
-
-
-
-    async def suno_text_to_music(self, prompt: str):
-        payload = {"prompt": prompt}
-        data = await self._post(self.suno_endpoint, payload)
-        task = self._parse_task(data)
-        done = await self._poll_until_done(task.status_url)
-        url = self._parse_done_url(done)
-        if not url:
-            raise CometError("Suno: completed but no result URL in response")
-        content = await self._download(url)
-        return content, "suno.mp3"
-
-    async def midjourney_imagine(self, prompt: str):
-        payload = {"prompt": prompt}
-        data = await self._post(self.mj_endpoint, payload)
-        task = self._parse_task(data)
-        done = await self._poll_until_done(task.status_url)
-        url = self._parse_done_url(done)
-        if not url:
-            raise CometError("Midjourney: completed but no result URL in response")
-        content = await self._download(url)
-        return content, "midjourney.jpg"
-
+        raise CometError("Timeout while waiting Comet result")
