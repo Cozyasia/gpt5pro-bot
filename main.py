@@ -46,7 +46,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("gpt-bot")
 
-PATCH_VERSION = "revive-fix-v4-2026-05-13"
+PATCH_VERSION = "revive-fix-v4-2026-05-16"
 
 # ───────── ENV ─────────
 
@@ -4185,9 +4185,16 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(BTN_FUN),     on_btn_fun),     group=0)
 
     # Жёсткий перехват «можешь оживить фото?» — до любого GPT-ответа
-    PHOTO_REVIVE_QA_RE = re.compile(r"(?is)(мож(ешь|ете|но)|уме(ешь|ете)|может\s+ли|способен|поддерживаешь|получится|делаешь).{0,160}(ожив|анимир|revive|animate).{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)|(?is)(ожив|анимир|revive|animate).{0,160}(фото|фотограф|картинк|изображен|photo|image|picture).{0,80}\?")
-    app.add_handler(MessageHandler(filters.Regex(PHOTO_REVIVE_QA_RE), on_photo_revival_capability), group=0)
-
+    PHOTO_REVIVE_QA_RE = re.compile(
+        r"(мож(ешь|ете|но)|уме(ешь|ете)|может\s+ли|способен|поддерживаешь|получится|делаешь)"
+        r".{0,160}(ожив|анимир|revive|animate)"
+        r".{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)"
+        r"|"
+        r"(ожив|анимир|revive|animate)"
+        r".{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)"
+        r".{0,80}\?",
+        re.I | re.S,
+    )
     # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
 
