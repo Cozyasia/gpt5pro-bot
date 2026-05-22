@@ -3119,13 +3119,23 @@ def _guess_aspect_from_image(img_bytes: bytes, fallback: str = "9:16") -> str:
         return fallback
 
 def _image_refs_for_i2v(update: Update, img_bytes: bytes) -> tuple[str, str]:
-    data_url = f"data:{sniff_image_mime(img_bytes)};base64,{base64.b64encode(img_bytes).decode('ascii')}"
-    url = ""
+    """
+    Возвращаем сначала data_url, потом Telegram URL.
+    Для Comet / Runway / Kling безопаснее первым пробовать base64 data-url,
+    потому что внешние API часто не могут корректно забрать Telegram file_path.
+    """
+    data_url = (
+        f"data:{sniff_image_mime(img_bytes)};base64,"
+        f"{base64.b64encode(img_bytes).decode('ascii')}"
+    )
+
+    tg_url = ""
     try:
-        url = _get_cached_photo_url(update.effective_user.id)
+        tg_url = _get_cached_photo_url(update.effective_user.id)
     except Exception:
-        url = ""
-    return url, data_url
+        tg_url = ""
+
+    return data_url, tg_url
 
 async def _start_photo_revival(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, img_bytes: bytes, prompt: str = ""):
     engine = (engine or "runway").lower().strip()
