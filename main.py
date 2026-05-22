@@ -149,12 +149,12 @@ COMET_BASE_URL = os.environ.get("COMET_BASE_URL", "https://api.cometapi.com").st
 RUNWAY_COMET_CREATE_PATH = os.environ.get("RUNWAY_COMET_CREATE_PATH", "/runwayml/v1/image_to_video").strip() or "/runwayml/v1/image_to_video"
 RUNWAY_COMET_STATUS_PATH = os.environ.get("RUNWAY_COMET_STATUS_PATH", "/runwayml/v1/tasks/{id}").strip() or "/runwayml/v1/tasks/{id}"
 SORA_API_KEY   = (os.environ.get("SORA_API_KEY") or COMET_API_KEY).strip()
-SORA_MODEL     = os.environ.get("SORA_MODEL", "sora-2-all").strip()
+SORA_MODEL     = os.environ.get("SORA_MODEL", "sora-2").strip()
 SORA_CREATE_PATH = os.environ.get("SORA_CREATE_PATH", "/v1/videos").strip() or "/v1/videos"
 SORA_STATUS_PATH = os.environ.get("SORA_STATUS_PATH", "/v1/videos/{id}").strip() or "/v1/videos/{id}"
 KLING_API_KEY  = (os.environ.get("KLING_API_KEY") or COMET_API_KEY).strip()
 KLING_MODEL    = os.environ.get("KLING_MODEL", "kling-v1-6").strip()
-KLING_CREATE_PATH = os.environ.get("KLING_CREATE_PATH", "/v1/videos/image2video").strip() or "/v1/videos/image2video"
+KLING_CREATE_PATH = os.environ.get("KLING_CREATE_PATH", "/kling/v1/videos/image2video").strip() or "/kling/v1/videos/image2video"
 KLING_STATUS_PATH = os.environ.get("KLING_STATUS_PATH", "/v1/videos/{id}").strip() or "/v1/videos/{id}"
 
 # Таймауты
