@@ -3283,7 +3283,7 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
         await _create_and_poll_i2v(update, COMET_BASE_URL, SORA_API_KEY, payloads, [SORA_STATUS_PATH, "/v1/tasks/{id}"], "Sora 2 image→video")
         return
     if engine == "kling":
-        d = _duration_for_engine("kling", duration_s)
+        d = str(_duration_for_engine("kling", duration_s))
         payloads = [
             (KLING_CREATE_PATH, {"model": KLING_MODEL, "prompt": prompt, "image": image_ref, "duration": d, "aspect_ratio": aspect}),
             (KLING_CREATE_PATH, {"model": KLING_MODEL, "prompt": prompt, "image_url": image_ref, "duration": d, "aspect_ratio": aspect}),
@@ -4204,6 +4204,10 @@ def build_application() -> "Application":
         r".{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)"
         r".{0,80}\?",
         re.I | re.S,
+    )
+    app.add_handler(
+        MessageHandler(filters.Regex(PHOTO_REVIVE_QA_RE), on_photo_revival_capability),
+        group=0,
     )
     # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
