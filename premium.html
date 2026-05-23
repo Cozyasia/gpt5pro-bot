@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1324" />
+  <title>Neuro-Bot GPT-5 • семь нейросетей</title>
+  <style>
+    :root{
+      --bg:#080d17; --card:#111827; --card2:#141d32; --line:#24314f;
+      --text:#edf4ff; --muted:#aab6ce; --blue:#4f8cff; --blue2:#7aa7ff;
+      --green:#36d399; --yellow:#ffd166; --red:#ff6b6b;
+      --shadow:0 20px 55px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box} html{scroll-behavior:smooth}
+    body{margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:radial-gradient(circle at 20% 0%,#14213d 0,#080d17 36%,#05070c 100%); color:var(--text); line-height:1.55;}
+    a{color:inherit; text-decoration:none}.wrap{max-width:920px;margin:0 auto;padding:18px 16px 42px}.top{position:sticky;top:0;z-index:2;backdrop-filter:blur(14px);background:rgba(8,13,23,.78);border-bottom:1px solid rgba(255,255,255,.08)}
+    .top-inner{max-width:920px;margin:0 auto;padding:13px 16px}.brand{font-weight:900;font-size:18px;letter-spacing:.1px}.sub{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hero{margin-top:22px;padding:28px;border:1px solid var(--line);background:linear-gradient(145deg,rgba(17,24,39,.96),rgba(20,29,50,.94));border-radius:24px;box-shadow:var(--shadow)}
+    h1{font-size:36px;line-height:1.15;margin:0 0 16px;font-weight:950} h2{font-size:27px;margin:0 0 16px} h3{font-size:20px;margin:0 0 10px}.lead{font-size:19px;color:#dfe8fb;margin:0 0 18px}.muted{color:var(--muted)}
+    .chips{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}.chip{border:1px solid var(--line);background:#19233a;border-radius:999px;padding:9px 13px;font-weight:700;color:#e8f0ff}.chip.warn{background:rgba(255,209,102,.12);border-color:rgba(255,209,102,.38);color:#ffe4a3}.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:20px}.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:17px;padding:14px 18px;font-weight:900;border:1px solid #315083;background:#17223a;box-shadow:0 10px 25px rgba(0,0,0,.22)}.btn.primary{background:linear-gradient(180deg,#5d96ff,#3e79ee);border-color:#79a8ff}.btn.support{background:#101827}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.card{border:1px solid var(--line);background:rgba(17,24,39,.92);border-radius:24px;padding:22px;box-shadow:0 14px 35px rgba(0,0,0,.22)}.card.highlight{border-color:rgba(79,140,255,.55)}.card.med{border-color:rgba(54,211,153,.45)}.card.fun{border-color:rgba(255,107,107,.45)} ul{margin:12px 0 0;padding-left:22px}li{margin:8px 0}.section{margin-top:22px}.pill-title{display:inline-block;background:#1b2640;border:1px solid var(--line);border-radius:999px;padding:8px 13px;font-weight:850;margin:0 0 12px}.engines{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.engine{padding:15px;border:1px solid var(--line);border-radius:18px;background:#101827}.engine b{display:block;margin-bottom:5px}.steps{counter-reset:s}.step{position:relative;padding-left:52px;margin:16px 0}.step:before{counter-increment:s;content:counter(s);position:absolute;left:0;top:2px;width:36px;height:36px;border-radius:13px;background:var(--blue);display:grid;place-items:center;font-weight:950}.note{border:1px solid rgba(255,209,102,.35);background:rgba(255,209,102,.09);border-radius:20px;padding:16px;margin-top:16px}.footer{margin-top:26px;color:var(--muted);font-size:13px;text-align:center}
+    @media (max-width:720px){.wrap{padding:14px 12px 34px}.hero{padding:24px 20px;border-radius:22px}h1{font-size:32px}.lead{font-size:18px}.grid,.engines{grid-template-columns:1fr}.btn{width:100%}.cta-row{gap:10px}.top-inner{padding:11px 14px}}
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand">Neuro-Bot GPT-5 • Runway • Sora 2 • Kling • Midjourney • Deepgram</div>
+      <div class="sub">Единый ИИ: тексты, изображения, видео, озвучка, анализ документов, медицина, учёба и работа</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>🤝 Семь нейросетей — один бот</h1>
+      <p class="lead"><b>Neuro-Bot</b> объединяет GPT-5, Images, Runway, Sora 2, Kling, Midjourney и Deepgram/STT/TTS. Всё подключено в одном Telegram-боте: пишешь задачу — бот подбирает режим и движок.</p>
+      <div class="chips">
+        <span class="chip">🎓 Учёба</span><span class="chip">💼 Работа</span><span class="chip">🩺 Медицина</span><span class="chip">🔥 Развлечения</span>
+        <span class="chip">✨ Оживление фото</span><span class="chip">🎬 Видео / Reels / Shorts</span><span class="chip">📄 PDF / таблицы</span><span class="chip">🗣️ Озвучка</span>
+        <span class="chip warn">Luma временно скрыта</span>
+      </div>
+      <div class="cta-row">
+        <a class="btn primary" id="startBtn" href="https://t.me/">🚀 Начать работу</a>
+        <a class="btn support" id="supportBtn" href="https://t.me/gpt5pro_support">💬 Связаться с поддержкой</a>
+      </div>
+    </section>
+
+    <section class="section grid">
+      <article class="card highlight">
+        <h3>🎓 Учёба</h3>
+        <ul><li>Объяснение тем простым языком и с примерами.</li><li>Решение задач пошагово.</li><li>Конспекты из PDF/EPUB/DOCX, шпаргалки, тесты и планы подготовки.</li><li>Аудиолекции: распознавание, выжимка, тайм-коды.</li></ul>
+      </article>
+      <article class="card">
+        <h3>💼 Работа</h3>
+        <ul><li>Письма, КП, договорные черновики, брифы.</li><li>Аналитика документов, таблиц, скриншотов и презентаций.</li><li>ToDo, планы, структуры проектов, чек-листы.</li><li>Идеи для рекламы, сценарии, визуалы и промпты.</li></ul>
+      </article>
+      <article class="card med">
+        <h3>🩺 Медицина</h3>
+        <ul><li>Разбор выписок, анамнеза и врачебных заключений.</li><li>Пояснение МРТ/КТ/снимков и результатов анализов.</li><li>Выделение рисков, непонятных терминов и вопросов врачу.</li></ul>
+        <div class="note">Это справочный разбор, не официальный диагноз и не замена очному врачу или исследованию.</div>
+      </article>
+      <article class="card fun">
+        <h3>🔥 Развлечения и видео</h3>
+        <ul><li>Оживление фото: Runway/Kling для людей, Sora 2 — для изображений без людей.</li><li>Создание Reels/Shorts по тексту или голосу через Sora 2 и Kling.</li><li>Мини-фильмы: сценарий, раскадровка, сцены 5–10 секунд, промпты и монтажная логика.</li><li>Мемы, квизы, идеи для досуга, фото-мастерская.</li></ul>
+      </article>
+    </section>
+
+    <section class="section card">
+      <h2>💼 Под капотом</h2>
+      <div class="engines">
+        <div class="engine"><b>GPT-5</b><span class="muted">тексты, логика, код, документы, анализ изображений</span></div>
+        <div class="engine"><b>Images</b><span class="muted">генерация и правка картинок, фон, стили, иллюстрации</span></div>
+        <div class="engine"><b>Runway</b><span class="muted">оживление фото, особенно портретов и референсов с людьми</span></div>
+        <div class="engine"><b>Sora 2</b><span class="muted">text→video и image→video для фото без людей: предметы, интерьер, пейзажи</span></div>
+        <div class="engine"><b>Kling</b><span class="muted">text→video и photo→video, динамика, Reels/Shorts</span></div>
+        <div class="engine"><b>Midjourney</b><span class="muted">фотореалистичные изображения, стили, концепты и референсы</span></div>
+        <div class="engine"><b>Deepgram / STT/TTS</b><span class="muted">распознавание речи, диктовка, озвучка ответов</span></div>
+      </div>
+    </section>
+
+    <section class="section card">
+      <h2>Как запускать видео и фото</h2>
+      <div class="step"><b>Оживить фото:</b> отправь картинку и выбери Runway, Kling или Sora 2 без людей. Можно добавить подпись: «оживи фото: плавная камера, 5 сек, 9:16».</div>
+      <div class="step"><b>Сделать Reels/Shorts:</b> напиши текстом или голосом тему, длительность, стиль и формат 9:16. Бот предложит Sora 2 или Kling.</div>
+      <div class="step"><b>Создать фильм:</b> дай идею, героев, стиль, длительность. Бот разобьёт фильм на сцены, сделает сценарий, промпты и короткие видео-фрагменты.</div>
+    </section>
+
+    <section class="section card">
+      <span class="pill-title">FAQ</span>
+      <h3>Почему Luma не указана в списке?</h3>
+      <p class="muted">Luma временно скрыта из меню и не используется, пока решается вопрос с оплатой. Когда вернём Luma, достаточно обновить этот блок и включить движок в коде.</p>
+      <h3>Почему Sora 2 «без людей»?</h3>
+      <p class="muted">Для загруженных фото с людьми Sora 2 часто срабатывает на модерации. Поэтому для людей основной вариант — Runway или Kling, а Sora 2 оставлена для объектов, животных, зданий, интерьера и пейзажей.</p>
+    </section>
+
+    <section class="section card">
+      <h2>📜 Пользовательское соглашение</h2>
+      <p class="muted">Бот помогает готовить черновики, объяснения и справочные разборы. Он не заменяет профессионального врача, юриста, финансового консультанта или официальную экспертизу. Пользователь отвечает за проверку результата перед применением.</p>
+    </section>
+    <div class="footer">Neuro-Bot GPT-5 • единый Telegram-бот для текста, документов, изображений, видео и речи.</div>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const bot = (params.get('bot') || 'gpt5pro_bot').replace('@','').trim();
+    if (bot) document.getElementById('startBtn').href = `https://t.me/${bot}?start=webapp`;
+  </script>
+</body>
+</html>
