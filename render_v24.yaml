@@ -1,0 +1,83 @@
+services:
+  - type: web
+    name: gpt5pro-bot
+    env: python
+    plan: starter
+    autoDeploy: true
+
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+
+    startCommand: bash -lc "python -u main.py"
+
+    disk:
+      name: bot-data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TZ
+        value: Asia/Bangkok
+
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
+      - key: USE_WEBHOOK
+        value: "1"
+      - key: WEBHOOK_PATH
+        value: /tg
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: DEEPGRAM_API_KEY
+        sync: false
+
+      - key: COMET_API_KEY
+        sync: false
+      - key: COMET_BASE_URL
+        value: https://api.cometapi.com
+      - key: RUNWAY_USE_COMET
+        value: "1"
+      - key: RUNWAY_MODEL
+        value: gen3a_turbo
+      - key: RUNWAY_RATIO
+        value: 720:1280
+      - key: RUNWAY_DURATION_S
+        value: "8"
+      - key: SORA_MODEL
+        value: sora-2
+      - key: KLING_MODEL
+        value: kling-v1-6
+
+      # Luma временно не показывается и не используется в main_v24
+      - key: LUMA_API_KEY
+        sync: false
+
+      - key: YOOKASSA_PROVIDER_TOKEN
+        sync: false
+      - key: CRYPTO_PAY_API_TOKEN
+        sync: false
+      - key: DB_PATH
+        value: /data/subs.db
+      - key: OWNER_ID
+        sync: false
+      - key: UNLIM_USER_IDS
+        sync: false
+      - key: UNLIM_USERNAMES
+        value: gpt5pro_support
