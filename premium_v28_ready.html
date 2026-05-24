@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Neuro-Bot GPT-5 • семь нейросетей</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root{
+      --bg:#eef3fb;
+      --surface:#ffffff;
+      --surface-soft:#f7f9fc;
+      --card:#121a29;
+      --card2:#17223a;
+      --text:#0f172a;
+      --text-strong:#0b1220;
+      --text-soft:#334155;
+      --hero-text:#f8fbff;
+      --hero-muted:#d9e7ff;
+      --muted:#64748b;
+      --line:#d6e0f0;
+      --line-strong:#26334f;
+      --primary:#2f80ff;
+      --primary2:#1f6df2;
+      --accent:#7ce0ff;
+      --good:#2ea44f;
+      --warn:#f2b84b;
+      --shadow:0 10px 30px rgba(15,23,42,.08);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+    body.tg{background:var(--bg)!important;color:var(--text)!important}
+    .wrap{max-width:900px;margin:0 auto;padding:18px 16px 28px}
+    .top{position:sticky;top:0;z-index:5;margin:-18px -16px 14px;padding:14px 16px;background:linear-gradient(180deg,rgba(11,16,24,.98),rgba(11,16,24,.92));backdrop-filter:blur(10px);border-bottom:1px solid #21304c}
+    .brand{font-weight:800;font-size:16px;color:#f4f8ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sub{color:#d6e1f3;font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hero{border:1px solid #23324d;border-radius:22px;padding:22px;background:radial-gradient(circle at 15% 0,rgba(79,140,255,.28),transparent 32%),linear-gradient(180deg,var(--card2),var(--card));box-shadow:0 18px 50px rgba(0,0,0,.28)}
+    h1,h2,h3{color:var(--text-strong)}
+    h1{font-size:34px;line-height:1.15;margin:0 0 14px;color:var(--hero-text);text-shadow:0 1px 0 rgba(0,0,0,.25)}
+    h2{font-size:28px;margin:30px 0 14px}
+    h3{font-size:20px;margin:0 0 10px}
+    .lead{font-size:18px;color:var(--hero-muted);margin:0 0 16px}
+    .strong{font-weight:800}
+    .chips{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+    .chip{padding:9px 13px;border:1px solid rgba(214,228,255,.18);border-radius:999px;background:rgba(255,255,255,.08);font-weight:700;color:#f1f6ff}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+    @media(max-width:680px){.grid{grid-template-columns:1fr}h1{font-size:30px}.hero{padding:20px}}
+    .card{border:1px solid var(--line);border-radius:20px;padding:18px;background:var(--surface);box-shadow:var(--shadow)}
+    .card p{margin:0 0 10px;color:var(--text-soft)}
+    .list{margin:0;padding-left:22px}
+    .list li{margin:8px 0;color:var(--text-soft)}
+    .engine{display:flex;align-items:flex-start;gap:12px}
+    .engine .icon{font-size:24px;width:32px;text-align:center}
+    .engine b{display:block;margin-bottom:4px;color:var(--text-strong)}
+    .muted{color:var(--muted)}
+    .warn{border-color:rgba(242,184,75,.55);background:#fff8e8}
+    .warn h3,.warn p{color:#5b3d00}
+    .buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+    .btn{appearance:none;border:0;border-radius:16px;padding:14px 18px;background:var(--primary);color:#fff;font-weight:800;font-size:16px;text-decoration:none;display:inline-flex;align-items:center;gap:8px;box-shadow:0 10px 28px rgba(47,128,255,.26)}
+    .btn.secondary{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.18);box-shadow:none;color:var(--hero-text)}
+    .tabs{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0 10px}
+    .tab{padding:11px 15px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:750;color:var(--text-strong)}
+    .footer{margin-top:24px;color:var(--muted);font-size:13px;text-align:center}
+    .small{font-size:13px;color:var(--muted)}
+
+    .quicknav{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 6px}
+    .quicknav a{padding:10px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--text-strong);font-weight:800;text-decoration:none;box-shadow:var(--shadow)}
+    .quicknav a:hover{border-color:#9db7df}
+    .legal-card{border:1px solid #b8c9e6;background:linear-gradient(180deg,#ffffff,#f8fbff)}
+    .legal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .legal-actions a{padding:12px 16px;border-radius:14px;text-decoration:none;font-weight:850;display:inline-flex;align-items:center;gap:8px}
+    .legal-actions .primary-link{background:var(--primary);color:#fff;box-shadow:0 10px 24px rgba(47,128,255,.22)}
+    .legal-actions .secondary-link{background:#eef4ff;color:#0b1220;border:1px solid #cddbf2}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">Neuro-Bot GPT-5 • Runway • Sora 2 • Kling • Midjourney • Deepgram</div>
+    <div class="sub">Единый ИИ: тексты, изображения, видео, озвучка, анализ документов, медицина, учёба и работа</div>
+  </div>
+
+  <section id="description" class="hero">
+    <h1>🤝 Семь нейросетей — один бот</h1>
+    <p class="lead"><span class="strong">Neuro-Bot</span> объединяет GPT-5, Images, Runway, Sora 2, Kling, Midjourney и Deepgram/STT/TTS. Всё в одном Telegram-боте: пишешь задачу — бот подбирает режим и движок.</p>
+    <div class="chips">
+      <span class="chip">🎓 Учёба</span><span class="chip">💼 Работа</span><span class="chip">🩺 Медицина</span><span class="chip">🔥 Развлечения</span><span class="chip">✨ Оживление фото</span><span class="chip">🎬 Видео / Reels / Shorts</span><span class="chip">📄 PDF / таблицы</span><span class="chip">🗣️ Озвучка</span>
+    </div>
+    <div class="buttons">
+      <a id="startBtn" class="btn" href="https://t.me/gpt5pro_bot">🚀 Начать работу</a>
+      <a id="supportBtn" class="btn secondary" href="https://t.me/gpt5pro_support">💬 Связаться с поддержкой</a>
+      <a id="termsBtn" class="btn secondary" href="terms.html">📜 Пользовательское соглашение</a>
+    </div>
+  </section>
+
+  <nav class="quicknav" aria-label="Навигация по мини-приложению">
+    <a href="#description">📘 Описание</a>
+    <a href="#modes">🎓 Режимы</a>
+    <a href="#engines">🧰 Модели</a>
+    <a href="#video-photo">🎬 Видео и фото</a>
+    <a href="#faq">❓ FAQ</a>
+    <a id="termsNav" href="terms.html">📜 Пользовательское соглашение</a>
+  </nav>
+
+  <h2 id="modes">Режимы работы</h2>
+  <div class="grid">
+    <div class="card"><h3>🎓 Учёба</h3><ul class="list"><li>Объяснение тем простым языком и с примерами.</li><li>Решение задач пошагово.</li><li>Конспекты из PDF/EPUB/DOCX, шпаргалки, тесты и планы подготовки.</li><li>Аудиолекции: распознавание, выжимка, тайм-коды.</li></ul></div>
+    <div class="card"><h3>💼 Работа</h3><ul class="list"><li>Письма, КП, договорные черновики, брифы.</li><li>Аналитика документов, таблиц, скриншотов и презентаций.</li><li>ToDo, планы, структуры проектов, чек-листы.</li><li>Идеи для рекламы, сценарии, визуалы и промпты.</li></ul></div>
+    <div class="card"><h3>🩺 Медицина</h3><ul class="list"><li>Справочный разбор выписок, анамнеза и врачебных заключений.</li><li>Пояснение МРТ/КТ/снимков и результатов анализов.</li><li>Выделение рисков, непонятных терминов и вопросов врачу.</li></ul><p class="small">Это не диагноз и не замена очному врачу или исследованию.</p></div>
+    <div class="card"><h3>🔥 Развлечения</h3><ul class="list"><li>Фото-мастерская: фон, дорисовка, outpaint, анализ фото.</li><li>Оживление фото через Runway, Kling или Sora 2 без людей.</li><li>Reels/Shorts, мини-фильмы, сценарии, раскадровка.</li><li>Мемы, квизы, идеи для досуга.</li></ul></div>
+  </div>
+
+  <h2 id="engines">🧰 Под капотом</h2>
+  <div class="grid">
+    <div class="card engine"><div class="icon">🧠</div><div><b>GPT-5</b><p>Тексты, логика, код, документы, анализ изображений.</p></div></div>
+    <div class="card engine"><div class="icon">🖼️</div><div><b>Images</b><p>Генерация и правка картинок, фон, стили, иллюстрации.</p></div></div>
+    <div class="card engine"><div class="icon">🎥</div><div><b>Runway</b><p>Оживление фото, особенно портретов и референсов с людьми.</p></div></div>
+    <div class="card engine"><div class="icon">🎞️</div><div><b>Sora 2</b><p>Text→video и image→video для фото без людей: предметы, интерьер, пейзажи.</p></div></div>
+    <div class="card engine"><div class="icon">🎬</div><div><b>Kling</b><p>Text→video и photo→video, динамика, Reels/Shorts.</p></div></div>
+    <div class="card engine"><div class="icon">🎨</div><div><b>Midjourney</b><p>Фотореалистичные изображения, стили, концепты и референсы.</p></div></div>
+    <div class="card engine"><div class="icon">🗣️</div><div><b>Deepgram / STT/TTS</b><p>Распознавание речи, диктовка, озвучка ответов.</p></div></div>
+    <div class="card warn"><h3>⏸ Luma временно скрыта</h3><p>Пока решается оплата, Luma не показывается в меню и не используется. Когда вернём Luma, достаточно обновить этот блок и включить движок в коде.</p></div>
+  </div>
+
+  <h2 id="video-photo">Как запускать видео и фото</h2>
+  <div class="card">
+    <p><b>✨ Оживить фото:</b> отправь картинку и выбери Runway, Kling или Sora 2 без людей. Можно добавить подпись: «оживи фото: плавная камера, 5 сек, 9:16».</p>
+    <p><b>🎬 Сделать Reels/Shorts:</b> напиши текстом или голосом тему, длительность, стиль и формат 9:16. Бот предложит Sora 2 или Kling.</p>
+    <p><b>🎞️ Создать фильм:</b> дай идею, героев, стиль, длительность. Бот разобьёт фильм на сцены, сделает сценарий, промпты и короткие видео-фрагменты.</p>
+  </div>
+
+  <h2 id="faq">FAQ</h2>
+  <div class="grid">
+    <div class="card"><h3>Почему Sora 2 «без людей»?</h3><p>Для загруженных фото с людьми Sora 2 часто срабатывает на модерации. Для людей основной вариант — Runway или Kling, а Sora 2 оставлена для объектов, животных, зданий, интерьера и пейзажей.</p></div>
+    <div class="card"><h3>Нужны ли отдельные аккаунты?</h3><p>Нет, пользователь работает из Telegram. Ключи и движки настраиваются на стороне бота и Render.</p></div>
+  </div>
+
+
+
+  <h2 id="terms">📜 Пользовательское соглашение</h2>
+  <div class="card legal-card">
+    <h3>Обязательный юридический блок</h3>
+    <p><b>Пользовательское соглашение</b> описывает, кто предоставляет сервис, какие ИИ-услуги доступны в боте, как работают подписка и баланс, какие есть ограничения, правила использования материалов и ответственность сторон.</p>
+    <p>Перед оплатой и использованием платных функций пользователь может открыть соглашение, прочитать условия и перейти к работе только после ознакомления.</p>
+    <div class="legal-actions">
+      <a id="termsInline" class="primary-link" href="terms.html">📜 Открыть пользовательское соглашение</a>
+      <a class="secondary-link" href="#description">⬆️ Вернуться к описанию</a>
+    </div>
+  </div>
+
+  <div class="footer">Neuro-Bot GPT-5 • единый Telegram-бот для текста, документов, изображений, видео и речи.</div>
+</div>
+<script>
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    document.body.classList.add('tg');
+    tg.ready(); tg.expand();
+    const p = tg.themeParams || {};
+    if (p.button_color) document.documentElement.style.setProperty('--primary', p.button_color);
+    if (p.button_text_color) document.documentElement.style.setProperty('--btnText', p.button_text_color);
+  }
+  const qs = new URLSearchParams(location.search);
+  const bot = qs.get('bot') || 'gpt5pro_bot';
+  const support = qs.get('support') || 'gpt5pro_support';
+  const startUrl = `https://t.me/${bot}`;
+  const supportUrl = `https://t.me/${support}`;
+  const startBtn = document.getElementById('startBtn');
+  const supportBtn = document.getElementById('supportBtn');
+  const termsUrl = new URL('terms.html', location.href).toString();
+  const termsBtn = document.getElementById('termsBtn');
+  const termsNav = document.getElementById('termsNav');
+  const termsInline = document.getElementById('termsInline');
+  startBtn.href = startUrl;
+  supportBtn.href = supportUrl;
+  [termsBtn, termsNav, termsInline].forEach(el => { if (el) el.href = termsUrl; });
+  startBtn.addEventListener('click', e => { if (tg?.openTelegramLink) { e.preventDefault(); tg.openTelegramLink(startUrl); } });
+  supportBtn.addEventListener('click', e => { if (tg?.openTelegramLink) { e.preventDefault(); tg.openTelegramLink(supportUrl); } });
+  [termsBtn, termsNav, termsInline].forEach(el => el?.addEventListener('click', e => { if (tg?.openLink) { e.preventDefault(); tg.openLink(termsUrl); } }));
+</script>
+</body>
+</html>
