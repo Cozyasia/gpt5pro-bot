@@ -1,0 +1,342 @@
+# ===================== TELEGRAM =====================
+BOT_TOKEN=
+# Альтернатива, если в Render уже используется другое имя переменной:
+TELEGRAM_BOT_TOKEN=
+BOT_USERNAME=gpt5pro_bot
+PUBLIC_URL=https://gpt5pro-bot.onrender.com
+USE_WEBHOOK=1
+WEBHOOK_PATH=/tg
+TELEGRAM_WEBHOOK_SECRET=
+
+
+# ===================== TELEGRAM PROFILE / BOTFATHER TEXTS =====================
+# 1 = бот сам обновит название, short description и description при запуске.
+AUTO_SET_BOT_PROFILE=1
+BOT_PUBLIC_NAME=Neuro-Bot GPT-5 Pro
+BOT_SHORT_DESCRIPTION=GPT-5, Images, Sora 2, Kling, Runway, Midjourney, Suno, Deepgram, Photoroom и FaceSwap — в одном Telegram-боте.
+BOT_DESCRIPTION=Neuro-Bot GPT-5 Pro — мультимодельный ИИ-бот для учёбы, работы, медицины и контента. Умеет: GPT-чат, PDF/DOCX, фото и скриншоты, анализ МРТ/КТ/анализов, озвучка и распознавание речи, генерация изображений, оживление фото, Reels/Shorts, Sora 2/Kling-видео, Midjourney, Suno-музыка, презентации, PDF-каталоги, логотипы, удаление/замена фона и замена лица. Выберите режим или просто напишите задачу.
+
+# ===================== WEBAPP / MINI APP =====================
+# Укажи фактический URL мини-приложения/статического сайта.
+WEBAPP_URL=https://gpt5pro-webapp.onrender.com/premium.html
+TARIFF_URL=https://gpt5pro-webapp.onrender.com/premium.html
+
+# ===================== OPENAI / TEXT / IMAGES / TTS =====================
+# Для обычного GPT-чата можно использовать OpenRouter или OpenAI.
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=
+TEXT_PROVIDER=
+OPENROUTER_SITE_URL=
+OPENROUTER_APP_NAME=Neuro-Bot GPT-5
+
+# Картинки / TTS
+OPENAI_IMAGE_KEY=
+OPENAI_TTS_KEY=
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_VOICE=alloy
+AVATAR_TTS_DEFAULT_VOICE=nova
+AVATAR_TTS_VOICES=nova,alloy,onyx,shimmer,fable
+
+# ===================== LIVE INTERNET / SEARCH =====================
+# Чтобы бот отвечал на актуальные вопросы: курс BTC, новости, законы, погода, релизы.
+LIVE_SEARCH_ENABLED=1
+LIVE_SEARCH_TIMEOUT_S=18
+
+# Основной внешний поиск. Рекомендуется заполнить, если OPENAI_API_KEY идёт через OpenRouter.
+TAVILY_API_KEY=
+
+# Fallback через OpenAI Responses API + web search.
+# Работает только с официальным OPENAI_API_KEY, не с OpenRouter sk-or-*.
+OPENAI_WEB_SEARCH_MODEL=gpt-4o-mini-search-preview
+
+# Криптовалюты: быстрый публичный API без ключа.
+CRYPTO_RATE_ENABLED=1
+BINANCE_MARKET_BASE=https://api.binance.com
+
+# ===================== STT / VOICE =====================
+DEEPGRAM_API_KEY=
+OPENAI_STT_KEY=
+OPENAI_TRANSCRIBE_MODEL=whisper-1
+
+# ===================== COMET API: RUNWAY / SORA / KLING =====================
+COMET_API_KEY=
+COMET_BASE_URL=https://api.cometapi.com
+
+# ===================== SUNO / MUSIC =====================
+# Если отдельного Suno key нет, можно оставить пустым: код возьмёт COMET_API_KEY.
+# Пути могут отличаться по каналу Comet, поэтому вынесены в ENV.
+SUNO_ENABLED=1
+SUNO_API_KEY=
+SUNO_BASE_URL=https://api.cometapi.com
+SUNO_MODEL=chirp-bluejay
+SUNO_CREATE_PATH=/suno/submit/music
+SUNO_STATUS_PATH=/suno/fetch/{id}
+SUNO_COST_USD=0.20
+SUNO_BILLING_ENGINE=runway
+SUNO_TIMEOUT_S=600
+SUNO_POLL_DELAY_S=5.0
+
+# Runway — только image→video / оживление фото, не text→video.
+RUNWAY_USE_COMET=1
+RUNWAY_MODEL=gen3a_turbo
+RUNWAY_TASK_NOT_EXIST_FALLBACK_S=90
+RUNWAY_AUTO_FALLBACK_KLING=1
+RUNWAY_RATIO=720:1280
+RUNWAY_DURATION_S=8
+RUNWAY_COMET_CREATE_PATH=/runwayml/v1/image_to_video
+RUNWAY_COMET_STATUS_PATH=/runwayml/v1/tasks/{id}
+
+# Sora 2
+SORA_ENABLED=1
+SORA_MODEL=sora-2
+SORA_CREATE_PATH=/v1/videos
+SORA_STATUS_PATH=/v1/videos/{id}
+SORA_UNIT_COST_USD=0.15
+SORA_PRO_UNIT_COST_USD=0.30
+
+# Kling
+KLING_ENABLED=1
+KLING_MODEL=kling-v1-6
+KLING_CREATE_PATH=/kling/v1/videos/image2video
+KLING_STATUS_PATH=/kling/v1/videos/image2video/{id}
+KLING_TEXT_CREATE_PATH=/kling/v1/videos/text2video
+KLING_TEXT_STATUS_PATH=/kling/v1/videos/text2video/{id}
+KLING_UNIT_COST_USD=0.80
+
+
+# ===================== KLING AVATAR / PHOTO→VIDEOCLIP =====================
+# Говорящий аватар: фото человека + текст/voice/audio → lip-sync video через Kling Avatar.
+KLING_AVATAR_CREATE_PATH=/kling/v1/videos/avatar/image2video
+KLING_AVATAR_STATUS_PATH=/kling/v1/videos/avatar/image2video/{id}
+KLING_AVATAR_MODE=std
+KLING_AVATAR_PROMPT=The person talks naturally to camera, realistic facial motion, accurate lip sync, subtle head movement, stable identity.
+AVATAR_UNIT_COST_USD=0.65
+
+# TTS для русского текста аватара. По умолчанию OpenAI TTS → MP3 → Kling Avatar.
+AVATAR_TTS_PROVIDER=openai
+OPENAI_TTS_BASE_URL=https://api.openai.com/v1
+TTS_MAX_CHARS=1000
+
+# Fallback Kling TTS, если OpenAI TTS не доступен. В документации Kling TTS обычно en/zh.
+KLING_TTS_CREATE_PATH=/kling/v1/audio/tts
+KLING_TTS_STATUS_PATH=/kling/v1/audio/tts/{id}
+KLING_TTS_VOICE_ID=genshin_vindi2
+KLING_TTS_LANGUAGE=en
+KLING_TTS_SPEED=1.0
+
+# Фото человека → видеоклип. По умолчанию вертикальный Kling image→video с generated sound:on.
+PHOTO_CLIP_SOUND=0
+PHOTO_CLIP_MODE=pro
+PHOTO_CLIP_UNIT_COST_USD=0.80
+
+# Опционально: отдельная генерация Suno-аудио к фото-клипу.
+# В этой сборке аудио отправляется отдельным файлом рядом с видео, без mux в один MP4.
+SUNO_AUTO_FOR_PHOTO_CLIP=1
+SUNO_UNIT_COST_USD=0.15
+
+
+# ===================== AI SELFIE / NANO BANANA STYLE =====================
+# Пользовательское селфи + текстовая сцена/звезда/персонаж → новая AI-фотография.
+# Основной путь: Google Gemini Interactions API / Nano Banana Pro.
+# AI selfie via Comet image edit (Nano Banana / Gemini image channel through Comet)
+AI_SELFIE_PROVIDER=comet
+COMET_IMAGE_EDIT_MODEL=gemini-2.5-flash-image
+COMET_IMAGE_EDIT_FALLBACK_MODELS=gemini-2.5-flash-image,gemini-2.5-flash-image-preview,gemini-3.1-flash-image,gemini-3-pro-image,gemini-2-5-flash-image
+COMET_IMAGE_EDIT_PATH=/v1beta/models/{model}:generateContent
+COMET_IMAGE_EDIT_STATUS_PATH=
+COMET_IMAGE_EDIT_TIMEOUT_S=600
+COMET_IMAGE_EDIT_OPENAI_FALLBACK=0
+AI_SELFIE_UNIT_COST_USD=0.20
+AI_SELFIE_DEFAULT_ASPECT=4:5
+AI_SELFIE_IMAGE_SIZE=1K
+AI_SELFIE_MAX_SIDE=1024
+AI_SELFIE_SEND_AS_DOCUMENT=1
+AI_SELFIE_ALLOW_PUBLIC_FIGURES=1
+AI_SELFIE_FAST_MODE=1
+AI_SELFIE_RETRY_ON_TIMEOUT=1
+
+# ===================== BACKGROUND REMOVE / REPLACE =====================
+# Production provider: Photoroom Remove Background API
+BG_PROVIDER=photoroom-api-only
+BG_DISABLE_LOCAL_REMBG=1
+LOCAL_REMBG_ENABLED=0
+BG_FORCE_LOCAL_REMBG=0
+BG_LOCAL_FIRST=0
+LOCAL_REMBG_SUBPROCESS=0
+BG_ACTION_TIMEOUT_S=90
+
+# Photoroom API key — вставить в Render Environment, не в код.
+PHOTOROOM_API_KEY=
+PHOTOROOM_BASE_URL=https://sdk.photoroom.com
+PHOTOROOM_REMOVE_PATH=/v1/segment
+# AI замена фона по тексту / селфи-режим
+PHOTOROOM_EDIT_ENABLED=1
+PHOTOROOM_EDIT_BASE_URL=https://image-api.photoroom.com
+PHOTOROOM_EDIT_PATH=/v2/edit
+PHOTOROOM_EDIT_TIMEOUT_S=95
+PHOTOROOM_EDIT_EXPAND_PROMPT_MODE=ai.never
+PHOTOROOM_EDIT_NEGATIVE_PROMPT=phone, smartphone, phone edge, mirror, selfie stick, frame, window frame, black bar, vertical bar, pole, reflection, extra object, extra person, duplicate person, extra hands, text, watermark, logo, illustration, cartoon, painting, anime, CGI, 3d render, surreal background, distorted face, distorted horizon
+PHOTOROOM_FORMAT=png
+PHOTOROOM_CHANNELS=rgba
+PHOTOROOM_SIZE=hd
+PHOTOROOM_CROP=false
+PHOTOROOM_DESPILL=false
+PHOTOROOM_TIMEOUT_S=70
+
+# Optional legacy remove.bg fallback. Не нужен, если используем только Photoroom.
+REMOVE_BG_API_KEY=
+REMOVE_BG_SIZE=auto
+REMOVE_BG_FORMAT=png
+REMOVE_BG_TIMEOUT_S=60
+
+# Optional fallbacks, currently disabled unless BG_PROVIDER=multi/auto.
+BG_COMET_MODEL=bria/remove-background
+BG_COMET_REMOVE_PATH=/v1/images/edits
+BG_REMOVE_TIMEOUT_S=90
+BRIA_API_KEY=
+BRIA_BASE_URL=https://engine.prod.bria-api.com
+BRIA_REMOVE_PATH=/v1/background/remove
+BRIA_ALLOW_LOCAL_FALLBACK=0
+
+# Local rembg disabled on Render Starter: CPU timeout/large model problems.
+REMBG_MODEL=u2netp
+REMBG_MODEL_FALLBACKS=u2netp
+REMBG_MAX_SIDE=1600
+U2NET_HOME=/tmp/.u2net
+XDG_CACHE_HOME=/tmp/.cache
+LOCAL_REMBG_TIMEOUT_S=180
+OMP_NUM_THREADS=1
+
+# Luma временно скрыта/не используется. Когда вернёшь оплату — можно включить в код и заполнить ключ.
+LUMA_API_KEY=
+
+
+# ===================== FACE SWAP / ЗАМЕНА ЛИЦА =====================
+# v34.1: выбор целевого лица на фото + выбор лица-источника, если лиц несколько.
+# Быстрый режим: PiAPI. Премиум: Segmind v4. Для точного выбора лица в группе используется Segmind v2.
+FACESWAP_ENABLED=1
+FACESWAP_PROVIDER=piapi
+FACESWAP_FAST_PROVIDER=piapi
+FACESWAP_PREMIUM_PROVIDER=segmind-v4
+FACESWAP_FALLBACK_PROVIDER=segmind-v2
+FACESWAP_FAST_COST_USD=0.03
+FACESWAP_PREMIUM_COST_USD=0.12
+FACESWAP_TIMEOUT_S=300
+FACESWAP_POLL_DELAY_S=2.5
+FACESWAP_INPUT_MAX_SIDE=1600
+FACESWAP_OUTPUT_MAX_SIDE=1600
+FACESWAP_RESULT_AS_DOCUMENT=0
+# Если провайдер не принимает чистый base64, поставь 1 — будет data:image/jpeg;base64,...
+FACESWAP_IMAGE_DATA_URL=0
+
+# Выбор лица на фото. При 2+ лицах бот покажет превью с номерами и кнопки.
+FACESWAP_ASK_TARGET_FACE=1
+FACESWAP_ASK_SOURCE_FACE=1
+FACESWAP_STRICT_SELECTED_FACE=1
+# Если детектор не нашёл лица, бот не берёт индекс 0 молча, а показывает ручной выбор: слева/центр/справа/авто.
+FACESWAP_MANUAL_CHOICE_IF_DETECTION_FAIL=1
+FACESWAP_FACE_DETECTION_ENABLED=1
+FACESWAP_DETECTION_MAX_SIDE=1200
+FACESWAP_PREVIEW_MAX_SIDE=1200
+
+# PiAPI FaceSwap — быстрый/дешёвый режим и fallback для одиночного лица
+PIAPI_API_KEY=
+PIAPI_BASE_URL=https://api.piapi.ai
+PIAPI_FACE_CREATE_PATH=/api/v1/task
+PIAPI_FACE_STATUS_PATH=/api/v1/task/{task_id}
+PIAPI_FACE_MODEL=Qubico/image-toolkit
+PIAPI_FACE_TASK_TYPE=face-swap
+
+# Segmind FaceSwap — нужен для Премиум и для точного выбора лица из нескольких людей.
+# Где взять ключ: https://www.segmind.com/ → Dashboard/API Keys
+SEGMIND_API_KEY=
+SEGMIND_BASE_URL=https://api.segmind.com
+SEGMIND_FACESWAP_MODEL_FAST=faceswap-v2
+SEGMIND_FACESWAP_MODEL_PREMIUM=faceswap-v4
+SEGMIND_FACE_RESTORE=codeformer-v0.1.0.pth
+SEGMIND_FACE_SWAP_TYPE=head
+SEGMIND_FACE_STYLE_TYPE=normal
+
+# ===================== PAYMENTS / LIMITS / DB =====================
+YOOKASSA_PROVIDER_TOKEN=
+CRYPTO_PAY_API_TOKEN=
+OWNER_ID=
+UNLIM_USER_IDS=
+UNLIM_USERNAMES=gpt5pro_support
+DB_PATH=/data/subs.db
+USD_RUB=100
+
+# Бесплатный дневной пакет для новых/бесплатных пользователей
+FREE_TEXT_PER_DAY=10
+FREE_IMAGE_GENERATIONS_PER_DAY=1
+FREE_IMAGE_PROCESSINGS_PER_DAY=1
+IMG_PROCESS_COST_USD=0.05
+
+VIDEO_RESULT_SEND_AS_DOCUMENT=1
+VIDEO_RESULT_DEDUPE_TTL_S=900
+
+SORA_AUTO_FALLBACK_KLING=1
+BG_LOCAL_FIRST=1
+REMBG_MAX_SIDE=1600
+BG_FORCE_LOCAL_REMBG=1
+
+LOCAL_REMBG_SUBPROCESS=1
+BG_ACTION_TIMEOUT_S=180
+
+# Photoroom size/time optimization and real photo replacement backgrounds
+PHOTOROOM_INPUT_MAX_SIDE=1400
+BG_OUTPUT_MAX_SIDE=1400
+BG_REALISTIC_BACKGROUNDS=1
+BG_BACKGROUND_TIMEOUT_S=12
+BG_CACHE_DIR=/tmp/bg_cache
+# ===================== GPT MEMORY / VOICE UX =====================
+# Память короткого диалога: бот связывает ответы вроде «биткоин» с предыдущим вопросом.
+CHAT_MEMORY_ENABLED=1
+CHAT_MEMORY_MAX_MESSAGES=16
+CHAT_MEMORY_MAX_CHARS=6000
+CHAT_MEMORY_TTL_DAYS=30
+
+# Голосовой UX: без лишних дублей.
+# 0 — voice от бота отправляется без caption с тем же текстом.
+TTS_VOICE_CAPTION=0
+# 0 — после voice пользователя бот не отправляет отдельное «Распознал: ...».
+STT_ECHO_TRANSCRIPT=0
+
+
+# FaceSwap v35.0 — точный выбор лица на групповых фото
+FACESWAP_PRECISE_COMPOSITE=1
+FACESWAP_FORCE_SEGMIND_FOR_MULTI=1
+FACESWAP_GROUP_ALLOW_SEGMIND_FALLBACK=1
+FACESWAP_FACE_BOX_FILTER_RATIO=0.35
+FACESWAP_SOURCE_CROP_MARGIN=2.20
+FACESWAP_TARGET_HIDE_MARGIN=1.55
+FACESWAP_COMPOSITE_MARGIN_X=1.85
+FACESWAP_COMPOSITE_MARGIN_Y_UP=1.45
+FACESWAP_COMPOSITE_MARGIN_Y_DOWN=1.75
+# На групповых фото для точности используем Segmind, PiAPI оставляем для одиночных/быстрых случаев.
+FACESWAP_TIMEOUT_S=300
+
+
+# --- Background replacement (two-stage production pipeline) ---
+BG_REPLACE_TWO_STAGE=1
+BG_REPLACE_GENERATE_PRESETS=0
+BG_REPLACE_GENERATE_CUSTOM=1
+BG_REPLACE_USE_STOCK_BACKGROUNDS=1
+BG_REPLACE_JPEG_QUALITY=94
+# Optional: keep legacy direct PhotoRoom edit disabled for production stability
+PHOTOROOM_EDIT_ENABLED=0
+
+
+# ===================== PHOTO → MUSIC VIDEO PIPELINE v61 =====================
+# v61 does NOT rely on Kling native sound. It creates a visual clip, generates music with Suno,
+# then muxes/loops video+audio into one final MP4 using ffmpeg.
+PHOTO_CLIP_PIPELINE=1
+PHOTO_CLIP_VIDEO_ENGINE=kling
+PHOTO_CLIP_DEFAULT_DURATION_S=15
+PHOTO_CLIP_MAX_DURATION_S=30
+PHOTO_CLIP_MUX_AUDIO=1
+PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS=1
+SUNO_AUTO_FOR_PHOTO_CLIP=1
+PHOTO_CLIP_SOUND=0
+VIDEO_RESULT_SEND_AS_DOCUMENT=1
