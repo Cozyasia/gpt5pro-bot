@@ -1,0 +1,31 @@
+# v82 YooKassa direct payments via Render Secret Files
+# Если Render не даёт добавить новые ENV, НЕ добавляйте YK_ID/YK_KEY в Environment.
+# Вместо этого создайте Render Secret File:
+# File name: yookassa.env
+# Contents:
+# YK_ID=1185809
+# YK_KEY=PASTE_YOOKASSA_SECRET_KEY_HERE
+
+# Уже сохранённые ENV из v79 можно оставить:
+YOO_DIRECT_ENABLED=1
+YOO_DEFAULT_METHOD=sbp
+YOO_SBP_ENABLED=1
+YOO_SBERPAY_ENABLED=1
+YOO_TPAY_ENABLED=1
+YOO_MIRPAY_ENABLED=1
+YOO_CARD_ENABLED=1
+YOO_PAYMENT_RETURN_URL=https://gpt5pro-bot.onrender.com/payment_return
+YOO_PAYMENT_POLL_SECONDS=900
+YOO_PAYMENT_POLL_INTERVAL_S=5
+WEBAPP_URL=https://gpt5pro-webapp.onrender.com/premium.html?v=79
+TARIFF_URL=https://gpt5pro-webapp.onrender.com/premium.html?v=79
+
+# Альтернатива, если ENV всё-таки сохраняются:
+# YK_ID=1185809
+# YK_KEY=PASTE_YOOKASSA_SECRET_KEY_HERE
+
+# v82 optional YooKassa receipt diagnostics
+# Добавляй в Secret File yookassa.env, не обязательно в ENV:
+# YK_RECEIPT_EMAIL=your-email@example.com
+# YK_VAT_CODE=1
+# YOO_DEBUG_PAY_ERRORS=1
