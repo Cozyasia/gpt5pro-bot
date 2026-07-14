@@ -1,0 +1,153 @@
+--- /mnt/data/presentation_v95_release/main_original_2026-07-14.py	2026-07-14 10:59:35.361035265 +0000
++++ /mnt/data/presentation_v95_release/main.py	2026-07-14 10:56:21.714819702 +0000
+@@ -108,7 +108,7 @@
+ )
+ log = logging.getLogger("gpt-bot")
+ 
+-PATCH_VERSION = "v94-menu-checkout-fix-2026-07-14"
++PATCH_VERSION = "v95-presentation-studio-fix-2026-07-14"
+ 
+ # ───────── ENV ─────────
+ 
+@@ -688,7 +688,8 @@
+     os.path.join(os.path.dirname(DB_PATH) or ".", "presentation_studio"),
+ ).strip() or "/tmp/presentation_studio"
+ PRESENTATION_MAX_UPLOADS = int(os.environ.get("PRESENTATION_MAX_UPLOADS", "60") or 60)
+-PRESENTATION_MAX_GENERATED_IMAGES = int(os.environ.get("PRESENTATION_MAX_GENERATED_IMAGES", "8") or 8)
++PRESENTATION_MAX_GENERATED_IMAGES = int(os.environ.get("PRESENTATION_MAX_GENERATED_IMAGES", "10") or 10)
++PRESENTATION_IMAGE_SIZE = os.environ.get("PRESENTATION_IMAGE_SIZE", "1536x1024").strip() or "1536x1024"
+ PRESENTATION_RENDER_COST_USD = _pricing_cost("PRESENTATION_RENDER_COST_USD", 0.20)
+ PRESENTATION_IMAGE_ENGINE_AUTO = os.environ.get("PRESENTATION_IMAGE_ENGINE_AUTO", "1").strip().lower() not in ("0", "false", "no", "off")
+ # Generated packaging/labels are kept blank; exact approved copy is rendered by PPTX/PDF code.
+@@ -6497,8 +6498,11 @@
+         user_id=update.effective_user.id if update.effective_user else None,
+         chat_id=update.effective_chat.id if update.effective_chat else None,
+         extra_system=(
+-            "Ты работаешь внутри мастера презентаций. Возвращай структурированные данные точно в запрошенном формате, "
+-            "не добавляй вымышленные цены, телефоны, сертификаты и факты."
++            "Ты работаешь внутри мастера презентаций. Возвращай структурированные данные точно в запрошенном формате. "
++            "Главный бриф пользователя является единственным источником фактов: сохраняй точное название бренда, продукты, "
++            "цены, контакты, ограничения и количество слайдов. Никогда не используй служебные слова «бренд», «бренда», "
++            "«компания», «товар» или «услуга» как название. Не добавляй вымышленные отзывы, статистику, кейсы, "
++            "сертификаты, телефоны, цены или награды. Если название не определено однозначно, не угадывай его."
+         ),
+     )
+ 
+@@ -6574,6 +6578,41 @@
+     return box.get("result")
+ 
+ 
++async def _generate_openai_presentation_image_bytes(prompt: str) -> bytes | None:
++    """Landscape-first image generation for slide visuals.
++
++    gpt-image supports landscape sizes on the official API. Some compatible
++    proxies only accept 1024x1024, so the function falls back safely.
++    """
++    sizes = []
++    for value in (PRESENTATION_IMAGE_SIZE, "1536x1024", "1024x1024"):
++        if value and value not in sizes:
++            sizes.append(value)
++    for size in sizes:
++        try:
++            try:
++                resp = oai_img.images.generate(
++                    model=IMAGES_MODEL, prompt=prompt, size=size,
++                    quality=OPENAI_IMAGE_QUALITY, n=1,
++                )
++            except Exception:
++                resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size=size, n=1)
++            item = resp.data[0]
++            b64 = getattr(item, "b64_json", None)
++            if b64:
++                return base64.b64decode(b64)
++            url = getattr(item, "url", None)
++            if url:
++                async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
++                    r = await client.get(url)
++                    r.raise_for_status()
++                    if r.content:
++                        return r.content
++        except Exception as e:
++            log.warning("Presentation OpenAI image size=%s failed: %s", size, e)
++    return None
++
++
+ async def _presentation_image_batch(
+     update: Update,
+     context: ContextTypes.DEFAULT_TYPE,
+@@ -6604,8 +6643,9 @@
+             # Midjourney is excellent for atmosphere but unreliable for exact lettering.
+             resolved_engines.append("openai")
+         elif engine == "auto":
+-            premium = bool(re.search(r"luxury|premium|editorial|lifestyle|cinematic|атмосфер|премиум|люкс", prompt, re.I))
+-            resolved_engines.append("midjourney" if premium and MIDJOURNEY_ENABLED and COMET_API_KEY else "openai")
++            # Production-safe auto route: one clean landscape image per slide.
++            # Midjourney remains available when the user selects it explicitly.
++            resolved_engines.append("openai")
+         else:
+             resolved_engines.append(engine)
+ 
+@@ -6623,22 +6663,19 @@
+                     if not img:
+                         img = await _luma_generate_image_bytes(prompt)
+                 else:
+-                    img = await _luma_generate_image_bytes(prompt)
++                    img = await _generate_openai_presentation_image_bytes(prompt)
+                     if not img:
+                         img = await _comet_generate_image_bytes(prompt)
+-                    # Logo concepts remain text-safe: do not silently switch them to Midjourney.
+-                    if not img and feature != "presentation_logo_variants" and MIDJOURNEY_ENABLED and COMET_API_KEY:
+-                        with contextlib.suppress(Exception):
+-                            img, _task = await _midjourney_generate_image_bytes(prompt)
++                    # Never switch a failed slide to Midjourney silently: that can return a
++                    # four-image grid and break visual consistency. The user can select
++                    # Midjourney explicitly in the presentation wizard.
+             except Exception as e:
+                 log.warning("Presentation image %s/%s failed: %s", idx + 1, len(prompts), e)
+-            if not img and feature != "presentation_logo_variants":
+-                img = _presentation_local_visual(prompt, idx)
+-            if not img:
+-                # For logos, keep any successful partial results; the studio fills missing concepts locally.
+-                continue
+-            result.append(img)
+-        return result
++            # Do not insert generic abstract placeholders. A failed visual remains empty and
++            # the renderer switches that slide to a clean text-first layout. Preserve list
++            # positions so a failed middle image cannot be assigned to the wrong slide.
++            result.append(img or b"")
++        return result if any(result) else None
+ 
+     return await _presentation_paid_runner(update, context, "img", feature, provider_cost, _action)
+ 
+@@ -10744,7 +10781,12 @@
+     try:
+         # Presentation/Catalog Studio v86
+         if data.startswith("ps:"):
+-            await _presentation_studio_get().handle_callback(update, context)
++            try:
++                await _presentation_studio_get().handle_callback(update, context)
++            except Exception as e:
++                # PresentationStudio already persists state and reports stage-specific errors.
++                # Do not leak this into the bot-wide generic callback/error messages.
++                log.exception("Presentation callback failed locally: %s", e)
+             return
+ 
+         # Persistent virtual chats
+@@ -14487,8 +14529,15 @@
+ async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
+     log.exception("Unhandled error: %s", context_.error)
+     try:
+-        if isinstance(update, Update) and update.effective_message:
+-            await update.effective_message.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
++        if isinstance(update, Update):
++            cb_data = (getattr(getattr(update, "callback_query", None), "data", "") or "").strip()
++            presentation_active = bool(getattr(context_, "user_data", {}).get("presentation_studio_active"))
++            # The presentation wizard handles and reports its own errors after saving state.
++            # Suppress the misleading second message «Упс, произошла ошибка».
++            if cb_data.startswith("ps:") or presentation_active:
++                return
++            if update.effective_message:
++                await update.effective_message.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
+     except Exception:
+         pass
+ 

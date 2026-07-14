@@ -1,0 +1,11 @@
+# Эти переменные НЕ обязательны: в main.py уже установлены безопасные значения по умолчанию.
+# Добавляйте их в Render только если хотите переопределить поведение.
+
+PRESENTATION_DATA_DIR=/data/presentation_studio
+PRESENTATION_MAX_UPLOADS=60
+PRESENTATION_MAX_GENERATED_IMAGES=10
+PRESENTATION_RENDER_COST_USD=0.20
+PRESENTATION_IMAGE_ENGINE_AUTO=1
+PRESENTATION_TEXT_SAFE_VISUALS=1
+PRESENTATION_FORCE_OPENAI_FOR_TEXT=1
+PRESENTATION_IMAGE_SIZE=1536x1024

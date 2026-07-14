@@ -1,0 +1,17 @@
+Canonical uploaded source:
+main - 2026-07-14T134403.875.py
+
+Exact preserved copy in this package:
+main_original_2026-07-14.py
+
+SHA-256 original:
+48cbeea77d747f05efe88c281e68e02d1468fcb89b39401be233305053b26672
+
+Patched deployment file:
+main.py
+
+SHA-256 patched:
+70abeeafe4c7a79cbbc615d03481484a43e933b97f4323cd9a876c565dd4be8b
+
+Patch version:
+v95-presentation-studio-fix-2026-07-14
