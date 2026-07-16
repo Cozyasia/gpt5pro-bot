@@ -11,6 +11,16 @@ import os
 from pathlib import Path
 from typing import Iterable
 
+# Presentation Studio v105 bootstrap. This import hook is installed before
+# main.py imports presentation_studio, so no monolithic source rewrite is needed.
+try:
+    from presentation_v105_patch import install_import_hook, patch_main_version_async
+    install_import_hook()
+    patch_main_version_async()
+except Exception:
+    # Secrets must remain available even if an optional presentation patch fails.
+    pass
+
 _LOADED_SOURCES: dict[str, str] = {}
 _BOOTSTRAPPED = False
 
