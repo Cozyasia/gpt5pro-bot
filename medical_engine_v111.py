@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Universal GPT-5.6 medical engine bootstrap v111."""
+"""Universal OpenAI Responses API medical engine bootstrap v112."""
 from __future__ import annotations
 
 import contextlib
@@ -11,7 +11,7 @@ from typing import Any
 from medical_v111_client import api_key, base_url, flag, log, model_plan, user_tier
 from medical_v111_runtime import analyze
 
-VERSION = "v111-universal-medical-gpt56-engine-2026-07-18"
+VERSION = "v112-medical-responses-api-reliability-2026-07-18"
 PATCH_FLAG = "_MEDICAL_ENGINE_V111_PATCHED"
 
 
@@ -53,6 +53,7 @@ async def _diag_medical(update: Any, context: Any) -> None:
         "🩺 Medical Engine diagnostic\n"
         f"version={VERSION}\n"
         f"tier={tier}\n"
+        f"transport=responses\n"
         f"extract_model={plan['extract']}\n"
         f"reasoning_model={plan['reason']}\n"
         f"audit_model={plan['audit']}\n"
@@ -88,6 +89,9 @@ def install_builder_hook() -> None:
 def patch_runtime(mod: Any) -> bool:
     if getattr(mod, PATCH_FLAG, False):
         mod.PATCH_VERSION = VERSION
+        mod.MEDICAL_ENGINE_VERSION = VERSION
+        mod.MEDICAL_PATCH_VERSION = VERSION
+        mod.MEDICAL_CARD_VERSION = VERSION
         return True
     required = ("_medical_analyze_text", "_medical_analyze_image", "_mode_track_get", "sniff_image_mime")
     if not all(hasattr(mod, name) for name in required):
@@ -104,13 +108,13 @@ def patch_runtime(mod: Any) -> bool:
     mod._medical_analyze_text = analyze_text
     mod._medical_analyze_image = analyze_image
     mod._medical_capability_text = lambda: (
-        "🩺 Универсальный медицинский анализ GPT-5.6: автоматическое определение анализов, "
+        "🩺 Универсальный медицинский анализ: автоматическое определение анализов, "
         "УЗИ, КТ, МРТ, рентгена, ЭКГ, гистологии, выписок и назначений; точное извлечение; "
         "клинический разбор; независимый аудит; актуальные источники для PRO/ULTIMATE; "
         "сравнение с медицинской картой. Это справочный инструмент, не диагноз."
     )
     mod._medical_menu_text = lambda track="": (
-        "🩺 Медицина — универсальный анализ GPT-5.6\n\n"
+        "🩺 Медицина — универсальный анализ\n\n"
         "Загрузите PDF/DOCX/TXT или чёткое фото. Бот сам определит тип документа и область "
         "исследования. Этапы: структурированное извлечение → клиническое рассуждение → "
         "независимый аудит → сохранение в медицинскую карту."
@@ -142,7 +146,7 @@ def install_async() -> None:
                         return
             time.sleep(0.02)
 
-    threading.Thread(target=worker, daemon=True, name="medical-v111").start()
+    threading.Thread(target=worker, daemon=True, name="medical-v112").start()
 
 
 __all__ = ["VERSION", "install_builder_hook", "patch_runtime", "install_async"]
