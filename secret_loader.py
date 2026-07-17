@@ -27,6 +27,7 @@ _PRESENTATION_V107_PATCHED = False
 _MEDICAL_V108_PATCHED = False
 _MEDICAL_CARD_V109_PATCHED = False
 _MEDICAL_CARD_V110_PATCHED = False
+_MEDICAL_ENGINE_V111_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -103,6 +104,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     """
     global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED
     global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED, _MEDICAL_CARD_V110_PATCHED
+    global _MEDICAL_ENGINE_V111_PATCHED
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
         parsed = parse_secret_file(path)
@@ -171,6 +173,18 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             from medical_card_v110_patch import install_async
             install_async()
             _MEDICAL_CARD_V110_PATCHED = True
+        except Exception:
+            pass
+
+    # v111 replaces disease-specific prompt patches with a universal medical
+    # pipeline: structured extraction, GPT-5.6 reasoning, guideline grounding,
+    # independent audit, and direct medical-card metadata reuse.
+    if not _MEDICAL_ENGINE_V111_PATCHED:
+        try:
+            from medical_engine_v111 import install_async, install_builder_hook
+            install_builder_hook()
+            install_async()
+            _MEDICAL_ENGINE_V111_PATCHED = True
         except Exception:
             pass
 
