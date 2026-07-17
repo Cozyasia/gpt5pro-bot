@@ -113,6 +113,10 @@ async def analyze(mod: Any, update: Any, context: Any, source: Any,
     except Exception as exc:
         error_id = hashlib.sha256(f"{type(exc).__name__}|{exc}".encode()).hexdigest()[:8]
         log(mod, "error", "medical v111 failed %s: %r\n%s", error_id, exc, traceback.format_exc())
+        await update.effective_message.reply_text(
+            "⚠️ Основной медицинский контур GPT‑5.6 сейчас недоступен. "
+            f"Использую резервный анализатор, чтобы не потерять запрос. Код диагностики: {error_id}."
+        )
         answer = await _legacy_fallback(mod, source, goal_text, track, is_image)
         extraction = normalize_extraction({"document_type": "other", "document_title": "Медицинский документ", "confidence": 0})
         engine_meta = {"fallback": True, "error_id": error_id}
