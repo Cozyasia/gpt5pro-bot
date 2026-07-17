@@ -24,6 +24,7 @@ except Exception:
 _LOADED_SOURCES: dict[str, str] = {}
 _BOOTSTRAPPED = False
 _PRESENTATION_V106_PATCHED = False
+_PRESENTATION_V107_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -98,7 +99,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     Environment variables already set by Render have priority and are never overwritten.
     Returns a mapping of loaded key -> source path.
     """
-    global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED
+    global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
         parsed = parse_secret_file(path)
@@ -123,6 +124,18 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
         except Exception:
             # Secret loading and the rest of the bot must remain operational even
             # if an optional presentation enhancement cannot be installed.
+            pass
+
+    # v107 must be installed after v106 so final visual/style/palette additions
+    # are intercepted before the multipart main-brief collector can see them.
+    if not _PRESENTATION_V107_PATCHED:
+        try:
+            import presentation_studio as _presentation_studio
+            from presentation_v107_patch import patch_main_version_async, patch_module
+            patch_module(_presentation_studio)
+            patch_main_version_async()
+            _PRESENTATION_V107_PATCHED = True
+        except Exception:
             pass
 
     return dict(_LOADED_SOURCES)
