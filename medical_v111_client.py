@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Direct OpenAI GPT-5.x client for the medical engine v111."""
+"""Direct OpenAI Responses API client for the medical engine v112."""
 from __future__ import annotations
 
 import base64
@@ -115,11 +115,12 @@ def model_plan(tier: str) -> dict[str, Any]:
         else "MEDICAL_REASONING_EFFORT_BASIC"
     )
     effort = os.environ.get(effort_key, "high" if tier == "ultimate" else "medium").strip().lower()
+    default_reason = "gpt-5.6-sol" if tier == "ultimate" else "gpt-5.6-terra" if premium else "gpt-5.6-luna"
     return {
         "extract": os.environ.get("MEDICAL_EXTRACT_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini",
-        "reason": os.environ.get(reason_key, "gpt-5.6-terra" if premium else "gpt-5.6-luna").strip(),
+        "reason": os.environ.get(reason_key, default_reason).strip() or default_reason,
         "audit": os.environ.get("MEDICAL_AUDIT_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini",
-        "effort": effort if effort in {"low", "medium", "high", "xhigh"} else "medium",
+        "effort": effort if effort in {"none", "low", "medium", "high", "xhigh"} else "medium",
         "max_output": int_env("MEDICAL_MAX_OUTPUT_PREMIUM" if premium else "MEDICAL_MAX_OUTPUT_BASIC", 5200 if premium else 3600, 1400, 9000),
     }
 
@@ -154,24 +155,55 @@ def parse_json(text: str) -> dict:
 
 
 def _response_text(data: dict) -> str:
-    try:
-        content = data["choices"][0]["message"]["content"]
-        if isinstance(content, str):
-            return content.strip()
-        if isinstance(content, list):
-            return "\n".join(str(item.get("text") or "") for item in content if isinstance(item, dict)).strip()
-    except Exception:
-        pass
-    return ""
+    direct = data.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    result: list[str] = []
+    for item in data.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content") or []:
+            if not isinstance(content, dict):
+                continue
+            if content.get("type") in {"output_text", "text"}:
+                value = content.get("text")
+                if isinstance(value, str) and value.strip():
+                    result.append(value.strip())
+    return "\n".join(result).strip()
 
 
 def _usage(model: str, data: dict) -> dict:
     usage = data.get("usage") or {}
-    input_tokens = int(usage.get("prompt_tokens") or 0)
-    output_tokens = int(usage.get("completion_tokens") or 0)
+    input_tokens = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+    output_tokens = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
     input_price, output_price = PRICES.get(model, (0.0, 0.0))
     cost = (input_tokens * input_price + output_tokens * output_price) / 1_000_000
     return {"model": model, "input": input_tokens, "output": output_tokens, "cost_usd": round(cost, 6)}
+
+
+def _responses_input(user_content: Any) -> Any:
+    if isinstance(user_content, str):
+        return user_content
+    if not isinstance(user_content, list):
+        return clean(user_content)
+    converted: list[dict[str, Any]] = []
+    for item in user_content:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if item_type in {"text", "input_text"}:
+            converted.append({"type": "input_text", "text": clean(item.get("text"), 120000)})
+        elif item_type in {"image_url", "input_image"}:
+            image = item.get("image_url")
+            if isinstance(image, dict):
+                url = image.get("url") or image.get("image_url")
+                detail = image.get("detail") or item.get("detail") or "high"
+            else:
+                url = image
+                detail = item.get("detail") or "high"
+            if url:
+                converted.append({"type": "input_image", "image_url": str(url), "detail": detail})
+    return [{"role": "user", "content": converted}]
 
 
 async def call_model(
@@ -188,34 +220,41 @@ async def call_model(
     if not api_key(mod):
         raise RuntimeError("MEDICAL_OPENAI_API_KEY/OPENAI_API_KEY is missing")
     headers = {"Authorization": f"Bearer {api_key(mod)}", "Content-Type": "application/json"}
-    last_error = None
+    last_error: Exception | None = None
     for model in models:
-        body = {
+        body: dict[str, Any] = {
             "model": model,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_content}],
-            "max_completion_tokens": max_tokens,
-            "reasoning_effort": effort,
+            "instructions": system,
+            "input": _responses_input(user_content),
+            "max_output_tokens": max_tokens,
+            "reasoning": {"effort": effort},
+            "store": False,
         }
         if json_mode:
-            body["response_format"] = {"type": "json_object"}
+            body["text"] = {"format": {"type": "json_object"}}
         try:
-            timeout = httpx.Timeout(connect=20, read=float(os.environ.get("MEDICAL_READ_TIMEOUT", "180")), write=60, pool=20)
+            timeout = httpx.Timeout(connect=20, read=float(os.environ.get("MEDICAL_READ_TIMEOUT", "240")), write=90, pool=20)
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(base_url() + "/chat/completions", headers=headers, json=body)
+                response = await client.post(base_url() + "/responses", headers=headers, json=body)
+            request_id = response.headers.get("x-request-id", "")
             if response.status_code >= 400:
-                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:500]}")
+                detail = response.text[:900]
+                raise RuntimeError(f"HTTP {response.status_code}: {detail}; request_id={request_id}")
             data = response.json()
             text = _response_text(data)
             if not text:
-                raise RuntimeError("empty model response")
+                status = data.get("status")
+                incomplete = data.get("incomplete_details") or data.get("error") or {}
+                raise RuntimeError(f"empty Responses API output; status={status}; details={incomplete}; request_id={request_id}")
             run.setdefault("calls", []).append(_usage(model, data))
+            run.setdefault("transports", []).append(f"{kind}:responses")
             if model != models[0]:
                 run.setdefault("fallbacks", []).append(f"{kind}:{model}")
             return text, model
         except Exception as exc:
             last_error = exc
-            log(mod, "warning", "medical %s model %s failed: %r", kind, model, exc)
-    raise RuntimeError(f"all {kind} models failed: {last_error!r}")
+            log(mod, "warning", "medical %s model %s failed via Responses API: %r", kind, model, exc)
+    raise RuntimeError(f"all {kind} models failed via Responses API: {last_error!r}")
 
 
 def normalize_extraction(data: dict) -> dict:
@@ -253,14 +292,20 @@ def normalize_extraction(data: dict) -> dict:
 async def extract_image(mod: Any, run: dict, raw: bytes, mime: str, goal: str, track: str, model: str) -> dict:
     prompt = f"User goal: {goal or 'detailed explanation'}\nSelected track: {track or 'automatic'}\nRead the attached image in high detail. If it is a raw medical scan rather than a written report, state that limitation."
     user_content = [
-        {"type": "text", "text": prompt},
-        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}", "detail": "high"}},
+        {"type": "input_text", "text": prompt},
+        {"type": "input_image", "image_url": f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}", "detail": "high"},
     ]
     text, _ = await call_model(mod, run, "extract", fallbacks(model, "extract"), EXTRACT_SYSTEM, user_content, "low", int_env("MEDICAL_EXTRACT_MAX_OUTPUT", 4200, 1800, 7500), True)
-    return normalize_extraction(parse_json(text))
+    data = parse_json(text)
+    if not data:
+        raise RuntimeError("extract model returned no valid JSON object")
+    return normalize_extraction(data)
 
 
 async def extract_text(mod: Any, run: dict, source: str, goal: str, track: str, model: str) -> dict:
     prompt = f"User goal: {goal or 'detailed explanation'}\nSelected track: {track or 'automatic'}\nSOURCE:\n{source[:50000]}"
     text, _ = await call_model(mod, run, "extract", fallbacks(model, "extract"), EXTRACT_SYSTEM, prompt, "low", int_env("MEDICAL_EXTRACT_MAX_OUTPUT", 4200, 1800, 7500), True)
-    return normalize_extraction(parse_json(text))
+    data = parse_json(text)
+    if not data:
+        raise RuntimeError("extract model returned no valid JSON object")
+    return normalize_extraction(data)
