@@ -25,6 +25,7 @@ _BOOTSTRAPPED = False
 _PRESENTATION_V106_PATCHED = False
 _PRESENTATION_V107_PATCHED = False
 _MEDICAL_V108_PATCHED = False
+_MEDICAL_CARD_V109_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -99,7 +100,8 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     Environment variables already set by Render have priority and are never overwritten.
     Returns a mapping of loaded key -> source path.
     """
-    global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED, _MEDICAL_V108_PATCHED
+    global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED
+    global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
         parsed = parse_secret_file(path)
@@ -136,8 +138,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
         except Exception:
             pass
 
-    # v108 patches main.py medical handlers after they are defined. It also owns
-    # the visible composite release version, avoiding races with older version threads.
+    # v108 patches main.py medical handlers after they are defined.
     if not _MEDICAL_V108_PATCHED:
         try:
             from medical_v108_patch import install_async
@@ -146,6 +147,18 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
         except Exception:
             # Presentation, secrets and all other bot modes must still start even
             # if the optional medical enhancement cannot be installed.
+            pass
+
+    # v109 installs PTB handlers before ApplicationBuilder.build() and then waits
+    # until v108 is active to patch the medical menu and save workflow.
+    if not _MEDICAL_CARD_V109_PATCHED:
+        try:
+            from medical_card_v109_patch import install_async, install_builder_hook
+            install_builder_hook()
+            install_async()
+            _MEDICAL_CARD_V109_PATCHED = True
+        except Exception:
+            # The bot must remain available even if the optional medical card fails.
             pass
 
     return dict(_LOADED_SOURCES)
