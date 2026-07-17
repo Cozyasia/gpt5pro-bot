@@ -26,6 +26,7 @@ _PRESENTATION_V106_PATCHED = False
 _PRESENTATION_V107_PATCHED = False
 _MEDICAL_V108_PATCHED = False
 _MEDICAL_CARD_V109_PATCHED = False
+_MEDICAL_CARD_V110_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -101,7 +102,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     Returns a mapping of loaded key -> source path.
     """
     global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED
-    global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED
+    global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED, _MEDICAL_CARD_V110_PATCHED
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
         parsed = parse_secret_file(path)
@@ -161,6 +162,16 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             _MEDICAL_CARD_V109_PATCHED = True
         except Exception:
             # The bot must remain available even if the optional medical card fails.
+            pass
+
+    # v110 waits for the complete v108 -> v109 chain, then fixes production save,
+    # medical-mode media routing, and clinical response quality.
+    if not _MEDICAL_CARD_V110_PATCHED:
+        try:
+            from medical_card_v110_patch import install_async
+            install_async()
+            _MEDICAL_CARD_V110_PATCHED = True
+        except Exception:
             pass
 
     return dict(_LOADED_SOURCES)
