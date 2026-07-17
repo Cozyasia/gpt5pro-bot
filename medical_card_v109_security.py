@@ -2,16 +2,49 @@
 """Security hardening for Medical Card v109.
 
 Provides a stable per-service encryption key on the persistent disk when an
-explicit MEDICAL_CARD_ENCRYPTION_KEY is not configured, and keeps irreversible
-data deletion available after a subscription expires.
+explicit MEDICAL_CARD_ENCRYPTION_KEY is not configured, keeps irreversible
+data deletion available after a subscription expires, and prevents the older
+v108 background worker from masking the active v109 release version.
 """
 from __future__ import annotations
 
 import contextlib
 import os
+import sys
+import threading
+import time
 from typing import Any
 
 _INSTALLED = False
+
+
+def _install_version_guard(card: Any) -> None:
+    """Wait until v109 patches main, then make the v108 publisher emit v109.
+
+    medical_v108_patch intentionally republishes its VERSION for several minutes
+    after startup. Changing that module's VERSION only after the v109 patch flag
+    appears preserves the v108 prerequisite check and removes the release race.
+    """
+    def worker() -> None:
+        for _ in range(7200):
+            for module_name in ("__main__", "main"):
+                mod = sys.modules.get(module_name)
+                if mod is None or not getattr(mod, card.PATCH_FLAG, False):
+                    continue
+                with contextlib.suppress(Exception):
+                    import medical_v108_patch as medical_v108
+                    medical_v108.VERSION = card.VERSION
+                with contextlib.suppress(Exception):
+                    mod.PATCH_VERSION = card.VERSION
+                    mod.MEDICAL_CARD_VERSION = card.VERSION
+                return
+            time.sleep(0.05)
+
+    threading.Thread(
+        target=worker,
+        daemon=True,
+        name="medical-card-v109-version-guard",
+    ).start()
 
 
 def install() -> bool:
@@ -106,5 +139,6 @@ def install() -> bool:
         return True
 
     card._handle_medcard_callback = callback
+    _install_version_guard(card)
     _INSTALLED = True
     return True
