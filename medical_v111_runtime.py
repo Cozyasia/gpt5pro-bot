@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Runtime pipeline for the universal medical engine v111."""
+"""Runtime pipeline for the universal medical engine v112."""
 from __future__ import annotations
 
 import base64
@@ -12,7 +12,7 @@ from typing import Any
 from medical_v111_client import clean, extract_image, extract_text, log, model_plan, normalize_extraction, plain, split_text, user_tier
 from medical_v111_reasoning import card_metadata, reason_and_audit
 
-VERSION = "v111-universal-medical-gpt56-engine-2026-07-18"
+VERSION = "v112-medical-responses-api-reliability-2026-07-18"
 
 
 def _capture(context: Any) -> dict:
@@ -76,6 +76,14 @@ async def _legacy_fallback(mod: Any, source: Any, goal: str, track: str, is_imag
         return "Не удалось надёжно обработать материал. Пришлите чёткое фото без бликов либо PDF/текст официального заключения."
 
 
+def _stage_label(stage: str) -> str:
+    return {
+        "extract": "точного чтения и структурирования документа",
+        "reason": "клинического разбора",
+        "audit": "независимой проверки ответа",
+    }.get(stage, "медицинского анализа")
+
+
 async def analyze(mod: Any, update: Any, context: Any, source: Any,
                   goal: str | None, is_image: bool) -> None:
     user = update.effective_user
@@ -83,7 +91,8 @@ async def analyze(mod: Any, update: Any, context: Any, source: Any,
     plan = model_plan(tier)
     track = str(mod._mode_track_get(user.id) or "")
     goal_text = clean(goal, 1200)
-    run = {"calls": [], "fallbacks": []}
+    run = {"calls": [], "fallbacks": [], "transports": []}
+    stage = "extract"
 
     await update.effective_message.reply_text(
         "🩺 Универсальный медицинский анализ:\n"
@@ -109,20 +118,32 @@ async def analyze(mod: Any, update: Any, context: Any, source: Any,
             await update.effective_message.reply_text(
                 "✅ Факты структурированы. Проверяю клинический смысл, уровень срочности, актуальные рекомендации и точность каждого числа…"
             )
+
+        stage = "reason"
         answer, engine_meta = await reason_and_audit(mod, run, extraction, goal_text, user, plan)
+        stage = "audit"
+
+        if run.get("fallbacks"):
+            used_models = ", ".join(item.split(":", 1)[-1] for item in run["fallbacks"])
+            await update.effective_message.reply_text(
+                "ℹ️ Одна из основных моделей была временно недоступна. "
+                f"Анализ завершён резервным маршрутом: {used_models}."
+            )
     except Exception as exc:
         error_id = hashlib.sha256(f"{type(exc).__name__}|{exc}".encode()).hexdigest()[:8]
-        log(mod, "error", "medical v111 failed %s: %r\n%s", error_id, exc, traceback.format_exc())
+        log(mod, "error", "medical v112 failed %s at %s: %r\n%s", error_id, stage, exc, traceback.format_exc())
         await update.effective_message.reply_text(
-            "⚠️ Основной медицинский контур GPT‑5.6 сейчас недоступен. "
-            f"Использую резервный анализатор, чтобы не потерять запрос. Код диагностики: {error_id}."
+            f"⚠️ Не удалось завершить этап {_stage_label(stage)} в новом медицинском контуре. "
+            "Использую резервный анализатор, чтобы не потерять запрос. "
+            f"Код диагностики: {error_id}."
         )
         answer = await _legacy_fallback(mod, source, goal_text, track, is_image)
         extraction = normalize_extraction({"document_type": "other", "document_title": "Медицинский документ", "confidence": 0})
-        engine_meta = {"fallback": True, "error_id": error_id}
+        engine_meta = {"fallback": True, "error_id": error_id, "failed_stage": stage}
 
     engine_meta["calls"] = run["calls"]
     engine_meta["fallbacks"] = run["fallbacks"]
+    engine_meta["transports"] = run["transports"]
     engine_meta["estimated_cost_usd"] = round(sum(item.get("cost_usd", 0) for item in run["calls"]), 6)
     await _send_answer(mod, update, context, answer)
 
