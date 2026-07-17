@@ -154,6 +154,8 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     if not _MEDICAL_CARD_V109_PATCHED:
         try:
             from medical_card_v109_patch import install_async, install_builder_hook
+            from medical_card_v109_security import install as install_medical_card_security
+            install_medical_card_security()
             install_builder_hook()
             install_async()
             _MEDICAL_CARD_V109_PATCHED = True
