@@ -29,8 +29,10 @@ AUTH_DOMAINS = (
 )
 
 EXTRACT_SYSTEM = """You are a senior medical document extraction system. Return JSON only. Do not diagnose or interpret. Preserve every decimal, unit, right/left side, negation, classification, comparison and date exactly. Separate multiple studies and body regions. Never invent unreadable facts. Exclude names, addresses, phones, record numbers and signatures.
+Allowed document_type values: laboratory_report, ultrasound_report, ct_report, mri_report, xray_report, ecg_report, endoscopy_report, pathology_report, cytology_report, doctor_conclusion, discharge_summary, prescription, raw_medical_image, other.
 Return these fields: document_type, document_title, document_date, is_official_report, image_quality, confidence, specialties, body_regions, patient_context, findings, impression, recommendations_in_source, medications_in_source, unreadable_fragments, contradictions, contains_multiple_studies, raw_image_limitations.
-Each finding must contain: section, organ_or_test, side, finding, measurements (name, value, unit, reference), classification, comparison, important_negatives, confidence, uncertainty."""
+Each finding must contain: section, organ_or_test, side, finding, measurements (name, value, unit, reference), classification, comparison, important_negatives, confidence, uncertainty.
+Each medications_in_source item must contain: name, dose, schedule, duration, source_wording. Never convert general treatment discussion into an official prescription."""
 
 REASON_SYSTEM = """You are a senior multidisciplinary medical reasoning assistant writing in Russian for a patient. The structured extraction is the only factual source of truth.
 
