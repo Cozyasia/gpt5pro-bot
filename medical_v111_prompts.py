@@ -1,5 +1,25 @@
 # -*- coding: utf-8 -*-
-"""Prompts for the universal medical engine v111."""
+"""Prompts and safe defaults for the universal medical engine v111."""
+from __future__ import annotations
+
+import os
+
+# These are code defaults, not required Render variables. Existing Environment
+# values always win, so the owner can change models without another code deploy.
+os.environ.setdefault("MEDICAL_OPENAI_BASE_URL", "https://api.openai.com/v1")
+os.environ.setdefault("MEDICAL_EXTRACT_MODEL", "gpt-5.4-mini")
+os.environ.setdefault("MEDICAL_REASONING_MODEL_BASIC", "gpt-5.6-luna")
+os.environ.setdefault("MEDICAL_REASONING_MODEL_PRO", "gpt-5.6-terra")
+os.environ.setdefault("MEDICAL_REASONING_MODEL_ULTIMATE", "gpt-5.6-sol")
+os.environ.setdefault("MEDICAL_AUDIT_MODEL", "gpt-5.4-mini")
+os.environ.setdefault("MEDICAL_REASONING_EFFORT_BASIC", "medium")
+os.environ.setdefault("MEDICAL_REASONING_EFFORT_PRO", "medium")
+os.environ.setdefault("MEDICAL_REASONING_EFFORT_ULTIMATE", "high")
+os.environ.setdefault("MEDICAL_GUIDELINE_SEARCH", "1")
+os.environ.setdefault("MEDICAL_GUIDELINE_SEARCH_BASIC", "0")
+os.environ.setdefault("MEDICAL_MAX_OUTPUT_BASIC", "3600")
+os.environ.setdefault("MEDICAL_MAX_OUTPUT_PREMIUM", "5200")
+os.environ.setdefault("MEDICAL_READ_TIMEOUT", "180")
 
 AUTH_DOMAINS = (
     "who.int", "cdc.gov", "nih.gov", "ncbi.nlm.nih.gov", "fda.gov", "nice.org.uk",
