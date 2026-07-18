@@ -28,6 +28,8 @@ _MEDICAL_V108_PATCHED = False
 _MEDICAL_CARD_V109_PATCHED = False
 _MEDICAL_CARD_V110_PATCHED = False
 _MEDICAL_ENGINE_V111_PATCHED = False
+_MEDICAL_V114_OVERLAY_PATCHED = False
+_GENERAL_TEXT_ROUTER_V114_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -104,7 +106,9 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     """
     global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED
     global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED, _MEDICAL_CARD_V110_PATCHED
-    global _MEDICAL_ENGINE_V111_PATCHED
+    global _MEDICAL_ENGINE_V111_PATCHED, _MEDICAL_V114_OVERLAY_PATCHED
+    global _GENERAL_TEXT_ROUTER_V114_PATCHED
+
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
         parsed = parse_secret_file(path)
@@ -176,15 +180,34 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
         except Exception:
             pass
 
-    # v111 replaces disease-specific prompt patches with a universal medical
-    # pipeline: structured extraction, GPT-5.6 reasoning, guideline grounding,
-    # independent audit, and direct medical-card metadata reuse.
+    # The base medical engine remains modular and installs diagnostics/handlers.
     if not _MEDICAL_ENGINE_V111_PATCHED:
         try:
             from medical_engine_v111 import install_async, install_builder_hook
             install_builder_hook()
             install_async()
             _MEDICAL_ENGINE_V111_PATCHED = True
+        except Exception:
+            pass
+
+    # v114 overlays strict Structured Outputs, deterministic source checks,
+    # improved confidence handling and quieter official-model fallback UX.
+    if not _MEDICAL_V114_OVERLAY_PATCHED:
+        try:
+            from medical_v114_overlay import install_async
+            install_async()
+            _MEDICAL_V114_OVERLAY_PATCHED = True
+        except Exception:
+            pass
+
+    # Ordinary text and general image analysis use a separate cost-controlled
+    # official OpenAI route. Medical calls remain isolated in the medical engine.
+    if not _GENERAL_TEXT_ROUTER_V114_PATCHED:
+        try:
+            from text_router_v114 import install_async, install_builder_hook
+            install_builder_hook()
+            install_async()
+            _GENERAL_TEXT_ROUTER_V114_PATCHED = True
         except Exception:
             pass
 
