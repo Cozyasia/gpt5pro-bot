@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v125(self):
+    def test_release_version_is_v126(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v125-celebrity-selfie-single-owner-2026-07-19"',
+            'VERSION = "v126-celebrity-selfie-clean-rewrite-2026-07-19"',
             source,
         )
 
@@ -28,22 +28,21 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("from presentation_relaxed_v121 import install_builder_hook", source)
         self.assertIn("_install_presentation_relaxed()", source)
 
-    def test_v122_catalog_and_runtime_are_still_bootstrapped(self):
+    def test_v122_runtime_is_kept_but_telegram_builder_is_not_installed(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v122 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_base()", source)
-        self.assertIn("_install_celebrity_selfie_runtime()", source)
+        self.assertIn("from celebrity_selfie_v122 import install_runtime_async", source)
+        self.assertIn("_install_celebrity_library_runtime()", source)
+        self.assertNotIn("from celebrity_selfie_v122 import install_builder_hook", source)
 
-    def test_competing_v123_and_v124_builder_hooks_are_not_installed(self):
+    def test_all_historical_selfie_router_hooks_are_disabled(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertNotIn("from celebrity_selfie_v123 import install_builder_hook", source)
-        self.assertNotIn("from celebrity_selfie_v123_pedit import install_builder_hook", source)
-        self.assertNotIn("from celebrity_selfie_v124 import install_builder_hook", source)
+        for version in ("v123", "v123_pedit", "v124", "v125"):
+            self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", source)
 
-    def test_v125_single_owner_is_bootstrapped(self):
+    def test_v126_clean_rewrite_is_the_only_selfie_builder(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v125 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_single_owner()", source)
+        self.assertIn("from celebrity_selfie_v126 import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie_clean()", source)
 
 
 if __name__ == "__main__":
