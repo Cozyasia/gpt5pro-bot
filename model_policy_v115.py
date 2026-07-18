@@ -79,6 +79,14 @@ def _patch_general_router(module: Any) -> None:
         module.PRICES.update(CURRENT_PRICES)
 
 
+def _install_medical_mode_v116() -> None:
+    """Install sticky Medicine mode before ApplicationBuilder.build()."""
+    with contextlib.suppress(Exception):
+        from medical_mode_v116 import install_async, install_builder_hook
+        install_builder_hook()
+        install_async()
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -93,6 +101,7 @@ def install() -> None:
     if general is not None:
         _patch_general_router(general)
 
+    _install_medical_mode_v116()
     _INSTALLED = True
 
 
