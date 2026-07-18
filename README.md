@@ -1,39 +1,45 @@
-# Neyro-Bot v94 — Telegram menu checkout fix
+# Neyro-Bot GPT 5 Studio — v119 Production Hardening
 
-Version: `v94-menu-checkout-fix-2026-07-14`
+Version: `v119-production-hardening-2026-07-18`
 
-## Why v93 could stay silent
-The bottom Telegram **Меню ботов** button may still have been configured by BotFather with an old plain `premium.html` URL. That URL did not contain the signed server checkout endpoint. The page therefore used the old `sendData()` fallback, closed the Mini App, and no payment request reached the bot.
+## What changed
 
-## Fixes in v94
+v119 adds a modular production layer in `neyrobot_prod/` without a dangerous one-shot rewrite of the 15k-line `main.py`.
 
-- the bot automatically updates the default Telegram menu button through `setChatMenuButton` on every deploy;
-- the menu URL now includes the current `/webapp/checkout` endpoint and cache-buster;
-- the current project has a safe checkout URL fallback in `premium.html`;
-- the page no longer silently closes when the server bridge is unavailable;
-- a bot deep-link fallback creates the invoice in chat;
-- `/webapp/checkout` supports GET/HEAD/OPTIONS for diagnostics;
-- `/` and `/healthz` return successful responses, removing the harmless `HEAD / 404` warning.
+- atomic, idempotent YooKassa, Telegram Payments and CryptoBot processing;
+- server-side pre-checkout amount validation;
+- SQLite WAL, busy timeout, foreign keys and transactional commercial tables;
+- durable registry and startup recovery for provider task IDs;
+- global and per-user limits for heavy generations;
+- encrypted Medical Card backup together with the database;
+- guaranteed Medical Card save/create prompt for PRO, ULTIMATE and unlimited users;
+- guaranteed Medical Card PRO/ULTIMATE explanation for non-entitled users;
+- one final official structured medical route instead of the v108/v111 startup race;
+- production diagnostics and automated GitHub Actions tests;
+- exact dependency versions for reproducible builds.
+
+The old payment handlers remain in `main.py` only as inert compatibility code. v119 registers validated handlers in a higher-priority group and stops propagation, so the old duplicate paths cannot process the same Telegram payment.
+
+## Automatic bootstrap
+
+`sitecustomize.py` loads the production layer before `main.py`. No new secrets are required.
+
+Recommended non-secret settings are listed in `PRODUCTION_ENV_V119.txt`. Defaults are already safe when those values are absent.
+
+## Diagnostics
+
+- `/version` — current release
+- `/diag_prod` — SQLite, payment, queue, Medical Card and backup status
+- `/diag_medcard` — entitlement, consent, pending save and active medical route
+- `/diag_jobs` — unfinished durable provider jobs
+- `/backup_now` — immediate owner-only backup
 
 ## Deploy
 
-Upload all files and run:
+1. Merge the release into `main`.
+2. Render: **Manual Deploy → Clear build cache & deploy**.
+3. Run the checks in `VALIDATION.md`.
 
-`Manual Deploy → Clear build cache & deploy`
+## Architecture direction
 
-No new secrets are required.
-
-Recommended environment variables:
-
-```env
-AUTO_SET_BOT_MENU=1
-BOT_MENU_TEXT=Меню ботов
-```
-
-## Check
-
-1. `/version` → `v94-menu-checkout-fix-2026-07-14`
-2. Open `https://gpt5pro-bot.onrender.com/webapp/checkout` — JSON with `ok: true` is expected.
-3. Close and reopen the Telegram chat so the updated menu button is refreshed.
-4. Open **Меню ботов** and press a tariff/package.
-5. Expected: YooKassa opens and a payment button also appears in the bot chat.
+New critical behavior belongs in isolated modules. A later refactor can progressively move providers, billing and Telegram handlers out of `main.py`; v119 first removes the production risks while preserving the currently working user flows.
