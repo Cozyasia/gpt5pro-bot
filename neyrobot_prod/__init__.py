@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v121-presentation-relaxed-brief-voice-2026-07-18"
+VERSION = "v122-celebrity-selfie-library-2026-07-19"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -31,6 +31,17 @@ try:
     from presentation_relaxed_v121 import install_version_async as _install_presentation_relaxed_version
     _install_presentation_relaxed()
     _install_presentation_relaxed_version()
+except Exception:
+    pass
+
+# Replace the old name-only AI-selfie path with one exact-identity mode:
+# curated 50+50 catalog, licensed reference synchronization, custom reference
+# upload and a second resemblance-refinement pass.
+try:
+    from celebrity_selfie_v122 import install_builder_hook as _install_celebrity_selfie
+    from celebrity_selfie_v122 import install_runtime_async as _install_celebrity_selfie_runtime
+    _install_celebrity_selfie()
+    _install_celebrity_selfie_runtime()
 except Exception:
     pass
 
