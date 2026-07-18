@@ -30,6 +30,7 @@ _MEDICAL_CARD_V110_PATCHED = False
 _MEDICAL_ENGINE_V111_PATCHED = False
 _MEDICAL_V114_OVERLAY_PATCHED = False
 _GENERAL_TEXT_ROUTER_V114_PATCHED = False
+_MODEL_POLICY_V115_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -107,7 +108,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED
     global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED, _MEDICAL_CARD_V110_PATCHED
     global _MEDICAL_ENGINE_V111_PATCHED, _MEDICAL_V114_OVERLAY_PATCHED
-    global _GENERAL_TEXT_ROUTER_V114_PATCHED
+    global _GENERAL_TEXT_ROUTER_V114_PATCHED, _MODEL_POLICY_V115_PATCHED
 
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
@@ -208,6 +209,17 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             install_builder_hook()
             install_async()
             _GENERAL_TEXT_ROUTER_V114_PATCHED = True
+        except Exception:
+            pass
+
+    # v115 updates only the model catalogue/policy. It keeps ordinary chat on
+    # GPT-5 mini and prefers GPT-5.6 Luna/Terra for complex paid and medical
+    # reasoning when those models are visible to the current API project.
+    if not _MODEL_POLICY_V115_PATCHED:
+        try:
+            from model_policy_v115 import install as install_model_policy
+            install_model_policy()
+            _MODEL_POLICY_V115_PATCHED = True
         except Exception:
             pass
 
