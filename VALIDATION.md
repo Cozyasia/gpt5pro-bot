@@ -7,6 +7,7 @@
 3. `/diag_prod` must show:
    - `sqlite_journal=wal`
    - `payments_patch=on`
+   - `payment_guard=on`
    - `jobs_patch=on`
    - `concurrency_guard=on`
    - `medical_text_route=v119`
@@ -40,6 +41,7 @@ Test with a low-value sandbox/test payment where available.
 3. Subscription duration and credits must change only once.
 4. Replayed Telegram successful-payment update must answer that the payment was already processed.
 5. A stale Telegram invoice with a wrong amount must be rejected during pre-checkout.
+6. Test a quarter/year Telegram invoice: the guard must accept the server-side discounted amount, not multiply the monthly WebApp price.
 
 ## 4. Durable jobs
 
@@ -50,7 +52,7 @@ Test with a low-value sandbox/test payment where available.
 
 ## 5. SQLite and backups
 
-1. `/backup_now` from the owner account.
+1. `/backup_now` from the OWNER_ID account.
 2. Verify `/data/backups` contains:
    - `subs-*.sqlite3`
    - `manifest-*.json`
