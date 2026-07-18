@@ -22,7 +22,7 @@ The old payment handlers remain in `main.py` only as inert compatibility code. v
 
 ## Automatic bootstrap
 
-`sitecustomize.py` loads the production layer before `main.py`. No new secrets are required.
+`main.py` imports `secret_loader.py` before reading provider keys and building the Telegram application. `secret_loader.py` explicitly starts `neyrobot_prod.bootstrap`; `sitecustomize.py` remains only as an optional secondary bootstrap. No new secrets are required.
 
 Recommended non-secret settings are listed in `PRODUCTION_ENV_V119.txt`. Defaults are already safe when those values are absent.
 
