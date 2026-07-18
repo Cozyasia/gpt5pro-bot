@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 """Guaranteed Medical Engine + Medical Card hand-off.
 
-The previous release patched only ``medical_v111_runtime._offer_save``. In some
-startup orders the public handlers were still the older v108 closures, so the
-medical answer was sent without creating ``medcard_pending``. This module makes
-the official structured engine the single public route and installs one final,
-idempotent Medical Card decision for every successful analysis.
+v120 keeps the complete audited medical answer for storage, but presents it in a
+progressive Telegram UI: a compact 30-second summary first, with full analysis,
+plan, doctor preparation, findings and urgent signs available through buttons.
 """
 from __future__ import annotations
 
@@ -15,7 +13,7 @@ import re
 import time
 from typing import Any
 
-VERSION = "v119-production-hardening-2026-07-18"
+VERSION = "v120-medical-progressive-ui-2026-07-18"
 _DEDUPE_TTL = 15 * 60
 
 UPSELL_TEXT = (
@@ -158,7 +156,7 @@ async def offer(mod: Any, update: Any, context: Any) -> None:
                 return
 
             await message.reply_text(
-                "📁 Сохранить оригинал, распознанные данные и этот разбор в медицинскую карту?",
+                "📁 Сохранить оригинал, распознанные данные и полный разбор в медицинскую карту?",
                 reply_markup=card._pending_save_kb(mod, uid),
             )
             _mark_sent(context, signature, "entitled_prompt_sent")
@@ -185,11 +183,49 @@ async def offer(mod: Any, update: Any, context: Any) -> None:
                 await message.reply_text(UPSELL_TEXT, disable_web_page_preview=True)
 
 
+def _patch_saved_analysis(card: Any, ui: Any) -> None:
+    current = getattr(card, "_handle_medcard_callback", None)
+    if not callable(current) or getattr(current, "_prod_v120_compact", False):
+        return
+
+    async def handle_medcard_callback(mod_arg: Any, update: Any, context: Any, data: str) -> bool:
+        if str(data or "").startswith("medcard:analysis:"):
+            q = update.callback_query
+            with contextlib.suppress(Exception):
+                await q.answer()
+            uid = int(update.effective_user.id)
+            doc_id = str(data).split(":", 2)[2]
+            row = card._doc_row(mod_arg, uid, doc_id)
+            if not row:
+                with contextlib.suppress(Exception):
+                    await q.message.edit_text("Документ не найден или уже удалён.", reply_markup=card._card_main_kb(mod_arg))
+                return True
+            answer = card._dec(mod_arg, row[11])
+            await ui.send_compact_answer(
+                mod_arg,
+                update,
+                context,
+                answer,
+                edit=True,
+                back_callback=f"medcard:doc:{doc_id}",
+                title=str(row[4] or "Медицинский документ"),
+            )
+            with contextlib.suppress(Exception):
+                card._audit(mod_arg, uid, "analysis_open", "document", doc_id)
+            return True
+        return await current(mod_arg, update, context, data)
+
+    handle_medcard_callback._prod_v120_compact = True  # type: ignore[attr-defined]
+    handle_medcard_callback._prod_v120_original = current  # type: ignore[attr-defined]
+    card._handle_medcard_callback = handle_medcard_callback
+
+
 def patch_runtime(mod: Any) -> bool:
-    """Force the current structured official medical engine onto public handlers."""
+    """Force the structured official engine and progressive medical UI onto public handlers."""
     try:
         import medical_card_v109_patch as card
         import medical_v111_runtime as runtime
+        from . import medical_answer_ui as ui
     except Exception:
         return False
 
@@ -199,13 +235,23 @@ def patch_runtime(mod: Any) -> bool:
     runtime._offer_save = offer
     card._offer_save = offer
 
-    original_send = getattr(runtime, "_send_answer", None)
-    if callable(original_send) and not getattr(original_send, "_prod_v119_wrapped", False):
+    current_send = getattr(runtime, "_send_answer", None)
+    if callable(current_send) and not getattr(current_send, "_prod_v120_compact", False):
         async def send_answer(mod_arg: Any, update: Any, context: Any, answer: str) -> None:
-            await original_send(mod_arg, update, context, dedupe_disclaimer(answer))
-        send_answer._prod_v119_wrapped = True  # type: ignore[attr-defined]
-        send_answer._prod_v119_original = original_send  # type: ignore[attr-defined]
+            final = dedupe_disclaimer(answer)
+            await ui.send_compact_answer(
+                mod_arg,
+                update,
+                context,
+                final,
+                edit=False,
+                back_callback="medcard:back_med",
+            )
+        send_answer._prod_v120_compact = True  # type: ignore[attr-defined]
+        send_answer._prod_v120_original = current_send  # type: ignore[attr-defined]
         runtime._send_answer = send_answer
+
+    _patch_saved_analysis(card, ui)
 
     async def analyze_text(update: Any, context: Any, value: str, goal: str | None = None) -> None:
         await runtime.analyze(mod, update, context, value, goal, False)
@@ -215,10 +261,13 @@ def patch_runtime(mod: Any) -> bool:
 
     analyze_text._prod_v119_medical = True  # type: ignore[attr-defined]
     analyze_image._prod_v119_medical = True  # type: ignore[attr-defined]
+    analyze_text._prod_v120_medical = True  # type: ignore[attr-defined]
+    analyze_image._prod_v120_medical = True  # type: ignore[attr-defined]
     mod._medical_analyze_text = analyze_text
     mod._medical_analyze_image = analyze_image
     mod.MEDICAL_ENGINE_VERSION = VERSION
     mod.MEDICAL_CARD_VERSION = VERSION
+    mod.MEDICAL_ANSWER_UI_VERSION = ui.VERSION
     mod.MEDICAL_PATCH_VERSION = VERSION
     mod._PROD_MEDICAL_FOLLOWUP_PATCHED = True
     return True
@@ -235,12 +284,13 @@ async def diag_medcard(mod: Any, update: Any, context: Any) -> None:
         await update.effective_message.reply_text(
             "📁 Medical Card diagnostic\n"
             f"version={VERSION}\n"
+            f"answer_ui={getattr(mod, 'MEDICAL_ANSWER_UI_VERSION', '—')}\n"
             f"entitled={'on' if entitled else 'off'}\n"
             f"consent={'on' if consent else 'off'}\n"
             f"pending={'on' if bool(pending) else 'off'}\n"
             f"last_offer={context.user_data.get('medcard_offer_last_status') or '—'}\n"
-            f"public_text_handler={'v119' if getattr(mod._medical_analyze_text, '_prod_v119_medical', False) else 'legacy'}\n"
-            f"public_image_handler={'v119' if getattr(mod._medical_analyze_image, '_prod_v119_medical', False) else 'legacy'}"
+            f"public_text_handler={'v120' if getattr(mod._medical_analyze_text, '_prod_v120_medical', False) else 'legacy'}\n"
+            f"public_image_handler={'v120' if getattr(mod._medical_analyze_image, '_prod_v120_medical', False) else 'legacy'}"
         )
     except Exception as exc:
         await update.effective_message.reply_text(f"Medical Card diagnostic error: {type(exc).__name__}: {exc}")
