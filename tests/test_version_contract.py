@@ -16,17 +16,23 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v121(self):
+    def test_release_version_is_v122(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v121-presentation-relaxed-brief-voice-2026-07-18"',
+            'VERSION = "v122-celebrity-selfie-library-2026-07-19"',
             source,
         )
 
-    def test_v121_presentation_overlay_is_bootstrapped(self):
+    def test_v121_presentation_overlay_is_still_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from presentation_relaxed_v121 import install_builder_hook", source)
         self.assertIn("_install_presentation_relaxed()", source)
+
+    def test_v122_celebrity_selfie_overlay_is_bootstrapped(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v122 import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie()", source)
+        self.assertIn("_install_celebrity_selfie_runtime()", source)
 
 
 if __name__ == "__main__":
