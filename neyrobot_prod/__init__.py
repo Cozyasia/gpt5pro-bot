@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v120.2-presentation-resume-router-2026-07-18"
+VERSION = "v121-presentation-relaxed-brief-voice-2026-07-18"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -20,6 +20,17 @@ try:
     from presentation_resume_v120 import install_version_async as _install_presentation_resume_version
     _install_presentation_resume()
     _install_presentation_resume_version()
+except Exception:
+    pass
+
+# Accept practical briefs without demanding artificial commercial sections,
+# intercept the final build before the legacy strict preflight and allow the
+# main presentation brief to be dictated by voice/audio.
+try:
+    from presentation_relaxed_v121 import install_builder_hook as _install_presentation_relaxed
+    from presentation_relaxed_v121 import install_version_async as _install_presentation_relaxed_version
+    _install_presentation_relaxed()
+    _install_presentation_relaxed_version()
 except Exception:
     pass
 
