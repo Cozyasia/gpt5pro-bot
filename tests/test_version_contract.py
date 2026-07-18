@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v124(self):
+    def test_release_version_is_v125(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v124-celebrity-selfie-telegram-photo-flow-2026-07-19"',
+            'VERSION = "v125-celebrity-selfie-single-owner-2026-07-19"',
             source,
         )
 
@@ -28,31 +28,22 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("from presentation_relaxed_v121 import install_builder_hook", source)
         self.assertIn("_install_presentation_relaxed()", source)
 
-    def test_v122_celebrity_selfie_overlay_is_still_bootstrapped(self):
+    def test_v122_catalog_and_runtime_are_still_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from celebrity_selfie_v122 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie()", source)
+        self.assertIn("_install_celebrity_selfie_base()", source)
         self.assertIn("_install_celebrity_selfie_runtime()", source)
 
-    def test_v123_exclusive_flow_overlay_is_still_bootstrapped(self):
+    def test_competing_v123_and_v124_builder_hooks_are_not_installed(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v123 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_flow()", source)
-        self.assertIn("_install_celebrity_selfie_flow_runtime()", source)
+        self.assertNotIn("from celebrity_selfie_v123 import install_builder_hook", source)
+        self.assertNotIn("from celebrity_selfie_v123_pedit import install_builder_hook", source)
+        self.assertNotIn("from celebrity_selfie_v124 import install_builder_hook", source)
 
-    def test_v123_photo_quick_action_bridge_is_still_bootstrapped(self):
+    def test_v125_single_owner_is_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v123_pedit import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_pedit()", source)
-
-    def test_v124_telegram_photo_flow_is_bootstrapped_last(self):
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v124 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_telegram_photo()", source)
-        self.assertGreater(
-            source.index("from celebrity_selfie_v124 import install_builder_hook"),
-            source.index("from celebrity_selfie_v123_pedit import install_builder_hook"),
-        )
+        self.assertIn("from celebrity_selfie_v125 import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie_single_owner()", source)
 
 
 if __name__ == "__main__":
