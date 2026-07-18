@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v122(self):
+    def test_release_version_is_v123_1(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v122-celebrity-selfie-library-2026-07-19"',
+            'VERSION = "v123.1-celebrity-selfie-photo-entry-2026-07-19"',
             source,
         )
 
@@ -28,11 +28,22 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("from presentation_relaxed_v121 import install_builder_hook", source)
         self.assertIn("_install_presentation_relaxed()", source)
 
-    def test_v122_celebrity_selfie_overlay_is_bootstrapped(self):
+    def test_v122_celebrity_selfie_overlay_is_still_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from celebrity_selfie_v122 import install_builder_hook", source)
         self.assertIn("_install_celebrity_selfie()", source)
         self.assertIn("_install_celebrity_selfie_runtime()", source)
+
+    def test_v123_exclusive_flow_overlay_is_bootstrapped(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v123 import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie_flow()", source)
+        self.assertIn("_install_celebrity_selfie_flow_runtime()", source)
+
+    def test_v123_photo_quick_action_bridge_is_bootstrapped(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v123_pedit import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie_pedit()", source)
 
 
 if __name__ == "__main__":
