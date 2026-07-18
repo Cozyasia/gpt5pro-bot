@@ -87,6 +87,13 @@ def _install_medical_mode_v116() -> None:
         install_async()
 
 
+def _install_medical_card_v117() -> None:
+    """Install contextual Medical Card conversion UX after the medical stack."""
+    with contextlib.suppress(Exception):
+        from medical_card_v117_upsell import install_async
+        install_async()
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -102,6 +109,7 @@ def install() -> None:
         _patch_general_router(general)
 
     _install_medical_mode_v116()
+    _install_medical_card_v117()
     _INSTALLED = True
 
 
