@@ -1,0 +1,30 @@
+# Balanced General GPT Router v114
+# Ordinary chat remains on the official OpenAI API but is deliberately cheaper
+# than the medical pipeline. No OpenRouter key is required.
+# All values below already have identical built-in defaults; adding them to
+# Render is optional and only needed when you want to override the policy.
+
+GENERAL_TEXT_ROUTER_ENABLED=1
+GENERAL_OPENAI_API_KEY=
+GENERAL_OPENAI_BASE_URL=https://api.openai.com/v1
+
+# Most ordinary answers:
+GENERAL_MODEL_BASIC=gpt-5-mini
+GENERAL_MODEL_PRO=gpt-5-mini
+GENERAL_MODEL_ULTIMATE=gpt-5-mini
+
+# Only complex PRO/ULTIMATE requests are escalated:
+GENERAL_MODEL_COMPLEX_PRO=gpt-5
+GENERAL_MODEL_COMPLEX_ULTIMATE=gpt-5
+GENERAL_COMPLEX_MIN_CHARS=1100
+
+GENERAL_REASONING_EFFORT_BASIC=low
+GENERAL_REASONING_EFFORT_PRO=low
+GENERAL_REASONING_EFFORT_ULTIMATE=medium
+GENERAL_VISION_MODEL=gpt-5-mini
+
+# Disabled by default so a broken/expired OpenRouter route cannot silently answer.
+GENERAL_ALLOW_LEGACY_FALLBACK=0
+
+# Diagnostics after deploy:
+# /diag_text
