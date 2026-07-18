@@ -27,22 +27,17 @@ CURRENT_PRICES = {
 
 def _upgrade_default(name: str, legacy: set[str], new_value: str) -> None:
     current = (os.environ.get(name) or "").strip()
-    # Values inserted by previous built-in defaults are upgraded. Any explicit
-    # non-legacy operator override is preserved.
     if not current or current in legacy:
         os.environ[name] = new_value
 
 
 def _set_policy_environment() -> None:
-    # Ordinary chat stays cheap. Only complex paid requests are elevated.
     os.environ.setdefault("GENERAL_MODEL_BASIC", "gpt-5-mini")
     os.environ.setdefault("GENERAL_MODEL_PRO", "gpt-5-mini")
     os.environ.setdefault("GENERAL_MODEL_ULTIMATE", "gpt-5-mini")
     _upgrade_default("GENERAL_MODEL_COMPLEX_PRO", {"gpt-5"}, "gpt-5.6-luna")
     _upgrade_default("GENERAL_MODEL_COMPLEX_ULTIMATE", {"gpt-5"}, "gpt-5.6-terra")
 
-    # Medical extraction and independent audit remain on the economical mini
-    # route. Clinical reasoning receives the stronger model by subscription.
     os.environ.setdefault("MEDICAL_EXTRACT_MODEL", "gpt-5-mini")
     os.environ.setdefault("MEDICAL_AUDIT_MODEL", "gpt-5-mini")
     os.environ.setdefault("MEDICAL_REASONING_MODEL_BASIC", "gpt-5-mini")
@@ -53,8 +48,6 @@ def _set_policy_environment() -> None:
 def _patch_medical_client(module: Any) -> None:
     with contextlib.suppress(Exception):
         module.PRICES.update(CURRENT_PRICES)
-    # The previous release rejected Sol/Terra/Luna because they had not yet
-    # reached the public API. They are now official IDs.
     with contextlib.suppress(Exception):
         module._NON_API_MODEL_PATTERNS = ()
     with contextlib.suppress(Exception):
@@ -80,7 +73,6 @@ def _patch_general_router(module: Any) -> None:
 
 
 def _install_medical_mode_v116() -> None:
-    """Install sticky Medicine mode before ApplicationBuilder.build()."""
     with contextlib.suppress(Exception):
         from medical_mode_v116 import install_async, install_builder_hook
         install_builder_hook()
@@ -88,9 +80,14 @@ def _install_medical_mode_v116() -> None:
 
 
 def _install_medical_card_v117() -> None:
-    """Install contextual Medical Card conversion UX after the medical stack."""
     with contextlib.suppress(Exception):
         from medical_card_v117_upsell import install_async
+        install_async()
+
+
+def _install_release_v118() -> None:
+    with contextlib.suppress(Exception):
+        from release_v118_quality import install_async
         install_async()
 
 
@@ -110,6 +107,7 @@ def install() -> None:
 
     _install_medical_mode_v116()
     _install_medical_card_v117()
+    _install_release_v118()
     _INSTALLED = True
 
 
