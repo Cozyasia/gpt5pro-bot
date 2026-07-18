@@ -9,6 +9,11 @@ class BootstrapWiringTests(unittest.TestCase):
         self.assertIn("from neyrobot_prod.bootstrap import install_early", source)
         self.assertIn("_install_production_hardening()", source)
 
+    def test_secret_loader_explicitly_starts_version_contract(self):
+        source = Path("secret_loader.py").read_text(encoding="utf-8")
+        self.assertIn("from neyrobot_prod.versioning import install_early", source)
+        self.assertIn("_install_version_contract()", source)
+
     def test_render_entrypoint_imports_secret_loader_before_runtime_config(self):
         source = Path("main.py").read_text(encoding="utf-8")
         bootstrap_pos = source.find("from secret_loader import bootstrap_secret_environment")
