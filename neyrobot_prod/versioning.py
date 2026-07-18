@@ -2,7 +2,7 @@
 """Canonical release version contract for the production bot.
 
 Legacy feature overlays keep their own component versions and may update
-``PATCH_VERSION`` while they are installed.  The public ``/version`` command,
+``PATCH_VERSION`` while they are installed. The public ``/version`` command,
 however, must always report the actual production release that Render runs.
 """
 from __future__ import annotations
@@ -46,13 +46,14 @@ async def _cmd_version(update: Any, context: Any) -> None:
 
     general_router = getattr(mod, "GENERAL_TEXT_ROUTER_VERSION", "—") if mod is not None else "—"
     medical_card = getattr(mod, "MEDICAL_CARD_VERSION", "—") if mod is not None else "—"
+    medical_ui = getattr(mod, "MEDICAL_ANSWER_UI_VERSION", "—") if mod is not None else "—"
     medical_text = bool(
         mod is not None
-        and getattr(getattr(mod, "_medical_analyze_text", None), "_prod_v119_medical", False)
+        and getattr(getattr(mod, "_medical_analyze_text", None), "_prod_v120_medical", False)
     )
     medical_image = bool(
         mod is not None
-        and getattr(getattr(mod, "_medical_analyze_image", None), "_prod_v119_medical", False)
+        and getattr(getattr(mod, "_medical_analyze_image", None), "_prod_v120_medical", False)
     )
 
     lines = [
@@ -60,8 +61,9 @@ async def _cmd_version(update: Any, context: Any) -> None:
         "entrypoint=main.py",
         "start_command=python -u main.py",
         f"general_router={general_router}",
-        f"medical_text_route={'v119' if medical_text else 'legacy'}",
-        f"medical_image_route={'v119' if medical_image else 'legacy'}",
+        f"medical_text_route={'v120' if medical_text else 'legacy'}",
+        f"medical_image_route={'v120' if medical_image else 'legacy'}",
+        f"medical_answer_ui={medical_ui}",
         f"medical_card={medical_card}",
     ]
     await update.effective_message.reply_text("\n".join(lines)[:3900])
@@ -85,8 +87,6 @@ def _install_builder_hook() -> None:
     def build(self: Any, *args: Any, **kwargs: Any):
         app = original_build(self, *args, **kwargs)
         if not getattr(app, "_neyrobot_version_contract_handler", False):
-            # A very early group plus ApplicationHandlerStop guarantees that an
-            # old overlay cannot send a second, stale version response.
             app.add_handler(CommandHandler("version", _cmd_version), group=-1000)
             setattr(app, "_neyrobot_version_contract_handler", True)
         return app
@@ -103,8 +103,6 @@ def _start_runtime_stamper() -> None:
     _RUNTIME_STAMPER_STARTED = True
 
     def worker() -> None:
-        # Keep the canonical release visible even if a legacy overlay installs
-        # later and writes its component version into PATCH_VERSION.
         while True:
             mod = _runtime_module()
             if mod is not None:
