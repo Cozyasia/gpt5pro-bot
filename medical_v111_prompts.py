@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Prompts and safe defaults for the universal medical engine v111."""
+"""Prompts and safe defaults for the universal medical engine v113."""
 from __future__ import annotations
 
 import os
 
-# These are code defaults, not required Render variables. Existing Environment
-# values always win, so the owner can change models without another code deploy.
+# Official public OpenAI API model IDs. Runtime discovery additionally checks
+# which aliases are actually available to the current API project.
 os.environ.setdefault("MEDICAL_OPENAI_BASE_URL", "https://api.openai.com/v1")
-os.environ.setdefault("MEDICAL_EXTRACT_MODEL", "gpt-5.4-mini")
-os.environ.setdefault("MEDICAL_REASONING_MODEL_BASIC", "gpt-5.6-luna")
-os.environ.setdefault("MEDICAL_REASONING_MODEL_PRO", "gpt-5.6-terra")
-os.environ.setdefault("MEDICAL_REASONING_MODEL_ULTIMATE", "gpt-5.6-sol")
-os.environ.setdefault("MEDICAL_AUDIT_MODEL", "gpt-5.4-mini")
+os.environ.setdefault("MEDICAL_EXTRACT_MODEL", "gpt-5-mini")
+os.environ.setdefault("MEDICAL_REASONING_MODEL_BASIC", "gpt-5-mini")
+os.environ.setdefault("MEDICAL_REASONING_MODEL_PRO", "gpt-5")
+os.environ.setdefault("MEDICAL_REASONING_MODEL_ULTIMATE", "gpt-5.2")
+os.environ.setdefault("MEDICAL_AUDIT_MODEL", "gpt-5-mini")
 os.environ.setdefault("MEDICAL_REASONING_EFFORT_BASIC", "medium")
 os.environ.setdefault("MEDICAL_REASONING_EFFORT_PRO", "medium")
 os.environ.setdefault("MEDICAL_REASONING_EFFORT_ULTIMATE", "high")
