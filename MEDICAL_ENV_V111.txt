@@ -1,4 +1,4 @@
-# Universal Medical Engine v114
+# Universal Medical Engine v114 + current model policy v115
 # The medical route always uses the official OpenAI Responses API.
 # MEDICAL_OPENAI_API_KEY is optional: when empty, OPENAI_API_KEY is used.
 # These values already have identical built-in defaults; Render changes are
@@ -10,12 +10,14 @@ MEDICAL_OPENAI_BASE_URL=https://api.openai.com/v1
 
 # Balanced model plan:
 # BASIC/START: cost-efficient GPT-5 mini
-# PRO: GPT-5 clinical reasoning
-# ULTIMATE: GPT-5.2 clinical reasoning
+# PRO: GPT-5.6 Luna clinical reasoning
+# ULTIMATE: GPT-5.6 Terra clinical reasoning
+# Runtime verifies /v1/models and falls back automatically when a new model has
+# not reached this API project yet.
 MEDICAL_EXTRACT_MODEL=gpt-5-mini
 MEDICAL_REASONING_MODEL_BASIC=gpt-5-mini
-MEDICAL_REASONING_MODEL_PRO=gpt-5
-MEDICAL_REASONING_MODEL_ULTIMATE=gpt-5.2
+MEDICAL_REASONING_MODEL_PRO=gpt-5.6-luna
+MEDICAL_REASONING_MODEL_ULTIMATE=gpt-5.6-terra
 MEDICAL_AUDIT_MODEL=gpt-5-mini
 
 MEDICAL_REASONING_EFFORT_BASIC=medium
@@ -36,9 +38,9 @@ MEDICAL_GUIDELINE_SEARCH_BASIC=0
 MEDICAL_SHOW_TECHNICAL_ROUTE=0
 
 # Optional official-model fallbacks. Built-in fallbacks are already enabled.
-# MEDICAL_EXTRACT_FALLBACKS=gpt-5-mini,gpt-4.1-mini,gpt-4o-mini,gpt-5
-# MEDICAL_REASON_FALLBACKS=gpt-5.2,gpt-5.1,gpt-5,gpt-5-mini,gpt-4.1
-# MEDICAL_AUDIT_FALLBACKS=gpt-5-mini,gpt-5,gpt-4.1-mini,gpt-4o-mini
+# MEDICAL_EXTRACT_FALLBACKS=gpt-5-mini,gpt-5.4-mini,gpt-5.6-luna,gpt-4.1-mini
+# MEDICAL_REASON_FALLBACKS=gpt-5.6-terra,gpt-5.6-luna,gpt-5.2,gpt-5,gpt-5-mini
+# MEDICAL_AUDIT_FALLBACKS=gpt-5-mini,gpt-5.4-mini,gpt-5.6-luna,gpt-4.1-mini
 
 # Diagnostics after deploy:
 # /version
