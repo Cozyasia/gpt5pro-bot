@@ -21,6 +21,7 @@ _BUILDER_FLAG = "_MEDICAL_MODE_V116_BUILDER_HOOKED"
 _ACTIVE_USERS: set[int] = set()
 _ACTIVE_LOCK = threading.RLock()
 
+# Exact reply-keyboard labels which leave the medical workspace.
 _EXIT_TEXTS = {
     "назад",
     "главное меню",
@@ -38,6 +39,7 @@ _EXIT_TEXTS = {
     "о боте",
 }
 
+# Explicit non-medical flows that should not remain armed after entering Medicine.
 _CONFLICTING_FLAGS = (
     "awaiting_photo_for",
     "photo_flow",
@@ -85,6 +87,7 @@ def _callback_is_medical(data: str) -> bool:
         or d.startswith("medicine:")
         or d in {"med", "medical", "medicine", "mode:med", "mode:medical", "mode:medicine"}
         or (d.startswith("mode:") and any(token in d for token in ("med", "medicine", "medical")))
+        or bool(re.search(r"(?:^|[:_\-/])(med|medical|medicine)(?:$|[:_\-/])", d))
     )
 
 
@@ -92,6 +95,8 @@ def _callback_leaves_medical(data: str) -> bool:
     d = (data or "").strip().lower()
     if not d or _callback_is_medical(d):
         return False
+    # Back/home/menu and any explicit non-medical mode or tool mean the user has
+    # deliberately left the medical workspace.
     if d in {"back", "main", "menu", "home", "start"}:
         return True
     if d.startswith(("back:", "main:", "menu:", "home:", "mode:", "study:", "work:", "fun:", "engine:")):
@@ -120,6 +125,7 @@ def _activate(mod: Any, context: Any, user_id: int) -> None:
     if context is not None:
         context.user_data["medical_mode_active"] = True
         context.user_data["medical_mode_entered_ts"] = int(time.time())
+        # Do not let an abandoned image/video workflow steal the next medical photo.
         for key in _CONFLICTING_FLAGS:
             context.user_data.pop(key, None)
     setter = getattr(mod, "_mode_set", None)
@@ -134,6 +140,8 @@ def _deactivate(mod: Any, context: Any, user_id: int) -> None:
     if context is not None:
         context.user_data.pop("medical_mode_active", None)
         context.user_data.pop("medical_mode_entered_ts", None)
+    # Do not force a replacement mode here. The legacy handler which processes the
+    # Back/other-mode button remains the source of truth for the new destination.
 
 
 def _is_active(mod: Any, context: Any, user_id: int) -> bool:
@@ -193,6 +201,29 @@ async def _entry_exit_command(update: Any, context: Any) -> None:
         _deactivate(mod, context, user.id)
 
 
+async def _entry_diag(update: Any, context: Any) -> None:
+    mod = _runtime_module()
+    user = getattr(update, "effective_user", None)
+    if mod is None or user is None:
+        return
+    uid = int(user.id)
+    mode = ""
+    track = ""
+    with contextlib.suppress(Exception):
+        mode = str(getattr(mod, "_mode_get")(uid) or "")
+    with contextlib.suppress(Exception):
+        track = str(getattr(mod, "_mode_track_get")(uid) or "")
+    await update.effective_message.reply_text(
+        "🩺 Medical mode diagnostic\n"
+        f"version={VERSION}\n"
+        f"active={'on' if _is_active(mod, context, uid) else 'off'}\n"
+        f"context_flag={'on' if context.user_data.get('medical_mode_active') else 'off'}\n"
+        f"mode={mode or '—'}\n"
+        f"track={track or '—'}\n"
+        f"photo_router={'on' if callable(getattr(mod, '_medical_analyze_image', None)) else 'off'}"
+    )
+
+
 async def _entry_photo(update: Any, context: Any) -> None:
     mod = _runtime_module()
     message = getattr(update, "message", None)
@@ -202,6 +233,8 @@ async def _entry_photo(update: Any, context: Any) -> None:
     if not _is_active(mod, context, user.id):
         return
 
+    # Prevent Telegram webhook retries or multiple PTB groups from analyzing the
+    # same photo twice.
     update_id = int(getattr(update, "update_id", 0) or 0)
     if update_id and context.user_data.get("medical_mode_last_update_id") == update_id:
         from telegram.ext import ApplicationHandlerStop
@@ -262,6 +295,8 @@ def install_builder_hook() -> None:
     def build(self, *args: Any, **kwargs: Any):
         app = original_build(self, *args, **kwargs)
         if not getattr(app, _BUILDER_FLAG, False):
+            # Negative groups execute before the legacy catch-all text/photo handlers.
+            # Mode observers do not stop propagation; the photo router does.
             app.add_handler(
                 MessageHandler(filters.TEXT & ~filters.COMMAND, _entry_text_mode),
                 group=-20,
@@ -269,6 +304,7 @@ def install_builder_hook() -> None:
             app.add_handler(CallbackQueryHandler(_entry_callback_mode), group=-20)
             app.add_handler(CommandHandler("start", _entry_exit_command), group=-20)
             app.add_handler(CommandHandler("menu", _entry_exit_command), group=-20)
+            app.add_handler(CommandHandler("diag_med_mode", _entry_diag), group=-20)
             app.add_handler(MessageHandler(filters.PHOTO, _entry_photo), group=-19)
             setattr(app, _BUILDER_FLAG, True)
         return app
@@ -278,6 +314,7 @@ def install_builder_hook() -> None:
 
 
 def _install_source_fidelity_guards() -> None:
+    """Strengthen general medical source fidelity without hard-coding one report."""
     with contextlib.suppress(Exception):
         import medical_v114_overlay as overlay
 
@@ -375,6 +412,8 @@ def install_async() -> None:
                 break
             time.sleep(0.02)
 
+        # Older overlays have short-lived version keepers. Keep v116 visible long
+        # enough to outlast them, then leave the runtime untouched.
         if patched_mod is not None:
             for _ in range(1200):
                 with contextlib.suppress(Exception):
