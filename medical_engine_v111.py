@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Universal OpenAI Responses API medical engine bootstrap v112."""
+"""Universal official OpenAI Responses API medical engine bootstrap v113."""
 from __future__ import annotations
 
 import contextlib
@@ -8,10 +8,20 @@ import threading
 import time
 from typing import Any
 
-from medical_v111_client import api_key, base_url, flag, log, model_plan, user_tier
+from medical_v111_client import (
+    api_key,
+    api_key_source,
+    base_url,
+    flag,
+    key_fingerprint,
+    log,
+    model_plan,
+    probe_api,
+    user_tier,
+)
 from medical_v111_runtime import analyze
 
-VERSION = "v112-medical-responses-api-reliability-2026-07-18"
+VERSION = "v113-medical-official-model-discovery-2026-07-18"
 PATCH_FLAG = "_MEDICAL_ENGINE_V111_PATCHED"
 
 
@@ -50,20 +60,35 @@ async def _diag_medical(update: Any, context: Any) -> None:
     plan = model_plan(tier)
     tavily = str(getattr(mod, "TAVILY_API_KEY", "") or "").strip()
     await update.effective_message.reply_text(
+        "🩺 Проверяю официальный OpenAI API, список моделей и тестовый Responses-запрос…"
+    )
+    result = await probe_api(mod, force=True)
+    preferred = ", ".join(result.get("available_preferred") or []) or "не найдены"
+    error = str(result.get("error") or "")[:700]
+    text = (
         "🩺 Medical Engine diagnostic\n"
         f"version={VERSION}\n"
         f"tier={tier}\n"
-        f"transport=responses\n"
-        f"extract_model={plan['extract']}\n"
-        f"reasoning_model={plan['reason']}\n"
-        f"audit_model={plan['audit']}\n"
+        "transport=official_openai_responses\n"
+        f"configured_extract={plan['extract']}\n"
+        f"configured_reason={plan['reason']}\n"
+        f"configured_audit={plan['audit']}\n"
         f"reasoning_effort={plan['effort']}\n"
-        f"medical_openai_key={'on' if api_key(mod) else 'off'}\n"
+        f"key_present={'on' if api_key(mod) else 'off'}\n"
+        f"key_source={api_key_source(mod)}\n"
+        f"key_fingerprint={key_fingerprint(mod)}\n"
         f"medical_base_url={base_url()}\n"
+        f"models_endpoint={result.get('models_status')}\n"
+        f"responses_probe={result.get('responses_status')}\n"
+        f"probe_model={result.get('selected_model') or '—'}\n"
+        f"available_preferred={preferred}\n"
         f"guideline_search={'on' if flag('MEDICAL_GUIDELINE_SEARCH', True) else 'off'}\n"
         f"tavily_key={'on' if tavily else 'off'}\n"
         f"medical_card_version={getattr(mod, 'MEDICAL_CARD_VERSION', '—')}"
     )
+    if error:
+        text += "\nerror=" + error
+    await update.effective_message.reply_text(text)
 
 
 def install_builder_hook() -> None:
@@ -79,6 +104,7 @@ def install_builder_hook() -> None:
         app = original_build(self, *args, **kwargs)
         if not getattr(app, "_medical_v111_handlers", False):
             app.add_handler(CommandHandler("diag_medical", _diag_medical), group=-3)
+            app.add_handler(CommandHandler("test_medical_api", _diag_medical), group=-3)
             setattr(app, "_medical_v111_handlers", True)
         return app
 
@@ -111,7 +137,8 @@ def patch_runtime(mod: Any) -> bool:
         "🩺 Универсальный медицинский анализ: автоматическое определение анализов, "
         "УЗИ, КТ, МРТ, рентгена, ЭКГ, гистологии, выписок и назначений; точное извлечение; "
         "клинический разбор; независимый аудит; актуальные источники для PRO/ULTIMATE; "
-        "сравнение с медицинской картой. Это справочный инструмент, не диагноз."
+        "сравнение с медицинской картой. Используются только доступные официальные OpenAI API-модели. "
+        "Это справочный инструмент, не диагноз."
     )
     mod._medical_menu_text = lambda track="": (
         "🩺 Медицина — универсальный анализ\n\n"
@@ -146,7 +173,7 @@ def install_async() -> None:
                         return
             time.sleep(0.02)
 
-    threading.Thread(target=worker, daemon=True, name="medical-v112").start()
+    threading.Thread(target=worker, daemon=True, name="medical-v113").start()
 
 
 __all__ = ["VERSION", "install_builder_hook", "patch_runtime", "install_async"]
