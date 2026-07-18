@@ -1,36 +1,39 @@
-# Universal Medical Engine v111
-# All values below already have identical built-in defaults.
-# Adding them to Render is optional and only needed to override the defaults.
+# Universal Medical Engine v113
+# IMPORTANT: use a dedicated official OpenAI project key for medicine.
+# Do not replace the OpenRouter key used by the rest of the bot when
+# OPENAI_BASE_URL=https://openrouter.ai/api/v1.
 
-# Dedicated official OpenAI key for medicine.
-# If empty or absent, the engine uses the existing OPENAI_API_KEY.
 MEDICAL_OPENAI_API_KEY=
 MEDICAL_OPENAI_BASE_URL=https://api.openai.com/v1
 
-# Model routing by stage and tariff.
-MEDICAL_EXTRACT_MODEL=gpt-5.4-mini
-MEDICAL_REASONING_MODEL_BASIC=gpt-5.6-luna
-MEDICAL_REASONING_MODEL_PRO=gpt-5.6-terra
-MEDICAL_REASONING_MODEL_ULTIMATE=gpt-5.6-sol
-MEDICAL_AUDIT_MODEL=gpt-5.4-mini
+# Official public OpenAI API aliases. Runtime also calls /v1/models and skips
+# any model not available to the current API project.
+MEDICAL_EXTRACT_MODEL=gpt-5-mini
+MEDICAL_REASONING_MODEL_BASIC=gpt-5-mini
+MEDICAL_REASONING_MODEL_PRO=gpt-5
+MEDICAL_REASONING_MODEL_ULTIMATE=gpt-5.2
+MEDICAL_AUDIT_MODEL=gpt-5-mini
 
-# Reasoning depth.
 MEDICAL_REASONING_EFFORT_BASIC=medium
 MEDICAL_REASONING_EFFORT_PRO=medium
 MEDICAL_REASONING_EFFORT_ULTIMATE=high
 
-# Output and network limits.
 MEDICAL_MAX_OUTPUT_BASIC=3600
 MEDICAL_MAX_OUTPUT_PREMIUM=5200
 MEDICAL_EXTRACT_MAX_OUTPUT=4200
 MEDICAL_AUDIT_MAX_OUTPUT=5200
 MEDICAL_READ_TIMEOUT=180
 
-# Guideline grounding. PRO/ULTIMATE use Tavily when TAVILY_API_KEY is available.
 MEDICAL_GUIDELINE_SEARCH=1
 MEDICAL_GUIDELINE_SEARCH_BASIC=0
 
-# Optional comma-separated fallbacks. Built-in fallbacks are used when omitted.
-# MEDICAL_EXTRACT_FALLBACKS=gpt-5.4-mini,gpt-5-mini,gpt-5
-# MEDICAL_REASON_FALLBACKS=gpt-5.6-terra,gpt-5.4,gpt-5,gpt-5.4-mini
-# MEDICAL_AUDIT_FALLBACKS=gpt-5.4-mini,gpt-5-mini,gpt-5
+# Optional official-model fallbacks. Built-in fallbacks are already enabled.
+# MEDICAL_EXTRACT_FALLBACKS=gpt-5-mini,gpt-4.1-mini,gpt-4o-mini,gpt-5
+# MEDICAL_REASON_FALLBACKS=gpt-5.2,gpt-5.1,gpt-5,gpt-5-mini,gpt-4.1
+# MEDICAL_AUDIT_FALLBACKS=gpt-5-mini,gpt-5,gpt-4.1-mini,gpt-4o-mini
+
+# Diagnostics after deploy:
+# /version
+# /diag_medical
+# Expected: transport=official_openai_responses, models_endpoint=ok,
+# responses_probe=ok, medical_base_url=https://api.openai.com/v1
