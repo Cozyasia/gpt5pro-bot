@@ -16,9 +16,17 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v119_4(self):
+    def test_release_version_is_v121(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v119.4-production-version-contract-2026-07-18"', source)
+        self.assertIn(
+            'VERSION = "v121-presentation-relaxed-brief-voice-2026-07-18"',
+            source,
+        )
+
+    def test_v121_presentation_overlay_is_bootstrapped(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from presentation_relaxed_v121 import install_builder_hook", source)
+        self.assertIn("_install_presentation_relaxed()", source)
 
 
 if __name__ == "__main__":
