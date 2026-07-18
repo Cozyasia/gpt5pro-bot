@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Early production bootstrap for Neyro-Bot v119.
 
-Loaded by ``sitecustomize.py`` before main.py reads secrets or builds the PTB
+Loaded from ``secret_loader.py`` before main.py reads secrets or builds the PTB
 Application. Critical routes are registered at negative handler groups and the
 runtime patches are re-applied after legacy asynchronous patch workers settle.
 """
@@ -40,13 +40,7 @@ def _runtime_module() -> Any | None:
 
 def _is_owner(mod: Any, user: Any) -> bool:
     uid = int(getattr(user, "id", 0) or 0)
-    if uid and uid == int(getattr(mod, "OWNER_ID", 0) or 0):
-        return True
-    checker = getattr(mod, "is_unlimited", None)
-    if callable(checker):
-        with contextlib.suppress(Exception):
-            return bool(checker(uid, str(getattr(user, "username", "") or "")))
-    return False
+    return bool(uid and uid == int(getattr(mod, "OWNER_ID", 0) or 0))
 
 
 def _key_paths(mod: Any) -> tuple[str, ...]:
@@ -102,7 +96,7 @@ async def _priority_successful_payment(update: Any, context: Any) -> None:
     try:
         if mod is None:
             raise RuntimeError("runtime module unavailable")
-        from .payments import successful_payment_handler
+        from .payment_guard import successful_payment_handler
         await successful_payment_handler(mod, update, context)
     except Exception as exc:
         if mod is not None:
@@ -124,7 +118,7 @@ async def _priority_precheckout(update: Any, context: Any) -> None:
         if mod is None:
             await update.pre_checkout_query.answer(ok=False, error_message="Бот ещё запускается. Повторите оплату через минуту.")
         else:
-            from .payments import precheckout_handler
+            from .payment_guard import precheckout_handler
             await precheckout_handler(mod, update, context)
     finally:
         raise ApplicationHandlerStop
@@ -156,6 +150,7 @@ async def _cmd_diag_prod(update: Any, context: Any) -> None:
         f"version={VERSION}",
         f"sqlite_journal={journal}",
         f"payments_patch={'on' if getattr(mod, '_PROD_PAYMENTS_PATCHED', False) else 'off'}",
+        f"payment_guard={'on' if getattr(mod, '_PROD_PAYMENT_GUARD_PATCHED', False) else 'off'}",
         f"payment_events={payment_events}",
         f"jobs_patch={'on' if getattr(mod, '_PROD_JOBS_PATCHED', False) else 'off'}",
         f"concurrency_guard={'on' if getattr(mod, '_PROD_LIMITS_PATCHED', False) else 'off'}",
@@ -190,7 +185,7 @@ async def _cmd_backup_now(update: Any, context: Any) -> None:
     if mod is None:
         return
     if not _is_owner(mod, update.effective_user):
-        await update.effective_message.reply_text("Команда доступна владельцу бота.")
+        await update.effective_message.reply_text("Команда доступна только владельцу бота.")
         return
     try:
         result = await asyncio.to_thread(_run_backup, mod)
@@ -255,9 +250,9 @@ def _install_builder_hook() -> None:
 
 
 def _apply_runtime(mod: Any) -> tuple[bool, bool, bool, bool]:
-    from . import jobs, limits, medical_followup, payments
+    from . import jobs, limits, medical_followup, payment_guard, payments
 
-    payment_ok = payments.patch_runtime(mod)
+    payment_ok = payments.patch_runtime(mod) and payment_guard.patch_runtime(mod)
     jobs_ok = jobs.patch_runtime(mod)
     medical_ok = medical_followup.patch_runtime(mod)
     limits_ok = limits.patch_runtime(mod)
