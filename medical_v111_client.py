@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Direct OpenAI Responses API client for the medical engine v112."""
+"""Direct official OpenAI Responses API client for the medical engine v113."""
 from __future__ import annotations
 
 import base64
 import contextlib
+import hashlib
 import json
 import os
 import re
 import sys
+import time
 from typing import Any
 
 import httpx
@@ -15,15 +17,40 @@ import httpx
 from medical_v111_prompts import EXTRACT_SYSTEM
 
 PRICES = {
-    "gpt-5.4-mini": (0.75, 4.50),
-    "gpt-5.4": (2.50, 15.00),
-    "gpt-5.6-luna": (1.00, 6.00),
-    "gpt-5.6-terra": (2.50, 15.00),
-    "gpt-5.6-sol": (5.00, 30.00),
-    "gpt-5.6": (5.00, 30.00),
+    "gpt-5.2": (1.75, 14.00),
+    "gpt-5.1": (1.25, 10.00),
     "gpt-5": (1.25, 10.00),
     "gpt-5-mini": (0.25, 2.00),
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-4.1": (2.00, 8.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4o-mini": (0.15, 0.60),
 }
+
+_STABLE_BY_KIND = {
+    "extract": ["gpt-5-mini", "gpt-4.1-mini", "gpt-4o-mini", "gpt-5"],
+    "reason": ["gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-4.1"],
+    "audit": ["gpt-5-mini", "gpt-5", "gpt-4.1-mini", "gpt-4o-mini"],
+}
+
+_NON_API_MODEL_PATTERNS = (
+    re.compile(r"^gpt-5\.4(?:-|$)", re.I),
+    re.compile(r"^gpt-5\.6(?:-|$)", re.I),
+    re.compile(r"(?:^|-)sol$", re.I),
+    re.compile(r"(?:^|-)terra$", re.I),
+    re.compile(r"(?:^|-)luna$", re.I),
+)
+
+_MODEL_CACHE: dict[str, Any] = {"at": 0.0, "models": [], "error": ""}
+
+
+class MedicalAPIError(RuntimeError):
+    def __init__(self, category: str, message: str, *, status: int = 0, request_id: str = "") -> None:
+        super().__init__(message)
+        self.category = category
+        self.status = status
+        self.request_id = request_id
 
 
 def clean(value: Any, limit: int = 60000) -> str:
@@ -80,9 +107,27 @@ def log(mod: Any, level: str, message: str, *args: Any) -> None:
 def api_key(mod: Any) -> str:
     return (
         os.environ.get("MEDICAL_OPENAI_API_KEY", "").strip()
-        or str(getattr(mod, "OPENAI_API_KEY", "") or "").strip()
         or os.environ.get("OPENAI_API_KEY", "").strip()
+        or str(getattr(mod, "OPENAI_API_KEY", "") or "").strip()
+        or os.environ.get("OPENAI_IMAGE_KEY", "").strip()
     )
+
+
+def api_key_source(mod: Any) -> str:
+    if os.environ.get("MEDICAL_OPENAI_API_KEY", "").strip():
+        return "MEDICAL_OPENAI_API_KEY"
+    if os.environ.get("OPENAI_API_KEY", "").strip():
+        return "OPENAI_API_KEY"
+    if str(getattr(mod, "OPENAI_API_KEY", "") or "").strip():
+        return "runtime OPENAI_API_KEY"
+    if os.environ.get("OPENAI_IMAGE_KEY", "").strip():
+        return "OPENAI_IMAGE_KEY"
+    return "missing"
+
+
+def key_fingerprint(mod: Any) -> str:
+    value = api_key(mod)
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:10] if value else "—"
 
 
 def base_url() -> str:
@@ -115,26 +160,25 @@ def model_plan(tier: str) -> dict[str, Any]:
         else "MEDICAL_REASONING_EFFORT_BASIC"
     )
     effort = os.environ.get(effort_key, "high" if tier == "ultimate" else "medium").strip().lower()
-    default_reason = "gpt-5.6-sol" if tier == "ultimate" else "gpt-5.6-terra" if premium else "gpt-5.6-luna"
+    default_reason = "gpt-5.2" if tier == "ultimate" else "gpt-5" if premium else "gpt-5-mini"
     return {
-        "extract": os.environ.get("MEDICAL_EXTRACT_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini",
+        "extract": os.environ.get("MEDICAL_EXTRACT_MODEL", "gpt-5-mini").strip() or "gpt-5-mini",
         "reason": os.environ.get(reason_key, default_reason).strip() or default_reason,
-        "audit": os.environ.get("MEDICAL_AUDIT_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini",
+        "audit": os.environ.get("MEDICAL_AUDIT_MODEL", "gpt-5-mini").strip() or "gpt-5-mini",
         "effort": effort if effort in {"none", "low", "medium", "high", "xhigh"} else "medium",
         "max_output": int_env("MEDICAL_MAX_OUTPUT_PREMIUM" if premium else "MEDICAL_MAX_OUTPUT_BASIC", 5200 if premium else 3600, 1400, 9000),
     }
 
 
+def _looks_non_api(model: str) -> bool:
+    return any(pattern.search(model or "") for pattern in _NON_API_MODEL_PATTERNS)
+
+
 def fallbacks(primary: str, kind: str) -> list[str]:
-    defaults = {
-        "extract": ["gpt-5.4-mini", "gpt-5-mini", "gpt-5"],
-        "reason": ["gpt-5.6-terra", "gpt-5.4", "gpt-5", "gpt-5.4-mini"],
-        "audit": ["gpt-5.4-mini", "gpt-5-mini", "gpt-5"],
-    }[kind]
     custom = [item.strip() for item in os.environ.get(f"MEDICAL_{kind.upper()}_FALLBACKS", "").split(",") if item.strip()]
-    result = []
-    for model in [primary, *custom, *defaults]:
-        if model and model not in result:
+    result: list[str] = []
+    for model in [primary, *custom, *_STABLE_BY_KIND[kind]]:
+        if model and model not in result and not _looks_non_api(model):
             result.append(model)
     return result
 
@@ -206,6 +250,105 @@ def _responses_input(user_content: Any) -> Any:
     return [{"role": "user", "content": converted}]
 
 
+def _headers(mod: Any) -> dict[str, str]:
+    key = api_key(mod)
+    if not key:
+        raise MedicalAPIError("missing_key", "MEDICAL_OPENAI_API_KEY/OPENAI_API_KEY is missing")
+    return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+
+def _error_text(response: httpx.Response) -> tuple[str, str]:
+    code = ""
+    message = response.text[:1200]
+    with contextlib.suppress(Exception):
+        payload = response.json()
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            code = clean(error.get("code") or error.get("type"), 100)
+            message = clean(error.get("message") or message, 900)
+    return code, message
+
+
+async def available_models(mod: Any, force: bool = False) -> tuple[list[str], str]:
+    now = time.monotonic()
+    if not force and _MODEL_CACHE["models"] and now - float(_MODEL_CACHE["at"]) < 600:
+        return list(_MODEL_CACHE["models"]), str(_MODEL_CACHE["error"])
+    try:
+        timeout = httpx.Timeout(connect=15, read=30, write=30, pool=15)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(base_url() + "/models", headers=_headers(mod))
+        request_id = response.headers.get("x-request-id", "")
+        if response.status_code >= 400:
+            code, message = _error_text(response)
+            category = "auth" if response.status_code in {401, 403} else "quota" if response.status_code == 429 else "models"
+            raise MedicalAPIError(category, f"HTTP {response.status_code} {code}: {message}", status=response.status_code, request_id=request_id)
+        data = response.json()
+        models = sorted({str(item.get("id")) for item in data.get("data", []) if isinstance(item, dict) and item.get("id")})
+        _MODEL_CACHE.update({"at": now, "models": models, "error": ""})
+        return models, ""
+    except Exception as exc:
+        _MODEL_CACHE.update({"at": now, "models": [], "error": clean(exc, 600)})
+        return [], clean(exc, 600)
+
+
+async def _resolve_models(mod: Any, requested: list[str], kind: str) -> tuple[list[str], str]:
+    available, discovery_error = await available_models(mod)
+    candidates: list[str] = []
+    for model in [*requested, *_STABLE_BY_KIND[kind]]:
+        if model and model not in candidates and not _looks_non_api(model):
+            candidates.append(model)
+    if available:
+        exact = [model for model in candidates if model in available]
+        if exact:
+            return exact, ""
+        relevant = [model for model in _STABLE_BY_KIND[kind] if model in available]
+        if relevant:
+            return relevant, ""
+        discovered = [
+            model for model in available
+            if re.match(r"^(gpt-5|gpt-4\.1|gpt-4o)(?:$|-)", model)
+            and "audio" not in model and "realtime" not in model and "transcribe" not in model and "tts" not in model
+        ]
+        if discovered:
+            return discovered[:6], ""
+        raise MedicalAPIError("model", "No compatible GPT text/vision model is available for this API project")
+    return candidates, discovery_error
+
+
+def _request_variants(model: str, system: str, user_content: Any, effort: str,
+                      max_tokens: int, json_mode: bool) -> list[dict[str, Any]]:
+    base: dict[str, Any] = {
+        "model": model,
+        "instructions": system + ("\nReturn exactly one valid JSON object." if json_mode else ""),
+        "input": _responses_input(user_content),
+        "max_output_tokens": max_tokens,
+        "store": False,
+    }
+    if effort != "none" and (model.startswith("gpt-5") or model.startswith("o")):
+        base["reasoning"] = {"effort": effort}
+    variants: list[dict[str, Any]] = []
+    first = dict(base)
+    if json_mode:
+        first["text"] = {"format": {"type": "json_object"}}
+    variants.append(first)
+    if "reasoning" in first:
+        second = dict(first)
+        second.pop("reasoning", None)
+        variants.append(second)
+    if json_mode:
+        plain_json = dict(base)
+        plain_json.pop("reasoning", None)
+        variants.append(plain_json)
+    unique: list[dict[str, Any]] = []
+    seen = set()
+    for variant in variants:
+        marker = json.dumps(variant, ensure_ascii=False, sort_keys=True)
+        if marker not in seen:
+            seen.add(marker)
+            unique.append(variant)
+    return unique
+
+
 async def call_model(
     mod: Any,
     run: dict,
@@ -217,44 +360,98 @@ async def call_model(
     max_tokens: int,
     json_mode: bool = False,
 ) -> tuple[str, str]:
-    if not api_key(mod):
-        raise RuntimeError("MEDICAL_OPENAI_API_KEY/OPENAI_API_KEY is missing")
-    headers = {"Authorization": f"Bearer {api_key(mod)}", "Content-Type": "application/json"}
+    requested = list(models)
+    resolved, discovery_error = await _resolve_models(mod, requested, kind)
+    if discovery_error:
+        log(mod, "warning", "medical model discovery unavailable; using stable aliases: %s", discovery_error)
     last_error: Exception | None = None
-    for model in models:
-        body: dict[str, Any] = {
-            "model": model,
-            "instructions": system,
-            "input": _responses_input(user_content),
-            "max_output_tokens": max_tokens,
-            "reasoning": {"effort": effort},
-            "store": False,
-        }
-        if json_mode:
-            body["text"] = {"format": {"type": "json_object"}}
-        try:
-            timeout = httpx.Timeout(connect=20, read=float(os.environ.get("MEDICAL_READ_TIMEOUT", "240")), write=90, pool=20)
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(base_url() + "/responses", headers=headers, json=body)
-            request_id = response.headers.get("x-request-id", "")
-            if response.status_code >= 400:
-                detail = response.text[:900]
-                raise RuntimeError(f"HTTP {response.status_code}: {detail}; request_id={request_id}")
-            data = response.json()
-            text = _response_text(data)
-            if not text:
-                status = data.get("status")
-                incomplete = data.get("incomplete_details") or data.get("error") or {}
-                raise RuntimeError(f"empty Responses API output; status={status}; details={incomplete}; request_id={request_id}")
-            run.setdefault("calls", []).append(_usage(model, data))
-            run.setdefault("transports", []).append(f"{kind}:responses")
-            if model != models[0]:
-                run.setdefault("fallbacks", []).append(f"{kind}:{model}")
-            return text, model
-        except Exception as exc:
-            last_error = exc
-            log(mod, "warning", "medical %s model %s failed via Responses API: %r", kind, model, exc)
-    raise RuntimeError(f"all {kind} models failed via Responses API: {last_error!r}")
+    timeout = httpx.Timeout(connect=20, read=float(os.environ.get("MEDICAL_READ_TIMEOUT", "240")), write=90, pool=20)
+    for model in resolved:
+        variants = _request_variants(model, system, user_content, effort, max_tokens, json_mode)
+        for variant_index, body in enumerate(variants, start=1):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(base_url() + "/responses", headers=_headers(mod), json=body)
+                request_id = response.headers.get("x-request-id", "")
+                if response.status_code >= 400:
+                    code, message = _error_text(response)
+                    combined = f"{code} {message}".lower()
+                    if response.status_code in {401, 403}:
+                        raise MedicalAPIError("auth", f"HTTP {response.status_code}: {message}", status=response.status_code, request_id=request_id)
+                    if response.status_code == 429 and any(token in combined for token in ("quota", "billing", "credit", "insufficient")):
+                        raise MedicalAPIError("quota", f"HTTP 429: {message}", status=429, request_id=request_id)
+                    if response.status_code == 404 or "model_not_found" in combined or "does not exist" in combined:
+                        last_error = MedicalAPIError("model", f"Model {model} unavailable: {message}", status=response.status_code, request_id=request_id)
+                        break
+                    if response.status_code == 400 and variant_index < len(variants):
+                        last_error = MedicalAPIError("request", f"HTTP 400: {message}", status=400, request_id=request_id)
+                        continue
+                    raise MedicalAPIError("request", f"HTTP {response.status_code}: {message}", status=response.status_code, request_id=request_id)
+                data = response.json()
+                text = _response_text(data)
+                if not text:
+                    status = data.get("status")
+                    incomplete = data.get("incomplete_details") or data.get("error") or {}
+                    raise MedicalAPIError("empty", f"empty Responses API output; status={status}; details={incomplete}; request_id={request_id}", request_id=request_id)
+                run.setdefault("calls", []).append(_usage(model, data))
+                run.setdefault("transports", []).append(f"{kind}:responses")
+                if requested and model != requested[0]:
+                    run.setdefault("fallbacks", []).append(f"{kind}:{model}")
+                return text, model
+            except MedicalAPIError as exc:
+                last_error = exc
+                log(mod, "warning", "medical %s model %s failed via Responses API [%s]: %s", kind, model, exc.category, exc)
+                if exc.category in {"auth", "quota", "missing_key"}:
+                    raise
+                if exc.category == "model":
+                    break
+            except Exception as exc:
+                last_error = exc
+                log(mod, "warning", "medical %s model %s failed via Responses API: %r", kind, model, exc)
+    if isinstance(last_error, MedicalAPIError):
+        raise last_error
+    raise MedicalAPIError("unavailable", f"all {kind} models failed via Responses API: {last_error!r}")
+
+
+async def probe_api(mod: Any, force: bool = True) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "base_url": base_url(),
+        "key_source": api_key_source(mod),
+        "key_fingerprint": key_fingerprint(mod),
+        "models_status": "not_tested",
+        "responses_status": "not_tested",
+        "selected_model": "",
+        "available_preferred": [],
+        "error": "",
+    }
+    models, error = await available_models(mod, force=force)
+    if error:
+        result["models_status"] = "error"
+        result["error"] = error
+        return result
+    result["models_status"] = "ok"
+    result["available_preferred"] = [m for m in ["gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-4.1-mini", "gpt-4o-mini"] if m in models]
+    candidates = result["available_preferred"] or [m for m in models if m.startswith("gpt-")][:5]
+    if not candidates:
+        result["responses_status"] = "no_compatible_model"
+        return result
+    model = candidates[0]
+    result["selected_model"] = model
+    body = {"model": model, "input": "Reply with exactly OK", "max_output_tokens": 20, "store": False}
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post(base_url() + "/responses", headers=_headers(mod), json=body)
+        if response.status_code >= 400:
+            code, message = _error_text(response)
+            result["responses_status"] = f"http_{response.status_code}"
+            result["error"] = f"{code}: {message}"
+        else:
+            text = _response_text(response.json())
+            result["responses_status"] = "ok" if text else "empty"
+    except Exception as exc:
+        result["responses_status"] = "error"
+        result["error"] = clean(exc, 600)
+    return result
 
 
 def normalize_extraction(data: dict) -> dict:
@@ -298,7 +495,7 @@ async def extract_image(mod: Any, run: dict, raw: bytes, mime: str, goal: str, t
     text, _ = await call_model(mod, run, "extract", fallbacks(model, "extract"), EXTRACT_SYSTEM, user_content, "low", int_env("MEDICAL_EXTRACT_MAX_OUTPUT", 4200, 1800, 7500), True)
     data = parse_json(text)
     if not data:
-        raise RuntimeError("extract model returned no valid JSON object")
+        raise MedicalAPIError("parse", "extract model returned no valid JSON object")
     return normalize_extraction(data)
 
 
@@ -307,5 +504,5 @@ async def extract_text(mod: Any, run: dict, source: str, goal: str, track: str, 
     text, _ = await call_model(mod, run, "extract", fallbacks(model, "extract"), EXTRACT_SYSTEM, prompt, "low", int_env("MEDICAL_EXTRACT_MAX_OUTPUT", 4200, 1800, 7500), True)
     data = parse_json(text)
     if not data:
-        raise RuntimeError("extract model returned no valid JSON object")
+        raise MedicalAPIError("parse", "extract model returned no valid JSON object")
     return normalize_extraction(data)
