@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v120.1-presentation-resume-router-2026-07-18"
+VERSION = "v120.2-presentation-resume-router-2026-07-18"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
