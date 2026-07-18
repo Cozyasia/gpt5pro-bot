@@ -21,6 +21,14 @@ try:
 except Exception:
     pass
 
+# The same explicit path is required for the canonical /version handler.
+# Do not rely only on sitecustomize.py: Render starts the service as main.py.
+try:
+    from neyrobot_prod.versioning import install_early as _install_version_contract
+    _install_version_contract()
+except Exception:
+    pass
+
 # Presentation Studio v105 bootstrap. This import hook is installed before
 # main.py imports presentation_studio, so no monolithic source rewrite is needed.
 try:
