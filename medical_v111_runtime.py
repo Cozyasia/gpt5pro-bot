@@ -1,18 +1,27 @@
 # -*- coding: utf-8 -*-
-"""Runtime pipeline for the universal medical engine v112."""
+"""Runtime pipeline for the universal medical engine v113."""
 from __future__ import annotations
 
-import base64
 import contextlib
 import hashlib
 import json
 import traceback
 from typing import Any
 
-from medical_v111_client import clean, extract_image, extract_text, log, model_plan, normalize_extraction, plain, split_text, user_tier
+from medical_v111_client import (
+    MedicalAPIError,
+    clean,
+    extract_image,
+    extract_text,
+    log,
+    model_plan,
+    plain,
+    split_text,
+    user_tier,
+)
 from medical_v111_reasoning import card_metadata, reason_and_audit
 
-VERSION = "v112-medical-responses-api-reliability-2026-07-18"
+VERSION = "v113-medical-official-model-discovery-2026-07-18"
 
 
 def _capture(context: Any) -> dict:
@@ -60,28 +69,40 @@ async def _offer_save(mod: Any, update: Any, context: Any) -> None:
         log(mod, "warning", "medical card offer failed: %r", exc)
 
 
-async def _legacy_fallback(mod: Any, source: Any, goal: str, track: str, is_image: bool) -> str:
-    try:
-        import medical_v108_patch as old
-        if is_image:
-            extracted = await mod.ask_openai_vision(
-                old._extraction_prompt(track, goal),
-                base64.b64encode(source).decode("ascii"),
-                mod.sniff_image_mime(source),
-            )
-        else:
-            extracted = clean(source, 24000)
-        return await old._reason(mod, extracted, track, goal, "медицинский материал")
-    except Exception:
-        return "Не удалось надёжно обработать материал. Пришлите чёткое фото без бликов либо PDF/текст официального заключения."
-
-
 def _stage_label(stage: str) -> str:
     return {
         "extract": "точного чтения и структурирования документа",
         "reason": "клинического разбора",
         "audit": "независимой проверки ответа",
     }.get(stage, "медицинского анализа")
+
+
+def _public_api_error(exc: MedicalAPIError, stage: str, error_id: str) -> str:
+    prefix = f"⚠️ Не удалось завершить этап {_stage_label(stage)}."
+    if exc.category in {"missing_key", "auth"}:
+        return (
+            prefix + " Официальный OpenAI API отклонил ключ. Проверьте переменную "
+            "MEDICAL_OPENAI_API_KEY, отсутствие пробелов и значение "
+            "MEDICAL_OPENAI_BASE_URL=https://api.openai.com/v1. "
+            f"Код диагностики: {error_id}."
+        )
+    if exc.category == "quota":
+        return (
+            prefix + " Для проекта OpenAI API недоступен оплаченный лимит: проверьте баланс, "
+            "бюджет именно проекта, к которому относится ключ, и Usage Limits. "
+            f"Код диагностики: {error_id}."
+        )
+    if exc.category == "model":
+        return (
+            prefix + " Настроенная модель недоступна этому API-проекту. Бот проверяет /v1/models, "
+            "но не нашёл совместимую модель. Запустите /diag_medical. "
+            f"Код диагностики: {error_id}."
+        )
+    return (
+        prefix + " Запрос не передан старому OpenRouter-контуру, чтобы медицинский ответ не был "
+        "сформирован неподходящим или неавторизованным резервом. Запустите /diag_medical. "
+        f"Код диагностики: {error_id}."
+    )
 
 
 async def analyze(mod: Any, update: Any, context: Any, source: Any,
@@ -98,7 +119,8 @@ async def analyze(mod: Any, update: Any, context: Any, source: Any,
         "🩺 Универсальный медицинский анализ:\n"
         f"1) точное извлечение — {plan['extract']};\n"
         f"2) клинический разбор — {plan['reason']};\n"
-        f"3) независимый аудит — {plan['audit']}."
+        f"3) независимый аудит — {plan['audit']}.\n\n"
+        "Перед каждым этапом бот проверяет доступность официальных моделей для текущего API-проекта."
     )
 
     try:
@@ -112,11 +134,13 @@ async def analyze(mod: Any, update: Any, context: Any, source: Any,
         confidence = float(extraction.get("confidence") or 0)
         if extraction.get("image_quality") == "poor" or confidence < 0.45:
             await update.effective_message.reply_text(
-                "⚠️ Источник распознан не полностью уверенно. Ограничения будут явно отмечены; для максимальной точности лучше приложить PDF или более чёткое фото."
+                "⚠️ Источник распознан не полностью уверенно. Ограничения будут явно отмечены; "
+                "для максимальной точности лучше приложить PDF или более чёткое фото."
             )
         else:
             await update.effective_message.reply_text(
-                "✅ Факты структурированы. Проверяю клинический смысл, уровень срочности, актуальные рекомендации и точность каждого числа…"
+                "✅ Факты структурированы. Проверяю клинический смысл, уровень срочности, "
+                "актуальные рекомендации и точность каждого числа…"
             )
 
         stage = "reason"
@@ -126,20 +150,33 @@ async def analyze(mod: Any, update: Any, context: Any, source: Any,
         if run.get("fallbacks"):
             used_models = ", ".join(item.split(":", 1)[-1] for item in run["fallbacks"])
             await update.effective_message.reply_text(
-                "ℹ️ Одна из основных моделей была временно недоступна. "
-                f"Анализ завершён резервным маршрутом: {used_models}."
+                "ℹ️ Одна из настроенных моделей недоступна этому API-проекту. "
+                f"Анализ завершён официальным резервным маршрутом: {used_models}."
             )
+    except MedicalAPIError as exc:
+        error_id = hashlib.sha256(f"{exc.category}|{exc.status}|{exc}".encode()).hexdigest()[:8]
+        log(mod, "error", "medical v113 failed %s at %s [%s]: %s\n%s", error_id, stage, exc.category, exc, traceback.format_exc())
+        _capture(context)
+        await update.effective_message.reply_text(_public_api_error(exc, stage, error_id))
+        keyboard = None
+        with contextlib.suppress(Exception):
+            keyboard = mod.medicine_kb()
+        if keyboard is not None:
+            await update.effective_message.reply_text(
+                "Медицинский документ не сохранён и клинический ответ не сформирован, потому что "
+                "официальный API не завершил анализ.",
+                reply_markup=keyboard,
+            )
+        return
     except Exception as exc:
         error_id = hashlib.sha256(f"{type(exc).__name__}|{exc}".encode()).hexdigest()[:8]
-        log(mod, "error", "medical v112 failed %s at %s: %r\n%s", error_id, stage, exc, traceback.format_exc())
+        log(mod, "error", "medical v113 unexpected failure %s at %s: %r\n%s", error_id, stage, exc, traceback.format_exc())
+        _capture(context)
         await update.effective_message.reply_text(
-            f"⚠️ Не удалось завершить этап {_stage_label(stage)} в новом медицинском контуре. "
-            "Использую резервный анализатор, чтобы не потерять запрос. "
-            f"Код диагностики: {error_id}."
+            f"⚠️ Внутренняя ошибка этапа {_stage_label(stage)}. Старый OpenRouter-анализатор не "
+            f"использован. Запустите /diag_medical. Код диагностики: {error_id}."
         )
-        answer = await _legacy_fallback(mod, source, goal_text, track, is_image)
-        extraction = normalize_extraction({"document_type": "other", "document_title": "Медицинский документ", "confidence": 0})
-        engine_meta = {"fallback": True, "error_id": error_id, "failed_stage": stage}
+        return
 
     engine_meta["calls"] = run["calls"]
     engine_meta["fallbacks"] = run["fallbacks"]
