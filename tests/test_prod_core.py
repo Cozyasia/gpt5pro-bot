@@ -11,7 +11,8 @@ from pathlib import Path
 
 from neyrobot_prod.db import backup_database, connect, init_schema, install_sqlite_hardening
 from neyrobot_prod.medical_followup import STANDARD_DISCLAIMER, dedupe_disclaimer, offer, patch_runtime as patch_medical
-from neyrobot_prod.payments import precheckout_handler, process_once
+from neyrobot_prod.payment_guard import expected_invoice, precheckout_handler
+from neyrobot_prod.payments import process_once
 
 
 class FakeMessage:
@@ -129,6 +130,12 @@ class PaymentTests(unittest.TestCase):
             )
             self.assertTrue(first.processed)
             self.assertTrue(second.duplicate)
+
+    def test_precheckout_uses_legacy_discount_table_when_available(self):
+        with tempfile.TemporaryDirectory() as td:
+            mod = self._mod(str(Path(td) / "subs.db"))
+            mod._plan_payload_and_amount = lambda tier, months: (f"sub:{tier}:{months}", 2799, "PRO quarter")
+            self.assertEqual(expected_invoice(mod, "sub:pro:3"), ("RUB", 279900))
 
     def test_precheckout_rejects_stale_amount(self):
         with tempfile.TemporaryDirectory() as td:
