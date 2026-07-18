@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v123-celebrity-selfie-exclusive-flow-2026-07-19"
+VERSION = "v123.1-celebrity-selfie-photo-entry-2026-07-19"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -45,13 +45,21 @@ except Exception:
     pass
 
 # v123 gives the Celebrity Selfie wizard exclusive control over its callbacks,
-# photo uploads and text. It is installed after v122 so its build wrapper can
-# register the final handlers at priority -10000, ahead of all legacy routers.
+# photo uploads and text at priority -10000.
 try:
     from celebrity_selfie_v123 import install_builder_hook as _install_celebrity_selfie_flow
     from celebrity_selfie_v123 import install_runtime_async as _install_celebrity_selfie_flow_runtime
     _install_celebrity_selfie_flow()
     _install_celebrity_selfie_flow_runtime()
+except Exception:
+    pass
+
+# The photo quick-actions menu uses a different legacy callback:
+# pedit:aiselfie. Route it into the same exact-reference wizard before the old
+# name-only generator can consume the update.
+try:
+    from celebrity_selfie_v123_pedit import install_builder_hook as _install_celebrity_selfie_pedit
+    _install_celebrity_selfie_pedit()
 except Exception:
     pass
 
