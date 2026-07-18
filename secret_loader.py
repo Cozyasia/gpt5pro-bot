@@ -11,6 +11,16 @@ import os
 from pathlib import Path
 from typing import Iterable
 
+# Explicit production bootstrap. Python does not reliably import a repository
+# sitecustomize.py when a script is executed directly, so the critical v119
+# handlers and SQLite policy are installed from this module, which main.py
+# imports before reading provider keys or building the Telegram Application.
+try:
+    from neyrobot_prod.bootstrap import install_early as _install_production_hardening
+    _install_production_hardening()
+except Exception:
+    pass
+
 # Presentation Studio v105 bootstrap. This import hook is installed before
 # main.py imports presentation_studio, so no monolithic source rewrite is needed.
 try:
