@@ -1,0 +1,13 @@
+# Neyro-Bot v119 production hardening
+# These values are non-secret and may be kept in render.yaml or Environment.
+PROD_HARDENING_ENABLED=1
+JOB_RECOVERY_ENABLED=1
+AUTO_BACKUP_ENABLED=1
+BACKUP_DIR=/data/backups
+BACKUP_RETENTION=14
+BACKUP_INITIAL_DELAY_S=90
+BACKUP_INTERVAL_S=86400
+HEAVY_GLOBAL_CONCURRENCY=3
+
+# Keep all API keys, Telegram token, YooKassa credentials and the optional
+# MEDICAL_CARD_ENCRYPTION_KEY in Render Secret Files / secret Environment only.
