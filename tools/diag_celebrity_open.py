@@ -4,7 +4,7 @@ import traceback
 from pathlib import Path
 from types import SimpleNamespace
 
-import celebrity_selfie_v127 as feature
+import celebrity_selfie_v128 as feature
 
 
 class Message:
@@ -38,6 +38,8 @@ async def probe():
         session = feature.core._session(context, create=False)
         return {
             "ok": True,
+            "version": feature.VERSION,
+            "session_root": str(feature._writable_session_root()),
             "sent": [(text, type(markup).__name__ if markup is not None else None) for text, markup in message.sent],
             "session": dict(session),
             "active": feature.core._active(context),
