@@ -19,10 +19,11 @@ def portrait_bytes(size=(800, 1000)):
 
 
 class CelebritySelfieV133Tests(unittest.TestCase):
-    def test_version(self):
-        self.assertEqual(
-            v133.VERSION,
-            "v133-celebrity-selfie-best-of-n-fallback-2026-07-19",
+    def test_historical_version_remains_documented(self):
+        source = Path("celebrity_selfie_v133.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'VERSION = "v133-celebrity-selfie-best-of-n-fallback-2026-07-19"',
+            source,
         )
 
     def test_scene_profiles_are_specific(self):
@@ -72,9 +73,10 @@ class CelebritySelfieV133Tests(unittest.TestCase):
         self.assertNotIn("Задача не выполнена. Попробуйте позже.", source)
         self.assertIn("return True", source)
 
-    def test_runtime_bootstrap_uses_only_v133_builder(self):
+    def test_runtime_bootstrap_moves_forward_to_v134(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v133 import install_builder_hook", source)
+        self.assertIn("from celebrity_selfie_v134 import install_builder_hook", source)
+        self.assertNotIn("from celebrity_selfie_v133 import install_builder_hook", source)
         for version in ("v122", "v126", "v130_runtime", "v131", "v132"):
             self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", source)
 

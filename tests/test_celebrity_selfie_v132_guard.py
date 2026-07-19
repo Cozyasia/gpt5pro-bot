@@ -33,14 +33,16 @@ class CelebritySelfieV132GuardTests(unittest.TestCase):
         self.assertEqual(reason, "не удалось надёжно закрепить оба лица")
         self.assertNotIn("123", reason)
 
-    def test_v132_guard_is_reused_internally_but_only_v133_builder_is_bootstrapped(self):
+    def test_v132_guard_is_reused_internally_but_only_v134_builder_is_bootstrapped(self):
         bootstrap = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        release = Path("celebrity_selfie_v133.py").read_text(encoding="utf-8")
+        release_v133 = Path("celebrity_selfie_v133.py").read_text(encoding="utf-8")
+        release_v134 = Path("celebrity_selfie_v134.py").read_text(encoding="utf-8")
         self.assertNotIn("from celebrity_selfie_v132_guard import install", bootstrap)
         self.assertNotIn("from celebrity_selfie_v132 import install_builder_hook", bootstrap)
-        self.assertIn("from celebrity_selfie_v133 import install_builder_hook", bootstrap)
-        self.assertIn("import celebrity_selfie_v132_guard as base_guard", release)
-        self.assertIn("base_guard._same_job_selection", release)
+        self.assertNotIn("from celebrity_selfie_v133 import install_builder_hook", bootstrap)
+        self.assertIn("from celebrity_selfie_v134 import install_builder_hook", bootstrap)
+        self.assertIn("import celebrity_selfie_v132_guard as base_guard", release_v133)
+        self.assertIn("previous.base_guard", release_v134)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v133-celebrity-selfie-best-of-n-fallback-2026-07-19"
+VERSION = "v134-celebrity-selfie-face-first-soft-scene-2026-07-19"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -39,13 +39,15 @@ try:
 except Exception:
     pass
 
-# v133 keeps v132's fail-closed final-output validation and adds production
-# best-of-N candidates, a second scene provider fallback, scene-specific prompt
-# contracts, face-similarity ranking, one actionable failure card and same-scene
-# retry without repeating the whole wizard.
+# v134 keeps v133 best-of-N generation and provider fallback, but changes the
+# acceptance policy to face-first: background/location is a soft ranking signal,
+# while only broken composition, missing second person, collage/split-screen or
+# failed identity preservation can block delivery. One rescue scene is attempted
+# when the environment is weak, but a good two-face result is no longer discarded
+# solely because a landmark is subtle.
 try:
-    from celebrity_selfie_v133 import install_builder_hook as _install_celebrity_selfie_best_of_n
-    _install_celebrity_selfie_best_of_n()
+    from celebrity_selfie_v134 import install_builder_hook as _install_celebrity_selfie_face_first
+    _install_celebrity_selfie_face_first()
 except Exception:
     pass
 

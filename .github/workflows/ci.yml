@@ -28,4 +28,14 @@ jobs:
       - name: Run production core tests
         env:
           PROD_HARDENING_ENABLED: "0"
-        run: python -m unittest discover -s tests -v
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -v 2>&1 | tee production-test-output.txt
+      - name: Upload production test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-test-output
+          path: production-test-output.txt
+          if-no-files-found: error
+          retention-days: 7
