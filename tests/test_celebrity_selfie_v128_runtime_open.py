@@ -48,7 +48,8 @@ class CelebritySelfieRuntimeOpenTests(unittest.TestCase):
             feature.core._cached_photo = original_cached
 
         self.assertEqual(len(message.sent), 1)
-        self.assertIn("Точное AI-селфи", message.sent[0][0])
+        self.assertIn("Селфи со звездой", message.sent[0][0])
+        self.assertIn("проверку качества", message.sent[0][0])
         self.assertIsNotNone(message.sent[0][1])
         session = feature.core._session(context, create=False)
         self.assertEqual(session.get("owner"), feature.VERSION)
