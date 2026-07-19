@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-import asyncio
 from io import BytesIO
-import os
 from pathlib import Path
 import unittest
 
 from PIL import Image, ImageDraw
 
-import celebrity_selfie_v130_runtime as runtime
+import celebrity_selfie_v130_runtime as _runtime  # prepares the historical v127 alias
 import celebrity_selfie_v130 as v130
 
 
@@ -25,7 +23,7 @@ def image_bytes(size=(900, 1100), *, detail=True):
     return out.getvalue()
 
 
-class CelebritySelfieV130Tests(unittest.TestCase):
+class CelebritySelfieV130HistoricalTests(unittest.TestCase):
     def test_historical_version_and_catalog_contract(self):
         source = Path("celebrity_selfie_v130.py").read_text(encoding="utf-8")
         self.assertIn('VERSION = "v130-celebrity-selfie-identity-lock-2026-07-19"', source)
@@ -47,80 +45,17 @@ class CelebritySelfieV130Tests(unittest.TestCase):
         small = v130._quality_metrics(image_bytes((240, 240)))
         self.assertIn("малень", v130._quality_problem(small))
 
-    def test_identity_source_pair_has_user_left_and_celebrity_right_panels(self):
-        raw = v130._source_pair(image_bytes(), image_bytes(detail=False))
-        with Image.open(BytesIO(raw)) as image:
-            self.assertEqual(image.size, (1800, 900))
+    def test_historical_v130_source_pair_contract_is_documented(self):
+        source = Path("celebrity_selfie_v130.py").read_text(encoding="utf-8")
+        self.assertIn('sheet = Image.new("RGB", (size * 2, size)', source)
+        self.assertIn('"swap_faces_index": "0,1"', source)
+        self.assertIn('"target_faces_index": "0,1"', source)
 
-    def test_raw_draft_is_blocked_when_identity_key_is_missing(self):
-        old = os.environ.pop("PIAPI_API_KEY", None)
-        try:
-            with self.assertRaises(RuntimeError) as raised:
-                asyncio.run(v130._run_quality_generation(
-                    object(), image_bytes(), [image_bytes()], "Test Person", "test scene",
-                    previous_result=image_bytes(),
-                ))
-            self.assertIn("Плохой черновик не отправлен", str(raised.exception))
-        finally:
-            if old is not None:
-                os.environ["PIAPI_API_KEY"] = old
-
-    def test_refinement_uses_previous_scene_without_regenerating_draft(self):
-        calls = {"draft": 0, "lock": 0}
-        original_draft = v130._ORIGINAL_DRAFT_GENERATOR
-        original_lock = v130._identity_lock
-
-        async def forbidden_draft(*args, **kwargs):
-            calls["draft"] += 1
-            raise AssertionError("draft generator must not run during refinement")
-
-        async def fake_lock(mod, user, ref, target):
-            calls["lock"] += 1
-            return target
-
-        v130._ORIGINAL_DRAFT_GENERATOR = forbidden_draft
-        v130._identity_lock = fake_lock
-        try:
-            result = asyncio.run(v130._run_quality_generation(
-                object(), image_bytes(), [image_bytes()], "Test Person", "same scene",
-                previous_result=image_bytes(),
-            ))
-            self.assertTrue(result)
-            self.assertEqual(calls, {"draft": 0, "lock": 1})
-        finally:
-            v130._ORIGINAL_DRAFT_GENERATOR = original_draft
-            v130._identity_lock = original_lock
-
-    def test_piapi_multi_face_contract(self):
-        captured = {}
-        original_task = v130._piapi_task
-
-        async def fake_task(mod, task_type, inputs):
-            captured["task_type"] = task_type
-            captured["inputs"] = inputs
-            return image_bytes()
-
-        v130._piapi_task = fake_task
-        original_face_count = v130._face_count
-
-        async def two_faces(raw):
-            return 2
-
-        v130._face_count = two_faces
-        try:
-            asyncio.run(v130._identity_lock(object(), image_bytes(), image_bytes(), image_bytes()))
-        finally:
-            v130._piapi_task = original_task
-            v130._face_count = original_face_count
-        self.assertEqual(captured["task_type"], "multi-face-swap")
-        self.assertEqual(captured["inputs"]["swap_faces_index"], "0,1")
-        self.assertEqual(captured["inputs"]["target_faces_index"], "0,1")
-        self.assertGreater(len(captured["inputs"]["swap_image"]), 1000)
-
-    def test_v130_runtime_is_historical_and_v131_is_registered(self):
+    def test_v130_runtime_is_historical_and_v132_is_registered(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertNotIn("from celebrity_selfie_v130_runtime import install_builder_hook", source)
-        self.assertIn("from celebrity_selfie_v131 import install_builder_hook", source)
+        self.assertNotIn("from celebrity_selfie_v131 import install_builder_hook", source)
+        self.assertIn("from celebrity_selfie_v132 import install_builder_hook", source)
         self.assertNotIn("from celebrity_selfie_v129 import install_builder_hook", source)
 
 

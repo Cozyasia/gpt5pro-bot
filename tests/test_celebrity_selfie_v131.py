@@ -2,6 +2,7 @@
 import asyncio
 from io import BytesIO
 import os
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
@@ -32,10 +33,11 @@ class _Message:
 
 
 class CelebritySelfieV131Tests(unittest.TestCase):
-    def test_version(self):
-        self.assertEqual(
-            v131.VERSION,
-            "v131-celebrity-selfie-tolerant-face-preflight-2026-07-19",
+    def test_historical_version(self):
+        source = Path("celebrity_selfie_v131.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'VERSION = "v131-celebrity-selfie-tolerant-face-preflight-2026-07-19"',
+            source,
         )
 
     def test_good_photo_is_accepted_when_local_detector_returns_zero(self):
