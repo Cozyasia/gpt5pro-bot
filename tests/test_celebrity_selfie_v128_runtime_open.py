@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
-import celebrity_selfie_v127 as feature
+import celebrity_selfie_v128 as feature
 
 
 class _Message:
@@ -23,6 +24,13 @@ class _Context:
 
 
 class CelebritySelfieRuntimeOpenTests(unittest.TestCase):
+    def test_session_root_is_actually_writable(self):
+        root = feature._writable_session_root()
+        self.assertTrue(Path(root).is_dir())
+        probe = Path(root) / ".runtime_test"
+        probe.write_bytes(b"ok")
+        probe.unlink()
+
     def test_real_open_builds_session_and_upload_prompt(self):
         message = _Message()
         update = SimpleNamespace(
