@@ -42,7 +42,7 @@ except Exception:
 # v130 keeps the stable v129 flow/storage fixes and adds mandatory identity
 # locking. Weak Gemini drafts are never delivered as final results.
 try:
-    from celebrity_selfie_v130 import install_builder_hook as _install_celebrity_selfie_identity_lock
+    from celebrity_selfie_v130_runtime import install_builder_hook as _install_celebrity_selfie_identity_lock
     _install_celebrity_selfie_identity_lock()
 except Exception:
     pass
