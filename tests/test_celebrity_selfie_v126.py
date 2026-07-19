@@ -16,7 +16,7 @@ class CelebritySelfieV126Tests(unittest.TestCase):
     def test_v126_is_retained_but_its_builder_is_not_installed(self):
         self.assertTrue(Path("celebrity_selfie_v126.py").exists())
         self.assertNotIn("from celebrity_selfie_v126 import install_builder_hook", self.bootstrap)
-        self.assertIn("from celebrity_selfie_v128 import install_builder_hook", self.bootstrap)
+        self.assertIn("from celebrity_selfie_v129 import install_builder_hook", self.bootstrap)
 
     def test_plain_telegram_photo_uses_largest_photo_without_filename(self):
         self.assertIn("media = photos[-1] if photos else None", self.source)
