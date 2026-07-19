@@ -2,14 +2,14 @@
 """Stable bootstrap for the v130 quality overlay.
 
 The historical v127 module calls its v126 implementation ``core`` rather than
-``previous``.  Expose that alias before importing v130 so the shared release
+``previous``. Expose that alias before importing v130 so the shared release
 version can be propagated through the old routing chain without special cases.
 """
 from __future__ import annotations
 
 import celebrity_selfie_v129 as base
 
-_v127 = base.previous.previous.previous
+_v127 = base.previous.previous
 if not hasattr(_v127, "previous"):
     _v127.previous = _v127.core
 
