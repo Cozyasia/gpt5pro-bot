@@ -3,8 +3,8 @@
 
 v128 fixed the per-user session directory, but the v122 reference downloader has
 its own independent ``CelebrityLibrary`` instance rooted at
-``/data/celebrity_library``.  When Render has no writable persistent disk at
-/data, selecting any catalog person fails before generation.  v129 verifies the
+``/data/celebrity_library``. When Render has no writable persistent disk at
+/data, selecting any catalog person fails before generation. v129 verifies the
 reference root with an actual write probe, falls back to /tmp, and patches the
 live v122 library instance before any callback is handled.
 """
@@ -106,6 +106,56 @@ def _ensure_refs_writable(*args: Any, **kwargs: Any):
 
 
 engine.LIBRARY.ensure_refs = _ensure_refs_writable
+
+# v122's status line always says that references are saved on a persistent disk.
+# That is incorrect when Render falls back to /tmp. Wrap only this one primitive
+# with per-update proxies; no global Telegram object is mutated, so concurrent
+# users remain isolated.
+_ORIGINAL_PREPARE_LIBRARY_REFS = engine._prepare_library_refs
+
+
+class _MessageProxy:
+    def __init__(self, target: Any):
+        self._target = target
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._target, name)
+
+    async def reply_text(self, text: str, *args: Any, **kwargs: Any):
+        value = str(text)
+        old = "Первое обращение может занять до минуты; затем файлы сохранятся на постоянном диске."
+        if old in value:
+            root = Path(engine.LIBRARY.root)
+            if str(root).startswith("/tmp/") or root == Path("/tmp"):
+                replacement = (
+                    "Первое обращение может занять до минуты; повторные обращения будут быстрее "
+                    "до следующего перезапуска сервиса."
+                )
+            else:
+                replacement = (
+                    "Первое обращение может занять до минуты; затем файлы сохранятся "
+                    "в кэше библиотеки."
+                )
+            value = value.replace(old, replacement)
+        return await self._target.reply_text(value, *args, **kwargs)
+
+
+class _UpdateProxy:
+    def __init__(self, target: Any):
+        self._target = target
+        self.effective_message = _MessageProxy(target.effective_message)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._target, name)
+
+
+async def _prepare_library_refs(update: Any, context: Any, entry: dict[str, Any]) -> None:
+    message = getattr(update, "effective_message", None)
+    wrapped = _UpdateProxy(update) if message is not None else update
+    await _ORIGINAL_PREPARE_LIBRARY_REFS(wrapped, context, entry)
+
+
+engine._prepare_library_refs = _prepare_library_refs
 
 
 def _active(context: Any) -> bool:
