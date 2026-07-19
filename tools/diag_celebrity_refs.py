@@ -29,18 +29,39 @@ class Context:
         self.bot = SimpleNamespace()
 
 
+def safe_repr(value, limit=3000):
+    try:
+        return repr(value)[:limit]
+    except Exception as exc:
+        return f"<repr failed: {exc!r}>"
+
+
 def engine_storage_inventory():
     found = {}
+    lib_cls = getattr(feature.engine, "CelebrityLibrary", None)
+    if lib_cls is not None:
+        found["CelebrityLibrary:signature"] = safe_repr(inspect.signature(lib_cls))
+        found["CelebrityLibrary:init_signature"] = safe_repr(inspect.signature(lib_cls.__init__))
+        found["CelebrityLibrary:class_dict"] = {
+            name: {"type": type(value).__name__, "repr": safe_repr(value, 1000)}
+            for name, value in vars(lib_cls).items()
+            if not name.startswith("__")
+        }
+
     for name, value in vars(feature.engine).items():
-        try:
-            rendered = repr(value)
-        except Exception:
-            continue
-        if "/data" in rendered or "celebrity_library" in rendered or "CELEBRITY" in name.upper():
-            found[name] = {
-                "type": type(value).__name__,
-                "repr": rendered[:2000],
-            }
+        rendered = safe_repr(value)
+        cls_name = type(value).__name__
+        if (
+            "/data" in rendered
+            or "celebrity_library" in rendered
+            or "CELEBRITY" in name.upper()
+            or cls_name == "CelebrityLibrary"
+        ):
+            row = {"type": cls_name, "repr": rendered}
+            if cls_name == "CelebrityLibrary":
+                row["dict"] = {k: safe_repr(v) for k, v in vars(value).items()}
+            found[name] = row
+
     for fn_name in ("materialize_layout", "ensure_refs", "_prepare_library_refs"):
         fn = getattr(feature.engine, fn_name, None)
         if callable(fn):
