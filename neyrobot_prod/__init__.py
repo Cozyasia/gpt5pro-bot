@@ -43,6 +43,8 @@ except Exception:
 # pipeline with face-only scene inputs, explicit PiAPI output parsing, strict
 # collage/scene validation, duplicate-job protection and stale-result blocking.
 try:
+    from celebrity_selfie_v132_guard import install as _install_celebrity_selfie_job_guard
+    _install_celebrity_selfie_job_guard()
     from celebrity_selfie_v132 import install_builder_hook as _install_celebrity_selfie_validated_output
     _install_celebrity_selfie_validated_output()
 except Exception:
