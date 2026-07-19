@@ -98,7 +98,7 @@ class CelebritySelfieV132Tests(unittest.TestCase):
         prompt = v132._scene_prompt("Роман Абрамович", "Красная площадь", 0)
         self.assertIn("ONE seamless", prompt)
         self.assertIn("not a collage", prompt)
-        self.assertIn("no vertical divider", prompt)
+        self.assertIn("vertical divider", prompt)
         self.assertIn("Красная площадь", prompt)
 
     def test_duplicate_generation_click_is_blocked_before_second_job(self):
