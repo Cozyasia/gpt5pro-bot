@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v133(self):
+    def test_release_version_is_v134(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v133-celebrity-selfie-best-of-n-fallback-2026-07-19"',
+            'VERSION = "v134-celebrity-selfie-face-first-soft-scene-2026-07-19"',
             source,
         )
 
@@ -37,14 +37,14 @@ class VersionContractTests(unittest.TestCase):
     def test_all_historical_selfie_router_hooks_are_disabled(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         for version in (
-            "v123", "v123_pedit", "v124", "v125", "v126", "v127", "v128", "v129", "v130_runtime", "v131", "v132"
+            "v123", "v123_pedit", "v124", "v125", "v126", "v127", "v128", "v129", "v130_runtime", "v131", "v132", "v133"
         ):
             self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", source)
 
-    def test_v133_best_of_n_is_the_only_selfie_builder(self):
+    def test_v134_face_first_is_the_only_selfie_builder(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v133 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_best_of_n()", source)
+        self.assertIn("from celebrity_selfie_v134 import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie_face_first()", source)
 
 
 if __name__ == "__main__":
