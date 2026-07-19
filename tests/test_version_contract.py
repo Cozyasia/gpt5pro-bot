@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v127(self):
+    def test_release_version_is_v128(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v127-celebrity-selfie-exact-integration-2026-07-19"',
+            'VERSION = "v128-celebrity-selfie-writable-session-single-owner-2026-07-19"',
             source,
         )
 
@@ -36,13 +36,13 @@ class VersionContractTests(unittest.TestCase):
 
     def test_all_historical_selfie_router_hooks_are_disabled(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        for version in ("v123", "v123_pedit", "v124", "v125", "v126"):
+        for version in ("v123", "v123_pedit", "v124", "v125", "v126", "v127"):
             self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", source)
 
-    def test_v127_exact_integration_is_the_only_selfie_builder(self):
+    def test_v128_writable_integration_is_the_only_selfie_builder(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v127 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_exact()", source)
+        self.assertIn("from celebrity_selfie_v128 import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie_writable()", source)
 
 
 if __name__ == "__main__":
