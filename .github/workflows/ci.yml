@@ -28,8 +28,10 @@ jobs:
       - name: Upload decoded runtime
         uses: actions/upload-artifact@v4
         with:
-          name: decoded-v122-runtime
-          path: decoded_v122_runtime.py
+          name: decoded-v122-runtime-2
+          path: |
+            decoded_v122_runtime.py
+            runtime_helper_excerpts.txt
       - name: Compile all Python modules
         run: python -m compileall -q .
       - name: Run production core tests
