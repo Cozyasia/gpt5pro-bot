@@ -51,4 +51,13 @@ try:
 except Exception:
     pass
 
+# CometAPI retired the old preview image route still present in the Render
+# environment. Install the stable-model resolver after v134 has loaded so every
+# scene candidate uses gemini-2.5-flash-image and never the dead preview slug.
+try:
+    from celebrity_selfie_provider_hotfix_v134_1 import install as _install_celebrity_provider_hotfix
+    _install_celebrity_provider_hotfix()
+except Exception:
+    pass
+
 __all__ = ["VERSION"]
