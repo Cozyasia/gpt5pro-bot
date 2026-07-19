@@ -16,11 +16,11 @@ SPEC.loader.exec_module(mod)
 
 
 class CelebritySelfieV122Tests(unittest.TestCase):
-    def test_catalog_has_exactly_50_ru_and_50_us(self):
+    def test_catalog_has_exactly_20_ru_and_10_us(self):
         entries = mod.CELEBRITIES
-        self.assertEqual(100, len(entries))
-        self.assertEqual(50, sum(x.get("country") == "ru" for x in entries))
-        self.assertEqual(50, sum(x.get("country") == "us" for x in entries))
+        self.assertEqual(30, len(entries))
+        self.assertEqual(20, sum(x.get("country") == "ru" for x in entries))
+        self.assertEqual(10, sum(x.get("country") == "us" for x in entries))
         self.assertEqual(len(entries), len({x.get("id") for x in entries}))
         self.assertNotIn("Наталья Орейро", {x.get("display_name") for x in entries})
 
