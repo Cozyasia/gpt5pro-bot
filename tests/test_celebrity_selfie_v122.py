@@ -45,11 +45,11 @@ class CelebritySelfieV122Tests(unittest.TestCase):
             4,
             refinement=True,
         )
-        self.assertIn("exactly two separate people", prompt)
-        self.assertIn("Do not average, merge, blend or swap", prompt)
-        self.assertIn("not documentary evidence", prompt)
-        self.assertIn("do not imply that the public figure endorses", prompt)
-        self.assertIn("previous draft", prompt)
+        self.assertIn("EXACTLY TWO foreground people", prompt)
+        self.assertIn("Do not blend the two identities", prompt)
+        self.assertIn("user's immutable identity reference", prompt)
+        self.assertIn("not evidence, news, endorsement", prompt)
+        self.assertIn("Refine the supplied draft", prompt)
 
     def test_materialized_layout_is_alphabetical_and_metadata_backed(self):
         with TemporaryDirectory() as tmp:
