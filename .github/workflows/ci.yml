@@ -25,18 +25,6 @@ jobs:
           pip install -r requirements.txt
       - name: Compile all Python modules
         run: python -m compileall -q .
-      - name: Reproduce Celebrity Selfie reference preparation
-        env:
-          PROD_HARDENING_ENABLED: "0"
-          PYTHONPATH: "."
-        run: python tools/diag_celebrity_refs.py
-      - name: Upload Celebrity Selfie reference diagnostic
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: celebrity-selfie-reference-diagnostic
-          path: celebrity-refs-diagnostic.json
-          if-no-files-found: error
       - name: Run production core tests
         env:
           PROD_HARDENING_ENABLED: "0"
