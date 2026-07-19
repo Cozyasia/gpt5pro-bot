@@ -85,12 +85,17 @@ async def probe(name: str):
         feature.engine._prepare_library_refs(update, context, item),
         timeout=120,
     )
+    paths = list(feature.engine.LIBRARY.reference_paths(item))
+    if not paths:
+        raise RuntimeError(f"no reference files created for {name!r}")
     return {
         "name": name,
         "item": item,
         "session": dict(feature.core._session(context, create=False)),
         "messages": message.sent,
-        "reference_paths": [str(path) for path in feature.engine.LIBRARY.reference_paths(item["id"])],
+        "reference_paths": [str(path) for path in paths],
+        "reference_count": len(paths),
+        "reference_sizes": [path.stat().st_size for path in paths],
     }
 
 
