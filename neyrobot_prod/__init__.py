@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v127-celebrity-selfie-exact-integration-2026-07-19"
+VERSION = "v128-celebrity-selfie-writable-session-single-owner-2026-07-19"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -31,7 +31,7 @@ try:
 except Exception:
     pass
 
-# Keep only the audited v122 library runtime: 50 RU + 50 US catalog entries,
+# Keep the audited v122 library runtime: 50 RU + 50 US catalog entries,
 # Wikimedia reference packs and the multi-image generation/refinement engine.
 try:
     from celebrity_selfie_v122 import install_runtime_async as _install_celebrity_library_runtime
@@ -39,11 +39,11 @@ try:
 except Exception:
     pass
 
-# v127 owns the exact production callbacks and media/text routing. Older
-# Celebrity Selfie builder hooks are deliberately not installed.
+# v128 verifies writable session storage and is the sole Telegram owner of the
+# Celebrity Selfie callback, photos, image documents and text steps.
 try:
-    from celebrity_selfie_v127 import install_builder_hook as _install_celebrity_selfie_exact
-    _install_celebrity_selfie_exact()
+    from celebrity_selfie_v128 import install_builder_hook as _install_celebrity_selfie_writable
+    _install_celebrity_selfie_writable()
 except Exception:
     pass
 
