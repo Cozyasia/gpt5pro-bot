@@ -9,8 +9,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 os.environ.setdefault("CELEBRITY_SESSION_ROOT", "/tmp/celebrity_selfie_sessions")
+os.environ.setdefault("CELEBRITY_LIBRARY_ROOT", "/tmp/celebrity_library")
 
-import celebrity_selfie_v128 as feature
+import celebrity_selfie_v129 as feature
 
 
 class Message:
@@ -37,16 +38,14 @@ def safe_repr(value, limit=3000):
 
 
 def engine_storage_inventory():
-    found = {}
+    found = {
+        "selected_library_root": str(feature.engine.LIBRARY.root),
+        "selected_library_writable": bool(feature._probe_writable(Path(feature.engine.LIBRARY.root))),
+    }
     lib_cls = getattr(feature.engine, "CelebrityLibrary", None)
     if lib_cls is not None:
         found["CelebrityLibrary:signature"] = safe_repr(inspect.signature(lib_cls))
         found["CelebrityLibrary:init_signature"] = safe_repr(inspect.signature(lib_cls.__init__))
-        found["CelebrityLibrary:class_dict"] = {
-            name: {"type": type(value).__name__, "repr": safe_repr(value, 1000)}
-            for name, value in vars(lib_cls).items()
-            if not name.startswith("__")
-        }
 
     for name, value in vars(feature.engine).items():
         rendered = safe_repr(value)
@@ -61,14 +60,6 @@ def engine_storage_inventory():
             if cls_name == "CelebrityLibrary":
                 row["dict"] = {k: safe_repr(v) for k, v in vars(value).items()}
             found[name] = row
-
-    for fn_name in ("materialize_layout", "ensure_refs", "_prepare_library_refs"):
-        fn = getattr(feature.engine, fn_name, None)
-        if callable(fn):
-            try:
-                found[f"signature:{fn_name}"] = str(inspect.signature(fn))
-            except Exception as exc:
-                found[f"signature:{fn_name}"] = repr(exc)
     return found
 
 
@@ -99,6 +90,7 @@ async def probe(name: str):
         "item": item,
         "session": dict(feature.core._session(context, create=False)),
         "messages": message.sent,
+        "reference_paths": [str(path) for path in feature.engine.LIBRARY.reference_paths(item["id"])],
     }
 
 
