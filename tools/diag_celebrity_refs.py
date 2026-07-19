@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import inspect
 import json
 import os
 import tempfile
@@ -26,6 +27,28 @@ class Context:
         self.user_data = {}
         self.bot_data = {}
         self.bot = SimpleNamespace()
+
+
+def engine_storage_inventory():
+    found = {}
+    for name, value in vars(feature.engine).items():
+        try:
+            rendered = repr(value)
+        except Exception:
+            continue
+        if "/data" in rendered or "celebrity_library" in rendered or "CELEBRITY" in name.upper():
+            found[name] = {
+                "type": type(value).__name__,
+                "repr": rendered[:2000],
+            }
+    for fn_name in ("materialize_layout", "ensure_refs", "_prepare_library_refs"):
+        fn = getattr(feature.engine, fn_name, None)
+        if callable(fn):
+            try:
+                found[f"signature:{fn_name}"] = str(inspect.signature(fn))
+            except Exception as exc:
+                found[f"signature:{fn_name}"] = repr(exc)
+    return found
 
 
 async def probe(name: str):
@@ -59,17 +82,17 @@ async def probe(name: str):
 
 
 async def main_async():
-    output = []
+    output = {"inventory": engine_storage_inventory(), "probes": []}
     for name in ("Роман Абрамович", "Тимур Батрутдинов"):
         try:
-            output.append({"ok": True, "result": await probe(name)})
+            output["probes"].append({"ok": True, "result": await probe(name)})
         except BaseException:
-            output.append({"ok": False, "name": name, "traceback": traceback.format_exc()})
+            output["probes"].append({"ok": False, "name": name, "traceback": traceback.format_exc()})
     Path("celebrity-refs-diagnostic.json").write_text(
         json.dumps(output, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
-    if not all(row.get("ok") for row in output):
+    if not all(row.get("ok") for row in output["probes"]):
         raise SystemExit(1)
 
 
