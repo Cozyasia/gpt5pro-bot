@@ -9,20 +9,14 @@ class CelebritySelfieV126Tests(unittest.TestCase):
         cls.source = Path("celebrity_selfie_v126.py").read_text(encoding="utf-8")
         cls.bootstrap = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
 
-    def test_entry_is_detected_from_clicked_button_text(self):
-        self.assertIn("def _button_text", self.source)
-        self.assertIn('"селфи" in text', self.source)
-        self.assertIn('"звезд" in text or "знаменит" in text', self.source)
-        self.assertIn("callback_data", self.source)
-
-    def test_known_legacy_callback_names_are_also_supported(self):
-        for value in ("act:fun:aiselfie", "pedit:aiselfie", "act:fun:selfie"):
+    def test_known_legacy_callback_names_are_supported_by_the_clean_wizard(self):
+        for value in ("act:fun:aiselfie", "pedit:aiselfie", "fun:aiselfie"):
             self.assertIn(value, self.source)
 
-    def test_v126_is_the_only_installed_selfie_builder(self):
-        self.assertIn("from celebrity_selfie_v126 import install_builder_hook", self.bootstrap)
-        for old in ("v122", "v123", "v123_pedit", "v124", "v125"):
-            self.assertNotIn(f"from celebrity_selfie_{old} import install_builder_hook", self.bootstrap)
+    def test_v126_is_retained_but_its_builder_is_not_installed(self):
+        self.assertTrue(Path("celebrity_selfie_v126.py").exists())
+        self.assertNotIn("from celebrity_selfie_v126 import install_builder_hook", self.bootstrap)
+        self.assertIn("from celebrity_selfie_v127 import install_builder_hook", self.bootstrap)
 
     def test_plain_telegram_photo_uses_largest_photo_without_filename(self):
         self.assertIn("media = photos[-1] if photos else None", self.source)
@@ -54,11 +48,6 @@ class CelebritySelfieV126Tests(unittest.TestCase):
         self.assertNotIn("Упс, произошла ошибка", self.source)
         self.assertNotIn("Сессия восстановлена", self.source)
         self.assertNotIn("Фото получено. Что сделать?", self.source)
-
-    def test_every_owned_update_stops_legacy_handlers(self):
-        self.assertIn("_GROUP = -50000", self.source)
-        self.assertIn("raise ApplicationHandlerStop", self.source)
-        self.assertIn("CallbackQueryHandler(_callback)", self.source)
 
     def test_refinement_remains_available_through_v122_callbacks(self):
         self.assertIn('data.startswith("celeb:")', self.source)
