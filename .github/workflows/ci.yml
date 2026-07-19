@@ -28,7 +28,14 @@ jobs:
       - name: Reproduce Celebrity Selfie entry
         env:
           PROD_HARDENING_ENABLED: "0"
-        run: python -m unittest tests.test_celebrity_selfie_v128_runtime_open -v
+        run: python tools/diag_celebrity_open.py
+      - name: Upload Celebrity Selfie diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: celebrity-selfie-open-diagnostic
+          path: celebrity-diagnostic.txt
+          if-no-files-found: error
       - name: Run production core tests
         env:
           PROD_HARDENING_ENABLED: "0"
