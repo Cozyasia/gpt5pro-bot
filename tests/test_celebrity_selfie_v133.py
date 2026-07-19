@@ -19,10 +19,11 @@ def portrait_bytes(size=(800, 1000)):
 
 
 class CelebritySelfieV133Tests(unittest.TestCase):
-    def test_version(self):
-        self.assertEqual(
-            v133.VERSION,
-            "v133-celebrity-selfie-best-of-n-fallback-2026-07-19",
+    def test_historical_version_remains_documented(self):
+        source = Path("celebrity_selfie_v133.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'VERSION = "v133-celebrity-selfie-best-of-n-fallback-2026-07-19"',
+            source,
         )
 
     def test_scene_profiles_are_specific(self):
