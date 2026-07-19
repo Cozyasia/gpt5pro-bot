@@ -16,11 +16,11 @@ SPEC.loader.exec_module(mod)
 
 
 class CelebritySelfieV122Tests(unittest.TestCase):
-    def test_catalog_has_exactly_50_ru_and_50_us(self):
+    def test_catalog_has_exactly_20_ru_and_10_us(self):
         entries = mod.CELEBRITIES
-        self.assertEqual(100, len(entries))
-        self.assertEqual(50, sum(x.get("country") == "ru" for x in entries))
-        self.assertEqual(50, sum(x.get("country") == "us" for x in entries))
+        self.assertEqual(30, len(entries))
+        self.assertEqual(20, sum(x.get("country") == "ru" for x in entries))
+        self.assertEqual(10, sum(x.get("country") == "us" for x in entries))
         self.assertEqual(len(entries), len({x.get("id") for x in entries}))
         self.assertNotIn("Наталья Орейро", {x.get("display_name") for x in entries})
 
@@ -45,11 +45,11 @@ class CelebritySelfieV122Tests(unittest.TestCase):
             4,
             refinement=True,
         )
-        self.assertIn("exactly two separate people", prompt)
-        self.assertIn("Do not average, merge, blend or swap", prompt)
-        self.assertIn("not documentary evidence", prompt)
-        self.assertIn("do not imply that the public figure endorses", prompt)
-        self.assertIn("previous draft", prompt)
+        self.assertIn("EXACTLY TWO foreground people", prompt)
+        self.assertIn("Do not blend the two identities", prompt)
+        self.assertIn("user's immutable identity reference", prompt)
+        self.assertIn("not evidence, news, endorsement", prompt)
+        self.assertIn("Refine the supplied draft", prompt)
 
     def test_materialized_layout_is_alphabetical_and_metadata_backed(self):
         with TemporaryDirectory() as tmp:
