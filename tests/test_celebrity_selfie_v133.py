@@ -67,7 +67,8 @@ class CelebritySelfieV133Tests(unittest.TestCase):
 
     def test_handled_failure_suppresses_legacy_generic_card(self):
         source = Path("celebrity_selfie_v133.py").read_text(encoding="utf-8")
-        self.assertIn("failure was fully handled", source)
+        self.assertIn("Качественный результат не получен", source)
+        self.assertIn("Повторить эту же сцену", source)
         self.assertNotIn("Задача не выполнена. Попробуйте позже.", source)
         self.assertIn("return True", source)
 
