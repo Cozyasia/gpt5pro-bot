@@ -5,6 +5,7 @@ import unittest
 
 from PIL import Image, ImageDraw
 
+import celebrity_selfie_v130_runtime as _runtime  # prepares the historical v127 alias
 import celebrity_selfie_v130 as v130
 
 
