@@ -19,7 +19,7 @@ class CelebritySelfieV127HistoricalTests(unittest.TestCase):
 
     def test_v127_is_no_longer_registered(self):
         self.assertNotIn("from celebrity_selfie_v127 import install_builder_hook", self.bootstrap)
-        self.assertIn("from celebrity_selfie_v130_runtime import install_builder_hook", self.bootstrap)
+        self.assertIn("from celebrity_selfie_v131 import install_builder_hook", self.bootstrap)
 
 
 if __name__ == "__main__":

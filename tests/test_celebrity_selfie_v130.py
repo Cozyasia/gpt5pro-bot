@@ -26,8 +26,9 @@ def image_bytes(size=(900, 1100), *, detail=True):
 
 
 class CelebritySelfieV130Tests(unittest.TestCase):
-    def test_version_and_catalog_contract(self):
-        self.assertEqual(runtime.VERSION, "v130-celebrity-selfie-identity-lock-2026-07-19")
+    def test_historical_version_and_catalog_contract(self):
+        source = Path("celebrity_selfie_v130.py").read_text(encoding="utf-8")
+        self.assertIn('VERSION = "v130-celebrity-selfie-identity-lock-2026-07-19"', source)
         self.assertEqual(len(v130.RU_IDS), 20)
         self.assertEqual(len(v130.US_IDS), 10)
         self.assertEqual(len(v130.engine.CATALOG.get("celebrities", [])), 30)
@@ -116,9 +117,10 @@ class CelebritySelfieV130Tests(unittest.TestCase):
         self.assertEqual(captured["inputs"]["target_faces_index"], "0,1")
         self.assertGreater(len(captured["inputs"]["swap_image"]), 1000)
 
-    def test_bootstrap_installs_only_v130_runtime(self):
+    def test_v130_runtime_is_historical_and_v131_is_registered(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("celebrity_selfie_v130_runtime", source)
+        self.assertNotIn("from celebrity_selfie_v130_runtime import install_builder_hook", source)
+        self.assertIn("from celebrity_selfie_v131 import install_builder_hook", source)
         self.assertNotIn("from celebrity_selfie_v129 import install_builder_hook", source)
 
 
