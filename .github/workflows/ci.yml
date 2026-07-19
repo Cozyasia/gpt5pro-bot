@@ -28,6 +28,7 @@ jobs:
       - name: Reproduce Celebrity Selfie entry
         env:
           PROD_HARDENING_ENABLED: "0"
+          PYTHONPATH: "."
         run: python tools/diag_celebrity_open.py
       - name: Upload Celebrity Selfie diagnostic
         if: always()
