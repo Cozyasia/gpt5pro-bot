@@ -15,7 +15,7 @@ class CelebritySelfieV125HistoricalTests(unittest.TestCase):
 
     def test_v125_is_no_longer_registered(self):
         self.assertNotIn("from celebrity_selfie_v125 import install_builder_hook", self.bootstrap)
-        self.assertIn("from celebrity_selfie_v127 import install_builder_hook", self.bootstrap)
+        self.assertIn("from celebrity_selfie_v128 import install_builder_hook", self.bootstrap)
 
     def test_historical_download_fallbacks_remain_documented(self):
         self.assertIn("download_to_memory(out=out)", self.source)
