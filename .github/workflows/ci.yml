@@ -23,27 +23,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Decode v122 runtime for inspection
-        run: python tools/decode_v122_payload.py
-      - name: Upload decoded runtime
-        uses: actions/upload-artifact@v4
-        with:
-          name: decoded-v122-runtime-2
-          path: |
-            decoded_v122_runtime.py
-            runtime_helper_excerpts.txt
       - name: Compile all Python modules
         run: python -m compileall -q .
       - name: Run production core tests
         env:
           PROD_HARDENING_ENABLED: "0"
-        run: |
-          set -o pipefail
-          python -m unittest discover -s tests -v 2>&1 | tee v132_test_output.txt
-      - name: Upload v132 test output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: v132-test-output
-          path: v132_test_output.txt
-          if-no-files-found: error
+        run: python -m unittest discover -s tests -v
