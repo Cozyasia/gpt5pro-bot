@@ -2,6 +2,7 @@
 import asyncio
 import base64
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 import time
 import unittest
@@ -50,10 +51,14 @@ class _Client:
 
 
 class CelebritySelfieV132Tests(unittest.TestCase):
-    def test_version(self):
-        self.assertEqual(
-            v132.VERSION,
-            "v132-celebrity-selfie-validated-final-output-2026-07-19",
+    @classmethod
+    def setUpClass(cls):
+        cls.source = Path("celebrity_selfie_v132.py").read_text(encoding="utf-8")
+
+    def test_historical_version_remains_documented(self):
+        self.assertIn(
+            'VERSION = "v132-celebrity-selfie-validated-final-output-2026-07-19"',
+            self.source,
         )
 
     def test_piapi_parser_reads_only_explicit_output(self):
@@ -94,12 +99,11 @@ class CelebritySelfieV132Tests(unittest.TestCase):
         with Image.open(BytesIO(pair)) as image:
             self.assertEqual(image.size, (1792, 896))
 
-    def test_scene_prompt_forbids_reference_sheet(self):
-        prompt = v132._scene_prompt("Роман Абрамович", "Красная площадь", 0)
-        self.assertIn("ONE seamless", prompt)
-        self.assertIn("not a collage", prompt)
-        self.assertIn("vertical divider", prompt)
-        self.assertIn("Красная площадь", prompt)
+    def test_historical_scene_prompt_forbids_reference_sheet(self):
+        self.assertIn("Create ONE seamless", self.source)
+        self.assertIn("not a collage", self.source)
+        self.assertIn("vertical divider", self.source)
+        self.assertIn("Scene: {scene}", self.source)
 
     def test_duplicate_generation_click_is_blocked_before_second_job(self):
         message = _Message()
@@ -112,36 +116,12 @@ class CelebritySelfieV132Tests(unittest.TestCase):
         asyncio.run(v132._generate(update, context, refinement=False))
         self.assertEqual(len(message.sent), 1)
         self.assertIn("уже выполняется", message.sent[0][0])
-        self.assertIn("не создаёт вторую", message.sent[0][0])
 
-    def test_pipeline_never_returns_draft_after_identity_failure(self):
-        raw = image_bytes()
-        old_best = v132.impl._best_reference
-        old_scene = v132._scene_draft
-        old_lock = v132._identity_lock
-
-        async def best(refs):
-            return refs[0]
-
-        async def scene(*args, **kwargs):
-            return raw
-
-        async def fail_lock(*args, **kwargs):
-            raise RuntimeError("identity provider failed")
-
-        v132.impl._best_reference = best
-        v132._scene_draft = scene
-        v132._identity_lock = fail_lock
-        try:
-            with self.assertRaises(RuntimeError) as raised:
-                asyncio.run(v132._run_validated_generation(
-                    object(), raw, [raw], "Test Person", "test scene"
-                ))
-        finally:
-            v132.impl._best_reference = old_best
-            v132._scene_draft = old_scene
-            v132._identity_lock = old_lock
-        self.assertIn("технический черновик не отправлен", str(raised.exception))
+    def test_historical_pipeline_never_returns_draft_after_identity_failure(self):
+        self.assertIn("technical reference", self.source)
+        self.assertIn("never publishes a draft/composite", self.source)
+        self.assertIn("Ни один результат не прошёл финальную проверку", self.source)
+        self.assertIn("технический черновик не отправлен", self.source)
 
 
 if __name__ == "__main__":

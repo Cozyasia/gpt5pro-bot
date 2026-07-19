@@ -38,10 +38,10 @@ class CelebritySelfieV129Tests(unittest.TestCase):
         self.assertIn("library_root_writable=", self.source)
         self.assertIn("reference_flow=enabled", self.source)
 
-    def test_v129_is_historical_and_v132_is_registered(self):
+    def test_v129_is_historical_and_v133_is_registered(self):
         self.assertNotIn("from celebrity_selfie_v129 import install_builder_hook", self.bootstrap)
-        self.assertIn("from celebrity_selfie_v132 import install_builder_hook", self.bootstrap)
-        for version in ("v122", "v123", "v123_pedit", "v124", "v125", "v126", "v127", "v128", "v130_runtime", "v131"):
+        self.assertIn("from celebrity_selfie_v133 import install_builder_hook", self.bootstrap)
+        for version in ("v122", "v123", "v123_pedit", "v124", "v125", "v126", "v127", "v128", "v130_runtime", "v131", "v132"):
             self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", self.bootstrap)
 
 

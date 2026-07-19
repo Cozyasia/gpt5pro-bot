@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v132-celebrity-selfie-validated-final-output-2026-07-19"
+VERSION = "v133-celebrity-selfie-best-of-n-fallback-2026-07-19"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -39,14 +39,13 @@ try:
 except Exception:
     pass
 
-# v132 retains v131's tolerant input preflight and replaces the generation
-# pipeline with face-only scene inputs, explicit PiAPI output parsing, strict
-# collage/scene validation, duplicate-job protection and stale-result blocking.
+# v133 keeps v132's fail-closed final-output validation and adds production
+# best-of-N candidates, a second scene provider fallback, scene-specific prompt
+# contracts, face-similarity ranking, one actionable failure card and same-scene
+# retry without repeating the whole wizard.
 try:
-    from celebrity_selfie_v132_guard import install as _install_celebrity_selfie_job_guard
-    _install_celebrity_selfie_job_guard()
-    from celebrity_selfie_v132 import install_builder_hook as _install_celebrity_selfie_validated_output
-    _install_celebrity_selfie_validated_output()
+    from celebrity_selfie_v133 import install_builder_hook as _install_celebrity_selfie_best_of_n
+    _install_celebrity_selfie_best_of_n()
 except Exception:
     pass
 
