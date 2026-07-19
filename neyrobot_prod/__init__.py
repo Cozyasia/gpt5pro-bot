@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v131-celebrity-selfie-tolerant-face-preflight-2026-07-19"
+VERSION = "v132-celebrity-selfie-validated-final-output-2026-07-19"
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -39,11 +39,12 @@ try:
 except Exception:
     pass
 
-# v131 keeps the mandatory PiAPI identity-lock from v130 but makes the legacy
-# local face detector advisory, preventing false rejection of normal portraits.
+# v132 retains v131's tolerant input preflight and replaces the generation
+# pipeline with face-only scene inputs, explicit PiAPI output parsing, strict
+# collage/scene validation, duplicate-job protection and stale-result blocking.
 try:
-    from celebrity_selfie_v131 import install_builder_hook as _install_celebrity_selfie_tolerant_preflight
-    _install_celebrity_selfie_tolerant_preflight()
+    from celebrity_selfie_v132 import install_builder_hook as _install_celebrity_selfie_validated_output
+    _install_celebrity_selfie_validated_output()
 except Exception:
     pass
 
