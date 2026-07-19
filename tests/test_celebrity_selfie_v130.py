@@ -51,12 +51,13 @@ class CelebritySelfieV130HistoricalTests(unittest.TestCase):
         self.assertIn('"swap_faces_index": "0,1"', source)
         self.assertIn('"target_faces_index": "0,1"', source)
 
-    def test_v130_runtime_is_historical_and_v133_is_registered(self):
+    def test_v130_runtime_is_historical_and_v134_is_registered(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertNotIn("from celebrity_selfie_v130_runtime import install_builder_hook", source)
         self.assertNotIn("from celebrity_selfie_v131 import install_builder_hook", source)
         self.assertNotIn("from celebrity_selfie_v132 import install_builder_hook", source)
-        self.assertIn("from celebrity_selfie_v133 import install_builder_hook", source)
+        self.assertNotIn("from celebrity_selfie_v133 import install_builder_hook", source)
+        self.assertIn("from celebrity_selfie_v134 import install_builder_hook", source)
         self.assertNotIn("from celebrity_selfie_v129 import install_builder_hook", source)
 
 
