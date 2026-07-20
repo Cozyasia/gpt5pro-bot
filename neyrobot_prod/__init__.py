@@ -151,7 +151,9 @@ except Exception:
 try:
     from celebrity_selfie_v139 import install_builder_hook as _install_v139_builder
     from celebrity_selfie_v139 import install_runtime_patches as _install_v139_runtime
+    from celebrity_selfie_v139_compat import install as _install_v139_compat
     _install_v139_runtime()
+    _install_v139_compat()
     _install_v139_builder()
 except Exception:
     pass
