@@ -71,6 +71,8 @@ except Exception:
 # in the normal route.
 try:
     from celebrity_selfie_v136 import install_builder_hook as _install_celebrity_selfie_v136
+    from celebrity_selfie_v136_hotfix import install as _install_celebrity_selfie_v136_hotfix
+    _install_celebrity_selfie_v136_hotfix()
     _install_celebrity_selfie_v136()
 except Exception:
     pass
