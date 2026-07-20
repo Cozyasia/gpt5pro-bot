@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v139(self):
+    def test_release_version_is_v140(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v139-two-stage-celebrity-selfie-2026-07-20"',
+            'VERSION = "v140-scene-provider-rescue-2026-07-20"',
             source,
         )
 
@@ -67,13 +67,19 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("_install_v138_compat_builder()", source)
         self.assertIn("_install_v138_async()", source)
 
-    def test_v139_two_stage_pipeline_is_applied_last(self):
+    def test_v139_two_stage_pipeline_remains_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from celebrity_selfie_v139 import install_builder_hook", source)
         self.assertIn("_install_v139_runtime()", source)
         self.assertIn("_install_v139_builder()", source)
         self.assertIn("from celebrity_selfie_v139_compat import install", source)
         self.assertGreater(source.index("from celebrity_selfie_v139"), source.index("from ui_selfie_v138"))
+
+    def test_v140_scene_rescue_is_applied_after_v139(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v140 import install", source)
+        self.assertIn("_install_v140()", source)
+        self.assertGreater(source.index("from celebrity_selfie_v140"), source.index("from celebrity_selfie_v139"))
 
 
 if __name__ == "__main__":
