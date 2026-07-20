@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v135(self):
+    def test_release_version_is_v136(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v135-celebrity-selfie-gemini3-native-identity-2026-07-20"',
+            'VERSION = "v136-celebrity-selfie-chat-choice-2026-07-20"',
             source,
         )
 
@@ -34,7 +34,7 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("_install_celebrity_library_runtime()", source)
         self.assertNotIn("from celebrity_selfie_v122 import install_builder_hook", source)
 
-    def test_all_historical_selfie_router_hooks_are_disabled(self):
+    def test_old_selfie_router_hooks_through_v134_are_disabled(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         for version in (
             "v123", "v123_pedit", "v124", "v125", "v126", "v127", "v128", "v129",
@@ -42,10 +42,16 @@ class VersionContractTests(unittest.TestCase):
         ):
             self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", source)
 
-    def test_v135_native_is_the_only_selfie_builder(self):
+    def test_v136_is_the_active_selfie_builder(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v135 import install_builder_hook", source)
-        self.assertIn("_install_celebrity_selfie_native()", source)
+        self.assertIn("from celebrity_selfie_v136 import install_builder_hook", source)
+        self.assertIn("_install_celebrity_selfie_v136()", source)
+
+    def test_gpt_gemini_selector_is_bootstrapped(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from chat_provider_v136 import install_builder_hook", source)
+        self.assertIn("_install_chat_provider_builder()", source)
+        self.assertIn("_install_chat_provider_async()", source)
 
 
 if __name__ == "__main__":
