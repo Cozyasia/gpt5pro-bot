@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 from PIL import Image, ImageDraw
 
 import celebrity_selfie_v142 as v142
+import celebrity_selfie_v142_compat as compat
 
 
 def _png_with_subject(width=320, height=420):
@@ -99,10 +100,15 @@ class CelebritySelfieV142Tests(unittest.IsolatedAsyncioTestCase):
                 else:
                     os.environ[name] = value
 
-    def test_install_patches_live_generation_and_disables_generative_cleanup(self):
+    def test_install_patches_only_live_engine_and_disables_generative_cleanup(self):
         v142.install()
-        self.assertIs(v142.v139._run_two_stage_generation, v142._run_v142_generation)
+        compat.install()
         self.assertIs(v142.v139.selfie.engine._generate, v142._generate)
+        self.assertIs(v142.v139.selfie.engine._run_multi_reference_generation, v142._run_compat)
+        self.assertIs(v142.v139.selfie.engine._result_kb, v142._result_kb)
+        self.assertEqual(v142.v139.VERSION, v142.v140_hotfix.V139_COMPONENT_VERSION if hasattr(v142, "v140_hotfix") else "v139-two-stage-celebrity-selfie-2026-07-20")
+        self.assertIs(v142.v139._run_two_stage_generation, v142.v140._run_v140_generation)
+        self.assertIs(v142.v141._result_kb, v142._ORIGINAL_V141_RESULT_KB)
         self.assertEqual(os.environ["CELEBRITY_V141_OPENAI_QUALITY_CLEANUP"], "0")
         self.assertEqual(os.environ["CELEBRITY_V142_CUTOUT_PROVIDERS"], "photoroom,rembg")
 
