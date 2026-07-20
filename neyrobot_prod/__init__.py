@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v138-brand-palette-selfie-preview-2026-07-20"
+VERSION = "v139-two-stage-celebrity-selfie-2026-07-20"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -25,6 +25,18 @@ os.environ.setdefault("CELEBRITY_FLUX_MODEL", "flux-2-pro")
 os.environ.setdefault("CELEBRITY_V136_MIN_DELIVERY_IDENTITY", "28")
 os.environ.setdefault("CELEBRITY_V138_PREVIEW_IDENTITY_FLOOR", "32")
 os.environ.setdefault("CELEBRITY_V138_VERIFIED_IDENTITY", "58")
+# v139: create the scene first, then lock the left and right identities
+# separately. No Nano Banana via Comet is used in this route.
+os.environ.setdefault("CELEBRITY_V139_UNIT_COST_USD", "0.80")
+os.environ.setdefault("CELEBRITY_V139_GEMINI_SCENES", "2")
+os.environ.setdefault("CELEBRITY_V139_SCENES_TO_IDENTITY", "2")
+os.environ.setdefault("CELEBRITY_V139_IDENTITY_PROVIDERS", "piapi,openai")
+os.environ.setdefault("CELEBRITY_V139_IDENTITY_STOP_SCORE", "76")
+os.environ.setdefault("CELEBRITY_V139_REPAIR_BELOW", "72")
+os.environ.setdefault("CELEBRITY_V139_VERIFIED_IDENTITY", "62")
+os.environ.setdefault("CELEBRITY_V139_ONE_SHOT_FALLBACK", "1")
+os.environ.setdefault("CELEBRITY_V139_WEAK_SIDE_REPAIR", "1")
+os.environ.setdefault("CELEBRITY_V139_VISION_QC", "1")
 
 os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
 os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
@@ -117,10 +129,8 @@ try:
 except Exception:
     pass
 
-# v138 is applied last: it neutralises the overly bright all-colour keyboard,
-# retaining Telegram's default white/transparent buttons and one blue primary
-# action. It also changes identity QC from an all-or-nothing delivery gate into
-# ranking + labelled preview while preserving structural hard gates.
+# v138 owns the calm neutral/primary-blue UI and keeps low-confidence but
+# structurally valid outputs visible as labelled previews.
 try:
     from ui_selfie_v138 import install_builder_hook as _install_v138_builder
     from ui_selfie_v138 import install_async as _install_v138_async
@@ -130,6 +140,19 @@ try:
     _install_v138_builder()
     _install_v138_compat_builder()
     _install_v138_async()
+except Exception:
+    pass
+
+# v139 is installed last and owns only the live Celebrity Selfie generation and
+# diagnostics. It creates anonymous scene plates first, then applies the user's
+# identity to the left face and the selected person's identity to the right face
+# in separate operations. Direct Gemini/OpenAI/optional FLUX and existing PiAPI
+# are used; Nano Banana through Comet is intentionally absent.
+try:
+    from celebrity_selfie_v139 import install_builder_hook as _install_v139_builder
+    from celebrity_selfie_v139 import install_runtime_patches as _install_v139_runtime
+    _install_v139_runtime()
+    _install_v139_builder()
 except Exception:
     pass
 
