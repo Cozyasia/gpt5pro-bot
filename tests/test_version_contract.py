@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v140(self):
+    def test_release_version_is_v141(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v140-scene-provider-rescue-2026-07-20"',
+            'VERSION = "v141-accepted-result-targeted-refinement-2026-07-20"',
             source,
         )
 
@@ -80,6 +80,15 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("from celebrity_selfie_v140 import install", source)
         self.assertIn("_install_v140()", source)
         self.assertGreater(source.index("from celebrity_selfie_v140"), source.index("from celebrity_selfie_v139"))
+
+    def test_v141_accepted_result_refinement_is_applied_last(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v141 import install", source)
+        self.assertIn("_install_v141()", source)
+        self.assertIn("_install_v141_builder()", source)
+        self.assertGreater(source.index("from celebrity_selfie_v141"), source.index("from celebrity_selfie_v140"))
+        self.assertIn('CELEBRITY_V139_IDENTITY_PROVIDERS", "openai,piapi"', source)
+        self.assertIn('CELEBRITY_V141_AUTO_REPAIR_BELOW", "58"', source)
 
 
 if __name__ == "__main__":
