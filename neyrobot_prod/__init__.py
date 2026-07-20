@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v141-accepted-result-targeted-refinement-2026-07-20"
+VERSION = "v142-preserve-user-composite-2026-07-21"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -54,6 +54,21 @@ os.environ.setdefault("CELEBRITY_V141_QUALITY_COST_USD", "0.12")
 os.environ.setdefault("CELEBRITY_V141_OPENAI_QUALITY_CLEANUP", "1")
 os.environ.setdefault("CELEBRITY_V141_FACE_SCENE_SIMILARITY", "0.70")
 os.environ.setdefault("CELEBRITY_V141_QUALITY_SCENE_SIMILARITY", "0.80")
+# v142: preserve the user's source pixels. Scene and public-person identity are
+# generated first; PhotoRoom/rembg isolate the real user and local compositing
+# inserts the cutout without synthesising the user's face geometry.
+os.environ.setdefault("CELEBRITY_V142_UNIT_COST_USD", "0.80")
+os.environ.setdefault("CELEBRITY_V142_CUTOUT_PROVIDERS", "photoroom,rembg")
+os.environ.setdefault("CELEBRITY_V142_LOCAL_REMBG_FALLBACK", "1")
+os.environ.setdefault("CELEBRITY_V142_PHOTOROOM_SIZE", "full")
+os.environ.setdefault("CELEBRITY_V142_USER_CUTOUTS", "2")
+os.environ.setdefault("CELEBRITY_V142_GEMINI_PLATES", "2")
+os.environ.setdefault("CELEBRITY_V142_PLATES_TO_IDENTITY", "2")
+os.environ.setdefault("CELEBRITY_V142_CELEBRITY_PROVIDERS", "openai,piapi")
+os.environ.setdefault("CELEBRITY_V142_PLACEMENT_VARIANTS", "2")
+os.environ.setdefault("CELEBRITY_V142_PRESERVED_USER_SCORE_FLOOR", "94")
+os.environ.setdefault("CELEBRITY_V142_LEGACY_FALLBACK", "1")
+os.environ.setdefault("CELEBRITY_V142_ALLOW_GENERATIVE_CLEANUP", "0")
 
 os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
 os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
@@ -183,14 +198,26 @@ try:
 except Exception:
     pass
 
-# v141 is the final live overlay. It freezes the exact file delivered to the
-# user, routes all improvement actions from that accepted file, locks the scene,
-# separates texture cleanup from identity refinement, and rejects regressions.
+# v141 freezes the exact file delivered to the user and owns accepted-result
+# refinement, scene locking, texture cleanup and undo.
 try:
     from celebrity_selfie_v141 import install as _install_v141
     from celebrity_selfie_v141 import install_builder_hook as _install_v141_builder
     _install_v141()
     _install_v141_builder()
+except Exception:
+    pass
+
+# v142 is the final live overlay. It stops regenerating the user in the normal
+# route: scene and public-person identity are generated first, then the user's
+# real PhotoRoom/rembg cutout is composited locally with geometry lock.
+try:
+    from celebrity_selfie_v142 import install as _install_v142
+    from celebrity_selfie_v142 import install_builder_hook as _install_v142_builder
+    from celebrity_selfie_v142_compat import install as _install_v142_compat
+    _install_v142()
+    _install_v142_compat()
+    _install_v142_builder()
 except Exception:
     pass
 
