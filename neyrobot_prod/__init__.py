@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v139-two-stage-celebrity-selfie-2026-07-20"
+VERSION = "v140-scene-provider-rescue-2026-07-20"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -37,6 +37,11 @@ os.environ.setdefault("CELEBRITY_V139_VERIFIED_IDENTITY", "62")
 os.environ.setdefault("CELEBRITY_V139_ONE_SHOT_FALLBACK", "1")
 os.environ.setdefault("CELEBRITY_V139_WEAK_SIDE_REPAIR", "1")
 os.environ.setdefault("CELEBRITY_V139_VISION_QC", "1")
+# v140: provider-compatible direct scene calls and rescue routes.
+os.environ.setdefault("CELEBRITY_V140_SOFT_ONE_FACE_SCENE_GATE", "1")
+os.environ.setdefault("CELEBRITY_V140_RESCUE_SCENE", "1")
+os.environ.setdefault("CELEBRITY_V140_GEMINI_TIMEOUT_S", "420")
+os.environ.setdefault("CELEBRITY_V140_OPENAI_TIMEOUT_S", "420")
 
 os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
 os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
@@ -143,11 +148,8 @@ try:
 except Exception:
     pass
 
-# v139 is installed last and owns only the live Celebrity Selfie generation and
-# diagnostics. It creates anonymous scene plates first, then applies the user's
-# identity to the left face and the selected person's identity to the right face
-# in separate operations. Direct Gemini/OpenAI/optional FLUX and existing PiAPI
-# are used; Nano Banana through Comet is intentionally absent.
+# v139 owns the live scene-first wizard, sequential identity locks and
+# diagnostics. Nano Banana through Comet remains intentionally absent.
 try:
     from celebrity_selfie_v139 import install_builder_hook as _install_v139_builder
     from celebrity_selfie_v139 import install_runtime_patches as _install_v139_runtime
@@ -155,6 +157,17 @@ try:
     _install_v139_runtime()
     _install_v139_compat()
     _install_v139_builder()
+except Exception:
+    pass
+
+# v140 is installed after v139. It replaces only scene-provider adapters,
+# rescue/fallback routing and the failure explanation while preserving the
+# scene → left identity → right identity → weak-side repair architecture.
+try:
+    from celebrity_selfie_v140 import install as _install_v140
+    _install_v140()
+    from celebrity_selfie_v140_hotfix import install as _install_v140_hotfix
+    _install_v140_hotfix()
 except Exception:
     pass
 
