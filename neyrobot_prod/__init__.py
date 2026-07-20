@@ -125,8 +125,10 @@ try:
     from ui_selfie_v138 import install_builder_hook as _install_v138_builder
     from ui_selfie_v138 import install_runtime_patches as _install_v138_runtime
     from ui_selfie_v138 import install_async as _install_v138_async
+    from ui_selfie_v138_compat import install_builder_hook as _install_v138_compat_builder
     _install_v138_runtime()
     _install_v138_builder()
+    _install_v138_compat_builder()
     _install_v138_async()
 except Exception:
     pass
