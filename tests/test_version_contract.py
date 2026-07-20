@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v138(self):
+    def test_release_version_is_v139(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v138-brand-palette-selfie-preview-2026-07-20"',
+            'VERSION = "v139-two-stage-celebrity-selfie-2026-07-20"',
             source,
         )
 
@@ -42,7 +42,7 @@ class VersionContractTests(unittest.TestCase):
         ):
             self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", source)
 
-    def test_v136_is_the_active_selfie_builder(self):
+    def test_v136_wizard_is_kept_for_ui_and_catalog(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from celebrity_selfie_v136 import install_builder_hook", source)
         self.assertIn("_install_celebrity_selfie_v136()", source)
@@ -59,14 +59,21 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("_install_ui_v137_runtime()", source)
         self.assertIn("_install_ui_v137_builder()", source)
 
-    def test_v138_palette_and_preview_policy_are_applied_last(self):
+    def test_v138_palette_and_preview_policy_remain_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from ui_selfie_v138 import install_builder_hook", source)
         self.assertIn("_install_v138_safe_runtime()", source)
         self.assertIn("_install_v138_builder()", source)
         self.assertIn("_install_v138_compat_builder()", source)
         self.assertIn("_install_v138_async()", source)
-        self.assertGreater(source.index("from ui_selfie_v138"), source.index("from ui_hotfix_v137"))
+
+    def test_v139_two_stage_pipeline_is_applied_last(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v139 import install_builder_hook", source)
+        self.assertIn("_install_v139_runtime()", source)
+        self.assertIn("_install_v139_builder()", source)
+        self.assertIn("from celebrity_selfie_v139_compat import install", source)
+        self.assertGreater(source.index("from celebrity_selfie_v139"), source.index("from ui_selfie_v138"))
 
 
 if __name__ == "__main__":
