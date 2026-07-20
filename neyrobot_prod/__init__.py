@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v140-scene-provider-rescue-2026-07-20"
+VERSION = "v141-accepted-result-targeted-refinement-2026-07-20"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -30,9 +30,12 @@ os.environ.setdefault("CELEBRITY_V138_VERIFIED_IDENTITY", "58")
 os.environ.setdefault("CELEBRITY_V139_UNIT_COST_USD", "0.80")
 os.environ.setdefault("CELEBRITY_V139_GEMINI_SCENES", "2")
 os.environ.setdefault("CELEBRITY_V139_SCENES_TO_IDENTITY", "2")
-os.environ.setdefault("CELEBRITY_V139_IDENTITY_PROVIDERS", "piapi,openai")
+# v141 prefers high-fidelity OpenAI identity edits; PiAPI remains fallback.
+os.environ.setdefault("CELEBRITY_V139_IDENTITY_PROVIDERS", "openai,piapi")
 os.environ.setdefault("CELEBRITY_V139_IDENTITY_STOP_SCORE", "76")
-os.environ.setdefault("CELEBRITY_V139_REPAIR_BELOW", "72")
+# Do not automatically re-edit already acceptable faces; explicit buttons own
+# subsequent refinement.
+os.environ.setdefault("CELEBRITY_V139_REPAIR_BELOW", "58")
 os.environ.setdefault("CELEBRITY_V139_VERIFIED_IDENTITY", "62")
 os.environ.setdefault("CELEBRITY_V139_ONE_SHOT_FALLBACK", "1")
 os.environ.setdefault("CELEBRITY_V139_WEAK_SIDE_REPAIR", "1")
@@ -42,6 +45,15 @@ os.environ.setdefault("CELEBRITY_V140_SOFT_ONE_FACE_SCENE_GATE", "1")
 os.environ.setdefault("CELEBRITY_V140_RESCUE_SCENE", "1")
 os.environ.setdefault("CELEBRITY_V140_GEMINI_TIMEOUT_S", "420")
 os.environ.setdefault("CELEBRITY_V140_OPENAI_TIMEOUT_S", "420")
+# v141: accepted-result-only post-processing with composition and identity locks.
+os.environ.setdefault("CELEBRITY_V141_IDENTITY_PROVIDERS", "openai,piapi")
+os.environ.setdefault("CELEBRITY_V141_REFINEMENT_PROVIDERS", "openai,piapi")
+os.environ.setdefault("CELEBRITY_V141_AUTO_REPAIR_BELOW", "58")
+os.environ.setdefault("CELEBRITY_V141_REFINEMENT_COST_USD", "0.25")
+os.environ.setdefault("CELEBRITY_V141_QUALITY_COST_USD", "0.12")
+os.environ.setdefault("CELEBRITY_V141_OPENAI_QUALITY_CLEANUP", "1")
+os.environ.setdefault("CELEBRITY_V141_FACE_SCENE_SIMILARITY", "0.70")
+os.environ.setdefault("CELEBRITY_V141_QUALITY_SCENE_SIMILARITY", "0.80")
 
 os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
 os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
@@ -168,6 +180,17 @@ try:
     _install_v140()
     from celebrity_selfie_v140_hotfix import install as _install_v140_hotfix
     _install_v140_hotfix()
+except Exception:
+    pass
+
+# v141 is the final live overlay. It freezes the exact file delivered to the
+# user, routes all improvement actions from that accepted file, locks the scene,
+# separates texture cleanup from identity refinement, and rejects regressions.
+try:
+    from celebrity_selfie_v141 import install as _install_v141
+    from celebrity_selfie_v141 import install_builder_hook as _install_v141_builder
+    _install_v141()
+    _install_v141_builder()
 except Exception:
     pass
 
