@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v137(self):
+    def test_release_version_is_v138(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v137-selfie-ui-brand-buttons-2026-07-20"',
+            'VERSION = "v138-brand-palette-selfie-preview-2026-07-20"',
             source,
         )
 
@@ -58,6 +58,14 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("from ui_hotfix_v137 import install_builder_hook", source)
         self.assertIn("_install_ui_v137_runtime()", source)
         self.assertIn("_install_ui_v137_builder()", source)
+
+    def test_v138_palette_and_preview_policy_are_applied_last(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from ui_selfie_v138 import install_builder_hook", source)
+        self.assertIn("_install_v138_runtime()", source)
+        self.assertIn("_install_v138_builder()", source)
+        self.assertIn("_install_v138_async()", source)
+        self.assertGreater(source.index("from ui_selfie_v138"), source.index("from ui_hotfix_v137"))
 
 
 if __name__ == "__main__":
