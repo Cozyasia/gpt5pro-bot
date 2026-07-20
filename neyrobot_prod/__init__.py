@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v137-selfie-ui-brand-buttons-2026-07-20"
+VERSION = "v138-brand-palette-selfie-preview-2026-07-20"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -20,6 +20,11 @@ os.environ.setdefault("CELEBRITY_GEMINI_ASPECT", "auto")
 os.environ.setdefault("CELEBRITY_GEMINI_IMAGE_SIZE", "2K")
 os.environ.setdefault("CELEBRITY_FLUX_ENABLED", "1")
 os.environ.setdefault("CELEBRITY_FLUX_MODEL", "flux-2-pro")
+# v138 keeps structural failures blocked, but shows a structurally valid best
+# candidate as a labelled preview when identity confidence is below target.
+os.environ.setdefault("CELEBRITY_V136_MIN_DELIVERY_IDENTITY", "28")
+os.environ.setdefault("CELEBRITY_V138_PREVIEW_IDENTITY_FLOOR", "32")
+os.environ.setdefault("CELEBRITY_V138_VERIFIED_IDENTITY", "58")
 
 os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
 os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
@@ -109,6 +114,20 @@ try:
     from ui_hotfix_v137 import install_runtime_patches as _install_ui_v137_runtime
     _install_ui_v137_runtime()
     _install_ui_v137_builder()
+except Exception:
+    pass
+
+# v138 is applied last: it neutralises the overly bright all-colour keyboard,
+# retaining Telegram's default white/transparent buttons and one blue primary
+# action. It also changes identity QC from an all-or-nothing delivery gate into
+# ranking + labelled preview while preserving structural hard gates.
+try:
+    from ui_selfie_v138 import install_builder_hook as _install_v138_builder
+    from ui_selfie_v138 import install_runtime_patches as _install_v138_runtime
+    from ui_selfie_v138 import install_async as _install_v138_async
+    _install_v138_runtime()
+    _install_v138_builder()
+    _install_v138_async()
 except Exception:
     pass
 
