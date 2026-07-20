@@ -13,7 +13,7 @@ import zlib
 _ROOT = Path(__file__).resolve().parent
 _PAYLOAD = _ROOT / "celebrity_selfie_v136_payload"
 _PARTS = tuple(sorted(_PAYLOAD.glob("part_*.txt")))
-_SOURCE_SHA256 = "a1e76e6328da3ce6ee06acb7d8a30b01ae976a7e17bad2a59919856d6c3199e2"
+_SOURCE_SHA256 = "6708ff3738eb6efe60640e5981b07cfd372980c93ca050a50178de61c66eaf90"
 _encoded = "".join(path.read_text(encoding="ascii") for path in _PARTS)
 _source = zlib.decompress(base64.b85decode(_encoded))
 if hashlib.sha256(_source).hexdigest() != _SOURCE_SHA256:
