@@ -166,6 +166,8 @@ except Exception:
 try:
     from celebrity_selfie_v140 import install as _install_v140
     _install_v140()
+    from celebrity_selfie_v140_hotfix import install as _install_v140_hotfix
+    _install_v140_hotfix()
 except Exception:
     pass
 
