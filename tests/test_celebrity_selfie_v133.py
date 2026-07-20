@@ -73,10 +73,11 @@ class CelebritySelfieV133Tests(unittest.TestCase):
         self.assertNotIn("Задача не выполнена. Попробуйте позже.", source)
         self.assertIn("return True", source)
 
-    def test_runtime_bootstrap_moves_forward_to_v134(self):
+    def test_runtime_bootstrap_moves_forward_to_v135(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v134 import install_builder_hook", source)
+        self.assertIn("from celebrity_selfie_v135 import install_builder_hook", source)
         self.assertNotIn("from celebrity_selfie_v133 import install_builder_hook", source)
+        self.assertNotIn("from celebrity_selfie_v134 import install_builder_hook", source)
         for version in ("v122", "v126", "v130_runtime", "v131", "v132"):
             self.assertNotIn(f"from celebrity_selfie_{version} import install_builder_hook", source)
 
