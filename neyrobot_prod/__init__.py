@@ -123,10 +123,10 @@ except Exception:
 # ranking + labelled preview while preserving structural hard gates.
 try:
     from ui_selfie_v138 import install_builder_hook as _install_v138_builder
-    from ui_selfie_v138 import install_runtime_patches as _install_v138_runtime
     from ui_selfie_v138 import install_async as _install_v138_async
     from ui_selfie_v138_compat import install_builder_hook as _install_v138_compat_builder
-    _install_v138_runtime()
+    from ui_selfie_v138_compat import _safe_install_runtime_patches as _install_v138_safe_runtime
+    _install_v138_safe_runtime()
     _install_v138_builder()
     _install_v138_compat_builder()
     _install_v138_async()
