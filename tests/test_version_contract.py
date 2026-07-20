@@ -62,8 +62,9 @@ class VersionContractTests(unittest.TestCase):
     def test_v138_palette_and_preview_policy_are_applied_last(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from ui_selfie_v138 import install_builder_hook", source)
-        self.assertIn("_install_v138_runtime()", source)
+        self.assertIn("_install_v138_safe_runtime()", source)
         self.assertIn("_install_v138_builder()", source)
+        self.assertIn("_install_v138_compat_builder()", source)
         self.assertIn("_install_v138_async()", source)
         self.assertGreater(source.index("from ui_selfie_v138"), source.index("from ui_hotfix_v137"))
 
