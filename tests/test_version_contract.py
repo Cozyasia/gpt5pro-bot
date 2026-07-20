@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v136(self):
+    def test_release_version_is_v137(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v136-celebrity-selfie-chat-choice-2026-07-20"',
+            'VERSION = "v137-selfie-ui-brand-buttons-2026-07-20"',
             source,
         )
 
@@ -52,6 +52,12 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("from chat_provider_v136 import install_builder_hook", source)
         self.assertIn("_install_chat_provider_builder()", source)
         self.assertIn("_install_chat_provider_async()", source)
+
+    def test_v137_ui_hotfix_is_bootstrapped(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from ui_hotfix_v137 import install_builder_hook", source)
+        self.assertIn("_install_ui_v137_runtime()", source)
+        self.assertIn("_install_ui_v137_builder()", source)
 
 
 if __name__ == "__main__":
