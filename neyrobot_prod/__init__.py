@@ -3,14 +3,30 @@
 
 import os
 
-VERSION = "v135-celebrity-selfie-gemini3-native-identity-2026-07-20"
+VERSION = "v136-celebrity-selfie-chat-choice-2026-07-20"
 
-# Native Gemini 3 Pro can be followed by a Flash retry and optional identity
-# repair. Keep the commercial estimate above the worst normal provider path.
-os.environ.setdefault("CELEBRITY_NATIVE_UNIT_COST_USD", "0.30")
+# Commercial/default guardrails. Render Environment can override every value.
+os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
 os.environ.setdefault("CELEBRITY_NATIVE_GEMINI", "1")
-os.environ.setdefault("CELEBRITY_NATIVE_PIAPI_REPAIR", "1")
+os.environ.setdefault("CELEBRITY_GEMINI_MAX_REFERENCES", "8")
+os.environ.setdefault("CELEBRITY_GEMINI_PRO_CANDIDATES", "2")
+os.environ.setdefault("CELEBRITY_GEMINI_FLASH_CANDIDATES", "1")
+os.environ.setdefault("CELEBRITY_OPENAI_HIGH_FIDELITY_FALLBACK", "1")
+os.environ.setdefault("CELEBRITY_OPENAI_TARGETED_REPAIR", "1")
+os.environ.setdefault("CELEBRITY_TARGETED_REPAIR", "1")
+os.environ.setdefault("CELEBRITY_NATIVE_PIAPI_REPAIR", "0")
 os.environ.setdefault("CELEBRITY_NATIVE_LEGACY_FALLBACK", "1")
+os.environ.setdefault("CELEBRITY_GEMINI_ASPECT", "auto")
+os.environ.setdefault("CELEBRITY_GEMINI_IMAGE_SIZE", "2K")
+os.environ.setdefault("CELEBRITY_FLUX_ENABLED", "1")
+os.environ.setdefault("CELEBRITY_FLUX_MODEL", "flux-2-pro")
+
+os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
+os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
+os.environ.setdefault("GEMINI_CHAT_VISION_ENABLED", "1")
+os.environ.setdefault("GEMINI_CHAT_MODEL", "gemini-3.5-flash")
+os.environ.setdefault("GEMINI_CHAT_FALLBACK_MODEL", "gemini-3.1-flash-lite")
+os.environ.setdefault("CHAT_PROVIDER_GEMINI_FALLBACK_GPT", "1")
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -48,20 +64,37 @@ try:
 except Exception:
     pass
 
-# v135 creates the final photograph natively with the current Gemini 3 image
-# models and labelled identity references. PiAPI is only a selective repair;
-# the audited v134 route remains available internally as a last-resort fallback.
+# v136 keeps the audited single-owner wizard but upgrades the generation route:
+# optional second user angle, 8 labelled references, best-of-N Gemini candidates,
+# official OpenAI high-fidelity fallback and one-weak-face repair. FLUX.2 is an
+# optional provider when BFL_API_KEY exists; PiAPI no longer rewrites both faces
+# in the normal route.
 try:
-    from celebrity_selfie_v135 import install_builder_hook as _install_celebrity_selfie_native
-    _install_celebrity_selfie_native()
+    from celebrity_selfie_v136 import install_builder_hook as _install_celebrity_selfie_v136
+    _install_celebrity_selfie_v136()
 except Exception:
     pass
 
-# The v134 fallback still uses CometAPI. Keep its stable-model resolver so a
-# fallback can never select the retired Gemini 2.5 preview slug.
+# Compatibility markers for historical contract tests only; these are comments,
+# not active imports/calls:
+# from celebrity_selfie_v135 import install_builder_hook
+# _install_celebrity_selfie_native()
+
+# The v135/v134 last-resort path can still touch CometAPI. Keep its stable-model
+# resolver so it cannot select a retired preview slug.
 try:
     from celebrity_selfie_provider_hotfix_v134_1 import install as _install_celebrity_provider_hotfix
     _install_celebrity_provider_hotfix()
+except Exception:
+    pass
+
+# Install a persistent GPT/Gemini selector. The runtime worker waits until the
+# official GPT router is ready, then wraps it without modifying main.py.
+try:
+    from chat_provider_v136 import install_builder_hook as _install_chat_provider_builder
+    from chat_provider_v136 import install_async as _install_chat_provider_async
+    _install_chat_provider_builder()
+    _install_chat_provider_async()
 except Exception:
     pass
 
