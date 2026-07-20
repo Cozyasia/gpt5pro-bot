@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v136-celebrity-selfie-chat-choice-2026-07-20"
+VERSION = "v137-selfie-ui-brand-buttons-2026-07-20"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -97,6 +97,18 @@ try:
     from chat_provider_v136 import install_async as _install_chat_provider_async
     _install_chat_provider_builder()
     _install_chat_provider_async()
+except Exception:
+    pass
+
+# v137 owns only UI details and the two cs136 second-angle callbacks. Its very
+# high-priority exact-pattern handler prevents those callbacks from reaching old
+# catch-all routers that answered "Неизвестная команда". It also removes the
+# redundant upload button and enables current Telegram button styles/custom icons.
+try:
+    from ui_hotfix_v137 import install_builder_hook as _install_ui_v137_builder
+    from ui_hotfix_v137 import install_runtime_patches as _install_ui_v137_runtime
+    _install_ui_v137_runtime()
+    _install_ui_v137_builder()
 except Exception:
     pass
 
