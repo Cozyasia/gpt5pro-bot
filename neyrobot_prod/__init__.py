@@ -1,7 +1,16 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
-VERSION = "v134-celebrity-selfie-face-first-soft-scene-2026-07-19"
+import os
+
+VERSION = "v135-celebrity-selfie-gemini3-native-identity-2026-07-20"
+
+# Native Gemini 3 Pro can be followed by a Flash retry and optional identity
+# repair. Keep the commercial estimate above the worst normal provider path.
+os.environ.setdefault("CELEBRITY_NATIVE_UNIT_COST_USD", "0.30")
+os.environ.setdefault("CELEBRITY_NATIVE_GEMINI", "1")
+os.environ.setdefault("CELEBRITY_NATIVE_PIAPI_REPAIR", "1")
+os.environ.setdefault("CELEBRITY_NATIVE_LEGACY_FALLBACK", "1")
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
@@ -39,21 +48,17 @@ try:
 except Exception:
     pass
 
-# v134 keeps v133 best-of-N generation and provider fallback, but changes the
-# acceptance policy to face-first: background/location is a soft ranking signal,
-# while only broken composition, missing second person, collage/split-screen or
-# failed identity preservation can block delivery. One rescue scene is attempted
-# when the environment is weak, but a good two-face result is no longer discarded
-# solely because a landmark is subtle.
+# v135 creates the final photograph natively with the current Gemini 3 image
+# models and labelled identity references. PiAPI is only a selective repair;
+# the audited v134 route remains available internally as a last-resort fallback.
 try:
-    from celebrity_selfie_v134 import install_builder_hook as _install_celebrity_selfie_face_first
-    _install_celebrity_selfie_face_first()
+    from celebrity_selfie_v135 import install_builder_hook as _install_celebrity_selfie_native
+    _install_celebrity_selfie_native()
 except Exception:
     pass
 
-# CometAPI retired the old preview image route still present in the Render
-# environment. Install the stable-model resolver after v134 has loaded so every
-# scene candidate uses gemini-2.5-flash-image and never the dead preview slug.
+# The v134 fallback still uses CometAPI. Keep its stable-model resolver so a
+# fallback can never select the retired Gemini 2.5 preview slug.
 try:
     from celebrity_selfie_provider_hotfix_v134_1 import install as _install_celebrity_provider_hotfix
     _install_celebrity_provider_hotfix()

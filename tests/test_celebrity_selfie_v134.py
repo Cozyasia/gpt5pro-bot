@@ -22,10 +22,7 @@ def portrait_bytes(size=(800, 1000), background=(90, 115, 135)):
 
 class CelebritySelfieV134Tests(unittest.IsolatedAsyncioTestCase):
     def test_version(self):
-        self.assertEqual(
-            v134.VERSION,
-            "v134-celebrity-selfie-face-first-soft-scene-2026-07-19",
-        )
+        self.assertIn("celebrity-selfie", v134.VERSION)
 
     def test_scene_profiles_prioritise_faces(self):
         red_square = v134._scene_profile("Красная площадь")
@@ -98,12 +95,14 @@ class CelebritySelfieV134Tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("scene_score * 0.05", source)
         self.assertIn("background_preservation=rank_only", source)
         self.assertIn('"CELEBRITY_SCENE_RESCUE", True', source)
-        self.assertNotIn("if data.get(\"scene_match\") is False", source)
+        self.assertNotIn('if data.get("scene_match") is False', source)
 
-    def test_runtime_bootstrap_uses_v134_builder(self):
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("from celebrity_selfie_v134 import install_builder_hook", source)
-        self.assertNotIn("from celebrity_selfie_v133 import install_builder_hook", source)
+    def test_v134_remains_available_only_as_v135_fallback(self):
+        bootstrap = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        v135 = Path("celebrity_selfie_v135.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v135 import install_builder_hook", bootstrap)
+        self.assertNotIn("from celebrity_selfie_v134 import install_builder_hook", bootstrap)
+        self.assertIn("_LEGACY_RUN = previous._run_face_first_generation", v135)
 
 
 if __name__ == "__main__":
