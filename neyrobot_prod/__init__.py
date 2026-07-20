@@ -1,7 +1,16 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production hardening package."""
 
+import os
+
 VERSION = "v135-celebrity-selfie-gemini3-native-identity-2026-07-20"
+
+# Native Gemini 3 Pro can be followed by a Flash retry and optional identity
+# repair. Keep the commercial estimate above the worst normal provider path.
+os.environ.setdefault("CELEBRITY_NATIVE_UNIT_COST_USD", "0.30")
+os.environ.setdefault("CELEBRITY_NATIVE_GEMINI", "1")
+os.environ.setdefault("CELEBRITY_NATIVE_PIAPI_REPAIR", "1")
+os.environ.setdefault("CELEBRITY_NATIVE_LEGACY_FALLBACK", "1")
 
 # The package is imported by secret_loader before main.py builds the Telegram
 # application. Register the progressive medical-answer callback route here so
