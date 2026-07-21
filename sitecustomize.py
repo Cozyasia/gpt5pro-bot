@@ -15,9 +15,9 @@ try:
 except Exception as exc:  # a stale version label must never block bot startup
     print(f"[neyrobot-version] early bootstrap warning: {type(exc).__name__}: {exc}")
 
-# Keep the audited historical overlays available, then apply v147 last. v147
-# replaces only the Celebrity Selfie execution route and removes PiAPI/OpenAI
-# Images from identity handling.
+# Keep the audited historical overlays available, then apply v148 last. v148
+# removes Gemini responseFormat/aspect fields and uses validated source-layer
+# placement geometry instead of a fallible post-JPEG face detector.
 try:
     from celebrity_selfie_v145 import install_early as install_celebrity_selfie_v145
 
@@ -38,3 +38,10 @@ try:
     install_celebrity_selfie_v147()
 except Exception as exc:
     print(f"[celebrity-selfie-v147] early bootstrap warning: {type(exc).__name__}: {exc}")
+
+try:
+    from celebrity_selfie_v148 import install_early as install_celebrity_selfie_v148
+
+    install_celebrity_selfie_v148()
+except Exception as exc:
+    print(f"[celebrity-selfie-v148] early bootstrap warning: {type(exc).__name__}: {exc}")
