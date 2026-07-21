@@ -3,6 +3,7 @@ import json
 import os
 import unittest
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -33,7 +34,10 @@ def _rectangular_leak(width=320, height=420) -> bytes:
 
 
 def _jpeg(width=800, height=1000) -> bytes:
-    image = Image.new("RGB", (width, height), (70, 80, 90))
+    image = Image.new("RGB", (width, height), (55, 65, 80))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, width, height // 2), fill=(145, 155, 170))
+    draw.rectangle((width // 2, height // 2, width, height), fill=(80, 95, 115))
     out = BytesIO()
     image.save(out, "JPEG", quality=95)
     return out.getvalue()
@@ -113,7 +117,7 @@ class CelebritySelfieV143Tests(unittest.IsolatedAsyncioTestCase):
                 os.environ["CELEBRITY_V143_LEGACY_FALLBACK"] = old
 
     def test_source_declares_fail_closed_contract(self):
-        source = open("celebrity_selfie_v143.py", "r", encoding="utf-8").read()
+        source = Path("celebrity_selfie_v143.py").read_text(encoding="utf-8")
         self.assertIn("primary_selfie_only", source)
         self.assertIn("no_rectangular_patch", source)
         self.assertIn("no_source_background_leak", source)
