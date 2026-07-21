@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v142-preserve-user-composite-2026-07-21"
+VERSION = "v143-strict-composite-quality-gate-2026-07-21"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -69,6 +69,20 @@ os.environ.setdefault("CELEBRITY_V142_PLACEMENT_VARIANTS", "2")
 os.environ.setdefault("CELEBRITY_V142_PRESERVED_USER_SCORE_FLOOR", "94")
 os.environ.setdefault("CELEBRITY_V142_LEGACY_FALLBACK", "1")
 os.environ.setdefault("CELEBRITY_V142_ALLOW_GENERATIVE_CLEANUP", "0")
+# v143: fail closed on dirty segmentation, rectangular source-background leaks,
+# extra prominent people, unknown celebrity identity and unnatural composites.
+os.environ.setdefault("CELEBRITY_V143_CUTOUT_PROVIDERS", "photoroom,rembg")
+os.environ.setdefault("CELEBRITY_V143_PHOTOROOM_SIZE", "hd")
+os.environ.setdefault("CELEBRITY_V143_ALPHA_MAX_COVERAGE", "0.82")
+os.environ.setdefault("CELEBRITY_V143_ALPHA_MIN_TRANSPARENT", "0.10")
+os.environ.setdefault("CELEBRITY_V143_ALPHA_MAX_BBOX_OPAQUE", "0.84")
+os.environ.setdefault("CELEBRITY_V143_ALPHA_MAX_BORDER_OPAQUE", "0.48")
+os.environ.setdefault("CELEBRITY_V143_ALPHA_MIN_CLEAR_CORNERS", "2")
+os.environ.setdefault("CELEBRITY_V143_MIN_CELEBRITY_SCORE", "66")
+os.environ.setdefault("CELEBRITY_V143_MIN_VISUAL_NATURALNESS", "70")
+os.environ.setdefault("CELEBRITY_V143_PLATES_TO_IDENTITY", "2")
+os.environ.setdefault("CELEBRITY_V143_PLACEMENT_VARIANTS", "2")
+os.environ.setdefault("CELEBRITY_V143_LEGACY_FALLBACK", "0")
 
 os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
 os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
@@ -208,9 +222,7 @@ try:
 except Exception:
     pass
 
-# v142 is the final live overlay. It stops regenerating the user in the normal
-# route: scene and public-person identity are generated first, then the user's
-# real PhotoRoom/rembg cutout is composited locally with geometry lock.
+# v142 introduces preserve-user compositing and remains the implementation base.
 try:
     from celebrity_selfie_v142 import install as _install_v142
     from celebrity_selfie_v142 import install_builder_hook as _install_v142_builder
@@ -218,6 +230,17 @@ try:
     _install_v142()
     _install_v142_compat()
     _install_v142_builder()
+except Exception:
+    pass
+
+# v143 is the final live overlay. It keeps only the frontal primary selfie for
+# compositing and rejects rectangular masks, leaked car/interior backgrounds,
+# extra main people, unknown celebrity identity and visually unnatural results.
+try:
+    from celebrity_selfie_v143 import install as _install_v143
+    from celebrity_selfie_v143 import install_builder_hook as _install_v143_builder
+    _install_v143()
+    _install_v143_builder()
 except Exception:
     pass
 
