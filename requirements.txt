@@ -15,7 +15,9 @@ ebooklib==0.18
 
 # Images and background removal
 Pillow==10.4.0
-rembg==2.0.67
+# The plain rembg wheel does not install an inference backend. The CPU extra
+# installs onnxruntime, required by the local Render fallback used in v154.
+rembg[cpu]==2.0.67
 
 # Presentation and PDF generation
 python-pptx==1.0.2
