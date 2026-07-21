@@ -5,7 +5,7 @@ Legacy feature overlays keep their own component versions and may update
 ``PATCH_VERSION`` while they are installed. The public ``/version`` command,
 however, must always report and re-assert the actual production release.
 
-v146 is installed from this module as well as from ``sitecustomize.py`` because
+v147 is installed from this module as well as from ``sitecustomize.py`` because
 Render starts the service with ``python main.py`` and Python does not guarantee
 that a repository-local sitecustomize module is imported in every environment.
 ``secret_loader.py`` explicitly imports this module before the Telegram
@@ -19,7 +19,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v146-local-face-lock-2026-07-21"
+VERSION = "v147-source-pixel-dual-composite-2026-07-21"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
@@ -30,6 +30,10 @@ _RELEASE_OVERLAY_INSTALLED = False
 # from celebrity_selfie_v145 import install as install_v145
 # install_v145()
 # release_overlay={'v145' if release_overlay else 'load-error'}
+# VERSION = "v146-local-face-lock-2026-07-21"
+# from celebrity_selfie_v146 import install as install_v146
+# install_v146()
+# release_overlay={'v146' if release_overlay else 'load-error'}
 
 
 def _install_current_release() -> bool:
@@ -38,11 +42,11 @@ def _install_current_release() -> bool:
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from celebrity_selfie_v146 import install as install_v146
-        from celebrity_selfie_v146 import install_builder_hook as install_v146_builder
+        from celebrity_selfie_v147 import install as install_v147
+        from celebrity_selfie_v147 import install_builder_hook as install_v147_builder
 
-        install_v146()
-        install_v146_builder()
+        install_v147()
+        install_v147_builder()
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
         _RELEASE_OVERLAY_INSTALLED = True
@@ -93,7 +97,7 @@ async def _cmd_version(update: Any, context: Any) -> None:
         f"✅ Код запущен: {VERSION}",
         "entrypoint=main.py",
         "start_command=python -u main.py",
-        f"release_overlay={'v146' if release_overlay else 'load-error'}",
+        f"release_overlay={'v147' if release_overlay else 'load-error'}",
         f"general_router={general_router}",
         f"medical_text_route={'v120' if medical_text else 'legacy'}",
         f"medical_image_route={'v120' if medical_image else 'legacy'}",
@@ -147,7 +151,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v146",
+        name="neyrobot-version-contract-v147",
         daemon=True,
     ).start()
 
