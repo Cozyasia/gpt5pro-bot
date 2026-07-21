@@ -15,9 +15,10 @@ try:
 except Exception as exc:  # a stale version label must never block bot startup
     print(f"[neyrobot-version] early bootstrap warning: {type(exc).__name__}: {exc}")
 
-# Keep audited historical overlays available, then apply v150 last. v149 proves
-# that both foreground layers are real visible humans; v150 removes Gemini as a
-# single point of failure and uses CometAPI for primary real-scene generation.
+# Keep audited historical overlays available, then apply v151 last. v149 proves
+# that both foreground layers are real visible humans; v150 provides the tested
+# Comet transport; v151 removes stale Gemini/FLUX failover and accepts natural,
+# composition-ready Comet location plates through a local structural gate.
 try:
     from celebrity_selfie_v145 import install_early as install_celebrity_selfie_v145
 
@@ -59,3 +60,10 @@ try:
     install_celebrity_selfie_v150()
 except Exception as exc:
     print(f"[celebrity-selfie-v150] early bootstrap warning: {type(exc).__name__}: {exc}")
+
+try:
+    from celebrity_selfie_v151 import install_early as install_celebrity_selfie_v151
+
+    install_celebrity_selfie_v151()
+except Exception as exc:
+    print(f"[celebrity-selfie-v151] early bootstrap warning: {type(exc).__name__}: {exc}")
