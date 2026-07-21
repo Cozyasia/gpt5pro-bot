@@ -15,12 +15,19 @@ try:
 except Exception as exc:  # a stale version label must never block bot startup
     print(f"[neyrobot-version] early bootstrap warning: {type(exc).__name__}: {exc}")
 
-# Load the current Celebrity Selfie overlay after every historical package hook.
-# Its builder wrapper re-applies the PiAPI-first identity route after legacy
-# ApplicationBuilder wrappers have completed.
+# Keep v145 as the audited provider base, then apply v146 as the final local
+# face-crop identity overlay. The explicit versioning bootstrap repeats v146 when
+# Python does not automatically import repository-local sitecustomize.py.
 try:
     from celebrity_selfie_v145 import install_early as install_celebrity_selfie_v145
 
     install_celebrity_selfie_v145()
 except Exception as exc:  # keep the rest of the bot available for diagnostics
     print(f"[celebrity-selfie-v145] early bootstrap warning: {type(exc).__name__}: {exc}")
+
+try:
+    from celebrity_selfie_v146 import install_early as install_celebrity_selfie_v146
+
+    install_celebrity_selfie_v146()
+except Exception as exc:  # keep the rest of the bot available for diagnostics
+    print(f"[celebrity-selfie-v146] early bootstrap warning: {type(exc).__name__}: {exc}")
