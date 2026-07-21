@@ -14,7 +14,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v151-comet-only-composition-ready-2026-07-21"
+VERSION = "v152-empty-comet-plate-contract-2026-07-21"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
@@ -45,19 +45,23 @@ _RELEASE_OVERLAY_INSTALLED = False
 # from celebrity_selfie_v150 import install as install_v150
 # install_v150()
 # release_overlay={'v150' if release_overlay else 'load-error'}
+# VERSION = "v151-comet-only-composition-ready-2026-07-21"
+# from celebrity_selfie_v151 import install as install_v151
+# install_v151()
+# release_overlay={'v151' if release_overlay else 'load-error'}
 
 
 def _install_current_release() -> bool:
-    """Install and re-apply v151 without relying on import order."""
+    """Install and re-apply v152 without relying on import order."""
     global _RELEASE_OVERLAY_INSTALLED
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from celebrity_selfie_v151 import install as install_v151
-        from celebrity_selfie_v151 import install_builder_hook as install_v151_builder
+        from celebrity_selfie_v152 import install as install_v152
+        from celebrity_selfie_v152 import install_builder_hook as install_v152_builder
 
-        install_v151()
-        install_v151_builder()
+        install_v152()
+        install_v152_builder()
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
         _RELEASE_OVERLAY_INSTALLED = True
@@ -106,7 +110,7 @@ async def _cmd_version(update: Any, context: Any) -> None:
         f"✅ Код запущен: {VERSION}",
         "entrypoint=main.py",
         "start_command=python -u main.py",
-        f"release_overlay={'v151' if release_overlay else 'load-error'}",
+        f"release_overlay={'v152' if release_overlay else 'load-error'}",
         f"general_router={general_router}",
         f"medical_text_route={'v120' if medical_text else 'legacy'}",
         f"medical_image_route={'v120' if medical_image else 'legacy'}",
@@ -160,7 +164,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v151",
+        name="neyrobot-version-contract-v152",
         daemon=True,
     ).start()
 
