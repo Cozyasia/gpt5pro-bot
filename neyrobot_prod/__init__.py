@@ -239,7 +239,9 @@ except Exception:
 try:
     from celebrity_selfie_v143 import install as _install_v143
     from celebrity_selfie_v143 import install_builder_hook as _install_v143_builder
+    from celebrity_selfie_v143_compat import install as _install_v143_compat
     _install_v143()
+    _install_v143_compat()
     _install_v143_builder()
 except Exception:
     pass
