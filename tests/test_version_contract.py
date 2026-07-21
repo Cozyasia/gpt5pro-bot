@@ -16,10 +16,10 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v143(self):
+    def test_release_version_is_v144(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v143-strict-composite-quality-gate-2026-07-21"',
+            'VERSION = "v144-scene-provider-schema-retry-2026-07-21"',
             source,
         )
 
@@ -96,7 +96,7 @@ class VersionContractTests(unittest.TestCase):
         self.assertGreater(source.index("from celebrity_selfie_v142"), source.index("from celebrity_selfie_v141"))
         self.assertIn('CELEBRITY_V142_CUTOUT_PROVIDERS", "photoroom,rembg"', source)
 
-    def test_v143_strict_quality_gate_is_applied_last(self):
+    def test_v143_strict_quality_gate_remains_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from celebrity_selfie_v143 import install", source)
         self.assertIn("_install_v143()", source)
@@ -105,6 +105,16 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn('CELEBRITY_V143_MIN_CELEBRITY_SCORE", "66"', source)
         self.assertIn('CELEBRITY_V143_MIN_VISUAL_NATURALNESS", "70"', source)
         self.assertIn('CELEBRITY_V143_LEGACY_FALLBACK", "0"', source)
+
+    def test_v144_provider_safe_scene_overlay_is_applied_last(self):
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("from celebrity_selfie_v144 import install", source)
+        self.assertIn("_install_v144()", source)
+        self.assertIn("_install_v144_builder()", source)
+        self.assertGreater(source.index("from celebrity_selfie_v144"), source.index("from celebrity_selfie_v143"))
+        self.assertIn('CELEBRITY_V144_GEMINI_PLATES", "2"', source)
+        self.assertIn('CELEBRITY_V144_OPENAI_PLATES", "2"', source)
+        self.assertIn('CELEBRITY_V144_STRICT_RESCUE_ROUND", "1"', source)
 
 
 if __name__ == "__main__":
