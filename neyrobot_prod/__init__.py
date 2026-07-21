@@ -3,7 +3,7 @@
 
 import os
 
-VERSION = "v143-strict-composite-quality-gate-2026-07-21"
+VERSION = "v144-scene-provider-schema-retry-2026-07-21"
 
 # Commercial/default guardrails. Render Environment can override every value.
 os.environ.setdefault("CELEBRITY_V136_UNIT_COST_USD", "0.60")
@@ -83,6 +83,16 @@ os.environ.setdefault("CELEBRITY_V143_MIN_VISUAL_NATURALNESS", "70")
 os.environ.setdefault("CELEBRITY_V143_PLATES_TO_IDENTITY", "2")
 os.environ.setdefault("CELEBRITY_V143_PLACEMENT_VARIANTS", "2")
 os.environ.setdefault("CELEBRITY_V143_LEGACY_FALLBACK", "0")
+# v144: normalize Gemini aspect ratios, retry compatible request schemas and
+# generate several private one-person plates before a strict rescue round.
+os.environ.setdefault("CELEBRITY_V144_GEMINI_SCENE_ENABLED", "1")
+os.environ.setdefault("CELEBRITY_V144_OPENAI_SCENE_ENABLED", "1")
+os.environ.setdefault("CELEBRITY_V144_GEMINI_PLATES", "2")
+os.environ.setdefault("CELEBRITY_V144_OPENAI_PLATES", "2")
+os.environ.setdefault("CELEBRITY_V144_SCENE_PARALLEL", "2")
+os.environ.setdefault("CELEBRITY_V144_STRICT_RESCUE_ROUND", "1")
+os.environ.setdefault("CELEBRITY_V144_VISION_ZERO_FACE_RESCUE", "1")
+os.environ.setdefault("CELEBRITY_V144_GEMINI_TIMEOUT_S", "420")
 
 os.environ.setdefault("CHAT_PROVIDER_DEFAULT", "gpt")
 os.environ.setdefault("GEMINI_CHAT_ENABLED", "1")
@@ -233,9 +243,8 @@ try:
 except Exception:
     pass
 
-# v143 is the final live overlay. It keeps only the frontal primary selfie for
-# compositing and rejects rectangular masks, leaked car/interior backgrounds,
-# extra main people, unknown celebrity identity and visually unnatural results.
+# v143 keeps only the frontal primary selfie for compositing and rejects dirty
+# masks, leaked source backgrounds, extra people and unknown celebrity identity.
 try:
     from celebrity_selfie_v143 import install as _install_v143
     from celebrity_selfie_v143 import install_builder_hook as _install_v143_builder
@@ -243,6 +252,17 @@ try:
     _install_v143()
     _install_v143_compat()
     _install_v143_builder()
+except Exception:
+    pass
+
+# v144 is the final live overlay. It fixes invalid Gemini aspect payloads,
+# retries compatible schemas, supplies low-clutter one-person scene templates and
+# requires Vision confirmation before rescuing a local zero-face detection.
+try:
+    from celebrity_selfie_v144 import install as _install_v144
+    from celebrity_selfie_v144 import install_builder_hook as _install_v144_builder
+    _install_v144()
+    _install_v144_builder()
 except Exception:
     pass
 
