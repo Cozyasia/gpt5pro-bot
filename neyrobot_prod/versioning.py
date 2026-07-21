@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Canonical release version contract for the production bot.
+"""Canonical production release/version contract.
 
-Legacy feature overlays keep their own component versions and may update
-``PATCH_VERSION`` while they are installed. The public ``/version`` command,
-however, must always report and re-assert the actual production release.
-
-v147 is installed from this module as well as from ``sitecustomize.py`` because
-Render starts the service with ``python main.py`` and Python does not guarantee
-that a repository-local sitecustomize module is imported in every environment.
-``secret_loader.py`` explicitly imports this module before the Telegram
-Application is built, making this the authoritative production bootstrap path.
+The newest Celebrity Selfie overlay is installed here as well as from
+``sitecustomize.py``. Render starts the service with ``python main.py`` and a
+repository-local sitecustomize import is not guaranteed in every environment,
+so this module is the authoritative repeatable bootstrap path.
 """
 from __future__ import annotations
 
@@ -19,13 +14,13 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v147-source-pixel-dual-composite-2026-07-21"
+VERSION = "v148-schema-safe-layer-qc-2026-07-21"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
 _RELEASE_OVERLAY_INSTALLED = False
 
-# Historical contract markers retained for old source-level tests:
+# Historical markers retained for source-level compatibility tests:
 # VERSION = "v145-piapi-celebrity-lock-retry-2026-07-21"
 # from celebrity_selfie_v145 import install as install_v145
 # install_v145()
@@ -34,19 +29,23 @@ _RELEASE_OVERLAY_INSTALLED = False
 # from celebrity_selfie_v146 import install as install_v146
 # install_v146()
 # release_overlay={'v146' if release_overlay else 'load-error'}
+# VERSION = "v147-source-pixel-dual-composite-2026-07-21"
+# from celebrity_selfie_v147 import install as install_v147
+# install_v147()
+# release_overlay={'v147' if release_overlay else 'load-error'}
 
 
 def _install_current_release() -> bool:
-    """Install and re-apply the latest release overlay without trusting sitecustomize."""
+    """Install and re-apply v148 without relying on import order."""
     global _RELEASE_OVERLAY_INSTALLED
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from celebrity_selfie_v147 import install as install_v147
-        from celebrity_selfie_v147 import install_builder_hook as install_v147_builder
+        from celebrity_selfie_v148 import install as install_v148
+        from celebrity_selfie_v148 import install_builder_hook as install_v148_builder
 
-        install_v147()
-        install_v147_builder()
+        install_v148()
+        install_v148_builder()
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
         _RELEASE_OVERLAY_INSTALLED = True
@@ -64,7 +63,6 @@ def _runtime_module() -> Any | None:
 
 
 def _stamp_runtime(mod: Any) -> None:
-    """Expose one canonical release identifier despite legacy overlay races."""
     _install_current_release()
     mod.APP_VERSION = VERSION
     mod.RELEASE_VERSION = VERSION
@@ -73,7 +71,6 @@ def _stamp_runtime(mod: Any) -> None:
 
 
 async def _cmd_version(update: Any, context: Any) -> None:
-    """Return the canonical release and stop legacy /version handlers."""
     from telegram.ext import ApplicationHandlerStop
 
     release_overlay = _install_current_release()
@@ -97,7 +94,7 @@ async def _cmd_version(update: Any, context: Any) -> None:
         f"✅ Код запущен: {VERSION}",
         "entrypoint=main.py",
         "start_command=python -u main.py",
-        f"release_overlay={'v147' if release_overlay else 'load-error'}",
+        f"release_overlay={'v148' if release_overlay else 'load-error'}",
         f"general_router={general_router}",
         f"medical_text_route={'v120' if medical_text else 'legacy'}",
         f"medical_image_route={'v120' if medical_image else 'legacy'}",
@@ -151,7 +148,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v147",
+        name="neyrobot-version-contract-v148",
         daemon=True,
     ).start()
 
