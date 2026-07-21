@@ -15,9 +15,9 @@ try:
 except Exception as exc:  # a stale version label must never block bot startup
     print(f"[neyrobot-version] early bootstrap warning: {type(exc).__name__}: {exc}")
 
-# Keep audited historical overlays available, then apply v153 last. v152 fixes
-# empty Comet scene validation; v153 recovers licensed portrait references when
-# the optional local face detector returns zero boxes, while preserving pixels.
+# Keep audited historical overlays available, then apply v154 last. v153 repairs
+# catalog detector misses; v154 installs the missing CPU rembg backend and adds
+# a fail-closed alpha-silhouette recovery for detector misses on the user selfie.
 try:
     from celebrity_selfie_v145 import install_early as install_celebrity_selfie_v145
 
@@ -80,3 +80,10 @@ try:
     install_celebrity_selfie_v153()
 except Exception as exc:
     print(f"[celebrity-selfie-v153] early bootstrap warning: {type(exc).__name__}: {exc}")
+
+try:
+    from celebrity_selfie_v154 import install_early as install_celebrity_selfie_v154
+
+    install_celebrity_selfie_v154()
+except Exception as exc:
+    print(f"[celebrity-selfie-v154] early bootstrap warning: {type(exc).__name__}: {exc}")
