@@ -3,7 +3,13 @@
 
 Legacy feature overlays keep their own component versions and may update
 ``PATCH_VERSION`` while they are installed. The public ``/version`` command,
-however, must always report the actual production release that Render runs.
+however, must always report and re-assert the actual production release.
+
+v145 is installed from this module as well as from ``sitecustomize.py`` because
+Render starts the service with ``python main.py`` and Python does not guarantee
+that a repository-local sitecustomize module is imported in every environment.
+``secret_loader.py`` explicitly imports this module before the Telegram
+Application is built, making this the authoritative production bootstrap path.
 """
 from __future__ import annotations
 
@@ -13,11 +19,30 @@ import threading
 import time
 from typing import Any
 
-from . import VERSION
-
+VERSION = "v145-piapi-celebrity-lock-retry-2026-07-21"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
+_RELEASE_OVERLAY_INSTALLED = False
+
+
+def _install_current_release() -> bool:
+    """Install and re-apply the latest release overlay without trusting sitecustomize."""
+    global _RELEASE_OVERLAY_INSTALLED
+    try:
+        import neyrobot_prod
+        from neyrobot_prod import bootstrap
+        from celebrity_selfie_v145 import install as install_v145
+        from celebrity_selfie_v145 import install_builder_hook as install_v145_builder
+
+        install_v145()
+        install_v145_builder()
+        neyrobot_prod.VERSION = VERSION
+        bootstrap.VERSION = VERSION
+        _RELEASE_OVERLAY_INSTALLED = True
+        return True
+    except Exception:
+        return False
 
 
 def _runtime_module() -> Any | None:
@@ -30,6 +55,7 @@ def _runtime_module() -> Any | None:
 
 def _stamp_runtime(mod: Any) -> None:
     """Expose one canonical release identifier despite legacy overlay races."""
+    _install_current_release()
     mod.APP_VERSION = VERSION
     mod.RELEASE_VERSION = VERSION
     mod.PRODUCTION_HARDENING_VERSION = VERSION
@@ -40,6 +66,7 @@ async def _cmd_version(update: Any, context: Any) -> None:
     """Return the canonical release and stop legacy /version handlers."""
     from telegram.ext import ApplicationHandlerStop
 
+    release_overlay = _install_current_release()
     mod = _runtime_module()
     if mod is not None:
         _stamp_runtime(mod)
@@ -60,6 +87,7 @@ async def _cmd_version(update: Any, context: Any) -> None:
         f"✅ Код запущен: {VERSION}",
         "entrypoint=main.py",
         "start_command=python -u main.py",
+        f"release_overlay={'v145' if release_overlay else 'load-error'}",
         f"general_router={general_router}",
         f"medical_text_route={'v120' if medical_text else 'legacy'}",
         f"medical_image_route={'v120' if medical_image else 'legacy'}",
@@ -86,6 +114,7 @@ def _install_builder_hook() -> None:
 
     def build(self: Any, *args: Any, **kwargs: Any):
         app = original_build(self, *args, **kwargs)
+        _install_current_release()
         if not getattr(app, "_neyrobot_version_contract_handler", False):
             app.add_handler(CommandHandler("version", _cmd_version), group=-1000)
             setattr(app, "_neyrobot_version_contract_handler", True)
@@ -112,13 +141,14 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract",
+        name="neyrobot-version-contract-v145",
         daemon=True,
     ).start()
 
 
 def install_early() -> None:
     global _INSTALLED
+    _install_current_release()
     if _INSTALLED:
         return
     _install_builder_hook()
@@ -126,4 +156,4 @@ def install_early() -> None:
     _INSTALLED = True
 
 
-__all__ = ["install_early", "VERSION"]
+__all__ = ["install_early", "VERSION", "_install_current_release"]

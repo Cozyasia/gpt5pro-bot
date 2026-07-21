@@ -16,12 +16,15 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn("raise ApplicationHandlerStop", source)
         self.assertIn("mod.PATCH_VERSION = VERSION", source)
 
-    def test_release_version_is_v144(self):
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+    def test_release_version_is_v145(self):
+        source = Path("neyrobot_prod/versioning.py").read_text(encoding="utf-8")
         self.assertIn(
-            'VERSION = "v144-scene-provider-schema-retry-2026-07-21"',
+            'VERSION = "v145-piapi-celebrity-lock-retry-2026-07-21"',
             source,
         )
+        self.assertIn("from celebrity_selfie_v145 import install as install_v145", source)
+        self.assertIn("install_v145()", source)
+        self.assertIn("release_overlay={'v145' if release_overlay else 'load-error'}", source)
 
     def test_v121_presentation_overlay_is_still_bootstrapped(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
@@ -106,7 +109,7 @@ class VersionContractTests(unittest.TestCase):
         self.assertIn('CELEBRITY_V143_MIN_VISUAL_NATURALNESS", "70"', source)
         self.assertIn('CELEBRITY_V143_LEGACY_FALLBACK", "0"', source)
 
-    def test_v144_provider_safe_scene_overlay_is_applied_last(self):
+    def test_v144_provider_safe_scene_overlay_remains_the_base(self):
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("from celebrity_selfie_v144 import install", source)
         self.assertIn("_install_v144()", source)
