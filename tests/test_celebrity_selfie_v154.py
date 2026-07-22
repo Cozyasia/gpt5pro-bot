@@ -32,10 +32,11 @@ class CelebritySelfieV154Tests(unittest.TestCase):
     def test_version(self):
         self.assertEqual(v154.VERSION, "v154-cpu-rembg-user-face-recovery-2026-07-22")
 
-    def test_requirements_install_cpu_backend(self):
-        source = Path("requirements.txt").read_text(encoding="utf-8")
-        self.assertIn("rembg[cpu]==2.0.67", source)
-        self.assertNotIn("\nrembg==2.0.67", source)
+    def test_cpu_backend_is_isolated_from_web_requirements(self):
+        web = Path("requirements.txt").read_text(encoding="utf-8")
+        worker = Path("requirements-media-worker.txt").read_text(encoding="utf-8")
+        self.assertNotIn("rembg[cpu]", web)
+        self.assertIn("rembg[cpu]==2.0.67", worker)
 
     def test_zero_box_user_source_gets_provisional_region(self):
         error = v139.PipelineError(
@@ -77,10 +78,11 @@ class CelebritySelfieV154Tests(unittest.TestCase):
         self.assertIn("v149._source_face_info = _source_face_info", source)
         self.assertIn("v143._prepare_user_cutout = _prepare_user_cutout", source)
 
-    def test_sitecustomize_loads_v154_last(self):
+    def test_sitecustomize_applies_memory_policy_after_v154(self):
         source = Path("sitecustomize.py").read_text(encoding="utf-8")
         self.assertIn("from celebrity_selfie_v154 import install_early", source)
-        self.assertGreater(source.index("from celebrity_selfie_v154"), source.index("from celebrity_selfie_v153"))
+        self.assertIn("from memory_safety_v155 import install_early", source)
+        self.assertGreater(source.index("from memory_safety_v155"), source.index("from celebrity_selfie_v154"))
 
     def test_version_contract_points_to_v154(self):
         source = Path("neyrobot_prod/versioning.py").read_text(encoding="utf-8")
