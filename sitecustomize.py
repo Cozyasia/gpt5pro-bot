@@ -87,3 +87,12 @@ try:
     install_celebrity_selfie_v154()
 except Exception as exc:
     print(f"[celebrity-selfie-v154] early bootstrap warning: {type(exc).__name__}: {exc}")
+
+# Apply resource policy after all historical overlays. This deliberately wins
+# over v154's local-rembg defaults and keeps ONNX out of the web process.
+try:
+    from memory_safety_v155 import install_early as install_memory_safety_v155
+
+    install_memory_safety_v155()
+except Exception as exc:
+    print(f"[memory-safety-v155] early bootstrap warning: {type(exc).__name__}: {exc}")
