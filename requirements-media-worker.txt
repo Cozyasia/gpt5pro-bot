@@ -1,0 +1,4 @@
+# Optional dependency set for an isolated, non-web media worker.
+# Do not install this file in gpt5pro-bot Web Service.
+-r requirements.txt
+rembg[cpu]==2.0.67
