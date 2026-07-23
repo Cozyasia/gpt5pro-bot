@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production defaults.
 
-The package activates one Celebrity Selfie release: v158. Historical modules
-remain available only as implementation libraries and catalog assets.
+v159 keeps the complete v158 Celebrity Selfie renderer/reference pack and adds
+priority photo routing, canonical credit checkout and medical integrity guards.
+Historical modules remain implementation libraries rather than competing owners.
 """
 
 import os
 
-VERSION = "v158-fixed-roman-reference-pack-2026-07-23"
+VERSION = "v159-payments-selfie-medical-integrity-2026-07-24"
 
-# Current Celebrity Selfie production contract. v158 retains the v124 wizard
-# and successful v156 renderer, pins Roman Abramovich to the owner-provided
-# three-reference pack and removes false submenu error messages.
+# Current Celebrity Selfie production contract.
 os.environ.setdefault("CELEBRITY_V156_UNIT_COST_USD", "0.80")
 os.environ.setdefault("CELEBRITY_V156_CANDIDATES", "3")
 os.environ.setdefault("CELEBRITY_V156_COMET_ROUTES", "gemini,openai-edit")
@@ -30,8 +29,8 @@ os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "84")
 os.environ.setdefault("CELEBRITY_V156_CELEBRITY_REFERENCE_LIMIT", "3")
 os.environ.setdefault("CELEBRITY_FIXED_REF_CACHE", "/tmp/neyrobot_fixed_refs")
 
-# Explicitly disable obsolete production paths. The independent PhotoRoom
-# background-removal feature remains enabled in main.py/render.yaml.
+# Explicitly disable obsolete production paths. PhotoRoom background removal in
+# main.py/render.yaml remains independent and enabled.
 os.environ["CELEBRITY_V142_LOCAL_REMBG_FALLBACK"] = "0"
 os.environ["CELEBRITY_V142_LEGACY_FALLBACK"] = "0"
 os.environ["CELEBRITY_V143_LEGACY_FALLBACK"] = "0"
@@ -48,8 +47,7 @@ os.environ.setdefault("GEMINI_CHAT_MODEL", "gemini-3.5-flash")
 os.environ.setdefault("GEMINI_CHAT_FALLBACK_MODEL", "gemini-3.1-flash-lite")
 os.environ.setdefault("CHAT_PROVIDER_GEMINI_FALLBACK_GPT", "1")
 
-# Register non-selfie production features that previously relied on package
-# import side effects. Failures stay isolated so the Telegram service can start.
+# Register non-selfie production features that rely on package import effects.
 try:
     from .medical_answer_ui import install_early as _install_medical_answer_ui
     _install_medical_answer_ui()
@@ -72,8 +70,6 @@ try:
 except Exception:
     pass
 
-# Catalog/reference library only. v158 loads v124's exclusive Telegram wizard
-# later, after all generic routers have been defined.
 try:
     from celebrity_selfie_v122 import install_runtime_async as _install_celebrity_library_runtime
     _install_celebrity_library_runtime()
@@ -88,8 +84,7 @@ try:
 except Exception:
     pass
 
-# UI compatibility remains active; v158 is installed later and is the final
-# owner of celebrity flow routing, generation, result buttons and diagnostics.
+# UI compatibility remains active; v159 is the final routing owner.
 try:
     from ui_hotfix_v137 import install_builder_hook as _install_ui_v137_builder
     from ui_hotfix_v137 import install_runtime_patches as _install_ui_v137_runtime
