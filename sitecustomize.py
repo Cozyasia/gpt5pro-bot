@@ -13,10 +13,10 @@ except Exception as exc:
     print(f"[neyrobot-prod] early bootstrap warning: {type(exc).__name__}: {exc}")
 
 try:
-    from celebrity_selfie_v157 import install_early as install_celebrity_selfie_v157
-    install_celebrity_selfie_v157()
+    from celebrity_selfie_v158 import install_early as install_celebrity_selfie_v158
+    install_celebrity_selfie_v158()
 except Exception as exc:
-    print(f"[celebrity-selfie-v157] early bootstrap warning: {type(exc).__name__}: {exc}")
+    print(f"[celebrity-selfie-v158] early bootstrap warning: {type(exc).__name__}: {exc}")
 
 try:
     from neyrobot_prod.versioning import install_early as install_version_contract_early
