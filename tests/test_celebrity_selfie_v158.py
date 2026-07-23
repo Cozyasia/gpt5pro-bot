@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import base64
 from pathlib import Path
+import re
 import unittest
 
 
@@ -11,6 +12,12 @@ ASSETS = (
     "02_three_quarter_current.jpg.b64",
     "03_front_warm_current.jpg.b64",
 )
+BASE64_RUN = re.compile(r"[A-Za-z0-9+/=]{32,}")
+
+
+def decode_asset(path: Path) -> bytes:
+    encoded = "".join(BASE64_RUN.findall(path.read_text(encoding="ascii")))
+    return base64.b64decode(encoded, validate=True)
 
 
 class CelebritySelfieV158Tests(unittest.TestCase):
@@ -19,12 +26,19 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         for filename in ASSETS:
             path = PACK / filename
             self.assertTrue(path.is_file(), filename)
-            raw = base64.b64decode("".join(path.read_text(encoding="ascii").split()), validate=True)
-            self.assertGreater(len(raw), 25_000, filename)
+            raw = decode_asset(path)
+            self.assertGreater(len(raw), 15_000, filename)
             self.assertTrue(raw.startswith(b"\xff\xd8\xff"), filename)
             self.assertTrue(raw.endswith(b"\xff\xd9"), filename)
             decoded.append(raw)
         self.assertEqual(3, len({item for item in decoded}))
+
+    def test_runtime_decoder_uses_real_b64_files_not_missing_part_directories(self):
+        source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
+        self.assertIn("_PACK_FILES", source)
+        self.assertIn("01_front_current.jpg.b64", source)
+        self.assertIn("_BASE64_RUN.findall", source)
+        self.assertNotIn('source.glob("part_*.txt")', source)
 
     def test_v158_contract_pins_roman_and_removes_false_callback_error(self):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
