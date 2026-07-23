@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Celebrity Selfie v158: repository-pinned Roman Abramovich references.
 
-The complete v157 catalog/scene wizard and the v156 coherent Comet renderer stay
+The complete v157 catalog/scene wizard and v156 coherent Comet renderer remain
 unchanged. This overlay only replaces the reference source for the selected
-catalog entry ``ru_roman_abramovich`` with the three owner-provided portraits.
+catalog entry ``ru_roman_abramovich`` with three owner-provided portraits.
 """
 from __future__ import annotations
 
@@ -71,23 +71,62 @@ def _is_roman_session(session: dict[str, Any] | None) -> bool:
     return _normalise_name(ROMAN_NAME) in names
 
 
-def _decode_reference(source: Path, target: Path) -> Path:
-    """Decode one repository asset and validate that it is a complete JPEG.
+def _valid_jpeg(raw: bytes) -> bool:
+    return bool(
+        len(raw) >= 15_000
+        and raw.startswith(b"\xff\xd8\xff")
+        and raw.endswith(b"\xff\xd9")
+    )
 
-    The extraction deliberately keeps only long standard-base64 runs. This is
-    tolerant of accidental diff/display annotations while never accepting a
-    truncated or malformed JPEG: SOI, EOI and a minimum byte size are mandatory.
+
+def _decode_asset_text(text: str, label: str = "asset") -> bytes:
+    """Recover one complete JPEG from a textual standard-base64 asset.
+
+    Historical PR tooling could append display material after a correctly padded
+    payload. Candidate decoding therefore stops at the first padding boundary and
+    accepts a result only when it is a complete JPEG. Invalid/truncated data still
+    fails startup before a paid generation can begin.
     """
+    runs = _BASE64_RUN.findall(text or "")
+    if not runs:
+        raise ValueError(f"no base64 payload in {label}")
+
+    candidates: list[str] = []
+    joined = "".join(runs)
+    for value in (joined, *runs):
+        if not value:
+            continue
+        variants = [value]
+        pad_at = value.find("=")
+        if pad_at >= 0:
+            end = pad_at + 1
+            while end < len(value) and value[end] == "=":
+                end += 1
+            variants.insert(0, value[:end])
+        for candidate in variants:
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+
+    errors: list[str] = []
+    for candidate in candidates:
+        payload = candidate
+        if "=" not in payload and len(payload) % 4:
+            payload += "=" * (-len(payload) % 4)
+        try:
+            raw = base64.b64decode(payload, validate=True)
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}:{exc}")
+            continue
+        if _valid_jpeg(raw):
+            return raw
+        errors.append(f"decoded-not-complete-jpeg:{len(raw)}")
+    raise ValueError(f"invalid or truncated JPEG asset {label}: {'; '.join(errors[-4:])}")
+
+
+def _decode_reference(source: Path, target: Path) -> Path:
     if not source.is_file():
         raise FileNotFoundError(f"fixed reference missing: {source}")
-    text = source.read_text(encoding="ascii")
-    encoded = "".join(_BASE64_RUN.findall(text))
-    if not encoded:
-        raise ValueError(f"no base64 payload in {source.name}")
-    raw = base64.b64decode(encoded, validate=True)
-    if len(raw) < 15_000 or not raw.startswith(b"\xff\xd8\xff") or not raw.endswith(b"\xff\xd9"):
-        raise ValueError(f"invalid or truncated JPEG asset: {source.name}")
-
+    raw = _decode_asset_text(source.read_text(encoding="ascii"), source.name)
     digest = hashlib.sha256(raw).hexdigest()
     digest_path = target.with_suffix(target.suffix + ".sha256")
     cached_ok = (
@@ -105,9 +144,10 @@ def _decode_reference(source: Path, target: Path) -> Path:
 
 def _fixed_reference_paths() -> list[str]:
     _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
-    result: list[str] = []
-    for index, filename in enumerate(_PACK_FILES, start=1):
-        result.append(str(_decode_reference(_PACK_ROOT / filename, _CACHE_ROOT / f"{index:02d}.jpg")))
+    result = [
+        str(_decode_reference(_PACK_ROOT / filename, _CACHE_ROOT / f"{index:02d}.jpg"))
+        for index, filename in enumerate(_PACK_FILES, start=1)
+    ]
     if len(result) != 3:
         raise RuntimeError("Roman reference pack must contain exactly three images")
     return result
@@ -173,7 +213,6 @@ async def _prepare_library_refs(update: Any, context: Any, entry: dict[str, Any]
 
 
 async def _v122_callback_without_false_error(update: Any, context: Any) -> Any:
-    """Treat the wizard's ApplicationHandlerStop as normal propagation control."""
     target = _CALLBACK_TARGET
     if not callable(target):
         raise RuntimeError("Celebrity Selfie callback target is unavailable")
@@ -194,7 +233,6 @@ def _hashes(items: list[bytes]) -> set[str]:
 
 
 async def _rank_celebrity_references(mod: Any, refs: list[bytes], debug: dict[str, Any]) -> list[bytes]:
-    """Keep the owner-approved Roman pack complete and in the intended order."""
     try:
         fixed = _fixed_reference_bytes()
         if len(refs) >= 3 and _hashes(fixed).issubset(_hashes(refs)):
@@ -227,7 +265,6 @@ def _patch_version_contract() -> None:
 
 async def _diag(update: Any, context: Any) -> None:
     from telegram.ext import ApplicationHandlerStop
-
     session = v139.selfie.engine._session(context, create=False) or {}
     debug = session.get("v156_debug") or session.get("v139_debug") or renderer._LAST_RUN_DEBUG or {}
     selected = debug.get("selected") or {}
@@ -269,7 +306,6 @@ def install() -> None:
     if getattr(engine, _INSTALL_FLAG, False):
         _patch_version_contract()
         return
-
     previous.install()
     os.environ.setdefault("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
     os.environ["CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY"] = os.environ.get(
@@ -280,8 +316,8 @@ def install() -> None:
     )
     os.environ.setdefault("CELEBRITY_V156_CELEBRITY_REFERENCE_LIMIT", "3")
     os.environ.setdefault("CELEBRITY_V156_CANDIDATES", "3")
-
     _fixed_reference_paths()  # fail at deploy/start, never during a paid job
+
     current_callback = flow.base._on_callback
     if current_callback is not _v122_callback_without_false_error:
         _CALLBACK_TARGET = current_callback
@@ -290,7 +326,6 @@ def install() -> None:
     engine._prepare_library_refs = _prepare_library_refs
     engine._reference_paths = _reference_paths
     renderer._rank_celebrity_references = _rank_celebrity_references
-
     previous.VERSION = VERSION
     renderer.VERSION = VERSION
     v139.VERSION = VERSION
@@ -307,7 +342,6 @@ def install_builder_hook() -> None:
         return
     if getattr(ApplicationBuilder, _BUILDER_FLAG, False):
         return
-
     install()
     previous.install_builder_hook()
     original_build = ApplicationBuilder.build
@@ -317,11 +351,8 @@ def install_builder_hook() -> None:
         app = original_build(self, *args, **kwargs)
         if not getattr(app, _HANDLER_FLAG, False):
             for command in (
-                "diag_selfie_v158",
-                "diag_selfie_v157",
-                "diag_selfie_v156",
-                "diag_celebrity_flow",
-                "diag_brand",
+                "diag_selfie_v158", "diag_selfie_v157", "diag_selfie_v156",
+                "diag_celebrity_flow", "diag_brand",
             ):
                 app.add_handler(CommandHandler(command, _diag), group=_GROUP)
             setattr(app, _HANDLER_FLAG, True)
@@ -340,4 +371,5 @@ __all__ = [
     "VERSION", "ROMAN_ID", "ROMAN_NAME", "install", "install_early",
     "install_builder_hook", "_fixed_reference_paths", "_reference_paths",
     "_prepare_library_refs", "_rank_celebrity_references", "_diag",
+    "_decode_asset_text",
 ]
