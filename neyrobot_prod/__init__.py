@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production defaults.
 
-The package no longer activates a chain of historical Celebrity Selfie overlays.
-The canonical v156 release is installed by ``neyrobot_prod.versioning`` and
-``sitecustomize``. Older modules are retained only as implementation libraries.
+The package activates one Celebrity Selfie release: v157. Historical modules
+remain available only as implementation libraries and catalog assets.
 """
 
 import os
 
-VERSION = "v156-comet-dual-identity-best-of-n-2026-07-23"
+VERSION = "v157-menu-selected-identity-lock-2026-07-23"
 
-# Current Celebrity Selfie production contract.
+# Current Celebrity Selfie production contract. v157 restores the exclusive
+# catalog/scene wizard while retaining the successful v156 coherent renderer.
 os.environ.setdefault("CELEBRITY_V156_UNIT_COST_USD", "0.80")
 os.environ.setdefault("CELEBRITY_V156_CANDIDATES", "3")
 os.environ.setdefault("CELEBRITY_V156_COMET_ROUTES", "gemini,openai-edit")
@@ -19,10 +19,13 @@ os.environ.setdefault("CELEBRITY_V156_TARGETED_REPAIR", "1")
 os.environ.setdefault("CELEBRITY_V156_REFERENCE_VISION_QC", "1")
 os.environ.setdefault("CELEBRITY_V156_VISION_QC", "1")
 os.environ.setdefault("CELEBRITY_V156_MAX_CONCURRENCY", "1")
-os.environ.setdefault("CELEBRITY_V156_MIN_USER_SIMILARITY", "64")
-os.environ.setdefault("CELEBRITY_V156_MIN_CELEBRITY_SIMILARITY", "62")
+os.environ.setdefault("CELEBRITY_V157_MIN_USER_SIMILARITY", "64")
+os.environ.setdefault("CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY", "78")
+os.environ["CELEBRITY_V156_MIN_USER_SIMILARITY"] = os.environ.get("CELEBRITY_V157_MIN_USER_SIMILARITY", "64")
+os.environ["CELEBRITY_V156_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY", "78")
 os.environ.setdefault("CELEBRITY_V156_MIN_QUALITY", "66")
-os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "82")
+os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "86")
+os.environ.setdefault("CELEBRITY_V156_CELEBRITY_REFERENCE_LIMIT", "3")
 
 # Explicitly disable obsolete production paths. The independent PhotoRoom
 # background-removal feature remains enabled in main.py/render.yaml.
@@ -66,7 +69,8 @@ try:
 except Exception:
     pass
 
-# Catalog/reference library only. Its historical Telegram builder is not loaded.
+# Catalog/reference library only. v157 loads v124's exclusive Telegram wizard
+# later, after all generic routers have been defined.
 try:
     from celebrity_selfie_v122 import install_runtime_async as _install_celebrity_library_runtime
     _install_celebrity_library_runtime()
@@ -81,8 +85,8 @@ try:
 except Exception:
     pass
 
-# UI compatibility remains active; v156 is installed later and is the final
-# owner of generation, result buttons, callbacks and diagnostics.
+# UI compatibility remains active; v157 is installed later and is the final
+# owner of celebrity flow routing, generation, result buttons and diagnostics.
 try:
     from ui_hotfix_v137 import install_builder_hook as _install_ui_v137_builder
     from ui_hotfix_v137 import install_runtime_patches as _install_ui_v137_runtime
