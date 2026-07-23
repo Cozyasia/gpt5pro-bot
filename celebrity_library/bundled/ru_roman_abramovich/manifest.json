@@ -1,0 +1,33 @@
+{
+  "version": "v158-bundled-abramovich-identity-pack-2026-07-23",
+  "id": "ru_roman_abramovich",
+  "references": [
+    {
+      "output": "ref_01.jpg",
+      "sha256": "56244292676776752d7b0a42bcc494b841f29dba928ef482ded1dbef2e08fcd8",
+      "bytes": 45970,
+      "parts": [
+        "ref_01.part_01.b64",
+        "ref_01.part_02.b64"
+      ]
+    },
+    {
+      "output": "ref_02.jpg",
+      "sha256": "d385e567faeffb59a672cdc816d664a38a94f4f9823a1e8eb97eb414b389f5eb",
+      "bytes": 59643,
+      "parts": [
+        "ref_02.part_01.b64",
+        "ref_02.part_02.b64"
+      ]
+    },
+    {
+      "output": "ref_03.jpg",
+      "sha256": "c42b098252f0544dd5065b22686721c3e1b348f970ff19db1b251db201b46f1f",
+      "bytes": 41896,
+      "parts": [
+        "ref_03.part_01.b64",
+        "ref_03.part_02.b64"
+      ]
+    }
+  ]
+}
