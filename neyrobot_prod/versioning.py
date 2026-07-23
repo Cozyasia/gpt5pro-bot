@@ -8,7 +8,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v156-comet-dual-identity-best-of-n-2026-07-23"
+VERSION = "v157-menu-selected-identity-lock-2026-07-23"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
@@ -20,11 +20,11 @@ def _install_current_release() -> bool:
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from celebrity_selfie_v156 import install as install_v156
-        from celebrity_selfie_v156 import install_builder_hook as install_v156_builder
+        from celebrity_selfie_v157 import install as install_v157
+        from celebrity_selfie_v157 import install_builder_hook as install_v157_builder
 
-        install_v156()
-        install_v156_builder()
+        install_v157()
+        install_v157_builder()
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
         _RELEASE_OVERLAY_INSTALLED = True
@@ -73,8 +73,11 @@ async def _cmd_version(update: Any, context: Any) -> None:
         f"✅ Код запущен: {VERSION}",
         "entrypoint=main.py",
         "start_command=python -u main.py",
-        f"release_overlay={'v156' if release_overlay else 'load-error'}",
-        "celebrity_selfie=comet-dual-identity-best-of-n",
+        f"release_overlay={'v157' if release_overlay else 'load-error'}",
+        "celebrity_selfie_menu=v124-exclusive-catalog-and-scene-wizard",
+        "celebrity_selfie_render=v156-comet-dual-identity-best-of-n",
+        "selected_celebrity_identity=hard-gated-and-dominant",
+        "generic_nano_banana_route=blocked_inside_celebrity_wizard",
         "legacy_selfie_overlays=inactive",
         f"general_router={general_router}",
         f"medical_text_route={'v120' if medical_text else 'legacy'}",
@@ -129,7 +132,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v156",
+        name="neyrobot-version-contract-v157",
         daemon=True,
     ).start()
 
