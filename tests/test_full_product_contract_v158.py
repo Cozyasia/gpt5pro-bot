@@ -84,6 +84,7 @@ class FullProductContractV158Tests(unittest.TestCase):
         self.assert_tokens(MAIN, [
             "CHAT_MAX_CONVERSATIONS", "min(4", "CHAT_MEMORY_ENABLED",
             "CHAT_HISTORY_PAGE_MESSAGES", "CHAT_HISTORY_PAGE_SIZE",
+            "chat:delete:", "_chat_delete",
         ])
 
     def test_provider_routes_for_text_image_audio_and_video_exist(self):
