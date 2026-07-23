@@ -46,13 +46,17 @@ class CelebritySelfieV157Tests(unittest.TestCase):
         self.assertIn("exact same individual shown in all PUBLIC FIGURE REFERENCES", source)
         self.assertIn("not merely a person of similar age or style", source)
 
-    def test_startup_and_version_contract_point_to_v157(self):
-        expected = "v157-menu-selected-identity-lock-2026-07-23"
-        self.assertIn(expected, _source("celebrity_selfie_v157.py"))
-        self.assertIn(expected, _source("neyrobot_prod/versioning.py"))
-        self.assertIn(expected, _source("neyrobot_prod/__init__.py"))
+    def test_v157_remains_the_menu_and_identity_library_under_v158(self):
+        v157 = "v157-menu-selected-identity-lock-2026-07-23"
+        v158 = "v158-fixed-roman-reference-pack-2026-07-23"
+        self.assertIn(v157, _source("celebrity_selfie_v157.py"))
+        versioning = _source("neyrobot_prod/versioning.py")
+        defaults = _source("neyrobot_prod/__init__.py")
         site = _source("sitecustomize.py")
-        self.assertIn("celebrity_selfie_v157", site)
+        self.assertIn(v158, versioning)
+        self.assertIn(v158, defaults)
+        self.assertIn("celebrity_selfie_v158", site)
+        self.assertIn("import celebrity_selfie_v157 as previous", _source("celebrity_selfie_v158.py"))
         self.assertNotIn("install_celebrity_selfie_v156", site)
 
 

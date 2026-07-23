@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production defaults.
 
-The package activates one Celebrity Selfie release: v157. Historical modules
+The package activates one Celebrity Selfie release: v158. Historical modules
 remain available only as implementation libraries and catalog assets.
 """
 
 import os
 
-VERSION = "v157-menu-selected-identity-lock-2026-07-23"
+VERSION = "v158-fixed-roman-reference-pack-2026-07-23"
 
-# Current Celebrity Selfie production contract. v157 restores the exclusive
-# catalog/scene wizard while retaining the successful v156 coherent renderer.
+# Current Celebrity Selfie production contract. v158 retains the v124 wizard
+# and successful v156 renderer, pins Roman Abramovich to the owner-provided
+# three-reference pack and removes false submenu error messages.
 os.environ.setdefault("CELEBRITY_V156_UNIT_COST_USD", "0.80")
 os.environ.setdefault("CELEBRITY_V156_CANDIDATES", "3")
 os.environ.setdefault("CELEBRITY_V156_COMET_ROUTES", "gemini,openai-edit")
@@ -20,12 +21,14 @@ os.environ.setdefault("CELEBRITY_V156_REFERENCE_VISION_QC", "1")
 os.environ.setdefault("CELEBRITY_V156_VISION_QC", "1")
 os.environ.setdefault("CELEBRITY_V156_MAX_CONCURRENCY", "1")
 os.environ.setdefault("CELEBRITY_V157_MIN_USER_SIMILARITY", "64")
-os.environ.setdefault("CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY", "78")
+os.environ.setdefault("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
+os.environ["CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
 os.environ["CELEBRITY_V156_MIN_USER_SIMILARITY"] = os.environ.get("CELEBRITY_V157_MIN_USER_SIMILARITY", "64")
-os.environ["CELEBRITY_V156_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY", "78")
+os.environ["CELEBRITY_V156_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
 os.environ.setdefault("CELEBRITY_V156_MIN_QUALITY", "66")
-os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "86")
+os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "84")
 os.environ.setdefault("CELEBRITY_V156_CELEBRITY_REFERENCE_LIMIT", "3")
+os.environ.setdefault("CELEBRITY_FIXED_REF_CACHE", "/tmp/neyrobot_fixed_refs")
 
 # Explicitly disable obsolete production paths. The independent PhotoRoom
 # background-removal feature remains enabled in main.py/render.yaml.
@@ -69,7 +72,7 @@ try:
 except Exception:
     pass
 
-# Catalog/reference library only. v157 loads v124's exclusive Telegram wizard
+# Catalog/reference library only. v158 loads v124's exclusive Telegram wizard
 # later, after all generic routers have been defined.
 try:
     from celebrity_selfie_v122 import install_runtime_async as _install_celebrity_library_runtime
@@ -85,7 +88,7 @@ try:
 except Exception:
     pass
 
-# UI compatibility remains active; v157 is installed later and is the final
+# UI compatibility remains active; v158 is installed later and is the final
 # owner of celebrity flow routing, generation, result buttons and diagnostics.
 try:
     from ui_hotfix_v137 import install_builder_hook as _install_ui_v137_builder
