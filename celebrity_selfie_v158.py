@@ -33,7 +33,7 @@ ROMAN_NAME = "Роман Абрамович"
 _ROOT = Path(__file__).resolve().parent
 _PACK_ROOT = _ROOT / "celebrity_library" / "fixed_refs" / ROMAN_ID
 _CACHE_ROOT = Path(os.environ.get("CELEBRITY_FIXED_REF_CACHE") or "/tmp/neyrobot_fixed_refs") / ROMAN_ID
-_PACK_FILES = ("01_front_current.jpg.b64", "02_three_quarter_current.jpg.b64", "03_front_warm_current.jpg.b64")
+_PACK_DIRS = ("01_front_current", "02_three_quarter_current", "03_front_warm_current")
 
 log = logging.getLogger("gpt-bot.celebrity-selfie-v158")
 _ORIGINAL_REFERENCE_PATHS = v139.selfie.engine._reference_paths
@@ -69,9 +69,12 @@ def _is_roman_session(session: dict[str, Any] | None) -> bool:
 
 
 def _decode_reference(source: Path, target: Path) -> Path:
-    encoded = "".join(source.read_text(encoding="ascii").split())
+    parts = sorted(source.glob("part_*.txt"))
+    if not source.is_dir() or not parts:
+        raise FileNotFoundError(f"fixed reference chunks missing: {source}")
+    encoded = "".join("".join(part.read_text(encoding="ascii").split()) for part in parts)
     raw = base64.b64decode(encoded, validate=True)
-    if len(raw) < 25_000 or not raw.startswith(b"\xff\xd8\xff"):
+    if len(raw) < 15_000 or not raw.startswith(b"\xff\xd8\xff") or not raw.endswith(b"\xff\xd9"):
         raise ValueError(f"invalid fixed reference asset: {source.name}")
     digest = hashlib.sha256(raw).hexdigest()
     digest_path = target.with_suffix(target.suffix + ".sha256")
@@ -84,9 +87,9 @@ def _decode_reference(source: Path, target: Path) -> Path:
 def _fixed_reference_paths() -> list[str]:
     _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
     paths: list[str] = []
-    for index, filename in enumerate(_PACK_FILES, start=1):
-        source = _PACK_ROOT / filename
-        if not source.is_file():
+    for index, dirname in enumerate(_PACK_DIRS, start=1):
+        source = _PACK_ROOT / dirname
+        if not source.is_dir():
             raise FileNotFoundError(f"fixed reference missing: {source}")
         target = _CACHE_ROOT / f"{index:02d}.jpg"
         paths.append(str(_decode_reference(source, target)))
