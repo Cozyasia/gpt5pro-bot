@@ -1,98 +1,25 @@
 # -*- coding: utf-8 -*-
-"""Automatically load Neyro-Bot production hardening before main.py."""
+"""Early Neyro-Bot production bootstrap.
+
+Only the current Celebrity Selfie release is activated here. Historical
+celebrity-selfie overlays remain importable as implementation libraries, but are
+not installed as competing runtime owners.
+"""
 
 try:
     from neyrobot_prod.bootstrap import install_early as install_production_early
-
     install_production_early()
-except Exception as exc:  # startup must remain available for diagnostics
+except Exception as exc:
     print(f"[neyrobot-prod] early bootstrap warning: {type(exc).__name__}: {exc}")
 
 try:
+    from celebrity_selfie_v156 import install_early as install_celebrity_selfie_v156
+    install_celebrity_selfie_v156()
+except Exception as exc:
+    print(f"[celebrity-selfie-v156] early bootstrap warning: {type(exc).__name__}: {exc}")
+
+try:
     from neyrobot_prod.versioning import install_early as install_version_contract_early
-
     install_version_contract_early()
-except Exception as exc:  # a stale version label must never block bot startup
+except Exception as exc:
     print(f"[neyrobot-version] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-# Keep audited historical overlays available, then apply v154 last. v153 repairs
-# catalog detector misses; v154 installs the missing CPU rembg backend and adds
-# a fail-closed alpha-silhouette recovery for detector misses on the user selfie.
-try:
-    from celebrity_selfie_v145 import install_early as install_celebrity_selfie_v145
-
-    install_celebrity_selfie_v145()
-except Exception as exc:
-    print(f"[celebrity-selfie-v145] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v146 import install_early as install_celebrity_selfie_v146
-
-    install_celebrity_selfie_v146()
-except Exception as exc:
-    print(f"[celebrity-selfie-v146] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v147 import install_early as install_celebrity_selfie_v147
-
-    install_celebrity_selfie_v147()
-except Exception as exc:
-    print(f"[celebrity-selfie-v147] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v148 import install_early as install_celebrity_selfie_v148
-
-    install_celebrity_selfie_v148()
-except Exception as exc:
-    print(f"[celebrity-selfie-v148] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v149 import install_early as install_celebrity_selfie_v149
-
-    install_celebrity_selfie_v149()
-except Exception as exc:
-    print(f"[celebrity-selfie-v149] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v150 import install_early as install_celebrity_selfie_v150
-
-    install_celebrity_selfie_v150()
-except Exception as exc:
-    print(f"[celebrity-selfie-v150] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v151 import install_early as install_celebrity_selfie_v151
-
-    install_celebrity_selfie_v151()
-except Exception as exc:
-    print(f"[celebrity-selfie-v151] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v152 import install_early as install_celebrity_selfie_v152
-
-    install_celebrity_selfie_v152()
-except Exception as exc:
-    print(f"[celebrity-selfie-v152] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v153 import install_early as install_celebrity_selfie_v153
-
-    install_celebrity_selfie_v153()
-except Exception as exc:
-    print(f"[celebrity-selfie-v153] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-try:
-    from celebrity_selfie_v154 import install_early as install_celebrity_selfie_v154
-
-    install_celebrity_selfie_v154()
-except Exception as exc:
-    print(f"[celebrity-selfie-v154] early bootstrap warning: {type(exc).__name__}: {exc}")
-
-# Apply resource policy after all historical overlays. This deliberately wins
-# over v154's local-rembg defaults and keeps ONNX out of the web process.
-try:
-    from memory_safety_v155 import install_early as install_memory_safety_v155
-
-    install_memory_safety_v155()
-except Exception as exc:
-    print(f"[memory-safety-v155] early bootstrap warning: {type(exc).__name__}: {exc}")
