@@ -9,6 +9,8 @@ before main.py builds the Telegram Application.
 try:
     from neyrobot_prod.hotfix_v159 import install_early as install_hotfix_v159
     install_hotfix_v159()
+    from neyrobot_prod.topup_v159 import install_early as install_topup_v159
+    install_topup_v159()
 except Exception as exc:
     print(f"[neyrobot-v159] early bootstrap warning: {type(exc).__name__}: {exc}")
 
