@@ -16,8 +16,32 @@ BASE64_RUN = re.compile(r"[A-Za-z0-9+/=]{32,}")
 
 
 def decode_asset(path: Path) -> bytes:
-    encoded = "".join(BASE64_RUN.findall(path.read_text(encoding="ascii")))
-    return base64.b64decode(encoded, validate=True)
+    runs = BASE64_RUN.findall(path.read_text(encoding="ascii"))
+    candidates = []
+    for value in ("".join(runs), *runs):
+        if not value:
+            continue
+        variants = [value]
+        pad_at = value.find("=")
+        if pad_at >= 0:
+            end = pad_at + 1
+            while end < len(value) and value[end] == "=":
+                end += 1
+            variants.insert(0, value[:end])
+        for candidate in variants:
+            if candidate not in candidates:
+                candidates.append(candidate)
+    for candidate in candidates:
+        payload = candidate
+        if "=" not in payload and len(payload) % 4:
+            payload += "=" * (-len(payload) % 4)
+        try:
+            raw = base64.b64decode(payload, validate=True)
+        except Exception:
+            continue
+        if len(raw) >= 15_000 and raw.startswith(b"\xff\xd8\xff") and raw.endswith(b"\xff\xd9"):
+            return raw
+    raise AssertionError(f"No complete JPEG payload in {path.name}")
 
 
 class CelebritySelfieV158Tests(unittest.TestCase):
@@ -37,7 +61,7 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
         self.assertIn("_PACK_FILES", source)
         self.assertIn("01_front_current.jpg.b64", source)
-        self.assertIn("_BASE64_RUN.findall", source)
+        self.assertIn("_decode_asset_text", source)
         self.assertNotIn('source.glob("part_*.txt")', source)
 
     def test_v158_contract_pins_roman_and_removes_false_callback_error(self):
