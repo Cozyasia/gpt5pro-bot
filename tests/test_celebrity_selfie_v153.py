@@ -12,7 +12,11 @@ import celebrity_selfie_v153 as v153
 
 
 def _jpeg(size=(800, 1000), color=(110, 125, 140)) -> bytes:
+    """Create a portrait-like fixture that passes the real contrast gate."""
     image = Image.new("RGB", size, color)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((80, 100, 720, 900), fill=(75, 105, 135))
+    draw.ellipse((260, 170, 540, 490), fill=(175, 145, 125))
     out = BytesIO()
     image.save(out, "JPEG", quality=92)
     return out.getvalue()

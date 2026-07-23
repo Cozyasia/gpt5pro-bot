@@ -5,13 +5,17 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import celebrity_selfie_v151 as v151
 
 
 def _jpeg(size=(800, 1000), color=(75, 95, 120)) -> bytes:
+    """Create a valid photographic-looking plate with measurable contrast."""
     image = Image.new("RGB", size, color)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, size[0], size[1] // 3), fill=(105, 125, 150))
+    draw.rectangle((0, size[1] * 2 // 3, size[0], size[1]), fill=(45, 65, 90))
     out = BytesIO()
     image.save(out, "JPEG", quality=92)
     return out.getvalue()
