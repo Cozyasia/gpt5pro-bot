@@ -11,10 +11,13 @@ bot test.
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 TESTS = ROOT / "tests"
 RETIRED_SELFIE = re.compile(r"^test_celebrity_selfie_v(\d+)(?:_|\.py$)")
 
@@ -36,7 +39,7 @@ def build_suite() -> unittest.TestSuite:
     for path in sorted(TESTS.glob("test_*.py")):
         if not _included(path):
             continue
-        suite.addTests(loader.discover(str(TESTS), pattern=path.name, top_level_dir=str(ROOT)))
+        suite.addTests(loader.discover(str(TESTS), pattern=path.name))
     return suite
 
 
