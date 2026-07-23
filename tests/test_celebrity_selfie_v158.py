@@ -59,11 +59,12 @@ class CelebritySelfieV158Tests(unittest.TestCase):
 
     def test_runtime_decoder_uses_real_b64_files_not_missing_part_directories(self):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
-        compat = (ROOT / "celebrity_selfie_reference_compat.py").read_text(encoding="utf-8")
+        hotfix = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
         self.assertIn("_PACK_FILES", source)
         self.assertIn("01_front_current.jpg.b64", source)
         self.assertIn("_decode_asset_text", source)
-        self.assertIn("len(raw or b\"\") >= 4_000", compat)
+        self.assertIn("len(raw or b\"\") >= 4_000", hotfix)
+        self.assertLess(hotfix.index("release._valid_jpeg = _valid_owner_jpeg"), hotfix.index("release.install()"))
         self.assertNotIn('source.glob("part_*.txt")', source)
 
     def test_v158_contract_pins_roman_and_removes_false_callback_error(self):
@@ -75,15 +76,16 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         self.assertIn('"fixed_reference_count": len(paths)', source)
         self.assertIn('"state": "await_scene"', source)
 
-    def test_production_bootstrap_activates_only_v158(self):
+    def test_v159_bootstrap_activates_v158_as_renderer_library(self):
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
         versioning = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
         defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
-        for source in (site, versioning, defaults):
-            self.assertIn("v158", source)
-        self.assertIn("celebrity_selfie_reference_compat", site)
-        self.assertIn("from celebrity_selfie_v158", site)
-        self.assertIn("from celebrity_selfie_v158", versioning)
+        hotfix = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
+        for source in (site, versioning, defaults, hotfix):
+            self.assertIn("v159", source)
+        self.assertIn("neyrobot_prod.hotfix_v159", site)
+        self.assertIn("import celebrity_selfie_v158 as release", hotfix)
+        self.assertIn("release.install_builder_hook()", hotfix)
         self.assertNotIn("from celebrity_selfie_v157 import install", versioning)
 
 
