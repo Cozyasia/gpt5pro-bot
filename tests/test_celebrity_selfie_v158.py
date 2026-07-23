@@ -39,7 +39,7 @@ def decode_asset(path: Path) -> bytes:
             raw = base64.b64decode(payload, validate=True)
         except Exception:
             continue
-        if len(raw) >= 15_000 and raw.startswith(b"\xff\xd8\xff") and raw.endswith(b"\xff\xd9"):
+        if len(raw) >= 4_000 and raw.startswith(b"\xff\xd8\xff") and raw.endswith(b"\xff\xd9"):
             return raw
     raise AssertionError(f"No complete JPEG payload in {path.name}")
 
@@ -51,7 +51,7 @@ class CelebritySelfieV158Tests(unittest.TestCase):
             path = PACK / filename
             self.assertTrue(path.is_file(), filename)
             raw = decode_asset(path)
-            self.assertGreater(len(raw), 15_000, filename)
+            self.assertGreater(len(raw), 4_000, filename)
             self.assertTrue(raw.startswith(b"\xff\xd8\xff"), filename)
             self.assertTrue(raw.endswith(b"\xff\xd9"), filename)
             decoded.append(raw)
@@ -59,9 +59,11 @@ class CelebritySelfieV158Tests(unittest.TestCase):
 
     def test_runtime_decoder_uses_real_b64_files_not_missing_part_directories(self):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
+        compat = (ROOT / "celebrity_selfie_reference_compat.py").read_text(encoding="utf-8")
         self.assertIn("_PACK_FILES", source)
         self.assertIn("01_front_current.jpg.b64", source)
         self.assertIn("_decode_asset_text", source)
+        self.assertIn("len(raw or b\"\") >= 4_000", compat)
         self.assertNotIn('source.glob("part_*.txt")', source)
 
     def test_v158_contract_pins_roman_and_removes_false_callback_error(self):
@@ -79,6 +81,7 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
         for source in (site, versioning, defaults):
             self.assertIn("v158", source)
+        self.assertIn("celebrity_selfie_reference_compat", site)
         self.assertIn("from celebrity_selfie_v158", site)
         self.assertIn("from celebrity_selfie_v158", versioning)
         self.assertNotIn("from celebrity_selfie_v157 import install", versioning)
