@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Celebrity Selfie v158: repository-pinned identity references.
+"""Celebrity Selfie v158: repository-pinned Roman Abramovich references.
 
-The v157 menu and v156 Comet renderer remain the production architecture.
-This overlay gives selected catalog people an authoritative repository-backed
-identity pack. The first pack is Roman Abramovich: three same-era portraits
-provided by the project owner. It also removes the false submenu error emitted
-when the v122 callback intentionally stops handler propagation.
+The complete v157 catalog/scene wizard and the v156 coherent Comet renderer stay
+unchanged. This overlay only replaces the reference source for the selected
+catalog entry ``ru_roman_abramovich`` with the three owner-provided portraits.
 """
 from __future__ import annotations
 
@@ -14,6 +12,7 @@ import contextlib
 import hashlib
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -33,13 +32,18 @@ ROMAN_NAME = "Роман Абрамович"
 _ROOT = Path(__file__).resolve().parent
 _PACK_ROOT = _ROOT / "celebrity_library" / "fixed_refs" / ROMAN_ID
 _CACHE_ROOT = Path(os.environ.get("CELEBRITY_FIXED_REF_CACHE") or "/tmp/neyrobot_fixed_refs") / ROMAN_ID
-_PACK_DIRS = ("01_front_current", "02_three_quarter_current", "03_front_warm_current")
+_PACK_FILES = (
+    "01_front_current.jpg.b64",
+    "02_three_quarter_current.jpg.b64",
+    "03_front_warm_current.jpg.b64",
+)
+_BASE64_RUN = re.compile(r"[A-Za-z0-9+/=]{32,}")
 
 log = logging.getLogger("gpt-bot.celebrity-selfie-v158")
 _ORIGINAL_REFERENCE_PATHS = v139.selfie.engine._reference_paths
 _ORIGINAL_PREPARE_LIBRARY_REFS = getattr(v139.selfie.engine, "_prepare_library_refs", None)
-_CALLBACK_TARGET: Any | None = None
 _ORIGINAL_RANK_REFERENCES = renderer._rank_celebrity_references
+_CALLBACK_TARGET: Any | None = None
 
 
 def _normalise_name(value: Any) -> str:
@@ -49,11 +53,10 @@ def _normalise_name(value: Any) -> str:
 def _is_roman_session(session: dict[str, Any] | None) -> bool:
     if not isinstance(session, dict):
         return False
-    ids = {
+    if ROMAN_ID in {
         str(session.get("selected_celebrity_id") or "").strip(),
         str(session.get("celebrity_id") or "").strip(),
-    }
-    if ROMAN_ID in ids:
+    }:
         return True
     entry = None
     with contextlib.suppress(Exception):
@@ -69,16 +72,32 @@ def _is_roman_session(session: dict[str, Any] | None) -> bool:
 
 
 def _decode_reference(source: Path, target: Path) -> Path:
-    parts = sorted(source.glob("part_*.txt"))
-    if not source.is_dir() or not parts:
-        raise FileNotFoundError(f"fixed reference chunks missing: {source}")
-    encoded = "".join("".join(part.read_text(encoding="ascii").split()) for part in parts)
+    """Decode one repository asset and validate that it is a complete JPEG.
+
+    The extraction deliberately keeps only long standard-base64 runs. This is
+    tolerant of accidental diff/display annotations while never accepting a
+    truncated or malformed JPEG: SOI, EOI and a minimum byte size are mandatory.
+    """
+    if not source.is_file():
+        raise FileNotFoundError(f"fixed reference missing: {source}")
+    text = source.read_text(encoding="ascii")
+    encoded = "".join(_BASE64_RUN.findall(text))
+    if not encoded:
+        raise ValueError(f"no base64 payload in {source.name}")
     raw = base64.b64decode(encoded, validate=True)
     if len(raw) < 15_000 or not raw.startswith(b"\xff\xd8\xff") or not raw.endswith(b"\xff\xd9"):
-        raise ValueError(f"invalid fixed reference asset: {source.name}")
+        raise ValueError(f"invalid or truncated JPEG asset: {source.name}")
+
     digest = hashlib.sha256(raw).hexdigest()
     digest_path = target.with_suffix(target.suffix + ".sha256")
-    if not target.exists() or target.stat().st_size != len(raw) or not digest_path.exists() or digest_path.read_text(encoding="ascii").strip() != digest:
+    cached_ok = (
+        target.exists()
+        and target.stat().st_size == len(raw)
+        and digest_path.exists()
+        and digest_path.read_text(encoding="ascii").strip() == digest
+    )
+    if not cached_ok:
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
         digest_path.write_text(digest, encoding="ascii")
     return target
@@ -86,14 +105,12 @@ def _decode_reference(source: Path, target: Path) -> Path:
 
 def _fixed_reference_paths() -> list[str]:
     _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
-    paths: list[str] = []
-    for index, dirname in enumerate(_PACK_DIRS, start=1):
-        source = _PACK_ROOT / dirname
-        if not source.is_dir():
-            raise FileNotFoundError(f"fixed reference missing: {source}")
-        target = _CACHE_ROOT / f"{index:02d}.jpg"
-        paths.append(str(_decode_reference(source, target)))
-    return paths
+    result: list[str] = []
+    for index, filename in enumerate(_PACK_FILES, start=1):
+        result.append(str(_decode_reference(_PACK_ROOT / filename, _CACHE_ROOT / f"{index:02d}.jpg")))
+    if len(result) != 3:
+        raise RuntimeError("Roman reference pack must contain exactly three images")
+    return result
 
 
 def _fixed_reference_bytes() -> list[bytes]:
@@ -149,14 +166,14 @@ async def _prepare_library_refs(update: Any, context: Any, entry: dict[str, Any]
     })
     await update.effective_message.reply_text(
         "✅ Выбран: Роман Абрамович.\n"
-        "Закреплённый набор из 3 проверенных референсов загружен из проекта. "
+        "Использую закреплённый набор из 3 референсов, приложенных владельцем проекта. "
         "Теперь выберите или опишите сцену.",
         reply_markup=v139.selfie.engine._scene_kb(),
     )
 
 
 async def _v122_callback_without_false_error(update: Any, context: Any) -> Any:
-    """v124 owns propagation; an inner ApplicationHandlerStop is success, not failure."""
+    """Treat the wizard's ApplicationHandlerStop as normal propagation control."""
     target = _CALLBACK_TARGET
     if not callable(target):
         raise RuntimeError("Celebrity Selfie callback target is unavailable")
@@ -177,11 +194,7 @@ def _hashes(items: list[bytes]) -> set[str]:
 
 
 async def _rank_celebrity_references(mod: Any, refs: list[bytes], debug: dict[str, Any]) -> list[bytes]:
-    """Keep the owner-approved Roman pack ordered and complete.
-
-    01 is the clean current-age frontal portrait used by QC; 02 and 03 provide
-    three-quarter and warm-light geometry to the generation model.
-    """
+    """Keep the owner-approved Roman pack complete and in the intended order."""
     try:
         fixed = _fixed_reference_bytes()
         if len(refs) >= 3 and _hashes(fixed).issubset(_hashes(refs)):
@@ -258,8 +271,6 @@ def install() -> None:
         return
 
     previous.install()
-    # Stable defaults: the fixed pack improves conditioning, while a 74-point
-    # public-identity gate avoids discarding realistic results due to noisy QC.
     os.environ.setdefault("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
     os.environ["CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY"] = os.environ.get(
         "CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74"
@@ -270,7 +281,7 @@ def install() -> None:
     os.environ.setdefault("CELEBRITY_V156_CELEBRITY_REFERENCE_LIMIT", "3")
     os.environ.setdefault("CELEBRITY_V156_CANDIDATES", "3")
 
-    _fixed_reference_paths()  # fail during deploy/start rather than during a paid job
+    _fixed_reference_paths()  # fail at deploy/start, never during a paid job
     current_callback = flow.base._on_callback
     if current_callback is not _v122_callback_without_false_error:
         _CALLBACK_TARGET = current_callback
@@ -297,7 +308,6 @@ def install_builder_hook() -> None:
     if getattr(ApplicationBuilder, _BUILDER_FLAG, False):
         return
 
-    # Patch v122 before v124 captures its callback in a CallbackQueryHandler.
     install()
     previous.install_builder_hook()
     original_build = ApplicationBuilder.build
