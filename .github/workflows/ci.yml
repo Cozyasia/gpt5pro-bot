@@ -25,12 +25,12 @@ jobs:
           pip install -r requirements.txt
       - name: Compile all Python modules
         run: python -m compileall -q .
-      - name: Run production core tests
+      - name: Run current production contract
         env:
           PROD_HARDENING_ENABLED: "0"
         run: |
           set -o pipefail
-          python -m unittest discover -s tests -v 2>&1 | tee production-test-output.txt
+          python tests/run_production_suite.py 2>&1 | tee production-test-output.txt
       - name: Upload production test output
         if: always()
         uses: actions/upload-artifact@v4
