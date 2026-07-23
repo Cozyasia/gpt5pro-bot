@@ -2,10 +2,10 @@
 """Run the current production test contract without importing retired overlays.
 
 Historical Celebrity Selfie test modules encode mutually exclusive release
-contracts (v123 ... v155). They remain in the repository as regression history,
+contracts (v123 ... v156). They remain in the repository as regression history,
 but importing all of them in one process mutates shared runtime modules and makes
 any current release fail for the wrong reason. Production CI therefore runs the
-current v156 contract, the still-used v122 catalog contract, and every unrelated
+current v157 contract, the still-used v122 catalog contract, and every unrelated
 bot test.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ def _included(path: Path) -> bool:
     match = RETIRED_SELFIE.match(path.name)
     if match:
         version = int(match.group(1))
-        if 123 <= version <= 155:
+        if 123 <= version <= 156:
             return False
     if path.name == "test_version_contract.py":
         return False
