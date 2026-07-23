@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Canonical production release/version contract.
-
-The newest Celebrity Selfie overlay is installed here as well as from
-``sitecustomize.py``. Render starts the service with ``python main.py`` and a
-repository-local sitecustomize import is not guaranteed in every environment,
-so this module is the authoritative repeatable bootstrap path.
-"""
+"""Canonical production release/version contract."""
 from __future__ import annotations
 
 import contextlib
@@ -14,62 +8,23 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v154-cpu-rembg-user-face-recovery-2026-07-22"
+VERSION = "v156-comet-dual-identity-best-of-n-2026-07-23"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
 _RELEASE_OVERLAY_INSTALLED = False
 
-# Historical markers retained for source-level compatibility tests:
-# VERSION = "v145-piapi-celebrity-lock-retry-2026-07-21"
-# from celebrity_selfie_v145 import install as install_v145
-# install_v145()
-# release_overlay={'v145' if release_overlay else 'load-error'}
-# VERSION = "v146-local-face-lock-2026-07-21"
-# from celebrity_selfie_v146 import install as install_v146
-# install_v146()
-# release_overlay={'v146' if release_overlay else 'load-error'}
-# VERSION = "v147-source-pixel-dual-composite-2026-07-21"
-# from celebrity_selfie_v147 import install as install_v147
-# install_v147()
-# release_overlay={'v147' if release_overlay else 'load-error'}
-# VERSION = "v148-schema-safe-layer-qc-2026-07-21"
-# from celebrity_selfie_v148 import install as install_v148
-# install_v148()
-# release_overlay={'v148' if release_overlay else 'load-error'}
-# VERSION = "v149-visible-human-layer-proof-2026-07-21"
-# from celebrity_selfie_v149 import install as install_v149
-# install_v149()
-# release_overlay={'v149' if release_overlay else 'load-error'}
-# VERSION = "v150-comet-scene-failover-2026-07-21"
-# from celebrity_selfie_v150 import install as install_v150
-# install_v150()
-# release_overlay={'v150' if release_overlay else 'load-error'}
-# VERSION = "v151-comet-only-composition-ready-2026-07-21"
-# from celebrity_selfie_v151 import install as install_v151
-# install_v151()
-# release_overlay={'v151' if release_overlay else 'load-error'}
-# VERSION = "v152-empty-comet-plate-contract-2026-07-21"
-# from celebrity_selfie_v152 import install as install_v152
-# install_v152()
-# release_overlay={'v152' if release_overlay else 'load-error'}
-# VERSION = "v153-reference-detector-miss-recovery-2026-07-21"
-# from celebrity_selfie_v153 import install as install_v153
-# install_v153()
-# release_overlay={'v153' if release_overlay else 'load-error'}
-
 
 def _install_current_release() -> bool:
-    """Install and re-apply v154 without relying on import order."""
     global _RELEASE_OVERLAY_INSTALLED
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from celebrity_selfie_v154 import install as install_v154
-        from celebrity_selfie_v154 import install_builder_hook as install_v154_builder
+        from celebrity_selfie_v156 import install as install_v156
+        from celebrity_selfie_v156 import install_builder_hook as install_v156_builder
 
-        install_v154()
-        install_v154_builder()
+        install_v156()
+        install_v156_builder()
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
         _RELEASE_OVERLAY_INSTALLED = True
@@ -118,7 +73,9 @@ async def _cmd_version(update: Any, context: Any) -> None:
         f"✅ Код запущен: {VERSION}",
         "entrypoint=main.py",
         "start_command=python -u main.py",
-        f"release_overlay={'v154' if release_overlay else 'load-error'}",
+        f"release_overlay={'v156' if release_overlay else 'load-error'}",
+        "celebrity_selfie=comet-dual-identity-best-of-n",
+        "legacy_selfie_overlays=inactive",
         f"general_router={general_router}",
         f"medical_text_route={'v120' if medical_text else 'legacy'}",
         f"medical_image_route={'v120' if medical_image else 'legacy'}",
@@ -172,7 +129,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v154",
+        name="neyrobot-version-contract-v156",
         daemon=True,
     ).start()
 
