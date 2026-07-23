@@ -8,11 +8,13 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 HOTFIX = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
+TOPUP = (ROOT / "neyrobot_prod" / "topup_v159.py").read_text(encoding="utf-8")
 
 
 class HotfixV159Tests(unittest.TestCase):
     def test_hotfix_is_valid_python(self):
         ast.parse(HOTFIX)
+        ast.parse(TOPUP)
 
     def test_version_contract_is_v159_everywhere(self):
         expected = "v159-payments-selfie-medical-integrity-2026-07-24"
@@ -21,6 +23,7 @@ class HotfixV159Tests(unittest.TestCase):
         self.assertIn(expected, (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8"))
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
         self.assertIn("neyrobot_prod.hotfix_v159", site)
+        self.assertIn("neyrobot_prod.topup_v159", site)
         self.assertNotIn("install_celebrity_selfie_v158", site)
 
     def test_credit_catalog_overrides_stale_render_labels(self):
@@ -48,6 +51,11 @@ class HotfixV159Tests(unittest.TestCase):
         self.assertIn("_poll_yoo_credit_payment", HOTFIX)
         self.assertIn("credit:v159:pay:", HOTFIX)
         self.assertIn("topup:rub:", HOTFIX)
+
+    def test_main_topup_button_is_owned_before_legacy_menu(self):
+        self.assertIn('pattern=r"^topup$"', TOPUP)
+        self.assertIn("_send_topup_menu", TOPUP)
+        self.assertIn("_GROUP = -50_001", TOPUP)
 
     def test_selfie_wizard_owns_callback_and_photo_before_generic_router(self):
         for token in (
