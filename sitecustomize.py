@@ -3,7 +3,9 @@
 
 try:
     from neyrobot_prod.bootstrap import install_early
+    from neyrobot_prod.versioning import install_builder_hook as install_version_owner
 
     install_early()
+    install_version_owner()
 except Exception as exc:  # startup must remain available for diagnostics
     print(f"[neyrobot-prod] early bootstrap warning: {type(exc).__name__}: {exc}")
