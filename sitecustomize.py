@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
 """Early Neyro-Bot production bootstrap.
 
-v161 preserves the full v160 payment, routing, medical and general Celebrity
-Selfie release, while restoring the proven PiAPI celebrity-lock/original-user
-composite path for Roman Abramovich.
+v162 preserves v161 rendering, payments, medicine and all product modes while
+making one catalog/reference-backed Celebrity Selfie wizard authoritative.
 """
 
 try:
-    from neyrobot_prod.hotfix_v161 import install_early as install_hotfix_v161
-    install_hotfix_v161()
+    from neyrobot_prod.hotfix_v162 import install_early as install_hotfix_v162
+    install_hotfix_v162()
+    from neyrobot_prod.v162_flow_guard import install as install_v162_flow_guard
+    install_v162_flow_guard()
     from neyrobot_prod.v161_reference_v2 import install as install_v161_reference_v2
     install_v161_reference_v2()
     from neyrobot_prod.topup_v159 import install_early as install_topup_v159
     install_topup_v159()
 except Exception as exc:
-    print(f"[neyrobot-v161] early bootstrap warning: {type(exc).__name__}: {exc}")
+    print(f"[neyrobot-v162] early bootstrap warning: {type(exc).__name__}: {exc}")
 
 try:
     from neyrobot_prod.bootstrap import install_early as install_production_early

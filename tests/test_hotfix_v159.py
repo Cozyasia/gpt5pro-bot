@@ -11,30 +11,30 @@ HOTFIX = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
 TOPUP = (ROOT / "neyrobot_prod" / "topup_v159.py").read_text(encoding="utf-8")
 HOTFIX160 = (ROOT / "neyrobot_prod" / "hotfix_v160.py").read_text(encoding="utf-8")
 HOTFIX161 = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
+HOTFIX162 = (ROOT / "neyrobot_prod" / "hotfix_v162.py").read_text(encoding="utf-8")
 
 
 class HotfixV159Tests(unittest.TestCase):
     def test_hotfix_is_valid_python(self):
-        ast.parse(HOTFIX)
-        ast.parse(TOPUP)
-        ast.parse(HOTFIX160)
-        ast.parse(HOTFIX161)
+        for source in (HOTFIX, TOPUP, HOTFIX160, HOTFIX161, HOTFIX162):
+            ast.parse(source)
 
-    def test_v159_remains_the_payment_medical_implementation_under_v161(self):
+    def test_v159_remains_payment_medical_implementation_under_v162(self):
         v159 = "v159-payments-selfie-medical-integrity-2026-07-24"
-        v161 = "v161-roman-hybrid-identity-2026-07-24"
+        v162 = "v162-unified-celebrity-selfie-flow-2026-07-24"
         self.assertIn(v159, HOTFIX)
         versioning = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
         defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn(v161, versioning)
-        self.assertIn(v161, defaults)
-        self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", versioning)
+        self.assertIn(v162, versioning)
+        self.assertIn(v162, defaults)
+        self.assertIn("from neyrobot_prod.hotfix_v162 import install_early", versioning)
         self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", versioning)
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
-        self.assertIn("neyrobot_prod.hotfix_v161", site)
+        self.assertIn("neyrobot_prod.hotfix_v162", site)
         self.assertIn("from . import hotfix_v159 as previous", HOTFIX160)
         self.assertIn("from . import hotfix_v160 as previous", HOTFIX161)
-        self.assertIn("previous.install_early()", HOTFIX161)
+        self.assertIn("from . import hotfix_v161 as previous", HOTFIX162)
+        self.assertIn("previous.install_early()", HOTFIX162)
         self.assertIn("neyrobot_prod.topup_v159", site)
         self.assertNotIn("install_celebrity_selfie_v158", site)
 
@@ -69,20 +69,17 @@ class HotfixV159Tests(unittest.TestCase):
         self.assertIn("_send_topup_menu", TOPUP)
         self.assertIn("_GROUP = -50_001", TOPUP)
 
-    def test_selfie_wizard_owns_callback_and_photo_before_generic_router(self):
+    def test_selfie_wizard_still_exists_under_v162(self):
         for token in (
-            "celebrity_selfie_v124",
-            "_selfie_callback",
-            "_selfie_image",
-            "_selfie_text",
-            'group=_GROUP',
-            'act:fun:aiselfie(?:_.*)?',
+            "celebrity_selfie_v124", "_selfie_callback", "_selfie_image", "_selfie_text",
+            'group=_GROUP', 'act:fun:aiselfie(?:_.*)?',
             "После загрузки автоматически откроется каталог знаменитостей",
         ):
             self.assertIn(token, HOTFIX)
         flow = (ROOT / "celebrity_selfie_v124.py").read_text(encoding="utf-8")
         self.assertIn('session["state"] = "choose_celebrity"', flow)
         self.assertIn("base._main_menu_kb()", flow)
+        self.assertIn("v162-before-all-generic-photo-handlers", HOTFIX162)
 
     def test_owner_reference_validation_is_patched_before_release_install(self):
         self.assertLess(HOTFIX.index("release._valid_jpeg = _valid_owner_jpeg"), HOTFIX.index("release.install()"))
@@ -91,13 +88,9 @@ class HotfixV159Tests(unittest.TestCase):
 
     def test_medical_engine_and_card_integrity_remain_protected(self):
         for path in (
-            "medical_v111_runtime.py",
-            "medical_v111_client.py",
-            "medical_v111_reasoning.py",
-            "medical_card_v109_patch.py",
-            "medical_card_v109_security.py",
-            "neyrobot_prod/medical_followup.py",
-            "neyrobot_prod/medical_answer_ui.py",
+            "medical_v111_runtime.py", "medical_v111_client.py", "medical_v111_reasoning.py",
+            "medical_card_v109_patch.py", "medical_card_v109_security.py",
+            "neyrobot_prod/medical_followup.py", "neyrobot_prod/medical_answer_ui.py",
         ):
             self.assertTrue((ROOT / path).is_file(), path)
         followup = (ROOT / "neyrobot_prod" / "medical_followup.py").read_text(encoding="utf-8")
