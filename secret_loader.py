@@ -78,6 +78,53 @@ def _strip_wrapping_quotes(value: str) -> str:
     return value.strip()
 
 
+def _ensure_writable_runtime_dir(
+    var_name: str,
+    preferred_default: str,
+    fallback: str,
+) -> str:
+    """Resolve a writable runtime directory and update ``os.environ``.
+
+    Render environment variables have priority for secrets, but a path supplied
+    by an existing service can point to a Blueprint disk that is not actually
+    attached.  This check intentionally overrides an unwritable value so startup
+    cannot fail while constructing a feature store.
+    """
+    raw = (os.environ.get(var_name) or "").strip()
+    candidates: list[str] = []
+    for candidate in (raw, preferred_default, fallback):
+        candidate = (candidate or "").strip()
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    for directory in candidates:
+        try:
+            path = Path(directory).expanduser()
+            path.mkdir(parents=True, exist_ok=True)
+            probe = path / ".neyrobot_write_probe"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink(missing_ok=True)
+            resolved = str(path)
+            os.environ[var_name] = resolved
+            if raw and resolved != raw:
+                print(
+                    f"[neyrobot-storage] {var_name} is not writable: {raw}; "
+                    f"using {resolved}"
+                )
+            return resolved
+        except Exception:
+            continue
+
+    emergency = str(Path(fallback).expanduser())
+    os.environ[var_name] = emergency
+    try:
+        Path(emergency).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    print(f"[neyrobot-storage] no writable candidate for {var_name}; using {emergency}")
+    return emergency
+
+
 def parse_secret_file(path: str | os.PathLike[str]) -> dict[str, str]:
     """Parse a tiny .env-like file without shell expansion.
 
@@ -137,6 +184,16 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             if not (os.environ.get(key) or "").strip():
                 os.environ[key] = value
                 _LOADED_SOURCES[key] = str(path)
+
+    # This is the explicit startup path used by ``python -u main.py``.  Resolve
+    # storage here rather than in sitecustomize.py, which is not guaranteed to be
+    # imported for direct script execution on Render.
+    _ensure_writable_runtime_dir(
+        "CELEBRITY_SELFIE_DATA_DIR",
+        "/data/celebrity_selfie",
+        "/tmp/neyrobot/celebrity_selfie",
+    )
+
     _BOOTSTRAPPED = True
 
     # v105 has already installed its import hook above. Importing the studio here
