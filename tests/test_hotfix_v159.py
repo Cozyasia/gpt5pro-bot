@@ -9,20 +9,24 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 HOTFIX = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
 TOPUP = (ROOT / "neyrobot_prod" / "topup_v159.py").read_text(encoding="utf-8")
+HOTFIX160 = (ROOT / "neyrobot_prod" / "hotfix_v160.py").read_text(encoding="utf-8")
 
 
 class HotfixV159Tests(unittest.TestCase):
     def test_hotfix_is_valid_python(self):
         ast.parse(HOTFIX)
         ast.parse(TOPUP)
+        ast.parse(HOTFIX160)
 
-    def test_version_contract_is_v159_everywhere(self):
+    def test_v159_remains_the_payment_medical_implementation_under_v160(self):
         expected = "v159-payments-selfie-medical-integrity-2026-07-24"
         self.assertIn(expected, HOTFIX)
         self.assertIn(expected, (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8"))
         self.assertIn(expected, (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8"))
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
-        self.assertIn("neyrobot_prod.hotfix_v159", site)
+        self.assertIn("neyrobot_prod.hotfix_v160", site)
+        self.assertIn("from . import hotfix_v159 as previous", HOTFIX160)
+        self.assertIn("previous.install_early()", HOTFIX160)
         self.assertIn("neyrobot_prod.topup_v159", site)
         self.assertNotIn("install_celebrity_selfie_v158", site)
 

@@ -76,16 +76,20 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         self.assertIn('"fixed_reference_count": len(paths)', source)
         self.assertIn('"state": "await_scene"', source)
 
-    def test_v159_bootstrap_activates_v158_as_renderer_library(self):
+    def test_v160_bootstrap_keeps_v158_as_renderer_library(self):
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
         versioning = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
         defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
-        hotfix = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
-        for source in (site, versioning, defaults, hotfix):
+        hotfix159 = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
+        hotfix160 = (ROOT / "neyrobot_prod" / "hotfix_v160.py").read_text(encoding="utf-8")
+        for source in (versioning, defaults, hotfix159):
             self.assertIn("v159", source)
-        self.assertIn("neyrobot_prod.hotfix_v159", site)
-        self.assertIn("import celebrity_selfie_v158 as release", hotfix)
-        self.assertIn("release.install_builder_hook()", hotfix)
+        self.assertIn("v160", site)
+        self.assertIn("v160", hotfix160)
+        self.assertIn("neyrobot_prod.hotfix_v160", site)
+        self.assertIn("from . import hotfix_v159 as previous", hotfix160)
+        self.assertIn("import celebrity_selfie_v158 as release", hotfix159)
+        self.assertIn("release.install_builder_hook()", hotfix159)
         self.assertNotIn("from celebrity_selfie_v157 import install", versioning)
 
 
