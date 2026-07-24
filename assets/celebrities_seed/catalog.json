@@ -19,22 +19,22 @@
         {
           "filename": "ref_01.jpg",
           "sha256": "fe3fff98eb94df1228eb17d7573fcb74edb604485fdffb6633df9986579f3bf7",
-          "width": 768,
-          "height": 653,
+          "width": 256,
+          "height": 218,
           "created_at": 1784907838.9568298
         },
         {
           "filename": "ref_02.jpg",
           "sha256": "b6d496078a6918d4a10c85555f4cdfd9cf6c25cdd3e92264dd0d38cb234636ee",
-          "width": 768,
-          "height": 768,
+          "width": 256,
+          "height": 256,
           "created_at": 1784907838.9569945
         },
         {
           "filename": "ref_03.jpg",
           "sha256": "429f1e1f272f1d277012dccc6d86024f4c772719f32fd3fe5e940b6b34dbf282",
-          "width": 740,
-          "height": 768,
+          "width": 247,
+          "height": 256,
           "created_at": 1784907838.9570866
         }
       ]
