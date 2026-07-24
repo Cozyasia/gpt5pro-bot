@@ -26,8 +26,10 @@ def _install_current_release() -> bool:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
         from neyrobot_prod.hotfix_v161 import install_early
+        from neyrobot_prod.v161_reference_v2 import install as install_reference_v2
 
         install_early()
+        install_reference_v2()
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
         _RELEASE_OVERLAY_INSTALLED = True
