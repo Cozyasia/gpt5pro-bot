@@ -1,0 +1,1 @@
+Trigger pull_request synchronize after the base workflow was enabled.
