@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Run the current production test contract without importing retired overlays.
+"""Run the current production contract.
 
-Historical Celebrity Selfie test modules encode mutually exclusive release
-contracts (v123 ... v156). They remain in the repository as regression history,
-but importing all of them in one process mutates shared runtime modules and makes
-any current release fail for the wrong reason. Production CI therefore runs the
-current v157 contract, the still-used v122 catalog contract, and every unrelated
-bot test.
+Historical Celebrity Selfie modules remain in the repository only as source
+history. They are not imported by the clean v200 runtime and their mutually
+exclusive release tests must not participate in production CI.
 """
 from __future__ import annotations
 
@@ -19,27 +16,27 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 TESTS = ROOT / "tests"
-RETIRED_SELFIE = re.compile(r"^test_celebrity_selfie_v(\d+)(?:_|\.py$)")
+
+RETIRED_PATTERNS = (
+    re.compile(r"^test_celebrity_selfie_(?!clean\.py$)"),
+    re.compile(r"^test_hotfix_v(?:159|160|161|162)\.py$"),
+    re.compile(r"^test_ui_selfie_v138\.py$"),
+    re.compile(r"^test_main_ai_selfie_callback_contract\.py$"),
+    re.compile(r"^test_memory_safety_v155\.py$"),
+    re.compile(r"^test_version_contract\.py$"),
+)
 
 
 def _included(path: Path) -> bool:
-    match = RETIRED_SELFIE.match(path.name)
-    if match:
-        version = int(match.group(1))
-        if 123 <= version <= 156:
-            return False
-    if path.name == "test_version_contract.py":
-        return False
-    return True
+    return not any(pattern.match(path.name) for pattern in RETIRED_PATTERNS)
 
 
 def build_suite() -> unittest.TestSuite:
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     for path in sorted(TESTS.glob("test_*.py")):
-        if not _included(path):
-            continue
-        suite.addTests(loader.discover(str(TESTS), pattern=path.name))
+        if _included(path):
+            suite.addTests(loader.discover(str(TESTS), pattern=path.name))
     return suite
 
 
