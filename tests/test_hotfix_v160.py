@@ -1,0 +1,66 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+HOTFIX_PATH = ROOT / "neyrobot_prod" / "hotfix_v160.py"
+HOTFIX = HOTFIX_PATH.read_text(encoding="utf-8")
+SITE = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
+
+
+class HotfixV160Tests(unittest.TestCase):
+    def test_hotfix_is_valid_python(self):
+        ast.parse(HOTFIX)
+
+    def test_v160_is_the_early_bootstrap_owner(self):
+        expected = "v160-selfie-delivery-rescue-2026-07-24"
+        self.assertIn(expected, HOTFIX)
+        self.assertIn("neyrobot_prod.hotfix_v160", SITE)
+        self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", SITE)
+        self.assertIn("topup_v159", SITE)
+
+    def test_four_candidate_practical_strict_gates_are_applied_before_v159(self):
+        previous_import = HOTFIX.index("from . import hotfix_v159 as previous")
+        for token in (
+            'CELEBRITY_V156_CANDIDATES"] = "4"',
+            'CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY"] = "70"',
+            'CELEBRITY_V156_MIN_QUALITY"] = "62"',
+        ):
+            self.assertIn(token, HOTFIX)
+            self.assertLess(HOTFIX.index(token), previous_import)
+
+    def test_near_threshold_rescue_never_bypasses_hard_structure(self):
+        for token in (
+            "_HARD_CHECKS",
+            "exactly_two_main_adults",
+            "real_living_people_not_wax",
+            "no_plaque_poster_or_museum_display",
+            "one_seamless_scene",
+            "scene_match",
+            "any(checks.get(key) is not True",
+            "user_score >= 60",
+            "celebrity_score >= 68",
+            "face_quality >= 60",
+            "overall_quality >= 60",
+            "total >= 68",
+        ):
+            self.assertIn(token, HOTFIX)
+
+    def test_selfie_failure_card_is_not_followed_by_generic_wallet_error(self):
+        self.assertIn('if "celebrity_selfie" in remember_kind', HOTFIX)
+        self.assertIn('kwargs["silent_failure"] = True', HOTFIX)
+        self.assertIn("celebrity_selfie_duplicate_failure=blocked", HOTFIX)
+
+    def test_v159_payments_and_medical_are_preserved(self):
+        self.assertIn("previous.install_early()", HOTFIX)
+        self.assertIn("previous._patch_runtime(mod)", HOTFIX)
+        self.assertIn("credit_catalog=", HOTFIX)
+        self.assertIn("medical_text_route=", HOTFIX)
+        self.assertIn("medical_image_route=", HOTFIX)
+
+
+if __name__ == "__main__":
+    unittest.main()
