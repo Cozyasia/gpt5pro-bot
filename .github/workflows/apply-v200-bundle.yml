@@ -15,7 +15,7 @@ jobs:
           ref: ${{ github.head_ref }}
       - name: Rebuild clean Celebrity Selfie module
         run: |
-          cat .deploy/v200/module_00.b64 .deploy/v200/module_01.b64 .deploy/v200/module_02.b64 .deploy/v200/module_03a.b64 .deploy/v200/module_03b.b64 > /tmp/celebrity_selfie_mode.py.gz.b64
+          cat .deploy/v200/exact_00.b64 .deploy/v200/exact_01.b64 .deploy/v200/exact_02.b64 .deploy/v200/exact_03.b64 .deploy/v200/exact_04.b64 .deploy/v200/exact_05.b64 .deploy/v200/exact_06.b64 .deploy/v200/exact_07.b64 .deploy/v200/exact_08.b64 .deploy/v200/exact_09.b64 > /tmp/celebrity_selfie_mode.py.gz.b64
           base64 --decode /tmp/celebrity_selfie_mode.py.gz.b64 | gzip --decompress > celebrity_selfie_mode.py
       - name: Apply integration files
         run: |
