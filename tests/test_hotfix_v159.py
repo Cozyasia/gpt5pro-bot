@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOTFIX = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
 TOPUP = (ROOT / "neyrobot_prod" / "topup_v159.py").read_text(encoding="utf-8")
 HOTFIX160 = (ROOT / "neyrobot_prod" / "hotfix_v160.py").read_text(encoding="utf-8")
+HOTFIX161 = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
 
 
 class HotfixV159Tests(unittest.TestCase):
@@ -17,21 +18,23 @@ class HotfixV159Tests(unittest.TestCase):
         ast.parse(HOTFIX)
         ast.parse(TOPUP)
         ast.parse(HOTFIX160)
+        ast.parse(HOTFIX161)
 
-    def test_v159_remains_the_payment_medical_implementation_under_v160(self):
+    def test_v159_remains_the_payment_medical_implementation_under_v161(self):
         v159 = "v159-payments-selfie-medical-integrity-2026-07-24"
-        v160 = "v160-selfie-delivery-rescue-2026-07-24"
+        v161 = "v161-roman-hybrid-identity-2026-07-24"
         self.assertIn(v159, HOTFIX)
         versioning = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
         defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn(v160, versioning)
-        self.assertIn(v160, defaults)
-        self.assertIn("from neyrobot_prod.hotfix_v160 import install_early", versioning)
+        self.assertIn(v161, versioning)
+        self.assertIn(v161, defaults)
+        self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", versioning)
         self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", versioning)
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
-        self.assertIn("neyrobot_prod.hotfix_v160", site)
+        self.assertIn("neyrobot_prod.hotfix_v161", site)
         self.assertIn("from . import hotfix_v159 as previous", HOTFIX160)
-        self.assertIn("previous.install_early()", HOTFIX160)
+        self.assertIn("from . import hotfix_v160 as previous", HOTFIX161)
+        self.assertIn("previous.install_early()", HOTFIX161)
         self.assertIn("neyrobot_prod.topup_v159", site)
         self.assertNotIn("install_celebrity_selfie_v158", site)
 

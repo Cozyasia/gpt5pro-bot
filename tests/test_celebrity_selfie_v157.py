@@ -46,22 +46,26 @@ class CelebritySelfieV157Tests(unittest.TestCase):
         self.assertIn("exact same individual shown in all PUBLIC FIGURE REFERENCES", source)
         self.assertIn("not merely a person of similar age or style", source)
 
-    def test_v157_remains_an_implementation_library_under_v160(self):
+    def test_v157_remains_an_implementation_library_under_v161(self):
         v157 = "v157-menu-selected-identity-lock-2026-07-23"
         v159 = "v159-payments-selfie-medical-integrity-2026-07-24"
         v160 = "v160-selfie-delivery-rescue-2026-07-24"
+        v161 = "v161-roman-hybrid-identity-2026-07-24"
         self.assertIn(v157, _source("celebrity_selfie_v157.py"))
         versioning = _source("neyrobot_prod/versioning.py")
         defaults = _source("neyrobot_prod/__init__.py")
         site = _source("sitecustomize.py")
         hotfix159 = _source("neyrobot_prod/hotfix_v159.py")
         hotfix160 = _source("neyrobot_prod/hotfix_v160.py")
+        hotfix161 = _source("neyrobot_prod/hotfix_v161.py")
         self.assertIn(v159, hotfix159)
-        self.assertIn(v160, versioning)
-        self.assertIn(v160, defaults)
         self.assertIn(v160, hotfix160)
-        self.assertIn("neyrobot_prod.hotfix_v160", site)
+        self.assertIn(v161, versioning)
+        self.assertIn(v161, defaults)
+        self.assertIn(v161, hotfix161)
+        self.assertIn("neyrobot_prod.hotfix_v161", site)
         self.assertIn("from . import hotfix_v159 as previous", hotfix160)
+        self.assertIn("from . import hotfix_v160 as previous", hotfix161)
         self.assertIn("import celebrity_selfie_v157 as previous", _source("celebrity_selfie_v158.py"))
         self.assertIn("import celebrity_selfie_v124 as flow", hotfix159)
         self.assertIn("import celebrity_selfie_v158 as release", hotfix159)

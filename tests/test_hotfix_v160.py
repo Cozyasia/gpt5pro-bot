@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 HOTFIX_PATH = ROOT / "neyrobot_prod" / "hotfix_v160.py"
 HOTFIX = HOTFIX_PATH.read_text(encoding="utf-8")
+HOTFIX161 = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
 SITE = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
 VERSIONING = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
 DEFAULTS = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
@@ -15,29 +16,29 @@ SECRET_LOADER = (ROOT / "secret_loader.py").read_text(encoding="utf-8")
 
 
 class HotfixV160Tests(unittest.TestCase):
-    def test_hotfix_is_valid_python(self):
+    def test_hotfixes_are_valid_python(self):
         ast.parse(HOTFIX)
+        ast.parse(HOTFIX161)
         ast.parse(VERSIONING)
         ast.parse(DEFAULTS)
 
-    def test_v160_is_the_early_and_explicit_render_bootstrap_owner(self):
-        expected = "v160-selfie-delivery-rescue-2026-07-24"
-        self.assertIn(expected, HOTFIX)
-        self.assertIn(expected, VERSIONING)
-        self.assertIn(expected, DEFAULTS)
-        self.assertIn("neyrobot_prod.hotfix_v160", SITE)
-        self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", SITE)
-        self.assertIn("topup_v159", SITE)
-        # Render's main.py path explicitly imports versioning through secret_loader;
-        # versioning must therefore delegate to v160, not to the historical v159.
+    def test_v160_remains_the_general_fallback_under_v161(self):
+        v160 = "v160-selfie-delivery-rescue-2026-07-24"
+        v161 = "v161-roman-hybrid-identity-2026-07-24"
+        self.assertIn(v160, HOTFIX)
+        self.assertIn(v161, HOTFIX161)
+        self.assertIn(v161, VERSIONING)
+        self.assertIn(v161, DEFAULTS)
+        self.assertIn("neyrobot_prod.hotfix_v161", SITE)
+        self.assertIn("from . import hotfix_v160 as previous", HOTFIX161)
         self.assertIn("from neyrobot_prod.versioning import install_early", SECRET_LOADER)
-        self.assertIn("from neyrobot_prod.hotfix_v160 import install_early", VERSIONING)
-        self.assertIn("from neyrobot_prod.hotfix_v160 import _cmd_version", VERSIONING)
-        self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", VERSIONING)
-        self.assertNotIn("from neyrobot_prod.hotfix_v159 import _cmd_version", VERSIONING)
-        self.assertIn("neyrobot-version-contract-v160", VERSIONING)
+        self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", VERSIONING)
+        self.assertIn("from neyrobot_prod.hotfix_v161 import _cmd_version", VERSIONING)
+        self.assertNotIn("from neyrobot_prod.hotfix_v160 import install_early", VERSIONING)
+        self.assertIn("neyrobot-version-contract-v161", VERSIONING)
+        self.assertIn("topup_v159", SITE)
 
-    def test_four_candidate_practical_strict_gates_are_applied_before_v159(self):
+    def test_four_candidate_practical_strict_gates_remain_in_v160(self):
         previous_import = HOTFIX.index("from . import hotfix_v159 as previous")
         for token in (
             'CELEBRITY_V156_CANDIDATES"] = "4"',
