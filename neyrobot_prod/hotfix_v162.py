@@ -110,7 +110,6 @@ def _target_ready(session: dict[str, Any] | None) -> bool:
         return True
     if not isinstance(session, dict):
         return False
-    # User-supplied character references are also a valid explicit target.
     paths = session.get("reference_paths") or session.get("celebrity_reference_paths") or []
     return bool(paths and session.get("custom_celebrity_name"))
 
@@ -256,8 +255,6 @@ async def _resume_pending_after_photo(update: Any, context: Any) -> None:
         if item:
             await _prepare_target_and_scene(update, context, item, scene)
             return
-    # No target was supplied before the photo: the catalog menu is the next
-    # mandatory step, never the generic photo-action menu.
     session["state"] = "choose_celebrity"
 
 
@@ -311,7 +308,6 @@ async def _entry_callback(update: Any, context: Any) -> None:
         _stop()
 
     session = _session(context)
-    # A scene callback is invalid until a target/reference pack has been fixed.
     if ("scene" in data or data.startswith("celeb:preset:")) and not _target_ready(session):
         await _reply_target_required(update, context)
         _stop()
@@ -423,8 +419,6 @@ async def _text(update: Any, context: Any) -> None:
         await _reply_target_required(update, context, scene)
         _stop()
 
-    # Once a target is fixed, all text is a scene/refinement request handled by
-    # the authoritative catalog engine, never by legacy Nano Banana free prompt.
     await engine._on_text(update, context)
     _stop()
 
@@ -491,9 +485,8 @@ async def _cmd_version(update: Any, context: Any) -> None:
         f"medical_card={getattr(mod, 'MEDICAL_CARD_VERSION', '—') if mod is not None else '—'}",
         f"medical_answer_ui={getattr(mod, 'MEDICAL_ANSWER_UI_VERSION', '—') if mod is not None else '—'}",
     ]
-    # Deliberately return normally: all older /version handlers were removed from
-    # this Application, so ApplicationHandlerStop cannot be misreported by a
-    # legacy generic error handler as «Упс, произошла ошибка».
+    # Return normally: every historical /version handler was removed from this
+    # Application, so the legacy generic error hook has nothing else to process.
     await update.effective_message.reply_text("\n".join(lines)[:3900])
 
 
