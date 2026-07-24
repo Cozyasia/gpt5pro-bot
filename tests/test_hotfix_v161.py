@@ -11,6 +11,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 HOTFIX = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
+REFERENCE_V2 = (ROOT / "neyrobot_prod" / "v161_reference_v2.py").read_text(encoding="utf-8")
 SITE = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
 VERSIONING = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
 DEFAULTS = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
@@ -18,10 +19,8 @@ DEFAULTS = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
 
 class HotfixV161Tests(unittest.TestCase):
     def test_v161_files_are_valid_python(self):
-        ast.parse(HOTFIX)
-        ast.parse(SITE)
-        ast.parse(VERSIONING)
-        ast.parse(DEFAULTS)
+        for source in (HOTFIX, REFERENCE_V2, SITE, VERSIONING, DEFAULTS):
+            ast.parse(source)
 
     def test_v161_is_the_explicit_release_owner(self):
         expected = "v161-roman-hybrid-identity-2026-07-24"
@@ -29,8 +28,10 @@ class HotfixV161Tests(unittest.TestCase):
         self.assertIn(expected, VERSIONING)
         self.assertIn(expected, DEFAULTS)
         self.assertIn("neyrobot_prod.hotfix_v161", SITE)
+        self.assertIn("neyrobot_prod.v161_reference_v2", SITE)
         self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", VERSIONING)
         self.assertIn("from neyrobot_prod.hotfix_v161 import _cmd_version", VERSIONING)
+        self.assertIn("from neyrobot_prod.v161_reference_v2 import install", VERSIONING)
         self.assertIn("neyrobot-version-contract-v161", VERSIONING)
 
     def test_roman_uses_proven_identity_lock_and_user_pixel_preservation(self):
@@ -56,8 +57,10 @@ class HotfixV161Tests(unittest.TestCase):
         self.assertIn("v143._celebrity_variants = old_celebrities", HOTFIX)
 
     def test_full_owner_reference_one_is_complete_and_high_resolution(self):
-        directory = ROOT / "celebrity_library" / "fixed_refs" / "ru_roman_abramovich" / "full" / "01"
-        encoded = "".join(path.read_text(encoding="ascii") for path in sorted(directory.glob("part_*.txt")))
+        directory = ROOT / "celebrity_library" / "fixed_refs" / "ru_roman_abramovich" / "full_v2" / "01"
+        chunks = sorted(directory.glob("chunk_*.txt"))
+        self.assertEqual(5, len(chunks))
+        encoded = "".join(path.read_text(encoding="ascii").strip() for path in chunks)
         raw = base64.b64decode(encoded, validate=True)
         self.assertGreater(len(raw), 20_000)
         self.assertTrue(raw.startswith(b"\xff\xd8\xff"))
@@ -65,6 +68,8 @@ class HotfixV161Tests(unittest.TestCase):
         with Image.open(BytesIO(raw)) as image:
             self.assertGreaterEqual(min(image.size), 400)
             self.assertEqual((512, 435), image.size)
+        self.assertIn('directory.glob("chunk_*.txt")', REFERENCE_V2)
+        self.assertIn("base64.b64decode(encoded, validate=True)", REFERENCE_V2)
 
     def test_failure_message_no_longer_claims_sequential_fixation(self):
         self.assertIn("Все созданные варианты были отклонены контролем качества", HOTFIX)
