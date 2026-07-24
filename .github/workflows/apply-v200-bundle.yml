@@ -78,7 +78,7 @@ jobs:
           import hashlib, pathlib
           p = pathlib.Path('celebrity_selfie_mode.py')
           assert p.stat().st_size == 59435, p.stat().st_size
-          assert hashlib.sha256(p.read_bytes()).hexdigest() == '65e98a96bf8e86e009658002db9d8e41312497f601c3e7be875e0b36cae4312d'
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == '5b73c8a676d082570cbe2efa6384296a0ab0427a076fff9d30aff5c39e7f8f2a'
           assert 'group=-200' in pathlib.Path('main.py').read_text(encoding='utf-8')
           assert 'CELEBRITY_SELFIE_MIN_USER_SIMILARITY' in pathlib.Path('render.yaml').read_text(encoding='utf-8')
           PY
@@ -86,7 +86,7 @@ jobs:
         run: |
           rm -rf .deploy/v200
           rm -f .github/workflows/apply-v200-bundle.yml
-          rm -f DEPLOY_V200_TRIGGER.txt
+          rm -f DEPLOY_V200_TRIGGER.txt FINALIZE_V200.txt
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
