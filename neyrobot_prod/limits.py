@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Concurrency guard for expensive generation workflows."""
+"""Concurrency guard for expensive generation workflows.
+
+The guard is deliberately idempotent across release overlays. Some production
+hotfixes wrap ``_try_pay_then_do`` for billing/UI behaviour. Re-install workers
+must recognise a limiter anywhere in that wrapper chain; otherwise the same
+non-reentrant per-user semaphore can be acquired twice by one request and the
+job waits forever behind itself.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -23,11 +30,44 @@ def _semaphores(user_id: int) -> tuple[asyncio.Semaphore, asyncio.Semaphore]:
     return _GLOBAL_SEMAPHORE, user
 
 
+def _wrapper_chain_has_limit(current: Any) -> bool:
+    """Return True when a concurrency guard already exists under UI wrappers."""
+    seen: set[int] = set()
+    node = current
+    for _ in range(64):
+        if not callable(node) or id(node) in seen:
+            return False
+        seen.add(id(node))
+        if bool(getattr(node, "_prod_v119_limited", False)):
+            return True
+        next_node = None
+        for attr in (
+            "_v160_original",
+            "_v159_original",
+            "_prod_v119_original",
+            "__wrapped__",
+        ):
+            candidate = getattr(node, attr, None)
+            if callable(candidate) and candidate is not node:
+                next_node = candidate
+                break
+        if next_node is None:
+            return False
+        node = next_node
+    return False
+
+
 def patch_runtime(mod: Any) -> bool:
     current = getattr(mod, "_try_pay_then_do", None)
     if not callable(current):
         return False
-    if getattr(current, "_prod_v119_limited", False):
+
+    # A payment/UI overlay may sit above the limiter. Mark the outer callable as
+    # protected instead of wrapping it again. This prevents self-deadlock on the
+    # same per-user asyncio.Semaphore during repeated startup/runtime patching.
+    if _wrapper_chain_has_limit(current):
+        with contextlib.suppress(Exception):
+            current._prod_v119_limited = True  # type: ignore[attr-defined]
         mod._PROD_LIMITS_PATCHED = True
         return True
 
@@ -71,4 +111,4 @@ def patch_runtime(mod: Any) -> bool:
     return True
 
 
-__all__ = ["patch_runtime"]
+__all__ = ["patch_runtime", "_wrapper_chain_has_limit"]
