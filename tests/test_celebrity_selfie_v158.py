@@ -56,21 +56,20 @@ class CelebritySelfieV158Tests(unittest.TestCase):
             decoded.append(raw)
         self.assertEqual(3, len({item for item in decoded}))
 
-    def test_v161_can_upgrade_compact_assets_with_full_owner_parts(self):
+    def test_v161_upgrades_compact_asset_with_validated_owner_chunks(self):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
         hotfix159 = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
-        hotfix161 = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
+        reference_v2 = (ROOT / "neyrobot_prod" / "v161_reference_v2.py").read_text(encoding="utf-8")
         self.assertIn("_PACK_FILES", source)
         self.assertIn("01_front_current.jpg.b64", source)
         self.assertIn("_decode_asset_text", source)
         self.assertIn("len(raw or b\"\") >= 4_000", hotfix159)
         self.assertLess(hotfix159.index("release._valid_jpeg = _valid_owner_jpeg"), hotfix159.index("release.install()"))
-        self.assertIn('directory.glob("part_*.txt")', hotfix161)
-        self.assertIn("min(width, height) < 400", hotfix161)
-        full_one = PACK / "full" / "01"
-        self.assertTrue((full_one / "part_001.txt").is_file())
-        self.assertTrue((full_one / "part_002.txt").is_file())
-        self.assertTrue((full_one / "part_003.txt").is_file())
+        self.assertIn('directory.glob("chunk_*.txt")', reference_v2)
+        self.assertIn("min(width, height) < 400", reference_v2)
+        full_one = PACK / "full_v2" / "01"
+        chunks = sorted(full_one.glob("chunk_*.txt"))
+        self.assertEqual(5, len(chunks))
 
     def test_v158_contract_pins_roman_and_removes_false_callback_error(self):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
@@ -95,9 +94,11 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         self.assertIn("v161", site)
         self.assertIn("v161", hotfix161)
         self.assertIn("neyrobot_prod.hotfix_v161", site)
+        self.assertIn("neyrobot_prod.v161_reference_v2", site)
         self.assertIn("from . import hotfix_v160 as previous", hotfix161)
         self.assertIn("import celebrity_selfie_v158 as release", hotfix161)
         self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", versioning)
+        self.assertIn("from neyrobot_prod.v161_reference_v2 import install", versioning)
         self.assertNotIn("from neyrobot_prod.hotfix_v160 import install_early", versioning)
         self.assertNotIn("from celebrity_selfie_v157 import install", versioning)
 
