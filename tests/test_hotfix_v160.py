@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOTFIX_PATH = ROOT / "neyrobot_prod" / "hotfix_v160.py"
 HOTFIX = HOTFIX_PATH.read_text(encoding="utf-8")
 HOTFIX161 = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
+HOTFIX162 = (ROOT / "neyrobot_prod" / "hotfix_v162.py").read_text(encoding="utf-8")
 SITE = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
 VERSIONING = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
 DEFAULTS = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
@@ -17,25 +18,26 @@ SECRET_LOADER = (ROOT / "secret_loader.py").read_text(encoding="utf-8")
 
 class HotfixV160Tests(unittest.TestCase):
     def test_hotfixes_are_valid_python(self):
-        ast.parse(HOTFIX)
-        ast.parse(HOTFIX161)
-        ast.parse(VERSIONING)
-        ast.parse(DEFAULTS)
+        for source in (HOTFIX, HOTFIX161, HOTFIX162, VERSIONING, DEFAULTS):
+            ast.parse(source)
 
-    def test_v160_remains_the_general_fallback_under_v161(self):
+    def test_v160_remains_general_fallback_under_v161_and_v162(self):
         v160 = "v160-selfie-delivery-rescue-2026-07-24"
         v161 = "v161-roman-hybrid-identity-2026-07-24"
+        v162 = "v162-unified-celebrity-selfie-flow-2026-07-24"
         self.assertIn(v160, HOTFIX)
         self.assertIn(v161, HOTFIX161)
-        self.assertIn(v161, VERSIONING)
-        self.assertIn(v161, DEFAULTS)
-        self.assertIn("neyrobot_prod.hotfix_v161", SITE)
+        self.assertIn(v162, HOTFIX162)
+        self.assertIn(v162, VERSIONING)
+        self.assertIn(v162, DEFAULTS)
+        self.assertIn("neyrobot_prod.hotfix_v162", SITE)
         self.assertIn("from . import hotfix_v160 as previous", HOTFIX161)
+        self.assertIn("from . import hotfix_v161 as previous", HOTFIX162)
         self.assertIn("from neyrobot_prod.versioning import install_early", SECRET_LOADER)
-        self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", VERSIONING)
-        self.assertIn("from neyrobot_prod.hotfix_v161 import _cmd_version", VERSIONING)
+        self.assertIn("from neyrobot_prod.hotfix_v162 import install_early", VERSIONING)
+        self.assertIn("from neyrobot_prod.hotfix_v162 import _cmd_version", VERSIONING)
         self.assertNotIn("from neyrobot_prod.hotfix_v160 import install_early", VERSIONING)
-        self.assertIn("neyrobot-version-contract-v161", VERSIONING)
+        self.assertIn("neyrobot-version-contract-v162", VERSIONING)
         self.assertIn("topup_v159", SITE)
 
     def test_four_candidate_practical_strict_gates_remain_in_v160(self):
@@ -50,17 +52,10 @@ class HotfixV160Tests(unittest.TestCase):
 
     def test_near_threshold_rescue_never_bypasses_hard_structure(self):
         for token in (
-            "_HARD_CHECKS",
-            "exactly_two_main_adults",
-            "real_living_people_not_wax",
-            "no_plaque_poster_or_museum_display",
-            "one_seamless_scene",
-            "scene_match",
-            "any(checks.get(key) is not True",
-            "user_score >= 60",
-            "celebrity_score >= 68",
-            "face_quality >= 60",
-            "overall_quality >= 60",
+            "_HARD_CHECKS", "exactly_two_main_adults", "real_living_people_not_wax",
+            "no_plaque_poster_or_museum_display", "one_seamless_scene", "scene_match",
+            "any(checks.get(key) is not True", "user_score >= 60",
+            "celebrity_score >= 68", "face_quality >= 60", "overall_quality >= 60",
             "total >= 68",
         ):
             self.assertIn(token, HOTFIX)
