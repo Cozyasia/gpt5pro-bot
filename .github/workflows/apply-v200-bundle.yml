@@ -17,8 +17,8 @@ jobs:
           base64 --decode /tmp/celebrity_selfie_mode.py.gz.b64 | gzip --decompress > celebrity_selfie_mode.py
       - name: Apply integration files
         run: |
-          patch -p3 < .deploy/v200/main_changes.patch
-          patch -p3 < .deploy/v200/render_changes.patch
+          patch -p4 < .deploy/v200/main_changes.patch
+          patch -p4 < .deploy/v200/render_changes.patch
           cp .deploy/v200/files/sitecustomize.py sitecustomize.py
           cp .deploy/v200/files/neyrobot_prod/__init__.py neyrobot_prod/__init__.py
           cp .deploy/v200/files/neyrobot_prod/versioning.py neyrobot_prod/versioning.py
