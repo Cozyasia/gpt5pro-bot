@@ -1,0 +1,3 @@
+Force Render redeploy for v160.
+Expected production commit: d178f927315eba778accf37bf187f44612ddf202
+Expected version: v160-selfie-delivery-rescue-2026-07-24
