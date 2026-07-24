@@ -8,6 +8,8 @@ making one catalog/reference-backed Celebrity Selfie wizard authoritative.
 try:
     from neyrobot_prod.hotfix_v162 import install_early as install_hotfix_v162
     install_hotfix_v162()
+    from neyrobot_prod.v162_flow_guard import install as install_v162_flow_guard
+    install_v162_flow_guard()
     from neyrobot_prod.v161_reference_v2 import install as install_v161_reference_v2
     install_v161_reference_v2()
     from neyrobot_prod.topup_v159 import install_early as install_topup_v159
