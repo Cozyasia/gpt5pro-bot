@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Canonical production release/version contract for Neyro-Bot v160.
+"""Canonical production release/version contract for Neyro-Bot v161.
 
-Render starts ``main.py`` directly. ``secret_loader.py`` therefore imports this
-module explicitly before the Telegram Application is built. The canonical
-version contract must install and delegate to the current v160 owner rather than
-re-activating the historical v159 compatibility layer.
+Render starts ``main.py`` directly and ``secret_loader.py`` imports this module
+before the Telegram Application is built. The explicit startup owner therefore
+must install and delegate to v161 rather than any historical compatibility layer.
 """
 from __future__ import annotations
 
@@ -14,7 +13,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v160-selfie-delivery-rescue-2026-07-24"
+VERSION = "v161-roman-hybrid-identity-2026-07-24"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
@@ -26,7 +25,7 @@ def _install_current_release() -> bool:
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from neyrobot_prod.hotfix_v160 import install_early
+        from neyrobot_prod.hotfix_v161 import install_early
 
         install_early()
         neyrobot_prod.VERSION = VERSION
@@ -54,10 +53,7 @@ def _stamp_runtime(mod: Any) -> None:
 
 
 async def _cmd_version(update: Any, context: Any) -> None:
-    # Delegate only to the current release owner. The handler is also registered
-    # by v160 at higher priority through the inherited v159 builder hook, while
-    # this route remains a safe explicit-startup fallback.
-    from neyrobot_prod.hotfix_v160 import _cmd_version as current
+    from neyrobot_prod.hotfix_v161 import _cmd_version as current
     await current(update, context)
 
 
@@ -103,7 +99,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v160",
+        name="neyrobot-version-contract-v161",
         daemon=True,
     ).start()
 
