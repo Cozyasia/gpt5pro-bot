@@ -34,7 +34,7 @@ class HotfixV162Tests(unittest.TestCase):
         self.assertIn("filters.TEXT & ~filters.COMMAND", HOTFIX)
         self.assertIn("wizard._accept_user_photo", HOTFIX)
         self.assertIn("session[\"state\"] = \"choose_celebrity\"", HOTFIX)
-        self.assertIn("never the generic photo-action menu", HOTFIX)
+        self.assertIn("celebrity_selfie_photo_router=v162-before-all-generic-photo-handlers", HOTFIX)
 
     def test_photo_choice_callbacks_are_consumed_directly(self):
         self.assertIn('data not in {"celeb:use_cached", "celeb:upload_user"}', GUARD)
