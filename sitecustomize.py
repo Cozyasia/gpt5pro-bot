@@ -9,6 +9,8 @@ composite path for Roman Abramovich.
 try:
     from neyrobot_prod.hotfix_v161 import install_early as install_hotfix_v161
     install_hotfix_v161()
+    from neyrobot_prod.v161_reference_v2 import install as install_v161_reference_v2
+    install_v161_reference_v2()
     from neyrobot_prod.topup_v159 import install_early as install_topup_v159
     install_topup_v159()
 except Exception as exc:
