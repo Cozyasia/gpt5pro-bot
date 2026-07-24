@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production defaults.
 
-v161 preserves the complete v160 payment, selfie-routing, medical-integrity and
-four-candidate release, while restoring the proven PiAPI celebrity-lock and
-original-user-pixel composite route for Roman Abramovich.
-Historical modules remain implementation libraries rather than competing owners.
+v162 preserves the complete v161 hybrid renderer, v159 payments, v120 medicine
+and every product mode, while making the Celebrity Selfie catalog wizard the
+single authoritative menu/photo/text route.
 """
 
 import os
 
-VERSION = "v161-roman-hybrid-identity-2026-07-24"
+VERSION = "v162-unified-celebrity-selfie-flow-2026-07-24"
 
 # Current Celebrity Selfie production contract.
 os.environ.setdefault("CELEBRITY_V156_UNIT_COST_USD", "0.80")
@@ -29,9 +28,11 @@ os.environ.setdefault("CELEBRITY_V156_MIN_QUALITY", "62")
 os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "80")
 os.environ.setdefault("CELEBRITY_V156_CELEBRITY_REFERENCE_LIMIT", "3")
 os.environ.setdefault("CELEBRITY_FIXED_REF_CACHE", "/tmp/neyrobot_fixed_refs")
+os.environ.setdefault("COMET_IMAGE_EDIT_TIMEOUT_S", "600")
+os.environ.setdefault("CELEBRITY_V150_COMET_TIMEOUT_S", "600")
 
-# v161 hybrid settings. The user's real pixels are segmented by PhotoRoom and
-# Roman's identity is locked with PiAPI; v160 remains the safe fallback.
+# v161 hybrid settings retained by v162. The user's real pixels are segmented by
+# PhotoRoom and Roman's identity is locked with PiAPI; v160 remains the fallback.
 os.environ.setdefault("CELEBRITY_V145_CELEBRITY_PROVIDERS", "piapi,openai")
 os.environ.setdefault("CELEBRITY_V145_PIAPI_MODES", "face-swap,multi-face-swap")
 os.environ.setdefault("CELEBRITY_V145_PIAPI_REFERENCE_ATTEMPTS", "3")
@@ -39,7 +40,7 @@ os.environ.setdefault("CELEBRITY_V143_CUTOUT_PROVIDERS", "photoroom")
 os.environ.setdefault("CELEBRITY_V143_MIN_VISUAL_NATURALNESS", "66")
 
 # Explicitly disable obsolete generic fallbacks. PhotoRoom segmentation used by
-# v161 and the independent background-removal feature remain enabled.
+# the hybrid route and the independent background-removal feature remain enabled.
 os.environ["CELEBRITY_V142_LOCAL_REMBG_FALLBACK"] = "0"
 os.environ["CELEBRITY_V142_LEGACY_FALLBACK"] = "0"
 os.environ["CELEBRITY_V143_LEGACY_FALLBACK"] = "0"
@@ -93,7 +94,7 @@ try:
 except Exception:
     pass
 
-# UI compatibility remains active; v161 is the final routing owner.
+# UI compatibility remains active; v162 is the final routing owner.
 try:
     from ui_hotfix_v137 import install_builder_hook as _install_ui_v137_builder
     from ui_hotfix_v137 import install_runtime_patches as _install_ui_v137_runtime
