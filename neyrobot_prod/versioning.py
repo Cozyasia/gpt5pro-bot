@@ -26,9 +26,11 @@ def _install_current_release() -> bool:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
         from neyrobot_prod.hotfix_v162 import install_early
+        from neyrobot_prod.v162_flow_guard import install as install_flow_guard
         from neyrobot_prod.v161_reference_v2 import install as install_reference_v2
 
         install_early()
+        install_flow_guard()
         install_reference_v2()
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
@@ -67,8 +69,10 @@ def _install_builder_hook() -> None:
     try:
         from telegram.ext import ApplicationBuilder
         from neyrobot_prod.hotfix_v162 import install_builder_hook
+        from neyrobot_prod.v162_flow_guard import install as install_flow_guard
     except Exception:
         return
+    install_flow_guard()
     install_builder_hook()
     setattr(ApplicationBuilder, "_neyrobot_version_contract_hooked", True)
     _BUILDER_HOOKED = True
