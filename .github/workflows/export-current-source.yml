@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - tmp/export-current-source-20260724
+  pull_request:
+    branches:
+      - main
 permissions:
   contents: read
 jobs:
