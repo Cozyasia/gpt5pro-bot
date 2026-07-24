@@ -82,6 +82,12 @@ from telegram.ext import (
 from telegram.constants import ChatAction
 from telegram.error import TelegramError, TimedOut, BadRequest
 from presentation_studio import PresentationStudio, StudioConfig
+from celebrity_selfie_mode import (
+    VERSION as CELEBRITY_SELFIE_VERSION,
+    CelebritySelfieConfig,
+    CelebritySelfieFeature,
+    parse_admin_ids,
+)
 # ───────── TTS imports ─────────
 import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
 
@@ -108,7 +114,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("gpt-bot")
 
-PATCH_VERSION = "v104-presentation-preflight-self-heal-2026-07-16"
+PATCH_VERSION = CELEBRITY_SELFIE_VERSION
 
 # ───────── ENV ─────────
 
@@ -4898,10 +4904,16 @@ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
 
 async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(
-        f"✅ Код запущен: {PATCH_VERSION}\n"
-        f"Файл должен быть именно main.py на Render. Start Command: python -u main.py"
-    )
+    lines = [
+        f"✅ Код запущен: {PATCH_VERSION}",
+        "entrypoint=main.py",
+        "start_command=python -u main.py",
+    ]
+    try:
+        lines.extend(_celebrity_selfie_get().version_lines())
+    except Exception as exc:
+        lines.append(f"celebrity_selfie_init_error={type(exc).__name__}: {exc}")
+    await update.effective_message.reply_text("\n".join(lines)[:3900])
 
 
 # ───────── Диагностика/лимиты ─────────
@@ -15165,6 +15177,89 @@ async def on_presentation_text_priority(update: Update, context: ContextTypes.DE
     raise ApplicationHandlerStop
 
 
+# ───────── Clean Celebrity Selfie v200 ─────────
+_CELEBRITY_SELFIE_FEATURE = None
+
+
+def _env_int_clamped(name: str, default: int, low: int, high: int) -> int:
+    try:
+        value = int(str(os.environ.get(name, default)).strip())
+    except Exception:
+        value = int(default)
+    return max(low, min(high, value))
+
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return bool(default)
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+async def _celebrity_selfie_charge_and_run(update, context, kind, cost_usd, work):
+    return await _try_pay_then_do(
+        update,
+        context,
+        update.effective_user.id,
+        kind,
+        cost_usd,
+        work,
+        remember_kind="celebrity_selfie_clean_v200",
+        remember_payload={"feature": "celebrity_selfie_clean_v200"},
+        silent_failure=True,
+    )
+
+
+def _celebrity_selfie_get() -> CelebritySelfieFeature:
+    global _CELEBRITY_SELFIE_FEATURE
+    if _CELEBRITY_SELFIE_FEATURE is not None:
+        return _CELEBRITY_SELFIE_FEATURE
+
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    providers = tuple(
+        part.strip().lower()
+        for part in os.environ.get("CELEBRITY_SELFIE_PROVIDER_ORDER", "gemini,openai").split(",")
+        if part.strip().lower() in {"gemini", "openai"}
+    ) or ("gemini", "openai")
+    official_vision_key = OPENAI_API_KEY if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-or-") else OPENAI_IMAGE_KEY
+
+    _CELEBRITY_SELFIE_FEATURE = CelebritySelfieFeature(
+        CelebritySelfieConfig(
+            project_root=project_root,
+            data_dir=os.environ.get("CELEBRITY_SELFIE_DATA_DIR", "/data/celebrity_selfie").strip() or "/data/celebrity_selfie",
+            seed_dir=os.path.join(project_root, "assets", "celebrities_seed"),
+            admin_ids=parse_admin_ids(OWNER_ID),
+            enabled=_env_flag("CELEBRITY_SELFIE_ENABLED", True),
+            public_button_text=os.environ.get("CELEBRITY_SELFIE_PUBLIC_BUTTON_TEXT", "🤳 AI-селфи со звездой").strip() or "🤳 AI-селфи со звездой",
+            hidden_admin_command=os.environ.get("CELEBRITY_SELFIE_HIDDEN_ADMIN_COMMAND", "star_admin").strip().lstrip("/") or "star_admin",
+            gemini_api_key=os.environ.get("GEMINI_IMAGE_API_KEY", "").strip(),
+            gemini_base_url=os.environ.get("GEMINI_IMAGE_BASE_URL", "https://generativelanguage.googleapis.com/v1beta").strip(),
+            gemini_model=os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3-pro-image").strip(),
+            gemini_fallback_model=os.environ.get("GEMINI_IMAGE_FALLBACK_MODEL", "gemini-3.1-flash-image").strip(),
+            openai_image_key=OPENAI_IMAGE_KEY,
+            openai_base_url=IMAGES_BASE_URL,
+            openai_image_model=IMAGES_MODEL,
+            openai_vision_key=official_vision_key,
+            openai_vision_model=os.environ.get("CELEBRITY_SELFIE_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+            provider_order=providers,
+            timeout_s=_env_int_clamped("CELEBRITY_SELFIE_IMAGE_TIMEOUT_S", 420, 60, 900),
+            reference_min=_env_int_clamped("CELEBRITY_SELFIE_REFERENCE_MIN", 3, 1, 6),
+            reference_max=_env_int_clamped("CELEBRITY_SELFIE_REFERENCE_MAX", 6, 3, 8),
+            max_attempts=_env_int_clamped("CELEBRITY_SELFIE_MAX_ATTEMPTS", 2, 1, 4),
+            min_user_similarity=_env_int_clamped("CELEBRITY_SELFIE_MIN_USER_SIMILARITY", 90, 50, 100),
+            min_character_similarity=_env_int_clamped("CELEBRITY_SELFIE_MIN_CHARACTER_SIMILARITY", 90, 50, 100),
+            min_quality=_env_int_clamped("CELEBRITY_SELFIE_MIN_QUALITY", 72, 40, 100),
+            qc_enabled=_env_flag("CELEBRITY_SELFIE_QC_ENABLED", True),
+            page_size=_env_int_clamped("CELEBRITY_SELFIE_PAGE_SIZE", 6, 2, 10),
+            cost_usd=AI_SELFIE_UNIT_COST_USD,
+        ),
+        charge_and_run=_celebrity_selfie_charge_and_run,
+        get_cached_photo=_get_cached_photo,
+        cache_photo=_cache_photo,
+    )
+    return _CELEBRITY_SELFIE_FEATURE
+
+
 # ───────── Вспомогательное: взять первую объявленную функцию по имени ─────────
 def _pick_first_defined(*names):
     for n in names:
@@ -15210,6 +15305,13 @@ def build_application() -> "Application":
     if AUTO_SET_BOT_PROFILE or AUTO_SET_BOT_MENU:
         builder = builder.post_init(_post_init_bot_profile)
     app = builder.build()
+
+    # Новый режим AI-селфи регистрируется раньше старых callback/photo/text routes.
+    # Обработанные обновления завершаются ApplicationHandlerStop, поэтому исторические
+    # функции в main.py остаются недостижимыми и не конфликтуют с новым state machine.
+    celebrity_feature = _celebrity_selfie_get()
+    for handler in celebrity_feature.handlers():
+        app.add_handler(handler, group=-200)
 
     # Команды
     app.add_handler(CommandHandler("start",        cmd_start))
