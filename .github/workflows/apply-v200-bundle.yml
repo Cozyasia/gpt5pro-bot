@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 permissions:
   contents: write
 jobs:
@@ -11,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - name: Rebuild clean Celebrity Selfie module
         run: |
           cat .deploy/v200/module_*.b64 > /tmp/celebrity_selfie_mode.py.gz.b64
@@ -84,8 +89,9 @@ jobs:
         run: |
           rm -rf .deploy/v200
           rm -f .github/workflows/apply-v200-bundle.yml
+          rm -f DEPLOY_V200_TRIGGER.txt FINALIZE_V200_PR_TRIGGER.txt
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
           git commit -m "Deploy clean v200 Celebrity Selfie rewrite"
-          git push
+          git push origin HEAD:${{ github.head_ref || github.ref_name }}
