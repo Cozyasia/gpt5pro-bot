@@ -4,7 +4,6 @@ from pathlib import Path
 import re
 import unittest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACK = ROOT / "celebrity_library" / "fixed_refs" / "ru_roman_abramovich"
 ASSETS = (
@@ -57,15 +56,21 @@ class CelebritySelfieV158Tests(unittest.TestCase):
             decoded.append(raw)
         self.assertEqual(3, len({item for item in decoded}))
 
-    def test_runtime_decoder_uses_real_b64_files_not_missing_part_directories(self):
+    def test_v161_can_upgrade_compact_assets_with_full_owner_parts(self):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
-        hotfix = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
+        hotfix159 = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
+        hotfix161 = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
         self.assertIn("_PACK_FILES", source)
         self.assertIn("01_front_current.jpg.b64", source)
         self.assertIn("_decode_asset_text", source)
-        self.assertIn("len(raw or b\"\") >= 4_000", hotfix)
-        self.assertLess(hotfix.index("release._valid_jpeg = _valid_owner_jpeg"), hotfix.index("release.install()"))
-        self.assertNotIn('source.glob("part_*.txt")', source)
+        self.assertIn("len(raw or b\"\") >= 4_000", hotfix159)
+        self.assertLess(hotfix159.index("release._valid_jpeg = _valid_owner_jpeg"), hotfix159.index("release.install()"))
+        self.assertIn('directory.glob("part_*.txt")', hotfix161)
+        self.assertIn("min(width, height) < 400", hotfix161)
+        full_one = PACK / "full" / "01"
+        self.assertTrue((full_one / "part_001.txt").is_file())
+        self.assertTrue((full_one / "part_002.txt").is_file())
+        self.assertTrue((full_one / "part_003.txt").is_file())
 
     def test_v158_contract_pins_roman_and_removes_false_callback_error(self):
         source = (ROOT / "celebrity_selfie_v158.py").read_text(encoding="utf-8")
@@ -76,23 +81,24 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         self.assertIn('"fixed_reference_count": len(paths)', source)
         self.assertIn('"state": "await_scene"', source)
 
-    def test_v160_bootstrap_keeps_v158_as_renderer_library(self):
+    def test_v161_bootstrap_keeps_v158_as_reference_library(self):
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
         versioning = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
         defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
         hotfix159 = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
         hotfix160 = (ROOT / "neyrobot_prod" / "hotfix_v160.py").read_text(encoding="utf-8")
+        hotfix161 = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
         self.assertIn("v159", hotfix159)
-        self.assertIn("v160", versioning)
-        self.assertIn("v160", defaults)
-        self.assertIn("v160", site)
         self.assertIn("v160", hotfix160)
-        self.assertIn("neyrobot_prod.hotfix_v160", site)
-        self.assertIn("from . import hotfix_v159 as previous", hotfix160)
-        self.assertIn("import celebrity_selfie_v158 as release", hotfix159)
-        self.assertIn("release.install_builder_hook()", hotfix159)
-        self.assertIn("from neyrobot_prod.hotfix_v160 import install_early", versioning)
-        self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", versioning)
+        self.assertIn("v161", versioning)
+        self.assertIn("v161", defaults)
+        self.assertIn("v161", site)
+        self.assertIn("v161", hotfix161)
+        self.assertIn("neyrobot_prod.hotfix_v161", site)
+        self.assertIn("from . import hotfix_v160 as previous", hotfix161)
+        self.assertIn("import celebrity_selfie_v158 as release", hotfix161)
+        self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", versioning)
+        self.assertNotIn("from neyrobot_prod.hotfix_v160 import install_early", versioning)
         self.assertNotIn("from celebrity_selfie_v157 import install", versioning)
 
 
