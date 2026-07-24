@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Canonical production release/version contract for Neyro-Bot v161.
+"""Canonical production release/version contract for Neyro-Bot v162.
 
 Render starts ``main.py`` directly and ``secret_loader.py`` imports this module
-before the Telegram Application is built. The explicit startup owner therefore
-must install and delegate to v161 rather than any historical compatibility layer.
+before the Telegram Application is built.  The explicit startup owner therefore
+installs v162, which retains v161 rendering and fixes the complete selfie wizard.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v161-roman-hybrid-identity-2026-07-24"
+VERSION = "v162-unified-celebrity-selfie-flow-2026-07-24"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
@@ -25,7 +25,7 @@ def _install_current_release() -> bool:
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from neyrobot_prod.hotfix_v161 import install_early
+        from neyrobot_prod.hotfix_v162 import install_early
         from neyrobot_prod.v161_reference_v2 import install as install_reference_v2
 
         install_early()
@@ -55,32 +55,21 @@ def _stamp_runtime(mod: Any) -> None:
 
 
 async def _cmd_version(update: Any, context: Any) -> None:
-    from neyrobot_prod.hotfix_v161 import _cmd_version as current
+    from neyrobot_prod.hotfix_v162 import _cmd_version as current
     await current(update, context)
 
 
 def _install_builder_hook() -> None:
+    """Let v162 own /version; it removes all historical duplicate handlers."""
     global _BUILDER_HOOKED
     if _BUILDER_HOOKED:
         return
     try:
-        from telegram.ext import ApplicationBuilder, CommandHandler
+        from telegram.ext import ApplicationBuilder
+        from neyrobot_prod.hotfix_v162 import install_builder_hook
     except Exception:
         return
-    if getattr(ApplicationBuilder, "_neyrobot_version_contract_hooked", False):
-        _BUILDER_HOOKED = True
-        return
-    original_build = ApplicationBuilder.build
-
-    def build(self: Any, *args: Any, **kwargs: Any):
-        app = original_build(self, *args, **kwargs)
-        _install_current_release()
-        if not getattr(app, "_neyrobot_version_contract_handler", False):
-            app.add_handler(CommandHandler("version", _cmd_version), group=-1000)
-            setattr(app, "_neyrobot_version_contract_handler", True)
-        return app
-
-    ApplicationBuilder.build = build
+    install_builder_hook()
     setattr(ApplicationBuilder, "_neyrobot_version_contract_hooked", True)
     _BUILDER_HOOKED = True
 
@@ -101,7 +90,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v161",
+        name="neyrobot-version-contract-v162",
         daemon=True,
     ).start()
 
