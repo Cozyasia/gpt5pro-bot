@@ -11,6 +11,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 HOTFIX = (ROOT / "neyrobot_prod" / "hotfix_v161.py").read_text(encoding="utf-8")
+HOTFIX162 = (ROOT / "neyrobot_prod" / "hotfix_v162.py").read_text(encoding="utf-8")
 REFERENCE_V2 = (ROOT / "neyrobot_prod" / "v161_reference_v2.py").read_text(encoding="utf-8")
 SITE = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
 VERSIONING = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
@@ -18,21 +19,24 @@ DEFAULTS = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
 
 
 class HotfixV161Tests(unittest.TestCase):
-    def test_v161_files_are_valid_python(self):
-        for source in (HOTFIX, REFERENCE_V2, SITE, VERSIONING, DEFAULTS):
+    def test_release_files_are_valid_python(self):
+        for source in (HOTFIX, HOTFIX162, REFERENCE_V2, SITE, VERSIONING, DEFAULTS):
             ast.parse(source)
 
-    def test_v161_is_the_explicit_release_owner(self):
-        expected = "v161-roman-hybrid-identity-2026-07-24"
-        self.assertIn(expected, HOTFIX)
-        self.assertIn(expected, VERSIONING)
-        self.assertIn(expected, DEFAULTS)
-        self.assertIn("neyrobot_prod.hotfix_v161", SITE)
+    def test_v162_is_owner_and_v161_is_renderer(self):
+        v161 = "v161-roman-hybrid-identity-2026-07-24"
+        v162 = "v162-unified-celebrity-selfie-flow-2026-07-24"
+        self.assertIn(v161, HOTFIX)
+        self.assertIn(v162, HOTFIX162)
+        self.assertIn(v162, VERSIONING)
+        self.assertIn(v162, DEFAULTS)
+        self.assertIn("neyrobot_prod.hotfix_v162", SITE)
         self.assertIn("neyrobot_prod.v161_reference_v2", SITE)
-        self.assertIn("from neyrobot_prod.hotfix_v161 import install_early", VERSIONING)
-        self.assertIn("from neyrobot_prod.hotfix_v161 import _cmd_version", VERSIONING)
+        self.assertIn("from neyrobot_prod.hotfix_v162 import install_early", VERSIONING)
+        self.assertIn("from neyrobot_prod.hotfix_v162 import _cmd_version", VERSIONING)
         self.assertIn("from neyrobot_prod.v161_reference_v2 import install", VERSIONING)
-        self.assertIn("neyrobot-version-contract-v161", VERSIONING)
+        self.assertIn("neyrobot-version-contract-v162", VERSIONING)
+        self.assertIn("from . import hotfix_v161 as previous", HOTFIX162)
 
     def test_roman_uses_proven_identity_lock_and_user_pixel_preservation(self):
         for token in (
