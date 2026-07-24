@@ -1,0 +1,6 @@
+Neyro-Bot stable baseline restore
+
+Base release: v119-production-hardening-2026-07-18
+Base commit: 9c2bb94d615c7292e1aefee6b66ac5fd8cae97eb
+Reason: restore the complete production feature set and encrypted Medical Card before further isolated Celebrity Selfie work.
+Previous v200 state is preserved at branch backup/pre-v119-restore-20260724.
