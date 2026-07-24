@@ -1,0 +1,20 @@
+name: Export current source
+on:
+  push:
+    branches:
+      - tmp/export-current-source-20260724
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package repository source
+        run: |
+          zip -qr current-source.zip . -x '.git/*' 'current-source.zip'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-source
+          path: current-source.zip
+          if-no-files-found: error
