@@ -1,20 +1,18 @@
 name: Apply v200 bundle
 on:
-  workflow_run:
-    workflows:
-      - Production CI
-    types:
-      - completed
+  pull_request:
+    branches:
+      - main
 permissions:
   contents: write
 jobs:
   apply:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.head_ref }}
       - name: Rebuild clean Celebrity Selfie module
         run: |
           cat .deploy/v200/module_*.b64 > /tmp/celebrity_selfie_mode.py.gz.b64
@@ -88,9 +86,9 @@ jobs:
         run: |
           rm -rf .deploy/v200
           rm -f .github/workflows/apply-v200-bundle.yml
-          rm -f DEPLOY_V200_TRIGGER.txt FINALIZE_V200_PR_TRIGGER.txt FINALIZE_V200_PR_TRIGGER_2.txt
+          rm -f DEPLOY_V200_TRIGGER.txt
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
           git commit -m "Deploy clean v200 Celebrity Selfie rewrite"
-          git push origin main
+          git push origin HEAD:${{ github.head_ref }}
