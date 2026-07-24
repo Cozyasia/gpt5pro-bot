@@ -1,0 +1,35 @@
+--- /mnt/data/current_repo/render.yaml	2026-07-24 15:32:13.000000000 +0000
++++ /mnt/data/neyrobot_selfie_clean_ready/render.yaml	2026-07-24 15:54:19.532712786 +0000
+@@ -314,6 +314,32 @@
+     value: gemini
+   - key: AI_SELFIE_UNIT_COST_USD
+     value: '0.20'
++  - key: CELEBRITY_SELFIE_ENABLED
++    value: '1'
++  - key: CELEBRITY_SELFIE_DATA_DIR
++    value: /data/celebrity_selfie
++  - key: CELEBRITY_SELFIE_PROVIDER_ORDER
++    value: gemini,openai
++  - key: CELEBRITY_SELFIE_IMAGE_TIMEOUT_S
++    value: '420'
++  - key: CELEBRITY_SELFIE_REFERENCE_MIN
++    value: '3'
++  - key: CELEBRITY_SELFIE_REFERENCE_MAX
++    value: '6'
++  - key: CELEBRITY_SELFIE_MAX_ATTEMPTS
++    value: '2'
++  - key: CELEBRITY_SELFIE_MIN_USER_SIMILARITY
++    value: '90'
++  - key: CELEBRITY_SELFIE_MIN_CHARACTER_SIMILARITY
++    value: '90'
++  - key: CELEBRITY_SELFIE_MIN_QUALITY
++    value: '72'
++  - key: CELEBRITY_SELFIE_QC_ENABLED
++    value: '1'
++  - key: CELEBRITY_SELFIE_VISION_MODEL
++    value: gpt-4o-mini
++  - key: CELEBRITY_SELFIE_HIDDEN_ADMIN_COMMAND
++    value: star_admin
+   - key: AI_SELFIE_DEFAULT_ASPECT
+     value: '4:5'
+   - key: AI_SELFIE_IMAGE_SIZE
