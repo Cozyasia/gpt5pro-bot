@@ -9,18 +9,33 @@ ROOT = Path(__file__).resolve().parents[1]
 HOTFIX_PATH = ROOT / "neyrobot_prod" / "hotfix_v160.py"
 HOTFIX = HOTFIX_PATH.read_text(encoding="utf-8")
 SITE = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
+VERSIONING = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
+DEFAULTS = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
+SECRET_LOADER = (ROOT / "secret_loader.py").read_text(encoding="utf-8")
 
 
 class HotfixV160Tests(unittest.TestCase):
     def test_hotfix_is_valid_python(self):
         ast.parse(HOTFIX)
+        ast.parse(VERSIONING)
+        ast.parse(DEFAULTS)
 
-    def test_v160_is_the_early_bootstrap_owner(self):
+    def test_v160_is_the_early_and_explicit_render_bootstrap_owner(self):
         expected = "v160-selfie-delivery-rescue-2026-07-24"
         self.assertIn(expected, HOTFIX)
+        self.assertIn(expected, VERSIONING)
+        self.assertIn(expected, DEFAULTS)
         self.assertIn("neyrobot_prod.hotfix_v160", SITE)
         self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", SITE)
         self.assertIn("topup_v159", SITE)
+        # Render's main.py path explicitly imports versioning through secret_loader;
+        # versioning must therefore delegate to v160, not to the historical v159.
+        self.assertIn("from neyrobot_prod.versioning import install_early", SECRET_LOADER)
+        self.assertIn("from neyrobot_prod.hotfix_v160 import install_early", VERSIONING)
+        self.assertIn("from neyrobot_prod.hotfix_v160 import _cmd_version", VERSIONING)
+        self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", VERSIONING)
+        self.assertNotIn("from neyrobot_prod.hotfix_v159 import _cmd_version", VERSIONING)
+        self.assertIn("neyrobot-version-contract-v160", VERSIONING)
 
     def test_four_candidate_practical_strict_gates_are_applied_before_v159(self):
         previous_import = HOTFIX.index("from . import hotfix_v159 as previous")

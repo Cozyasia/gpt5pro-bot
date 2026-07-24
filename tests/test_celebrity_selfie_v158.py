@@ -82,14 +82,17 @@ class CelebritySelfieV158Tests(unittest.TestCase):
         defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
         hotfix159 = (ROOT / "neyrobot_prod" / "hotfix_v159.py").read_text(encoding="utf-8")
         hotfix160 = (ROOT / "neyrobot_prod" / "hotfix_v160.py").read_text(encoding="utf-8")
-        for source in (versioning, defaults, hotfix159):
-            self.assertIn("v159", source)
+        self.assertIn("v159", hotfix159)
+        self.assertIn("v160", versioning)
+        self.assertIn("v160", defaults)
         self.assertIn("v160", site)
         self.assertIn("v160", hotfix160)
         self.assertIn("neyrobot_prod.hotfix_v160", site)
         self.assertIn("from . import hotfix_v159 as previous", hotfix160)
         self.assertIn("import celebrity_selfie_v158 as release", hotfix159)
         self.assertIn("release.install_builder_hook()", hotfix159)
+        self.assertIn("from neyrobot_prod.hotfix_v160 import install_early", versioning)
+        self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", versioning)
         self.assertNotIn("from celebrity_selfie_v157 import install", versioning)
 
 

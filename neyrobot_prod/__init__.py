@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production defaults.
 
-v159 keeps the complete v158 Celebrity Selfie renderer/reference pack and adds
-priority photo routing, canonical credit checkout and medical integrity guards.
+v160 keeps the complete v159 payment, selfie-routing and medical-integrity
+release and adds the four-candidate Celebrity Selfie delivery rescue.
 Historical modules remain implementation libraries rather than competing owners.
 """
 
 import os
 
-VERSION = "v159-payments-selfie-medical-integrity-2026-07-24"
+VERSION = "v160-selfie-delivery-rescue-2026-07-24"
 
 # Current Celebrity Selfie production contract.
 os.environ.setdefault("CELEBRITY_V156_UNIT_COST_USD", "0.80")
-os.environ.setdefault("CELEBRITY_V156_CANDIDATES", "3")
+os.environ.setdefault("CELEBRITY_V156_CANDIDATES", "4")
 os.environ.setdefault("CELEBRITY_V156_COMET_ROUTES", "gemini,openai-edit")
 os.environ.setdefault("CELEBRITY_V156_COMET_GEMINI_MODELS", "gemini-2.5-flash-image,gemini-3-pro-image")
 os.environ.setdefault("CELEBRITY_V156_TARGETED_REPAIR", "1")
@@ -20,12 +20,12 @@ os.environ.setdefault("CELEBRITY_V156_REFERENCE_VISION_QC", "1")
 os.environ.setdefault("CELEBRITY_V156_VISION_QC", "1")
 os.environ.setdefault("CELEBRITY_V156_MAX_CONCURRENCY", "1")
 os.environ.setdefault("CELEBRITY_V157_MIN_USER_SIMILARITY", "64")
-os.environ.setdefault("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
-os.environ["CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
+os.environ.setdefault("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "70")
+os.environ["CELEBRITY_V157_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "70")
 os.environ["CELEBRITY_V156_MIN_USER_SIMILARITY"] = os.environ.get("CELEBRITY_V157_MIN_USER_SIMILARITY", "64")
-os.environ["CELEBRITY_V156_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "74")
-os.environ.setdefault("CELEBRITY_V156_MIN_QUALITY", "66")
-os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "84")
+os.environ["CELEBRITY_V156_MIN_CELEBRITY_SIMILARITY"] = os.environ.get("CELEBRITY_V158_MIN_CELEBRITY_SIMILARITY", "70")
+os.environ.setdefault("CELEBRITY_V156_MIN_QUALITY", "62")
+os.environ.setdefault("CELEBRITY_V156_EARLY_ACCEPT_TOTAL", "80")
 os.environ.setdefault("CELEBRITY_V156_CELEBRITY_REFERENCE_LIMIT", "3")
 os.environ.setdefault("CELEBRITY_FIXED_REF_CACHE", "/tmp/neyrobot_fixed_refs")
 
@@ -84,7 +84,7 @@ try:
 except Exception:
     pass
 
-# UI compatibility remains active; v159 is the final routing owner.
+# UI compatibility remains active; v160 is the final routing owner.
 try:
     from ui_hotfix_v137 import install_builder_hook as _install_ui_v137_builder
     from ui_hotfix_v137 import install_runtime_patches as _install_ui_v137_runtime

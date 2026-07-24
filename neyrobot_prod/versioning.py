@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Canonical production release/version contract for Neyro-Bot v159."""
+"""Canonical production release/version contract for Neyro-Bot v160.
+
+Render starts ``main.py`` directly. ``secret_loader.py`` therefore imports this
+module explicitly before the Telegram Application is built. The canonical
+version contract must install and delegate to the current v160 owner rather than
+re-activating the historical v159 compatibility layer.
+"""
 from __future__ import annotations
 
 import contextlib
@@ -8,7 +14,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v159-payments-selfie-medical-integrity-2026-07-24"
+VERSION = "v160-selfie-delivery-rescue-2026-07-24"
 _INSTALLED = False
 _BUILDER_HOOKED = False
 _RUNTIME_STAMPER_STARTED = False
@@ -20,16 +26,13 @@ def _install_current_release() -> bool:
     try:
         import neyrobot_prod
         from neyrobot_prod import bootstrap
-        from neyrobot_prod.hotfix_v159 import install_early, _install_celebrity_release
+        from neyrobot_prod.hotfix_v160 import install_early
 
         install_early()
-        release_ok = bool(_install_celebrity_release())
         neyrobot_prod.VERSION = VERSION
         bootstrap.VERSION = VERSION
         _RELEASE_OVERLAY_INSTALLED = True
-        # The v124 priority wizard remains operational even when an optional
-        # owner-reference validation is degraded, so v159 itself is installed.
-        return True if release_ok or _RELEASE_OVERLAY_INSTALLED else False
+        return True
     except Exception:
         return False
 
@@ -51,9 +54,10 @@ def _stamp_runtime(mod: Any) -> None:
 
 
 async def _cmd_version(update: Any, context: Any) -> None:
-    # Delegate to the richer v159 diagnostic. Its priority handler normally owns
-    # /version first; this remains a safe compatibility route.
-    from neyrobot_prod.hotfix_v159 import _cmd_version as current
+    # Delegate only to the current release owner. The handler is also registered
+    # by v160 at higher priority through the inherited v159 builder hook, while
+    # this route remains a safe explicit-startup fallback.
+    from neyrobot_prod.hotfix_v160 import _cmd_version as current
     await current(update, context)
 
 
@@ -99,7 +103,7 @@ def _start_runtime_stamper() -> None:
 
     threading.Thread(
         target=worker,
-        name="neyrobot-version-contract-v159",
+        name="neyrobot-version-contract-v160",
         daemon=True,
     ).start()
 
