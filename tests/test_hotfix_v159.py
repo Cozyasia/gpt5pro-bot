@@ -19,10 +19,15 @@ class HotfixV159Tests(unittest.TestCase):
         ast.parse(HOTFIX160)
 
     def test_v159_remains_the_payment_medical_implementation_under_v160(self):
-        expected = "v159-payments-selfie-medical-integrity-2026-07-24"
-        self.assertIn(expected, HOTFIX)
-        self.assertIn(expected, (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8"))
-        self.assertIn(expected, (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8"))
+        v159 = "v159-payments-selfie-medical-integrity-2026-07-24"
+        v160 = "v160-selfie-delivery-rescue-2026-07-24"
+        self.assertIn(v159, HOTFIX)
+        versioning = (ROOT / "neyrobot_prod" / "versioning.py").read_text(encoding="utf-8")
+        defaults = (ROOT / "neyrobot_prod" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn(v160, versioning)
+        self.assertIn(v160, defaults)
+        self.assertIn("from neyrobot_prod.hotfix_v160 import install_early", versioning)
+        self.assertNotIn("from neyrobot_prod.hotfix_v159 import install_early", versioning)
         site = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
         self.assertIn("neyrobot_prod.hotfix_v160", site)
         self.assertIn("from . import hotfix_v159 as previous", HOTFIX160)
