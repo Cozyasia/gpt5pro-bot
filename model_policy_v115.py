@@ -119,6 +119,13 @@ def _install_celebrity_selfie_v201() -> None:
         install_async()
 
 
+def _install_selfie_admin_v202() -> None:
+    """Install the non-silent, multi-source owner/admin service menu."""
+    with contextlib.suppress(Exception):
+        from neyrobot_prod.selfie_admin_v202 import install
+        install()
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -140,6 +147,7 @@ def install() -> None:
     _install_credit_store_v201()
     _install_commercial_numbers_v201()
     _install_celebrity_selfie_v201()
+    _install_selfie_admin_v202()
     _INSTALLED = True
 
 
