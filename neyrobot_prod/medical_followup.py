@@ -12,11 +12,15 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import re
+import sys
+import threading
 import time
 from typing import Any
 
 VERSION = "v119-production-hardening-2026-07-18"
 _DEDUPE_TTL = 15 * 60
+_WORKER_STARTED = False
+_MENU_MARKER = "_prod_v119_medcard_menu"
 
 UPSELL_TEXT = (
     "📁 Персональная медицинская карта\n\n"
@@ -34,6 +38,14 @@ STANDARD_DISCLAIMER = (
     "⚠️ Важно: это справочный разбор и подготовка вопросов к врачу, а не диагноз, "
     "не медицинское заключение и не замена очной консультации или обследования."
 )
+
+
+def _runtime_module() -> Any | None:
+    for name in ("__main__", "main"):
+        mod = sys.modules.get(name)
+        if mod is not None and hasattr(mod, "BOT_TOKEN"):
+            return mod
+    return None
 
 
 def _log(mod: Any, level: str, message: str, *args: Any) -> None:
@@ -103,6 +115,66 @@ def _upsell_kb(card: Any, mod: Any):
             [("⬅️ В Медицину", "medcard:back_med")],
         ],
     )
+
+
+def _button_callback(button: Any) -> str:
+    return str(getattr(button, "callback_data", "") or "")
+
+
+def _install_medical_card_menu(mod: Any) -> bool:
+    """Add one stable Medical Card entry regardless of legacy patch order."""
+    current = getattr(mod, "medicine_kb", None)
+    button_cls = getattr(mod, "InlineKeyboardButton", None)
+    markup_cls = getattr(mod, "InlineKeyboardMarkup", None)
+    if not callable(current) or not callable(button_cls) or not callable(markup_cls):
+        return False
+    if getattr(current, _MENU_MARKER, False):
+        return True
+
+    def medicine_kb():
+        base = current()
+        try:
+            rows = [list(row) for row in getattr(base, "inline_keyboard", [])]
+            if any(
+                _button_callback(button) == "medcard:open"
+                for row in rows
+                for button in row
+            ):
+                return base
+            card_row = [
+                button_cls(
+                    "📁 Моя медицинская карта · PRO/ULTIMATE",
+                    callback_data="medcard:open",
+                )
+            ]
+            insert_at = len(rows)
+            if rows:
+                last_callbacks = [_button_callback(button).lower() for button in rows[-1]]
+                if any("back" in value or "назад" in value for value in last_callbacks):
+                    insert_at -= 1
+            rows.insert(max(0, insert_at), card_row)
+            return markup_cls(rows)
+        except Exception:
+            return current()
+
+    setattr(medicine_kb, _MENU_MARKER, True)
+    medicine_kb._prod_v119_original = current  # type: ignore[attr-defined]
+    mod.medicine_kb = medicine_kb
+
+    menu_text = getattr(mod, "_medical_menu_text", None)
+    if callable(menu_text) and not getattr(menu_text, _MENU_MARKER, False):
+        def medical_menu_text(track: str = "") -> str:
+            text = str(menu_text(track) or "").rstrip()
+            notice = (
+                "\n\n📁 Медицинская карта: хранение оригиналов, показателей, хронологии "
+                "и PDF-сводки доступно владельцу и пользователям PRO/ULTIMATE после согласия."
+            )
+            return text if "медицинская карта:" in text.lower() else text + notice
+
+        setattr(medical_menu_text, _MENU_MARKER, True)
+        medical_menu_text._prod_v119_original = menu_text  # type: ignore[attr-defined]
+        mod._medical_menu_text = medical_menu_text
+    return True
 
 
 def dedupe_disclaimer(answer: str) -> str:
@@ -207,21 +279,67 @@ def patch_runtime(mod: Any) -> bool:
         send_answer._prod_v119_original = original_send  # type: ignore[attr-defined]
         runtime._send_answer = send_answer
 
-    async def analyze_text(update: Any, context: Any, value: str, goal: str | None = None) -> None:
-        await runtime.analyze(mod, update, context, value, goal, False)
+    current_text = getattr(mod, "_medical_analyze_text", None)
+    current_image = getattr(mod, "_medical_analyze_image", None)
+    if not getattr(current_text, "_prod_v119_medical", False):
+        async def analyze_text(update: Any, context: Any, value: str, goal: str | None = None) -> None:
+            await runtime.analyze(mod, update, context, value, goal, False)
+        analyze_text._prod_v119_medical = True  # type: ignore[attr-defined]
+        mod._medical_analyze_text = analyze_text
 
-    async def analyze_image(update: Any, context: Any, value: bytes, goal: str | None = None) -> None:
-        await runtime.analyze(mod, update, context, value, goal, True)
+    if not getattr(current_image, "_prod_v119_medical", False):
+        async def analyze_image(update: Any, context: Any, value: bytes, goal: str | None = None) -> None:
+            await runtime.analyze(mod, update, context, value, goal, True)
+        analyze_image._prod_v119_medical = True  # type: ignore[attr-defined]
+        mod._medical_analyze_image = analyze_image
 
-    analyze_text._prod_v119_medical = True  # type: ignore[attr-defined]
-    analyze_image._prod_v119_medical = True  # type: ignore[attr-defined]
-    mod._medical_analyze_text = analyze_text
-    mod._medical_analyze_image = analyze_image
+    # The v110 routing helper is safe to call directly and makes PDF/DOCX/TXT
+    # follow the active Medicine mode or any med_* submode instead of the general
+    # document assistant. It does not alter non-medical document handling.
+    with contextlib.suppress(Exception):
+        import medical_card_v110_patch as card110
+        card110._install_medical_routing(mod)
+
+    with contextlib.suppress(Exception):
+        card._init_db(mod)
+
+    _install_medical_card_menu(mod)
     mod.MEDICAL_ENGINE_VERSION = VERSION
     mod.MEDICAL_CARD_VERSION = VERSION
     mod.MEDICAL_PATCH_VERSION = VERSION
     mod._PROD_MEDICAL_FOLLOWUP_PATCHED = True
     return True
+
+
+def install_async() -> None:
+    """Activate the V119 medical route from main.py's guaranteed secret loader."""
+    global _WORKER_STARTED
+    if _WORKER_STARTED:
+        return
+    _WORKER_STARTED = True
+
+    def worker() -> None:
+        stable_rounds = 0
+        for _ in range(3600):
+            mod = _runtime_module()
+            if mod is None:
+                time.sleep(0.1)
+                continue
+            try:
+                if patch_runtime(mod):
+                    stable_rounds += 1
+                    # Keep applying after the legacy V108/V114 workers settle, then
+                    # stop. Every operation is idempotent and medical-only.
+                    if stable_rounds >= 300:
+                        return
+                else:
+                    stable_rounds = 0
+            except Exception as exc:
+                stable_rounds = 0
+                _log(mod, "warning", "V119 medical activation failed: %r", exc)
+            time.sleep(0.1)
+
+    threading.Thread(target=worker, name="neyrobot-medical-v119", daemon=True).start()
 
 
 async def diag_medcard(mod: Any, update: Any, context: Any) -> None:
@@ -232,12 +350,24 @@ async def diag_medcard(mod: Any, update: Any, context: Any) -> None:
         entitled = _eligible(card, mod, user)
         consent = bool(card._has_consent(mod, uid)) if entitled else False
         pending = context.user_data.get("medcard_pending") or {}
+        menu = None
+        with contextlib.suppress(Exception):
+            menu = mod.medicine_kb()
+        menu_has_card = bool(
+            menu
+            and any(
+                _button_callback(button) == "medcard:open"
+                for row in getattr(menu, "inline_keyboard", [])
+                for button in row
+            )
+        )
         await update.effective_message.reply_text(
             "📁 Medical Card diagnostic\n"
             f"version={VERSION}\n"
             f"entitled={'on' if entitled else 'off'}\n"
             f"consent={'on' if consent else 'off'}\n"
             f"pending={'on' if bool(pending) else 'off'}\n"
+            f"menu_button={'on' if menu_has_card else 'off'}\n"
             f"last_offer={context.user_data.get('medcard_offer_last_status') or '—'}\n"
             f"public_text_handler={'v119' if getattr(mod._medical_analyze_text, '_prod_v119_medical', False) else 'legacy'}\n"
             f"public_image_handler={'v119' if getattr(mod._medical_analyze_image, '_prod_v119_medical', False) else 'legacy'}"
@@ -246,4 +376,7 @@ async def diag_medcard(mod: Any, update: Any, context: Any) -> None:
         await update.effective_message.reply_text(f"Medical Card diagnostic error: {type(exc).__name__}: {exc}")
 
 
-__all__ = ["VERSION", "offer", "patch_runtime", "diag_medcard", "dedupe_disclaimer"]
+__all__ = [
+    "VERSION", "offer", "patch_runtime", "install_async", "diag_medcard",
+    "dedupe_disclaimer", "_install_medical_card_menu",
+]
