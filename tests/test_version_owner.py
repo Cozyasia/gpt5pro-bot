@@ -30,7 +30,7 @@ class VersionOwnerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(message.calls), 1)
         self.assertIn(VERSION, message.calls[0][0])
-        self.assertEqual(VERSION, "v205-selfie-persistent-catalog-2026-07-25")
+        self.assertEqual(VERSION, "v206-selfie-command-routing-2026-07-25")
 
     def test_version_handler_has_priority_over_all_legacy_groups(self) -> None:
         self.assertLess(VERSION_HANDLER_GROUP, -100)
