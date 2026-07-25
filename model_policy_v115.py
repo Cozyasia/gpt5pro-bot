@@ -127,9 +127,16 @@ def _install_selfie_admin_v202() -> None:
 
 
 def _install_celebrity_selfie_v203() -> None:
-    """Own final generation with Gemini: user selfie plus three hero references."""
+    """Own final generation with direct Gemini when a Google key is available."""
     with contextlib.suppress(Exception):
         from neyrobot_prod.celebrity_selfie_v203 import install
+        install()
+
+
+def _install_celebrity_selfie_v204() -> None:
+    """Prefer CometAPI Gemini with user selfie plus three hero references."""
+    with contextlib.suppress(Exception):
+        from neyrobot_prod.celebrity_selfie_v204 import install
         install()
 
 
@@ -156,6 +163,7 @@ def install() -> None:
     _install_celebrity_selfie_v201()
     _install_selfie_admin_v202()
     _install_celebrity_selfie_v203()
+    _install_celebrity_selfie_v204()
     _INSTALLED = True
 
 
