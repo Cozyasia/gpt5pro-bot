@@ -22,6 +22,12 @@ class SelfieCommandsV206Tests(unittest.TestCase):
         self.assertIn("selfie_commands_v206", source)
         self.assertIn("install_selfie_commands()", source)
 
+    def test_guaranteed_main_bootstrap_installs_commands_on_render(self):
+        source = Path("secret_loader.py").read_text(encoding="utf-8")
+        self.assertIn("_SELFIE_COMMANDS_V206_PATCHED", source)
+        self.assertIn("from neyrobot_prod.selfie_commands_v206", source)
+        self.assertIn("install_selfie_commands_v206()", source)
+
     def test_admin_policy_accepts_normal_two_argument_unlimited_checker(self):
         v206._install_authorization_owner()
         runtime = types.SimpleNamespace(
