@@ -93,8 +93,8 @@ class CelebritySelfieTests(unittest.TestCase):
         self.assertEqual(image_config["aspectRatio"], "4:5")
         self.assertEqual(image_config["imageSize"], "2K")
         prompt = request["json"]["contents"][0]["parts"][0]["text"]
-        self.assertIn("two separate recognizable people", prompt)
-        self.assertIn("do not merge", prompt)
+        self.assertIn("two separate recognizable individuals", prompt)
+        self.assertIn("never merge", prompt)
 
     def test_runtime_patch_changes_only_selfie_executor(self) -> None:
         async def original(*args, **kwargs):
@@ -109,7 +109,7 @@ class CelebritySelfieTests(unittest.TestCase):
         self.assertIsNot(mod._run_ai_selfie_image, original)
         self.assertIs(mod._start_ai_selfie, billing_owner)
         self.assertEqual(mod.AI_SELFIE_RUNTIME_VERSION, celebrity_selfie.VERSION)
-        self.assertTrue(getattr(mod._run_ai_selfie_image, "_celebrity_selfie_direct_gemini", False))
+        self.assertTrue(getattr(mod._run_ai_selfie_image, "_celebrity_selfie_v201", False))
 
     def test_sitecustomize_activates_isolated_selfie_runtime(self) -> None:
         source = Path("sitecustomize.py").read_text(encoding="utf-8")
