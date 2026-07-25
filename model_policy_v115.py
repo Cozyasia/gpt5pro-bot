@@ -147,6 +147,15 @@ def _install_selfie_v204_lock() -> None:
         install()
 
 
+def _install_selfie_runtime_v207() -> None:
+    """Canonicalize generator, persistent storage and service commands."""
+    try:
+        from neyrobot_prod.selfie_runtime_v207 import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie runtime v207 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -172,6 +181,7 @@ def install() -> None:
     _install_celebrity_selfie_v203()
     _install_celebrity_selfie_v204()
     _install_selfie_v204_lock()
+    _install_selfie_runtime_v207()
     _INSTALLED = True
 
 
