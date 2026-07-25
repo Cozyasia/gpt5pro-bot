@@ -1,4 +1,4 @@
-name: V205 validation and backup
+name: V206 validation and backup
 
 on:
   push:
@@ -26,29 +26,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Compile V204 and V205 layers
+      - name: Compile selfie production layers
         run: |
           python -m py_compile \
             neyrobot_prod/celebrity_selfie_v204.py \
             neyrobot_prod/selfie_storage_v205.py \
+            neyrobot_prod/selfie_commands_v206.py \
             neyrobot_prod/selfie_v204_lock.py
 
       - name: Run focused regression tests
         run: |
           python -m unittest \
             tests.test_celebrity_selfie_v204 \
-            tests.test_selfie_storage_v205 -v
+            tests.test_selfie_storage_v205 \
+            tests.test_selfie_commands_v206 -v
 
       - name: Build source snapshot
         run: |
-          zip -r neyrobot_v205_persistent_catalog.zip . \
+          zip -r neyrobot_v206_selfie_command_routing.zip . \
             -x '.git/*' '.github/workflows/*' '__pycache__/*' '*.pyc' \
                '.env' '*.env' 'yookassa.env' 'secrets/*' '/data/*'
 
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: neyrobot-v205-persistent-catalog
-          path: neyrobot_v205_persistent_catalog.zip
+          name: neyrobot-v206-selfie-command-routing
+          path: neyrobot_v206_selfie_command_routing.zip
           if-no-files-found: error
           retention-days: 90
