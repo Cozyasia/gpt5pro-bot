@@ -1,0 +1,4 @@
+Neyro-Bot V205 persistent celebrity selfie catalogue release verification.
+Base main commit: 1b5a6d28495d2995a9843949fc7be30bcdb37a08
+Storage root: /data/celebrity_selfie
+Prepared characters: Roman Abramovich; Vlad A4 (Bumaga).
