@@ -1,0 +1,4 @@
+Neyro-Bot V206 selfie command routing release.
+Commands: /selfie_admin and /diag_selfie_storage.
+Priority: before all legacy Telegram routers.
+Persistent storage remains /data/celebrity_selfie.
