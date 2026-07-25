@@ -1,0 +1,8 @@
+V206 Render bootstrap verification
+
+Purpose: trigger clean PR validation after moving selfie service command installation into secret_loader.py, the guaranteed main.py bootstrap path.
+
+Expected runtime commands:
+/version
+/selfie_admin
+/diag_selfie_storage
