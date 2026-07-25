@@ -91,6 +91,13 @@ def _install_release_v118() -> None:
         install_async()
 
 
+def _install_medical_v119() -> None:
+    """Pin public medical handlers and the Medical Card menu after legacy overlays."""
+    with contextlib.suppress(Exception):
+        from neyrobot_prod.medical_followup import install_async
+        install_async()
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -108,6 +115,7 @@ def install() -> None:
     _install_medical_mode_v116()
     _install_medical_card_v117()
     _install_release_v118()
+    _install_medical_v119()
     _INSTALLED = True
 
 
