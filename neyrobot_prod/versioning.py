@@ -40,6 +40,7 @@ async def command(update: Any, context: Any) -> None:
                     f"• медицинская карта: {getattr(runtime, 'MEDICAL_CARD_VERSION', '—')}",
                     f"• покупка кредитов: {getattr(runtime, 'CREDIT_STORE_VERSION', '—')}",
                     f"• AI-селфи: {getattr(runtime, 'CELEBRITY_SELFIE_VERSION', getattr(runtime, 'AI_SELFIE_RUNTIME_VERSION', '—'))}",
+                    f"• сервисное меню селфи: {getattr(runtime, 'SELFIE_ADMIN_VERSION', '—')}",
                 ])
             lines.append("Render: main.py · Start Command: python -u main.py")
             await message.reply_text("\n".join(lines))
