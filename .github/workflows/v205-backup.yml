@@ -1,0 +1,54 @@
+name: V205 validation and backup
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile V204 and V205 layers
+        run: |
+          python -m py_compile \
+            neyrobot_prod/celebrity_selfie_v204.py \
+            neyrobot_prod/selfie_storage_v205.py \
+            neyrobot_prod/selfie_v204_lock.py
+
+      - name: Run focused regression tests
+        run: |
+          python -m unittest \
+            tests.test_celebrity_selfie_v204 \
+            tests.test_selfie_storage_v205 -v
+
+      - name: Build source snapshot
+        run: |
+          zip -r neyrobot_v205_persistent_catalog.zip . \
+            -x '.git/*' '.github/workflows/*' '__pycache__/*' '*.pyc' \
+               '.env' '*.env' 'yookassa.env' 'secrets/*' '/data/*'
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: neyrobot-v205-persistent-catalog
+          path: neyrobot_v205_persistent_catalog.zip
+          if-no-files-found: error
+          retention-days: 90
