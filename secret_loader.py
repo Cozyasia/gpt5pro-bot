@@ -31,6 +31,8 @@ _MEDICAL_ENGINE_V111_PATCHED = False
 _MEDICAL_V114_OVERLAY_PATCHED = False
 _GENERAL_TEXT_ROUTER_V114_PATCHED = False
 _MODEL_POLICY_V115_PATCHED = False
+_RELEASE_VERSION_OWNER_PATCHED = False
+_CELEBRITY_SELFIE_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -109,6 +111,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED, _MEDICAL_CARD_V110_PATCHED
     global _MEDICAL_ENGINE_V111_PATCHED, _MEDICAL_V114_OVERLAY_PATCHED
     global _GENERAL_TEXT_ROUTER_V114_PATCHED, _MODEL_POLICY_V115_PATCHED
+    global _RELEASE_VERSION_OWNER_PATCHED, _CELEBRITY_SELFIE_PATCHED
 
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
@@ -120,6 +123,16 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
                 os.environ[key] = value
                 _LOADED_SOURCES[key] = str(path)
     _BOOTSTRAPPED = True
+
+    # This module is imported directly by main.py before the Telegram application
+    # is built. Install the canonical V119 /version handler here rather than
+    # relying only on Python's optional sitecustomize auto-import.
+    if not _RELEASE_VERSION_OWNER_PATCHED:
+        try:
+            from neyrobot_prod.versioning import install_builder_hook as install_version_owner
+            _RELEASE_VERSION_OWNER_PATCHED = bool(install_version_owner())
+        except Exception:
+            pass
 
     # v105 has already installed its import hook above. Importing the studio here
     # applies v105 first; v106 then safely patches the resulting class before
@@ -220,6 +233,17 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             from model_policy_v115 import install as install_model_policy
             install_model_policy()
             _MODEL_POLICY_V115_PATCHED = True
+        except Exception:
+            pass
+
+    # Celebrity Selfie is activated from the same guaranteed main.py bootstrap.
+    # It patches only main._run_ai_selfie_image; billing and every other feature
+    # remain owned by the existing monolith.
+    if not _CELEBRITY_SELFIE_PATCHED:
+        try:
+            from neyrobot_prod.celebrity_selfie import install_async as install_celebrity_selfie
+            install_celebrity_selfie()
+            _CELEBRITY_SELFIE_PATCHED = True
         except Exception:
             pass
 
