@@ -21,7 +21,7 @@ class FakeMessage:
 
 
 class VersionOwnerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_public_version_uses_canonical_v119_and_stops_legacy_handler(self) -> None:
+    async def test_public_version_uses_current_package_release_and_stops_legacy_handler(self) -> None:
         message = FakeMessage()
         update = types.SimpleNamespace(effective_message=message)
 
@@ -30,7 +30,7 @@ class VersionOwnerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(message.calls), 1)
         self.assertIn(VERSION, message.calls[0][0])
-        self.assertEqual(VERSION, "v119-production-hardening-2026-07-18")
+        self.assertEqual(VERSION, "v205-selfie-persistent-catalog-2026-07-25")
 
     def test_version_handler_has_priority_over_all_legacy_groups(self) -> None:
         self.assertLess(VERSION_HANDLER_GROUP, -100)
