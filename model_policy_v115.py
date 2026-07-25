@@ -105,6 +105,13 @@ def _install_credit_store_v201() -> None:
         install_async()
 
 
+def _install_commercial_numbers_v201() -> None:
+    """Overwrite stale Render credit figures and obsolete package prices."""
+    with contextlib.suppress(Exception):
+        from neyrobot_prod.commercial_numbers_v201 import install_async
+        install_async()
+
+
 def _install_celebrity_selfie_v201() -> None:
     """Install persistent selfie routing and the hidden owner reference manager."""
     with contextlib.suppress(Exception):
@@ -131,6 +138,7 @@ def install() -> None:
     _install_release_v118()
     _install_medical_v119()
     _install_credit_store_v201()
+    _install_commercial_numbers_v201()
     _install_celebrity_selfie_v201()
     _INSTALLED = True
 
