@@ -1,4 +1,4 @@
-name: V206 PR backup
+name: V207 PR backup
 
 on:
   pull_request:
@@ -31,25 +31,27 @@ jobs:
             neyrobot_prod/celebrity_selfie_v204.py \
             neyrobot_prod/selfie_storage_v205.py \
             neyrobot_prod/selfie_commands_v206.py \
-            neyrobot_prod/selfie_v204_lock.py
+            neyrobot_prod/selfie_v204_lock.py \
+            neyrobot_prod/selfie_runtime_v207.py
 
       - name: Run focused regression tests
         run: |
           python -m unittest \
             tests.test_celebrity_selfie_v204 \
             tests.test_selfie_storage_v205 \
-            tests.test_selfie_commands_v206 -v
+            tests.test_selfie_commands_v206 \
+            tests.test_selfie_runtime_v207 -v
 
       - name: Build source snapshot
         run: |
-          zip -r neyrobot_v206_selfie_command_routing.zip . \
+          zip -r neyrobot_v207_canonical_selfie_runtime.zip . \
             -x '.git/*' '.github/workflows/*' '__pycache__/*' '*.pyc' \
                '.env' '*.env' 'yookassa.env' 'secrets/*' '/data/*'
 
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: neyrobot-v206-selfie-command-routing
-          path: neyrobot_v206_selfie_command_routing.zip
+          name: neyrobot-v207-canonical-selfie-runtime
+          path: neyrobot_v207_canonical_selfie_runtime.zip
           if-no-files-found: error
           retention-days: 90
