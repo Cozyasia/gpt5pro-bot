@@ -140,6 +140,13 @@ def _install_celebrity_selfie_v204() -> None:
         install()
 
 
+def _install_selfie_v204_lock() -> None:
+    """Leave V204 as the final owner after all legacy patch workers stop."""
+    with contextlib.suppress(Exception):
+        from neyrobot_prod.selfie_v204_lock import install
+        install()
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -164,6 +171,7 @@ def install() -> None:
     _install_selfie_admin_v202()
     _install_celebrity_selfie_v203()
     _install_celebrity_selfie_v204()
+    _install_selfie_v204_lock()
     _INSTALLED = True
 
 
