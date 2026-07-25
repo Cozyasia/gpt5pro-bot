@@ -18,7 +18,7 @@ class SelfieV203Tests(unittest.TestCase):
         assert spec.loader
         spec.loader.exec_module(cls.module)
 
-    def test_rest_payload_uses_official_camel_case_and_four_images(self):
+    def test_rest_payload_uses_generate_content_fields_and_four_images(self):
         package = types.ModuleType("neyrobot_prod")
         base = types.ModuleType("neyrobot_prod.celebrity_selfie")
         base._aspect_ratio = lambda: "4:5"
@@ -44,8 +44,8 @@ class SelfieV203Tests(unittest.TestCase):
                 sys.modules.pop("neyrobot_prod.celebrity_selfie", None)
 
         parts = body["contents"][0]["parts"]
-        self.assertEqual(sum("inlineData" in part for part in parts), 4)
-        self.assertFalse(any("inline_data" in part for part in parts))
+        self.assertEqual(sum("inline_data" in part for part in parts), 4)
+        self.assertFalse(any("inlineData" in part for part in parts))
         self.assertEqual(
             body["generationConfig"]["responseFormat"]["image"]["aspectRatio"],
             "4:5",
