@@ -33,6 +33,7 @@ _GENERAL_TEXT_ROUTER_V114_PATCHED = False
 _MODEL_POLICY_V115_PATCHED = False
 _RELEASE_VERSION_OWNER_PATCHED = False
 _CELEBRITY_SELFIE_PATCHED = False
+_SELFIE_COMMANDS_V206_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -112,6 +113,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     global _MEDICAL_ENGINE_V111_PATCHED, _MEDICAL_V114_OVERLAY_PATCHED
     global _GENERAL_TEXT_ROUTER_V114_PATCHED, _MODEL_POLICY_V115_PATCHED
     global _RELEASE_VERSION_OWNER_PATCHED, _CELEBRITY_SELFIE_PATCHED
+    global _SELFIE_COMMANDS_V206_PATCHED
 
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
@@ -246,6 +248,23 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             _CELEBRITY_SELFIE_PATCHED = True
         except Exception:
             pass
+
+    # V206 service commands must use this guaranteed bootstrap path. Render may
+    # provide its own sitecustomize module, so relying only on the repository's
+    # optional sitecustomize.py can leave the V205 handlers in control even when
+    # the deployed commit already contains V206. This runs before main.py builds
+    # the Telegram Application and makes /version, /selfie_admin and
+    # /diag_selfie_storage deterministic.
+    if not _SELFIE_COMMANDS_V206_PATCHED:
+        try:
+            from neyrobot_prod.selfie_commands_v206 import install_async as install_selfie_commands_v206
+            install_selfie_commands_v206()
+            _SELFIE_COMMANDS_V206_PATCHED = True
+        except Exception as exc:
+            print(
+                f"[neyrobot-prod] selfie commands v206 bootstrap warning: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     return dict(_LOADED_SOURCES)
 
