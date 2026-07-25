@@ -2,11 +2,12 @@
 """Canonical Telegram /version owner for Neyro-Bot releases.
 
 The legacy monolith and historical runtime overlays may still expose their own
-``PATCH_VERSION`` attributes.  The public /version command must not depend on
-which background patch happened to write that mutable attribute last.
+``PATCH_VERSION`` attributes. The public /version command is owned by the
+package release and reports component versions separately.
 """
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 from . import VERSION
@@ -15,20 +16,34 @@ VERSION_HANDLER_GROUP = -1000
 _VERSION_BUILDER_HOOKED = False
 
 
+def _runtime_module() -> Any | None:
+    for name in ("__main__", "main"):
+        module = sys.modules.get(name)
+        if module is not None and hasattr(module, "BOT_TOKEN"):
+            return module
+    return None
+
+
 async def command(update: Any, context: Any) -> None:
-    """Return the package release version and stop lower-priority handlers."""
+    """Return the package release plus the active production component versions."""
     from telegram.ext import ApplicationHandlerStop
 
     try:
         message = getattr(update, "effective_message", None)
         if message is not None:
-            await message.reply_text(
-                f"✅ Код запущен: {VERSION}\n"
-                "Файл должен быть именно main.py на Render. Start Command: python -u main.py"
-            )
+            runtime = _runtime_module()
+            lines = [f"✅ Код запущен: {VERSION}"]
+            if runtime is not None:
+                lines.extend([
+                    "Компоненты:",
+                    f"• медицина: {getattr(runtime, 'MEDICAL_ENGINE_VERSION', '—')}",
+                    f"• медицинская карта: {getattr(runtime, 'MEDICAL_CARD_VERSION', '—')}",
+                    f"• покупка кредитов: {getattr(runtime, 'CREDIT_STORE_VERSION', '—')}",
+                    f"• AI-селфи: {getattr(runtime, 'CELEBRITY_SELFIE_VERSION', getattr(runtime, 'AI_SELFIE_RUNTIME_VERSION', '—'))}",
+                ])
+            lines.append("Render: main.py · Start Command: python -u main.py")
+            await message.reply_text("\n".join(lines))
     finally:
-        # Prevent the legacy main.py /version handler from replying with a stale
-        # PATCH_VERSION after this canonical handler has already answered.
         raise ApplicationHandlerStop
 
 
@@ -54,10 +69,7 @@ def install_builder_hook() -> bool:
     def build(self: Any, *args: Any, **kwargs: Any):
         app = original_build(self, *args, **kwargs)
         if not getattr(app, app_flag, False):
-            app.add_handler(
-                CommandHandler("version", command),
-                group=VERSION_HANDLER_GROUP,
-            )
+            app.add_handler(CommandHandler("version", command), group=VERSION_HANDLER_GROUP)
             setattr(app, app_flag, True)
         return app
 
