@@ -78,7 +78,7 @@ def storage_root(mod: Any) -> Path:
 
 
 def payload(prompt: str, images: list[tuple[str, str]], *, compatibility: bool) -> dict[str, Any]:
-    """Build official raw REST JSON with explicit roles for all four images."""
+    """Build the official models:generateContent REST request with four images."""
     labels = (
         "REFERENCE 1 — USER SELFIE. Preserve this person's identity exactly.",
         "REFERENCE 2 — CHARACTER PHOTO A. This is the selected second person.",
@@ -88,7 +88,8 @@ def payload(prompt: str, images: list[tuple[str, str]], *, compatibility: bool) 
     parts: list[dict[str, Any]] = [{"text": prompt}]
     for index, (image_b64, mime) in enumerate(images):
         parts.append({"text": labels[index] if index < len(labels) else f"REFERENCE {index + 1}."})
-        parts.append({"inlineData": {"mimeType": mime, "data": image_b64}})
+        # The raw generateContent REST examples use inline_data/mime_type.
+        parts.append({"inline_data": {"mime_type": mime, "data": image_b64}})
 
     generation_config: dict[str, Any] = {
         "responseModalities": ["TEXT", "IMAGE"] if compatibility else ["IMAGE"],
@@ -275,7 +276,7 @@ async def diagnostic(update: Any, context: Any) -> None:
             f"roman_abramovich={base._character_status(mod, 'roman_abramovich')}",
             f"ready={'on' if base._character_ready(mod, 'roman_abramovich') else 'off'}",
             "comet_character_fallback=off",
-            "payload_fields=inlineData/mimeType",
+            "payload_fields=inline_data/mime_type",
         ]
         await update.effective_message.reply_text("\n".join(lines))
     finally:
