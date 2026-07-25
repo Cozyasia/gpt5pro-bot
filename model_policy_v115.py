@@ -98,6 +98,20 @@ def _install_medical_v119() -> None:
         install_async()
 
 
+def _install_credit_store_v201() -> None:
+    """Install canonical package buttons before the monolith builds its handlers."""
+    with contextlib.suppress(Exception):
+        from neyrobot_prod.credit_store_v201 import install_async
+        install_async()
+
+
+def _install_celebrity_selfie_v201() -> None:
+    """Install persistent selfie routing and the hidden owner reference manager."""
+    with contextlib.suppress(Exception):
+        from neyrobot_prod.celebrity_selfie import install_async
+        install_async()
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -116,6 +130,8 @@ def install() -> None:
     _install_medical_card_v117()
     _install_release_v118()
     _install_medical_v119()
+    _install_credit_store_v201()
+    _install_celebrity_selfie_v201()
     _INSTALLED = True
 
 
