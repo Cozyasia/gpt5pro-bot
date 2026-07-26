@@ -183,6 +183,15 @@ def _install_selfie_v211() -> None:
         print(f"[neyrobot-prod] selfie delivery v211 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_admin_v212() -> None:
+    """Expose every Russian and American hero in the owner reference uploader."""
+    try:
+        from neyrobot_prod.selfie_admin_v212_catalog import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie admin v212 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -212,6 +221,7 @@ def install() -> None:
     _install_selfie_v209()
     _install_selfie_v210()
     _install_selfie_v211()
+    _install_selfie_admin_v212()
     _INSTALLED = True
 
 
