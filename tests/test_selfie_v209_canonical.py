@@ -11,6 +11,15 @@ def test_v209_is_bootstrapped_after_v208() -> None:
     assert source.index("install_selfie_v209") > source.index("install_selfie_v208")
 
 
+def test_v209_is_installed_from_guaranteed_main_bootstrap_after_v207() -> None:
+    source = (ROOT / "model_policy_v115.py").read_text(encoding="utf-8")
+    install_body = source[source.index("def install() -> None:"):]
+    assert "from neyrobot_prod.selfie_v209_canonical import install" in source
+    assert "_install_selfie_runtime_v207()" in install_body
+    assert "_install_selfie_v209()" in install_body
+    assert install_body.index("_install_selfie_v209()") > install_body.index("_install_selfie_runtime_v207()")
+
+
 def test_v209_owns_public_handlers_at_higher_priority() -> None:
     source = (ROOT / "neyrobot_prod" / "selfie_v209_canonical.py").read_text(encoding="utf-8")
     assert 'VERSION = "v209-selfie-canonical-binding-2026-07-26"' in source
