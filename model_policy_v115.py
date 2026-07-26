@@ -192,6 +192,15 @@ def _install_selfie_admin_v212() -> None:
         print(f"[neyrobot-prod] selfie admin v212 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_v213() -> None:
+    """Balance hero references with user face crops and hard identity binding."""
+    try:
+        from neyrobot_prod.selfie_v213_user_identity_lock import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie identity v213 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -222,6 +231,7 @@ def install() -> None:
     _install_selfie_v210()
     _install_selfie_v211()
     _install_selfie_admin_v212()
+    _install_selfie_v213()
     _INSTALLED = True
 
 
