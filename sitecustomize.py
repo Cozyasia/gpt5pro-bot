@@ -32,7 +32,7 @@ except Exception as exc:  # service commands must never block bot startup
     print(f"[neyrobot-prod] selfie commands warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Final V208 owner: two user references, country catalogue and safe mode exits.
+    # V208 implements two user references, country catalogue and safe mode exits.
     from neyrobot_prod import selfie_v208_overlay as selfie_v208
 
     # Engines and billing retain their existing dedicated routers; V208 owns only
@@ -56,3 +56,12 @@ try:
     install_selfie_v208_nav_guard()
 except Exception as exc:  # V208 must remain fail-safe and diagnosable
     print(f"[neyrobot-prod] selfie V208 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # V209 binds V208 handlers directly at higher priority and prevents the later
+    # V207 bootstrap from restoring the obsolete one-selfie/flat-list workflow.
+    from neyrobot_prod.selfie_v209_canonical import install_async as install_selfie_v209
+
+    install_selfie_v209()
+except Exception as exc:  # canonical selfie ownership must stay diagnosable
+    print(f"[neyrobot-prod] selfie V209 warning: {type(exc).__name__}: {exc}")
