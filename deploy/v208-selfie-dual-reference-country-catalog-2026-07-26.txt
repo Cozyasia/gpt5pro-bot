@@ -1,0 +1,18 @@
+Neyro-Bot V208 Celebrity Selfie release
+Date: 2026-07-26
+
+Production changes:
+- Two user selfie references plus three fixed hero references (five images per request).
+- Successful generation clears the selfie state and prevents mode buttons from restarting the previous scene.
+- Reply-keyboard labels are routed before selfie text handlers.
+- Public hero selection: country first (Russian / American), then hero name.
+- Admin catalogue uses the same country split.
+- 20 prepared hero slots: 10 Russian and 10 American.
+- Hero JPEG files remain under /data/celebrity_selfie/characters/<slug>.
+
+Smoke tests:
+1. /version
+2. /diag_selfie_storage
+3. /selfie_admin
+4. Upload two user selfies, choose country, hero and scene.
+5. After the result press "🔥 Развлечения" and "💼 Работа/Бизнес"; no repeat generation must start.
