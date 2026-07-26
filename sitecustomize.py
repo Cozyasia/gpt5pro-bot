@@ -40,6 +40,19 @@ try:
     selfie_v208.MODE_LABELS.pop("движки", None)
     selfie_v208.MODE_LABELS.pop("баланс", None)
     selfie_v208.MODE_LABELS.pop("баланс/подписка", None)
+
+    # User selfies are temporary request data. Always release them when a flow is
+    # completed, restarted or exited so stale scenes cannot rerun and RAM does not grow.
+    _v208_original_clear = selfie_v208._clear
+
+    def _v208_clear_all(context, *, keep_photos=True):
+        return _v208_original_clear(context, keep_photos=False)
+
+    selfie_v208._clear = _v208_clear_all
     selfie_v208.install_async()
+
+    from neyrobot_prod.selfie_v208_nav_guard import install_builder_hook as install_selfie_v208_nav_guard
+
+    install_selfie_v208_nav_guard()
 except Exception as exc:  # V208 must remain fail-safe and diagnosable
     print(f"[neyrobot-prod] selfie V208 warning: {type(exc).__name__}: {exc}")
