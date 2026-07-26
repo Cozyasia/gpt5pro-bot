@@ -174,6 +174,15 @@ def _install_selfie_v210() -> None:
         print(f"[neyrobot-prod] selfie generation v210 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_v211() -> None:
+    """Retry slow Telegram uploads without regenerating or double charging."""
+    try:
+        from neyrobot_prod.selfie_v211_delivery import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie delivery v211 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -202,6 +211,7 @@ def install() -> None:
     _install_selfie_runtime_v207()
     _install_selfie_v209()
     _install_selfie_v210()
+    _install_selfie_v211()
     _INSTALLED = True
 
 
