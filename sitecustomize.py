@@ -82,3 +82,12 @@ try:
     install_selfie_v218()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V218 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # V219 is the final canonical owner: three user photos, three hero references,
+    # and uploaded-scene routing before the generic photo-processing pipeline.
+    from neyrobot_prod.selfie_v219_triref_scene_owner import install_async as install_selfie_v219
+
+    install_selfie_v219()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V219 warning: {type(exc).__name__}: {exc}")
