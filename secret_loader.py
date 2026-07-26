@@ -34,6 +34,7 @@ _MODEL_POLICY_V115_PATCHED = False
 _RELEASE_VERSION_OWNER_PATCHED = False
 _CELEBRITY_SELFIE_PATCHED = False
 _SELFIE_COMMANDS_V206_PATCHED = False
+_SELFIE_V218_PATCHED = False
 
 DEFAULT_SECRET_PATHS = (
     "/etc/secrets/runway.env",
@@ -113,7 +114,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     global _MEDICAL_ENGINE_V111_PATCHED, _MEDICAL_V114_OVERLAY_PATCHED
     global _GENERAL_TEXT_ROUTER_V114_PATCHED, _MODEL_POLICY_V115_PATCHED
     global _RELEASE_VERSION_OWNER_PATCHED, _CELEBRITY_SELFIE_PATCHED
-    global _SELFIE_COMMANDS_V206_PATCHED
+    global _SELFIE_COMMANDS_V206_PATCHED, _SELFIE_V218_PATCHED
 
     candidates = tuple(paths or DEFAULT_SECRET_PATHS)
     for path in candidates:
@@ -146,8 +147,6 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             patch_module(_presentation_studio)
             _PRESENTATION_V106_PATCHED = True
         except Exception:
-            # Secret loading and the rest of the bot must remain operational even
-            # if an optional presentation enhancement cannot be installed.
             pass
 
     # v107 must be installed after v106 so final visual/style/palette additions
@@ -168,8 +167,6 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             install_async()
             _MEDICAL_V108_PATCHED = True
         except Exception:
-            # Presentation, secrets and all other bot modes must still start even
-            # if the optional medical enhancement cannot be installed.
             pass
 
     # v109 installs PTB handlers before ApplicationBuilder.build() and then waits
@@ -183,7 +180,6 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             install_async()
             _MEDICAL_CARD_V109_PATCHED = True
         except Exception:
-            # The bot must remain available even if the optional medical card fails.
             pass
 
     # v110 waits for the complete v108 -> v109 chain, then fixes production save,
@@ -239,8 +235,6 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             pass
 
     # Celebrity Selfie is activated from the same guaranteed main.py bootstrap.
-    # It patches only main._run_ai_selfie_image; billing and every other feature
-    # remain owned by the existing monolith.
     if not _CELEBRITY_SELFIE_PATCHED:
         try:
             from neyrobot_prod.celebrity_selfie import install_async as install_celebrity_selfie
@@ -249,12 +243,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
         except Exception:
             pass
 
-    # V206 service commands must use this guaranteed bootstrap path. Render may
-    # provide its own sitecustomize module, so relying only on the repository's
-    # optional sitecustomize.py can leave the V205 handlers in control even when
-    # the deployed commit already contains V206. This runs before main.py builds
-    # the Telegram Application and makes /version, /selfie_admin and
-    # /diag_selfie_storage deterministic.
+    # V206 service commands must use this guaranteed bootstrap path.
     if not _SELFIE_COMMANDS_V206_PATCHED:
         try:
             from neyrobot_prod.selfie_commands_v206 import install_async as install_selfie_commands_v206
@@ -263,6 +252,29 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
         except Exception as exc:
             print(
                 f"[neyrobot-prod] selfie commands v206 bootstrap warning: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    # V218 must be installed from this guaranteed main.py bootstrap, not only from
+    # repository sitecustomize.py. Render can provide its own sitecustomize module.
+    # model_policy_v115 has already installed the legacy V216 stack above, so V218
+    # wraps the final ApplicationBuilder and becomes the canonical route owner.
+    if not _SELFIE_V218_PATCHED:
+        try:
+            from neyrobot_prod.selfie_v218_runtime_owner import (
+                install_builder_hook as install_selfie_v218_builder,
+                install_async as install_selfie_v218,
+            )
+            builder_ok = bool(install_selfie_v218_builder())
+            install_selfie_v218()
+            _SELFIE_V218_PATCHED = builder_ok
+            print(
+                f"[neyrobot-prod] selfie V218 guaranteed bootstrap: "
+                f"builder={'on' if builder_ok else 'off'}"
+            )
+        except Exception as exc:
+            print(
+                f"[neyrobot-prod] selfie V218 guaranteed bootstrap warning: "
                 f"{type(exc).__name__}: {exc}"
             )
 
