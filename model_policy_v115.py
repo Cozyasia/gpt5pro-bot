@@ -201,6 +201,15 @@ def _install_selfie_v213() -> None:
         print(f"[neyrobot-prod] selfie identity v213 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_v214() -> None:
+    """Retain current inputs and show post-result scene/hero/photo controls."""
+    try:
+        from neyrobot_prod.selfie_v214_reuse_controls import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie reuse v214 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -232,6 +241,7 @@ def install() -> None:
     _install_selfie_v211()
     _install_selfie_admin_v212()
     _install_selfie_v213()
+    _install_selfie_v214()
     _INSTALLED = True
 
 
