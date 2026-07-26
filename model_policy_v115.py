@@ -219,6 +219,15 @@ def _install_selfie_v215() -> None:
         print(f"[neyrobot-prod] selfie production v215 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_v216() -> None:
+    """Prioritize hero-reference uploads over cached public user-photo state."""
+    try:
+        from neyrobot_prod.selfie_v216_admin_upload_priority import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie admin upload v216 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -252,6 +261,7 @@ def install() -> None:
     _install_selfie_v213()
     _install_selfie_v214()
     _install_selfie_v215()
+    _install_selfie_v216()
     _INSTALLED = True
 
 
