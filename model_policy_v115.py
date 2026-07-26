@@ -210,6 +210,15 @@ def _install_selfie_v214() -> None:
         print(f"[neyrobot-prod] selfie reuse v214 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_v215() -> None:
+    """Install explicit shot modes, custom scene images/text and expanded heroes."""
+    try:
+        from neyrobot_prod.selfie_v215_shot_scene_modes import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie production v215 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -242,6 +251,7 @@ def install() -> None:
     _install_selfie_admin_v212()
     _install_selfie_v213()
     _install_selfie_v214()
+    _install_selfie_v215()
     _INSTALLED = True
 
 
