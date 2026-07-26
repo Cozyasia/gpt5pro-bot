@@ -165,6 +165,15 @@ def _install_selfie_v209() -> None:
         print(f"[neyrobot-prod] selfie canonical v209 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_v210() -> None:
+    """Fix the V208 generator signature and serialize repeated scene taps."""
+    try:
+        from neyrobot_prod.selfie_v210_generation_guard import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie generation v210 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -192,6 +201,7 @@ def install() -> None:
     _install_selfie_v204_lock()
     _install_selfie_runtime_v207()
     _install_selfie_v209()
+    _install_selfie_v210()
     _INSTALLED = True
 
 
