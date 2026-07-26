@@ -67,10 +67,18 @@ except Exception as exc:  # canonical selfie ownership must stay diagnosable
     print(f"[neyrobot-prod] selfie V209 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # V217 is the final owner of the selfie route: three user photos, three hero
-    # references and equal identity priority. It intentionally touches no other mode.
+    # V217 implements three user references and equal identity priority.
     from neyrobot_prod.selfie_v217_user_triref import install_async as install_selfie_v217
 
     install_selfie_v217()
-except Exception as exc:  # final selfie owner must remain diagnosable
+except Exception as exc:
     print(f"[neyrobot-prod] selfie V217 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # V218 owns the final PTB handlers themselves. This is required because handlers
+    # created by older layers retain their original callback objects after monkeypatching.
+    from neyrobot_prod.selfie_v218_runtime_owner import install_async as install_selfie_v218
+
+    install_selfie_v218()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V218 warning: {type(exc).__name__}: {exc}")
