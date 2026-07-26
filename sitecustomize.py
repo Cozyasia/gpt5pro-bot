@@ -33,8 +33,13 @@ except Exception as exc:  # service commands must never block bot startup
 
 try:
     # Final V208 owner: two user references, country catalogue and safe mode exits.
-    from neyrobot_prod.selfie_v208_overlay import install_async as install_selfie_v208
+    from neyrobot_prod import selfie_v208_overlay as selfie_v208
 
-    install_selfie_v208()
+    # Engines and billing retain their existing dedicated routers; V208 owns only
+    # the four main mode buttons that could previously be mistaken for a scene.
+    selfie_v208.MODE_LABELS.pop("движки", None)
+    selfie_v208.MODE_LABELS.pop("баланс", None)
+    selfie_v208.MODE_LABELS.pop("баланс/подписка", None)
+    selfie_v208.install_async()
 except Exception as exc:  # V208 must remain fail-safe and diagnosable
     print(f"[neyrobot-prod] selfie V208 warning: {type(exc).__name__}: {exc}")
