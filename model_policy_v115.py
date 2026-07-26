@@ -156,6 +156,15 @@ def _install_selfie_runtime_v207() -> None:
         print(f"[neyrobot-prod] selfie runtime v207 warning: {type(exc).__name__}: {exc}")
 
 
+def _install_selfie_v209() -> None:
+    """Install V209 from the guaranteed main.py bootstrap after the V207 stack."""
+    try:
+        from neyrobot_prod.selfie_v209_canonical import install
+        install()
+    except Exception as exc:
+        print(f"[neyrobot-prod] selfie canonical v209 warning: {type(exc).__name__}: {exc}")
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -182,6 +191,7 @@ def install() -> None:
     _install_celebrity_selfie_v204()
     _install_selfie_v204_lock()
     _install_selfie_runtime_v207()
+    _install_selfie_v209()
     _INSTALLED = True
 
 
