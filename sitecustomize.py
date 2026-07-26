@@ -30,3 +30,11 @@ try:
     install_selfie_commands()
 except Exception as exc:  # service commands must never block bot startup
     print(f"[neyrobot-prod] selfie commands warning: {type(exc).__name__}: {exc}")
+
+try:
+    # Final V208 owner: two user references, country catalogue and safe mode exits.
+    from neyrobot_prod.selfie_v208_overlay import install_async as install_selfie_v208
+
+    install_selfie_v208()
+except Exception as exc:  # V208 must remain fail-safe and diagnosable
+    print(f"[neyrobot-prod] selfie V208 warning: {type(exc).__name__}: {exc}")
