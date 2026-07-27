@@ -84,3 +84,10 @@ try:
     install_selfie_v223()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V223 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # Final proof owner: only GEMINI_IMAGE_API_KEY is accepted; no alias or Comet fallback.
+    from neyrobot_prod.selfie_v226_google_key_proof import install_async as install_selfie_v226
+    install_selfie_v226()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V226 warning: {type(exc).__name__}: {exc}")
