@@ -91,3 +91,10 @@ try:
     install_selfie_v226()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V226 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # Highest-priority generation handler dedicated to Celebrity Selfie.
+    from neyrobot_prod.selfie_v227_direct_google_handler import install_async as install_selfie_v227
+    install_selfie_v227()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V227 warning: {type(exc).__name__}: {exc}")
