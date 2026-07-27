@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v221-selfie-identity-scene-lock-2026-07-27"
+VERSION = "v222-selfie-exact-triref-scene-base-2026-07-27"
 
 __all__ = ["VERSION"]
