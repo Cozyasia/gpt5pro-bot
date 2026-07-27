@@ -65,8 +65,15 @@ except Exception as exc:
     print(f"[neyrobot-prod] selfie V219 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Final visible/runtime owner. It overrides V218's retained hard-coded command callbacks.
+    # Visible/runtime owner for the canonical three-user/three-hero flow.
     from neyrobot_prod.selfie_v220_runtime_marker import install_async as install_selfie_v220
     install_selfie_v220()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V220 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # Final generation owner: structured face anchors and strict uploaded-scene lock.
+    from neyrobot_prod.selfie_v221_identity_scene_lock import install_async as install_selfie_v221
+    install_selfie_v221()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V221 warning: {type(exc).__name__}: {exc}")
