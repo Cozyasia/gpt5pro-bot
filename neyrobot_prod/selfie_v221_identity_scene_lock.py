@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-"""V224 strict identity and uploaded-scene owner.
+"""V225 direct-Google strict identity and uploaded-scene owner.
 
 The V219 flow remains the UI/billing owner. This layer keeps the uploaded scene
-as the immutable base image and gives the user substantially stronger identity
-weight than the hero:
-- all three original user photos;
-- a detected face crop derived from each user photo;
-- all three original hero photos;
-- optional uploaded scene sent first as the base image.
+as the immutable base image, strengthens the user identity with three originals
+plus three detected face crops, and sends the request directly to the official
+Gemini Developer API. CometAPI is not used by this selfie route.
 """
 from __future__ import annotations
 
@@ -18,7 +15,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v224-selfie-user-face-anchor-scene-lock-2026-07-27"
+VERSION = "v225-selfie-direct-gemini-pro-2026-07-27"
 _START = False
 
 
@@ -28,6 +25,28 @@ def _runtime() -> Any | None:
         if mod is not None and hasattr(mod, "BOT_TOKEN"):
             return mod
     return None
+
+
+def _google_key() -> str:
+    return (
+        os.environ.get("GEMINI_IMAGE_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+        or ""
+    ).strip()
+
+
+def _models() -> list[str]:
+    raw = (
+        os.environ.get("GEMINI_SELFIE_MODELS")
+        or os.environ.get("GEMINI_SELFIE_MODEL")
+        or "gemini-3-pro-image,gemini-3.1-flash-image"
+    )
+    return list(dict.fromkeys(item.strip() for item in raw.split(",") if item.strip()))
+
+
+def _base_url() -> str:
+    return (os.environ.get("GEMINI_API_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
 
 
 def _prompt(name: str, scene: str, aspect: str, shot_mode: str, has_scene_image: bool) -> str:
@@ -106,7 +125,22 @@ def _prepare_stack(base: Any, runtime: Any, identity: Any, user_images: list[byt
     return prepared, labels
 
 
+def _payload(prompt: str, labels: list[str], prepared: list[tuple[str, str]], aspect: str, image_size: str) -> dict[str, Any]:
+    parts: list[dict[str, Any]] = [{"text": prompt}]
+    for label, (data, mime) in zip(labels, prepared):
+        parts.append({"text": label})
+        parts.append({"inline_data": {"mime_type": mime, "data": data}})
+    return {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": {"aspectRatio": aspect, "imageSize": image_size},
+        },
+    }
+
+
 async def _comet_generate(user_images: list[bytes], slug: str, scene: str, shot_mode: str, scene_image: bytes | None) -> bytes:
+    """Compatibility name retained for V219; implementation is direct Google Gemini."""
     from neyrobot_prod import celebrity_selfie as base
     from neyrobot_prod import celebrity_selfie_v204 as gen
     from neyrobot_prod import selfie_v213_user_identity_lock as identity
@@ -118,57 +152,50 @@ async def _comet_generate(user_images: list[bytes], slug: str, scene: str, shot_
     if len(user_images) != 3 or len(refs) != 3:
         raise RuntimeError(f"user photos={len(user_images)}/3, character refs={len(refs)}/3")
 
+    key = _google_key()
+    if not key:
+        raise RuntimeError("GEMINI_IMAGE_API_KEY is missing")
+
     hero_images = [path.read_bytes() for path in refs]
     has_scene_image = bool(scene_image and len(scene_image) > 1024)
     prepared, labels = _prepare_stack(base, runtime, identity, user_images, hero_images, scene_image)
     meta = base.CHARACTERS.get(slug) or {}
     name = str(meta.get("name") or slug)
-    prompt = _prompt(name, scene, base._aspect_ratio(), shot_mode, has_scene_image)
-
-    key = gen._comet_key()
-    if not key:
-        raise RuntimeError("COMET_API_KEY is missing")
-    base_url = (os.environ.get("COMET_BASE_URL") or "https://api.cometapi.com").rstrip("/")
-    headers = {
-        "Authorization": f"Bearer {key}",
-        "x-goog-api-key": key,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    aspect = base._aspect_ratio()
+    image_size = (os.environ.get("GEMINI_SELFIE_IMAGE_SIZE") or base._image_size() or "2K").upper()
+    if image_size not in {"1K", "2K", "4K"}:
+        image_size = "2K"
+    prompt = _prompt(name, scene, aspect, shot_mode, has_scene_image)
 
     import httpx
-    errors: list[str] = []
-    timeout_value = max(300.0, float(os.environ.get("COMET_SELFIE_TIMEOUT_S", "300") or 300))
+
+    timeout_value = max(300.0, float(os.environ.get("GEMINI_SELFIE_TIMEOUT_S", "300") or 300))
     timeout = httpx.Timeout(timeout_value, connect=40.0, read=timeout_value, write=180.0, pool=40.0)
+    headers = {"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"}
+    errors: list[str] = []
+
     async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
-        for model in gen._models():
-            for camel, compatibility in ((True, False), (False, False), (True, True), (False, True)):
-                parts: list[dict[str, Any]] = [{"text": prompt}]
-                for label, (data, mime) in zip(labels, prepared):
-                    parts.append({"text": label})
-                    parts.append(
-                        {"inlineData": {"mimeType": mime, "data": data}}
-                        if camel else {"inline_data": {"mime_type": mime, "data": data}}
-                    )
-                config: dict[str, Any] = {"responseModalities": ["TEXT", "IMAGE"]}
-                if not compatibility:
-                    config["imageConfig"] = {"aspectRatio": base._aspect_ratio(), "imageSize": base._image_size()}
-                try:
-                    response = await client.post(
-                        f"{base_url}/v1beta/models/{model}:generateContent",
-                        headers=headers,
-                        json={"contents": [{"role": "user", "parts": parts}], "generationConfig": config},
-                    )
-                    if response.status_code >= 400:
-                        errors.append(f"{model}: HTTP {response.status_code}: {response.text[:350]}")
-                        continue
-                    output = gen._extract_final_image(response.json())
-                    if output:
-                        return output
-                    errors.append(f"{model}: response contained no final image")
-                except Exception as exc:
-                    errors.append(f"{model}: {type(exc).__name__}: {exc}")
-    raise RuntimeError("Comet V224 generation failed: " + " | ".join(errors[-8:]))
+        for model in _models():
+            try:
+                response = await client.post(
+                    f"{_base_url()}/models/{model}:generateContent",
+                    headers=headers,
+                    json=_payload(prompt, labels, prepared, aspect, image_size),
+                )
+                if response.status_code >= 400:
+                    errors.append(f"{model}: HTTP {response.status_code}: {response.text[:700]}")
+                    continue
+                output = gen._extract_final_image(response.json())
+                if output:
+                    runtime.AI_SELFIE_LAST_PROVIDER = "Google Gemini direct"
+                    runtime.AI_SELFIE_LAST_MODEL = model
+                    runtime.AI_SELFIE_LAST_IMAGE_SIZE = image_size
+                    return output
+                errors.append(f"{model}: response contained no final non-thought image")
+            except Exception as exc:
+                errors.append(f"{model}: {type(exc).__name__}: {exc}")
+
+    raise RuntimeError("Direct Gemini V225 generation failed: " + " | ".join(errors[-6:]))
 
 
 def patch_runtime() -> bool:
@@ -190,7 +217,10 @@ def patch_runtime() -> bool:
         runtime.SELFIE_STORAGE_VERSION = VERSION
         runtime.SELFIE_COMMANDS_VERSION = VERSION
         runtime.SELFIE_ADMIN_VERSION = VERSION
-        runtime.CELEBRITY_SELFIE_ROUTE = "v224-scene-first-3-user-3-face-3-hero"
+        runtime.CELEBRITY_SELFIE_ROUTE = "v225-direct-google-scene-first-3-user-3-face-3-hero"
+        runtime.AI_SELFIE_PROVIDER = "Google Gemini direct"
+        runtime.AI_SELFIE_CONFIGURED = bool(_google_key())
+        runtime.AI_SELFIE_MODELS = ",".join(_models())
         runtime.AI_SELFIE_USER_REFERENCES = 3
         runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
         runtime.AI_SELFIE_HERO_REFERENCES = 3
@@ -214,14 +244,14 @@ def install_async() -> None:
                 runtime = _runtime()
                 logger = getattr(runtime, "log", None) if runtime is not None else None
                 with contextlib.suppress(Exception):
-                    logger.exception("V224 selfie patch failed: %r", exc)
+                    logger.exception("V225 direct Gemini selfie patch failed: %r", exc)
             time.sleep(0.1)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-selfie-v224-owner").start()
+    threading.Thread(target=worker, daemon=True, name="neyrobot-selfie-v225-direct-gemini").start()
 
 
 def install() -> None:
     install_async()
 
 
-__all__ = ["VERSION", "_prompt", "_prepare_stack", "_comet_generate", "patch_runtime", "install_async", "install"]
+__all__ = ["VERSION", "_google_key", "_models", "_prompt", "_prepare_stack", "_comet_generate", "patch_runtime", "install_async", "install"]
