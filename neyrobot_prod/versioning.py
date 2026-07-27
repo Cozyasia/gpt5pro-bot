@@ -12,7 +12,8 @@ from typing import Any
 
 from . import VERSION
 
-VERSION_HANDLER_GROUP = -1000
+# Must run before every historical /version owner, including V206 (-1700).
+VERSION_HANDLER_GROUP = -3000
 _VERSION_BUILDER_HOOKED = False
 
 
@@ -40,7 +41,9 @@ async def command(update: Any, context: Any) -> None:
                     f"• медицинская карта: {getattr(runtime, 'MEDICAL_CARD_VERSION', '—')}",
                     f"• покупка кредитов: {getattr(runtime, 'CREDIT_STORE_VERSION', '—')}",
                     f"• AI-селфи: {getattr(runtime, 'CELEBRITY_SELFIE_VERSION', getattr(runtime, 'AI_SELFIE_RUNTIME_VERSION', '—'))}",
-                    f"• сервисное меню селфи: {getattr(runtime, 'SELFIE_ADMIN_VERSION', '—')}",
+                    f"• хранилище героев: {getattr(runtime, 'SELFIE_STORAGE_VERSION', '—')}",
+                    f"• команды AI-селфи: {getattr(runtime, 'SELFIE_COMMANDS_VERSION', '—')}",
+                    f"• маршрут AI-селфи: {getattr(runtime, 'CELEBRITY_SELFIE_ROUTE', '—')}",
                 ])
             lines.append("Render: main.py · Start Command: python -u main.py")
             await message.reply_text("\n".join(lines))
