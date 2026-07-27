@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
-"""V222 strict identity and uploaded-scene owner.
+"""V224 strict identity and uploaded-scene owner.
 
-The V219 flow remains the UI/billing owner. This layer fixes two production
-regressions introduced by V221:
-- all three uploaded user photos and all three hero photos are actually sent;
-- an uploaded scene is sent first and treated as the immutable base image.
+The V219 flow remains the UI/billing owner. This layer keeps the uploaded scene
+as the immutable base image and gives the user substantially stronger identity
+weight than the hero:
+- all three original user photos;
+- a detected face crop derived from each user photo;
+- all three original hero photos;
+- optional uploaded scene sent first as the base image.
 """
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ import threading
 import time
 from typing import Any
 
-VERSION = "v222-selfie-exact-triref-scene-base-2026-07-27"
+VERSION = "v224-selfie-user-face-anchor-scene-lock-2026-07-27"
 _START = False
 
 
@@ -43,7 +46,7 @@ def _prompt(name: str, scene: str, aspect: str, shot_mode: str, has_scene_image:
 
     if has_scene_image:
         scene_rule = (
-            "BASE IMAGE / REFERENCE 1 IS THE USER-UPLOADED SCENE AND IS IMMUTABLE. "
+            "BASE SCENE REFERENCE IS THE USER-UPLOADED PHOTOGRAPH AND IS IMMUTABLE. "
             "THIS IS AN IMAGE-EDITING TASK, NOT A NEW-SCENE GENERATION TASK. "
             "Keep the exact same room, architecture, walls, ceiling, windows, doors, curtains, balcony, radiator, "
             "floor, table, chairs, objects, object positions, camera position, lens perspective, crop, framing, "
@@ -56,14 +59,18 @@ def _prompt(name: str, scene: str, aspect: str, shot_mode: str, has_scene_image:
 
     return (
         f"Create one photorealistic image with exactly two people. Aspect ratio {aspect}. {shot}{scene_rule}"
-        "IDENTITY IS STRICT, NOT APPROXIMATE. "
-        "PERSON A IS THE USER. USER REFERENCES are three different original photographs of the same person. "
-        "Use all three jointly as authoritative identity evidence. Preserve exact face shape, skull/head proportions, "
-        "hairline, hairstyle, eye shape and spacing, eyebrows, nose, lips, cheeks, jaw, chin, ears, skin tone, apparent age, "
-        "facial hair, body build and natural asymmetry. Do not beautify, slim, rejuvenate, age, change ethnicity, average, "
-        "or replace PERSON A with a generic lookalike. Clothing may follow the most recent user reference unless required by the scene. "
-        f"PERSON B IS {name}. HERO REFERENCES are three different original photographs of that same person. "
-        "Use all three jointly and preserve distinctive facial structure, age and proportions. "
+        "USER IDENTITY IS THE HIGHEST PRIORITY IN THE ENTIRE TASK, ABOVE HERO STYLING. "
+        "PERSON A IS THE USER. USER ORIGINAL references are three different original photographs of the same person "
+        "and define body build, apparent age, skin tone, hairstyle, hairline and overall proportions. "
+        "USER FACE CROP references are three close facial anchors derived from those same originals and are the decisive, "
+        "highest-priority evidence for PERSON A's identity. Reproduce the same facial geometry, skull and head shape, "
+        "eye shape and spacing, eyelids, eyebrows, nose width and tip, lips, cheeks, jawline, chin, ears, hairline, facial hair, "
+        "skin texture, skin tone, apparent age and natural asymmetry. Do not beautify, slim, rejuvenate, masculinize, "
+        "feminize, change ethnicity, average the face, or replace PERSON A with a generic lookalike. "
+        "PERSON A must be closest to the camera, near frontal or mild three-quarter view, unobstructed and large enough "
+        "that the face is clearly recognizable; do not make the user's head tiny in the frame. Preserve the user's real body build. "
+        f"PERSON B IS {name}. HERO references are three photographs of that same person and define PERSON B's identity. "
+        "PERSON B may stand slightly behind or beside PERSON A so the user's identity remains dominant. "
         "Keep PERSON A and PERSON B separate. Never merge, swap, average, duplicate or transfer facial features. "
         "Exactly two people only. Realistic anatomy, scale, skin texture, lighting and contact shadows. "
         "No text, logos, watermarks or interface elements. The image is fictional AI-generated fan content."
@@ -74,22 +81,28 @@ def _prepare_stack(base: Any, runtime: Any, identity: Any, user_images: list[byt
     if len(user_images) != 3 or len(hero_images) != 3:
         raise RuntimeError(f"strict stack requires 3 user and 3 hero refs, got {len(user_images)} and {len(hero_images)}")
 
-    raw_stack: list[bytes] = []
+    prepared: list[tuple[str, str]] = []
     labels: list[str] = []
+    ref_no = 1
+
     if scene_image and len(scene_image) > 1024:
-        raw_stack.append(bytes(scene_image))
-        labels.append("REFERENCE 1 — IMMUTABLE BASE SCENE; EDIT THIS EXACT IMAGE; ENVIRONMENT MUST NOT CHANGE")
+        prepared.append(identity._prepare_original(base, runtime, bytes(scene_image)))
+        labels.append(f"REFERENCE {ref_no} — IMMUTABLE BASE SCENE; EDIT THIS EXACT IMAGE; ENVIRONMENT MUST NOT CHANGE")
+        ref_no += 1
 
-    offset = 2 if raw_stack else 1
-    for idx, raw in enumerate(user_images, start=offset):
-        raw_stack.append(bytes(raw))
-        labels.append(f"REFERENCE {idx} — PERSON A / USER IDENTITY PHOTO {idx - offset + 1} OF 3")
-    hero_offset = offset + 3
-    for idx, raw in enumerate(hero_images, start=hero_offset):
-        raw_stack.append(bytes(raw))
-        labels.append(f"REFERENCE {idx} — PERSON B / HERO IDENTITY PHOTO {idx - hero_offset + 1} OF 3")
+    for idx, raw in enumerate(user_images, start=1):
+        prepared.append(identity._prepare_original(base, runtime, bytes(raw)))
+        labels.append(f"REFERENCE {ref_no} — PERSON A / USER ORIGINAL {idx} OF 3: BODY, AGE, HAIR AND PROPORTIONS")
+        ref_no += 1
+        prepared.append(identity._prepare_face(base, runtime, bytes(raw)))
+        labels.append(f"REFERENCE {ref_no} — PERSON A / USER FACE CROP {idx} OF 3: HIGHEST-PRIORITY FACIAL IDENTITY")
+        ref_no += 1
 
-    prepared = [identity._prepare_original(base, runtime, raw) for raw in raw_stack]
+    for idx, raw in enumerate(hero_images, start=1):
+        prepared.append(identity._prepare_original(base, runtime, bytes(raw)))
+        labels.append(f"REFERENCE {ref_no} — PERSON B / HERO IDENTITY PHOTO {idx} OF 3")
+        ref_no += 1
+
     return prepared, labels
 
 
@@ -155,7 +168,7 @@ async def _comet_generate(user_images: list[bytes], slug: str, scene: str, shot_
                     errors.append(f"{model}: response contained no final image")
                 except Exception as exc:
                     errors.append(f"{model}: {type(exc).__name__}: {exc}")
-    raise RuntimeError("Comet V222 generation failed: " + " | ".join(errors[-8:]))
+    raise RuntimeError("Comet V224 generation failed: " + " | ".join(errors[-8:]))
 
 
 def patch_runtime() -> bool:
@@ -164,6 +177,7 @@ def patch_runtime() -> bool:
     from neyrobot_prod import selfie_v220_runtime_marker as v220
 
     v219._prompt = _prompt
+    v219._prepare_stack = _prepare_stack
     v219._comet_generate = _comet_generate
     v219.VERSION = VERSION
     v218.VERSION = VERSION
@@ -176,8 +190,9 @@ def patch_runtime() -> bool:
         runtime.SELFIE_STORAGE_VERSION = VERSION
         runtime.SELFIE_COMMANDS_VERSION = VERSION
         runtime.SELFIE_ADMIN_VERSION = VERSION
-        runtime.CELEBRITY_SELFIE_ROUTE = "v222-scene-first-exact-3-user-3-hero"
+        runtime.CELEBRITY_SELFIE_ROUTE = "v224-scene-first-3-user-3-face-3-hero"
         runtime.AI_SELFIE_USER_REFERENCES = 3
+        runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
         runtime.AI_SELFIE_HERO_REFERENCES = 3
         runtime.AI_SELFIE_SCENE_REFERENCE_POSITION = 1
     return True
@@ -192,7 +207,6 @@ def install_async() -> None:
     _START = True
 
     def worker() -> None:
-        # Keep this owner above all legacy V218/V219/V220 workers for six hours.
         for _ in range(216000):
             try:
                 patch_runtime()
@@ -200,10 +214,10 @@ def install_async() -> None:
                 runtime = _runtime()
                 logger = getattr(runtime, "log", None) if runtime is not None else None
                 with contextlib.suppress(Exception):
-                    logger.exception("V222 selfie patch failed: %r", exc)
+                    logger.exception("V224 selfie patch failed: %r", exc)
             time.sleep(0.1)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-selfie-v222-owner").start()
+    threading.Thread(target=worker, daemon=True, name="neyrobot-selfie-v224-owner").start()
 
 
 def install() -> None:
