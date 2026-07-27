@@ -72,8 +72,15 @@ except Exception as exc:
     print(f"[neyrobot-prod] selfie V220 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Final generation owner: structured face anchors and strict uploaded-scene lock.
+    # Strict three-original-reference generator and uploaded-scene base semantics.
     from neyrobot_prod.selfie_v221_identity_scene_lock import install_async as install_selfie_v221
     install_selfie_v221()
 except Exception as exc:
-    print(f"[neyrobot-prod] selfie V221 warning: {type(exc).__name__}: {exc}")
+    print(f"[neyrobot-prod] selfie V222 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # Deterministic final owner: wraps V218/V219 patch workers so they cannot restore V220.
+    from neyrobot_prod.selfie_v223_deterministic_owner import install_async as install_selfie_v223
+    install_selfie_v223()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V223 warning: {type(exc).__name__}: {exc}")
