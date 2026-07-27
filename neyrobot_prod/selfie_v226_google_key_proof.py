@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """V226 proof layer for the direct Google Gemini selfie route.
 
-This layer deliberately accepts only GEMINI_IMAGE_API_KEY. It removes fallback to
-GEMINI_API_KEY/GOOGLE_API_KEY, logs a non-secret SHA-256 fingerprint of the key,
-and makes the actually used provider/model visible at runtime.
+Only GEMINI_IMAGE_API_KEY is accepted. The route is hard-wired to the V225
+Google implementation and cannot fall back to CometAPI or key aliases.
 """
 from __future__ import annotations
 
@@ -16,10 +15,10 @@ import time
 from typing import Any
 
 from neyrobot_prod import selfie_v221_identity_scene_lock as strict
+from neyrobot_prod import selfie_v225_direct_gemini as direct
 
-VERSION = "v226-selfie-direct-google-key-proof-2026-07-28"
+VERSION = "v226-selfie-direct-google-key-proof-fixed-2026-07-28"
 _STARTED = False
-_ORIGINAL_GENERATE = strict._comet_generate
 
 
 def _runtime() -> Any | None:
@@ -31,7 +30,6 @@ def _runtime() -> Any | None:
 
 
 def _single_google_key() -> str:
-    """Use exactly one Render variable; no aliases and no provider fallback."""
     return (os.environ.get("GEMINI_IMAGE_API_KEY") or "").strip()
 
 
@@ -55,16 +53,16 @@ def _log(message: str, *args: Any) -> None:
 async def _direct_generate(user_images: list[bytes], slug: str, scene: str, shot_mode: str, scene_image: bytes | None) -> bytes:
     key = _single_google_key()
     fp = _fingerprint(key)
-    models = strict._models()
-    base_url = strict._base_url()
+    models = direct._models()
+    base_url = direct._base_url()
     _log(
-        "AI_SELFIE_ROUTE provider=Google-Gemini-direct key_env=GEMINI_IMAGE_API_KEY key_fp=%s models=%s base_url=%s",
+        "AI_SELFIE_ROUTE provider=Google-Gemini-direct-only key_env=GEMINI_IMAGE_API_KEY key_fp=%s models=%s base_url=%s",
         fp,
         ",".join(models),
         base_url,
     )
     if not key:
-        raise RuntimeError("GEMINI_IMAGE_API_KEY is missing; aliases and Comet fallback are disabled")
+        raise RuntimeError("GEMINI_IMAGE_API_KEY is missing; all aliases and Comet fallback are disabled")
 
     runtime = _runtime()
     if runtime is not None:
@@ -73,12 +71,15 @@ async def _direct_generate(user_images: list[bytes], slug: str, scene: str, shot
         runtime.AI_SELFIE_PROVIDER = "Google Gemini direct only"
         runtime.AI_SELFIE_CONFIGURED = True
 
-    output = await _ORIGINAL_GENERATE(user_images, slug, scene, shot_mode, scene_image)
+    # Force the direct implementation to read only this exact variable.
+    direct._google_key = _single_google_key
+    output = await direct._comet_generate(user_images, slug, scene, shot_mode, scene_image)
+
     runtime = _runtime()
     model = str(getattr(runtime, "AI_SELFIE_LAST_MODEL", "unknown") if runtime is not None else "unknown")
     image_size = str(getattr(runtime, "AI_SELFIE_LAST_IMAGE_SIZE", "unknown") if runtime is not None else "unknown")
     _log(
-        "AI_SELFIE_SUCCESS provider=Google-Gemini-direct model=%s image_size=%s key_fp=%s bytes=%s",
+        "AI_SELFIE_SUCCESS provider=Google-Gemini-direct-only model=%s image_size=%s key_fp=%s bytes=%s",
         model,
         image_size,
         fp,
@@ -88,13 +89,22 @@ async def _direct_generate(user_images: list[bytes], slug: str, scene: str, shot
 
 
 def patch_runtime() -> bool:
-    from neyrobot_prod import selfie_v219_triref_scene_owner as v219
     from neyrobot_prod import selfie_v218_runtime_owner as v218
+    from neyrobot_prod import selfie_v219_triref_scene_owner as v219
     from neyrobot_prod import selfie_v220_runtime_marker as v220
 
+    # Make every legacy owner point to the direct Google stack.
+    direct._google_key = _single_google_key
     strict._google_key = _single_google_key
+    strict._models = direct._models
+    strict._base_url = direct._base_url
+    strict._prompt = direct._prompt
+    strict._prepare_stack = direct._prepare_stack
     strict._comet_generate = _direct_generate
     strict.VERSION = VERSION
+
+    v219._prompt = direct._prompt
+    v219._prepare_stack = direct._prepare_stack
     v219._comet_generate = _direct_generate
     v219.VERSION = VERSION
     v218.VERSION = VERSION
@@ -108,12 +118,15 @@ def patch_runtime() -> bool:
         runtime.SELFIE_STORAGE_VERSION = VERSION
         runtime.SELFIE_COMMANDS_VERSION = VERSION
         runtime.SELFIE_ADMIN_VERSION = VERSION
-        runtime.CELEBRITY_SELFIE_ROUTE = "v226-direct-google-only-key-proof"
+        runtime.CELEBRITY_SELFIE_ROUTE = "v226-direct-google-only-3-user-3-face-3-hero"
         runtime.AI_SELFIE_PROVIDER = "Google Gemini direct only"
         runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY"
         runtime.AI_SELFIE_ACTIVE_KEY_FINGERPRINT = _fingerprint(key)
         runtime.AI_SELFIE_CONFIGURED = bool(key)
-        runtime.AI_SELFIE_MODELS = ",".join(strict._models())
+        runtime.AI_SELFIE_MODELS = ",".join(direct._models())
+        runtime.AI_SELFIE_USER_REFERENCES = 3
+        runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
+        runtime.AI_SELFIE_HERO_REFERENCES = 3
     return True
 
 
@@ -131,9 +144,9 @@ def install_async() -> None:
                 patch_runtime()
             except Exception as exc:
                 _log("V226 Google key proof patch failed: %r", exc)
-            time.sleep(0.1)
+            time.sleep(0.05)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-selfie-v226-google-key-proof").start()
+    threading.Thread(target=worker, daemon=True, name="neyrobot-selfie-v226-google-key-proof-fixed").start()
 
 
 def install() -> None:
