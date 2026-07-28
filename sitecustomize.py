@@ -95,8 +95,14 @@ except Exception as exc:
     print(f"[neyrobot-prod] selfie V227 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Final owner: replace the generate function used by the already-bound V219 handler.
     from neyrobot_prod.selfie_v228_force_generate_owner import install_async as install_selfie_v228
     install_selfie_v228()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V228 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # Canonical final owner: removes legacy generation handlers and runs two direct-Google stages.
+    from neyrobot_prod.selfie_v229_canonical_two_stage import install_async as install_selfie_v229
+    install_selfie_v229()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V229 warning: {type(exc).__name__}: {exc}")
