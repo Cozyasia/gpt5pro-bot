@@ -65,36 +65,38 @@ except Exception as exc:
     print(f"[neyrobot-prod] selfie V219 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Visible/runtime owner for the canonical three-user/three-hero flow.
     from neyrobot_prod.selfie_v220_runtime_marker import install_async as install_selfie_v220
     install_selfie_v220()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V220 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Strict three-original-reference generator and uploaded-scene base semantics.
     from neyrobot_prod.selfie_v221_identity_scene_lock import install_async as install_selfie_v221
     install_selfie_v221()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V222 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Deterministic final owner: wraps V218/V219 patch workers so they cannot restore V220.
     from neyrobot_prod.selfie_v223_deterministic_owner import install_async as install_selfie_v223
     install_selfie_v223()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V223 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Final proof owner: only GEMINI_IMAGE_API_KEY is accepted; no alias or Comet fallback.
     from neyrobot_prod.selfie_v226_google_key_proof import install_async as install_selfie_v226
     install_selfie_v226()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V226 warning: {type(exc).__name__}: {exc}")
 
 try:
-    # Highest-priority generation handler dedicated to Celebrity Selfie.
     from neyrobot_prod.selfie_v227_direct_google_handler import install_async as install_selfie_v227
     install_selfie_v227()
 except Exception as exc:
     print(f"[neyrobot-prod] selfie V227 warning: {type(exc).__name__}: {exc}")
+
+try:
+    # Final owner: replace the generate function used by the already-bound V219 handler.
+    from neyrobot_prod.selfie_v228_force_generate_owner import install_async as install_selfie_v228
+    install_selfie_v228()
+except Exception as exc:
+    print(f"[neyrobot-prod] selfie V228 warning: {type(exc).__name__}: {exc}")
