@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Load independent Neyro-Bot runtime layers before main.py."""
+"""Load the production runtime before main.py.
+
+Celebrity Selfie has one owner only. Older V208-V228 owner workers are deliberately
+not started because they continuously rewrote the active generator and caused the
+visible V229 package version to execute the legacy six-reference Comet route.
+"""
 
 try:
     from neyrobot_prod.bootstrap import install_early
@@ -26,83 +31,45 @@ except Exception as exc:
     print(f"[neyrobot-prod] selfie commands warning: {type(exc).__name__}: {exc}")
 
 try:
-    from neyrobot_prod import selfie_v208_overlay as selfie_v208
-    selfie_v208.MODE_LABELS.pop("движки", None)
-    selfie_v208.MODE_LABELS.pop("баланс", None)
-    selfie_v208.MODE_LABELS.pop("баланс/подписка", None)
-    _v208_original_clear = selfie_v208._clear
-    def _v208_clear_all(context, *, keep_photos=True):
-        return _v208_original_clear(context, keep_photos=False)
-    selfie_v208._clear = _v208_clear_all
-    selfie_v208.install_async()
-    from neyrobot_prod.selfie_v208_nav_guard import install_builder_hook as install_selfie_v208_nav_guard
-    install_selfie_v208_nav_guard()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V208 warning: {type(exc).__name__}: {exc}")
+    # V219 owns the complete three-photo UI/media flow. Its owner loop is retained,
+    # but its patch function is wrapped so every iteration finishes by installing
+    # the canonical two-stage direct-Google generator. No competing owner loops are
+    # started anywhere else in this file.
+    from neyrobot_prod import selfie_v219_triref_scene_owner as selfie_v219
+    from neyrobot_prod import selfie_v229_canonical_two_stage as selfie_v229
 
-try:
-    from neyrobot_prod.selfie_v209_canonical import install_async as install_selfie_v209
-    install_selfie_v209()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V209 warning: {type(exc).__name__}: {exc}")
+    CANONICAL_SELFIE_VERSION = "v230-selfie-single-owner-two-stage-google-2026-07-28"
+    _v219_original_patch_runtime = selfie_v219.patch_runtime
 
-try:
-    from neyrobot_prod.selfie_v217_user_triref import install_async as install_selfie_v217
-    install_selfie_v217()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V217 warning: {type(exc).__name__}: {exc}")
+    def _canonical_selfie_patch_runtime():
+        result = _v219_original_patch_runtime()
+        selfie_v229.VERSION = CANONICAL_SELFIE_VERSION
+        selfie_v229.patch_runtime()
 
-try:
-    from neyrobot_prod.selfie_v218_runtime_owner import install_async as install_selfie_v218
-    install_selfie_v218()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V218 warning: {type(exc).__name__}: {exc}")
+        # Source-level aliases used by the already-bound V219 callback are resolved
+        # at call time. Set them after every V219 patch, so the legacy generator and
+        # its six-reference Comet caption cannot execute.
+        selfie_v219.VERSION = CANONICAL_SELFIE_VERSION
+        selfie_v219.generate = selfie_v229.generate
 
-try:
-    from neyrobot_prod.selfie_v219_triref_scene_owner import install_async as install_selfie_v219
-    install_selfie_v219()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V219 warning: {type(exc).__name__}: {exc}")
+        runtime = selfie_v229._runtime()
+        if runtime is not None:
+            runtime.CELEBRITY_SELFIE_VERSION = CANONICAL_SELFIE_VERSION
+            runtime.AI_SELFIE_RUNTIME_VERSION = CANONICAL_SELFIE_VERSION
+            runtime.SELFIE_STORAGE_VERSION = CANONICAL_SELFIE_VERSION
+            runtime.SELFIE_COMMANDS_VERSION = CANONICAL_SELFIE_VERSION
+            runtime.SELFIE_ADMIN_VERSION = CANONICAL_SELFIE_VERSION
+            runtime.CELEBRITY_SELFIE_ROUTE = "v230-single-owner-direct-google-two-stage-9-or-10-refs"
+            runtime.AI_SELFIE_PROVIDER = "Google Gemini direct only"
+            runtime.AI_SELFIE_GENERATION_STAGES = 2
+            runtime.AI_SELFIE_USER_REFERENCES = 3
+            runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
+            runtime.AI_SELFIE_HERO_REFERENCES = 3
+        return result
 
-try:
-    from neyrobot_prod.selfie_v220_runtime_marker import install_async as install_selfie_v220
-    install_selfie_v220()
+    selfie_v219.patch_runtime = _canonical_selfie_patch_runtime
+    selfie_v219.install_async()
+    selfie_v229.install_async()
+    _canonical_selfie_patch_runtime()
 except Exception as exc:
-    print(f"[neyrobot-prod] selfie V220 warning: {type(exc).__name__}: {exc}")
-
-try:
-    from neyrobot_prod.selfie_v221_identity_scene_lock import install_async as install_selfie_v221
-    install_selfie_v221()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V222 warning: {type(exc).__name__}: {exc}")
-
-try:
-    from neyrobot_prod.selfie_v223_deterministic_owner import install_async as install_selfie_v223
-    install_selfie_v223()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V223 warning: {type(exc).__name__}: {exc}")
-
-try:
-    from neyrobot_prod.selfie_v226_google_key_proof import install_async as install_selfie_v226
-    install_selfie_v226()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V226 warning: {type(exc).__name__}: {exc}")
-
-try:
-    from neyrobot_prod.selfie_v227_direct_google_handler import install_async as install_selfie_v227
-    install_selfie_v227()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V227 warning: {type(exc).__name__}: {exc}")
-
-try:
-    from neyrobot_prod.selfie_v228_force_generate_owner import install_async as install_selfie_v228
-    install_selfie_v228()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V228 warning: {type(exc).__name__}: {exc}")
-
-try:
-    # Canonical final owner: removes legacy generation handlers and runs two direct-Google stages.
-    from neyrobot_prod.selfie_v229_canonical_two_stage import install_async as install_selfie_v229
-    install_selfie_v229()
-except Exception as exc:
-    print(f"[neyrobot-prod] selfie V229 warning: {type(exc).__name__}: {exc}")
+    print(f"[neyrobot-prod] canonical selfie V230 warning: {type(exc).__name__}: {exc}")
