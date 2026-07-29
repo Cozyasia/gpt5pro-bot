@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Load the production runtime before main.py.
 
-V233 preserves the V232 code on backup/v232-2026-07-29-before-v233 and activates
-one direct-Google body-first / localized-face-transplant Celebrity Selfie owner.
-Only GEMINI_IMAGE_API_KEY is accepted; Comet selfie generation is disabled.
+V234 preserves V233 on backup/v233-2026-07-29-before-v234 and activates one
+hybrid owner: direct Google Gemini for scene/body composition followed by a
+specialized PiAPI FaceSwap crop/composite pass for the user's real face.
 """
 
 import contextlib
@@ -35,12 +35,12 @@ except Exception as exc:
 try:
     from telegram.ext import ApplicationBuilder
     from neyrobot_prod import selfie_v219_triref_scene_owner as selfie_ui
-    from neyrobot_prod import selfie_v233_body_face_transplant as selfie_google
+    from neyrobot_prod import selfie_v233_body_face_transplant as selfie_v233
+    from neyrobot_prod import selfie_v234_hybrid_faceswap as selfie_hybrid
 
-    CANONICAL_SELFIE_VERSION = "v233-selfie-body-face-transplant-google-2026-07-29"
+    CANONICAL_SELFIE_VERSION = "v234-selfie-hybrid-real-faceswap-2026-07-29"
 
-    # Prepare the proven three-face UI once, then permanently stop every legacy
-    # owner/rebinding path that could restore the six-reference Comet generator.
+    # Prepare the proven UI, then permanently stop every legacy rebinding path.
     selfie_ui.patch_runtime()
 
     def _legacy_noop(*args, **kwargs):
@@ -52,55 +52,57 @@ try:
     selfie_ui.install_async = lambda *args, **kwargs: None
     selfie_ui.install = lambda *args, **kwargs: None
 
-    selfie_google.VERSION = CANONICAL_SELFIE_VERSION
+    selfie_hybrid.VERSION = CANONICAL_SELFIE_VERSION
+    selfie_v233.VERSION = CANONICAL_SELFIE_VERSION
     selfie_ui.VERSION = CANONICAL_SELFIE_VERSION
 
     async def _disabled_comet_route(*args, **kwargs):
-        raise RuntimeError("Legacy Comet selfie route is disabled by V233")
+        raise RuntimeError("Legacy Comet selfie route is disabled by V234")
 
     def _force_canonical_aliases() -> None:
-        selfie_ui.generate = selfie_google.generate
-        selfie_ui.public_callback.__globals__["generate"] = selfie_google.generate
+        selfie_v233.generate = selfie_hybrid.generate
+        selfie_ui.generate = selfie_hybrid.generate
+        selfie_ui.public_callback.__globals__["generate"] = selfie_hybrid.generate
         selfie_ui._comet_generate = _disabled_comet_route
         with contextlib.suppress(Exception):
             selfie_ui.public_callback.__globals__["_comet_generate"] = _disabled_comet_route
-        selfie_google.patch_runtime()
+        selfie_hybrid.patch_runtime()
 
     _force_canonical_aliases()
 
-    _builder_flag = "_neyrobot_v233_body_face_builder_hooked"
+    _builder_flag = "_neyrobot_v234_hybrid_faceswap_builder_hooked"
     if not getattr(ApplicationBuilder, _builder_flag, False):
         _original_build = ApplicationBuilder.build
 
         def _build_with_canonical_selfie(self, *args, **kwargs):
             app = _original_build(self, *args, **kwargs)
             _force_canonical_aliases()
-            selfie_google.bind_application(app)
+            selfie_hybrid.bind_application(app)
             _force_canonical_aliases()
             return app
 
         ApplicationBuilder.build = _build_with_canonical_selfie
         setattr(ApplicationBuilder, _builder_flag, True)
 
-    selfie_google.install_async()
+    selfie_hybrid.install_async()
     _force_canonical_aliases()
 
-    runtime = selfie_google._runtime()
+    runtime = selfie_hybrid._runtime()
     if runtime is not None:
         runtime.CELEBRITY_SELFIE_VERSION = CANONICAL_SELFIE_VERSION
         runtime.AI_SELFIE_RUNTIME_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_STORAGE_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_COMMANDS_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_ADMIN_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.CELEBRITY_SELFIE_ROUTE = "v233-body-first-localized-face-transplant-google-three-stage"
-        runtime.AI_SELFIE_PROVIDER = "Google Gemini direct only"
-        runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY"
+        runtime.CELEBRITY_SELFIE_ROUTE = "v234-google-scene-plus-piapi-real-faceswap-crop-composite"
+        runtime.AI_SELFIE_PROVIDER = "Google Gemini + PiAPI FaceSwap"
+        runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY + PIAPI_API_KEY"
         runtime.AI_SELFIE_GENERATION_STAGES = 3
         runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
-        runtime.AI_SELFIE_USER_FACE_CROPS = 3
         runtime.AI_SELFIE_USER_FULL_BODY_REFERENCES = 1
         runtime.AI_SELFIE_HERO_REFERENCES = 3
+        runtime.AI_SELFIE_REAL_FACESWAP = True
 
-    print("[neyrobot-prod] V233 body-first face-transplant direct-Google owner installed", flush=True)
+    print("[neyrobot-prod] V234 hybrid Gemini + real PiAPI FaceSwap owner installed", flush=True)
 except Exception as exc:
-    print(f"[neyrobot-prod] canonical selfie V233 warning: {type(exc).__name__}: {exc}")
+    print(f"[neyrobot-prod] canonical selfie V234 warning: {type(exc).__name__}: {exc}")
