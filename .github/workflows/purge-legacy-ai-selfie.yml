@@ -28,19 +28,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Purge obsolete source
+      - name: Back up current main.py
+        run: cp main.py main.py.pre-ai-selfie-purge.bak
+      - name: Physically purge obsolete AI-selfie source
         run: |
           python tools/purge_legacy_ai_selfie.py main.py
-          python -m py_compile main.py sitecustomize.py tools/purge_legacy_ai_selfie.py
-          ! grep -RniE 'aiselfie|ai_selfie|celebrity_selfie|awaiting_ai_selfie|as_preset_|AI-селфи со звездой|селфи со звездой' --include='*.py' --exclude='purge_legacy_ai_selfie.py' .
-      - name: Commit sanitized main
+          python -m py_compile main.py tools/purge_legacy_ai_selfie.py
+          ! grep -RniE 'aiselfie|ai_selfie|celebrity_selfie|awaiting_ai_selfie|as_preset_|AI-селфи со звездой|AI-селфи со знаменитостью|селфи со звездой|селфи со знаменитостью|cs20[1-9]|cs21[0-9]|cs22[0-9]|cs23[0-9]' --include='*.py' --exclude='purge_legacy_ai_selfie.py' --exclude='main.py.pre-ai-selfie-purge.bak' .
+      - name: Commit physically sanitized source
         run: |
           if git diff --quiet -- main.py; then
-            echo 'main.py is already clean'
-            exit 0
+            echo 'ERROR: purge produced no physical main.py change'
+            exit 1
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add main.py
-          git commit -m 'Purge legacy AI selfie implementation from main [skip selfie purge]'
+          git add main.py main.py.pre-ai-selfie-purge.bak
+          git commit -m 'Physically remove legacy AI selfie feature from main [skip selfie purge]'
           git push origin HEAD:main
