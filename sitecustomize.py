@@ -37,10 +37,10 @@ try:
     from neyrobot_prod import selfie_v219_triref_scene_owner as selfie_ui
     from neyrobot_prod import selfie_v233_body_face_transplant as selfie_v233
     from neyrobot_prod import selfie_v234_hybrid_faceswap as selfie_hybrid
+    from neyrobot_prod import selfie_v234_full_body_guard as selfie_media_guard
 
     CANONICAL_SELFIE_VERSION = "v234-selfie-hybrid-real-faceswap-2026-07-29"
 
-    # Prepare the proven UI, then permanently stop every legacy rebinding path.
     selfie_ui.patch_runtime()
 
     def _legacy_noop(*args, **kwargs):
@@ -78,6 +78,7 @@ try:
             app = _original_build(self, *args, **kwargs)
             _force_canonical_aliases()
             selfie_hybrid.bind_application(app)
+            selfie_media_guard.bind_application(app)
             _force_canonical_aliases()
             return app
 
