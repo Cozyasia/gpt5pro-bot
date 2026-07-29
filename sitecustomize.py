@@ -59,24 +59,6 @@ try:
     async def _disabled_comet_route(*args, **kwargs):
         raise RuntimeError("Legacy Comet selfie route is disabled by V234")
 
-    def _publish_runtime_metadata() -> None:
-        runtime = selfie_hybrid._runtime()
-        if runtime is None:
-            return
-        runtime.CELEBRITY_SELFIE_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.AI_SELFIE_RUNTIME_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.SELFIE_STORAGE_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.SELFIE_COMMANDS_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.SELFIE_ADMIN_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.CELEBRITY_SELFIE_ROUTE = "v234-google-scene-plus-piapi-real-faceswap-crop-composite"
-        runtime.AI_SELFIE_PROVIDER = "Google Gemini + PiAPI FaceSwap"
-        runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY + PIAPI_API_KEY"
-        runtime.AI_SELFIE_GENERATION_STAGES = 3
-        runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
-        runtime.AI_SELFIE_USER_FULL_BODY_REFERENCES = 1
-        runtime.AI_SELFIE_HERO_REFERENCES = 3
-        runtime.AI_SELFIE_REAL_FACESWAP = True
-
     def _force_canonical_aliases() -> None:
         selfie_v233.generate = selfie_hybrid.generate
         selfie_ui.generate = selfie_hybrid.generate
@@ -85,7 +67,6 @@ try:
         with contextlib.suppress(Exception):
             selfie_ui.public_callback.__globals__["_comet_generate"] = _disabled_comet_route
         selfie_hybrid.patch_runtime()
-        _publish_runtime_metadata()
 
     _force_canonical_aliases()
 
@@ -99,7 +80,6 @@ try:
             selfie_hybrid.bind_application(app)
             selfie_media_guard.bind_application(app)
             _force_canonical_aliases()
-            _publish_runtime_metadata()
             return app
 
         ApplicationBuilder.build = _build_with_canonical_selfie
@@ -107,7 +87,22 @@ try:
 
     selfie_hybrid.install_async()
     _force_canonical_aliases()
-    _publish_runtime_metadata()
+
+    runtime = selfie_hybrid._runtime()
+    if runtime is not None:
+        runtime.CELEBRITY_SELFIE_VERSION = CANONICAL_SELFIE_VERSION
+        runtime.AI_SELFIE_RUNTIME_VERSION = CANONICAL_SELFIE_VERSION
+        runtime.SELFIE_STORAGE_VERSION = CANONICAL_SELFIE_VERSION
+        runtime.SELFIE_COMMANDS_VERSION = CANONICAL_SELFIE_VERSION
+        runtime.SELFIE_ADMIN_VERSION = CANONICAL_SELFIE_VERSION
+        runtime.CELEBRITY_SELFIE_ROUTE = "v234-google-scene-plus-piapi-real-faceswap-crop-composite"
+        runtime.AI_SELFIE_PROVIDER = "Google Gemini + PiAPI FaceSwap"
+        runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY + PIAPI_API_KEY"
+        runtime.AI_SELFIE_GENERATION_STAGES = 3
+        runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
+        runtime.AI_SELFIE_USER_FULL_BODY_REFERENCES = 1
+        runtime.AI_SELFIE_HERO_REFERENCES = 3
+        runtime.AI_SELFIE_REAL_FACESWAP = True
 
     print("[neyrobot-prod] V234 hybrid Gemini + real PiAPI FaceSwap owner installed", flush=True)
 except Exception as exc:
