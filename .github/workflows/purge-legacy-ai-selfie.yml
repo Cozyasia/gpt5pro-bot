@@ -1,0 +1,46 @@
+name: Purge legacy AI selfie source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - tools/purge_legacy_ai_selfie.py
+      - sitecustomize.py
+      - .github/workflows/purge-legacy-ai-selfie.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: purge-legacy-ai-selfie-main
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    if: ${{ !contains(github.event.head_commit.message || '', '[skip selfie purge]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Purge obsolete source
+        run: |
+          python tools/purge_legacy_ai_selfie.py main.py
+          python -m py_compile main.py sitecustomize.py tools/purge_legacy_ai_selfie.py
+          ! grep -RniE 'aiselfie|ai_selfie|celebrity_selfie|awaiting_ai_selfie|as_preset_|AI-селфи со звездой|селфи со звездой' --include='*.py' --exclude='purge_legacy_ai_selfie.py' .
+      - name: Commit sanitized main
+        run: |
+          if git diff --quiet -- main.py; then
+            echo 'main.py is already clean'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.py
+          git commit -m 'Purge legacy AI selfie implementation from main [skip selfie purge]'
+          git push origin HEAD:main
