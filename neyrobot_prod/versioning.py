@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Canonical Telegram /version owner for Neyro-Bot releases.
-
-The legacy monolith and historical runtime overlays may still expose their own
-``PATCH_VERSION`` attributes. The public /version command is owned by the
-package release and reports component versions separately.
-"""
+"""Canonical Telegram /version owner for Neyro-Bot releases."""
 from __future__ import annotations
 
 import os
@@ -13,8 +8,6 @@ from typing import Any
 
 from . import VERSION
 
-# Run before every historical /version owner. A deliberately distant group
-# prevents old overlays from taking ownership again after future refactors.
 VERSION_HANDLER_GROUP = -100000
 _VERSION_BUILDER_HOOKED = False
 
@@ -28,13 +21,11 @@ def _runtime_module() -> Any | None:
 
 
 def _deploy_revision() -> str:
-    """Return Render's deployed Git revision without exposing environment data."""
     raw = (os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or "").strip()
     return raw[:7] if raw else "unknown"
 
 
 async def command(update: Any, context: Any) -> None:
-    """Return the package release plus the active production component versions."""
     from telegram.ext import ApplicationHandlerStop
 
     try:
@@ -48,10 +39,6 @@ async def command(update: Any, context: Any) -> None:
                     f"• медицина: {getattr(runtime, 'MEDICAL_ENGINE_VERSION', '—')}",
                     f"• медицинская карта: {getattr(runtime, 'MEDICAL_CARD_VERSION', '—')}",
                     f"• покупка кредитов: {getattr(runtime, 'CREDIT_STORE_VERSION', '—')}",
-                    f"• AI-селфи: {getattr(runtime, 'CELEBRITY_SELFIE_VERSION', getattr(runtime, 'AI_SELFIE_RUNTIME_VERSION', '—'))}",
-                    f"• хранилище героев: {getattr(runtime, 'SELFIE_STORAGE_VERSION', '—')}",
-                    f"• команды AI-селфи: {getattr(runtime, 'SELFIE_COMMANDS_VERSION', '—')}",
-                    f"• маршрут AI-селфи: {getattr(runtime, 'CELEBRITY_SELFIE_ROUTE', '—')}",
                 ])
             lines.append(f"Git revision: {_deploy_revision()}")
             lines.append("Render: main.py · Start Command: python -u main.py")
@@ -61,7 +48,6 @@ async def command(update: Any, context: Any) -> None:
 
 
 def install_builder_hook() -> bool:
-    """Install exactly one highest-priority /version handler."""
     global _VERSION_BUILDER_HOOKED
     if _VERSION_BUILDER_HOOKED:
         return True
