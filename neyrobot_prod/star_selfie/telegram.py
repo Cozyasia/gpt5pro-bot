@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from typing import Any
 
 from .catalog.runtime import runtime_catalog
@@ -11,6 +12,7 @@ from .models import CaptureMode, GenerationRequest
 
 _STATE_KEY = "star_selfie_flow"
 _CALLBACK_PREFIX = "starselfie:"
+_LOGGER = logging.getLogger("gpt-bot.star-selfie")
 
 
 def _catalog(config: StarSelfieConfig):
@@ -152,17 +154,22 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
                 photo=image,
                 caption=f"✅ Готово: {character.title}",
             )
+        getattr(context.application, "bot_data", {}).pop("star_selfie_last_error", None)
         _clear(context)
     except Exception as exc:
         state["step"] = "photo"
+        error_text = f"{type(exc).__name__}: {exc}"[:1800]
+        getattr(context.application, "bot_data", {})["star_selfie_last_error"] = error_text
+        _LOGGER.exception(
+            "Star Selfie generation failed user_id=%s character=%s mode=%s",
+            user_id,
+            character.slug,
+            state.get("mode"),
+        )
         with contextlib.suppress(Exception):
             await progress.edit_text(
                 "❌ Не удалось завершить генерацию. Отправьте фотографию ещё раз или отмените командой /cancel_star_selfie."
             )
-        runtime = getattr(context.application, "bot_data", {}).get("star_selfie_runtime_logger")
-        if runtime is not None:
-            with contextlib.suppress(Exception):
-                runtime.exception("Star Selfie generation failed", exc_info=exc)
     finally:
         with contextlib.suppress(OSError):
             await asyncio.to_thread(source_path.unlink)
