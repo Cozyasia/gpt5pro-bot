@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from ..errors import CatalogError
@@ -10,6 +11,20 @@ from .schema import character_from_dict, character_to_dict
 
 class CharacterCatalog:
     def __init__(self, catalog_path: Path, references_root: Path):
+        references_root = references_root.resolve()
+        persistent_path = references_root.parent / "catalog.json"
+        seed_path = catalog_path.resolve()
+
+        # Repository assets are immutable deployment seeds. Runtime mutations must
+        # survive redeploys in the same persistent root as character references.
+        if seed_path != persistent_path.resolve():
+            persistent_path.parent.mkdir(parents=True, exist_ok=True)
+            if not persistent_path.exists() and seed_path.is_file():
+                temp_path = persistent_path.with_suffix(".json.tmp")
+                shutil.copy2(seed_path, temp_path)
+                temp_path.replace(persistent_path)
+            catalog_path = persistent_path
+
         self.catalog_path = catalog_path
         self.references_root = references_root
 
