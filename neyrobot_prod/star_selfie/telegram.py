@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from pathlib import Path
 from typing import Any
 
-from .catalog.store import CharacterCatalog
+from .catalog.runtime import runtime_catalog
 from .config import StarSelfieConfig
 from .factory import build_pipeline
 from .models import CaptureMode, GenerationRequest
@@ -14,11 +13,8 @@ _STATE_KEY = "star_selfie_flow"
 _CALLBACK_PREFIX = "starselfie:"
 
 
-def _catalog(config: StarSelfieConfig) -> CharacterCatalog:
-    catalog_path = config.seed_catalog_path
-    if not catalog_path.is_absolute():
-        catalog_path = config.project_root / catalog_path
-    return CharacterCatalog(catalog_path, config.persistent_root / "references")
+def _catalog(config: StarSelfieConfig):
+    return runtime_catalog(config)
 
 
 def _state(context: Any) -> dict[str, Any]:
