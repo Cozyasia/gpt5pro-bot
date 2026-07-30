@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "characters": {
+    "roman_abramovich": {
+      "title": "Роман Абрамович",
+      "aliases": ["роман абрамович", "абрамович", "roman abramovich"],
+      "active": false,
+      "source": "verified_v200_seed",
+      "references": ["ref_01.jpg", "ref_02.jpg", "ref_03.jpg"],
+      "restore_status": "metadata_restored_references_pending_copy"
+    }
+  }
+}
