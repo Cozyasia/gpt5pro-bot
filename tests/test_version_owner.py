@@ -30,7 +30,7 @@ class VersionOwnerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(message.calls), 1)
         self.assertIn(VERSION, message.calls[0][0])
-        self.assertEqual(VERSION, "v206-selfie-command-routing-2026-07-25")
+        self.assertTrue(VERSION.startswith("v239-"))
 
     def test_version_handler_has_priority_over_all_legacy_groups(self) -> None:
         self.assertLess(VERSION_HANDLER_GROUP, -100)
@@ -40,8 +40,9 @@ class VersionOwnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("{VERSION}", source)
         self.assertNotIn("PATCH_VERSION", source)
 
-    def test_sitecustomize_activates_the_canonical_owner(self) -> None:
-        source = Path("sitecustomize.py").read_text(encoding="utf-8")
+    def test_secret_loader_activates_the_canonical_owner(self) -> None:
+        source = Path("secret_loader.py").read_text(encoding="utf-8")
+        self.assertIn("install_version_owner", source)
         self.assertIn("install_version_owner()", source)
 
 
