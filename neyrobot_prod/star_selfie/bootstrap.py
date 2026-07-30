@@ -38,11 +38,13 @@ def install_builder_hook(project_root: Path | None = None) -> bool:
         if not _enabled() or getattr(app, "_star_selfie_handlers", False):
             return app
         try:
+            from .admin import register_handlers as register_admin_handlers
             from .config import StarSelfieConfig
             from .telegram import register_handlers
 
             config = StarSelfieConfig.from_env(root)
             register_handlers(app, config)
+            register_admin_handlers(app, config)
         except Exception as exc:
             with contextlib.suppress(Exception):
                 app.bot_data["star_selfie_boot_error"] = f"{type(exc).__name__}: {exc}"
