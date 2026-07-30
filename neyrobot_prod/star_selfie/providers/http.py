@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import mimetypes
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -14,7 +13,7 @@ class ProviderHTTPError(RuntimeError):
     pass
 
 
-def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: int) -> dict[str, Any]:
+def _request(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: int) -> tuple[bytes, str]:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -23,12 +22,16 @@ def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeo
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read()
+            return response.read(), response.headers.get("Content-Type", "")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         raise ProviderHTTPError(f"provider HTTP {exc.code}: {body[:1000]}") from exc
     except urllib.error.URLError as exc:
         raise ProviderHTTPError(f"provider connection failed: {exc.reason}") from exc
+
+
+def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: int) -> dict[str, Any]:
+    raw, _ = _request(url, headers, payload, timeout)
     try:
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -41,6 +44,31 @@ def _guess_mime(data: bytes) -> str:
     if data.startswith(b"RIFF") and b"WEBP" in data[:16]:
         return "image/webp"
     return "image/jpeg"
+
+
+def _is_image(data: bytes) -> bool:
+    return data.startswith((b"\xff\xd8\xff", b"\x89PNG")) or (
+        data.startswith(b"RIFF") and b"WEBP" in data[:16]
+    )
+
+
+def _decode_image_value(value: Any) -> bytes:
+    if isinstance(value, list) and value:
+        value = value[0]
+    if isinstance(value, dict):
+        for key in ("image", "url", "output"):
+            if key in value:
+                return _decode_image_value(value[key])
+    if not isinstance(value, str):
+        raise ProviderHTTPError("provider image result is not a string")
+    if value.startswith("data:"):
+        _, encoded = value.split(",", 1)
+        return base64.b64decode(encoded, validate=True)
+    if value.startswith("http://") or value.startswith("https://"):
+        request = urllib.request.Request(value, headers={"User-Agent": "GPT5Pro-StarSelfie/1.0"})
+        with urllib.request.urlopen(request, timeout=600) as response:
+            return response.read()
+    return base64.b64decode(value, validate=True)
 
 
 def _lookup(payload: Any, dotted_path: str) -> Any:
@@ -59,11 +87,11 @@ def _lookup(payload: Any, dotted_path: str) -> Any:
 class GeminiRESTTransport:
     api_key: str
     timeout_s: int = 600
-    api_base: str = "https://generativelanguage.googleapis.com/v1/models"
+    api_base: str = "https://generativelanguage.googleapis.com/v1beta/models"
 
     async def generate_image(self, *, prompt: str, references: list[bytes], model: str) -> bytes:
         if not self.api_key:
-            raise ProviderHTTPError("GEMINI_API_KEY is not configured")
+            raise ProviderHTTPError("Gemini image API key is not configured")
         parts: list[dict[str, Any]] = [{"text": prompt}]
         parts.extend(
             {
@@ -94,12 +122,51 @@ class GeminiRESTTransport:
 
 
 @dataclass(slots=True)
-class GenericFaceSwapRESTTransport:
-    """Synchronous JSON Face Swap adapter.
+class SegmindFaceSwapRESTTransport:
+    endpoint: str
+    api_key: str
+    timeout_s: int = 600
+    face_restore: str = "codeformer-v0.1.0.pth"
 
-    The endpoint must accept source_image and target_image as data URLs and return
-    either a base64 image or an image URL at the configured dotted JSON path.
-    """
+    async def swap(self, *, source_face: bytes, target_scene: bytes) -> bytes:
+        if not self.endpoint:
+            raise ProviderHTTPError("Segmind FaceSwap URL is not configured")
+        if not self.api_key:
+            raise ProviderHTTPError("SEGMIND_API_KEY is not configured")
+        payload = {
+            "source_img": self._data_url(source_face),
+            "target_img": self._data_url(target_scene),
+            "input_faces_index": "0",
+            "source_faces_index": "0",
+            "face_restore": self.face_restore,
+            "base64": False,
+        }
+        raw, content_type = await asyncio.to_thread(
+            _request,
+            self.endpoint,
+            {"x-api-key": self.api_key, "Accept": "image/*, application/json"},
+            payload,
+            self.timeout_s,
+        )
+        if content_type.lower().startswith("image/") or _is_image(raw):
+            return raw
+        try:
+            response = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ProviderHTTPError("Segmind returned neither an image nor valid JSON") from exc
+        for key in ("output", "image", "data"):
+            if key in response:
+                return _decode_image_value(response[key])
+        raise ProviderHTTPError("Segmind response did not contain an image")
+
+    @staticmethod
+    def _data_url(data: bytes) -> str:
+        return f"data:{_guess_mime(data)};base64,{base64.b64encode(data).decode('ascii')}"
+
+
+@dataclass(slots=True)
+class GenericFaceSwapRESTTransport:
+    """Synchronous JSON Face Swap adapter for custom providers."""
 
     endpoint: str
     api_key: str
@@ -123,21 +190,8 @@ class GenericFaceSwapRESTTransport:
             result = _lookup(response, self.result_path)
         except (KeyError, IndexError, ValueError, TypeError) as exc:
             raise ProviderHTTPError(f"Face Swap result path not found: {self.result_path}") from exc
-        if not isinstance(result, str):
-            raise ProviderHTTPError("Face Swap result is not a string")
-        if result.startswith("data:"):
-            _, encoded = result.split(",", 1)
-            return base64.b64decode(encoded, validate=True)
-        if result.startswith("http://") or result.startswith("https://"):
-            return await asyncio.to_thread(self._download, result)
-        return base64.b64decode(result, validate=True)
-
-    def _download(self, url: str) -> bytes:
-        request = urllib.request.Request(url, headers={"User-Agent": "GPT5Pro-StarSelfie/1.0"})
-        with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
-            return response.read()
+        return _decode_image_value(result)
 
     @staticmethod
     def _data_url(data: bytes) -> str:
-        mime = _guess_mime(data)
-        return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+        return f"data:{_guess_mime(data)};base64,{base64.b64encode(data).decode('ascii')}"
