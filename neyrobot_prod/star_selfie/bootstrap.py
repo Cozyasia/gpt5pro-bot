@@ -40,9 +40,11 @@ def install_builder_hook(project_root: Path | None = None) -> bool:
         try:
             from .admin import register_handlers as register_admin_handlers
             from .config import StarSelfieConfig
+            from .diagnostics import register_handler as register_diagnostics_handler
             from .telegram import register_handlers
 
             config = StarSelfieConfig.from_env(root)
+            register_diagnostics_handler(app, config)
             register_handlers(app, config)
             register_admin_handlers(app, config)
         except Exception as exc:
