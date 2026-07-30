@@ -24,7 +24,12 @@ def _writable(path: Path) -> bool:
         return False
 
 
-def build_report(config: StarSelfieConfig, *, boot_error: str = "") -> str:
+def build_report(
+    config: StarSelfieConfig,
+    *,
+    boot_error: str = "",
+    last_error: str = "",
+) -> str:
     catalog = runtime_catalog(config)
     characters = catalog.load()
     ready = [
@@ -57,23 +62,26 @@ def build_report(config: StarSelfieConfig, *, boot_error: str = "") -> str:
         f"Активны и готовы: {len(active_ready)}",
         f"Отсутствующих файлов: {missing_refs}",
         f"Boot error: {boot_error or 'нет'}",
+        f"Последняя ошибка генерации: {last_error or 'нет'}",
     ]
 
     blockers: list[str] = []
     if not config.enabled:
         blockers.append("STAR_SELFIE_ENABLED выключен")
     if not config.gemini_api_key:
-        blockers.append("нет GEMINI_API_KEY")
+        blockers.append("нет Gemini API key")
     if not config.face_swap_url:
-        blockers.append("нет STAR_SELFIE_FACE_SWAP_URL")
+        blockers.append("нет Face Swap URL")
     if not config.face_swap_api_key:
-        blockers.append("нет STAR_SELFIE_FACE_SWAP_API_KEY")
+        blockers.append("нет Face Swap API key")
     if not admin_configured:
         blockers.append("не настроен OWNER_ID/STAR_SELFIE_ADMIN_IDS")
     if not active_ready:
         blockers.append("нет активного героя с 3–6 референсами")
     if boot_error:
         blockers.append("ошибка bootstrap")
+    if last_error:
+        blockers.append("последняя генерация завершилась ошибкой")
 
     lines.extend(["", "Итог: " + ("✅ готово к smoke test" if not blockers else "⚠️ есть блокеры")])
     lines.extend(f"• {item}" for item in blockers)
@@ -84,8 +92,12 @@ async def command(update: Any, context: Any, config: StarSelfieConfig) -> None:
     if not is_admin(update.effective_user):
         await update.effective_message.reply_text("Команда доступна владельцу бота.")
         return
-    boot_error = str(getattr(context.application, "bot_data", {}).get("star_selfie_boot_error", "") or "")
-    await update.effective_message.reply_text(build_report(config, boot_error=boot_error))
+    bot_data = getattr(context.application, "bot_data", {})
+    boot_error = str(bot_data.get("star_selfie_boot_error", "") or "")
+    last_error = str(bot_data.get("star_selfie_last_error", "") or "")
+    await update.effective_message.reply_text(
+        build_report(config, boot_error=boot_error, last_error=last_error)
+    )
 
 
 def register_handler(app: Any, config: StarSelfieConfig, *, group: int = -99) -> bool:
