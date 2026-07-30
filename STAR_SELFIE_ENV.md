@@ -11,6 +11,16 @@ STAR_SELFIE_FACE_SWAP_URL=https://provider.example/v1/face-swap
 STAR_SELFIE_FACE_SWAP_API_KEY=...
 ```
 
+## Owner admin panel
+
+The hidden catalog panel is opened with `/star_admin`. Access is granted only to the runtime `OWNER_ID` and IDs explicitly listed below.
+
+```env
+STAR_SELFIE_ADMIN_IDS=123456789
+```
+
+Multiple IDs may be comma-separated. The upload flow is completed with `/star_admin_done` after 3–6 reference images have been sent.
+
 ## Optional
 
 ```env
@@ -25,6 +35,8 @@ STAR_SELFIE_SEED_CATALOG=assets/star_selfie/catalog.json
 STAR_SELFIE_TIMEOUT_S=600
 STAR_SELFIE_MAX_ATTEMPTS=2
 ```
+
+Runtime catalog mutations are stored in `STAR_SELFIE_DATA_ROOT/catalog.json`. The repository catalog is used only as the first-run seed, so admin changes survive deploys when the data root is mounted persistently.
 
 The generic Face Swap endpoint receives JSON fields `source_image`, `target_image` and `swap_mode`. Images are data URLs. The configured result path may point to a base64 string, data URL, or downloadable HTTPS URL.
 
