@@ -56,12 +56,11 @@ def _is_image(data: bytes) -> bool:
 def _normalize_jpeg(data: bytes, *, max_side: int = 2048) -> bytes:
     try:
         from PIL import Image, ImageOps
-
         with Image.open(BytesIO(data)) as image:
             image = ImageOps.exif_transpose(image).convert("RGB")
             image.thumbnail((max_side, max_side))
             output = BytesIO()
-            image.save(output, format="JPEG", quality=95, optimize=True)
+            image.save(output, format="JPEG", quality=97, optimize=True, subsampling=0)
             normalized = output.getvalue()
             if not normalized.startswith(b"\xff\xd8\xff"):
                 raise ValueError("JPEG encoder returned invalid data")
@@ -107,19 +106,28 @@ class GeminiRESTTransport:
     timeout_s: int = 600
     api_base: str = "https://generativelanguage.googleapis.com/v1/models"
 
-    async def generate_image(self, *, prompt: str, references: list[bytes], model: str) -> bytes:
+    async def generate_image(
+        self,
+        *,
+        prompt: str,
+        references: list[bytes],
+        model: str,
+        reference_labels: list[str] | None = None,
+    ) -> bytes:
         if not self.api_key:
             raise ProviderHTTPError("Gemini image API key is not configured")
+        labels = reference_labels or [f"REFERENCE {index + 1}" for index in range(len(references))]
+        if len(labels) != len(references):
+            raise ProviderHTTPError("Gemini reference labels do not match reference count")
         parts: list[dict[str, Any]] = [{"text": prompt}]
-        parts.extend(
-            {
+        for label, reference in zip(labels, references):
+            parts.append({"text": label})
+            parts.append({
                 "inline_data": {
                     "mime_type": _guess_mime(reference),
                     "data": base64.b64encode(reference).decode("ascii"),
                 }
-            }
-            for reference in references
-        )
+            })
         payload = {
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
@@ -131,12 +139,17 @@ class GeminiRESTTransport:
             payload,
             self.timeout_s,
         )
+        found: list[bytes] = []
         for candidate in response.get("candidates", []):
             for part in candidate.get("content", {}).get("parts", []):
+                if part.get("thought") is True:
+                    continue
                 inline = part.get("inlineData") or part.get("inline_data")
                 if inline and inline.get("data"):
-                    return base64.b64decode(inline["data"], validate=True)
-        raise ProviderHTTPError("Gemini response did not contain an image")
+                    found.append(base64.b64decode(inline["data"], validate=True))
+        if found:
+            return found[-1]
+        raise ProviderHTTPError("Gemini response did not contain a final image")
 
 
 @dataclass(slots=True)
@@ -144,23 +157,25 @@ class SegmindFaceSwapRESTTransport:
     endpoint: str
     api_key: str
     timeout_s: int = 600
-    face_restore: str = "codeformer-v0.1.0.pth"
+    face_restore: str = ""
 
     async def swap(self, *, source_face: bytes, target_scene: bytes) -> bytes:
         if not self.endpoint:
             raise ProviderHTTPError("Segmind FaceSwap URL is not configured")
         if not self.api_key:
             raise ProviderHTTPError("SEGMIND_API_KEY is not configured")
-        source_jpeg = await asyncio.to_thread(_normalize_jpeg, source_face)
-        target_jpeg = await asyncio.to_thread(_normalize_jpeg, target_scene)
-        payload = {
+        source_jpeg = await asyncio.to_thread(_normalize_jpeg, source_face, max_side=1600)
+        target_jpeg = await asyncio.to_thread(_normalize_jpeg, target_scene, max_side=2048)
+        payload: dict[str, Any] = {
             "source_img": base64.b64encode(source_jpeg).decode("ascii"),
             "target_img": base64.b64encode(target_jpeg).decode("ascii"),
             "input_faces_index": "0",
             "source_faces_index": "0",
-            "face_restore": self.face_restore,
             "base64": False,
         }
+        restore = (self.face_restore or "").strip()
+        if restore and restore.lower() not in {"none", "off", "false", "0"}:
+            payload["face_restore"] = restore
         raw, content_type = await asyncio.to_thread(
             _request,
             self.endpoint,
@@ -182,8 +197,6 @@ class SegmindFaceSwapRESTTransport:
 
 @dataclass(slots=True)
 class GenericFaceSwapRESTTransport:
-    """Synchronous JSON Face Swap adapter for custom providers."""
-
     endpoint: str
     api_key: str
     timeout_s: int = 600
