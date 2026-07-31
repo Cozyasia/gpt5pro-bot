@@ -204,7 +204,13 @@ def register_handlers(app: Any, config: StarSelfieConfig, *, group: int = -98) -
     if not config.enabled or getattr(app, "_star_selfie_handlers", False):
         return False
 
-    from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, filters
+    from telegram.ext import (
+        ApplicationHandlerStop,
+        CallbackQueryHandler,
+        CommandHandler,
+        MessageHandler,
+        filters,
+    )
 
     async def _start(update: Any, context: Any) -> None:
         await start(update, context, config)
@@ -216,7 +222,13 @@ def register_handlers(app: Any, config: StarSelfieConfig, *, group: int = -98) -
         await callback(update, context, config)
 
     async def _photo(update: Any, context: Any) -> None:
+        state = context.user_data.get(_STATE_KEY) or {}
+        owns_photo = state.get("step") == "photo"
         await photo(update, context, config)
+        if owns_photo:
+            # Prevent the same Telegram photo from reaching the bot's generic
+            # photo menu after Star Selfie has consumed it.
+            raise ApplicationHandlerStop
 
     app.add_handler(CommandHandler("star_selfie", _start), group=group)
     app.add_handler(CommandHandler("cancel_star_selfie", cancel), group=group)
