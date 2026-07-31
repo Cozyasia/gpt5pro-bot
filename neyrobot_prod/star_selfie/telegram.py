@@ -5,6 +5,7 @@ import contextlib
 import logging
 from typing import Any
 
+from .admin import is_admin
 from .catalog.runtime import runtime_catalog
 from .config import StarSelfieConfig
 from .factory import build_pipeline
@@ -177,10 +178,14 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
             state.get("mode"),
             error_text,
         )
+        message = (
+            "❌ Не удалось завершить генерацию.\n"
+            "Отправьте фотографию ещё раз или отмените командой /cancel_star_selfie."
+        )
+        if is_admin(update.effective_user):
+            message += f"\n\n🔧 Техническая причина:\n{error_text[:1200]}"
         with contextlib.suppress(Exception):
-            await progress.edit_text(
-                "❌ Не удалось завершить генерацию. Отправьте фотографию ещё раз или отмените командой /cancel_star_selfie."
-            )
+            await progress.edit_text(message)
     finally:
         with contextlib.suppress(OSError):
             await asyncio.to_thread(source_path.unlink)
