@@ -25,13 +25,16 @@ class StarSelfiePipeline:
     async def run(self, request: GenerationRequest) -> GenerationResult:
         if not request.user_face_path.is_file():
             raise FileNotFoundError(request.user_face_path)
+        if not request.user_body_path.is_file():
+            raise FileNotFoundError(request.user_body_path)
         if not 3 <= len(request.character.reference_paths) <= 6:
             raise ValueError("Character must have 3-6 reference images")
         if request.scene_reference_path is not None and not request.scene_reference_path.is_file():
             raise FileNotFoundError(request.scene_reference_path)
 
         prompt = build_scene_prompt(request.character.title, request.scene, request.capture_mode)
-        refs = [path.read_bytes() for path in request.character.reference_paths]
+        character_refs = [path.read_bytes() for path in request.character.reference_paths]
+        user_body_reference = request.user_body_path.read_bytes()
         scene_reference = (
             request.scene_reference_path.read_bytes()
             if request.scene_reference_path is not None
@@ -44,7 +47,8 @@ class StarSelfiePipeline:
             try:
                 base_scene = await self.scene_provider.generate(
                     prompt=prompt,
-                    character_references=refs,
+                    character_references=character_refs,
+                    user_body_reference=user_body_reference,
                     scene_reference=scene_reference,
                 )
             except Exception as exc:
@@ -84,6 +88,7 @@ class StarSelfiePipeline:
                     "aspect_ratio": request.aspect_ratio,
                     "attempt": attempt,
                     "custom_scene_photo": request.scene_reference_path is not None,
+                    "user_body_reference": True,
                 },
             )
 
