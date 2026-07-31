@@ -4,7 +4,7 @@ import contextlib
 import os
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 _HOOKED = False
 _MENU_CALLBACK = "fun:star_selfie"
@@ -27,10 +27,9 @@ def _inject_button(markup: Any, callback_data: str) -> Any:
             for button in row
         ):
             return markup
-        insert_at = len(rows)
-        if rows and any(getattr(button, "callback_data", None) in {"fun:back", "mode:root"} for button in rows[-1]):
-            insert_at -= 1
-        rows.insert(insert_at, [InlineKeyboardButton(_BUTTON_TEXT, callback_data=callback_data)])
+        # Star Selfie is a primary entertainment action, so keep it visible at
+        # the top instead of hiding it near the navigation row.
+        rows.insert(0, [InlineKeyboardButton(_BUTTON_TEXT, callback_data=callback_data)])
         return InlineKeyboardMarkup(rows)
     except Exception:
         return markup
