@@ -27,9 +27,16 @@ class StarSelfiePipeline:
             raise FileNotFoundError(request.user_face_path)
         if not 3 <= len(request.character.reference_paths) <= 6:
             raise ValueError("Character must have 3-6 reference images")
+        if request.scene_reference_path is not None and not request.scene_reference_path.is_file():
+            raise FileNotFoundError(request.scene_reference_path)
 
         prompt = build_scene_prompt(request.character.title, request.scene, request.capture_mode)
         refs = [path.read_bytes() for path in request.character.reference_paths]
+        scene_reference = (
+            request.scene_reference_path.read_bytes()
+            if request.scene_reference_path is not None
+            else None
+        )
         source_face = request.user_face_path.read_bytes()
         last_reason = "generation_failed"
 
@@ -38,6 +45,7 @@ class StarSelfiePipeline:
                 base_scene = await self.scene_provider.generate(
                     prompt=prompt,
                     character_references=refs,
+                    scene_reference=scene_reference,
                 )
             except Exception as exc:
                 raise RuntimeError(f"Gemini scene generation failed: {type(exc).__name__}: {exc}") from exc
@@ -75,6 +83,7 @@ class StarSelfiePipeline:
                     "character": request.character.slug,
                     "aspect_ratio": request.aspect_ratio,
                     "attempt": attempt,
+                    "custom_scene_photo": request.scene_reference_path is not None,
                 },
             )
 
