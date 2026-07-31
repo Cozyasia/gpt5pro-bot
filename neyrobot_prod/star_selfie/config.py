@@ -26,7 +26,7 @@ class StarSelfieConfig:
     enabled: bool
     gemini_api_key: str
     gemini_model: str = "gemini-3.1-flash-image"
-    gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta/models"
+    gemini_api_base: str = "https://generativelanguage.googleapis.com/v1/models"
     face_swap_provider: str = "segmind"
     face_swap_api_key: str = ""
     face_swap_url: str = "https://api.segmind.com/v1/faceswap-v2"
@@ -53,7 +53,7 @@ class StarSelfieConfig:
             ),
             gemini_api_base=os.getenv(
                 "STAR_SELFIE_GEMINI_API_BASE",
-                "https://generativelanguage.googleapis.com/v1beta/models",
+                "https://generativelanguage.googleapis.com/v1/models",
             ),
             face_swap_provider=os.getenv("STAR_SELFIE_FACE_SWAP_PROVIDER", "segmind").strip().lower(),
             face_swap_api_key=_first_env("STAR_SELFIE_FACE_SWAP_API_KEY", "SEGMIND_API_KEY"),
