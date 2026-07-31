@@ -19,11 +19,14 @@ class GeminiSceneProvider:
         *,
         prompt: str,
         character_references: list[bytes],
+        user_body_reference: bytes,
         scene_reference: bytes | None = None,
     ) -> bytes:
         if not 3 <= len(character_references) <= 6:
             raise ValueError("Gemini scene generation requires 3-6 character references")
-        references = list(character_references)
+        if not user_body_reference:
+            raise ValueError("Gemini scene generation requires a user full-body reference")
+        references = [*character_references, user_body_reference]
         if scene_reference:
             references.append(scene_reference)
         return await self.transport.generate_image(
