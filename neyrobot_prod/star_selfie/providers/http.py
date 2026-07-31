@@ -6,6 +6,7 @@ import json
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Any
 
 
@@ -52,6 +53,23 @@ def _is_image(data: bytes) -> bool:
     )
 
 
+def _normalize_jpeg(data: bytes, *, max_side: int = 2048) -> bytes:
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(data)) as image:
+            image = ImageOps.exif_transpose(image).convert("RGB")
+            image.thumbnail((max_side, max_side))
+            output = BytesIO()
+            image.save(output, format="JPEG", quality=95, optimize=True)
+            normalized = output.getvalue()
+            if not normalized.startswith(b"\xff\xd8\xff"):
+                raise ValueError("JPEG encoder returned invalid data")
+            return normalized
+    except Exception as exc:
+        raise ProviderHTTPError(f"invalid input image: {type(exc).__name__}: {exc}") from exc
+
+
 def _decode_image_value(value: Any) -> bytes:
     if isinstance(value, list) and value:
         value = value[0]
@@ -87,7 +105,7 @@ def _lookup(payload: Any, dotted_path: str) -> Any:
 class GeminiRESTTransport:
     api_key: str
     timeout_s: int = 600
-    api_base: str = "https://generativelanguage.googleapis.com/v1beta/models"
+    api_base: str = "https://generativelanguage.googleapis.com/v1/models"
 
     async def generate_image(self, *, prompt: str, references: list[bytes], model: str) -> bytes:
         if not self.api_key:
@@ -133,9 +151,11 @@ class SegmindFaceSwapRESTTransport:
             raise ProviderHTTPError("Segmind FaceSwap URL is not configured")
         if not self.api_key:
             raise ProviderHTTPError("SEGMIND_API_KEY is not configured")
+        source_jpeg = await asyncio.to_thread(_normalize_jpeg, source_face)
+        target_jpeg = await asyncio.to_thread(_normalize_jpeg, target_scene)
         payload = {
-            "source_img": self._data_url(source_face),
-            "target_img": self._data_url(target_scene),
+            "source_img": base64.b64encode(source_jpeg).decode("ascii"),
+            "target_img": base64.b64encode(target_jpeg).decode("ascii"),
             "input_faces_index": "0",
             "source_faces_index": "0",
             "face_restore": self.face_restore,
@@ -158,10 +178,6 @@ class SegmindFaceSwapRESTTransport:
             if key in response:
                 return _decode_image_value(response[key])
         raise ProviderHTTPError("Segmind response did not contain an image")
-
-    @staticmethod
-    def _data_url(data: bytes) -> str:
-        return f"data:{_guess_mime(data)};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 @dataclass(slots=True)
