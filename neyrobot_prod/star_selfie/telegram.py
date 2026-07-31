@@ -12,7 +12,8 @@ from .models import CaptureMode, GenerationRequest
 
 _STATE_KEY = "star_selfie_flow"
 _CALLBACK_PREFIX = "starselfie:"
-_LOGGER = logging.getLogger("gpt-bot.star-selfie")
+_MENU_CALLBACKS = {"fun:star_selfie", "act:fun:star_selfie"}
+_LOG = logging.getLogger("gpt-bot.star-selfie")
 
 
 def _catalog(config: StarSelfieConfig):
@@ -73,6 +74,14 @@ async def start(update: Any, context: Any, config: StarSelfieConfig) -> None:
         "⭐ Выберите героя для совместного кадра:",
         reply_markup=_character_keyboard(characters),
     )
+
+
+async def menu_callback(update: Any, context: Any, config: StarSelfieConfig) -> None:
+    query = update.callback_query
+    if query is None or (query.data or "") not in _MENU_CALLBACKS:
+        return
+    await query.answer("Селфи со звездой")
+    await start(update, context, config)
 
 
 async def callback(update: Any, context: Any, config: StarSelfieConfig) -> None:
@@ -154,17 +163,19 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
                 photo=image,
                 caption=f"✅ Готово: {character.title}",
             )
-        getattr(context.application, "bot_data", {}).pop("star_selfie_last_error", None)
+        context.application.bot_data.pop("star_selfie_last_error", None)
         _clear(context)
     except Exception as exc:
         state["step"] = "photo"
-        error_text = f"{type(exc).__name__}: {exc}"[:1800]
-        getattr(context.application, "bot_data", {})["star_selfie_last_error"] = error_text
-        _LOGGER.exception(
-            "Star Selfie generation failed user_id=%s character=%s mode=%s",
+        error_text = f"{type(exc).__name__}: {exc}"
+        with contextlib.suppress(Exception):
+            context.application.bot_data["star_selfie_last_error"] = error_text[:1500]
+        _LOG.exception(
+            "Star Selfie generation failed user_id=%s character=%s mode=%s: %s",
             user_id,
             character.slug,
             state.get("mode"),
+            error_text,
         )
         with contextlib.suppress(Exception):
             await progress.edit_text(
@@ -193,6 +204,9 @@ def register_handlers(app: Any, config: StarSelfieConfig, *, group: int = -98) -
     async def _start(update: Any, context: Any) -> None:
         await start(update, context, config)
 
+    async def _menu_callback(update: Any, context: Any) -> None:
+        await menu_callback(update, context, config)
+
     async def _callback(update: Any, context: Any) -> None:
         await callback(update, context, config)
 
@@ -201,10 +215,11 @@ def register_handlers(app: Any, config: StarSelfieConfig, *, group: int = -98) -
 
     app.add_handler(CommandHandler("star_selfie", _start), group=group)
     app.add_handler(CommandHandler("cancel_star_selfie", cancel), group=group)
+    app.add_handler(CallbackQueryHandler(_menu_callback, pattern=r"^(?:fun:star_selfie|act:fun:star_selfie)$"), group=group)
     app.add_handler(CallbackQueryHandler(_callback, pattern=r"^starselfie:"), group=group)
     app.add_handler(MessageHandler(filters.PHOTO, _photo), group=group)
     setattr(app, "_star_selfie_handlers", True)
     return True
 
 
-__all__ = ["register_handlers", "start", "callback", "photo", "cancel"]
+__all__ = ["register_handlers", "start", "menu_callback", "callback", "photo", "cancel"]
