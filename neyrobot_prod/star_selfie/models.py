@@ -28,6 +28,7 @@ class GenerationRequest:
     scene: str
     capture_mode: CaptureMode
     aspect_ratio: str = "4:5"
+    scene_reference_path: Path | None = None
 
 
 @dataclass(slots=True)
