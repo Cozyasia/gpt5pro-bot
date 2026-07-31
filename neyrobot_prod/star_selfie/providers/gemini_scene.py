@@ -14,11 +14,20 @@ class GeminiSceneProvider:
         self.transport = transport
         self.model = model
 
-    async def generate(self, *, prompt: str, character_references: list[bytes]) -> bytes:
+    async def generate(
+        self,
+        *,
+        prompt: str,
+        character_references: list[bytes],
+        scene_reference: bytes | None = None,
+    ) -> bytes:
         if not 3 <= len(character_references) <= 6:
             raise ValueError("Gemini scene generation requires 3-6 character references")
+        references = list(character_references)
+        if scene_reference:
+            references.append(scene_reference)
         return await self.transport.generate_image(
             prompt=prompt,
-            references=character_references,
+            references=references,
             model=self.model,
         )
