@@ -36,7 +36,7 @@ class StarSelfieConfig:
     project_root: Path
     enabled: bool
     gemini_api_key: str
-    gemini_model: str = "gemini-3.1-flash-image"
+    gemini_model: str = "gemini-3-pro-image"
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1/models"
     face_swap_provider: str = "segmind"
     face_swap_api_key: str = ""
@@ -48,6 +48,8 @@ class StarSelfieConfig:
     persistent_root: Path = Path("/data/star_selfie")
     seed_catalog_path: Path = Path("assets/star_selfie/catalog.json")
     request_timeout_s: int = 600
+    face_swap_timeout_s: int = 900
+    face_swap_attempts: int = 3
     max_generation_attempts: int = 2
     required_character_refs: int = 3
     max_character_refs: int = 6
@@ -59,10 +61,11 @@ class StarSelfieConfig:
             project_root=project_root,
             enabled=_env_bool("STAR_SELFIE_ENABLED", False),
             gemini_api_key=_first_env("STAR_SELFIE_GEMINI_API_KEY", "GEMINI_IMAGE_API_KEY", "GEMINI_API_KEY"),
-            gemini_model=os.getenv(
+            gemini_model=_first_env(
                 "STAR_SELFIE_GEMINI_MODEL",
-                os.getenv("GEMINI_IMAGE_MODEL", os.getenv("GEMINI_IMAGE_FALLBACK_MODEL", "gemini-3.1-flash-image")),
-            ).strip(),
+                "GEMINI_IMAGE_MODEL",
+                default="gemini-3-pro-image",
+            ),
             gemini_api_base=os.getenv(
                 "STAR_SELFIE_GEMINI_API_BASE",
                 "https://generativelanguage.googleapis.com/v1/models",
@@ -83,6 +86,8 @@ class StarSelfieConfig:
             persistent_root=Path(os.getenv("STAR_SELFIE_DATA_ROOT", "/data/star_selfie")),
             seed_catalog_path=Path(os.getenv("STAR_SELFIE_SEED_CATALOG", "assets/star_selfie/catalog.json")),
             request_timeout_s=int(os.getenv("STAR_SELFIE_TIMEOUT_S", "600")),
+            face_swap_timeout_s=int(os.getenv("STAR_SELFIE_FACE_SWAP_TIMEOUT_S", "900")),
+            face_swap_attempts=max(1, int(os.getenv("STAR_SELFIE_FACE_SWAP_ATTEMPTS", "3"))),
             max_generation_attempts=int(os.getenv("STAR_SELFIE_MAX_ATTEMPTS", "2")),
         )
 
