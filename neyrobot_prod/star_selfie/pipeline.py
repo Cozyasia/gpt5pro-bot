@@ -34,19 +34,27 @@ class StarSelfiePipeline:
         last_reason = "generation_failed"
 
         for attempt in range(1, self.max_attempts + 1):
-            base_scene = await self.scene_provider.generate(
-                prompt=prompt,
-                character_references=refs,
-            )
+            try:
+                base_scene = await self.scene_provider.generate(
+                    prompt=prompt,
+                    character_references=refs,
+                )
+            except Exception as exc:
+                raise RuntimeError(f"Gemini scene generation failed: {type(exc).__name__}: {exc}") from exc
+
             scene_qc = self.qc.validate(base_scene)
             if not scene_qc.accepted:
                 last_reason = f"scene_{scene_qc.reason}"
                 continue
 
-            final = await self.face_swap_provider.swap_user_face(
-                source_face=source_face,
-                target_scene=base_scene,
-            )
+            try:
+                final = await self.face_swap_provider.swap_user_face(
+                    source_face=source_face,
+                    target_scene=base_scene,
+                )
+            except Exception as exc:
+                raise RuntimeError(f"Segmind face swap failed: {type(exc).__name__}: {exc}") from exc
+
             final_qc = self.qc.validate(final)
             if not final_qc.accepted:
                 last_reason = f"face_swap_{final_qc.reason}"
