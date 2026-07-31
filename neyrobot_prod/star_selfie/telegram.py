@@ -32,16 +32,17 @@ def _state(context: Any) -> dict[str, Any]:
     return context.user_data.setdefault(_STATE_KEY, {})
 
 
-def _cleanup_scene_file(state: dict[str, Any]) -> None:
-    raw = state.get("scene_reference_path")
-    if raw:
-        with contextlib.suppress(OSError):
-            Path(str(raw)).unlink()
+def _cleanup_files(state: dict[str, Any]) -> None:
+    for key in ("scene_reference_path", "user_face_path", "user_body_path"):
+        raw = state.get(key)
+        if raw:
+            with contextlib.suppress(OSError):
+                Path(str(raw)).unlink()
 
 
 def _clear(context: Any) -> None:
     state = context.user_data.pop(_STATE_KEY, None) or {}
-    _cleanup_scene_file(state)
+    _cleanup_files(state)
 
 
 def _character_keyboard(characters: list[Any]):
@@ -81,8 +82,16 @@ def _scene_keyboard():
 
 async def _ask_user_face(message: Any) -> None:
     await message.reply_text(
-        "Теперь отправьте одну чёткую фотографию вашего лица анфас.\n"
-        "Не используйте групповые фото, очки или сильные тени."
+        "1/2 — отправьте чёткий портрет вашего лица анфас.\n"
+        "Без очков, сильных теней и других людей в кадре."
+    )
+
+
+async def _ask_user_body(message: Any) -> None:
+    await message.reply_text(
+        "2/2 — теперь отправьте вашу фотографию в полный рост.\n"
+        "В кадре должен быть один человек, тело полностью видно от головы до ног. "
+        "Эта фотография нужна только для роста, комплекции и пропорций тела."
     )
 
 
@@ -163,8 +172,8 @@ async def callback(update: Any, context: Any, config: StarSelfieConfig) -> None:
     if action.startswith("scene:"):
         scene_key = action.split(":", 1)[1]
         if scene_key in _SCENES:
-            state.update({"step": "photo", "scene": _SCENES[scene_key], "scene_key": scene_key})
-            await query.edit_message_text(f"Сцена выбрана: {query.data.split(':')[-1]}.")
+            state.update({"step": "face_photo", "scene": _SCENES[scene_key], "scene_key": scene_key})
+            await query.edit_message_text("✅ Сцена выбрана.")
             await _ask_user_face(query.message)
             return
         if scene_key == "custom_text":
@@ -189,15 +198,20 @@ async def text_input(update: Any, context: Any) -> None:
     if len(text) < 5:
         await update.effective_message.reply_text("Опишите сцену подробнее, минимум 5 символов.")
         return
-    state.update({"step": "photo", "scene": text[:1200], "scene_key": "custom_text"})
+    state.update({"step": "face_photo", "scene": text[:1200], "scene_key": "custom_text"})
     await update.effective_message.reply_text("✅ Своя сцена сохранена.")
     await _ask_user_face(update.effective_message)
+
+
+async def _download_photo(update: Any, context: Any, path: Path) -> None:
+    telegram_file = await context.bot.get_file(update.effective_message.photo[-1].file_id)
+    await telegram_file.download_to_drive(custom_path=path)
 
 
 async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
     state = context.user_data.get(_STATE_KEY) or {}
     step = state.get("step")
-    if step not in {"scene_photo", "photo"} or not update.effective_message.photo:
+    if step not in {"scene_photo", "face_photo", "body_photo"} or not update.effective_message.photo:
         return
 
     user_id = int(update.effective_user.id)
@@ -206,16 +220,27 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
 
     if step == "scene_photo":
         scene_path = incoming_dir / f"scene_{update.effective_message.message_id}.jpg"
-        telegram_file = await context.bot.get_file(update.effective_message.photo[-1].file_id)
-        await telegram_file.download_to_drive(custom_path=scene_path)
+        await _download_photo(update, context, scene_path)
         state.update({
-            "step": "photo",
-            "scene": "Use the final reference image as the visual composition and location reference. Preserve its environment while placing both people naturally into the scene.",
+            "step": "face_photo",
+            "scene": "Use the optional final reference image only as the visual composition and location reference. Preserve its environment while placing exactly the user and the selected celebrity naturally into the scene.",
             "scene_key": "custom_photo",
             "scene_reference_path": str(scene_path),
         })
         await update.effective_message.reply_text("✅ Фото сцены сохранено.")
         await _ask_user_face(update.effective_message)
+        return
+
+    if step == "face_photo":
+        face_path = incoming_dir / f"face_{update.effective_message.message_id}.jpg"
+        await _download_photo(update, context, face_path)
+        old = state.get("user_face_path")
+        if old:
+            with contextlib.suppress(OSError):
+                Path(str(old)).unlink()
+        state.update({"step": "body_photo", "user_face_path": str(face_path)})
+        await update.effective_message.reply_text("✅ Портрет лица сохранён.")
+        await _ask_user_body(update.effective_message)
         return
 
     character = _catalog(config).get(str(state.get("character") or ""))
@@ -224,16 +249,28 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
         await update.effective_message.reply_text("Герой больше недоступен. Запустите /star_selfie заново.")
         return
 
-    source_path = incoming_dir / f"face_{update.effective_message.message_id}.jpg"
-    telegram_file = await context.bot.get_file(update.effective_message.photo[-1].file_id)
-    await telegram_file.download_to_drive(custom_path=source_path)
-    state["step"] = "generating"
-    progress = await update.effective_message.reply_text("⏳ Создаю выбранную сцену и переношу ваше лицо…")
+    face_path = Path(str(state.get("user_face_path") or ""))
+    if not face_path.is_file():
+        state["step"] = "face_photo"
+        await update.effective_message.reply_text("Портрет лица потерян. Отправьте фотографию лица ещё раз.")
+        return
+
+    body_path = incoming_dir / f"body_{update.effective_message.message_id}.jpg"
+    await _download_photo(update, context, body_path)
+    old_body = state.get("user_body_path")
+    if old_body:
+        with contextlib.suppress(OSError):
+            Path(str(old_body)).unlink()
+    state.update({"step": "generating", "user_body_path": str(body_path)})
+    progress = await update.effective_message.reply_text(
+        "⏳ Создаю выбранную сцену, сохраняю ваше телосложение и переношу лицо…"
+    )
     try:
         scene_reference_path = state.get("scene_reference_path")
         request = GenerationRequest(
             user_id=user_id,
-            user_face_path=source_path,
+            user_face_path=face_path,
+            user_body_path=body_path,
             character=character,
             scene=str(state.get("scene") or "A natural premium joint portrait."),
             capture_mode=CaptureMode(str(state["mode"])),
@@ -248,7 +285,7 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
         context.application.bot_data.pop("star_selfie_last_error", None)
         _clear(context)
     except Exception as exc:
-        state["step"] = "photo"
+        state["step"] = "body_photo"
         error_text = f"{type(exc).__name__}: {exc}"
         with contextlib.suppress(Exception):
             context.application.bot_data["star_selfie_last_error"] = error_text[:1500]
@@ -258,15 +295,12 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
         )
         message = (
             "❌ Не удалось завершить генерацию.\n"
-            "Отправьте фотографию ещё раз или отмените командой /cancel_star_selfie."
+            "Отправьте фото в полный рост ещё раз или отмените командой /cancel_star_selfie."
         )
         if is_admin(update.effective_user):
             message += f"\n\n🔧 Техническая причина:\n{error_text[:1200]}"
         with contextlib.suppress(Exception):
             await progress.edit_text(message)
-    finally:
-        with contextlib.suppress(OSError):
-            await asyncio.to_thread(source_path.unlink)
 
 
 async def cancel(update: Any, context: Any) -> None:
@@ -296,7 +330,7 @@ def register_handlers(app: Any, config: StarSelfieConfig, *, group: int = -98) -
 
     async def _photo(update: Any, context: Any) -> None:
         state = context.user_data.get(_STATE_KEY) or {}
-        owns_photo = state.get("step") in {"scene_photo", "photo"}
+        owns_photo = state.get("step") in {"scene_photo", "face_photo", "body_photo"}
         await photo(update, context, config)
         if owns_photo:
             raise ApplicationHandlerStop
