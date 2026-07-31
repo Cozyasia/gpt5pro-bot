@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from pathlib import Path
 from typing import Any
 
 from .admin import is_admin
@@ -15,6 +16,12 @@ _STATE_KEY = "star_selfie_flow"
 _CALLBACK_PREFIX = "starselfie:"
 _MENU_CALLBACKS = {"fun:star_selfie", "act:fun:star_selfie"}
 _LOG = logging.getLogger("gpt-bot.star-selfie")
+_SCENES = {
+    "yacht": "On a luxury yacht at golden hour, premium travel atmosphere, sea and coastline in the background.",
+    "premiere": "At a glamorous movie premiere on a red carpet with elegant lighting and press-wall atmosphere.",
+    "restaurant": "At an upscale fine-dining restaurant, warm cinematic lighting, elegant interior and natural candid mood.",
+    "stadium": "At a packed football stadium near the pitch, energetic match-day atmosphere and realistic stadium lighting.",
+}
 
 
 def _catalog(config: StarSelfieConfig):
@@ -25,8 +32,16 @@ def _state(context: Any) -> dict[str, Any]:
     return context.user_data.setdefault(_STATE_KEY, {})
 
 
+def _cleanup_scene_file(state: dict[str, Any]) -> None:
+    raw = state.get("scene_reference_path")
+    if raw:
+        with contextlib.suppress(OSError):
+            Path(str(raw)).unlink()
+
+
 def _clear(context: Any) -> None:
-    context.user_data.pop(_STATE_KEY, None)
+    state = context.user_data.pop(_STATE_KEY, None) or {}
+    _cleanup_scene_file(state)
 
 
 def _character_keyboard(characters: list[Any]):
@@ -43,12 +58,31 @@ def _character_keyboard(characters: list[Any]):
 def _mode_keyboard():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("📸 Фото со стороны", callback_data=f"{_CALLBACK_PREFIX}mode:{CaptureMode.THIRD_PERSON.value}")],
-            [InlineKeyboardButton("🤳 Настоящее селфи", callback_data=f"{_CALLBACK_PREFIX}mode:{CaptureMode.TRUE_PHONE_SELFIE.value}")],
-            [InlineKeyboardButton("✖️ Отмена", callback_data=f"{_CALLBACK_PREFIX}cancel")],
-        ]
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📸 Фото со стороны", callback_data=f"{_CALLBACK_PREFIX}mode:{CaptureMode.THIRD_PERSON.value}")],
+        [InlineKeyboardButton("🤳 Настоящее селфи", callback_data=f"{_CALLBACK_PREFIX}mode:{CaptureMode.TRUE_PHONE_SELFIE.value}")],
+        [InlineKeyboardButton("✖️ Отмена", callback_data=f"{_CALLBACK_PREFIX}cancel")],
+    ])
+
+
+def _scene_keyboard():
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🛥 Яхта", callback_data=f"{_CALLBACK_PREFIX}scene:yacht")],
+        [InlineKeyboardButton("🎬 Премьера", callback_data=f"{_CALLBACK_PREFIX}scene:premiere")],
+        [InlineKeyboardButton("🍽 Ресторан", callback_data=f"{_CALLBACK_PREFIX}scene:restaurant")],
+        [InlineKeyboardButton("⚽ Футбольный стадион", callback_data=f"{_CALLBACK_PREFIX}scene:stadium")],
+        [InlineKeyboardButton("✍️ Своя сцена текстом", callback_data=f"{_CALLBACK_PREFIX}scene:custom_text")],
+        [InlineKeyboardButton("🖼 Своя сцена по фото", callback_data=f"{_CALLBACK_PREFIX}scene:custom_photo")],
+        [InlineKeyboardButton("✖️ Отмена", callback_data=f"{_CALLBACK_PREFIX}cancel")],
+    ])
+
+
+async def _ask_user_face(message: Any) -> None:
+    await message.reply_text(
+        "Теперь отправьте одну чёткую фотографию вашего лица анфас.\n"
+        "Не используйте групповые фото, очки или сильные тени."
     )
 
 
@@ -56,10 +90,8 @@ async def start(update: Any, context: Any, config: StarSelfieConfig) -> None:
     if not config.enabled:
         await update.effective_message.reply_text("Функция «Селфи со звездой» пока отключена.")
         return
-
     characters = [
-        item
-        for item in _catalog(config).active()
+        item for item in _catalog(config).active()
         if config.required_character_refs <= len(item.reference_paths) <= config.max_character_refs
         and all(path.is_file() for path in item.reference_paths)
     ]
@@ -68,7 +100,6 @@ async def start(update: Any, context: Any, config: StarSelfieConfig) -> None:
             "Каталог звёзд пока не готов: администратору нужно активировать героя и загрузить 3–6 референсов."
         )
         return
-
     _clear(context)
     _state(context)["step"] = "character"
     await update.effective_message.reply_text(
@@ -91,7 +122,6 @@ async def callback(update: Any, context: Any, config: StarSelfieConfig) -> None:
         return
     await query.answer()
     action = query.data[len(_CALLBACK_PREFIX):]
-
     if action == "cancel":
         _clear(context)
         await query.edit_message_text("Создание селфи отменено.")
@@ -123,16 +153,69 @@ async def callback(update: Any, context: Any, config: StarSelfieConfig) -> None:
             await query.edit_message_text("Сессия устарела. Запустите /star_selfie заново.")
             _clear(context)
             return
-        state.update({"step": "photo", "mode": mode.value})
+        state.update({"step": "scene", "mode": mode.value})
         await query.edit_message_text(
-            "Теперь отправьте одну чёткую фотографию лица анфас.\n"
-            "Не используйте групповые фото, очки или сильные тени."
+            "Выберите сцену для совместного кадра:",
+            reply_markup=_scene_keyboard(),
         )
+        return
+
+    if action.startswith("scene:"):
+        scene_key = action.split(":", 1)[1]
+        if scene_key in _SCENES:
+            state.update({"step": "photo", "scene": _SCENES[scene_key], "scene_key": scene_key})
+            await query.edit_message_text(f"Сцена выбрана: {query.data.split(':')[-1]}.")
+            await _ask_user_face(query.message)
+            return
+        if scene_key == "custom_text":
+            state["step"] = "scene_text"
+            await query.edit_message_text(
+                "Опишите сцену одним сообщением. Например: «на крыше небоскрёба ночью, огни города, премиальный стиль»."
+            )
+            return
+        if scene_key == "custom_photo":
+            state["step"] = "scene_photo"
+            await query.edit_message_text(
+                "Отправьте фотографию места или композиции, которую нужно использовать как референс сцены."
+            )
+            return
+
+
+async def text_input(update: Any, context: Any) -> None:
+    state = context.user_data.get(_STATE_KEY) or {}
+    if state.get("step") != "scene_text":
+        return
+    text = (update.effective_message.text or "").strip()
+    if len(text) < 5:
+        await update.effective_message.reply_text("Опишите сцену подробнее, минимум 5 символов.")
+        return
+    state.update({"step": "photo", "scene": text[:1200], "scene_key": "custom_text"})
+    await update.effective_message.reply_text("✅ Своя сцена сохранена.")
+    await _ask_user_face(update.effective_message)
 
 
 async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
     state = context.user_data.get(_STATE_KEY) or {}
-    if state.get("step") != "photo" or not update.effective_message.photo:
+    step = state.get("step")
+    if step not in {"scene_photo", "photo"} or not update.effective_message.photo:
+        return
+
+    user_id = int(update.effective_user.id)
+    incoming_dir = config.persistent_root / "incoming" / str(user_id)
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+
+    if step == "scene_photo":
+        scene_path = incoming_dir / f"scene_{update.effective_message.message_id}.jpg"
+        telegram_file = await context.bot.get_file(update.effective_message.photo[-1].file_id)
+        await telegram_file.download_to_drive(custom_path=scene_path)
+        state.update({
+            "step": "photo",
+            "scene": "Use the final reference image as the visual composition and location reference. Preserve its environment while placing both people naturally into the scene.",
+            "scene_key": "custom_photo",
+            "scene_reference_path": str(scene_path),
+        })
+        await update.effective_message.reply_text("✅ Фото сцены сохранено.")
+        await _ask_user_face(update.effective_message)
         return
 
     character = _catalog(config).get(str(state.get("character") or ""))
@@ -141,22 +224,20 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
         await update.effective_message.reply_text("Герой больше недоступен. Запустите /star_selfie заново.")
         return
 
-    user_id = int(update.effective_user.id)
-    incoming_dir = config.persistent_root / "incoming" / str(user_id)
-    incoming_dir.mkdir(parents=True, exist_ok=True)
-    source_path = incoming_dir / f"{update.effective_message.message_id}.jpg"
+    source_path = incoming_dir / f"face_{update.effective_message.message_id}.jpg"
     telegram_file = await context.bot.get_file(update.effective_message.photo[-1].file_id)
     await telegram_file.download_to_drive(custom_path=source_path)
-
     state["step"] = "generating"
-    progress = await update.effective_message.reply_text("⏳ Создаю сцену и переношу ваше лицо…")
+    progress = await update.effective_message.reply_text("⏳ Создаю выбранную сцену и переношу ваше лицо…")
     try:
+        scene_reference_path = state.get("scene_reference_path")
         request = GenerationRequest(
             user_id=user_id,
             user_face_path=source_path,
             character=character,
-            scene="A natural premium joint portrait with realistic lighting and coherent body geometry.",
+            scene=str(state.get("scene") or "A natural premium joint portrait."),
             capture_mode=CaptureMode(str(state["mode"])),
+            scene_reference_path=Path(scene_reference_path) if scene_reference_path else None,
         )
         result = await build_pipeline(config).run(request)
         with result.final_image_path.open("rb") as image:
@@ -172,11 +253,8 @@ async def photo(update: Any, context: Any, config: StarSelfieConfig) -> None:
         with contextlib.suppress(Exception):
             context.application.bot_data["star_selfie_last_error"] = error_text[:1500]
         _LOG.exception(
-            "Star Selfie generation failed user_id=%s character=%s mode=%s: %s",
-            user_id,
-            character.slug,
-            state.get("mode"),
-            error_text,
+            "Star Selfie generation failed user_id=%s character=%s mode=%s scene=%s: %s",
+            user_id, character.slug, state.get("mode"), state.get("scene_key"), error_text,
         )
         message = (
             "❌ Не удалось завершить генерацию.\n"
@@ -200,34 +278,34 @@ async def cancel(update: Any, context: Any) -> None:
 
 
 def register_handlers(app: Any, config: StarSelfieConfig, *, group: int = -98) -> bool:
-    """Register isolated PTB handlers. Safe to call repeatedly."""
     if not config.enabled or getattr(app, "_star_selfie_handlers", False):
         return False
 
-    from telegram.ext import (
-        ApplicationHandlerStop,
-        CallbackQueryHandler,
-        CommandHandler,
-        MessageHandler,
-        filters,
-    )
+    from telegram.ext import ApplicationHandlerStop, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
     async def _start(update: Any, context: Any) -> None:
         await start(update, context, config)
 
     async def _menu_callback(update: Any, context: Any) -> None:
         await menu_callback(update, context, config)
+        raise ApplicationHandlerStop
 
     async def _callback(update: Any, context: Any) -> None:
         await callback(update, context, config)
+        raise ApplicationHandlerStop
 
     async def _photo(update: Any, context: Any) -> None:
         state = context.user_data.get(_STATE_KEY) or {}
-        owns_photo = state.get("step") == "photo"
+        owns_photo = state.get("step") in {"scene_photo", "photo"}
         await photo(update, context, config)
         if owns_photo:
-            # Prevent the same Telegram photo from reaching the bot's generic
-            # photo menu after Star Selfie has consumed it.
+            raise ApplicationHandlerStop
+
+    async def _text(update: Any, context: Any) -> None:
+        state = context.user_data.get(_STATE_KEY) or {}
+        owns_text = state.get("step") == "scene_text"
+        await text_input(update, context)
+        if owns_text:
             raise ApplicationHandlerStop
 
     app.add_handler(CommandHandler("star_selfie", _start), group=group)
@@ -235,8 +313,9 @@ def register_handlers(app: Any, config: StarSelfieConfig, *, group: int = -98) -
     app.add_handler(CallbackQueryHandler(_menu_callback, pattern=r"^(?:fun:star_selfie|act:fun:star_selfie)$"), group=group)
     app.add_handler(CallbackQueryHandler(_callback, pattern=r"^starselfie:"), group=group)
     app.add_handler(MessageHandler(filters.PHOTO, _photo), group=group)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text), group=group)
     setattr(app, "_star_selfie_handlers", True)
     return True
 
 
-__all__ = ["register_handlers", "start", "menu_callback", "callback", "photo", "cancel"]
+__all__ = ["register_handlers", "start", "menu_callback", "callback", "photo", "text_input", "cancel"]
