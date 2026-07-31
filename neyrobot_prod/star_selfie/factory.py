@@ -25,14 +25,14 @@ def build_pipeline(config: StarSelfieConfig) -> StarSelfiePipeline:
         face_swap_transport = SegmindFaceSwapRESTTransport(
             endpoint=config.face_swap_url,
             api_key=config.face_swap_api_key,
-            timeout_s=config.request_timeout_s,
+            timeout_s=config.face_swap_timeout_s,
             face_restore=config.segmind_face_restore,
         )
     elif config.face_swap_provider == "generic_rest":
         face_swap_transport = GenericFaceSwapRESTTransport(
             endpoint=config.face_swap_url,
             api_key=config.face_swap_api_key,
-            timeout_s=config.request_timeout_s,
+            timeout_s=config.face_swap_timeout_s,
             result_path=config.face_swap_result_path,
             auth_header=config.face_swap_auth_header,
             auth_scheme=config.face_swap_auth_scheme,
@@ -45,4 +45,5 @@ def build_pipeline(config: StarSelfieConfig) -> StarSelfiePipeline:
         face_swap_provider=FaceSwapProvider(face_swap_transport),
         storage=StarSelfieStorage(config.persistent_root),
         max_attempts=config.max_generation_attempts,
+        face_swap_attempts=config.face_swap_attempts,
     )
