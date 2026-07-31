@@ -24,12 +24,10 @@ def _face_swap_settings() -> tuple[str, str]:
     """Normalize provider and recover from a Segmind key pasted as provider."""
     raw_provider = (os.getenv("STAR_SELFIE_FACE_SWAP_PROVIDER") or "segmind").strip()
     api_key = _first_env("STAR_SELFIE_FACE_SWAP_API_KEY", "SEGMIND_API_KEY")
-
     if raw_provider.lower().startswith("sg_"):
         if not api_key:
             api_key = raw_provider
         return "segmind", api_key
-
     return raw_provider.lower() or "segmind", api_key
 
 
@@ -46,7 +44,7 @@ class StarSelfieConfig:
     face_swap_result_path: str = "data.image"
     face_swap_auth_header: str = "Authorization"
     face_swap_auth_scheme: str = "Bearer"
-    segmind_face_restore: str = "codeformer-v0.1.0.pth"
+    segmind_face_restore: str = ""
     persistent_root: Path = Path("/data/star_selfie")
     seed_catalog_path: Path = Path("assets/star_selfie/catalog.json")
     request_timeout_s: int = 600
@@ -63,7 +61,7 @@ class StarSelfieConfig:
             gemini_api_key=_first_env("STAR_SELFIE_GEMINI_API_KEY", "GEMINI_IMAGE_API_KEY", "GEMINI_API_KEY"),
             gemini_model=os.getenv(
                 "STAR_SELFIE_GEMINI_MODEL",
-                os.getenv("GEMINI_IMAGE_FALLBACK_MODEL", "gemini-3.1-flash-image"),
+                os.getenv("GEMINI_IMAGE_MODEL", os.getenv("GEMINI_IMAGE_FALLBACK_MODEL", "gemini-3.1-flash-image")),
             ).strip(),
             gemini_api_base=os.getenv(
                 "STAR_SELFIE_GEMINI_API_BASE",
@@ -80,12 +78,10 @@ class StarSelfieConfig:
             face_swap_auth_scheme=os.getenv("STAR_SELFIE_FACE_SWAP_AUTH_SCHEME", "Bearer").strip(),
             segmind_face_restore=os.getenv(
                 "STAR_SELFIE_SEGMIND_FACE_RESTORE",
-                os.getenv("SEGMIND_FACE_RESTORE", "codeformer-v0.1.0.pth"),
+                os.getenv("SEGMIND_FACE_RESTORE", ""),
             ).strip(),
             persistent_root=Path(os.getenv("STAR_SELFIE_DATA_ROOT", "/data/star_selfie")),
-            seed_catalog_path=Path(
-                os.getenv("STAR_SELFIE_SEED_CATALOG", "assets/star_selfie/catalog.json")
-            ),
+            seed_catalog_path=Path(os.getenv("STAR_SELFIE_SEED_CATALOG", "assets/star_selfie/catalog.json")),
             request_timeout_s=int(os.getenv("STAR_SELFIE_TIMEOUT_S", "600")),
             max_generation_attempts=int(os.getenv("STAR_SELFIE_MAX_ATTEMPTS", "2")),
         )
