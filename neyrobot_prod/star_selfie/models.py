@@ -24,6 +24,7 @@ class Character:
 class GenerationRequest:
     user_id: int
     user_face_path: Path
+    user_body_path: Path
     character: Character
     scene: str
     capture_mode: CaptureMode
