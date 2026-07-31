@@ -4,25 +4,27 @@ from ..models import CaptureMode
 
 
 def build_scene_prompt(character_title: str, scene: str, mode: CaptureMode) -> str:
-    common = (
-        "Create one photorealistic image with exactly two adults and no other visible people. "
-        "REFERENCE ORDER IS STRICT: the first 3-6 images show only the celebrity; the next image shows the USER'S FULL BODY; "
-        "an optional final image is only a scene/composition reference. "
-        f"PERSON A is the USER. Preserve PERSON A's sex presentation, approximate height, build, body proportions, shoulders, waist, limbs and posture from the full-body user reference. "
-        "Do not copy the face from the full-body reference; render PERSON A with a clear, unobstructed, front-facing face suitable for a later face swap. "
-        f"PERSON B is {character_title}. Preserve PERSON B's recognizable identity, age, face, build and characteristic appearance exclusively from the celebrity references. "
-        "Never transform PERSON A into the celebrity. Never replace the celebrity with a random companion. "
-        "Place PERSON A on the LEFT side of the final image and PERSON B on the RIGHT side, with both faces clearly visible and separated. "
-        "Exactly two principal faces, no duplicate bodies, merged faces, extra companions, text, logos or watermark. "
+    identity = (
+        "STRICT MULTI-REFERENCE IDENTITY COMPOSITION. Create exactly two adults and no other visible people. "
+        "SUBJECT A is the USER and must be placed on the LEFT. The USER BODY reference controls only height, build, "
+        "shoulder width, limb proportions and overall silhouette. Completely ignore and do not copy the user's face, haircut, "
+        "clothes, colors, accessories, pose, cup, objects or original background from the body reference. Dress SUBJECT A in "
+        "new scene-appropriate clothing. Leave SUBJECT A's face clear, frontal enough and unobstructed for a later external face swap. "
+        f"SUBJECT B is {character_title} and must be placed on the RIGHT. All CHARACTER references show the same person. "
+        "Use every CHARACTER reference together to reconstruct SUBJECT B's exact identity: facial proportions, eyes, nose, mouth, "
+        "jaw, beard, hairline, age, body cues and distinctive features. Do not generate a generic lookalike. Do not average, merge, "
+        "beautify, rejuvenate or swap the two identities. SUBJECT B must remain recognisable independently of SUBJECT A. "
+        "The two faces must be spatially separated and clearly detectable. No duplicate bodies, merged anatomy, text, logos or watermark. "
     )
     if mode is CaptureMode.TRUE_PHONE_SELFIE:
         camera = (
-            "TRUE FRONT-CAMERA SELFIE: PERSON A and PERSON B are close together in a direct front-camera image at natural arm's-length perspective. "
-            "Both faces must remain fully visible. The phone, phone edge, mirror, selfie stick, photographer and third-person viewpoint must be invisible. "
+            "TRUE FRONT-CAMERA SELFIE. The output is the direct image from a phone front camera held by one of the two subjects. "
+            "Both faces are visible at natural arm's-length perspective. The phone, mirror, selfie stick, photographer and any "
+            "third-person viewpoint are invisible. Keep SUBJECT A on image-left and SUBJECT B on image-right. "
         )
     else:
         camera = (
-            "THIRD-PERSON PHOTO: show both subjects naturally, preferably three-quarter or full-body so PERSON A's build is visible. "
-            "A fixed camera or event photographer viewpoint is allowed, but no third visible main subject. "
+            "THIRD-PERSON PHOTO. Show both subjects naturally, preferably at least three-quarter body. Keep SUBJECT A on image-left "
+            "and SUBJECT B on image-right. Clothing for both subjects must be newly designed for the selected scene, not copied from references. "
         )
-    return common + camera + f"Scene: {scene.strip()}"
+    return identity + camera + f"SCENE: {scene.strip()}"
