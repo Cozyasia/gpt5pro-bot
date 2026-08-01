@@ -9,30 +9,105 @@ from .qc import BasicImageQC
 from .storage import StarSelfieStorage
 
 
+def _decode_cv_image(data: bytes):
+    import cv2
+    import numpy as np
+
+    return cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+
+def _face_candidates(data: bytes):
+    """Return frontal faces with quality metadata used for reference ranking."""
+    import cv2
+
+    image = _decode_cv_image(data)
+    if image is None:
+        return image, []
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    faces = cascade.detectMultiScale(gray, scaleFactor=1.06, minNeighbors=6, minSize=(80, 80))
+    candidates = []
+    image_area = max(1.0, float(image.shape[0] * image.shape[1]))
+    for x, y, width, height in faces:
+        roi = gray[y : y + height, x : x + width]
+        if roi.size == 0:
+            continue
+        area_ratio = (float(width) * float(height)) / image_area
+        sharpness = float(cv2.Laplacian(roi, cv2.CV_64F).var())
+        brightness = float(roi.mean())
+        exposure_score = max(0.0, 1.0 - abs(brightness - 128.0) / 128.0)
+        center_x = x + width / 2.0
+        center_y = y + height / 2.0
+        center_distance = abs(center_x - image.shape[1] / 2.0) / max(1.0, image.shape[1])
+        center_distance += abs(center_y - image.shape[0] / 2.0) / max(1.0, image.shape[0])
+        score = area_ratio * 120.0 + min(sharpness, 1200.0) / 1200.0 * 4.0 + exposure_score * 2.0
+        score -= center_distance * 0.5
+        candidates.append((score, (int(x), int(y), int(width), int(height))))
+    return image, candidates
+
+
 def _select_best_face_reference(references: list[bytes]) -> bytes:
-    """Prefer the reference with the largest clear frontal face; keep catalog order as fallback."""
+    """Prefer a large, sharp, evenly exposed frontal celebrity face."""
     best = references[0]
     best_score = -1.0
     try:
-        import cv2
-        import numpy as np
         for reference in references:
-            image = cv2.imdecode(np.frombuffer(reference, dtype=np.uint8), cv2.IMREAD_COLOR)
-            if image is None:
+            _, candidates = _face_candidates(reference)
+            if not candidates:
                 continue
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-            faces = cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=(80, 80))
-            if len(faces) == 0:
-                continue
-            _, _, width, height = max(faces, key=lambda item: int(item[2]) * int(item[3]))
-            score = (float(width) * float(height)) / max(1.0, float(image.shape[0] * image.shape[1]))
+            score, _ = max(candidates, key=lambda item: item[0])
             if score > best_score:
                 best_score = score
                 best = reference
     except Exception:
         pass
     return best
+
+
+def _polish_identity_face(data: bytes, *, target_face_index: int = 0) -> bytes:
+    """Reduce swap ripple/compression only inside the selected face, preserving identity geometry."""
+    try:
+        import cv2
+        import numpy as np
+
+        image, candidates = _face_candidates(data)
+        if image is None or not candidates:
+            return data
+        ordered = sorted((box for _, box in candidates), key=lambda box: box[0])
+        if target_face_index >= len(ordered):
+            return data
+        x, y, width, height = ordered[target_face_index]
+
+        pad_x = int(width * 0.12)
+        pad_top = int(height * 0.16)
+        pad_bottom = int(height * 0.12)
+        x1 = max(0, x - pad_x)
+        y1 = max(0, y - pad_top)
+        x2 = min(image.shape[1], x + width + pad_x)
+        y2 = min(image.shape[0], y + height + pad_bottom)
+        roi = image[y1:y2, x1:x2]
+        if roi.size == 0:
+            return data
+
+        # Mild artifact suppression, followed by restrained detail recovery.
+        clean = cv2.bilateralFilter(roi, d=5, sigmaColor=18, sigmaSpace=18)
+        blur = cv2.GaussianBlur(clean, (0, 0), 0.75)
+        sharpened = cv2.addWeighted(clean, 1.16, blur, -0.16, 0)
+
+        mask = np.zeros(roi.shape[:2], dtype=np.uint8)
+        center = (mask.shape[1] // 2, int(mask.shape[0] * 0.50))
+        axes = (max(1, int(mask.shape[1] * 0.39)), max(1, int(mask.shape[0] * 0.45)))
+        cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+        mask = cv2.GaussianBlur(mask, (0, 0), max(2.0, min(width, height) * 0.025))
+        alpha = (mask.astype(np.float32) / 255.0)[..., None]
+        blended = sharpened.astype(np.float32) * alpha + roi.astype(np.float32) * (1.0 - alpha)
+        image[y1:y2, x1:x2] = np.clip(blended, 0, 255).astype(np.uint8)
+
+        # PNG prevents another lossy JPEG pass after both identity transfers.
+        ok, encoded = cv2.imencode(".png", image, [int(cv2.IMWRITE_PNG_COMPRESSION), 2])
+        return encoded.tobytes() if ok else data
+    except Exception:
+        return data
 
 
 class StarSelfiePipeline:
@@ -120,19 +195,25 @@ class StarSelfiePipeline:
                 last_reason = f"scene_{scene_qc.reason}"
                 continue
 
-            # First lock the celebrity on the right, then transfer the user's face on the left.
+            # Lock celebrity first; user stays last so the user's transferred face is never recompressed by another swap.
             celebrity_locked, celebrity_swap_attempt = await self._swap_with_retries(
                 label="Celebrity",
                 source_face=celebrity_face,
                 target_scene=base_scene,
                 target_face_index=1,
             )
-            final, user_swap_attempt = await self._swap_with_retries(
+            user_locked, user_swap_attempt = await self._swap_with_retries(
                 label="User",
                 source_face=user_face,
                 target_scene=celebrity_locked,
                 target_face_index=0,
             )
+            final = await asyncio.to_thread(_polish_identity_face, user_locked, target_face_index=0)
+
+            final_qc = self.qc.validate(final)
+            if not final_qc.accepted:
+                last_reason = f"final_{final_qc.reason}"
+                continue
 
             scene_path, final_path = self.storage.save_generation(
                 user_id=request.user_id,
@@ -151,8 +232,11 @@ class StarSelfiePipeline:
                     "attempt": attempt,
                     "celebrity_identity_transfer": True,
                     "celebrity_swap_attempt": celebrity_swap_attempt,
+                    "celebrity_reference_ranked_by_quality": True,
                     "user_identity_transfer": True,
                     "user_swap_attempt": user_swap_attempt,
+                    "user_face_local_artifact_cleanup": True,
+                    "lossless_final_encoding": True,
                     "custom_scene_photo": request.scene_reference_path is not None,
                     "user_body_reference": True,
                 },
