@@ -62,13 +62,42 @@ def _normalize_jpeg(data: bytes, *, max_side: int = 2048) -> bytes:
             image = ImageOps.exif_transpose(image).convert("RGB")
             image.thumbnail((max_side, max_side))
             output = BytesIO()
-            image.save(output, format="JPEG", quality=97, optimize=True, subsampling=0)
+            image.save(output, format="JPEG", quality=98, optimize=True, subsampling=0)
             normalized = output.getvalue()
             if not normalized.startswith(b"\xff\xd8\xff"):
                 raise ValueError("JPEG encoder returned invalid data")
             return normalized
     except Exception as exc:
         raise ProviderHTTPError(f"invalid input image: {type(exc).__name__}: {exc}") from exc
+
+
+def _crop_primary_face(data: bytes) -> bytes:
+    """Crop the clearest face so the swap provider cannot reinterpret body/background."""
+    normalized = _normalize_jpeg(data, max_side=2200)
+    try:
+        import cv2
+        import numpy as np
+        image = cv2.imdecode(np.frombuffer(normalized, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return normalized
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        faces = cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=(90, 90))
+        if len(faces) == 0:
+            return normalized
+        x, y, w, h = max(faces, key=lambda item: int(item[2]) * int(item[3]))
+        margin_x = int(w * 0.55)
+        margin_top = int(h * 0.55)
+        margin_bottom = int(h * 0.75)
+        x1 = max(0, x - margin_x)
+        y1 = max(0, y - margin_top)
+        x2 = min(image.shape[1], x + w + margin_x)
+        y2 = min(image.shape[0], y + h + margin_bottom)
+        crop = image[y1:y2, x1:x2]
+        ok, encoded = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 99])
+        return encoded.tobytes() if ok else normalized
+    except Exception:
+        return normalized
 
 
 def _decode_image_value(value: Any) -> bytes:
@@ -120,9 +149,7 @@ def _extract_interaction_image(response: dict[str, Any]) -> bytes:
         image = _decode_image_value(direct)
         if _is_image(image):
             return image
-
     found: list[bytes] = []
-
     def walk(value: Any) -> None:
         if isinstance(value, dict):
             block_type = str(value.get("type") or "").lower()
@@ -140,15 +167,11 @@ def _extract_interaction_image(response: dict[str, Any]) -> bytes:
         elif isinstance(value, list):
             for nested in value:
                 walk(nested)
-
     walk(response.get("output"))
     walk(response.get("steps"))
     if found:
         return found[-1]
-    raise ProviderHTTPError(
-        "Gemini interaction did not contain output_image; response keys="
-        + ",".join(sorted(response.keys()))
-    )
+    raise ProviderHTTPError("Gemini interaction did not contain output_image; response keys=" + ",".join(sorted(response.keys())))
 
 
 @dataclass(slots=True)
@@ -157,46 +180,22 @@ class GeminiRESTTransport:
     timeout_s: int = 600
     api_base: str = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
-    async def generate_image(
-        self,
-        *,
-        prompt: str,
-        references: list[bytes],
-        model: str,
-        reference_labels: list[str] | None = None,
-    ) -> bytes:
+    async def generate_image(self, *, prompt: str, references: list[bytes], model: str, reference_labels: list[str] | None = None) -> bytes:
         if not self.api_key:
             raise ProviderHTTPError("Gemini image API key is not configured")
         labels = reference_labels or [f"REFERENCE {index + 1}" for index in range(len(references))]
         if len(labels) != len(references):
             raise ProviderHTTPError("Gemini reference labels do not match reference count")
-
         interaction_input: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for label, reference in zip(labels, references):
             interaction_input.append({"type": "text", "text": label})
-            interaction_input.append({
-                "type": "image",
-                "mime_type": _guess_mime(reference),
-                "data": base64.b64encode(reference).decode("ascii"),
-            })
-
+            interaction_input.append({"type": "image", "mime_type": _guess_mime(reference), "data": base64.b64encode(reference).decode("ascii")})
         payload: dict[str, Any] = {
             "model": model,
             "input": interaction_input,
-            "response_format": {
-                "type": "image",
-                "mime_type": "image/jpeg",
-                "aspect_ratio": "4:5",
-                "image_size": "2K",
-            },
+            "response_format": {"type": "image", "mime_type": "image/jpeg", "aspect_ratio": "4:5", "image_size": "2K"},
         }
-        response = await asyncio.to_thread(
-            _post_json,
-            _interactions_url(self.api_base),
-            {"x-goog-api-key": self.api_key},
-            payload,
-            self.timeout_s,
-        )
+        response = await asyncio.to_thread(_post_json, _interactions_url(self.api_base), {"x-goog-api-key": self.api_key}, payload, self.timeout_s)
         return _extract_interaction_image(response)
 
 
@@ -207,30 +206,24 @@ class SegmindFaceSwapRESTTransport:
     timeout_s: int = 600
     face_restore: str = ""
 
-    async def swap(self, *, source_face: bytes, target_scene: bytes) -> bytes:
+    async def swap(self, *, source_face: bytes, target_scene: bytes, target_face_index: int = 0) -> bytes:
         if not self.endpoint:
             raise ProviderHTTPError("Segmind FaceSwap URL is not configured")
         if not self.api_key:
             raise ProviderHTTPError("SEGMIND_API_KEY is not configured")
-        source_jpeg = await asyncio.to_thread(_normalize_jpeg, source_face, max_side=1600)
-        target_jpeg = await asyncio.to_thread(_normalize_jpeg, target_scene, max_side=2048)
+        source_jpeg = await asyncio.to_thread(_crop_primary_face, source_face)
+        target_jpeg = await asyncio.to_thread(_normalize_jpeg, target_scene, max_side=2560)
         payload: dict[str, Any] = {
             "source_img": base64.b64encode(source_jpeg).decode("ascii"),
             "target_img": base64.b64encode(target_jpeg).decode("ascii"),
-            "input_faces_index": "0",
+            "input_faces_index": str(target_face_index),
             "source_faces_index": "0",
             "base64": False,
         }
         restore = (self.face_restore or "").strip()
         if restore and restore.lower() not in {"none", "off", "false", "0"}:
             payload["face_restore"] = restore
-        raw, content_type = await asyncio.to_thread(
-            _request,
-            self.endpoint,
-            {"x-api-key": self.api_key, "Accept": "image/*, application/json"},
-            payload,
-            self.timeout_s,
-        )
+        raw, content_type = await asyncio.to_thread(_request, self.endpoint, {"x-api-key": self.api_key, "Accept": "image/*, application/json"}, payload, self.timeout_s)
         if content_type.lower().startswith("image/") or _is_image(raw):
             return raw
         try:
@@ -252,14 +245,15 @@ class GenericFaceSwapRESTTransport:
     auth_header: str = "Authorization"
     auth_scheme: str = "Bearer"
 
-    async def swap(self, *, source_face: bytes, target_scene: bytes) -> bytes:
+    async def swap(self, *, source_face: bytes, target_scene: bytes, target_face_index: int = 0) -> bytes:
         if not self.endpoint:
             raise ProviderHTTPError("STAR_SELFIE_FACE_SWAP_URL is not configured")
         token = f"{self.auth_scheme} {self.api_key}".strip()
         headers = {self.auth_header: token} if self.api_key else {}
         payload = {
-            "source_image": self._data_url(source_face),
+            "source_image": self._data_url(await asyncio.to_thread(_crop_primary_face, source_face)),
             "target_image": self._data_url(target_scene),
+            "target_face_index": target_face_index,
             "swap_mode": "single_source_face",
         }
         response = await asyncio.to_thread(_post_json, self.endpoint, headers, payload, self.timeout_s)
