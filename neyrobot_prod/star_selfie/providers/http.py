@@ -26,9 +26,11 @@ def _request(url: str, headers: dict[str, str], payload: dict[str, Any], timeout
             return response.read(), response.headers.get("Content-Type", "")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise ProviderHTTPError(f"provider HTTP {exc.code}: {body[:1000]}") from exc
+        raise ProviderHTTPError(f"provider HTTP {exc.code}: {body[:1500]}") from exc
     except urllib.error.URLError as exc:
         raise ProviderHTTPError(f"provider connection failed: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise ProviderHTTPError(f"provider timed out after {timeout}s") from exc
 
 
 def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: int) -> dict[str, Any]:
@@ -71,9 +73,9 @@ def _normalize_jpeg(data: bytes, *, max_side: int = 2048) -> bytes:
 
 def _decode_image_value(value: Any) -> bytes:
     if isinstance(value, list) and value:
-        value = value[0]
+        value = value[-1]
     if isinstance(value, dict):
-        for key in ("image", "url", "output"):
+        for key in ("data", "image", "output_image", "output", "url"):
             if key in value:
                 return _decode_image_value(value[key])
     if not isinstance(value, str):
@@ -100,11 +102,60 @@ def _lookup(payload: Any, dotted_path: str) -> Any:
     return value
 
 
+def _interactions_url(api_base: str) -> str:
+    base = (api_base or "").strip().rstrip("/")
+    if base.endswith("/interactions"):
+        return base
+    if "/v1/models" in base or "/v1beta/models" in base:
+        root = base.split("/v1", 1)[0]
+        return f"{root}/v1beta/interactions"
+    if base:
+        return f"{base}/v1beta/interactions"
+    return "https://generativelanguage.googleapis.com/v1beta/interactions"
+
+
+def _extract_interaction_image(response: dict[str, Any]) -> bytes:
+    direct = response.get("output_image") or response.get("outputImage")
+    if direct:
+        image = _decode_image_value(direct)
+        if _is_image(image):
+            return image
+
+    found: list[bytes] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            block_type = str(value.get("type") or "").lower()
+            if block_type in {"image", "output_image"} and value.get("data"):
+                try:
+                    decoded = base64.b64decode(str(value["data"]), validate=True)
+                    if _is_image(decoded):
+                        found.append(decoded)
+                except Exception:
+                    pass
+            for key, nested in value.items():
+                if key in {"thought", "thinking"} and nested is True:
+                    continue
+                walk(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                walk(nested)
+
+    walk(response.get("output"))
+    walk(response.get("steps"))
+    if found:
+        return found[-1]
+    raise ProviderHTTPError(
+        "Gemini interaction did not contain output_image; response keys="
+        + ",".join(sorted(response.keys()))
+    )
+
+
 @dataclass(slots=True)
 class GeminiRESTTransport:
     api_key: str
     timeout_s: int = 600
-    api_base: str = "https://generativelanguage.googleapis.com/v1/models"
+    api_base: str = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
     async def generate_image(
         self,
@@ -119,37 +170,34 @@ class GeminiRESTTransport:
         labels = reference_labels or [f"REFERENCE {index + 1}" for index in range(len(references))]
         if len(labels) != len(references):
             raise ProviderHTTPError("Gemini reference labels do not match reference count")
-        parts: list[dict[str, Any]] = [{"text": prompt}]
+
+        interaction_input: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for label, reference in zip(labels, references):
-            parts.append({"text": label})
-            parts.append({
-                "inline_data": {
-                    "mime_type": _guess_mime(reference),
-                    "data": base64.b64encode(reference).decode("ascii"),
-                }
+            interaction_input.append({"type": "text", "text": label})
+            interaction_input.append({
+                "type": "image",
+                "mime_type": _guess_mime(reference),
+                "data": base64.b64encode(reference).decode("ascii"),
             })
-        payload = {
-            "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "input": interaction_input,
+            "response_format": {
+                "type": "image",
+                "mime_type": "image/jpeg",
+                "aspect_ratio": "4:5",
+                "image_size": "2K",
+            },
         }
         response = await asyncio.to_thread(
             _post_json,
-            f"{self.api_base.rstrip('/')}/{model}:generateContent",
+            _interactions_url(self.api_base),
             {"x-goog-api-key": self.api_key},
             payload,
             self.timeout_s,
         )
-        found: list[bytes] = []
-        for candidate in response.get("candidates", []):
-            for part in candidate.get("content", {}).get("parts", []):
-                if part.get("thought") is True:
-                    continue
-                inline = part.get("inlineData") or part.get("inline_data")
-                if inline and inline.get("data"):
-                    found.append(base64.b64decode(inline["data"], validate=True))
-        if found:
-            return found[-1]
-        raise ProviderHTTPError("Gemini response did not contain a final image")
+        return _extract_interaction_image(response)
 
 
 @dataclass(slots=True)
