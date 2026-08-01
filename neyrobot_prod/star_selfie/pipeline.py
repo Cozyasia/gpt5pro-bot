@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 
 from .models import GenerationRequest, GenerationResult
 from .prompts.scene import build_scene_prompt
@@ -8,224 +9,30 @@ from .qc import BasicImageQC
 from .storage import StarSelfieStorage
 
 
-def _decode_cv_image(data: bytes):
-    import cv2
-    import numpy as np
-
-    return cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
-
-
-def _encode_png(image) -> bytes:
-    import cv2
-
-    ok, encoded = cv2.imencode(".png", image, [int(cv2.IMWRITE_PNG_COMPRESSION), 2])
-    if not ok:
-        raise RuntimeError("Could not encode image")
-    return encoded.tobytes()
-
-
-def _face_candidates(data: bytes):
-    """Return frontal faces with quality metadata used for reference ranking."""
-    import cv2
-
-    image = _decode_cv_image(data)
-    if image is None:
-        return image, []
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    faces = cascade.detectMultiScale(gray, scaleFactor=1.06, minNeighbors=6, minSize=(70, 70))
-    candidates = []
-    image_area = max(1.0, float(image.shape[0] * image.shape[1]))
-    for x, y, width, height in faces:
-        roi = gray[y : y + height, x : x + width]
-        if roi.size == 0:
-            continue
-        area_ratio = (float(width) * float(height)) / image_area
-        sharpness = float(cv2.Laplacian(roi, cv2.CV_64F).var())
-        brightness = float(roi.mean())
-        exposure_score = max(0.0, 1.0 - abs(brightness - 128.0) / 128.0)
-        center_x = x + width / 2.0
-        center_y = y + height / 2.0
-        center_distance = abs(center_x - image.shape[1] / 2.0) / max(1.0, image.shape[1])
-        center_distance += abs(center_y - image.shape[0] / 2.0) / max(1.0, image.shape[0])
-        score = area_ratio * 120.0 + min(sharpness, 1200.0) / 1200.0 * 4.0 + exposure_score * 2.0
-        score -= center_distance * 0.5
-        candidates.append((score, (int(x), int(y), int(width), int(height))))
-    return image, candidates
-
-
 def _select_best_face_reference(references: list[bytes]) -> bytes:
-    """Prefer a large, sharp, evenly exposed frontal celebrity face."""
+    """Prefer the reference with the largest clear frontal face; keep catalog order as fallback."""
     best = references[0]
     best_score = -1.0
     try:
+        import cv2
+        import numpy as np
         for reference in references:
-            _, candidates = _face_candidates(reference)
-            if not candidates:
+            image = cv2.imdecode(np.frombuffer(reference, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if image is None:
                 continue
-            score, _ = max(candidates, key=lambda item: item[0])
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=(80, 80))
+            if len(faces) == 0:
+                continue
+            _, _, width, height = max(faces, key=lambda item: int(item[2]) * int(item[3]))
+            score = (float(width) * float(height)) / max(1.0, float(image.shape[0] * image.shape[1]))
             if score > best_score:
                 best_score = score
                 best = reference
     except Exception:
         pass
     return best
-
-
-def _ordered_primary_face_boxes(data: bytes) -> list[tuple[int, int, int, int]]:
-    """Return the two dominant scene faces ordered strictly from left to right."""
-    image, candidates = _face_candidates(data)
-    if image is None:
-        return []
-    ranked = sorted(candidates, key=lambda item: item[0], reverse=True)[:4]
-    boxes = [box for _, box in ranked]
-    boxes.sort(key=lambda box: box[0] + box[2] / 2.0)
-    return boxes[:2]
-
-
-def _expanded_face_region(
-    image_shape,
-    box: tuple[int, int, int, int],
-) -> tuple[int, int, int, int]:
-    """Expand around head and neck."""
-    height_px, width_px = image_shape[:2]
-    x, y, width, height = box
-    pad_x = int(width * 0.68)
-    pad_top = int(height * 0.62)
-    pad_bottom = int(height * 0.82)
-    x1 = max(0, x - pad_x)
-    y1 = max(0, y - pad_top)
-    x2 = min(width_px, x + width + pad_x)
-    y2 = min(height_px, y + height + pad_bottom)
-    return x1, y1, x2, y2
-
-
-def _isolated_face_regions(
-    image_shape,
-    boxes: list[tuple[int, int, int, int]],
-) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
-    """Build non-overlapping user/celebrity crops separated by the face midpoint."""
-    if len(boxes) != 2:
-        raise ValueError("Exactly two face boxes are required")
-    left_box, right_box = boxes
-    left = list(_expanded_face_region(image_shape, left_box))
-    right = list(_expanded_face_region(image_shape, right_box))
-    left_center = left_box[0] + left_box[2] / 2.0
-    right_center = right_box[0] + right_box[2] / 2.0
-    split_x = int((left_center + right_center) / 2.0)
-    left[2] = min(left[2], split_x)
-    right[0] = max(right[0], split_x)
-    min_side = 96
-    if left[2] - left[0] < min_side or left[3] - left[1] < min_side:
-        raise RuntimeError("User face region is too small")
-    if right[2] - right[0] < min_side or right[3] - right[1] < min_side:
-        raise RuntimeError("Celebrity face region is too small")
-    return tuple(left), tuple(right)
-
-
-def _extract_region(data: bytes, region: tuple[int, int, int, int]) -> bytes:
-    import cv2
-
-    image = _decode_cv_image(data)
-    if image is None:
-        raise RuntimeError("Could not decode target scene")
-    x1, y1, x2, y2 = region
-    crop = image[y1:y2, x1:x2]
-    if crop.size == 0:
-        raise RuntimeError("Target face crop is empty")
-    height, width = crop.shape[:2]
-    if min(height, width) < 384:
-        scale = 384.0 / max(1.0, float(min(height, width)))
-        crop = cv2.resize(
-            crop,
-            (max(384, int(width * scale)), max(384, int(height * scale))),
-            interpolation=cv2.INTER_LANCZOS4,
-        )
-    return _encode_png(crop)
-
-
-def _paste_region(
-    scene_data: bytes,
-    swapped_crop_data: bytes,
-    region: tuple[int, int, int, int],
-) -> bytes:
-    """Feather a locally swapped single-face crop back into the unchanged scene."""
-    import cv2
-    import numpy as np
-
-    scene = _decode_cv_image(scene_data)
-    swapped = _decode_cv_image(swapped_crop_data)
-    if scene is None or swapped is None:
-        raise RuntimeError("Could not decode swap result")
-    x1, y1, x2, y2 = region
-    target_width = x2 - x1
-    target_height = y2 - y1
-    if target_width <= 0 or target_height <= 0:
-        raise RuntimeError("Invalid target region")
-    if swapped.shape[1] != target_width or swapped.shape[0] != target_height:
-        swapped = cv2.resize(swapped, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
-
-    mask = np.zeros((target_height, target_width), dtype=np.uint8)
-    margin_x = max(2, int(target_width * 0.08))
-    margin_y = max(2, int(target_height * 0.08))
-    cv2.rectangle(mask, (margin_x, margin_y), (target_width - margin_x, target_height - margin_y), 255, -1)
-    sigma = max(3.0, min(target_width, target_height) * 0.038)
-    mask = cv2.GaussianBlur(mask, (0, 0), sigma)
-    alpha = (mask.astype(np.float32) / 255.0)[..., None]
-    original = scene[y1:y2, x1:x2]
-    blended = swapped.astype(np.float32) * alpha + original.astype(np.float32) * (1.0 - alpha)
-    scene[y1:y2, x1:x2] = np.clip(blended, 0, 255).astype(np.uint8)
-    return _encode_png(scene)
-
-
-def _validate_local_swap(data: bytes) -> None:
-    """Validate a local crop without applying full-frame byte-size thresholds."""
-    image = _decode_cv_image(data)
-    if image is None:
-        raise RuntimeError("provider returned an invalid local image")
-    height, width = image.shape[:2]
-    if min(height, width) < 96:
-        raise RuntimeError(f"provider returned a local image that is too small: {width}x{height}")
-
-
-def _polish_identity_face(data: bytes, *, target_face_index: int = 0) -> bytes:
-    """Reduce swap ripple only inside the selected face, preserving identity geometry."""
-    try:
-        import cv2
-        import numpy as np
-
-        image, candidates = _face_candidates(data)
-        if image is None or not candidates:
-            return data
-        ordered = sorted((box for _, box in candidates), key=lambda box: box[0] + box[2] / 2.0)
-        if target_face_index >= len(ordered):
-            return data
-        x, y, width, height = ordered[target_face_index]
-        pad_x = int(width * 0.08)
-        pad_top = int(height * 0.10)
-        pad_bottom = int(height * 0.08)
-        x1 = max(0, x - pad_x)
-        y1 = max(0, y - pad_top)
-        x2 = min(image.shape[1], x + width + pad_x)
-        y2 = min(image.shape[0], y + height + pad_bottom)
-        roi = image[y1:y2, x1:x2]
-        if roi.size == 0:
-            return data
-
-        clean = cv2.bilateralFilter(roi, d=3, sigmaColor=8, sigmaSpace=8)
-        blur = cv2.GaussianBlur(clean, (0, 0), 0.45)
-        sharpened = cv2.addWeighted(clean, 1.07, blur, -0.07, 0)
-        mask = np.zeros(roi.shape[:2], dtype=np.uint8)
-        center = (mask.shape[1] // 2, int(mask.shape[0] * 0.50))
-        axes = (max(1, int(mask.shape[1] * 0.35)), max(1, int(mask.shape[0] * 0.41)))
-        cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
-        mask = cv2.GaussianBlur(mask, (0, 0), max(1.2, min(width, height) * 0.015))
-        alpha = (mask.astype(np.float32) / 255.0)[..., None]
-        blended = sharpened.astype(np.float32) * alpha + roi.astype(np.float32) * (1.0 - alpha)
-        image[y1:y2, x1:x2] = np.clip(blended, 0, 255).astype(np.uint8)
-        return _encode_png(image)
-    except Exception:
-        return data
 
 
 class StarSelfiePipeline:
@@ -246,30 +53,30 @@ class StarSelfiePipeline:
         self.face_swap_attempts = max(1, face_swap_attempts)
         self.qc = qc or BasicImageQC()
 
-    async def _swap_local_region_with_retries(
+    async def _swap_with_retries(
         self,
         *,
         label: str,
         source_face: bytes,
         target_scene: bytes,
-        region: tuple[int, int, int, int],
+        target_face_index: int,
     ) -> tuple[bytes, int]:
         errors: list[str] = []
-        target_crop = await asyncio.to_thread(_extract_region, target_scene, region)
         for attempt in range(1, self.face_swap_attempts + 1):
             try:
-                swapped_crop = await self.face_swap_provider.swap_face(
+                candidate = await self.face_swap_provider.swap_face(
                     source_face=source_face,
-                    target_scene=target_crop,
-                    target_face_index=0,
+                    target_scene=target_scene,
+                    target_face_index=target_face_index,
                 )
-                if not swapped_crop:
+                if not candidate:
                     raise RuntimeError("provider returned an empty image")
-                if swapped_crop == target_crop:
+                if candidate == target_scene:
                     raise RuntimeError("provider returned the unchanged image")
-                await asyncio.to_thread(_validate_local_swap, swapped_crop)
-                composited = await asyncio.to_thread(_paste_region, target_scene, swapped_crop, region)
-                return composited, attempt
+                candidate_qc = self.qc.validate(candidate)
+                if not candidate_qc.accepted:
+                    raise RuntimeError(f"QC rejected identity transfer: {candidate_qc.reason}")
+                return candidate, attempt
             except Exception as exc:
                 errors.append(f"attempt {attempt}: {type(exc).__name__}: {exc}")
                 if attempt < self.face_swap_attempts:
@@ -306,10 +113,6 @@ class StarSelfiePipeline:
                     scene_reference=scene_reference,
                 )
             except Exception as exc:
-                last_reason = f"gemini_{type(exc).__name__}: {exc}"
-                if attempt < self.max_attempts:
-                    await asyncio.sleep(min(2.0 * attempt, 5.0))
-                    continue
                 raise RuntimeError(f"Gemini scene generation failed: {type(exc).__name__}: {exc}") from exc
 
             scene_qc = self.qc.validate(base_scene)
@@ -317,46 +120,18 @@ class StarSelfiePipeline:
                 last_reason = f"scene_{scene_qc.reason}"
                 continue
 
-            boxes = await asyncio.to_thread(_ordered_primary_face_boxes, base_scene)
-            if len(boxes) != 2:
-                last_reason = f"scene_expected_two_faces_detected_{len(boxes)}"
-                continue
-
-            base_image = _decode_cv_image(base_scene)
-            if base_image is None:
-                last_reason = "scene_decode_failed"
-                continue
-
-            try:
-                user_region, celebrity_region = await asyncio.to_thread(
-                    _isolated_face_regions,
-                    base_image.shape,
-                    boxes,
-                )
-                celebrity_locked, celebrity_swap_attempt = await self._swap_local_region_with_retries(
-                    label="Celebrity",
-                    source_face=celebrity_face,
-                    target_scene=base_scene,
-                    region=celebrity_region,
-                )
-                user_locked, user_swap_attempt = await self._swap_local_region_with_retries(
-                    label="User",
-                    source_face=user_face,
-                    target_scene=celebrity_locked,
-                    region=user_region,
-                )
-            except Exception as exc:
-                last_reason = f"identity_transfer_{type(exc).__name__}: {exc}"
-                if attempt < self.max_attempts:
-                    await asyncio.sleep(min(2.0 * attempt, 5.0))
-                    continue
-                raise RuntimeError(f"Star Selfie identity transfer failed: {type(exc).__name__}: {exc}") from exc
-
-            final = await asyncio.to_thread(_polish_identity_face, user_locked, target_face_index=0)
-            final_qc = self.qc.validate(final)
-            if not final_qc.accepted:
-                last_reason = f"final_{final_qc.reason}"
-                continue
+            celebrity_locked, celebrity_swap_attempt = await self._swap_with_retries(
+                label="Celebrity",
+                source_face=celebrity_face,
+                target_scene=base_scene,
+                target_face_index=1,
+            )
+            final, user_swap_attempt = await self._swap_with_retries(
+                label="User",
+                source_face=user_face,
+                target_scene=celebrity_locked,
+                target_face_index=0,
+            )
 
             scene_path, final_path = self.storage.save_generation(
                 user_id=request.user_id,
@@ -373,21 +148,13 @@ class StarSelfiePipeline:
                     "character": request.character.slug,
                     "aspect_ratio": request.aspect_ratio,
                     "attempt": attempt,
-                    "identity_assignment": "left_user_right_celebrity",
-                    "local_single_face_transfers": True,
-                    "non_overlapping_face_regions": True,
-                    "local_crop_upscale": True,
-                    "provider_face_order_ambiguity_removed": True,
                     "celebrity_identity_transfer": True,
                     "celebrity_swap_attempt": celebrity_swap_attempt,
-                    "celebrity_reference_ranked_by_quality": True,
                     "user_identity_transfer": True,
                     "user_swap_attempt": user_swap_attempt,
-                    "user_face_local_artifact_cleanup": True,
-                    "lossless_final_encoding": True,
                     "custom_scene_photo": request.scene_reference_path is not None,
                     "user_body_reference": True,
                 },
             )
 
-        raise RuntimeError(f"Star Selfie failed after {self.max_attempts} attempts: {last_reason}")
+        raise RuntimeError(f"Star Selfie failed QC after {self.max_attempts} attempts: {last_reason}")
