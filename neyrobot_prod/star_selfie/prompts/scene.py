@@ -5,26 +5,29 @@ from ..models import CaptureMode
 
 def build_scene_prompt(character_title: str, scene: str, mode: CaptureMode) -> str:
     identity = (
-        "STRICT MULTI-REFERENCE IDENTITY COMPOSITION. Create exactly two adults and no other visible people. "
-        "SUBJECT A is the USER and must be placed on the LEFT. The USER BODY reference controls only height, build, "
-        "shoulder width, limb proportions and overall silhouette. Completely ignore and do not copy the user's face, haircut, "
-        "clothes, colors, accessories, pose, cup, objects or original background from the body reference. Dress SUBJECT A in "
-        "new scene-appropriate clothing. Leave SUBJECT A's face clear, frontal enough and unobstructed for a later external face swap. "
-        f"SUBJECT B is {character_title} and must be placed on the RIGHT. All CHARACTER references show the same person. "
-        "Use every CHARACTER reference together to reconstruct SUBJECT B's exact identity: facial proportions, eyes, nose, mouth, "
-        "jaw, beard, hairline, age, body cues and distinctive features. Do not generate a generic lookalike. Do not average, merge, "
-        "beautify, rejuvenate or swap the two identities. SUBJECT B must remain recognisable independently of SUBJECT A. "
-        "The two faces must be spatially separated and clearly detectable. No duplicate bodies, merged anatomy, text, logos or watermark. "
+        "STRICT TWO-PERSON IDENTITY COMPOSITION. Create exactly two foreground adults. Background people may appear only as small, "
+        "out-of-focus extras with no clear faces. SUBJECT A is the USER and must stay on the LEFT. The USER BODY reference controls "
+        "only height, body mass, shoulder width, torso-to-leg ratio, limb thickness and silhouette. Never copy the reference clothing, "
+        "haircut, face, pose, cup, accessories or background. Dress SUBJECT A appropriately for the selected scene. SUBJECT A must face "
+        "the camera within 15 degrees, with both eyes visible, mouth unobstructed, no profile, no strong shadow and a face at least 320 pixels "
+        "high in the final 2K image. Keep a natural head shape and neutral placeholder facial features because an external identity-transfer "
+        "stage will replace this face exactly. "
+        f"SUBJECT B is {character_title} and must stay on the RIGHT. Every CHARACTER reference depicts the same celebrity. Reconstruct the "
+        "celebrity from all references without averaging into a generic lookalike: preserve exact craniofacial proportions, eyes, brows, nose, "
+        "mouth, jaw, beard pattern, hairline, age, body build, tattoos and other stable identity cues. SUBJECT B must also face the camera within "
+        "20 degrees with a large, unobstructed face so a second identity-preservation pass can reinforce the celebrity. Do not merge identities, "
+        "beautify, rejuvenate, slim, enlarge, duplicate or stylize either person. Keep the two faces separated horizontally, similar in scale, "
+        "fully inside frame and easy for a face detector to index left-to-right as USER=0 and CELEBRITY=1. Photorealistic documentary camera, "
+        "real skin texture, realistic anatomy, no text, logos or watermark. "
     )
     if mode is CaptureMode.TRUE_PHONE_SELFIE:
         camera = (
-            "TRUE FRONT-CAMERA SELFIE. The output is the direct image from a phone front camera held by one of the two subjects. "
-            "Both faces are visible at natural arm's-length perspective. The phone, mirror, selfie stick, photographer and any "
-            "third-person viewpoint are invisible. Keep SUBJECT A on image-left and SUBJECT B on image-right. "
+            "TRUE FRONT-CAMERA SELFIE. The image itself is the phone front-camera output; no phone, mirror, photographer or third-person camera "
+            "is visible. Both heads and upper torsos fill the frame at arm's length, USER left and CELEBRITY right, both looking into the lens. "
         )
     else:
         camera = (
-            "THIRD-PERSON PHOTO. Show both subjects naturally, preferably at least three-quarter body. Keep SUBJECT A on image-left "
-            "and SUBJECT B on image-right. Clothing for both subjects must be newly designed for the selected scene, not copied from references. "
+            "POSED THIRD-PERSON JOINT PHOTO, not a candid conversation. Show both people looking toward the photographer, preferably from knees "
+            "or waist up so faces remain large. USER left and CELEBRITY right. Generate new scene-appropriate wardrobe for both people. "
         )
     return identity + camera + f"SCENE: {scene.strip()}"
