@@ -130,6 +130,57 @@ async def _priority_precheckout(update: Any, context: Any) -> None:
         raise ApplicationHandlerStop
 
 
+async def _priority_start(update: Any, context: Any) -> None:
+    """Guarantee /start survives legacy handler ordering and late runtime patches."""
+    from telegram.ext import ApplicationHandlerStop
+
+    app = getattr(context, "application", None)
+    invoked = False
+    try:
+        handlers = getattr(app, "handlers", {}) if app is not None else {}
+        for group in sorted(handlers):
+            if group <= -98:
+                continue
+            for handler in handlers.get(group, ()):
+                callback = getattr(handler, "callback", None)
+                commands = {str(item).lower() for item in (getattr(handler, "commands", None) or ())}
+                if "start" not in commands or callback is None or callback is _priority_start:
+                    continue
+                result = callback(update, context)
+                if hasattr(result, "__await__"):
+                    await result
+                invoked = True
+                break
+            if invoked:
+                break
+        if not invoked:
+            mod = _runtime_module()
+            for name in ("start", "cmd_start", "start_command", "on_start"):
+                callback = getattr(mod, name, None) if mod is not None else None
+                if not callable(callback) or callback is _priority_start:
+                    continue
+                result = callback(update, context)
+                if hasattr(result, "__await__"):
+                    await result
+                invoked = True
+                break
+        if not invoked and update.effective_message is not None:
+            await update.effective_message.reply_text(
+                "✅ Бот работает. Откройте «Меню ботов» или выберите нужный раздел кнопками ниже."
+            )
+    except Exception as exc:
+        mod = _runtime_module()
+        logger = getattr(mod, "log", None) if mod is not None else None
+        with contextlib.suppress(Exception):
+            logger.exception("priority /start handler failed: %r", exc)
+        if update.effective_message is not None:
+            with contextlib.suppress(Exception):
+                await update.effective_message.reply_text(
+                    "⚠️ Не удалось открыть главное меню. Повторите /start через несколько секунд."
+                )
+    raise ApplicationHandlerStop
+
+
 async def _cmd_diag_prod(update: Any, context: Any) -> None:
     mod = _runtime_module()
     if mod is None:
@@ -235,6 +286,7 @@ def _install_builder_hook() -> None:
         if not getattr(app, "_neyrobot_prod_v119_handlers", False):
             app.add_handler(PreCheckoutQueryHandler(_priority_precheckout), group=-100)
             app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, _priority_successful_payment), group=-100)
+            app.add_handler(CommandHandler("start", _priority_start), group=-98)
             app.add_handler(CommandHandler("diag_prod", _cmd_diag_prod), group=-99)
             app.add_handler(CommandHandler("diag_jobs", _cmd_diag_jobs), group=-99)
             app.add_handler(CommandHandler("diag_medcard", _cmd_diag_medcard), group=-99)
