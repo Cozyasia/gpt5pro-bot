@@ -26,7 +26,9 @@ def build_pipeline(config: StarSelfieConfig) -> StarSelfiePipeline:
             endpoint=config.face_swap_url,
             api_key=config.face_swap_api_key,
             timeout_s=config.face_swap_timeout_s,
-            face_restore=config.segmind_face_restore,
+            # Face restoration commonly de-ages, smooths pores and changes facial
+            # geometry. Star Selfie needs an identity transfer, not beautification.
+            face_restore="",
         )
     elif config.face_swap_provider == "generic_rest":
         face_swap_transport = GenericFaceSwapRESTTransport(
