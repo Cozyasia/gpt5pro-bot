@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v239-legacy-ai-selfie-source-purged-2026-07-29"
+VERSION = "v241-star-selfie-v232-scene-terminal-user-faceswap-2026-08-02"
 
 try:
     from .star_selfie.bootstrap import install_builder_hook as _install_star_selfie_builder_hook
