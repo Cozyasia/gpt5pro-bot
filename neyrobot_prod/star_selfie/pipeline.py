@@ -9,12 +9,13 @@ from .storage import StarSelfieStorage
 
 
 class StarSelfiePipeline:
-    """Legacy multi-reference scene generation plus user-only face transfer.
+    """V232 scene generation followed by one isolated user identity transfer.
 
-    The scene model owns the complete scene and the celebrity identity, using all
-    catalogue references together. The external face provider is allowed to edit
-    only PERSON A (the user on image-left). This prevents the face-swap provider
-    from replacing, rejuvenating or degrading the celebrity produced by Gemini.
+    Gemini creates the complete scene and the selected celebrity from the legacy
+    multi-reference set.  Only after that image is accepted does the dedicated
+    FaceSwap provider replace PERSON A.  The FaceSwap output is terminal: it is
+    never sent back through Gemini, which prevents redraw, rejuvenation and loss
+    of celebrity identity.
     """
 
     def __init__(
@@ -40,7 +41,7 @@ class StarSelfiePipeline:
         source_face: bytes,
         target_scene: bytes,
     ) -> tuple[bytes, int]:
-        """Transfer only the user's face into the left-most principal face."""
+        """Replace PERSON A only; never alter or re-generate PERSON B."""
         errors: list[str] = []
         for attempt in range(1, self.face_swap_attempts + 1):
             try:
@@ -95,9 +96,12 @@ class StarSelfiePipeline:
 
         for generation_attempt in range(1, self.max_attempts + 1):
             try:
+                # V232-quality scene pass. The portrait is only a construction
+                # anchor here; the exact user identity is applied afterwards.
                 base_scene = await self.scene_provider.generate(
                     prompt=prompt,
                     character_references=character_refs,
+                    user_face_reference=user_face,
                     user_body_reference=user_body_reference,
                     scene_reference=scene_reference,
                 )
@@ -105,6 +109,7 @@ class StarSelfiePipeline:
                 if not scene_qc.accepted:
                     raise RuntimeError(f"base scene QC rejected: {scene_qc.reason}")
 
+                # Terminal isolated stage. Do not pass this result back to Gemini.
                 final, user_swap_attempt = await self._transfer_user_face(
                     source_face=user_face,
                     target_scene=base_scene,
@@ -128,15 +133,17 @@ class StarSelfiePipeline:
                         "character": request.character.slug,
                         "aspect_ratio": request.aspect_ratio,
                         "generation_attempt": generation_attempt,
-                        "architecture": "legacy_multireference_scene_plus_user_only_face_transfer",
+                        "architecture": "v232_scene_plus_terminal_user_only_face_swap",
                         "identity_assignment": "left_user_right_celebrity",
                         "celebrity_generated_from_all_catalog_references": True,
                         "celebrity_face_swap_disabled": True,
+                        "user_portrait_used_as_scene_anchor": True,
+                        "user_body_reference": True,
                         "user_identity_transfer": True,
                         "user_target_face_index": 0,
                         "user_swap_attempt": user_swap_attempt,
+                        "post_swap_gemini_pass": False,
                         "custom_scene_photo": request.scene_reference_path is not None,
-                        "user_body_reference": True,
                     },
                 )
             except Exception as exc:
