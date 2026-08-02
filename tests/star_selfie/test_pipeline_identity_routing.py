@@ -38,7 +38,7 @@ class _FaceSwapProvider:
 
 
 class PipelineIdentityRoutingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_scene_uses_all_character_refs_and_face_swap_edits_user_only(self):
+    async def test_v232_scene_then_terminal_user_only_face_swap(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             user_face = root / "user-face.jpg"
@@ -78,17 +78,22 @@ class PipelineIdentityRoutingTests(unittest.IsolatedAsyncioTestCase):
             result = await pipeline.run(request)
 
             self.assertEqual(len(scene_provider.calls), 1)
+            scene_call = scene_provider.calls[0]
             self.assertEqual(
-                scene_provider.calls[0]["character_references"],
+                scene_call["character_references"],
                 [path.read_bytes() for path in refs],
             )
+            self.assertEqual(scene_call["user_face_reference"], user_face.read_bytes())
+            self.assertEqual(scene_call["user_body_reference"], user_body.read_bytes())
+
             self.assertEqual(len(face_provider.calls), 1)
             self.assertEqual(face_provider.calls[0]["source_face"], user_face.read_bytes())
             self.assertEqual(face_provider.calls[0]["target_face_index"], 0)
             self.assertTrue(result.metadata["celebrity_face_swap_disabled"])
+            self.assertFalse(result.metadata["post_swap_gemini_pass"])
             self.assertEqual(
                 result.metadata["architecture"],
-                "legacy_multireference_scene_plus_user_only_face_transfer",
+                "v232_scene_plus_terminal_user_only_face_swap",
             )
 
 
