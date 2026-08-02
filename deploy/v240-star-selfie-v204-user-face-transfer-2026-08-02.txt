@@ -1,0 +1,8 @@
+version=v240-star-selfie-v204-user-face-transfer-2026-08-02
+architecture=legacy_multireference_scene_plus_user_only_face_transfer
+scene_provider=Gemini multi-reference
+character_identity=generated from all catalogue references
+celebrity_face_swap=disabled
+user_face_transfer=enabled
+target_face_index=0
+identity_assignment=left_user_right_celebrity
