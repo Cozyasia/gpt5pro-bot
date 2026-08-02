@@ -1,13 +1,22 @@
+from io import BytesIO
 from pathlib import Path
 import json
 import tempfile
 import unittest
 from unittest import mock
 
+from PIL import Image
+
 from neyrobot_prod.star_selfie.config import StarSelfieConfig
 from neyrobot_prod.star_selfie.diagnostics import build_report
 from neyrobot_prod.star_selfie.providers.http import SegmindFaceSwapRESTTransport
 from neyrobot_prod.star_selfie.qc import BasicImageQC
+
+
+def _jpeg_bytes(size=(256, 256), color=(128, 96, 64)) -> bytes:
+    bio = BytesIO()
+    Image.new("RGB", size, color).save(bio, format="JPEG", quality=95)
+    return bio.getvalue()
 
 
 class StarSelfieRuntimeTests(unittest.TestCase):
@@ -32,7 +41,8 @@ class StarSelfieRuntimeTests(unittest.TestCase):
         with mock.patch.dict("os.environ", env, clear=True):
             config = StarSelfieConfig.from_env(Path("/app"))
         self.assertEqual(config.gemini_api_key, "gemini-existing")
-        self.assertEqual(config.gemini_model, "gemini-existing-model")
+        # Star Selfie deliberately uses the Pro model and must not inherit the weaker fallback.
+        self.assertEqual(config.gemini_model, "gemini-3-pro-image")
         self.assertEqual(config.face_swap_api_key, "segmind-existing")
         self.assertEqual(config.face_swap_provider, "segmind")
         self.assertEqual(config.face_swap_url, "https://api.segmind.com/v1/faceswap-v2")
@@ -71,10 +81,11 @@ class StarSelfieRuntimeTests(unittest.TestCase):
 class SegmindTransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_faceswap_v2_uses_official_fields_and_api_header(self):
         captured = {}
+        provider_result = _jpeg_bytes(color=(32, 64, 96))
 
         def fake_request(url, headers, payload, timeout):
             captured.update(url=url, headers=headers, payload=payload, timeout=timeout)
-            return b"\xff\xd8\xffresult", "image/jpeg"
+            return provider_result, "image/jpeg"
 
         transport = SegmindFaceSwapRESTTransport(
             endpoint="https://api.segmind.com/v1/faceswap-v2",
@@ -82,9 +93,12 @@ class SegmindTransportTests(unittest.IsolatedAsyncioTestCase):
             timeout_s=123,
         )
         with mock.patch("neyrobot_prod.star_selfie.providers.http._request", side_effect=fake_request):
-            result = await transport.swap(source_face=b"\xff\xd8\xffsource", target_scene=b"\x89PNGtarget")
+            result = await transport.swap(
+                source_face=_jpeg_bytes(color=(200, 160, 120)),
+                target_scene=_jpeg_bytes(size=(640, 800), color=(80, 100, 120)),
+            )
 
-        self.assertEqual(result, b"\xff\xd8\xffresult")
+        self.assertEqual(result, provider_result)
         self.assertEqual(captured["headers"]["x-api-key"], "secret")
         self.assertIn("source_img", captured["payload"])
         self.assertIn("target_img", captured["payload"])
