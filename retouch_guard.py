@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import random
 import re
 from io import BytesIO
@@ -54,10 +53,14 @@ def _regions_from_instruction(text: str, width: int, height: int) -> list[tuple[
         regions.append((int(width * 0.58), 0, width, int(height * 0.38)))
     if top and left:
         regions.append((0, 0, int(width * 0.42), int(height * 0.38)))
-    if bottom and right:
+    if bottom and right and not center:
         regions.append((int(width * 0.58), int(height * 0.62), width, height))
-    if bottom and left:
+    if bottom and left and not center:
         regions.append((0, int(height * 0.62), int(width * 0.42), height))
+    if bottom and center:
+        regions.append((int(width * 0.18), int(height * 0.66), int(width * 0.82), height))
+    if top and center:
+        regions.append((int(width * 0.18), 0, int(width * 0.82), int(height * 0.34)))
 
     if not regions:
         if top:
@@ -72,13 +75,20 @@ def _regions_from_instruction(text: str, width: int, height: int) -> list[tuple[
             regions.append((int(width * 0.22), int(height * 0.22), int(width * 0.78), int(height * 0.78)))
 
     # A phrase can describe two objects, e.g. "logo top-right and text bottom".
-    # Add a bottom strip independently when the wording clearly contains a
-    # separate bottom target in addition to a corner target.
-    if regions and bottom and not any(y2 == height and y1 >= int(height * 0.60) for _, y1, _, y2 in regions):
-        regions.append((0, int(height * 0.72), width, height))
+    # If a top corner and a second bottom target are both named, include the
+    # bottom band independently; do not let the first object's "right" leak into
+    # the location of the second object.
+    if top and bottom and not center:
+        bottom_band = (0, int(height * 0.72), width, height)
+        if bottom_band not in regions:
+            regions.append(bottom_band)
 
-    # No position means we must not silently permit a full-frame redraw.
-    return regions
+    # Remove duplicates while preserving order.
+    unique: list[tuple[int, int, int, int]] = []
+    for region in regions:
+        if region not in unique:
+            unique.append(region)
+    return unique
 
 
 def _build_masks(size: tuple[int, int], regions: list[tuple[int, int, int, int]]) -> tuple[Image.Image, Image.Image]:
@@ -182,6 +192,8 @@ async def guarded_openai_retouch(img_bytes: bytes, user_instruction: str, *, api
 
     regions = _regions_from_instruction(user_instruction, *original.size)
     if not regions:
+        # Fail closed: without a location, a whole-frame edit would recreate the
+        # exact regression this module is designed to prevent.
         log.warning("retouch rejected: no location found in instruction=%r", user_instruction[:300])
         return None
 
