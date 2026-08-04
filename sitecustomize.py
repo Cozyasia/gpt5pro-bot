@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """Load the production runtime before main.py.
 
-V232 keeps the proven V219 selfie UI/media flow, permanently disables its
-legacy owner loop and Comet generator, and applies narrow production hardening:
-- direct Google Gemini remains the only celebrity-selfie owner;
-- text retouch uses a local mask and original-preserving composite;
-- Telegram media requests receive realistic transport timeouts.
+V234 keeps the proven V219 selfie UI/media flow and V232 scene/hero generation,
+but reserves user photo #3 for a mandatory terminal user-only identity transfer.
+Legacy Comet owners remain disabled. Text retouch keeps its original-preserving
+local-mask guard and Telegram media requests use production timeouts.
 """
 
 import contextlib
@@ -42,8 +41,9 @@ try:
     from telegram.ext import ApplicationBuilder
     from neyrobot_prod import selfie_v219_triref_scene_owner as selfie_ui
     from neyrobot_prod import selfie_v229_canonical_two_stage as selfie_google
+    from neyrobot_prod import selfie_v234_terminal_user_transfer as selfie_terminal
 
-    CANONICAL_SELFIE_VERSION = "v232-selfie-hard-source-google-two-stage-2026-07-29"
+    CANONICAL_SELFIE_VERSION = selfie_terminal.VERSION
 
     # Let V219 prepare its stable three-photo UI aliases exactly once.
     selfie_ui.patch_runtime()
@@ -65,15 +65,15 @@ try:
 
     async def _disabled_comet_route(*args, **kwargs):
         raise RuntimeError(
-            "Legacy Comet selfie route is disabled; use canonical direct Google Gemini"
+            "Legacy Comet selfie route is disabled; use canonical terminal user transfer"
         )
 
     def _force_canonical_aliases() -> None:
-        # The already registered V219 callback resolves `generate` from its module
-        # globals at call time. Replacing both the attribute and callback globals is
-        # therefore authoritative and does not depend on handler registration order.
-        selfie_ui.generate = selfie_google.generate
-        selfie_ui.public_callback.__globals__["generate"] = selfie_google.generate
+        # The registered V219 callback resolves `generate` from its module globals
+        # at call time. Both references must point to V234. No old owner may return
+        # a composition-only image or invoke Comet as an implicit fallback.
+        selfie_ui.generate = selfie_terminal.generate
+        selfie_ui.public_callback.__globals__["generate"] = selfie_terminal.generate
         selfie_ui._comet_generate = _disabled_comet_route
         with contextlib.suppress(Exception):
             selfie_ui.public_callback.__globals__["_comet_generate"] = _disabled_comet_route
@@ -107,14 +107,13 @@ try:
 
     _force_canonical_aliases()
     selfie_google.patch_runtime()
+    _force_canonical_aliases()
 
-    _builder_flag = "_neyrobot_v233_guarded_retouch_builder_hooked"
+    _builder_flag = "_neyrobot_v234_terminal_transfer_builder_hooked"
     if not getattr(ApplicationBuilder, _builder_flag, False):
         _original_build = ApplicationBuilder.build
 
         def _build_with_canonical_selfie(self, *args, **kwargs):
-            # PTB 21.6 exposes these builder methods. Larger media timeouts prevent
-            # getFile/download/sendDocument failures on Telegram's slower edges.
             with contextlib.suppress(Exception):
                 self.connect_timeout(float(os.environ.get("TELEGRAM_CONNECT_TIMEOUT_S", "30") or "30"))
                 self.read_timeout(float(os.environ.get("TELEGRAM_READ_TIMEOUT_S", "90") or "90"))
@@ -124,7 +123,6 @@ try:
 
             app = _original_build(self, *args, **kwargs)
             _install_guarded_retouch()
-            _force_canonical_aliases()
             selfie_google.bind_application(app)
             selfie_google.patch_runtime()
             _force_canonical_aliases()
@@ -133,7 +131,7 @@ try:
         ApplicationBuilder.build = _build_with_canonical_selfie
         setattr(ApplicationBuilder, _builder_flag, True)
 
-    # Canonical owner remains last and continuously restores only Google aliases.
+    # Keep V229's callback binder/watchdog, but V234 remains the generation owner.
     selfie_google.install_async()
     _force_canonical_aliases()
 
@@ -144,14 +142,15 @@ try:
         runtime.SELFIE_STORAGE_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_COMMANDS_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_ADMIN_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.CELEBRITY_SELFIE_ROUTE = "v232-hard-source-direct-google-two-stage-9-or-10-refs"
+        runtime.CELEBRITY_SELFIE_ROUTE = "v234-scene-hero-then-photo3-terminal-user-transfer"
         runtime.AI_SELFIE_PROVIDER = "Google Gemini direct only"
         runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY"
         runtime.AI_SELFIE_GENERATION_STAGES = 2
-        runtime.AI_SELFIE_USER_REFERENCES = 3
-        runtime.AI_SELFIE_USER_FACE_REFERENCES = 3
+        runtime.AI_SELFIE_BODY_REFERENCES = 2
+        runtime.AI_SELFIE_TERMINAL_FACE_REFERENCE = "photo_3_only"
         runtime.AI_SELFIE_HERO_REFERENCES = 3
+        runtime.AI_SELFIE_ALLOW_COMPOSITION_FALLBACK = False
 
-    print("[neyrobot-prod] V232 hard-source direct-Google selfie owner installed", flush=True)
+    print("[neyrobot-prod] V234 terminal photo-3 user transfer owner installed", flush=True)
 except Exception as exc:
-    print(f"[neyrobot-prod] canonical selfie V232 warning: {type(exc).__name__}: {exc}")
+    print(f"[neyrobot-prod] canonical selfie V234 warning: {type(exc).__name__}: {exc}")
