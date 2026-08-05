@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""V235 terminal user-only identity transfer for Celebrity Selfie.
+"""V236 terminal user-only identity transfer for Celebrity Selfie.
 
-Stage 1 remains the proven Gemini scene/hero composition. Stage 2 is no longer
-another generative image edit: it calls PiAPI's dedicated multi-face-swap
-endpoint and replaces only PERSON A with user photo #3.
+Stage 1 keeps the proven Gemini scene/hero composition, but now treats the
+user references as authoritative for apparent age, body scale and proportions.
+Stage 2 uses PiAPI's dedicated multi-face-swap endpoint and replaces only
+PERSON A with user photo #3.
 
 Required Render variable: PIAPI_API_KEY
 Optional variables:
@@ -21,7 +22,7 @@ from typing import Any
 
 import httpx
 
-VERSION = "v235-piapi-terminal-face-swap-2026-08-05"
+VERSION = "v236-age-locked-piapi-terminal-face-swap-2026-08-05"
 PIAPI_TASK_URL = "https://api.piapi.ai/api/v1/task"
 
 
@@ -44,15 +45,22 @@ def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool
         f"SHOT MODE: {shot_label}. {scene_rule}"
         "PERSON A is the user body placeholder and MUST stand on the LEFT side of the frame. "
         "PERSON B must stand on the RIGHT. Keep a clear horizontal separation between their faces. "
-        "The user body references define only height, build, age range, posture and clothing scale. "
-        "Do not copy their face and do not use their identity for PERSON B. PERSON A must be near-frontal, "
-        "at no more than 15 degrees yaw, with the whole face visible, unobstructed, evenly lit and at least "
-        "160 pixels high for a later deterministic face swap. Do not let PERSON B overlap PERSON A's face. "
+        "The two USER AGE/BUILD references are the authoritative source for PERSON A's apparent age, "
+        "height class, body scale, shoulder width, neck thickness, limb proportions and overall build. "
+        "Match that apparent age exactly. If the references show a child or teenager, PERSON A MUST remain "
+        "a child or teenager of the same apparent age. NEVER age up a minor and NEVER substitute an adult body, "
+        "adult skull, adult jaw, adult neck, broad adult shoulders, facial hair, age lines or mature facial mass. "
+        "For a minor, use age-appropriate head-to-body ratio, narrow shoulders, slim neck, youthful jaw and limbs. "
+        "Do not copy the user's facial identity during stage 1; create only a neutral temporary face with the correct "
+        "age geometry so a later deterministic face swap can fit naturally. PERSON A must be near-frontal, at no more "
+        "than 15 degrees yaw, with the whole face visible, unobstructed, evenly lit and at least 180 pixels high. "
+        "Do not let PERSON B overlap PERSON A's face. Do not make PERSON A older, heavier, taller or more muscular than "
+        "the user references. The final composition must visibly read as the same age group as the user references. "
         f"PERSON B is {name}. The three HERO references are the exclusive identity authority for PERSON B. "
         "Preserve the hero's face, age, hairstyle and distinctive features. Never blend PERSON A and PERSON B. "
-        "No profile views. No duplicate people. Use realistic smartphone or event photography: natural skin "
-        "texture, ordinary optics, subtle sensor noise and plausible ambient light. Do not show a phone unless "
-        "the requested scene explicitly requires a visible phone. No text, logos, watermark or interface."
+        "No profile views. No duplicate people. No identity mixing. Use realistic smartphone or event photography: "
+        "natural skin texture, ordinary optics, subtle sensor noise and plausible ambient light. Do not show a phone "
+        "unless the requested scene explicitly requires a visible phone. No text, logos, watermark or interface."
     )
 
 
@@ -120,7 +128,7 @@ async def _piapi_face_swap(composition: bytes, face_source: bytes, log: Any) -> 
         task_id = str((data or {}).get("task_id") or "").strip()
         if not task_id:
             raise RuntimeError(f"PiAPI did not return task_id: {str(created)[:500]}")
-        log("AI_SELFIE_V235_PIAPI_CREATED task_id=%s target_index=%s", task_id, target_index)
+        log("AI_SELFIE_V236_PIAPI_CREATED task_id=%s target_index=%s", task_id, target_index)
 
         deadline = asyncio.get_running_loop().time() + timeout_sec
         last_status = "pending"
@@ -132,7 +140,7 @@ async def _piapi_face_swap(composition: bytes, face_source: bytes, log: Any) -> 
             pdata = payload.get("data") if isinstance(payload, dict) else None
             status = str((pdata or {}).get("status") or "").lower()
             if status != last_status:
-                log("AI_SELFIE_V235_PIAPI_STATUS task_id=%s status=%s", task_id, status)
+                log("AI_SELFIE_V236_PIAPI_STATUS task_id=%s status=%s", task_id, status)
                 last_status = status
             if status in {"completed", "success", "succeeded"}:
                 url = _output_url(payload)
@@ -194,8 +202,16 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
         return False
 
     body_refs = [
-        ("USER BODY REFERENCE 1: body proportions only; ignore facial identity", bytes(photos[0])),
-        ("USER BODY REFERENCE 2: body proportions only; ignore facial identity", bytes(photos[1])),
+        (
+            "USER AGE/BUILD REFERENCE 1: authoritative apparent age, body scale and proportions only; "
+            "if this person is a child or teenager, keep PERSON A the same apparent age; ignore facial identity",
+            bytes(photos[0]),
+        ),
+        (
+            "USER AGE/BUILD REFERENCE 2: authoritative apparent age, shoulder width, neck thickness, limb proportions "
+            "and build only; never age up a minor; ignore facial identity",
+            bytes(photos[1]),
+        ),
     ]
     hero_refs = [(f"HERO REFERENCE {idx}: exclusive PERSON B identity", path.read_bytes()) for idx, path in enumerate(hero_paths, 1)]
     face_original = bytes(photos[2])
@@ -212,26 +228,29 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
     async def action() -> bool:
         try:
             v229._log(
-                "AI_SELFIE_V235_START user_id=%s character=%s body_refs=2 hero_refs=3 face3_sha=%s crop_sha=%s target_index=%s",
+                "AI_SELFIE_V236_START user_id=%s character=%s age_build_refs=2 hero_refs=3 face3_sha=%s crop_sha=%s target_index=%s",
                 int(user.id), slug, _sha(face_original), _sha(face_crop), _target_index(),
             )
-            await delivery._safe_text(message, "⏳ Этап 1/2: создаю сцену и героя. Лицо пользователя пока не переносится.")
+            await delivery._safe_text(
+                message,
+                "⏳ Этап 1/2: создаю сцену, героя и возрастно-точное тело пользователя. Лицо пока не переносится.",
+            )
             composition, model1 = await v229._call_google(
                 _stage1_prompt(str(meta["name"]), scene_text, v215._shot_label(shot_mode), has_scene_image),
                 stage1_refs,
-                "v235_scene_and_hero",
+                "v236_age_locked_scene_and_hero",
             )
-            v229._log("AI_SELFIE_V235_COMPOSITION_OK bytes=%s sha=%s model=%s", len(composition), _sha(composition), model1)
+            v229._log("AI_SELFIE_V236_COMPOSITION_OK bytes=%s sha=%s model=%s", len(composition), _sha(composition), model1)
 
             await delivery._safe_text(message, "🧬 Этап 2/2: выполняю отдельный face swap с фото №3. Gemini на этом этапе не используется.")
             final = await _piapi_face_swap(composition, face_crop, v229._log)
             if _sha(final) == _sha(composition):
                 raise RuntimeError("face swap returned unchanged composition")
-            v229._log("AI_SELFIE_V235_FACE_SWAP_OK bytes=%s sha=%s", len(final), _sha(final))
+            v229._log("AI_SELFIE_V236_FACE_SWAP_OK bytes=%s sha=%s", len(final), _sha(final))
 
             caption = (
                 f"🎭 AI-фото с персонажем «{meta['name']}» готово ✅\n"
-                f"Маршрут: Gemini сцена+герой → PiAPI face swap пользователя с фото №3.\n"
+                "Маршрут: Gemini сцена+герой+возрастно-точное тело → PiAPI face swap пользователя с фото №3.\n"
                 "Фото создано ИИ и не подтверждает реальную встречу или поддержку."
             )
             delivered = await delivery._deliver(message, final, caption, prefer_document=bool(getattr(runtime, "AI_SELFIE_SEND_AS_DOCUMENT", True)))
@@ -240,25 +259,26 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
                 await message.reply_text("✅ Что сделать дальше? Фото пользователя, герой, тип кадра и сцена сохранены.", reply_markup=v215._continuation_keyboard(runtime, slug))
             return bool(delivered)
         except Exception as exc:
-            delivery._log_exception("V235 PiAPI terminal face swap failed", exc)
+            delivery._log_exception("V236 age-locked PiAPI terminal face swap failed", exc)
             await delivery._safe_text(
                 message,
-                "❌ Не удалось выполнить обязательный точный перенос лица с фото №3. Черновая сцена не отправлена. "
+                "❌ Не удалось выполнить обязательный перенос лица с фото №3. Черновая сцена не отправлена. "
                 f"Причина: {type(exc).__name__}: {str(exc)[:500]}",
             )
             return False
 
     kwargs = {
-        "remember_kind": "celebrity_selfie_v235_piapi_terminal_face_swap",
+        "remember_kind": "celebrity_selfie_v236_age_locked_piapi_terminal_face_swap",
         "remember_payload": {
             "character": slug,
             "composition_provider": "google_gemini_direct",
             "identity_provider": "piapi_qubico_multi_face_swap",
             "stages": 2,
-            "body_refs": 2,
+            "age_build_refs": 2,
             "hero_refs": 3,
             "terminal_face_source": "user_photo_3_only",
             "target_face_index": _target_index(),
+            "minor_age_up_forbidden": True,
             "no_composition_fallback": True,
         },
     }
