@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Load the production runtime before main.py.
 
-V234 keeps the proven V219 selfie UI/media flow and V232 scene/hero generation,
-but reserves user photo #3 for a mandatory terminal user-only identity transfer.
+V238 keeps the proven V219 selfie UI/media flow and scene/hero generation,
+but applies user photo #3 in an observable two-pass terminal face transfer.
 Legacy Comet owners remain disabled. Text retouch keeps its original-preserving
 local-mask guard and Telegram media requests use production timeouts.
 """
@@ -41,16 +41,12 @@ try:
     from telegram.ext import ApplicationBuilder
     from neyrobot_prod import selfie_v219_triref_scene_owner as selfie_ui
     from neyrobot_prod import selfie_v229_canonical_two_stage as selfie_google
-    from neyrobot_prod import selfie_v234_terminal_user_transfer as selfie_terminal
+    from neyrobot_prod import selfie_v238_observable_double_transfer as selfie_terminal
 
     CANONICAL_SELFIE_VERSION = selfie_terminal.VERSION
 
-    # Let V219 prepare its stable three-photo UI aliases exactly once.
     selfie_ui.patch_runtime()
 
-    # Permanently stop every legacy rebinding path. The old worker resolves these
-    # module globals on each iteration, so replacing them also neutralizes a worker
-    # that may already have been started by an earlier bootstrap import.
     def _legacy_noop(*args, **kwargs):
         return True
 
@@ -64,14 +60,9 @@ try:
     selfie_ui.VERSION = CANONICAL_SELFIE_VERSION
 
     async def _disabled_comet_route(*args, **kwargs):
-        raise RuntimeError(
-            "Legacy Comet selfie route is disabled; use canonical terminal user transfer"
-        )
+        raise RuntimeError("Legacy Comet selfie route is disabled; use canonical terminal user transfer")
 
     def _force_canonical_aliases() -> None:
-        # The registered V219 callback resolves `generate` from its module globals
-        # at call time. Both references must point to V234. No old owner may return
-        # a composition-only image or invoke Comet as an implicit fallback.
         selfie_ui.generate = selfie_terminal.generate
         selfie_ui.public_callback.__globals__["generate"] = selfie_terminal.generate
         selfie_ui._comet_generate = _disabled_comet_route
@@ -79,7 +70,6 @@ try:
             selfie_ui.public_callback.__globals__["_comet_generate"] = _disabled_comet_route
 
     def _install_guarded_retouch() -> bool:
-        """Bind retouch only after main.py has defined its runtime globals."""
         runtime = sys.modules.get("__main__")
         if runtime is None or not hasattr(runtime, "_openai_image_edit_bytes"):
             return False
@@ -109,7 +99,7 @@ try:
     selfie_google.patch_runtime()
     _force_canonical_aliases()
 
-    _builder_flag = "_neyrobot_v234_terminal_transfer_builder_hooked"
+    _builder_flag = "_neyrobot_v238_observable_double_transfer_builder_hooked"
     if not getattr(ApplicationBuilder, _builder_flag, False):
         _original_build = ApplicationBuilder.build
 
@@ -131,7 +121,6 @@ try:
         ApplicationBuilder.build = _build_with_canonical_selfie
         setattr(ApplicationBuilder, _builder_flag, True)
 
-    # Keep V229's callback binder/watchdog, but V234 remains the generation owner.
     selfie_google.install_async()
     _force_canonical_aliases()
 
@@ -142,15 +131,16 @@ try:
         runtime.SELFIE_STORAGE_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_COMMANDS_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_ADMIN_VERSION = CANONICAL_SELFIE_VERSION
-        runtime.CELEBRITY_SELFIE_ROUTE = "v234-scene-hero-then-photo3-terminal-user-transfer"
-        runtime.AI_SELFIE_PROVIDER = "Google Gemini direct only"
+        runtime.CELEBRITY_SELFIE_ROUTE = "v238-scene-hero-body-then-double-photo3-terminal-transfer"
+        runtime.AI_SELFIE_PROVIDER = "Google Gemini composition plus PiAPI two-pass terminal transfer"
         runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY"
-        runtime.AI_SELFIE_GENERATION_STAGES = 2
+        runtime.AI_SELFIE_GENERATION_STAGES = 4
         runtime.AI_SELFIE_BODY_REFERENCES = 2
-        runtime.AI_SELFIE_TERMINAL_FACE_REFERENCE = "photo_3_only"
+        runtime.AI_SELFIE_TERMINAL_FACE_REFERENCE = "photo_3_only_two_pass"
         runtime.AI_SELFIE_HERO_REFERENCES = 3
         runtime.AI_SELFIE_ALLOW_COMPOSITION_FALLBACK = False
+        runtime.AI_SELFIE_TRACE_PREFIX = "AI_SELFIE_V238"
 
-    print("[neyrobot-prod] V234 terminal photo-3 user transfer owner installed", flush=True)
+    print(f"[neyrobot-prod] V238 observable double terminal transfer owner installed version={CANONICAL_SELFIE_VERSION}", flush=True)
 except Exception as exc:
-    print(f"[neyrobot-prod] canonical selfie V234 warning: {type(exc).__name__}: {exc}")
+    print(f"[neyrobot-prod] canonical selfie V238 warning: {type(exc).__name__}: {exc}")
