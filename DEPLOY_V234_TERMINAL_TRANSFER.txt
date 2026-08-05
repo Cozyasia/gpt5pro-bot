@@ -1,0 +1,4 @@
+V234 terminal photo-3 face-transfer deployment trigger.
+Expected startup marker: [neyrobot-prod] V234 terminal photo-3 user transfer owner installed
+Expected generation markers: AI_SELFIE_V234_START, AI_SELFIE_V234_COMPOSITION_OK, AI_SELFIE_V234_TRANSFER_OK
+Created: 2026-08-05
