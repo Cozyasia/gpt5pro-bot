@@ -1,30 +1,36 @@
 # -*- coding: utf-8 -*-
-"""V234 terminal user-only identity transfer for Celebrity Selfie.
+"""V235 terminal user-only identity transfer for Celebrity Selfie.
 
-The proven V232/V219 UI, scene selection and hero references remain untouched.
-Generation is split into two isolated operations:
+Stage 1 remains the proven Gemini scene/hero composition. Stage 2 is no longer
+another generative image edit: it calls PiAPI's dedicated multi-face-swap
+endpoint and replaces only PERSON A with user photo #3.
 
-1. composition: build the scene, pose, bodies and PERSON B (hero).  User photo #3
-   is deliberately excluded from this pass so the renderer cannot blend the
-   user's face into the hero;
-2. terminal transfer: use the completed composition as the authoritative base
-   and photo #3 as the single authoritative source for PERSON A's face.
-
-There is no successful fallback to the composition image.  If the terminal
-identity pass fails, the request fails visibly instead of returning a merely
-similar generated person.
+Required Render variable: PIAPI_API_KEY
+Optional variables:
+  PIAPI_FACE_SWAP_TARGET_INDEX=0   # PERSON A is forced to the left in stage 1
+  PIAPI_FACE_SWAP_TIMEOUT_SEC=150
+  PIAPI_FACE_SWAP_POLL_SEC=2
 """
 from __future__ import annotations
 
+import asyncio
+import base64
 import hashlib
 import os
 from typing import Any
 
-VERSION = "v234-terminal-user-only-transfer-2026-08-05"
+import httpx
+
+VERSION = "v235-piapi-terminal-face-swap-2026-08-05"
+PIAPI_TASK_URL = "https://api.piapi.ai/api/v1/task"
 
 
 def _sha(raw: bytes) -> str:
     return hashlib.sha256(bytes(raw or b"")).hexdigest()[:12]
+
+
+def _b64(raw: bytes) -> str:
+    return base64.b64encode(bytes(raw)).decode("ascii")
 
 
 def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool) -> str:
@@ -36,33 +42,113 @@ def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool
     return (
         "Create one natural photorealistic vertical photograph with exactly two principal people. "
         f"SHOT MODE: {shot_label}. {scene_rule}"
-        "PERSON A is the user body placeholder. The user body references define only height, build, "
-        "age range, posture and clothing scale. Do not copy their face and do not use their identity "
-        "for PERSON B. Keep PERSON A near-frontal or at no more than 20 degrees yaw, with the whole "
-        "face visible, unobstructed and large enough for a later identity transfer. "
-        f"PERSON B is {name}. The three HERO references are the exclusive identity authority for "
-        "PERSON B. Preserve the hero's face, age, hairstyle and distinctive features. Never blend "
-        "PERSON A and PERSON B. No profile views. No duplicate people. "
-        "Use realistic smartphone or event photography: natural skin texture, ordinary optics, "
-        "subtle sensor noise and plausible ambient light. Do not show a phone unless the requested "
-        "scene explicitly requires a visible phone. No text, logos, watermark or interface."
+        "PERSON A is the user body placeholder and MUST stand on the LEFT side of the frame. "
+        "PERSON B must stand on the RIGHT. Keep a clear horizontal separation between their faces. "
+        "The user body references define only height, build, age range, posture and clothing scale. "
+        "Do not copy their face and do not use their identity for PERSON B. PERSON A must be near-frontal, "
+        "at no more than 15 degrees yaw, with the whole face visible, unobstructed, evenly lit and at least "
+        "160 pixels high for a later deterministic face swap. Do not let PERSON B overlap PERSON A's face. "
+        f"PERSON B is {name}. The three HERO references are the exclusive identity authority for PERSON B. "
+        "Preserve the hero's face, age, hairstyle and distinctive features. Never blend PERSON A and PERSON B. "
+        "No profile views. No duplicate people. Use realistic smartphone or event photography: natural skin "
+        "texture, ordinary optics, subtle sensor noise and plausible ambient light. Do not show a phone unless "
+        "the requested scene explicitly requires a visible phone. No text, logos, watermark or interface."
     )
 
 
-def _transfer_prompt(name: str) -> str:
-    return (
-        "TERMINAL USER FACE TRANSFER. IMAGE 1 is the authoritative completed photograph. IMAGE 2 is "
-        "the sole authoritative identity source for PERSON A. Return the same photograph and replace "
-        "only PERSON A's facial identity with the exact identity from IMAGE 2. This is not a new "
-        "generation and not a beautification. Preserve PERSON A's real eye shape and spacing, nose, "
-        "lips, jaw, chin, cheeks, forehead, ears, skin texture, asymmetry and apparent age. Adapt only "
-        "lighting and perspective required to seat that face naturally in the target head. "
-        "Hard-lock every pixel outside PERSON A's face and immediate hairline/neck blending boundary: "
-        "scene, crop, resolution, body, pose, hands, clothes, background, objects and all other people. "
-        f"PERSON B is {name}; do not alter PERSON B in any way. Do not transfer the user onto PERSON B. "
-        "Exactly two principal people must remain. Do not blur, cover or omit PERSON A's face. Output "
-        "one photorealistic image only."
-    )
+def _piapi_key() -> str:
+    return str(os.getenv("PIAPI_API_KEY") or "").strip()
+
+
+def _target_index() -> str:
+    raw = str(os.getenv("PIAPI_FACE_SWAP_TARGET_INDEX") or "0").strip()
+    return raw if raw.isdigit() else "0"
+
+
+def _output_url(payload: dict[str, Any]) -> str:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        return ""
+    output = data.get("output")
+    if isinstance(output, str):
+        return output
+    if isinstance(output, dict):
+        for key in ("image_url", "image", "url", "output_url"):
+            value = output.get(key)
+            if isinstance(value, str) and value.startswith("http"):
+                return value
+        images = output.get("images")
+        if isinstance(images, list) and images:
+            first = images[0]
+            if isinstance(first, str):
+                return first
+            if isinstance(first, dict):
+                for key in ("url", "image_url", "image"):
+                    value = first.get(key)
+                    if isinstance(value, str):
+                        return value
+    return ""
+
+
+async def _piapi_face_swap(composition: bytes, face_source: bytes, log: Any) -> bytes:
+    key = _piapi_key()
+    if not key:
+        raise RuntimeError("PIAPI_API_KEY is missing")
+
+    target_index = _target_index()
+    timeout_sec = max(30.0, float(os.getenv("PIAPI_FACE_SWAP_TIMEOUT_SEC") or "150"))
+    poll_sec = max(1.0, float(os.getenv("PIAPI_FACE_SWAP_POLL_SEC") or "2"))
+    headers = {"x-api-key": key, "Content-Type": "application/json"}
+    body = {
+        "model": "Qubico/image-toolkit",
+        "task_type": "multi-face-swap",
+        "input": {
+            "swap_image": _b64(face_source),
+            "target_image": _b64(composition),
+            "swap_faces_index": "0",
+            "target_faces_index": target_index,
+        },
+        "config": {"webhook_config": {"endpoint": "", "secret": ""}},
+    }
+
+    limits = httpx.Limits(max_connections=5, max_keepalive_connections=2)
+    async with httpx.AsyncClient(timeout=httpx.Timeout(35.0), limits=limits) as client:
+        response = await client.post(PIAPI_TASK_URL, headers=headers, json=body)
+        response.raise_for_status()
+        created = response.json()
+        data = created.get("data") if isinstance(created, dict) else None
+        task_id = str((data or {}).get("task_id") or "").strip()
+        if not task_id:
+            raise RuntimeError(f"PiAPI did not return task_id: {str(created)[:500]}")
+        log("AI_SELFIE_V235_PIAPI_CREATED task_id=%s target_index=%s", task_id, target_index)
+
+        deadline = asyncio.get_running_loop().time() + timeout_sec
+        last_status = "pending"
+        while asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(poll_sec)
+            check = await client.get(f"{PIAPI_TASK_URL}/{task_id}", headers={"x-api-key": key})
+            check.raise_for_status()
+            payload = check.json()
+            pdata = payload.get("data") if isinstance(payload, dict) else None
+            status = str((pdata or {}).get("status") or "").lower()
+            if status != last_status:
+                log("AI_SELFIE_V235_PIAPI_STATUS task_id=%s status=%s", task_id, status)
+                last_status = status
+            if status in {"completed", "success", "succeeded"}:
+                url = _output_url(payload)
+                if not url:
+                    raise RuntimeError(f"PiAPI completed without image URL: {str(payload)[:800]}")
+                image_response = await client.get(url, timeout=45.0)
+                image_response.raise_for_status()
+                final = bytes(image_response.content)
+                if len(final) < 1024:
+                    raise RuntimeError("PiAPI returned an empty image")
+                return final
+            if status in {"failed", "error", "cancelled", "canceled"}:
+                error = (pdata or {}).get("error") or (pdata or {}).get("detail") or payload.get("message")
+                raise RuntimeError(f"PiAPI face swap failed: {str(error)[:700]}")
+
+    raise TimeoutError(f"PiAPI face swap exceeded {int(timeout_sec)} seconds")
 
 
 async def generate(update: Any, context: Any, scene: str = "") -> bool:
@@ -93,6 +179,9 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
     if not v229._key():
         await delivery._safe_text(message, "❌ Отсутствует GEMINI_IMAGE_API_KEY. Средства не списаны.")
         return False
+    if not _piapi_key():
+        await delivery._safe_text(message, "❌ Отсутствует PIAPI_API_KEY для точного переноса лица. Средства не списаны.")
+        return False
 
     runner = getattr(runtime, "_try_pay_then_do", None)
     if not callable(runner):
@@ -104,15 +193,11 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
         await delivery._safe_text(message, f"❌ Для героя не хватает референсов: {len(hero_paths)}/3.")
         return False
 
-    # Photo #3 is reserved exclusively for the terminal identity transfer.
     body_refs = [
         ("USER BODY REFERENCE 1: body proportions only; ignore facial identity", bytes(photos[0])),
         ("USER BODY REFERENCE 2: body proportions only; ignore facial identity", bytes(photos[1])),
     ]
-    hero_refs = [
-        (f"HERO REFERENCE {idx}: exclusive PERSON B identity", path.read_bytes())
-        for idx, path in enumerate(hero_paths, 1)
-    ]
+    hero_refs = [(f"HERO REFERENCE {idx}: exclusive PERSON B identity", path.read_bytes()) for idx, path in enumerate(hero_paths, 1)]
     face_original = bytes(photos[2])
     face_crop = identity._user_face_crop(face_original)
     has_scene_image = bool(scene_image and len(scene_image) > 1024)
@@ -122,77 +207,58 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
         stage1_refs.append(("AUTHORITATIVE SCENE BASE", bytes(scene_image)))
     stage1_refs.extend(body_refs)
     stage1_refs.extend(hero_refs)
-
     result = {"ok": False}
 
     async def action() -> bool:
         try:
             v229._log(
-                "AI_SELFIE_V234_START user_id=%s character=%s body_refs=2 hero_refs=3 face3_sha=%s crop_sha=%s",
-                int(user.id), slug, _sha(face_original), _sha(face_crop),
+                "AI_SELFIE_V235_START user_id=%s character=%s body_refs=2 hero_refs=3 face3_sha=%s crop_sha=%s target_index=%s",
+                int(user.id), slug, _sha(face_original), _sha(face_crop), _target_index(),
             )
-            await delivery._safe_text(message, "⏳ Этап 1/2: создаю сцену и героя. Фото лица №3 на этом этапе не используется.")
+            await delivery._safe_text(message, "⏳ Этап 1/2: создаю сцену и героя. Лицо пользователя пока не переносится.")
             composition, model1 = await v229._call_google(
                 _stage1_prompt(str(meta["name"]), scene_text, v215._shot_label(shot_mode), has_scene_image),
                 stage1_refs,
-                "v234_scene_and_hero",
+                "v235_scene_and_hero",
             )
-            v229._log("AI_SELFIE_V234_COMPOSITION_OK bytes=%s sha=%s model=%s", len(composition), _sha(composition), model1)
+            v229._log("AI_SELFIE_V235_COMPOSITION_OK bytes=%s sha=%s model=%s", len(composition), _sha(composition), model1)
 
-            await delivery._safe_text(message, "🧬 Этап 2/2: переношу лицо только с фотографии №3. Сцена и герой заблокированы.")
-            transfer_refs = [
-                ("IMAGE 1 — AUTHORITATIVE COMPLETED COMPOSITION", composition),
-                ("IMAGE 2 — USER PHOTO #3, SOLE FACE IDENTITY SOURCE", face_crop),
-            ]
-            final, model2 = await v229._call_google(
-                _transfer_prompt(str(meta["name"])),
-                transfer_refs,
-                "v234_terminal_user_face_transfer",
-            )
-            if not final or len(final) < 1024:
-                raise RuntimeError("terminal face transfer returned an empty image")
+            await delivery._safe_text(message, "🧬 Этап 2/2: выполняю отдельный face swap с фото №3. Gemini на этом этапе не используется.")
+            final = await _piapi_face_swap(composition, face_crop, v229._log)
             if _sha(final) == _sha(composition):
-                raise RuntimeError("terminal face transfer returned an unchanged composition")
+                raise RuntimeError("face swap returned unchanged composition")
+            v229._log("AI_SELFIE_V235_FACE_SWAP_OK bytes=%s sha=%s", len(final), _sha(final))
 
-            v229._log("AI_SELFIE_V234_TRANSFER_OK bytes=%s sha=%s model=%s", len(final), _sha(final), model2)
             caption = (
                 f"🎭 AI-фото с персонажем «{meta['name']}» готово ✅\n"
-                f"Маршрут: сцена+герой → отдельный перенос лица пользователя с фото №3. "
-                f"Модели: {model1} → {model2}.\n"
+                f"Маршрут: Gemini сцена+герой → PiAPI face swap пользователя с фото №3.\n"
                 "Фото создано ИИ и не подтверждает реальную встречу или поддержку."
             )
-            delivered = await delivery._deliver(
-                message,
-                final,
-                caption,
-                prefer_document=bool(getattr(runtime, "AI_SELFIE_SEND_AS_DOCUMENT", True)),
-            )
+            delivered = await delivery._deliver(message, final, caption, prefer_document=bool(getattr(runtime, "AI_SELFIE_SEND_AS_DOCUMENT", True)))
             result["ok"] = bool(delivered)
             if delivered:
-                await message.reply_text(
-                    "✅ Что сделать дальше? Фото пользователя, герой, тип кадра и сцена сохранены.",
-                    reply_markup=v215._continuation_keyboard(runtime, slug),
-                )
+                await message.reply_text("✅ Что сделать дальше? Фото пользователя, герой, тип кадра и сцена сохранены.", reply_markup=v215._continuation_keyboard(runtime, slug))
             return bool(delivered)
         except Exception as exc:
-            delivery._log_exception("V234 terminal user face transfer failed", exc)
+            delivery._log_exception("V235 PiAPI terminal face swap failed", exc)
             await delivery._safe_text(
                 message,
-                "❌ Не удалось выполнить обязательный перенос лица с фото №3. "
-                "Черновая сцена не отправлена, чтобы не выдавать просто похожего человека. "
+                "❌ Не удалось выполнить обязательный точный перенос лица с фото №3. Черновая сцена не отправлена. "
                 f"Причина: {type(exc).__name__}: {str(exc)[:500]}",
             )
             return False
 
     kwargs = {
-        "remember_kind": "celebrity_selfie_v234_terminal_user_transfer",
+        "remember_kind": "celebrity_selfie_v235_piapi_terminal_face_swap",
         "remember_payload": {
             "character": slug,
-            "provider": "google_gemini_direct",
+            "composition_provider": "google_gemini_direct",
+            "identity_provider": "piapi_qubico_multi_face_swap",
             "stages": 2,
             "body_refs": 2,
             "hero_refs": 3,
             "terminal_face_source": "user_photo_3_only",
+            "target_face_index": _target_index(),
             "no_composition_fallback": True,
         },
     }
