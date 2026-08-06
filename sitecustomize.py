@@ -3,6 +3,7 @@
 
 V238 keeps the proven V219 selfie UI/media flow and scene/hero generation,
 but applies user photo #3 in an observable two-pass terminal face transfer.
+V242 hardens only the Gemini composition call against transient 429/5xx failures.
 Legacy Comet owners remain disabled. Text retouch keeps its original-preserving
 local-mask guard and Telegram media requests use production timeouts.
 """
@@ -42,9 +43,12 @@ try:
     from neyrobot_prod import selfie_v219_triref_scene_owner as selfie_ui
     from neyrobot_prod import selfie_v229_canonical_two_stage as selfie_google
     from neyrobot_prod import selfie_v238_observable_double_transfer as selfie_terminal
+    from neyrobot_prod import selfie_v242_gemini_resilience as selfie_gemini_resilience
 
     CANONICAL_SELFIE_VERSION = selfie_terminal.VERSION
 
+    # Install the resilient caller before any runtime owner starts rebinding aliases.
+    selfie_gemini_resilience.install()
     selfie_ui.patch_runtime()
 
     def _legacy_noop(*args, **kwargs):
@@ -63,6 +67,9 @@ try:
         raise RuntimeError("Legacy Comet selfie route is disabled; use canonical terminal user transfer")
 
     def _force_canonical_aliases() -> None:
+        # Reinstall on every alias pass because legacy background owners can rewrite
+        # v229._call_google after sitecustomize has already run.
+        selfie_gemini_resilience.install()
         selfie_ui.generate = selfie_terminal.generate
         selfie_ui.public_callback.__globals__["generate"] = selfie_terminal.generate
         selfie_ui._comet_generate = _disabled_comet_route
@@ -113,6 +120,7 @@ try:
 
             app = _original_build(self, *args, **kwargs)
             _install_guarded_retouch()
+            selfie_gemini_resilience.install()
             selfie_google.bind_application(app)
             selfie_google.patch_runtime()
             _force_canonical_aliases()
@@ -132,7 +140,7 @@ try:
         runtime.SELFIE_COMMANDS_VERSION = CANONICAL_SELFIE_VERSION
         runtime.SELFIE_ADMIN_VERSION = CANONICAL_SELFIE_VERSION
         runtime.CELEBRITY_SELFIE_ROUTE = "v238-scene-hero-body-then-double-photo3-terminal-transfer"
-        runtime.AI_SELFIE_PROVIDER = "Google Gemini composition plus PiAPI two-pass terminal transfer"
+        runtime.AI_SELFIE_PROVIDER = "Google Gemini resilient composition plus PiAPI two-pass terminal transfer"
         runtime.AI_SELFIE_ACTIVE_KEY_ENV = "GEMINI_IMAGE_API_KEY"
         runtime.AI_SELFIE_GENERATION_STAGES = 4
         runtime.AI_SELFIE_BODY_REFERENCES = 2
@@ -140,6 +148,7 @@ try:
         runtime.AI_SELFIE_HERO_REFERENCES = 3
         runtime.AI_SELFIE_ALLOW_COMPOSITION_FALLBACK = False
         runtime.AI_SELFIE_TRACE_PREFIX = "AI_SELFIE_V238"
+        runtime.AI_SELFIE_GEMINI_RESILIENCE_VERSION = selfie_gemini_resilience.VERSION
 
     print(f"[neyrobot-prod] V238 observable double terminal transfer owner installed version={CANONICAL_SELFIE_VERSION}", flush=True)
 except Exception as exc:
