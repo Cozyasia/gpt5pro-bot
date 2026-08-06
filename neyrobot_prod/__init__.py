@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v242-nonfatal-left-target-lock-2026-08-06"
+VERSION = "v243-resilient-piapi-transport-2026-08-06"
 
 # Install resilient photo-3/source detection first. Gemini still creates scene,
 # hero and body; PiAPI remains the sole terminal user-identity transfer stage.
@@ -21,5 +21,15 @@ try:
     _install_v242()
 except Exception as _v242_error:
     print(f"[neyrobot-prod] V242 target-lock bootstrap failed: {_v242_error!r}", flush=True)
+
+# PiAPI can intermittently return 429/5xx while creating or polling a face-swap
+# task. Retry transient failures, progressively compact the two isolated crops,
+# and never fall back to Gemini identity generation.
+try:
+    from .selfie_v243_resilient_piapi_transport import install as _install_v243
+
+    _install_v243()
+except Exception as _v243_error:
+    print(f"[neyrobot-prod] V243 PiAPI transport bootstrap failed: {_v243_error!r}", flush=True)
 
 __all__ = ["VERSION"]
