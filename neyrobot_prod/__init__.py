@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v252-isolated-faceswap-quality-2026-08-08"
+VERSION = "v253-production-faceswap-quality-2026-08-08"
 
 try:
     from .selfie_v241_resilient_face_detection import install as _install_v241
@@ -30,14 +30,23 @@ try:
 except Exception as _v244_error:
     print(f"[neyrobot-prod] V244 transport-owner bootstrap failed: {_v244_error!r}", flush=True)
 
-# Independent diagnostic: two uploaded photos go directly through PiAPI/Qubico.
-# V252 adds conservative local photorealistic integration after the provider
-# result. It still does not touch Gemini, heroes, scenes, billing guards or the
-# production AI-selfie generation route.
+# Approved V252 image integration is now promoted to the production Celebrity
+# Selfie terminal crop path. This adds no model call: raw PiAPI face crop is
+# diff-mask/lighting/texture integrated before the existing crop is returned to
+# the untouched Gemini composition.
+try:
+    from .selfie_v253_production_faceswap_quality import install as _install_v253
+    _install_v253()
+except Exception as _v253_error:
+    print(f"[neyrobot-prod] V253 production Face Swap quality bootstrap failed: {_v253_error!r}", flush=True)
+
+# Independent diagnostic remains available for controlled two-photo tests. Its
+# result delivery has extended Telegram timeouts and no longer reports a false
+# PiAPI failure when Telegram accepted the document but its ACK arrived late.
 try:
     from .selfie_v246_faceswap_diag_bootstrap import install as _install_v246
     _install_v246()
 except Exception as _v246_error:
-    print(f"[neyrobot-prod] V252 Face Swap quality diagnostic bootstrap failed: {_v246_error!r}", flush=True)
+    print(f"[neyrobot-prod] V253 Face Swap quality diagnostic bootstrap failed: {_v246_error!r}", flush=True)
 
 __all__ = ["VERSION"]
