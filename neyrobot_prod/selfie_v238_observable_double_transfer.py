@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""V238 observable two-pass terminal identity transfer.
+"""V255 scene-photo-aware two-pass terminal identity transfer.
 
-The Gemini composition remains untouched. User identity is applied only after scene/body/hero
-generation, in two isolated PiAPI face-swap passes. Every material stage emits a Render-visible
-log line with one trace id, elapsed time, dimensions, hashes and crop coordinates.
+Gemini builds scene/hero/body only. PiAPI owns user identity transfer after composition.
+For user-supplied scene photos, the location remains authoritative while framing may adapt
+slightly so PERSON A has a large, frontal, face-swap-friendly placeholder head. A pre-swap
+quality gate retries Gemini once before spending PiAPI calls when target geometry is poor.
 """
 from __future__ import annotations
 
@@ -12,12 +13,11 @@ import contextlib
 import os
 import time
 import uuid
-from io import BytesIO
 from typing import Any
 
 from neyrobot_prod import selfie_v234_terminal_user_transfer as v237
 
-VERSION = "v238-observable-double-terminal-face-transfer-2026-08-05"
+VERSION = "v255-scene-photo-face-target-quality-gate-2026-08-08"
 
 
 def _dims(raw: bytes) -> str:
@@ -30,7 +30,7 @@ def _dims(raw: bytes) -> str:
 def _trace_log(log: Any, trace: str, started: float, stage: str, **fields: Any) -> None:
     elapsed = time.monotonic() - started
     suffix = " ".join(f"{key}={value!r}" for key, value in fields.items())
-    log("AI_SELFIE_V238 trace=%s stage=%s elapsed=%.2fs %s", trace, stage, elapsed, suffix)
+    log("AI_SELFIE_V255 trace=%s stage=%s elapsed=%.2fs %s", trace, stage, elapsed, suffix)
 
 
 async def _heartbeat(log: Any, trace: str, started: float, stage_ref: dict[str, str], stop: asyncio.Event) -> None:
@@ -103,6 +103,57 @@ def _composite_face_only(base_image: Any, target_crop_box: tuple[int, int, int, 
     return v237._jpeg(output, max_side=2048, quality=97)
 
 
+def _scene_photo_prompt(name: str, scene_text: str, shot_label: str, *, retry: bool = False) -> str:
+    retry_rule = (
+        "PREVIOUS COMPOSITION FAILED THE FACE-SWAP GEOMETRY GATE. Move PERSON A closer to camera and make PERSON A's head materially larger. "
+        if retry else ""
+    )
+    return (
+        "Create one natural photorealistic vertical photograph with exactly two principal people. "
+        f"SHOT MODE: {shot_label}. "
+        "The first image is an AUTHORITATIVE LOCATION REFERENCE, not a frozen pixel canvas. Preserve the identity of the place: architecture, "
+        "room geometry, furniture, materials, distinctive objects, window/door positions and recognizable layout. Do NOT invent a different place. "
+        "You MAY make a modest camera-distance, framing, crop or viewpoint adjustment when necessary to stage two people naturally and to create a reliable face-swap target. "
+        "Keep lighting direction and time-of-day plausible for the reference location. "
+        f"{retry_rule}"
+        "PERSON A is the user body placeholder and MUST be clearly on the LEFT. PERSON B must be clearly on the RIGHT. "
+        "PERSON A must be near-frontal, eyes open, mouth relaxed, no glasses, no hair/hand obstruction, and have a neutral temporary identity. "
+        "PERSON A's visible face MUST be large enough for a later terminal face replacement: target face height at least 230 pixels in the final image, preferably 260-360 pixels. "
+        "Do not place PERSON A far in the background. Keep the head, jaw, neck and skull age-appropriate and anatomically realistic. "
+        "The two USER AGE/BUILD references are authoritative only for PERSON A's apparent age, height class, body scale, shoulder width, neck thickness, limb proportions and overall build. "
+        "If the references show a child or teenager, PERSON A must remain the same apparent age and must never receive adult facial mass, mature jaw, facial hair or mature neck/shoulders. "
+        f"PERSON B is {name}. The HERO references are the exclusive identity authority for PERSON B. Preserve the hero's face, age, hairstyle and distinctive features. "
+        "Never blend PERSON A and PERSON B. No duplicate principal people. Use realistic smartphone/event photography, natural skin texture, ordinary optics, subtle sensor noise and plausible ambient light. "
+        "No text, logos, watermark or interface. "
+        + (f"Scene intent: {scene_text}. " if scene_text else "")
+    )
+
+
+def _composition_prompt(name: str, scene_text: str, shot_label: str, has_scene_image: bool, *, retry: bool = False) -> str:
+    if has_scene_image:
+        return _scene_photo_prompt(name, scene_text, shot_label, retry=retry)
+    return v237._stage1_prompt(name, scene_text, shot_label, False)
+
+
+def _target_metrics(composition: bytes) -> tuple[Any, tuple[int, int, int, int], bytes, tuple[int, int, int, int], dict[str, float]]:
+    base_image, target_box, target_crop, target_face = v237._target_face_crop(composition)
+    width, height = base_image.size
+    _x, _y, fw, fh = target_face
+    metrics = {
+        "face_w": float(fw),
+        "face_h": float(fh),
+        "face_h_ratio": float(fh) / float(max(1, height)),
+        "face_area_ratio": float(fw * fh) / float(max(1, width * height)),
+    }
+    return base_image, target_box, target_crop, target_face, metrics
+
+
+def _target_good(metrics: dict[str, float], *, scene_image: bool) -> bool:
+    min_face_px = float(os.getenv("AI_SELFIE_SCENE_MIN_FACE_PX") or ("190" if scene_image else "130"))
+    min_face_ratio = float(os.getenv("AI_SELFIE_SCENE_MIN_FACE_RATIO") or ("0.115" if scene_image else "0.075"))
+    return metrics["face_h"] >= min_face_px and metrics["face_h_ratio"] >= min_face_ratio
+
+
 async def generate(update: Any, context: Any, scene: str = "") -> bool:
     from neyrobot_prod import celebrity_selfie as base
     from neyrobot_prod import selfie_v211_delivery as delivery
@@ -150,7 +201,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
     has_scene_image = bool(scene_image and len(scene_image) > 1024)
     refs: list[tuple[str, bytes]] = []
     if has_scene_image:
-        refs.append(("AUTHORITATIVE SCENE BASE", bytes(scene_image)))
+        refs.append(("AUTHORITATIVE LOCATION REFERENCE: preserve this place, allow modest framing adaptation for two people", bytes(scene_image)))
     refs.extend(body_refs)
     refs.extend(hero_refs)
     result = {"ok": False}
@@ -171,16 +222,41 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
 
             await delivery._safe_text(message, "⏳ Этап 1/4: создаю сцену, героя и тело. Лицо пользователя пока не переносится.")
             stage_ref["value"] = "gemini_composition"
-            composition, model1 = await v229._call_google(
-                v237._stage1_prompt(str(meta["name"]), scene_text, v215._shot_label(shot_mode), has_scene_image),
-                refs,
-                "v238_scene_hero_body_locked",
-            )
-            _trace_log(v229._log, trace, started, "composition_ready", model=model1, bytes=len(composition), dims=_dims(composition), sha=v237._sha(composition))
 
-            stage_ref["value"] = "target_detection"
-            base_image, target_box, target_crop, target_face = v237._target_face_crop(composition)
-            _trace_log(v229._log, trace, started, "target_locked", all_faces=v237._detect_faces(base_image), target_face=target_face, target_crop_box=target_box, target_crop_dims=_dims(target_crop), target_crop_sha=v237._sha(target_crop))
+            max_attempts = 2 if has_scene_image else 1
+            composition = b""
+            model1 = ""
+            base_image = target_box = target_crop = target_face = None
+            metrics: dict[str, float] = {}
+            last_error: Exception | None = None
+
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    prompt = _composition_prompt(str(meta["name"]), scene_text, v215._shot_label(shot_mode), has_scene_image, retry=(attempt > 1))
+                    composition, model1 = await v229._call_google(prompt, refs, f"v255_scene_hero_body_attempt_{attempt}")
+                    _trace_log(v229._log, trace, started, "composition_candidate", attempt=attempt, model=model1, bytes=len(composition), dims=_dims(composition), sha=v237._sha(composition), scene_image=has_scene_image)
+
+                    stage_ref["value"] = "target_quality_gate"
+                    base_image, target_box, target_crop, target_face, metrics = _target_metrics(composition)
+                    good = _target_good(metrics, scene_image=has_scene_image)
+                    _trace_log(v229._log, trace, started, "target_quality", attempt=attempt, good=good, metrics=metrics, target_face=target_face, target_crop_box=target_box)
+                    if good:
+                        break
+                    if attempt < max_attempts:
+                        await delivery._safe_text(message, "🔎 Сцена готова, но лицо пользователя слишком мелкое для качественного переноса. Автоматически перестраиваю кадр ближе — PiAPI ещё не запускался.")
+                        continue
+                    raise ValueError(f"generated PERSON A face is too small for reliable FaceSwap: {metrics}")
+                except Exception as exc:
+                    last_error = exc
+                    _trace_log(v229._log, trace, started, "composition_attempt_failed", attempt=attempt, error_type=type(exc).__name__, error=str(exc)[:500])
+                    if attempt >= max_attempts:
+                        raise
+                    await delivery._safe_text(message, "🔎 Первый вариант сцены не прошёл геометрию FaceSwap. Делаю ещё один вариант с более крупным лицом пользователя.")
+
+            if not composition or base_image is None or target_box is None or target_crop is None or target_face is None:
+                raise RuntimeError(f"composition quality gate produced no usable target: {last_error!r}")
+
+            _trace_log(v229._log, trace, started, "composition_ready", model=model1, bytes=len(composition), dims=_dims(composition), sha=v237._sha(composition), target_metrics=metrics)
 
             await delivery._safe_text(message, "🧬 Этап 2/4: первый изолированный перенос лица с фото №3.")
             stage_ref["value"] = "piapi_pass1"
@@ -204,7 +280,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             await delivery._safe_text(message, "📤 Этап 4/4: отправляю итог. Сцена и герой сохранены из первой генерации.")
             caption = (
                 f"🎭 AI-фото с персонажем «{meta['name']}» готово ✅\n"
-                "Маршрут V238: Gemini сцена+герой+тело → PiAPI перенос №1 → тесный PiAPI перенос №2 → локальное овальное наложение в исходную сцену.\n"
+                "Маршрут V255: Gemini сцена+герой+тело → проверка геометрии лица → PiAPI перенос №1 → тесный PiAPI перенос №2 → локальная фотографичная интеграция.\n"
                 "Фото создано ИИ и не подтверждает реальную встречу или поддержку."
             )
             delivered = await delivery._deliver(message, final, caption, prefer_document=bool(getattr(runtime, "AI_SELFIE_SEND_AS_DOCUMENT", True)))
@@ -215,7 +291,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             return bool(delivered)
         except Exception as exc:
             _trace_log(v229._log, trace, started, "failed", error_type=type(exc).__name__, error=str(exc)[:900], active_stage=stage_ref.get("value"))
-            delivery._log_exception(f"V238 trace={trace} observable double terminal transfer failed", exc)
+            delivery._log_exception(f"V255 trace={trace} scene-aware terminal transfer failed", exc)
             await delivery._safe_text(message, "❌ Не удалось завершить обязательный перенос лица. Черновая сцена не отправлена. " f"Код трассировки: {trace}. Причина: {type(exc).__name__}: {str(exc)[:350]}")
             return False
         finally:
@@ -226,7 +302,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             _trace_log(v229._log, trace, started, "finished", ok=bool(result["ok"]))
 
     kwargs = {
-        "remember_kind": "celebrity_selfie_v238_observable_double_terminal_transfer",
+        "remember_kind": "celebrity_selfie_v255_scene_photo_quality_gate",
         "remember_payload": {
             "character": slug,
             "composition_provider": "google_gemini_direct",
@@ -234,6 +310,9 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             "stages": 4,
             "terminal_face_source": "user_photo_3_only",
             "scene_hero_locked": True,
+            "scene_photo_location_locked_framing_adaptive": True,
+            "pre_piapi_target_quality_gate": True,
+            "scene_photo_composition_retry": True,
             "render_trace_logs": True,
             "heartbeat_logs": True,
             "double_face_swap": True,
