@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Wire the V252 photorealistic quality layer into the isolated Face Swap test.
+"""Wire the photorealistic quality layer into the isolated Face Swap test.
 
-This intentionally changes only the diagnostic button flow. Production AI-selfie
-remains untouched until the isolated path is visually approved.
+V253 keeps the approved V252 image integration but fixes a misleading failure:
+Telegram can accept the result document and still let the client-side upload call
+raise telegram.error.TimedOut a few seconds later. That used to be caught by the
+outer provider exception handler and produced a red PiAPI/V252 failure message
+*after* a valid result had already been delivered.
+
+Production AI-selfie is patched separately after isolated visual approval.
 """
 from __future__ import annotations
 
@@ -13,7 +18,43 @@ from typing import Any
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import selfie_v252_faceswap_quality as quality
 
-VERSION = "v252-isolated-quality-diagnostic-2026-08-08"
+VERSION = "v253-isolated-quality-delivery-timeout-fix-2026-08-08"
+
+
+async def _send_result_document(message: Any, payload: bytes, filename: str, caption: str, trace: str) -> bool:
+    """Send a generated result without misclassifying Telegram ACK timeout as PiAPI failure.
+
+    python-telegram-bot's default media upload timeout can be shorter than a busy
+    Telegram edge needs. Give document delivery explicit headroom. If Telegram
+    raises TimedOut anyway, the request may already have been accepted (this is
+    exactly what the approved test demonstrated), so log it as delivery-uncertain
+    and DO NOT emit a false provider/model error to the user.
+    """
+    try:
+        await message.reply_document(
+            document=payload,
+            filename=filename,
+            caption=caption,
+            read_timeout=120.0,
+            write_timeout=120.0,
+            connect_timeout=30.0,
+            pool_timeout=30.0,
+        )
+        diag._log("trace=%s stage=telegram_result_delivery_ok bytes=%s", trace, len(payload))
+        return True
+    except Exception as exc:
+        try:
+            from telegram.error import TimedOut
+            is_timeout = isinstance(exc, TimedOut)
+        except Exception:
+            is_timeout = type(exc).__name__ in {"TimedOut", "TimeoutError"}
+        if is_timeout:
+            diag._log(
+                "trace=%s stage=telegram_result_delivery_timeout_ignored bytes=%s error=%r",
+                trace, len(payload), str(exc)[:800],
+            )
+            return True
+        raise
 
 
 async def media(update: Any, context: Any) -> None:
@@ -30,7 +71,7 @@ async def media(update: Any, context: Any) -> None:
         raise ApplicationHandlerStop
 
     trace = uuid.uuid4().hex[:12]
-    diag._log("trace=%s stage=v252_handler_enter key=%s state=%s version=%s", trace, diag._key(update), state, VERSION)
+    diag._log("trace=%s stage=v253_handler_enter key=%s state=%s version=%s", trace, diag._key(update), state, VERSION)
 
     try:
         raw = await diag._download_image_message(message)
@@ -80,12 +121,14 @@ async def media(update: Any, context: Any) -> None:
         getattr(transport, "VERSION", "unknown"), quality.VERSION,
     )
     await message.reply_text(
-        "⏳ Запускаю PiAPI Face Swap + V252 фотографичную интеграцию.\n"
+        "⏳ Запускаю PiAPI Face Swap + фотографичную интеграцию.\n"
         f"Код теста: {trace}. В Render ищите FACE_SWAP_DIAG и этот код."
     )
 
+    provider_done = False
     try:
         provider_result = await transport.resilient_piapi_single_face_swap(bytes(raw), source, diag._log)
+        provider_done = True
         provider_info = diag._describe(provider_result)
         diag._log("trace=%s stage=provider_success result=%r", trace, provider_info)
 
@@ -93,7 +136,7 @@ async def media(update: Any, context: Any) -> None:
         polished_info = diag._describe(polished)
         elapsed = time.monotonic() - started
         diag._log(
-            "trace=%s stage=v252_quality_success elapsed=%.2f applied=%s changed_ratio=%.4f bbox=%s polished=%r",
+            "trace=%s stage=v253_quality_success elapsed=%.2f applied=%s changed_ratio=%.4f bbox=%s polished=%r",
             trace, elapsed, stats.applied, stats.changed_ratio, stats.bbox, polished_info,
         )
 
@@ -107,13 +150,15 @@ async def media(update: Any, context: Any) -> None:
                 f"✅ PiAPI Face Swap выполнен. V252 оставил raw-результат без вмешательства "
                 f"({stats.reason}). Код: {trace}. Время: {elapsed:.1f} сек."
             )
-        await message.reply_document(document=polished, filename=f"faceswap_v252_{trace}.jpg", caption=caption)
+        await _send_result_document(message, polished, f"faceswap_v252_{trace}.jpg", caption, trace)
     except Exception as exc:
         elapsed = time.monotonic() - started
         diag._log(
-            "trace=%s stage=v252_swap_failed elapsed=%.2f error_type=%s error=%r",
-            trace, elapsed, type(exc).__name__, str(exc)[:2600],
+            "trace=%s stage=v253_swap_failed elapsed=%.2f provider_done=%s error_type=%s error=%r",
+            trace, elapsed, provider_done, type(exc).__name__, str(exc)[:2600],
         )
+        # Only provider/quality failures are shown as Face Swap failures. Delivery
+        # TimedOut is consumed in _send_result_document and never reaches here.
         await message.reply_text(
             "❌ PiAPI Face Swap/V252 завершился ошибкой.\n"
             f"Код: {trace}\nВремя: {elapsed:.1f} сек.\n"
@@ -131,7 +176,7 @@ def install() -> bool:
     # Must execute before diag.bind_application() on a fresh deploy, so Telegram's
     # MessageHandler receives this function rather than the V250 raw-result handler.
     diag.media = media
-    diag._log("stage=v252_quality_diag_patch status=installed version=%s quality=%s", VERSION, quality.VERSION)
+    diag._log("stage=v253_quality_diag_patch status=installed version=%s quality=%s", VERSION, quality.VERSION)
     return True
 
 
