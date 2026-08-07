@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v246-isolated-faceswap-diagnostic-2026-08-06"
+VERSION = "v252-isolated-faceswap-quality-2026-08-08"
 
 try:
     from .selfie_v241_resilient_face_detection import install as _install_v241
@@ -31,11 +31,13 @@ except Exception as _v244_error:
     print(f"[neyrobot-prod] V244 transport-owner bootstrap failed: {_v244_error!r}", flush=True)
 
 # Independent diagnostic: two uploaded photos go directly through PiAPI/Qubico.
-# It does not touch Gemini, heroes, scenes, billing guards or production selfie state.
+# V252 adds conservative local photorealistic integration after the provider
+# result. It still does not touch Gemini, heroes, scenes, billing guards or the
+# production AI-selfie generation route.
 try:
     from .selfie_v246_faceswap_diag_bootstrap import install as _install_v246
     _install_v246()
 except Exception as _v246_error:
-    print(f"[neyrobot-prod] V246 Face Swap diagnostic bootstrap failed: {_v246_error!r}", flush=True)
+    print(f"[neyrobot-prod] V252 Face Swap quality diagnostic bootstrap failed: {_v246_error!r}", flush=True)
 
 __all__ = ["VERSION"]
