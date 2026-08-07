@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v253-production-faceswap-quality-2026-08-08"
+VERSION = "v254-active-v238-faceswap-quality-and-fallback-fix-2026-08-08"
 
 try:
     from .selfie_v241_resilient_face_detection import install as _install_v241
@@ -21,28 +21,23 @@ try:
 except Exception as _v243_error:
     print(f"[neyrobot-prod] V243 PiAPI transport bootstrap failed: {_v243_error!r}", flush=True)
 
-# V239 re-applies the generation route after package import. Keep the resilient
-# low-level PiAPI transport owned as well, so it cannot be replaced by a late
-# legacy bootstrap and silently revert to one-shot HTTP behavior.
 try:
     from .selfie_v244_transport_owner import install as _install_v244
     _install_v244()
 except Exception as _v244_error:
     print(f"[neyrobot-prod] V244 transport-owner bootstrap failed: {_v244_error!r}", flush=True)
 
-# Approved V252 image integration is now promoted to the production Celebrity
-# Selfie terminal crop path. This adds no model call: raw PiAPI face crop is
-# diff-mask/lighting/texture integrated before the existing crop is returned to
-# the untouched Gemini composition.
+# The guaranteed runtime owner currently routes production through V238. V254
+# therefore patches V238's real final face-composition hook (and keeps V237 as a
+# compatibility path) so the approved V252 diff-mask quality layer is actually
+# executed in production.
 try:
     from .selfie_v253_production_faceswap_quality import install as _install_v253
     _install_v253()
 except Exception as _v253_error:
-    print(f"[neyrobot-prod] V253 production Face Swap quality bootstrap failed: {_v253_error!r}", flush=True)
+    print(f"[neyrobot-prod] V254 production Face Swap quality bootstrap failed: {_v253_error!r}", flush=True)
 
-# Independent diagnostic remains available for controlled two-photo tests. Its
-# result delivery has extended Telegram timeouts and no longer reports a false
-# PiAPI failure when Telegram accepted the document but its ACK arrived late.
+# Independent diagnostic remains available for controlled two-photo tests.
 try:
     from .selfie_v246_faceswap_diag_bootstrap import install as _install_v246
     _install_v246()
