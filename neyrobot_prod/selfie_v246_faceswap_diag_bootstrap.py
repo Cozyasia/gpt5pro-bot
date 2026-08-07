@@ -9,9 +9,14 @@ import time
 from typing import Any
 
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
+from neyrobot_prod import selfie_v252_faceswap_quality_diag as quality_diag
 
-VERSION = diag.VERSION
-_BUILDER_FLAG = "_faceswap_diag_v248_builder_hooked"
+# Critical ordering: patch diag.media before any Telegram application binds its
+# MessageHandler. Production AI-selfie is intentionally not modified here.
+quality_diag.install()
+
+VERSION = quality_diag.VERSION
+_BUILDER_FLAG = "_faceswap_diag_v252_builder_hooked"
 _STARTED = False
 
 
@@ -53,6 +58,7 @@ def install_builder_hook() -> bool:
     original = ApplicationBuilder.build
 
     def build(self: Any, *args: Any, **kwargs: Any):
+        quality_diag.install()
         diag.patch_main_keyboard()
         diag.patch_runtime_entertainment_menu()
         app = original(self, *args, **kwargs)
@@ -66,6 +72,7 @@ def install_builder_hook() -> bool:
 
 def install() -> bool:
     global _STARTED
+    quality_diag.install()
     with contextlib.suppress(Exception):
         diag.patch_main_keyboard()
     with contextlib.suppress(Exception):
@@ -79,6 +86,8 @@ def install() -> bool:
     def worker() -> None:
         for _ in range(7200):
             with contextlib.suppress(Exception):
+                quality_diag.install()
+            with contextlib.suppress(Exception):
                 diag.patch_main_keyboard()
             with contextlib.suppress(Exception):
                 diag.patch_runtime_entertainment_menu()
@@ -86,8 +95,8 @@ def install() -> bool:
                 bind_runtime_apps()
             time.sleep(0.5)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v248").start()
-    print(f"[neyrobot-prod] V248 Face Swap diagnostic installed version={VERSION}", flush=True)
+    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v252").start()
+    print(f"[neyrobot-prod] V252 Face Swap quality diagnostic installed version={VERSION}", flush=True)
     return True
 
 
