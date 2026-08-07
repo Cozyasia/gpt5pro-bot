@@ -11,7 +11,7 @@ from __future__ import annotations
 from io import BytesIO
 from typing import Any
 
-VERSION = "v245-literal-photo3-fallback-2026-08-06"
+VERSION = "v245-literal-photo3-fallback-stable-2026-08-07"
 _WRAPPER: Any | None = None
 _UPSTREAM: Any | None = None
 
@@ -51,8 +51,6 @@ def literal_face_transfer(target_crop: bytes, face_source: bytes, log: Any) -> b
     patch = source.crop((sl, st, sr, sb)).resize((tw, th), Image.LANCZOS)
     target_region = target.crop((tl, tt, tr, tb))
 
-    # Match only coarse luminance/chroma statistics. Facial geometry and texture
-    # remain the real pixels from photo #3.
     src_arr = cv2.cvtColor(np.asarray(patch), cv2.COLOR_RGB2LAB).astype(np.float32)
     dst_arr = cv2.cvtColor(np.asarray(target_region), cv2.COLOR_RGB2LAB).astype(np.float32)
     for channel in range(3):
@@ -83,14 +81,27 @@ def literal_face_transfer(target_crop: bytes, face_source: bytes, log: Any) -> b
 
 
 def install() -> bool:
+    """Bind once, and only repair the binding if another patch actually replaced it."""
     global _WRAPPER, _UPSTREAM
     from neyrobot_prod import selfie_v234_terminal_user_transfer as v237
     from neyrobot_prod import selfie_v243_resilient_piapi_transport as v243
 
-    v243.install()
-    upstream = v237._piapi_single_face_swap
-    if getattr(upstream, "_v245_literal_wrapper", False):
+    current = getattr(v237, "_piapi_single_face_swap", None)
+    if getattr(current, "_v245_literal_wrapper", False):
         return True
+
+    # If our wrapper already exists but a later patch replaced the pointer, restore
+    # the same wrapper without rebuilding the upstream chain or spamming logs.
+    if _WRAPPER is not None and getattr(_WRAPPER, "_v245_literal_wrapper", False):
+        v237._piapi_single_face_swap = _WRAPPER
+        v237.VERSION = VERSION
+        return True
+
+    # Establish V243 exactly once before wrapping it. Previously this happened on
+    # every bootstrap pass, which reset v237 back to V243 and forced V245 to wrap
+    # again every two seconds.
+    v243.install()
+    upstream = v243.resilient_piapi_single_face_swap
     _UPSTREAM = upstream
 
     async def guarded(target_crop: bytes, face_source: bytes, log: Any) -> bytes:
