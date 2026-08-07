@@ -11,7 +11,7 @@ from typing import Any
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 
 VERSION = diag.VERSION
-_BUILDER_FLAG = "_faceswap_diag_v247_builder_hooked"
+_BUILDER_FLAG = "_faceswap_diag_v248_builder_hooked"
 _STARTED = False
 
 
@@ -77,8 +77,6 @@ def install() -> bool:
     _STARTED = True
 
     def worker() -> None:
-        # Runtime owner patches in this project can replace menu functions after startup.
-        # Re-check both real user-visible menus and app bindings for one hour.
         for _ in range(7200):
             with contextlib.suppress(Exception):
                 diag.patch_main_keyboard()
@@ -88,8 +86,8 @@ def install() -> bool:
                 bind_runtime_apps()
             time.sleep(0.5)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v247").start()
-    print(f"[neyrobot-prod] V247 Face Swap diagnostic installed version={VERSION}", flush=True)
+    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v248").start()
+    print(f"[neyrobot-prod] V248 Face Swap diagnostic installed version={VERSION}", flush=True)
     return True
 
 
