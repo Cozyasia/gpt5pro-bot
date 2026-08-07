@@ -5,6 +5,11 @@ Gemini creates the scene/hero/body. Photo #3 is the sole identity source.
 PiAPI performs the terminal isolated face swap. Provider-side model failures are
 reported with their real task/error fields instead of being hidden behind five
 identical HTTP 500 retries.
+
+Important: PiAPI can return HTTP 200 with status=pending and an empty error
+object immediately after task creation. That is a normal accepted task, not a
+provider failure. Only terminal failure statuses or a meaningful provider error
+must abort the job.
 """
 from __future__ import annotations
 
@@ -16,7 +21,7 @@ from typing import Any
 
 import httpx
 
-VERSION = "v249-piapi-provider-error-diagnostics-2026-08-07"
+VERSION = "v251-piapi-pending-is-not-failure-2026-08-08"
 _BIND_COUNT = 0
 
 
@@ -62,28 +67,50 @@ def _output_url(payload: dict[str, Any]) -> str:
 
 
 def _provider_failure(payload: Any) -> str:
-    """Return concise provider/model failure details, or empty string."""
+    """Return concise provider/model failure details, or empty string.
+
+    PiAPI frequently returns an ``error`` object while a task is still pending.
+    Empty/default values (including code=0) are not failures. Treat a response as
+    failed only when the task has reached a terminal failure status or when the
+    provider actually supplied a non-empty error field.
+    """
     if not isinstance(payload, dict):
         return ""
     data = payload.get("data")
     if not isinstance(data, dict):
         return ""
-    status = str(data.get("status") or "").lower()
+
+    status = str(data.get("status") or "").strip().lower()
     error = data.get("error")
-    if status not in {"failed", "error", "cancelled", "canceled"} and not isinstance(error, dict):
+    failed_status = status in {"failed", "error", "cancelled", "canceled"}
+
+    error_dict = error if isinstance(error, dict) else {}
+    code = error_dict.get("code")
+    raw = str(error_dict.get("raw_message") or "").strip()
+    message = str(error_dict.get("message") or "").strip()
+    detail = error_dict.get("detail")
+
+    meaningful_error = (
+        code not in (None, "", 0, "0")
+        or bool(raw)
+        or bool(message)
+        or detail not in (None, "", {}, [], 0, "0")
+    )
+
+    if not failed_status and not meaningful_error:
         return ""
-    error = error if isinstance(error, dict) else {}
-    code = error.get("code")
-    raw = str(error.get("raw_message") or "").strip()
-    message = str(error.get("message") or "").strip()
-    detail = error.get("detail")
+
     task_id = str(data.get("task_id") or "").strip()
-    parts = [f"task_id={task_id or '-'}", f"status={status or '-'}", f"provider_code={code}"]
+    parts = [
+        f"task_id={task_id or '-'}",
+        f"status={status or '-'}",
+        f"provider_code={code if code not in (None, '') else 0}",
+    ]
     if raw:
         parts.append(f"raw_message={raw[:1200]}")
     if message and message != raw:
         parts.append(f"message={message[:800]}")
-    if detail not in (None, "", {}, []):
+    if detail not in (None, "", {}, [], 0, "0"):
         parts.append(f"detail={str(detail)[:800]}")
     return " | ".join(parts)
 
@@ -119,14 +146,14 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
                 },
             }
             log(
-                "AI_SELFIE_V249_CREATE_ATTEMPT attempt=%s/%s target_bytes=%s source_bytes=%s max_side=%s quality=%s",
+                "AI_SELFIE_V251_CREATE_ATTEMPT attempt=%s/%s target_bytes=%s source_bytes=%s max_side=%s quality=%s",
                 attempt, create_attempts, len(compact_target), len(compact_source), max_side, quality,
             )
             try:
                 response = await client.post(v237.PIAPI_TASK_URL, headers=headers, json=body)
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
-                log("AI_SELFIE_V249_CREATE_TRANSPORT_ERROR attempt=%s error=%s", attempt, last_error)
+                log("AI_SELFIE_V251_CREATE_TRANSPORT_ERROR attempt=%s error=%s", attempt, last_error)
                 if attempt < create_attempts:
                     await asyncio.sleep(min(15.0, 2.0 * (2 ** (attempt - 1))))
                     continue
@@ -140,13 +167,10 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
 
             provider_failure = _provider_failure(created)
             if provider_failure:
-                log("AI_SELFIE_V249_PROVIDER_MODEL_FAILURE http=%s %s", response.status_code, provider_failure)
-                # The provider accepted the request and created a task which then
-                # failed in Qubico. Repeating the same pair five times only hides
-                # the real failure and wastes time; surface it immediately.
+                log("AI_SELFIE_V251_PROVIDER_MODEL_FAILURE http=%s %s", response.status_code, provider_failure)
                 raise RuntimeError(f"PiAPI/Qubico model failure: HTTP {response.status_code} | {provider_failure}")
 
-            log("AI_SELFIE_V249_CREATE_RESPONSE attempt=%s status=%s body=%s", attempt, response.status_code, text_preview)
+            log("AI_SELFIE_V251_CREATE_RESPONSE attempt=%s status=%s body=%s", attempt, response.status_code, text_preview)
             if response.status_code >= 400:
                 last_error = f"HTTP {response.status_code}: {text_preview or 'empty response'}"
                 retryable = response.status_code in {408, 409, 425, 429} or response.status_code >= 500
@@ -164,8 +188,9 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
 
             data = created.get("data") if isinstance(created, dict) else None
             task_id = str((data or {}).get("task_id") or "").strip()
+            create_status = str((data or {}).get("status") or "").strip().lower()
             if task_id:
-                log("AI_SELFIE_V249_CREATED task_id=%s attempt=%s", task_id, attempt)
+                log("AI_SELFIE_V251_CREATED task_id=%s attempt=%s status=%s", task_id, attempt, create_status or "-")
                 break
             last_error = f"PiAPI did not return task_id: {str(created)[:700]}"
             if attempt < create_attempts:
@@ -177,7 +202,7 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
             raise RuntimeError(f"PiAPI create failed after {create_attempts} attempts: {last_error}")
 
         deadline = asyncio.get_running_loop().time() + timeout_sec
-        last_status = "pending"
+        last_status = ""
         poll_failures = 0
         while asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(poll_sec)
@@ -185,7 +210,7 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
                 check = await client.get(f"{v237.PIAPI_TASK_URL}/{task_id}", headers={"x-api-key": key})
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 poll_failures += 1
-                log("AI_SELFIE_V249_POLL_TRANSPORT_RETRY task_id=%s failures=%s error=%r", task_id, poll_failures, exc)
+                log("AI_SELFIE_V251_POLL_TRANSPORT_RETRY task_id=%s failures=%s error=%r", task_id, poll_failures, exc)
                 if poll_failures >= 8:
                     raise RuntimeError(f"PiAPI polling repeatedly failed: {type(exc).__name__}: {exc}") from exc
                 continue
@@ -195,14 +220,10 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
                 payload = check.json()
             except Exception:
                 payload = None
-            provider_failure = _provider_failure(payload)
-            if provider_failure:
-                log("AI_SELFIE_V249_PROVIDER_MODEL_FAILURE_POLL http=%s %s", check.status_code, provider_failure)
-                raise RuntimeError(f"PiAPI/Qubico model failure while polling: HTTP {check.status_code} | {provider_failure}")
 
             if check.status_code >= 400:
                 poll_failures += 1
-                log("AI_SELFIE_V249_POLL_RETRY task_id=%s status=%s failures=%s body=%s", task_id, check.status_code, poll_failures, preview)
+                log("AI_SELFIE_V251_POLL_RETRY task_id=%s status=%s failures=%s body=%s", task_id, check.status_code, poll_failures, preview)
                 if (check.status_code in {408, 425, 429} or check.status_code >= 500) and poll_failures < 8:
                     await asyncio.sleep(min(10.0, poll_failures * 1.5))
                     continue
@@ -211,11 +232,18 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
             poll_failures = 0
             if not isinstance(payload, dict):
                 raise RuntimeError(f"PiAPI poll returned invalid JSON: {preview}")
+
+            provider_failure = _provider_failure(payload)
+            if provider_failure:
+                log("AI_SELFIE_V251_PROVIDER_MODEL_FAILURE_POLL http=%s %s", check.status_code, provider_failure)
+                raise RuntimeError(f"PiAPI/Qubico model failure while polling: HTTP {check.status_code} | {provider_failure}")
+
             pdata = payload.get("data") if isinstance(payload, dict) else None
-            status = str((pdata or {}).get("status") or "").lower()
+            status = str((pdata or {}).get("status") or "").strip().lower()
             if status != last_status:
-                log("AI_SELFIE_V249_STATUS task_id=%s status=%s", task_id, status)
+                log("AI_SELFIE_V251_STATUS task_id=%s status=%s", task_id, status or "-")
                 last_status = status
+
             if status in {"completed", "success", "succeeded"}:
                 url = _output_url(payload)
                 if not url:
@@ -226,8 +254,11 @@ async def resilient_piapi_single_face_swap(target_crop: bytes, face_source: byte
                 final = bytes(image_response.content)
                 if len(final) < 1024:
                     raise RuntimeError("PiAPI returned an empty image")
-                log("AI_SELFIE_V249_OUTPUT_OK task_id=%s bytes=%s", task_id, len(final))
+                log("AI_SELFIE_V251_OUTPUT_OK task_id=%s bytes=%s", task_id, len(final))
                 return final
+
+            # pending/processing/queued/running are normal non-terminal states.
+            # Keep polling until completed, a real provider failure, or timeout.
 
     raise TimeoutError(f"PiAPI face swap exceeded {int(timeout_sec)} seconds")
 
@@ -240,7 +271,7 @@ def install() -> bool:
     v237.VERSION = VERSION
     _BIND_COUNT += 1
     if _BIND_COUNT == 1 or _BIND_COUNT % 600 == 0:
-        print(f"[neyrobot-prod] V249 PiAPI transport bound version={VERSION} bind_count={_BIND_COUNT}", flush=True)
+        print(f"[neyrobot-prod] V251 PiAPI transport bound version={VERSION} bind_count={_BIND_COUNT}", flush=True)
     return True
 
 
