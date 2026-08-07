@@ -10,16 +10,15 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import sys
 import time
 import uuid
 from typing import Any
 
-VERSION = "v246-isolated-faceswap-diagnostic-2026-08-06"
+VERSION = "v247-visible-faceswap-diagnostic-2026-08-07"
 STATE = "faceswap_diag_state"
 SOURCE = "faceswap_diag_source"
 TARGET = "faceswap_diag_target"
-_MENU_PATCHED = False
-_ORIGINAL_MAIN_KB: Any | None = None
 
 
 def _log(message: str, *args: Any) -> None:
@@ -176,39 +175,69 @@ async def media(update: Any, context: Any) -> None:
     raise ApplicationHandlerStop
 
 
-def patch_main_keyboard() -> bool:
-    """Append a diagnostic button to the existing AI-selfie/Entertainment keyboard."""
-    global _MENU_PATCHED, _ORIGINAL_MAIN_KB
-    if _MENU_PATCHED:
-        return True
+def _append_diag_button(markup: Any) -> Any:
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    rows = [list(row) for row in getattr(markup, "inline_keyboard", [])]
+    if not any(getattr(button, "callback_data", "") == "fsdiag:start" for row in rows for button in row):
+        rows.append([InlineKeyboardButton("🧪 Тест Face Swap", callback_data="fsdiag:start")])
+    return InlineKeyboardMarkup(rows)
+
+
+def patch_main_keyboard() -> bool:
+    """Patch the AI-selfie internal menu and keep patching if runtime owner code replaces it."""
     from neyrobot_prod import celebrity_selfie as base
 
-    original = getattr(base, "_main_kb", None)
-    if not callable(original):
+    current = getattr(base, "_main_kb", None)
+    if not callable(current):
         return False
-    _ORIGINAL_MAIN_KB = original
+    if getattr(current, "_faceswap_diag_v247", False):
+        return True
+
+    original = current
 
     def wrapped(mod: Any):
-        markup = original(mod)
-        rows = [list(row) for row in getattr(markup, "inline_keyboard", [])]
-        if not any(getattr(button, "callback_data", "") == "fsdiag:start" for row in rows for button in row):
-            rows.append([InlineKeyboardButton("🧪 Тест Face Swap", callback_data="fsdiag:start")])
-        return InlineKeyboardMarkup(rows)
+        return _append_diag_button(original(mod))
 
+    setattr(wrapped, "_faceswap_diag_v247", True)
     base._main_kb = wrapped
-    _MENU_PATCHED = True
-    _log("stage=menu_patch status=installed version=%s", VERSION)
+    _log("stage=ai_selfie_menu_patch status=installed version=%s", VERSION)
+    return True
+
+
+def patch_runtime_entertainment_menu() -> bool:
+    """Patch main.py Entertainment menu, which is the screen users actually open first."""
+    mod = sys.modules.get("__main__") or sys.modules.get("main")
+    if mod is None:
+        return False
+    current = getattr(mod, "_mode_kb", None)
+    if not callable(current):
+        return False
+    if getattr(current, "_faceswap_diag_v247", False):
+        return True
+
+    original = current
+
+    def wrapped(key: str):
+        markup = original(key)
+        if str(key) == "fun":
+            return _append_diag_button(markup)
+        return markup
+
+    setattr(wrapped, "_faceswap_diag_v247", True)
+    setattr(mod, "_mode_kb", wrapped)
+    _log("stage=entertainment_menu_patch status=installed version=%s", VERSION)
     return True
 
 
 def bind_application(app: Any) -> bool:
     from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
-    flag = "_faceswap_diag_v246_bound"
+    flag = "_faceswap_diag_v247_bound"
     if getattr(app, flag, False):
         return True
     patch_main_keyboard()
+    patch_runtime_entertainment_menu()
     app.add_handler(CommandHandler("faceswap_test", start), group=-7000)
     app.add_handler(CallbackQueryHandler(start, pattern=r"^fsdiag:start$"), group=-7000)
     app.add_handler(CallbackQueryHandler(cancel, pattern=r"^fsdiag:cancel$"), group=-7000)
@@ -218,4 +247,7 @@ def bind_application(app: Any) -> bool:
     return True
 
 
-__all__ = ["VERSION", "start", "cancel", "media", "patch_main_keyboard", "bind_application"]
+__all__ = [
+    "VERSION", "start", "cancel", "media", "patch_main_keyboard",
+    "patch_runtime_entertainment_menu", "bind_application"
+]
