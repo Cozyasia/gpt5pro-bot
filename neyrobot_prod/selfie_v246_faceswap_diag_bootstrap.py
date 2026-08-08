@@ -11,8 +11,8 @@ from typing import Any
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import selfie_v252_faceswap_quality_diag as quality_diag
 
-# Critical ordering: patch diag.media before any Telegram application binds its
-# MessageHandler. Production AI-selfie is intentionally not modified here.
+# Critical ordering: patch diag.media once before any Telegram application binds
+# its MessageHandler. Production AI-selfie is intentionally not modified here.
 quality_diag.install()
 
 VERSION = quality_diag.VERSION
@@ -58,6 +58,8 @@ def install_builder_hook() -> bool:
     original = ApplicationBuilder.build
 
     def build(self: Any, *args: Any, **kwargs: Any):
+        # Installer is idempotent, but calling it once per application build is
+        # sufficient. It must never be polled every 0.5 s.
         quality_diag.install()
         diag.patch_main_keyboard()
         diag.patch_runtime_entertainment_menu()
@@ -84,9 +86,10 @@ def install() -> bool:
     _STARTED = True
 
     def worker() -> None:
+        # The worker only discovers late-created Telegram apps/menus. Do not call
+        # quality_diag.install() here: repeated installer polling produced the
+        # FACE_SWAP_DIAG stage=v253_quality_diag_patch log flood seen in Render.
         for _ in range(7200):
-            with contextlib.suppress(Exception):
-                quality_diag.install()
             with contextlib.suppress(Exception):
                 diag.patch_main_keyboard()
             with contextlib.suppress(Exception):
