@@ -5,9 +5,10 @@ V253 keeps the approved V252 image integration but fixes a misleading failure:
 Telegram can accept the result document and still let the client-side upload call
 raise telegram.error.TimedOut a few seconds later. That used to be caught by the
 outer provider exception handler and produced a red PiAPI/V252 failure message
-*after* a valid result had already been delivered.
+after a valid result had already been delivered.
 
-Production AI-selfie is patched separately after isolated visual approval.
+Production AI-selfie is patched separately. This diagnostic installer is
+idempotent so repeated package imports do not flood Render logs.
 """
 from __future__ import annotations
 
@@ -19,17 +20,10 @@ from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import selfie_v252_faceswap_quality as quality
 
 VERSION = "v253-isolated-quality-delivery-timeout-fix-2026-08-08"
+_INSTALLED = False
 
 
 async def _send_result_document(message: Any, payload: bytes, filename: str, caption: str, trace: str) -> bool:
-    """Send a generated result without misclassifying Telegram ACK timeout as PiAPI failure.
-
-    python-telegram-bot's default media upload timeout can be shorter than a busy
-    Telegram edge needs. Give document delivery explicit headroom. If Telegram
-    raises TimedOut anyway, the request may already have been accepted (this is
-    exactly what the approved test demonstrated), so log it as delivery-uncertain
-    and DO NOT emit a false provider/model error to the user.
-    """
     try:
         await message.reply_document(
             document=payload,
@@ -157,8 +151,6 @@ async def media(update: Any, context: Any) -> None:
             "trace=%s stage=v253_swap_failed elapsed=%.2f provider_done=%s error_type=%s error=%r",
             trace, elapsed, provider_done, type(exc).__name__, str(exc)[:2600],
         )
-        # Only provider/quality failures are shown as Face Swap failures. Delivery
-        # TimedOut is consumed in _send_result_document and never reaches here.
         await message.reply_text(
             "❌ PiAPI Face Swap/V252 завершился ошибкой.\n"
             f"Код: {trace}\nВремя: {elapsed:.1f} сек.\n"
@@ -173,9 +165,13 @@ async def media(update: Any, context: Any) -> None:
 
 
 def install() -> bool:
-    # Must execute before diag.bind_application() on a fresh deploy, so Telegram's
-    # MessageHandler receives this function rather than the V250 raw-result handler.
+    global _INSTALLED
+    if _INSTALLED or getattr(diag.media, "_v253_quality_diag_owned", False):
+        _INSTALLED = True
+        return True
+    setattr(media, "_v253_quality_diag_owned", True)
     diag.media = media
+    _INSTALLED = True
     diag._log("stage=v253_quality_diag_patch status=installed version=%s quality=%s", VERSION, quality.VERSION)
     return True
 
