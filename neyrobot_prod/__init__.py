@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v255-scene-photo-face-target-quality-gate-2026-08-08"
+VERSION = "v256-exact-piapi-identity-core-2026-08-08"
 
 try:
     from .selfie_v241_resilient_face_detection import install as _install_v241
@@ -27,20 +27,22 @@ try:
 except Exception as _v244_error:
     print(f"[neyrobot-prod] V244 transport-owner bootstrap failed: {_v244_error!r}", flush=True)
 
-# V255 keeps V254/V252 photorealistic final integration active while the real
-# V238 production route now performs scene-photo-aware framing plus a pre-PiAPI
-# target geometry gate/retry. PiAPI remains the terminal identity provider.
+# V256: production V238/V255 still uses Gemini only for scene+hero+body and two
+# isolated PiAPI passes for identity. The production integration hook now treats
+# PiAPI as the identity authority and feathers only the outer face boundary;
+# the old V252 diff-mask no longer restores Gemini placeholder facial geometry.
 try:
     from .selfie_v253_production_faceswap_quality import install as _install_v253
     _install_v253()
 except Exception as _v253_error:
-    print(f"[neyrobot-prod] V255 production Face Swap quality bootstrap failed: {_v253_error!r}", flush=True)
+    print(f"[neyrobot-prod] V256 exact PiAPI identity bootstrap failed: {_v253_error!r}", flush=True)
 
-# Independent diagnostic remains available for controlled two-photo tests.
+# Independent two-photo provider diagnostic remains available. Its installer is
+# idempotent so repeated imports no longer flood Render with patch messages.
 try:
     from .selfie_v246_faceswap_diag_bootstrap import install as _install_v246
     _install_v246()
 except Exception as _v246_error:
-    print(f"[neyrobot-prod] V255 Face Swap quality diagnostic bootstrap failed: {_v246_error!r}", flush=True)
+    print(f"[neyrobot-prod] V256 Face Swap diagnostic bootstrap failed: {_v246_error!r}", flush=True)
 
 __all__ = ["VERSION"]
