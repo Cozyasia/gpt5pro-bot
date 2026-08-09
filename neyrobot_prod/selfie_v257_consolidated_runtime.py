@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""V257 consolidated production runtime for AI Selfie.
+"""V258 identity-quality runtime built on the consolidated V257 production path.
 
-The existing V219 Telegram UX/storage contract is preserved. Internally there is
+The existing Telegram UX/storage contract is preserved. Internally there is still
 one generation owner and one terminal identity path:
 
 photo 1-2 -> Gemini age/build/body references only
@@ -9,8 +9,9 @@ hero refs + scene -> Gemini scene/hero/body composition
 strict PERSON A target lock -> one PiAPI swap using photo 3 only
 edge-only local integration -> Telegram
 
-There is no automatic second Face Swap, no V252 diff-mask, no V254 literal
-fallback and no Gemini processing after PiAPI.
+V258 tightens the source/target crops used by the single PiAPI pass and rejects
+undersized PERSON A faces so Gemini regenerates the composition once instead of
+sending a weak target to Face Swap.
 """
 from __future__ import annotations
 
@@ -23,12 +24,13 @@ from typing import Any
 
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v257-consolidated-ai-selfie-runtime-2026-08-09"
+VERSION = "v258-identity-quality-runtime-2026-08-09"
+TRACE_PREFIX = "AI_SELFIE_V258"
 
 
 def _trace(log: Any, trace: str, started: float, stage: str, **fields: Any) -> None:
     suffix = " ".join(f"{k}={v!r}" for k, v in fields.items())
-    log("AI_SELFIE_V257 trace=%s stage=%s elapsed=%.2fs %s", trace, stage, time.monotonic() - started, suffix)
+    log(f"{TRACE_PREFIX} trace=%s stage=%s elapsed=%.2fs %s", trace, stage, time.monotonic() - started, suffix)
 
 
 async def _heartbeat(log: Any, trace: str, started: float, stage_ref: dict[str, str], stop: asyncio.Event) -> None:
@@ -47,7 +49,7 @@ def _prompt(name: str, scene_text: str, shot_label: str, has_scene_image: bool, 
         else (f"Create this scene faithfully: {scene_text}. " if scene_text else "Create a natural context appropriate to the selected hero. ")
     )
     retry_rule = (
-        "The previous composition was rejected because PERSON A could not be safely isolated for terminal Face Swap. Make PERSON A clearly visible on the LEFT, closer to camera, with a larger unobstructed near-frontal head. "
+        "The previous composition was rejected because PERSON A could not be safely isolated at sufficient resolution for terminal Face Swap. Make PERSON A clearly visible on the LEFT, closer to camera, with a substantially larger unobstructed near-frontal head. "
         if retry else ""
     )
     return (
@@ -57,12 +59,83 @@ def _prompt(name: str, scene_text: str, shot_label: str, has_scene_image: bool, 
         "PERSON A's body, apparent age, height class, build, shoulder width, neck thickness and proportions come only from the two USER AGE/BUILD references. "
         "The USER AGE/BUILD references are NOT identity references. Do not copy or reconstruct their face identity. "
         "PERSON A must have a neutral temporary face, near-frontal, eyes open, mouth relaxed, no glasses, no hand or hair obstruction, with the whole head and jaw visible. "
-        "PERSON A's face should be large enough for a later local Face Swap, preferably 220-360 pixels high in the final image. "
+        "PERSON A's detected face must be large enough for a later local Face Swap: target approximately 300-450 pixels high in the final generated image, never tiny or distant. "
         "Preserve age-appropriate skull, hairstyle, head-to-body ratio and anatomy. If the body references show a child or teenager, never give PERSON A adult facial mass, facial hair, mature neck or mature shoulders. "
         f"PERSON B is {name}. The HERO references are the exclusive identity authority for PERSON B; preserve the hero's recognizable face, age, hairstyle and distinctive features. "
         "Never blend PERSON A and PERSON B. Keep both principal faces separate. Avoid mirrors, portraits, posters, paintings or face-like decorations in the left upper background near PERSON A because the final pipeline must isolate PERSON A safely. "
         "Use realistic smartphone/event photography, natural skin texture, plausible ambient light and ordinary optics. No watermark or interface."
     )
+
+
+def _v258_source(photo3: bytes, log: Any) -> fs.FaceTarget:
+    """Create a face-centric source crop while preserving hair, ears and jaw."""
+    detected = fs.source_face_crop(photo3, None)
+    img = fs.image(photo3)
+    # V257 could expand a large portrait face to the full 3:4 frame. V258 keeps
+    # the detected identity dominant in the source presented to Qubico.
+    crop_box = fs._expand(detected.face_box, img.size, 1.52, 1.66, 0.02)
+    crop_img = img.crop(crop_box)
+    raw = fs.jpeg(crop_img, max_side=1100, quality=97)
+    fw, fh = detected.face_box[2], detected.face_box[3]
+    cw, ch = crop_img.size
+    face_w_coverage = fw / float(max(1, cw))
+    face_h_coverage = fh / float(max(1, ch))
+    result = fs.FaceTarget(
+        detected.face_box,
+        crop_box,
+        raw,
+        detected.support,
+        detected.eye_count,
+        detected.score,
+    )
+    log(
+        "AI_SELFIE_V258_SOURCE face=%s crop=%s support=%s eyes=%s sha=%s dims=%s face_w_coverage=%.3f face_h_coverage=%.3f",
+        result.face_box, result.crop_box, result.support, result.eye_count, fs.sha(raw), fs.dims(raw), face_w_coverage, face_h_coverage,
+    )
+    if face_w_coverage < 0.48 or face_h_coverage < 0.43:
+        raise ValueError("photo #3 source crop is not face-centric enough for production Face Swap")
+    return result
+
+
+def _v258_target(composition: bytes, *, scene_image: bool, log: Any) -> tuple[Any, fs.FaceTarget, dict[str, float]]:
+    """Use V257 safe localization, then enforce V258 resolution and crop quality."""
+    base_img, located, metrics = fs.locate_person_a(composition, scene_image=scene_image, log=None)
+    iw, ih = base_img.size
+    face_h = int(located.face_box[3])
+    ratio = face_h / float(max(1, ih))
+    min_px = 280 if scene_image else 260
+    min_ratio = 0.115 if scene_image else 0.108
+    if face_h < min_px or ratio < min_ratio:
+        raise ValueError(
+            f"PERSON A face below V258 production resolution: face_h={face_h}px ratio={ratio:.4f} required={min_px}px/{min_ratio:.4f}"
+        )
+
+    crop_box = fs._expand(located.face_box, base_img.size, 2.15, 2.45, 0.015)
+    crop_img = base_img.crop(crop_box)
+    crop_raw = fs.jpeg(crop_img, max_side=1250, quality=97)
+    fw, fh = located.face_box[2], located.face_box[3]
+    cw, ch = crop_img.size
+    metrics = dict(metrics)
+    metrics.update({
+        "v258_min_px": float(min_px),
+        "v258_min_ratio": float(min_ratio),
+        "target_face_w_coverage": fw / float(max(1, cw)),
+        "target_face_h_coverage": fh / float(max(1, ch)),
+    })
+    target = fs.FaceTarget(
+        located.face_box,
+        crop_box,
+        crop_raw,
+        located.support,
+        located.eye_count,
+        located.score,
+    )
+    log(
+        "AI_SELFIE_V258_TARGET face=%s crop=%s support=%s eyes=%s score=%.3f sha=%s dims=%s face_w_coverage=%.3f face_h_coverage=%.3f",
+        target.face_box, target.crop_box, target.support, target.eye_count, target.score, fs.sha(crop_raw), fs.dims(crop_raw),
+        metrics["target_face_w_coverage"], metrics["target_face_h_coverage"],
+    )
+    return base_img, target, metrics
 
 
 async def generate(update: Any, context: Any, scene: str = "") -> bool:
@@ -126,7 +199,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
         try:
             _trace(v229._log, trace, started, "start", version=VERSION, user_id=int(user.id), character=slug, shot=shot_mode, scene_mode=scene_mode, photo3_sha=fs.sha(photo3), photo3_dims=fs.dims(photo3), photo3_bytes=len(photo3))
 
-            source = fs.source_face_crop(photo3, v229._log)
+            source = _v258_source(photo3, v229._log)
             _trace(v229._log, trace, started, "source_ready", face=source.face_box, crop=source.crop_box, source_sha=fs.sha(source.crop_raw), source_dims=fs.dims(source.crop_raw), support=source.support, eyes=source.eye_count)
 
             await delivery._safe_text(message, "⏳ Этап 1/4: создаю сцену, героя и тело. Лицо пользователя пока не переносится.")
@@ -141,17 +214,17 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             for attempt in range(1, 3):
                 try:
                     prompt = _prompt(str(meta["name"]), scene_text, v215._shot_label(shot_mode), has_scene_image, retry=(attempt > 1))
-                    composition, model = await v229._call_google(prompt, refs, f"v257_scene_hero_body_attempt_{attempt}")
+                    composition, model = await v229._call_google(prompt, refs, f"v258_scene_hero_body_attempt_{attempt}")
                     _trace(v229._log, trace, started, "composition_candidate", attempt=attempt, model=model, sha=fs.sha(composition), dims=fs.dims(composition), bytes=len(composition), scene_image=has_scene_image)
                     stage_ref["value"] = "person_a_target_lock"
-                    base_image, target, metrics = fs.locate_person_a(composition, scene_image=has_scene_image, log=v229._log)
+                    base_image, target, metrics = _v258_target(composition, scene_image=has_scene_image, log=v229._log)
                     _trace(v229._log, trace, started, "target_ready", attempt=attempt, target_face=target.face_box, target_crop=target.crop_box, target_sha=fs.sha(target.crop_raw), target_dims=fs.dims(target.crop_raw), metrics=metrics)
                     break
                 except Exception as exc:
                     last_error = exc
                     _trace(v229._log, trace, started, "composition_rejected", attempt=attempt, error_type=type(exc).__name__, error=str(exc)[:700])
                     if attempt == 1:
-                        await delivery._safe_text(message, "🔎 Сцена создана, но лицо пользователя нельзя безопасно выделить для переноса. Перестраиваю кадр один раз — PiAPI ещё не запускался.")
+                        await delivery._safe_text(message, "🔎 Сцена создана, но лицо пользователя недостаточно крупное или безопасное для качественного переноса. Перестраиваю кадр один раз — PiAPI ещё не запускался.")
                         stage_ref["value"] = "gemini_composition_retry"
                         continue
                     raise
@@ -174,7 +247,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             await delivery._safe_text(message, "📤 Этап 4/4: отправляю итог. Сцена, герой и тело сохранены из Gemini; центральное лицо — результат PiAPI.")
             caption = (
                 f"🎭 AI-фото с персонажем «{meta['name']}» готово ✅\n"
-                "Маршрут V257: Gemini сцена+герой+тело → строгий выбор Person A → один PiAPI Face Swap с фото №3 → edge-only интеграция.\n"
+                "Маршрут V258: Gemini сцена+герой+тело → строгий выбор Person A → face-centric фото №3 → один PiAPI Face Swap → edge-only интеграция.\n"
                 "Фото создано ИИ и не подтверждает реальную встречу или поддержку."
             )
             delivered = await delivery._deliver(message, final, caption, prefer_document=bool(getattr(runtime, "AI_SELFIE_SEND_AS_DOCUMENT", True)))
@@ -185,7 +258,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             return bool(delivered)
         except Exception as exc:
             _trace(v229._log, trace, started, "failed", active_stage=stage_ref.get("value"), error_type=type(exc).__name__, error=str(exc)[:1200])
-            delivery._log_exception(f"V257 trace={trace} consolidated AI Selfie failed", exc)
+            delivery._log_exception(f"V258 trace={trace} identity-quality AI Selfie failed", exc)
             await delivery._safe_text(message, "❌ Не удалось безопасно завершить перенос лица. Черновая сцена не отправлена. " f"Код: {trace}. Причина: {type(exc).__name__}: {str(exc)[:420]}")
             return False
         finally:
@@ -196,14 +269,15 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             _trace(v229._log, trace, started, "finished", ok=bool(result["ok"]))
 
     kwargs = {
-        "remember_kind": "celebrity_selfie_v257_consolidated",
+        "remember_kind": "celebrity_selfie_v258_identity_quality",
         "remember_payload": {
             "character": slug,
             "composition_provider": "google_gemini_direct",
             "identity_provider": "piapi_qubico_single_pass",
-            "terminal_face_source": "user_photo_3_only",
+            "terminal_face_source": "user_photo_3_face_centric_crop_only",
             "body_references": "user_photo_1_2_only",
             "strict_person_a_target": True,
+            "v258_target_min_resolution": True,
             "unsafe_target_fallback": False,
             "second_face_swap": False,
             "gemini_after_piapi": False,
@@ -217,4 +291,4 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
     return bool(result["ok"])
 
 
-__all__ = ["VERSION", "generate"]
+__all__ = ["VERSION", "TRACE_PREFIX", "generate"]
