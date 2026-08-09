@@ -7,7 +7,11 @@ consolidated V257 runtime. The independent Face Swap diagnostic remains availabl
 and does not own production AI Selfie generation.
 """
 
-VERSION = "v257-consolidated-ai-selfie-faceswap-2026-08-09"
+# Keep the package-level release version stable: the canonical /version owner and
+# existing production tests intentionally treat this as a product release marker,
+# not as the AI Selfie implementation version.
+VERSION = "v206-selfie-command-routing-2026-07-25"
+AI_SELFIE_VERSION = "v257-consolidated-ai-selfie-faceswap-2026-08-09"
 
 # Keep the isolated provider diagnostic available for manual testing. It may use
 # legacy transport helpers internally, but it is intentionally separate from the
@@ -18,4 +22,4 @@ try:
 except Exception as _diag_error:
     print(f"[neyrobot-prod] V257 Face Swap diagnostic bootstrap failed: {_diag_error!r}", flush=True)
 
-__all__ = ["VERSION"]
+__all__ = ["VERSION", "AI_SELFIE_VERSION"]
