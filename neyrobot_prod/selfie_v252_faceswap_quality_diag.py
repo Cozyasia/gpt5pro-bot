@@ -1,30 +1,39 @@
 # -*- coding: utf-8 -*-
-"""Identity-first isolated Face Swap diagnostic.
+"""V260AM A/B/C isolated Face Swap diagnostic.
 
-V260 keeps the standalone Telegram test, but no longer sends full-frame source and
-target images directly to Qubico. Both faces are detected locally, cropped tightly
-around the identity region, swapped once through PiAPI, and then the provider result
-is composited back into the untouched target with a wider face/jaw/forehead oval.
+A = current PiAPI/Qubico production transport.
+B = Replicate ddvinh1/inswapper.
+C = Replicate codeplugtech/face-swap.
 
-The raw PiAPI crop is delivered before the final composite. This makes it possible
-to distinguish provider identity loss from local integration loss in one test.
+All three providers receive the same identity-first source crop and the same target
+crop. The Telegram test sends the provider RAW outputs without local compositing so
+identity transfer can be compared directly. Production AI-selfie is not changed by
+this branch.
 """
 from __future__ import annotations
 
+import asyncio
+import base64
+import os
 import time
 import uuid
 from io import BytesIO
 from typing import Any
 
+import httpx
+
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v260-identity-first-isolated-faceswap-2026-08-09"
+VERSION = "v260am-abc-faceswap-diagnostic-2026-08-10"
 _INSTALLED = False
+
+REPLICATE_PREDICTIONS_URL = "https://api.replicate.com/v1/predictions"
+REPLICATE_INSWAPPER_VERSION = "ddvinh1/inswapper:25bdae46f2713138640b6e8c04dc4ca18625ce95b1863936b053eee42d9ba6db"
+REPLICATE_CODEPLUG_VERSION = "codeplugtech/face-swap:278a81e7ebb22db98bcba54de985d22cc1abeead2754eb1f2af717247be69b34"
 
 
 def _identity_crop(raw: bytes, *, role: str) -> tuple[Any, fs.FaceTarget, dict[str, float]]:
-    """Return full image + tight authoritative face crop for source or target."""
     detected = fs.source_face_crop(raw, None)
     img = fs.image(raw)
     if role == "source":
@@ -35,7 +44,7 @@ def _identity_crop(raw: bytes, *, role: str) -> tuple[Any, fs.FaceTarget, dict[s
         max_side = 1280
     crop_box = fs._expand(detected.face_box, img.size, wf, hf, ys)
     crop = img.crop(crop_box)
-    crop_raw = fs.jpeg(crop, max_side=max_side, quality=98)
+    crop_raw = fs.jpeg(crop, max_side=max_side, quality=96)
     fw, fh = detected.face_box[2], detected.face_box[3]
     cw, ch = crop.size
     metrics = {
@@ -55,39 +64,81 @@ def _identity_crop(raw: bytes, *, role: str) -> tuple[Any, fs.FaceTarget, dict[s
     return img, target, metrics
 
 
-def _identity_first_composite(base_img: Any, target: fs.FaceTarget, provider_raw: bytes) -> bytes:
-    """Keep PiAPI authoritative over a wider identity oval; feather only perimeter."""
-    from PIL import Image, ImageDraw, ImageFilter
+def _data_url(raw: bytes) -> str:
+    return "data:image/jpeg;base64," + base64.b64encode(bytes(raw)).decode("ascii")
 
-    cl, ct, cr, cb = target.crop_box
-    cw, ch = cr - cl, cb - ct
-    provider = fs.image(provider_raw).resize((cw, ch), Image.LANCZOS)
-    original_crop = base_img.crop(target.crop_box)
-    fx, fy, fw, fh = target.face_box
-    local_face = (fx - cl, fy - ct, fw, fh)
 
-    # Wider than the V257 scene compositor so temples, forehead, cheeks and jaw
-    # remain provider-authoritative. Hair outside this oval stays target-native.
-    region = fs._expand(local_face, (cw, ch), 2.10, 2.30, 0.018)
-    left, top, right, bottom = region
-    rw, rh = right - left, bottom - top
-    provider_region = provider.crop(region)
-    original_region = original_crop.crop(region)
+def _prediction_output_url(payload: dict[str, Any]) -> str:
+    output = payload.get("output") if isinstance(payload, dict) else None
+    if isinstance(output, str) and output.startswith("http"):
+        return output
+    if isinstance(output, list):
+        for item in output:
+            if isinstance(item, str) and item.startswith("http"):
+                return item
+    if isinstance(output, dict):
+        for key in ("url", "image", "image_url", "output_url"):
+            value = output.get(key)
+            if isinstance(value, str) and value.startswith("http"):
+                return value
+    return ""
 
-    mask = Image.new("L", (rw, rh), 0)
-    draw = ImageDraw.Draw(mask)
-    mx = max(2, int(rw * 0.010))
-    my = max(2, int(rh * 0.010))
-    draw.ellipse((mx, my, rw - mx, rh - my), fill=255)
-    feather = max(2, int(min(rw, rh) * 0.009))
-    mask = mask.filter(ImageFilter.GaussianBlur(feather))
 
-    merged_region = Image.composite(provider_region, original_region, mask)
-    merged_crop = original_crop.copy()
-    merged_crop.paste(merged_region, (left, top))
-    output = base_img.copy()
-    output.paste(merged_crop, (cl, ct))
-    return fs.jpeg(output, max_side=2048, quality=98)
+async def _replicate_swap_once(*, version: str, inputs: dict[str, Any], trace: str, label: str) -> bytes:
+    token = str(os.getenv("REPLICATE_API_TOKEN") or "").strip()
+    if not token:
+        raise RuntimeError("REPLICATE_API_TOKEN is missing")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Prefer": "wait=60",
+    }
+    timeout = httpx.Timeout(connect=30.0, read=75.0, write=75.0, pool=30.0)
+    started = time.monotonic()
+    diag._log("trace=%s stage=v260am_%s_create version=%s", trace, label, version)
+
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        response = await client.post(REPLICATE_PREDICTIONS_URL, headers=headers, json={"version": version, "input": inputs})
+        response.raise_for_status()
+        payload = response.json()
+        prediction_id = str(payload.get("id") or "")
+        status = str(payload.get("status") or "").lower()
+        get_url = str(((payload.get("urls") or {}) if isinstance(payload, dict) else {}).get("get") or "")
+        diag._log("trace=%s stage=v260am_%s_created id=%s status=%s", trace, label, prediction_id, status)
+
+        deadline = time.monotonic() + 180.0
+        last_status = status
+        while status not in {"succeeded", "failed", "canceled"} and time.monotonic() < deadline:
+            await asyncio.sleep(2.0)
+            if not get_url:
+                if not prediction_id:
+                    raise RuntimeError(f"Replicate {label} returned no prediction id")
+                get_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
+            check = await client.get(get_url, headers={"Authorization": f"Bearer {token}"})
+            check.raise_for_status()
+            payload = check.json()
+            status = str(payload.get("status") or "").lower()
+            if status != last_status:
+                diag._log("trace=%s stage=v260am_%s_poll id=%s status=%s", trace, label, prediction_id, status)
+                last_status = status
+
+        if status != "succeeded":
+            raise RuntimeError(f"Replicate {label} ended with status={status}: {str(payload.get('error') or '')[:800]}")
+
+        output_url = _prediction_output_url(payload)
+        if not output_url:
+            raise RuntimeError(f"Replicate {label} succeeded without output URL")
+        out = await client.get(output_url)
+        out.raise_for_status()
+        raw = bytes(out.content)
+        if len(raw) < 1024:
+            raise RuntimeError(f"Replicate {label} returned empty output")
+        diag._log(
+            "trace=%s stage=v260am_%s_success elapsed=%.2f dims=%s bytes=%s sha=%s",
+            trace, label, time.monotonic() - started, fs.dims(raw), len(raw), fs.sha(raw),
+        )
+        return raw
 
 
 async def _send_doc(message: Any, payload: bytes, filename: str, caption: str, trace: str) -> bool:
@@ -103,7 +154,7 @@ async def _send_doc(message: Any, payload: bytes, filename: str, caption: str, t
             connect_timeout=30.0,
             pool_timeout=30.0,
         )
-        diag._log("trace=%s stage=v260_telegram_delivery_ok file=%s bytes=%s", trace, filename, len(payload))
+        diag._log("trace=%s stage=v260am_telegram_delivery_ok file=%s bytes=%s", trace, filename, len(payload))
         return True
     except Exception as exc:
         try:
@@ -112,7 +163,7 @@ async def _send_doc(message: Any, payload: bytes, filename: str, caption: str, t
         except Exception:
             is_timeout = type(exc).__name__ in {"TimedOut", "TimeoutError"}
         if is_timeout:
-            diag._log("trace=%s stage=v260_telegram_delivery_timeout_ignored file=%s bytes=%s", trace, filename, len(payload))
+            diag._log("trace=%s stage=v260am_telegram_delivery_timeout_ignored file=%s bytes=%s", trace, filename, len(payload))
             return True
         raise
 
@@ -131,12 +182,12 @@ async def media(update: Any, context: Any) -> None:
         raise ApplicationHandlerStop
 
     trace = uuid.uuid4().hex[:12]
-    diag._log("trace=%s stage=v260_handler_enter key=%s state=%s version=%s", trace, diag._key(update), state, VERSION)
+    diag._log("trace=%s stage=v260am_handler_enter key=%s state=%s version=%s", trace, diag._key(update), state, VERSION)
 
     try:
         raw = await diag._download_image_message(message)
     except Exception as exc:
-        diag._log("trace=%s stage=telegram_download_failed state=%s error=%r", trace, state, str(exc)[:1000])
+        diag._log("trace=%s stage=v260am_telegram_download_failed state=%s error=%r", trace, state, str(exc)[:1000])
         await message.reply_text(f"❌ Не удалось скачать изображение: {type(exc).__name__}: {str(exc)[:180]}")
         raise ApplicationHandlerStop
 
@@ -150,7 +201,7 @@ async def media(update: Any, context: Any) -> None:
         await message.reply_text(f"❌ Файл не открылся как изображение: {type(exc).__name__}: {str(exc)[:180]}")
         raise ApplicationHandlerStop
 
-    diag._log("trace=%s stage=v260_input_received role=%s info=%r", trace, state, info)
+    diag._log("trace=%s stage=v260am_input_received role=%s info=%r", trace, state, info)
 
     if state == "source":
         try:
@@ -166,12 +217,12 @@ async def media(update: Any, context: Any) -> None:
         context.user_data[diag.SOURCE] = bytes(raw)
         context.user_data[diag.STATE] = "target"
         diag._log(
-            "trace=%s stage=v260_source_locked face=%s crop=%s crop_dims=%s metrics=%r",
+            "trace=%s stage=v260am_source_locked face=%s crop=%s crop_dims=%s metrics=%r",
             trace, source_target.face_box, source_target.crop_box, fs.dims(source_target.crop_raw), source_metrics,
         )
         await message.reply_text(
-            "✅ Фото-источник принято и лицо выделено в identity-first crop.\n"
-            f"Исходный размер: {info['dims']}. Face coverage: {source_metrics['face_w_coverage']:.2f}×{source_metrics['face_h_coverage']:.2f}.\n\n"
+            "✅ V260AM ABC: фото-источник принято.\n"
+            f"Размер: {info['dims']}. Face coverage: {source_metrics['face_w_coverage']:.2f}×{source_metrics['face_h_coverage']:.2f}.\n\n"
             "Шаг 2/2: пришлите целевую фотографию."
         )
         raise ApplicationHandlerStop
@@ -184,7 +235,7 @@ async def media(update: Any, context: Any) -> None:
         raise ApplicationHandlerStop
 
     try:
-        target_img, target_face, target_metrics = _identity_crop(bytes(raw), role="target")
+        _, target_face, target_metrics = _identity_crop(bytes(raw), role="target")
     except Exception as exc:
         await message.reply_text(f"❌ Не удалось надёжно выделить целевое лицо: {type(exc).__name__}: {str(exc)[:220]}")
         raise ApplicationHandlerStop
@@ -192,58 +243,81 @@ async def media(update: Any, context: Any) -> None:
     session["state"] = "running"
     started = time.monotonic()
     diag._log(
-        "trace=%s stage=v260_swap_start source_full=%r target_full=%r source_crop_dims=%s target_crop_dims=%s source_metrics=%r target_metrics=%r transport=%s",
+        "trace=%s stage=v260am_abc_start source_full=%r target_full=%r source_crop_dims=%s target_crop_dims=%s source_metrics=%r target_metrics=%r",
         trace, session.get("source_info") or diag._describe(source), info, fs.dims(source_crop), fs.dims(target_face.crop_raw),
-        session.get("source_metrics"), target_metrics, transport.resilient_piapi_single_face_swap.__name__,
+        session.get("source_metrics"), target_metrics,
     )
     await message.reply_text(
-        "⏳ V260: запускаю identity-first PiAPI Face Swap.\n"
-        "Сначала получите RAW-результат PiAPI, затем финальную интеграцию.\n"
+        "🧪 V260AM ABC: один источник + одна цель → три независимых Face Swap backend.\n"
+        "A — PiAPI/Qubico\nB — Replicate InSwapper\nC — Replicate Codeplug Face Swap\n\n"
+        "Все результаты RAW, без Gemini и без нашей локальной маски. Сравнивайте именно узнаваемость личности.\n"
         f"Код теста: {trace}."
     )
 
-    provider_done = False
+    results: list[tuple[str, bytes]] = []
+    failures: list[str] = []
     try:
-        provider_result = await transport.resilient_piapi_single_face_swap(target_face.crop_raw, source_crop, diag._log)
-        provider_done = True
-        elapsed_provider = time.monotonic() - started
-        diag._log(
-            "trace=%s stage=v260_provider_success elapsed=%.2f raw_dims=%s raw_bytes=%s raw_sha=%s",
-            trace, elapsed_provider, fs.dims(provider_result), len(provider_result), fs.sha(provider_result),
-        )
+        try:
+            a = await transport.resilient_piapi_single_face_swap(target_face.crop_raw, source_crop, diag._log)
+            results.append(("A_Qubico", a))
+            diag._log("trace=%s stage=v260am_A_success dims=%s bytes=%s sha=%s", trace, fs.dims(a), len(a), fs.sha(a))
+            await _send_doc(message, a, f"faceswap_v260am_A_qubico_{trace}.jpg", "🅰️ RAW A — текущий PiAPI/Qubico. Без локальной интеграции.", trace)
+        except Exception as exc:
+            failures.append(f"A/Qubico: {type(exc).__name__}: {str(exc)[:180]}")
+            diag._log("trace=%s stage=v260am_A_failed error=%r", trace, str(exc)[:1200])
 
-        await _send_doc(
-            message,
-            provider_result,
-            f"faceswap_v260_raw_{trace}.jpg",
-            "🧬 V260 RAW PiAPI. Это результат провайдера ДО локальной интеграции. Оценивайте здесь именно сходство личности.",
-            trace,
-        )
+        token = str(os.getenv("REPLICATE_API_TOKEN") or "").strip()
+        if not token:
+            failures.append("B/C Replicate: REPLICATE_API_TOKEN отсутствует")
+            await message.reply_text("⚠️ A выполнен. B и C пока пропущены: в Render не задан REPLICATE_API_TOKEN.")
+        else:
+            try:
+                b = await _replicate_swap_once(
+                    version=REPLICATE_INSWAPPER_VERSION,
+                    inputs={
+                        "upscale": 1,
+                        "source_img": _data_url(source_crop),
+                        "target_img": _data_url(target_face.crop_raw),
+                        "face_restore": True,
+                        "face_upsample": True,
+                        "source_indexes": "-1",
+                        "target_indexes": "-1",
+                        "background_enhance": False,
+                        "codeformer_fidelity": 0.9,
+                    },
+                    trace=trace,
+                    label="B_inswapper",
+                )
+                results.append(("B_InSwapper", b))
+                await _send_doc(message, b, f"faceswap_v260am_B_inswapper_{trace}.jpg", "🅱️ RAW B — Replicate InSwapper. Face restore ON, fidelity 0.9; без нашей локальной интеграции.", trace)
+            except Exception as exc:
+                failures.append(f"B/InSwapper: {type(exc).__name__}: {str(exc)[:180]}")
+                diag._log("trace=%s stage=v260am_B_failed error=%r", trace, str(exc)[:1600])
 
-        final = _identity_first_composite(target_img, target_face, provider_result)
+            try:
+                c = await _replicate_swap_once(
+                    version=REPLICATE_CODEPLUG_VERSION,
+                    inputs={
+                        "input_image": _data_url(target_face.crop_raw),
+                        "swap_image": _data_url(source_crop),
+                    },
+                    trace=trace,
+                    label="C_codeplug",
+                )
+                results.append(("C_Codeplug", c))
+                await _send_doc(message, c, f"faceswap_v260am_C_codeplug_{trace}.jpg", "🅲 RAW C — Replicate Codeplug Face Swap. Без нашей локальной интеграции.", trace)
+            except Exception as exc:
+                failures.append(f"C/Codeplug: {type(exc).__name__}: {str(exc)[:180]}")
+                diag._log("trace=%s stage=v260am_C_failed error=%r", trace, str(exc)[:1600])
+
         elapsed = time.monotonic() - started
-        diag._log(
-            "trace=%s stage=v260_final_ready elapsed=%.2f final_dims=%s final_bytes=%s final_sha=%s target_crop=%s",
-            trace, elapsed, fs.dims(final), len(final), fs.sha(final), target_face.crop_box,
-        )
-        await _send_doc(
-            message,
-            final,
-            f"faceswap_v260_final_{trace}.jpg",
-            f"✅ V260 Identity-First Face Swap готов. Код: {trace}. Время: {elapsed:.1f} сек. Provider-authoritative область расширена до лба, висков, щёк и линии челюсти; исходный фон/тело сохранены.",
-            trace,
-        )
-    except Exception as exc:
-        elapsed = time.monotonic() - started
-        diag._log(
-            "trace=%s stage=v260_swap_failed elapsed=%.2f provider_done=%s error_type=%s error=%r",
-            trace, elapsed, provider_done, type(exc).__name__, str(exc)[:2600],
-        )
-        await message.reply_text(
-            "❌ V260 Face Swap завершился ошибкой.\n"
-            f"Код: {trace}\nВремя: {elapsed:.1f} сек.\n"
-            f"Причина: {type(exc).__name__}: {str(exc)[:1200]}"
-        )
+        diag._log("trace=%s stage=v260am_abc_finished elapsed=%.2f ok=%s failures=%r", trace, elapsed, [name for name, _ in results], failures)
+        summary = [f"✅ V260AM ABC завершён. Код: {trace}. Время: {elapsed:.1f} сек."]
+        summary.append("Получены: " + (", ".join(name for name, _ in results) if results else "нет результатов"))
+        if failures:
+            summary.append("Ошибки/пропуски:\n• " + "\n• ".join(failures))
+        summary.append("Выберите визуально A/B/C по сходству лица с источником; после этого победителя перенесём в production AI-селфи.")
+        await message.reply_text("\n\n".join(summary))
     finally:
         diag._reset(update, context)
 
@@ -252,13 +326,13 @@ async def media(update: Any, context: Any) -> None:
 
 def install() -> bool:
     global _INSTALLED
-    if _INSTALLED or getattr(diag.media, "_v260_identity_first_owned", False):
+    if _INSTALLED or getattr(diag.media, "_v260am_abc_owned", False):
         _INSTALLED = True
         return True
-    setattr(media, "_v260_identity_first_owned", True)
+    setattr(media, "_v260am_abc_owned", True)
     diag.media = media
     _INSTALLED = True
-    diag._log("stage=v260_identity_first_patch status=installed version=%s", VERSION)
+    diag._log("stage=v260am_abc_patch status=installed version=%s", VERSION)
     return True
 
 
