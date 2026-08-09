@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """V257 guaranteed runtime owner for AI Selfie.
 
-The filename is retained because secret_loader.py already imports it from the
-stable production bootstrap. V257 is the sole production generation owner while
+The legacy filename is retained because secret_loader.py imports it from the
+stable production bootstrap. V257 is the sole production generation owner;
 V219 remains the stable Telegram navigation/storage contract.
 """
 from __future__ import annotations
@@ -38,7 +38,6 @@ def _upload_log(stage: str, **fields: Any) -> None:
 
 
 async def _photo_callback(update: Any, context: Any) -> None:
-    """Own only photo-upload entry actions; delegate all other V219 navigation."""
     from telegram.ext import ApplicationHandlerStop
     from neyrobot_prod import celebrity_selfie as base
     from neyrobot_prod import selfie_v219_triref_scene_owner as v219
@@ -47,7 +46,8 @@ async def _photo_callback(update: Any, context: Any) -> None:
     if query is None:
         return
     data = str(query.data or "")
-    if data not in {"cs201:photo", "act:fun:aiselfie_upload", "cs201:reuse:photos", "cs201:last", "act:fun:aiselfie_last"}:
+    upload_actions = {"cs201:photo", "act:fun:aiselfie_upload", "cs201:reuse:photos", "cs201:last", "act:fun:aiselfie_last"}
+    if data not in upload_actions:
         original = _ORIGINAL_CALLBACK
         if callable(original):
             await original(update, context)
@@ -82,17 +82,13 @@ async def _photo_callback(update: Any, context: Any) -> None:
 
 
 async def _photo_media(update: Any, context: Any) -> None:
-    """Single high-priority owner for AI Selfie photo ingestion.
-
-    The handler intentionally runs before diagnostic/legacy image handlers. When
-    the separate Face Swap diagnostic is active it yields immediately so that
-    diagnostic mode can own its own source/target uploads.
-    """
+    """High-priority, single-owner AI Selfie image ingestion."""
     from telegram.ext import ApplicationHandlerStop
     from neyrobot_prod import celebrity_selfie as base
     from neyrobot_prod import selfie_v215_shot_scene_modes as v215
     from neyrobot_prod import selfie_v219_triref_scene_owner as v219
 
+    # The independent Face Swap diagnostic owns its own source/target uploads.
     if str(context.user_data.get("faceswap_diag_state") or "") in {"source", "target", "running"}:
         return
 
@@ -107,13 +103,20 @@ async def _photo_media(update: Any, context: Any) -> None:
         await v216.media_router(update, context)
         raise ApplicationHandlerStop
 
+    photos_before = v219._photos(context)
+    owns_scene = bool(context.user_data.get("cs215_await_scene_image"))
+    owns_reference = bool(context.user_data.get("awaiting_ai_selfie_photo")) or (0 < len(photos_before) < v219.USER_REFS)
+    if not owns_scene and not owns_reference:
+        return
+
     try:
         raw, url = await base._download_photo_message(message)
         if not raw:
-            return
-        _upload_log("downloaded", user_id=int(user.id), bytes=len(raw), awaiting_scene=bool(context.user_data.get("cs215_await_scene_image")), current_refs=len(v219._photos(context)))
+            await message.reply_text("❌ Не удалось прочитать фотографию. Отправьте обычный JPG/PNG или фото Telegram ещё раз.")
+            raise ApplicationHandlerStop
+        _upload_log("downloaded", user_id=int(user.id), bytes=len(raw), awaiting_scene=owns_scene, current_refs=len(photos_before))
 
-        if context.user_data.get("cs215_await_scene_image"):
+        if owns_scene:
             context.user_data["cs215_scene_image"] = v215._compact_scene(raw)
             context.user_data["cs215_scene_mode"] = v215.SCENE_IMAGE
             context.user_data["cs215_scene_text"] = "inside the uploaded real location, preserving its exact visual environment"
@@ -123,10 +126,6 @@ async def _photo_media(update: Any, context: Any) -> None:
             _upload_log("scene_saved", user_id=int(user.id), bytes=len(context.user_data["cs215_scene_image"]))
             await message.reply_text("✅ Фото сцены принято как отдельный структурный референс. Нажмите «Создать изображение».", reply_markup=v215._ready_scene_keyboard(runtime))
             raise ApplicationHandlerStop
-
-        photos = v219._photos(context)
-        if not context.user_data.get("awaiting_ai_selfie_photo") and not (0 < len(photos) < v219.USER_REFS):
-            return
 
         base._activate(runtime, context, int(user.id))
         count = v219._append_photo(context, raw)
@@ -155,15 +154,13 @@ async def _photo_media(update: Any, context: Any) -> None:
                 "Теперь выберите тип кадра:",
                 reply_markup=v215._shot_keyboard(runtime),
             )
+        raise ApplicationHandlerStop
     except ApplicationHandlerStop:
         raise
     except Exception as exc:
         _upload_log("failed", user_id=int(user.id), error_type=type(exc).__name__, error=str(exc)[:900])
         with contextlib.suppress(Exception):
             await message.reply_text(f"❌ Не удалось принять фотографию. Причина: {type(exc).__name__}. Попробуйте отправить её ещё раз.")
-    finally:
-        # Once this handler has accepted responsibility for an active AI Selfie
-        # upload, no lower-priority legacy photo handler may process the same update.
         raise ApplicationHandlerStop
 
 
@@ -321,8 +318,8 @@ def install_async() -> None:
         return
     _STARTED = True
 
-    # Legacy modules install during main.py import. Reassert V257 for a bounded
-    # startup window, then stop. There is no permanent production rebinding loop.
+    # Reassert during startup only while legacy modules finish importing. Unlike
+    # V244/V239 legacy owners, this is bounded and does not run permanently.
     def worker() -> None:
         for _ in range(300):
             with contextlib.suppress(Exception):
