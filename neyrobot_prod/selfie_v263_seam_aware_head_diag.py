@@ -9,17 +9,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import selfie_v262_full_head_identity_diag as v262
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v263-seam-aware-head-integration-2026-08-10"
+VERSION = "v263-seam-aware-head-integration-2026-08-10-r2"
+_INSTALLED = False
 
 
 def _seam_aware_overlay(
     *, source_full_raw: bytes, source_face_box: tuple[int, int, int, int],
     target_full_raw: bytes, target_face_box: tuple[int, int, int, int],
     baseline_full_raw: bytes, outer_strength: float, core_strength: float,
-    feather_ratio: float,
+    feather_ratio: float = 0.012,
 ) -> tuple[bytes, dict[str, Any]]:
     import numpy as np
     from PIL import Image, ImageDraw, ImageFilter
@@ -43,7 +45,6 @@ def _seam_aware_overlay(
     # never reaches shoulders/corners, which caused V262's broad ghost halo.
     fx, fy, fw, fh = target_face_box
     lfx, lfy = fx - tl, fy - tt
-    cx = lfx + fw * 0.5
     head_left = max(0, int(lfx - fw * 0.24))
     head_right = min(tw, int(lfx + fw * 1.24))
     head_top = max(0, int(lfy - fh * 0.54))
@@ -63,8 +64,7 @@ def _seam_aware_overlay(
     ma[fade_end:, :] = 0.0
     mask = Image.fromarray(np.clip(ma, 0, 255).astype(np.uint8), "L")
 
-    # Narrow feather only. V262 used ~3.5% of the head region and visibly
-    # blurred the boundary; V263 tests substantially tighter transitions.
+    # Much tighter transition than V262.
     feather = max(2, int(min(tw, th) * feather_ratio))
     mask = mask.filter(ImageFilter.GaussianBlur(feather))
 
@@ -79,7 +79,6 @@ def _seam_aware_overlay(
     protect = protect.filter(ImageFilter.GaussianBlur(max(2, int(min(fw, fh) * 0.018))))
     m = np.asarray(mask, dtype=np.float32)
     p = np.asarray(protect, dtype=np.float32) / 255.0
-    # core_strength is protection strength: attenuate raw source overlay there.
     m *= (1.0 - p)
     combined = Image.fromarray(np.clip(m, 0, 255).astype(np.uint8), "L")
 
@@ -95,12 +94,23 @@ def _seam_aware_overlay(
     }
 
 
-# Reuse V262 transport/session/provider machinery; only replace its faulty
-# full-head compositor. V262 media calls the module global at runtime.
+# Reuse V262 transport/session/provider machinery; only replace its full-head
+# compositor. V262 media resolves this module-global function at runtime.
 v262._full_head_overlay = _seam_aware_overlay
 media = v262.media
 
 
 def install() -> bool:
-    """Compatibility hook for the diagnostic bootstrap."""
+    """Make V263 the actual callback owner before Telegram binds handlers."""
+    global _INSTALLED
+    v262._full_head_overlay = _seam_aware_overlay
+    if _INSTALLED and getattr(diag.media, "_v263_seam_aware_owned", False):
+        return True
+    setattr(media, "_v263_seam_aware_owned", True)
+    diag.media = media
+    _INSTALLED = True
+    diag._log("stage=v263_seam_aware_patch status=installed version=%s", VERSION)
     return True
+
+
+__all__ = ["VERSION", "media", "install"]
