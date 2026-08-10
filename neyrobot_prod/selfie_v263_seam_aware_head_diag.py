@@ -16,7 +16,7 @@ from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import selfie_v262_full_head_identity_diag as v262
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v264-affine-head-ring-2026-08-10"
+VERSION = "v264-affine-head-ring-2026-08-10-r2"
 _INSTALLED = False
 
 
@@ -57,10 +57,16 @@ def _seam_aware_overlay(
     c = sx + (float(tl) - tx) * scale_x
     f = sy + (float(tt) - ty) * scale_y
     affine_mode = getattr(getattr(Image, "Transform", Image), "AFFINE", getattr(Image, "AFFINE", 0))
+
+    # Pillow's affine transform only supports NEAREST/BILINEAR/BICUBIC. LANCZOS
+    # is valid for resize(), but raises ValueError here. Use BICUBIC for the warp.
+    affine_resample = (
+        Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC
+    )
     warped = source_img.transform(
         (pw, ph), affine_mode,
         (scale_x, 0.0, c, 0.0, scale_y, f),
-        resample=Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
+        resample=affine_resample,
         fillcolor=(0, 0, 0),
     )
     reference = baseline.crop((tl, tt, tr, tb))
