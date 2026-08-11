@@ -21,6 +21,9 @@ Pillow==10.4.0
 # instead of allowing rembg's transitive dependency to resolve to OpenCV 5.
 opencv-python-headless==4.13.0.92
 rembg==2.0.67
+# rembg does not install an inference backend by default. V265 calls
+# rembg.new_session("u2netp"), which requires the CPU ONNX Runtime on Render.
+onnxruntime
 
 # Presentation and PDF generation
 python-pptx==1.0.2
