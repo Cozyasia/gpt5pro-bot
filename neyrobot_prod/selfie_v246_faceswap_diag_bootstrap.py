@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
-from neyrobot_prod import selfie_v263_seam_aware_head_diag as quality_diag
+from neyrobot_prod import selfie_v265_clean_head_transplant_diag as quality_diag
 
 # Critical ordering: patch diag.media before any Telegram application binds its
 # MessageHandler. Production AI-selfie is intentionally not modified here.
@@ -95,8 +95,8 @@ def install() -> bool:
                 bind_runtime_apps()
             time.sleep(0.5)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v264").start()
-    print(f"[neyrobot-prod] V264 Affine Head Ring diagnostic installed version={VERSION}", flush=True)
+    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v265").start()
+    print(f"[neyrobot-prod] V265 Clean Segmented Head Transplant diagnostic installed version={VERSION}", flush=True)
     return True
 
 
