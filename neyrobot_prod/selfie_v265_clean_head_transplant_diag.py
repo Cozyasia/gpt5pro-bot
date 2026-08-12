@@ -5,12 +5,12 @@ Goal: preserve the successful V262/V263 full-head identity direction while
 removing the cloudy halo / crescent / source-background ghost without loading
 rembg/U2NET/ONNX into the Telegram bot process.
 
-V265 now uses only Pillow + NumPy + OpenCV, which are already part of the bot:
-1) align source to target by detected face boxes;
-2) build a lightweight source-head matte with OpenCV GrabCut around the face;
-3) intersect that matte with a tight anatomical head gate;
-4) keep hair/ear edges comparatively crisp;
-5) fade only the lower jaw/upper-neck transition into the target body.
+This revision keeps the low-memory OpenCV path but fixes the main failure seen
+in the 3803b016288f test: the detector face *rectangle* was previously marked as
+certain foreground, so background pixels in the rectangle corners (cabinet/wall)
+could be transplanted together with the head. We now use an anatomical elliptical
+seed, a tighter probable-head gate, and retain only foreground connected to the
+face seed.
 
 The isolated Face Swap test still returns A/B/C. Production AI-selfie is not
 changed by this module.
@@ -23,16 +23,16 @@ from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import selfie_v262_full_head_identity_diag as v262
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v265-lightweight-opencv-head-transplant-2026-08-12"
+VERSION = "v265b-seeded-connected-head-mask-2026-08-12"
 _INSTALLED = False
 
 
 def _foreground_mask(source_img: Any, source_face_box: tuple[int, int, int, int]) -> Any:
-    """Return a lightweight 8-bit head/person matte using OpenCV GrabCut.
+    """Return a low-memory 8-bit head matte using seeded GrabCut + connectivity.
 
-    The segmentation is deliberately local to the head region. It avoids any
-    neural-network runtime and therefore avoids the large RAM spike that caused
-    Render OOM restarts when rembg/U2NET was imported.
+    Important: never mark the whole detector rectangle as certain foreground.
+    Detector boxes contain background in their corners, which is exactly what
+    produced the rectangular/crescent source-background artifacts in V265.
     """
     import cv2
     import numpy as np
@@ -42,59 +42,91 @@ def _foreground_mask(source_img: Any, source_face_box: tuple[int, int, int, int]
     h, w = rgb.shape[:2]
     x, y, fw, fh = [int(v) for v in source_face_box]
 
-    # Tight source-head working rectangle: enough room for hair/ears, but not
-    # shoulders/chest. Clamp aggressively to the image bounds.
-    x1 = max(0, int(round(x - fw * 0.42)))
-    y1 = max(0, int(round(y - fh * 0.78)))
-    x2 = min(w, int(round(x + fw * 1.42)))
-    y2 = min(h, int(round(y + fh * 1.28)))
+    # Head-local working window. It is intentionally smaller than the previous
+    # V265 window so shoulders and large source-background regions never become
+    # candidates for the matte.
+    x1 = max(0, int(round(x - fw * 0.30)))
+    y1 = max(0, int(round(y - fh * 0.62)))
+    x2 = min(w, int(round(x + fw * 1.30)))
+    y2 = min(h, int(round(y + fh * 1.16)))
     rw, rh = x2 - x1, y2 - y1
     if rw < 64 or rh < 80:
         raise ValueError("source head region is too small for OpenCV mask")
 
     crop = cv2.cvtColor(rgb[y1:y2, x1:x2], cv2.COLOR_RGB2BGR)
     mask = np.full((rh, rw), cv2.GC_BGD, dtype=np.uint8)
-
-    # Probable foreground occupies the central head oval.
     yy, xx = np.ogrid[:rh, :rw]
+
+    # Probable head/hair region. Tighter than V265: enough for hairstyle and
+    # ears, but not enough to swallow a cabinet/wall around the head.
     cx = (x + fw * 0.50) - x1
-    cy = (y + fh * 0.34) - y1
-    rx = max(8.0, fw * 0.88)
-    ry = max(10.0, fh * 1.18)
+    cy = (y + fh * 0.40) - y1
+    rx = max(8.0, fw * 0.72)
+    ry = max(10.0, fh * 0.98)
     head_oval = ((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2 <= 1.0
     mask[head_oval] = cv2.GC_PR_FGD
 
-    # The detected face itself is certain foreground. This anchors GrabCut so
-    # skin/eyes/nose/mouth cannot be discarded by the background model.
-    fx1 = max(0, x - x1)
-    fy1 = max(0, y - y1)
-    fx2 = min(rw, x + fw - x1)
-    fy2 = min(rh, y + fh - y1)
-    if fx2 > fx1 and fy2 > fy1:
-        mask[fy1:fy2, fx1:fx2] = cv2.GC_FGD
+    # Certain foreground is an INNER FACE ELLIPSE, not the rectangular detector
+    # box. This is the key artifact fix: rectangle corners remain background.
+    fcx = (x + fw * 0.50) - x1
+    fcy = (y + fh * 0.54) - y1
+    frx = max(6.0, fw * 0.40)
+    fry = max(8.0, fh * 0.46)
+    face_seed = ((xx - fcx) / frx) ** 2 + ((yy - fcy) / fry) ** 2 <= 1.0
+    mask[face_seed] = cv2.GC_FGD
+
+    # A smaller central skin seed makes the component selection deterministic.
+    srx = max(4.0, fw * 0.22)
+    sry = max(5.0, fh * 0.25)
+    center_seed = ((xx - fcx) / srx) ** 2 + ((yy - fcy) / sry) ** 2 <= 1.0
 
     bgd = np.zeros((1, 65), np.float64)
     fgd = np.zeros((1, 65), np.float64)
     try:
-        cv2.grabCut(crop, mask, None, bgd, fgd, 3, cv2.GC_INIT_WITH_MASK)
+        cv2.grabCut(crop, mask, None, bgd, fgd, 4, cv2.GC_INIT_WITH_MASK)
         fg = np.where(
             (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0
         ).astype(np.uint8)
     except cv2.error:
-        # Deterministic low-memory fallback: anatomical oval, never the old broad
-        # full-head ellipse that leaked source background into the target.
+        # Deterministic low-memory fallback. Still use the tight head oval and
+        # never return a broad source-background rectangle.
         fg = np.where(head_oval, 255, 0).astype(np.uint8)
 
-    # Remove small speckles and close tiny gaps in hair. Kernels remain small so
-    # the matte does not grow into a visible halo.
+    # Reject disconnected foreground. Keep only components touching the central
+    # face seed; this removes cabinets, wall patches and other source scenery even
+    # when GrabCut classifies them as probable foreground.
+    binary = (fg > 0).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    keep = np.zeros_like(binary)
+    seed_labels = np.unique(labels[center_seed])
+    seed_labels = [int(v) for v in seed_labels if int(v) != 0]
+    if seed_labels:
+        for lab in seed_labels:
+            keep[labels == lab] = 1
+    elif n > 1:
+        # Fallback: retain the largest non-background component.
+        lab = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+        keep[labels == lab] = 1
+    else:
+        keep = binary
+
+    # Hard anatomical guard. Connectivity alone is not enough if background is
+    # touching hair in the source image.
+    keep = keep * head_oval.astype(np.uint8)
+
+    # Repair tiny gaps in hair, then slightly contract once to avoid a dark/bright
+    # fringe from the source background. We do not broadly blur the mask.
     kernel = np.ones((3, 3), np.uint8)
-    fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, kernel, iterations=1)
-    fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, kernel, iterations=2)
+    keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, kernel, iterations=2)
+    keep = cv2.morphologyEx(keep, cv2.MORPH_OPEN, kernel, iterations=1)
+    keep = cv2.erode(keep, kernel, iterations=1)
+    fg = (keep * 255).astype(np.uint8)
 
     full = np.zeros((h, w), dtype=np.uint8)
     full[y1:y2, x1:x2] = fg
     out = Image.fromarray(full, "L")
-    return out.filter(ImageFilter.GaussianBlur(0.85))
+    # Sub-pixel anti-aliasing only. No cloudy halo.
+    return out.filter(ImageFilter.GaussianBlur(0.45))
 
 
 def _clean_head_overlay(
@@ -115,10 +147,10 @@ def _clean_head_overlay(
         raise ValueError("face region is too small for V265 head alignment")
 
     W, H = target_img.size
-    tl = max(0, int(round(tx - twf * 0.34)))
-    tr = min(W, int(round(tx + twf * 1.34)))
-    tt = max(0, int(round(ty - thf * 0.63)))
-    tb = min(H, int(round(ty + thf * 1.20)))
+    tl = max(0, int(round(tx - twf * 0.30)))
+    tr = min(W, int(round(tx + twf * 1.30)))
+    tt = max(0, int(round(ty - thf * 0.58)))
+    tb = min(H, int(round(ty + thf * 1.16)))
     pw, ph = tr - tl, tb - tt
     if pw < 128 or ph < 180:
         raise ValueError("target V265 patch is too small")
@@ -145,55 +177,55 @@ def _clean_head_overlay(
     )
 
     reference = baseline.crop((tl, tt, tr, tb))
-    match_amount = 0.14 if outer_strength < 0.85 else 0.09
+    match_amount = 0.18 if outer_strength < 0.85 else 0.14
     warped = v262._color_match(warped, reference, amount=match_amount)
 
     lfx = tx - tl
     lfy = ty - tt
 
-    # Anatomical gate restricts the segmentation to the actual head zone.
+    # Tight target anatomical gate. This is a second independent guard against
+    # any source-background pixel escaping the segmentation.
     gate = Image.new("L", (pw, ph), 0)
     gd = ImageDraw.Draw(gate)
-    gx1 = max(0, int(round(lfx - twf * 0.30)))
-    gy1 = max(0, int(round(lfy - thf * 0.58)))
-    gx2 = min(pw, int(round(lfx + twf * 1.30)))
-    gy2 = min(ph, int(round(lfy + thf * 1.10)))
+    gx1 = max(0, int(round(lfx - twf * 0.24)))
+    gy1 = max(0, int(round(lfy - thf * 0.50)))
+    gx2 = min(pw, int(round(lfx + twf * 1.24)))
+    gy2 = min(ph, int(round(lfy + thf * 1.06)))
     gd.ellipse((gx1, gy1, gx2, gy2), fill=255)
 
     ma = np.asarray(warped_alpha, dtype=np.float32) / 255.0
     ga = np.asarray(gate, dtype=np.float32) / 255.0
     ma *= ga
 
-    # Keep perimeter sharper than V262/V264. A tiny blur is only anti-aliasing.
     tiny = Image.fromarray(np.clip(ma * 255.0, 0, 255).astype(np.uint8), "L")
-    tiny = tiny.filter(ImageFilter.GaussianBlur(0.65))
+    tiny = tiny.filter(ImageFilter.GaussianBlur(0.45))
     ma = np.asarray(tiny, dtype=np.float32) / 255.0
 
-    alpha_gain = 0.95 if outer_strength < 0.85 else 1.0
+    alpha_gain = 0.94 if outer_strength < 0.85 else 0.98
     ma *= alpha_gain
 
-    # Preserve chin, then perform a short vertical dissolve into the target neck.
-    jaw_start = min(ph, max(0, int(round(lfy + thf * 0.94))))
-    fade_end = min(ph, max(jaw_start + 1, int(round(lfy + thf * 1.10))))
+    # Preserve chin, then dissolve only through a short upper-neck strip.
+    jaw_start = min(ph, max(0, int(round(lfy + thf * 0.92))))
+    fade_end = min(ph, max(jaw_start + 1, int(round(lfy + thf * 1.05))))
     if fade_end > jaw_start:
         ramp = np.linspace(1.0, 0.0, fade_end - jaw_start, dtype=np.float32)[:, None]
         ma[jaw_start:fade_end, :] *= ramp
     ma[fade_end:, :] = 0.0
 
-    # Reject affine fill pixels, preventing dark/transparent wedges.
+    # Reject affine fill pixels.
     wa = np.asarray(warped, dtype=np.uint8)
     valid = (wa.max(axis=2) > 7).astype(np.float32)
     ma *= valid
 
-    # Strong identity core, but never outside the OpenCV foreground matte.
+    # Strong identity core, but strictly inside segmented source foreground.
     core = Image.new("L", (pw, ph), 0)
     cd = ImageDraw.Draw(core)
-    cx1 = max(0, int(round(lfx - twf * 0.04)))
-    cy1 = max(0, int(round(lfy - thf * 0.18)))
-    cx2 = min(pw, int(round(lfx + twf * 1.04)))
-    cy2 = min(ph, int(round(lfy + thf * 0.99)))
+    cx1 = max(0, int(round(lfx + twf * 0.02)))
+    cy1 = max(0, int(round(lfy - thf * 0.12)))
+    cx2 = min(pw, int(round(lfx + twf * 0.98)))
+    cy2 = min(ph, int(round(lfy + thf * 0.94)))
     cd.ellipse((cx1, cy1, cx2, cy2), fill=int(round(255 * min(1.0, max(0.0, core_strength)))))
-    ca = np.asarray(core.filter(ImageFilter.GaussianBlur(1.0)), dtype=np.float32) / 255.0
+    ca = np.asarray(core.filter(ImageFilter.GaussianBlur(0.8)), dtype=np.float32) / 255.0
     seg = np.asarray(warped_alpha, dtype=np.float32) / 255.0
     ma = np.maximum(ma, ca * seg)
 
@@ -204,7 +236,7 @@ def _clean_head_overlay(
     payload = fs.jpeg(output, max_side=2048, quality=97)
 
     return payload, {
-        "mode": "v265_lightweight_opencv_head_transplant",
+        "mode": "v265b_seeded_connected_head_mask",
         "target_patch": (tl, tt, tr, tb),
         "source_face_box": tuple(int(v) for v in source_face_box),
         "target_face_box": tuple(int(v) for v in target_face_box),
@@ -212,12 +244,12 @@ def _clean_head_overlay(
         "gate_bounds": (gx1, gy1, gx2, gy2),
         "jaw_start": jaw_start,
         "fade_end": fade_end,
-        "edge_blur": 0.65,
+        "edge_blur": 0.45,
         "alpha_gain": alpha_gain,
         "color_match": match_amount,
         "outer_strength": float(outer_strength),
         "core_strength": float(core_strength),
-        "segmentation": "opencv_grabcut",
+        "segmentation": "opencv_grabcut_seeded_connected_component",
     }
 
 
