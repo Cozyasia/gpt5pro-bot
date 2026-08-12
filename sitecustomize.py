@@ -8,11 +8,55 @@ Legacy Comet owners remain disabled. Text retouch keeps its original-preserving
 local-mask guard and Telegram media requests use production timeouts.
 """
 
+import atexit
 import contextlib
 import os
 import sys
+import threading
+import time
 
 from retouch_guard import guarded_openai_retouch
+
+# Render lifecycle diagnostics. This does not interfere with python-telegram-bot
+# signal handling; it only makes it unambiguous which process is still alive.
+_LIFECYCLE_PID = os.getpid()
+_LIFECYCLE_STARTED = time.monotonic()
+
+
+def _lifecycle_rss_mb() -> float:
+    try:
+        import resource
+        value = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        # Linux reports KiB; macOS reports bytes. Render is Linux.
+        return value / 1024.0
+    except Exception:
+        return -1.0
+
+
+def _lifecycle_log(stage: str) -> None:
+    uptime = max(0.0, time.monotonic() - _LIFECYCLE_STARTED)
+    print(
+        f"[neyrobot-prod] PROCESS_LIFECYCLE stage={stage} pid={_LIFECYCLE_PID} "
+        f"uptime_s={uptime:.1f} rss_mb={_lifecycle_rss_mb():.1f}",
+        flush=True,
+    )
+
+
+def _lifecycle_worker() -> None:
+    # First heartbeat quickly confirms that the process survived the deploy handoff.
+    time.sleep(20.0)
+    while True:
+        _lifecycle_log("heartbeat")
+        time.sleep(60.0)
+
+
+_lifecycle_log("python_start")
+atexit.register(lambda: _lifecycle_log("python_atexit"))
+threading.Thread(
+    target=_lifecycle_worker,
+    daemon=True,
+    name="neyrobot-render-lifecycle-heartbeat",
+).start()
 
 try:
     from neyrobot_prod.bootstrap import install_early
