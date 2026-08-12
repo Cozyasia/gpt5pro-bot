@@ -13,14 +13,10 @@ pdfminer.six==20240706
 python-docx==1.1.2
 ebooklib==0.18
 
-# Images and background removal
+# Images
 Pillow==10.4.0
 # V257 target lock uses the classic Python `cv2.CascadeClassifier` API.
-# OpenCV 5 moved cascade detection to xobjdetect and the main headless wheel no
-# longer exposes this API in the same place. Pin the latest 4.x wheel explicitly
-# instead of allowing rembg's transitive dependency to resolve to OpenCV 5.
 opencv-python-headless==4.13.0.92
-rembg==2.0.67
 
 # Presentation and PDF generation
 python-pptx==1.0.2
