@@ -123,7 +123,9 @@ def _overlay(*, source_full_raw: bytes, source_face_box: tuple[int, int, int, in
     c = sx + (l - tx) * scale_x
     f = sy + (t - ty) * scale_y
     affine = getattr(getattr(Image, "Transform", Image), "AFFINE", getattr(Image, "AFFINE", 0))
-    rgb_resample = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+    # PIL.Image.transform does not accept LANCZOS; BICUBIC is the highest-quality
+    # supported affine resampler here. Keep alpha on BILINEAR to avoid hard ringing.
+    rgb_resample = Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC
     a_resample = Image.Resampling.BILINEAR if hasattr(Image, "Resampling") else Image.BILINEAR
 
     warped = source.transform((pw, ph), affine, (scale_x, 0.0, c, 0.0, scale_y, f),
