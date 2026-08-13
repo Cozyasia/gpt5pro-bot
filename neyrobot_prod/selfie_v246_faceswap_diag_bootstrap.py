@@ -11,10 +11,7 @@ from typing import Any
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
 from neyrobot_prod import selfie_v272_photoroom_head_cutout_diag as quality_diag
 
-# Critical ordering: patch diag.media before any Telegram application binds its
-# MessageHandler. Production AI-selfie is intentionally not modified here.
 quality_diag.install()
-
 VERSION = quality_diag.VERSION
 _BUILDER_FLAG = "_faceswap_diag_v252_builder_hooked"
 _STARTED = False
@@ -52,7 +49,6 @@ def bind_runtime_apps() -> int:
 
 def install_builder_hook() -> bool:
     from telegram.ext import ApplicationBuilder
-
     if getattr(ApplicationBuilder, _BUILDER_FLAG, False):
         return True
     original = ApplicationBuilder.build
@@ -95,8 +91,8 @@ def install() -> bool:
                 bind_runtime_apps()
             time.sleep(0.5)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v274").start()
-    print(f"[neyrobot-prod] V274 PhotoRoom Hair + InSwapper Face diagnostic installed version={VERSION}", flush=True)
+    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v275").start()
+    print(f"[neyrobot-prod] V275 PhotoRoom Full-Head Seamless Clone diagnostic installed version={VERSION}", flush=True)
     return True
 
 
