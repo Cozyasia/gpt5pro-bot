@@ -95,8 +95,8 @@ def install() -> bool:
                 bind_runtime_apps()
             time.sleep(0.5)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v272").start()
-    print(f"[neyrobot-prod] V272 PhotoRoom Head Cutout diagnostic installed version={VERSION}", flush=True)
+    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v273").start()
+    print(f"[neyrobot-prod] V273 PhotoRoom Seam Harmonized diagnostic installed version={VERSION}", flush=True)
     return True
 
 
