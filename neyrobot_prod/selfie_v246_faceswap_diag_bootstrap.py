@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from neyrobot_prod import selfie_v246_faceswap_diagnostic as diag
-from neyrobot_prod import selfie_v271_opaque_head_cutout_diag as quality_diag
+from neyrobot_prod import selfie_v272_photoroom_head_cutout_diag as quality_diag
 
 # Critical ordering: patch diag.media before any Telegram application binds its
 # MessageHandler. Production AI-selfie is intentionally not modified here.
@@ -95,8 +95,8 @@ def install() -> bool:
                 bind_runtime_apps()
             time.sleep(0.5)
 
-    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v271").start()
-    print(f"[neyrobot-prod] V271 Opaque Head Cutout diagnostic installed version={VERSION}", flush=True)
+    threading.Thread(target=worker, daemon=True, name="neyrobot-faceswap-diag-v272").start()
+    print(f"[neyrobot-prod] V272 PhotoRoom Head Cutout diagnostic installed version={VERSION}", flush=True)
     return True
 
 
