@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 
-VERSION = "v257-consolidated-faceswap-service-2026-08-09"
+VERSION = "v257-consolidated-faceswap-service-2026-08-13a"
 PIAPI_TASK_URL = "https://api.piapi.ai/api/v1/task"
 
 
@@ -92,8 +92,11 @@ def _expand(box: tuple[int, int, int, int], size: tuple[int, int], wf: float, hf
 def _detect_clusters(img: Any, *, roi: tuple[int, int, int, int] | None = None) -> list[dict[str, Any]]:
     """Multi-cascade face detection with agreement/eye evidence.
 
-    Returns clustered boxes in full-image coordinates. A single weak Haar hit is not
-    enough for a production target unless eye evidence is present.
+    The V259 compositions are synthetic photographs and can contain mild yaw,
+    contrast changes and non-frontal faces. We therefore combine several Haar
+    cascades, three contrast variants and mirrored profile detection. A single weak
+    hit is still not accepted by the production target selector unless eye evidence
+    is also present.
     """
     import cv2  # type: ignore
     import numpy as np  # type: ignore
@@ -108,27 +111,44 @@ def _detect_clusters(img: Any, *, roi: tuple[int, int, int, int] | None = None) 
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     equalized = cv2.equalizeHist(gray)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
-
-    cascades = [
-        cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml"),
-        cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"),
-    ]
     frames = [gray, equalized, clahe]
+
+    cascade_names = [
+        "haarcascade_frontalface_default.xml",
+        "haarcascade_frontalface_alt2.xml",
+        "haarcascade_frontalface_alt.xml",
+        "haarcascade_frontalface_alt_tree.xml",
+    ]
+    cascades = [cv2.CascadeClassifier(cv2.data.haarcascades + name) for name in cascade_names]
+    profile = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
+
     hits: list[tuple[int, int, int, int]] = []
-    min_side = max(48, int(min(crop.size) * 0.055))
+    min_side = max(44, int(min(crop.size) * 0.045))
     for cascade in cascades:
         if cascade.empty():
             continue
         for frame in frames:
-            found = cascade.detectMultiScale(frame, scaleFactor=1.045, minNeighbors=4, minSize=(min_side, min_side))
+            found = cascade.detectMultiScale(frame, scaleFactor=1.04, minNeighbors=3, minSize=(min_side, min_side))
             for x, y, w, h in found:
                 hits.append((int(x + rx1), int(y + ry1), int(w), int(h)))
+
+    if not profile.empty():
+        for frame in frames:
+            found = profile.detectMultiScale(frame, scaleFactor=1.04, minNeighbors=3, minSize=(min_side, min_side))
+            for x, y, w, h in found:
+                hits.append((int(x + rx1), int(y + ry1), int(w), int(h)))
+            flipped = cv2.flip(frame, 1)
+            found_flip = profile.detectMultiScale(flipped, scaleFactor=1.04, minNeighbors=3, minSize=(min_side, min_side))
+            fw = int(crop.size[0])
+            for x, y, w, h in found_flip:
+                real_x = fw - int(x) - int(w)
+                hits.append((int(real_x + rx1), int(y + ry1), int(w), int(h)))
 
     clusters: list[dict[str, Any]] = []
     for hit in sorted(hits, key=lambda b: b[2] * b[3], reverse=True):
         matched = None
         for cluster in clusters:
-            if _iou(hit, cluster["box"]) >= 0.34:
+            if _iou(hit, cluster["box"]) >= 0.30:
                 matched = cluster
                 break
         if matched is None:
@@ -152,7 +172,7 @@ def _detect_clusters(img: Any, *, roi: tuple[int, int, int, int] | None = None) 
         eye_count = 0
         if not eye.empty() and lx2 > lx1 and ly2 > ly1:
             eye_roi = gray[ly1:ly2, lx1:lx2]
-            found_eyes = eye.detectMultiScale(eye_roi, scaleFactor=1.08, minNeighbors=4, minSize=(12, 12))
+            found_eyes = eye.detectMultiScale(eye_roi, scaleFactor=1.07, minNeighbors=3, minSize=(12, 12))
             eye_count = int(len(found_eyes))
         cluster["eye_count"] = eye_count
     return clusters
@@ -177,46 +197,75 @@ def source_face_crop(photo3_raw: bytes, log: Any | None = None) -> FaceTarget:
 
 
 def locate_person_a(composition_raw: bytes, *, scene_image: bool, log: Any | None = None) -> tuple[Any, FaceTarget, dict[str, float]]:
-    """Locate PERSON A using a strict left-person ROI and confidence checks.
+    """Locate PERSON A with a staged, left-biased detector.
 
-    No deterministic synthetic target is allowed. If confidence is insufficient,
-    the caller must regenerate the Gemini composition instead of swapping a wall.
+    The old V259 path used one narrow ROI and failed before PiAPI when Gemini placed
+    PERSON A slightly lower, farther left/right, or with mild head yaw. This keeps
+    the safety invariant (real face evidence only) but widens acquisition in a
+    controlled second pass. No synthetic/random target fallback is allowed.
     """
     img = image(composition_raw)
     iw, ih = img.size
-    roi = (int(iw * 0.05), int(ih * 0.06), int(iw * 0.56), int(ih * 0.58))
-    clusters = _detect_clusters(img, roi=roi)
-    candidates: list[tuple[float, dict[str, Any]]] = []
-    target_x = iw * 0.29
-    target_y = ih * 0.29
+    target_x = iw * 0.30
+    target_y = ih * 0.30
 
-    for c in clusters:
-        x, y, w, h = c["box"]
-        cx, cy = x + w / 2.0, y + h / 2.0
-        hr = h / float(max(1, ih))
-        wr = w / float(max(1, iw))
-        if not (iw * 0.12 <= cx <= iw * 0.50):
-            continue
-        if not (ih * 0.10 <= cy <= ih * 0.49):
-            continue
-        if not (0.065 <= hr <= 0.245 and 0.045 <= wr <= 0.235):
-            continue
-        support = int(c["support"])
-        eyes = int(c.get("eye_count", 0))
-        if support < 2 and eyes < 1:
-            continue
-        distance = ((cx - target_x) / max(1.0, iw)) ** 2 + ((cy - target_y) / max(1.0, ih)) ** 2
-        size_bonus = min(3.0, hr * 16.0)
-        score = support * 2.2 + min(2, eyes) * 1.6 + size_bonus - distance * 14.0
-        candidates.append((score, c))
+    stages = [
+        ("strict", (int(iw * 0.03), int(ih * 0.04), int(iw * 0.62), int(ih * 0.66)), 0.57, 0.58),
+        ("wide", (0, int(ih * 0.02), int(iw * 0.70), int(ih * 0.74)), 0.64, 0.66),
+    ]
+    selected: list[tuple[float, dict[str, Any]]] = []
+    selected_stage = ""
+    stage_cluster_counts: dict[str, int] = {}
 
-    if not candidates:
-        raise ValueError("PERSON A target not reliably detected inside strict left-person ROI")
+    for stage_name, roi, max_cx_ratio, max_cy_ratio in stages:
+        clusters = _detect_clusters(img, roi=roi)
+        stage_cluster_counts[stage_name] = len(clusters)
+        candidates: list[tuple[float, dict[str, Any]]] = []
+        for c in clusters:
+            x, y, w, h = c["box"]
+            cx, cy = x + w / 2.0, y + h / 2.0
+            hr = h / float(max(1, ih))
+            wr = w / float(max(1, iw))
+            if not (iw * 0.055 <= cx <= iw * max_cx_ratio):
+                continue
+            if not (ih * 0.065 <= cy <= ih * max_cy_ratio):
+                continue
+            if not (0.052 <= hr <= 0.30 and 0.032 <= wr <= 0.28):
+                continue
+            support = int(c["support"])
+            eyes = int(c.get("eye_count", 0))
+            if support < 2 and eyes < 1:
+                continue
+            distance = ((cx - target_x) / max(1.0, iw)) ** 2 + ((cy - target_y) / max(1.0, ih)) ** 2
+            size_bonus = min(3.4, hr * 17.0)
+            left_bonus = max(0.0, (0.56 - cx / float(max(1, iw))) * 1.7)
+            score = support * 2.15 + min(2, eyes) * 1.5 + size_bonus + left_bonus - distance * 12.0
+            candidates.append((score, c))
 
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    score, best = candidates[0]
-    if len(candidates) > 1 and score - candidates[1][0] < 0.55:
-        raise ValueError("PERSON A target is ambiguous; refusing unsafe face swap")
+        if candidates:
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            selected = candidates
+            selected_stage = stage_name
+            break
+
+    if not selected:
+        raise ValueError(
+            "PERSON A target not reliably detected in staged left-person ROI "
+            f"(clusters strict={stage_cluster_counts.get('strict', 0)} wide={stage_cluster_counts.get('wide', 0)})"
+        )
+
+    score, best = selected[0]
+    if len(selected) > 1 and score - selected[1][0] < 0.40:
+        first_box = selected[0][1]["box"]
+        second_box = selected[1][1]["box"]
+        first_cx = first_box[0] + first_box[2] / 2.0
+        second_cx = second_box[0] + second_box[2] / 2.0
+        if abs(first_cx - second_cx) < iw * 0.12:
+            raise ValueError("PERSON A target is ambiguous; refusing unsafe face swap")
+        # In a two-person composition PERSON A is explicitly the left principal
+        # person, so horizontal separation is a valid disambiguator.
+        if second_cx < first_cx:
+            score, best = selected[1]
 
     box = tuple(best["box"])
     min_px = 180 if scene_image else 125
@@ -234,10 +283,24 @@ def locate_person_a(composition_raw: bytes, *, scene_image: bool, log: Any | Non
         "support": float(best["support"]),
         "eye_count": float(best.get("eye_count", 0)),
         "score": float(score),
+        "detector_stage": 1.0 if selected_stage == "strict" else 2.0,
+        "strict_clusters": float(stage_cluster_counts.get("strict", 0)),
+        "wide_clusters": float(stage_cluster_counts.get("wide", 0)),
     }
     result = FaceTarget(box, crop_box, crop_raw, int(best["support"]), int(best.get("eye_count", 0)), float(score))
     if callable(log):
-        log("AI_SELFIE_V257_TARGET face=%s crop=%s support=%s eyes=%s score=%.3f candidates=%s", result.face_box, result.crop_box, result.support, result.eye_count, result.score, len(candidates))
+        log(
+            "AI_SELFIE_V257_TARGET stage=%s face=%s crop=%s support=%s eyes=%s score=%.3f candidates=%s strict_clusters=%s wide_clusters=%s",
+            selected_stage,
+            result.face_box,
+            result.crop_box,
+            result.support,
+            result.eye_count,
+            result.score,
+            len(selected),
+            stage_cluster_counts.get("strict", 0),
+            stage_cluster_counts.get("wide", 0),
+        )
     return img, result, metrics
 
 
