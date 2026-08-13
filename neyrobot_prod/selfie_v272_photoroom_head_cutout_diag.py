@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-"""V274 hybrid PhotoRoom-hair + InSwapper-face compositor.
+"""V275 PhotoRoom full-head + seamless-clone compositor.
 
-V272/V273 proved that PhotoRoom gives a much better real foreground silhouette,
-but pasting the complete source head still produced a sticker: source jaw/cheeks/
-neck competed with the already well integrated InSwapper face.
+V274 regressed because it split ownership through the forehead and pasted a hair cap.
+V275 returns to the V272/V273 idea that worked best visually: PhotoRoom owns the real
+source head silhouette. The difference is integration: the head is no longer pasted
+with a visible alpha seam. Instead we align the full head by face geometry, build an
+anatomical jaw handoff, pre-harmonize only low frequencies, then use OpenCV mixed
+seamless cloning for the opaque head interior. A very narrow PhotoRoom-alpha contour
+is composited afterwards only to recover fine hair/flyaway silhouette.
 
-V274 changes ownership instead of adding more feathering:
-* InSwapper baseline owns the complete face, skin, jaw, ears and neck.
-* PhotoRoom is used only to recover the source hair/crown/temple silhouette.
-* The lower hairline is handed back to the InSwapper baseline through a soft,
-  curved anatomical gate. There is no full-head paste and no neck seam.
-
-This module patches only the isolated Face Swap diagnostic.
+Production AI-selfie remains untouched; this patches only the isolated Face Swap test.
 """
 from __future__ import annotations
 
@@ -24,12 +22,11 @@ from neyrobot_prod import selfie_v262_full_head_identity_diag as v262
 from neyrobot_prod import selfie_v265_clean_head_transplant_diag as v265
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v274-photoroom-hair-inswapper-face-blend-2026-08-13"
+VERSION = "v275-photoroom-full-head-seamless-clone-2026-08-13"
 _INSTALLED = False
 
 
 def _photoroom_rgba(source_raw: bytes):
-    """Return PhotoRoom RGBA cutout. No synthetic segmentation fallback."""
     import httpx
     from PIL import Image
 
@@ -48,14 +45,8 @@ def _photoroom_rgba(source_raw: bytes):
     return im
 
 
-def _hair_alpha_from_rgba(rgba, face_box: tuple[int, int, int, int], *, strong: bool):
-    """Build a PhotoRoom-owned alpha for hair/crown only, never a full head.
-
-    PhotoRoom owns foreground/background classification. Geometry only decides
-    which *part of that foreground* is allowed to replace the InSwapper baseline.
-    The centre fades out around the upper forehead while the sides continue a bit
-    lower to retain temples/side hair. Eyes, cheeks, jaw and neck are always zero.
-    """
+def _head_alpha_from_rgba(rgba, face_box: tuple[int, int, int, int], *, strong: bool):
+    """Keep the real PhotoRoom head silhouette and hand off below the jaw with a U curve."""
     import cv2
     import numpy as np
     from PIL import Image
@@ -63,61 +54,46 @@ def _hair_alpha_from_rgba(rgba, face_box: tuple[int, int, int, int], *, strong: 
     alpha = np.asarray(rgba.getchannel("A"), dtype=np.uint8)
     h, w = alpha.shape
     x, y, fw, fh = [float(v) for v in face_box]
-    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
 
-    # Limit PhotoRoom foreground to a generous head-width corridor. This removes
-    # shoulders/body while leaving real flyaway hair and crown silhouette intact.
-    cx = x + fw * 0.50
-    half_w = fw * (0.76 if strong else 0.72)
-    horizontal = np.clip((half_w - np.abs(xx - cx)) / max(fw * 0.055, 1.0), 0.0, 1.0)
+    # Wide corridor around the real head; body/shoulders are never source-owned.
+    keep = np.zeros_like(alpha)
+    left = max(0, int(round(x - fw * 0.58)))
+    right = min(w, int(round(x + fw * 1.58)))
+    top = max(0, int(round(y - fh * 1.04)))
+    bottom = min(h, int(round(y + fh * 1.18)))
+    keep[top:bottom, left:right] = 255
+    a = cv2.bitwise_and(alpha, keep)
 
-    # Curved lower ownership boundary. The central forehead is handed to the
-    # InSwapper baseline earlier; the sides retain a little more source hair.
-    nx = np.clip(np.abs((xx - cx) / max(fw * 0.50, 1.0)), 0.0, 1.35)
-    side_bonus = np.clip((nx - 0.35) / 0.75, 0.0, 1.0)
-    cutoff = y + fh * ((0.105 if strong else 0.085) + (0.155 if strong else 0.135) * side_bonus)
-    fade = max(10.0, fh * (0.095 if strong else 0.115))
-    lower_gate = np.clip((cutoff + fade - yy) / fade, 0.0, 1.0)
-
-    # Hard safety: source pixels must never own the lower face/jaw/neck.
-    safety_bottom = y + fh * 0.34
-    safety = np.clip((safety_bottom - yy) / max(fh * 0.035, 1.0), 0.0, 1.0)
-
-    af = (alpha.astype(np.float32) / 255.0) * horizontal * lower_gate * safety
-
-    # Keep only the connected PhotoRoom foreground component overlapping the
-    # source head corridor. This rejects stray foreground islands in the crop.
-    binary = (af >= 0.035).astype(np.uint8)
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    # Keep connected PhotoRoom foreground component that overlaps the detected face.
+    binary = (a >= 16).astype(np.uint8)
+    count, labels, _, _ = cv2.connectedComponentsWithStats(binary, 8)
     if count > 1:
-        probe_y0 = max(0, int(round(y - fh * 0.70)))
-        probe_y1 = min(h, int(round(y + fh * 0.16)))
-        probe_x0 = max(0, int(round(x - fw * 0.30)))
-        probe_x1 = min(w, int(round(x + fw * 1.30)))
-        probe = labels[probe_y0:probe_y1, probe_x0:probe_x1]
-        ids, freq = np.unique(probe[probe > 0], return_counts=True)
+        fx0, fy0 = max(0, int(x)), max(0, int(y))
+        fx1, fy1 = min(w, int(x + fw)), min(h, int(y + fh))
+        face_labels = labels[fy0:fy1, fx0:fx1]
+        ids, freq = np.unique(face_labels[face_labels > 0], return_counts=True)
         if len(ids):
             chosen = int(ids[int(np.argmax(freq))])
-            af = np.where(labels == chosen, af, 0.0).astype(np.float32)
+            a = np.where(labels == chosen, a, 0).astype(np.uint8)
 
-    # Decontaminate PhotoRoom contour by shrinking only the opaque interior a
-    # fraction, then rebuild a soft edge. This prevents bright background halos.
-    opaque = (af >= 0.58).astype(np.uint8)
-    kernel = np.ones((3, 3), np.uint8)
-    core = cv2.erode(opaque, kernel, iterations=1)
-    edge = np.clip(af - core.astype(np.float32), 0.0, 1.0)
-    sigma = max(1.0, fw * (0.0055 if strong else 0.0070))
-    edge = cv2.GaussianBlur(edge, (0, 0), sigma)
-    final = np.maximum(core.astype(np.float32), edge)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    cx = x + fw * 0.50
+    nx = np.clip(np.abs((xx - cx) / max(fw * 0.62, 1.0)), 0.0, 1.0)
 
-    # Hair interior remains opaque; only the real silhouette and lower handoff
-    # are feathered. This avoids the translucent double-hair/ghosting effect.
-    final[final >= 0.92] = 1.0
-    return Image.fromarray(np.clip(final * 255.0, 0, 255).astype(np.uint8), "L")
+    # Source extends lowest under the chin centre, but exits earlier at jaw corners.
+    centre = 1.0 - nx ** 1.55
+    curve = y + fh * ((0.93 if strong else 0.91) + (0.19 if strong else 0.17) * centre)
+    feather = max(10.0, fh * (0.075 if strong else 0.090))
+    jaw_gate = np.clip((curve + feather - yy) / feather, 0.0, 1.0)
+
+    af = (a.astype(np.float32) / 255.0) * jaw_gate
+
+    # Clean only tiny halo pixels; preserve genuine fine hair alpha.
+    af[af < 0.025] = 0.0
+    return Image.fromarray(np.clip(af * 255.0, 0, 255).astype(np.uint8), "L")
 
 
-def _harmonize_hair(warped, reference, alpha, *, strong: bool):
-    """Match broad target lighting on hair without blurring source texture."""
+def _harmonize_low_frequency(warped, reference, alpha, *, strong: bool):
     import cv2
     import numpy as np
     from PIL import Image
@@ -126,24 +102,72 @@ def _harmonize_hair(warped, reference, alpha, *, strong: bool):
     ref = np.asarray(reference.convert("RGB"), dtype=np.float32)
     a = np.asarray(alpha, dtype=np.float32) / 255.0
 
-    sigma = max(7.0, min(src.shape[0], src.shape[1]) * 0.025)
+    sigma = max(9.0, min(src.shape[0], src.shape[1]) * 0.032)
     src_low = cv2.GaussianBlur(src, (0, 0), sigma)
     ref_low = cv2.GaussianBlur(ref, (0, 0), sigma)
-    delta = np.clip(ref_low - src_low, -28.0, 28.0)
-    amount = 0.15 if strong else 0.22
+    delta = np.clip(ref_low - src_low, -30.0, 30.0)
+    amount = 0.20 if strong else 0.28
     out = src + delta * amount
 
-    # Only the transition band gets a little target-colour decontamination.
+    # Only transition pixels borrow a little target colour; identity core is untouched.
     band = np.clip(4.0 * a * (1.0 - a), 0.0, 1.0)[..., None]
     mix = 0.10 if strong else 0.15
     out = out * (1.0 - band * mix) + ref * (band * mix)
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
 
 
+def _seamless_integrate(warped, reference, alpha, *, strong: bool):
+    """Clone opaque head interior into target and restore only the fine PhotoRoom contour."""
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    src_rgb = np.asarray(warped.convert("RGB"), dtype=np.uint8)
+    dst_rgb = np.asarray(reference.convert("RGB"), dtype=np.uint8)
+    a = np.asarray(alpha, dtype=np.uint8)
+    h, w = a.shape
+
+    # Mixed clone mask excludes the semi-transparent hair fringe and the feather tail.
+    threshold = 104 if strong else 118
+    core = np.where(a >= threshold, 255, 0).astype(np.uint8)
+    kernel = np.ones((3, 3), np.uint8)
+    core = cv2.morphologyEx(core, cv2.MORPH_CLOSE, kernel, iterations=1)
+    core = cv2.erode(core, kernel, iterations=1)
+
+    ys, xs = np.where(core > 0)
+    if len(xs) < 500:
+        # Conservative fallback: soft alpha composite, never rectangular paste.
+        return Image.composite(warped, reference, alpha)
+
+    # Fill outside source mask with target so source-background gradients cannot leak.
+    safe_src = src_rgb.copy()
+    outside = core == 0
+    safe_src[outside] = dst_rgb[outside]
+
+    # seamlessClone expects BGR.
+    src_bgr = cv2.cvtColor(safe_src, cv2.COLOR_RGB2BGR)
+    dst_bgr = cv2.cvtColor(dst_rgb, cv2.COLOR_RGB2BGR)
+    center = (w // 2, h // 2)
+    try:
+        cloned_bgr = cv2.seamlessClone(src_bgr, dst_bgr, core, center, cv2.MIXED_CLONE)
+        cloned = cv2.cvtColor(cloned_bgr, cv2.COLOR_BGR2RGB)
+    except cv2.error:
+        return Image.composite(warped, reference, alpha)
+
+    # Restore only the narrow real silhouette that clone intentionally excludes.
+    af = a.astype(np.float32) / 255.0
+    coref = core.astype(np.float32) / 255.0
+    fringe = np.clip(af - coref, 0.0, 1.0)
+    fringe = cv2.GaussianBlur(fringe, (0, 0), max(0.8, w * 0.0022))
+    fringe = np.clip(fringe * (0.80 if strong else 0.72), 0.0, 1.0)[..., None]
+
+    out = cloned.astype(np.float32) * (1.0 - fringe) + src_rgb.astype(np.float32) * fringe
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
 def _overlay(*, source_full_raw: bytes, source_face_box: tuple[int, int, int, int],
              target_full_raw: bytes, target_face_box: tuple[int, int, int, int],
              baseline_full_raw: bytes, outer_strength: float, core_strength: float) -> tuple[bytes, dict[str, Any]]:
-    """Overlay only source hair onto the already integrated InSwapper baseline."""
     from PIL import Image
 
     source_rgba = _photoroom_rgba(source_full_raw)
@@ -155,22 +179,21 @@ def _overlay(*, source_full_raw: bytes, source_face_box: tuple[int, int, int, in
     strong = bool(outer_strength >= 0.85)
     W, H = baseline.size
 
-    # Hair-only work patch. It deliberately ends around the upper half of the
-    # target face; nothing near jaw/neck can be pasted by this compositor.
-    l = max(0, int(round(tx - tw * 0.72)))
-    r = min(W, int(round(tx + tw * 1.72)))
-    t = max(0, int(round(ty - th * 1.10)))
-    b = min(H, int(round(ty + th * 0.46)))
+    # Head-sized patch; never full frame and never cut through the forehead.
+    l = max(0, int(round(tx - tw * 0.70)))
+    r = min(W, int(round(tx + tw * 1.70)))
+    t = max(0, int(round(ty - th * 1.08)))
+    b = min(H, int(round(ty + th * 1.22)))
     pw, ph = r - l, b - t
-    if pw < 32 or ph < 32:
-        raise ValueError("target hair region is too small")
+    if pw < 64 or ph < 64:
+        raise ValueError("target head region is too small")
 
-    # Map source face coordinates onto the target face coordinates. No artificial
-    # head enlargement: hair geometry follows the actual source-to-target face scale.
-    scale_x = sw / max(tw, 1.0)
-    scale_y = sh / max(th, 1.0)
-    c = sx + (l - tx) * scale_x
-    f = sy + (t - ty) * scale_y
+    # Face-box registration. Keep source proportions; only a tiny fit correction is allowed.
+    fit = 1.006 if strong else 0.998
+    scale_x = (sw / max(tw, 1.0)) * fit
+    scale_y = (sh / max(th, 1.0)) * fit
+    c = sx + (l - tx) * scale_x + sw * (1.0 - fit) * 0.50
+    f = sy + (t - ty) * scale_y + sh * (1.0 - fit) * 0.50
 
     affine = getattr(getattr(Image, "Transform", Image), "AFFINE", getattr(Image, "AFFINE", 0))
     rgb_resample = Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC
@@ -180,51 +203,51 @@ def _overlay(*, source_full_raw: bytes, source_face_box: tuple[int, int, int, in
         (pw, ph), affine, (scale_x, 0.0, c, 0.0, scale_y, f),
         resample=rgb_resample, fillcolor=(0, 0, 0),
     )
-    source_alpha = _hair_alpha_from_rgba(source_rgba, source_face_box, strong=strong)
+    source_alpha = _head_alpha_from_rgba(source_rgba, source_face_box, strong=strong)
     alpha = source_alpha.transform(
         (pw, ph), affine, (scale_x, 0.0, c, 0.0, scale_y, f),
         resample=alpha_resample, fillcolor=0,
     )
 
     reference = baseline.crop((l, t, r, b))
-    warped = v262._color_match(warped, reference, amount=0.020 if strong else 0.035)
-    warped = _harmonize_hair(warped, reference, alpha, strong=strong)
+    warped = v262._color_match(warped, reference, amount=0.025 if strong else 0.040)
+    warped = _harmonize_low_frequency(warped, reference, alpha, strong=strong)
+    merged = _seamless_integrate(warped, reference, alpha, strong=strong)
 
-    merged = Image.composite(warped, reference, alpha)
     output = baseline.copy()
     output.paste(merged, (l, t))
     payload = fs.jpeg(output, max_side=2048, quality=98)
 
     return payload, {
-        "mode": "v274_photoroom_hair_inswapper_face",
-        "variant": "hair_identity_strong" if strong else "hair_natural",
+        "mode": "v275_photoroom_full_head_seamless_clone",
+        "variant": "identity_strong" if strong else "natural",
         "segmentation": "photoroom_v1_segment_rgba",
-        "ownership_model": "photoroom_hair_only_over_inswapper_face_baseline",
-        "baseline_owned": "face_forehead_skin_eyes_nose_mouth_cheeks_jaw_ears_neck_body_background",
-        "source_owned": "hair_crown_hairline_and_limited_temples_only",
-        "blend_model": "opaque_hair_core_soft_real_silhouette_curved_lower_handoff",
-        "neck_seam_possible": False,
-        "full_head_paste": False,
-        "edge_decontamination": True,
-        "illumination_harmonization": True,
+        "ownership_model": "full_source_head_inside_real_photoroom_silhouette",
+        "integration": "opencv_mixed_seamless_clone_plus_narrow_alpha_fringe",
+        "neck_handoff": "curved_u_jaw_gate",
+        "forehead_cut": False,
+        "hair_cap": False,
+        "full_head_identity": True,
+        "target_body_background_preserved": True,
         "target_patch": (l, t, r, b),
         "source_face_box": tuple(int(v) for v in source_face_box),
         "target_face_box": tuple(int(v) for v in target_face_box),
         "scale_xy": (round(float(scale_x), 4), round(float(scale_y), 4)),
+        "fit": fit,
     }
 
 
 def install() -> bool:
     global _INSTALLED
-    if _INSTALLED and getattr(diag.media, "_v274_photoroom_hair_inswapper_face", False):
+    if _INSTALLED and getattr(diag.media, "_v275_photoroom_full_head_seamless_clone", False):
         return True
     v265.install()
     v262._full_head_overlay = _overlay
     media = v262.media
-    setattr(media, "_v274_photoroom_hair_inswapper_face", True)
+    setattr(media, "_v275_photoroom_full_head_seamless_clone", True)
     diag.media = media
     _INSTALLED = True
-    diag._log("stage=v274_photoroom_hair_inswapper_face status=installed version=%s", VERSION)
+    diag._log("stage=v275_photoroom_full_head_seamless_clone status=installed version=%s", VERSION)
     return True
 
 
