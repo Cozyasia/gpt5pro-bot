@@ -10,6 +10,7 @@ Architecture:
 - PiAPI/Qubico is a production fallback;
 - no Gemini call occurs after face transfer;
 - provider input is supersampled and integrated locally;
+- InSwapper runs at 4x with CodeFormer restoration at high fidelity to improve face detail;
 - final output preserves the original Gemini resolution instead of downscaling to 2048px;
 - up to three composition attempts are allowed so an undersized Gemini face does not fail the user flow.
 
@@ -27,8 +28,8 @@ from typing import Any
 
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v263-production-fullres-resilient-2026-08-14"
-TRACE_PREFIX = "AI_SELFIE_V263"
+VERSION = "v264-production-fullhd-face-2026-08-14"
+TRACE_PREFIX = "AI_SELFIE_V264"
 
 
 def _trace(log: Any, trace: str, started: float, stage: str, **fields: Any) -> None:
@@ -63,9 +64,9 @@ def _diag_enabled(user_id: int) -> bool:
 async def _diag_document(delivery: Any, message: Any, payload: bytes, caption: str, log: Any, trace: str, stage: str) -> None:
     try:
         await delivery._send_document(message, bytes(payload), caption, timeout=240.0)
-        log("AI_SELFIE_V263_DIAG trace=%s stage=%s status=sent sha=%s dims=%s bytes=%s", trace, stage, fs.sha(payload), fs.dims(payload), len(payload))
+        log("AI_SELFIE_V264_DIAG trace=%s stage=%s status=sent sha=%s dims=%s bytes=%s", trace, stage, fs.sha(payload), fs.dims(payload), len(payload))
     except Exception as exc:
-        log("AI_SELFIE_V263_DIAG trace=%s stage=%s status=failed error_type=%s error=%s", trace, stage, type(exc).__name__, str(exc)[:500])
+        log("AI_SELFIE_V264_DIAG trace=%s stage=%s status=failed error_type=%s error=%s", trace, stage, type(exc).__name__, str(exc)[:500])
 
 
 def _prompt(name: str, scene_text: str, shot_label: str, has_scene_image: bool, attempt: int) -> str:
@@ -104,13 +105,13 @@ def _source(photo3: bytes, log: Any) -> fs.FaceTarget:
     img = fs.image(photo3)
     crop_box = fs._expand(detected.face_box, img.size, 1.42, 1.56, 0.015)
     crop_img = img.crop(crop_box)
-    raw = fs.jpeg(crop_img, max_side=1600, quality=99)
+    raw = fs.jpeg(crop_img, max_side=1800, quality=99)
     fw, fh = detected.face_box[2], detected.face_box[3]
     cw, ch = crop_img.size
     face_w_coverage = fw / float(max(1, cw))
     face_h_coverage = fh / float(max(1, ch))
     result = fs.FaceTarget(detected.face_box, crop_box, raw, detected.support, detected.eye_count, detected.score)
-    log("AI_SELFIE_V263_SOURCE face=%s crop=%s support=%s eyes=%s sha=%s dims=%s face_w_coverage=%.3f face_h_coverage=%.3f", result.face_box, result.crop_box, result.support, result.eye_count, fs.sha(raw), fs.dims(raw), face_w_coverage, face_h_coverage)
+    log("AI_SELFIE_V264_SOURCE face=%s crop=%s support=%s eyes=%s sha=%s dims=%s face_w_coverage=%.3f face_h_coverage=%.3f", result.face_box, result.crop_box, result.support, result.eye_count, fs.sha(raw), fs.dims(raw), face_w_coverage, face_h_coverage)
     if face_w_coverage < 0.56 or face_h_coverage < 0.50:
         raise ValueError("photo #3 source crop is not face-centric enough for production face transfer")
     return result
@@ -121,19 +122,14 @@ def _target(composition: bytes, *, scene_image: bool, log: Any) -> tuple[Any, fs
     _, ih = base_img.size
     face_h = int(located.face_box[3])
     ratio = face_h / float(max(1, ih))
-
-    # V262's 360px/0.150 hard floor proved too brittle: Gemini can return a strong,
-    # well-detected 250-330px face even after a retry. Supersampling and native final
-    # delivery already preserve detail well, so use a practical floor and spend up to
-    # three composition attempts before failing.
     min_px = 330 if scene_image else 300
     min_ratio = 0.140 if scene_image else 0.125
     if face_h < min_px or ratio < min_ratio:
         raise ValueError(f"PERSON A face below full-resolution production floor: face_h={face_h}px ratio={ratio:.4f} required={min_px}px/{min_ratio:.4f}")
 
-    crop_box = fs._expand(located.face_box, base_img.size, 1.62, 1.86, 0.010)
+    crop_box = fs._expand(located.face_box, base_img.size, 1.58, 1.82, 0.010)
     crop_img = base_img.crop(crop_box)
-    crop_raw = fs.jpeg(crop_img, max_side=1800, quality=99)
+    crop_raw = fs.jpeg(crop_img, max_side=1900, quality=99)
     fw, fh = located.face_box[2], located.face_box[3]
     cw, ch = crop_img.size
     metrics = dict(metrics)
@@ -144,56 +140,56 @@ def _target(composition: bytes, *, scene_image: bool, log: Any) -> tuple[Any, fs
         "target_face_h_coverage": fh / float(max(1, ch)),
     })
     target = fs.FaceTarget(located.face_box, crop_box, crop_raw, located.support, located.eye_count, located.score)
-    log("AI_SELFIE_V263_TARGET face=%s crop=%s support=%s eyes=%s score=%.3f sha=%s dims=%s face_w_coverage=%.3f face_h_coverage=%.3f", target.face_box, target.crop_box, target.support, target.eye_count, target.score, fs.sha(crop_raw), fs.dims(crop_raw), metrics["target_face_w_coverage"], metrics["target_face_h_coverage"])
+    log("AI_SELFIE_V264_TARGET face=%s crop=%s support=%s eyes=%s score=%.3f sha=%s dims=%s face_w_coverage=%.3f face_h_coverage=%.3f", target.face_box, target.crop_box, target.support, target.eye_count, target.score, fs.sha(crop_raw), fs.dims(crop_raw), metrics["target_face_w_coverage"], metrics["target_face_h_coverage"])
     return base_img, target, metrics
 
 
-def _supersample(raw: bytes, *, min_long_side: int = 1400) -> bytes:
-    """Upscale provider input only; final geometry still comes from the native scene."""
+def _supersample(raw: bytes, *, min_long_side: int = 1800) -> bytes:
+    """Upscale provider input; final geometry still comes from the native scene."""
     from PIL import Image, ImageFilter
     img = fs.image(raw)
     long_side = max(img.size)
     if long_side >= min_long_side:
         return raw
-    scale = min(3.0, float(min_long_side) / float(max(1, long_side)))
+    scale = min(4.0, float(min_long_side) / float(max(1, long_side)))
     size = (max(1, int(round(img.width * scale))), max(1, int(round(img.height * scale))))
     resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
     up = img.resize(size, resampling)
-    up = up.filter(ImageFilter.UnsharpMask(radius=0.65, percent=55, threshold=4))
-    return fs.jpeg(up, max_side=1900, quality=99)
+    up = up.filter(ImageFilter.UnsharpMask(radius=0.55, percent=45, threshold=4))
+    return fs.jpeg(up, max_side=2200, quality=99)
 
 
 async def _identity_swap(target_crop: bytes, source_crop: bytes, log: Any, *, trace: str) -> tuple[bytes, str]:
-    """Prefer identity-preserving InSwapper on supersampled target input."""
+    """High-detail InSwapper: 4x + face upsample + conservative CodeFormer restoration."""
     replicate_token = str(os.getenv("REPLICATE_API_TOKEN") or "").strip()
     if replicate_token:
         try:
             from neyrobot_prod import selfie_v252_faceswap_quality_diag as ins
-            provider_target = _supersample(target_crop, min_long_side=1400)
-            provider_source = _supersample(source_crop, min_long_side=1400)
+            provider_target = _supersample(target_crop, min_long_side=1800)
+            provider_source = _supersample(source_crop, min_long_side=1800)
             inputs = {
-                "upscale": 2,
+                "upscale": 4,
                 "source_img": ins._data_url(provider_source),
                 "target_img": ins._data_url(provider_target),
-                "face_restore": False,
+                "face_restore": True,
                 "face_upsample": True,
                 "source_indexes": "-1",
                 "target_indexes": "-1",
                 "background_enhance": False,
-                "codeformer_fidelity": 1.0,
+                "codeformer_fidelity": 0.90,
             }
-            log("AI_SELFIE_V263_IDENTITY trace=%s provider=replicate_inswapper stage=create target_native=%s target_provider=%s source_native=%s source_provider=%s upscale=2 face_upsample=true face_restore=false", trace, fs.dims(target_crop), fs.dims(provider_target), fs.dims(source_crop), fs.dims(provider_source))
-            raw = await ins._replicate_swap_once(version=ins.REPLICATE_INSWAPPER_VERSION, inputs=inputs, trace=trace, label="v263_prod_inswapper_fullres")
+            log("AI_SELFIE_V264_IDENTITY trace=%s provider=replicate_inswapper stage=create target_native=%s target_provider=%s source_native=%s source_provider=%s upscale=4 face_upsample=true face_restore=true codeformer_fidelity=0.90", trace, fs.dims(target_crop), fs.dims(provider_target), fs.dims(source_crop), fs.dims(provider_source))
+            raw = await ins._replicate_swap_once(version=ins.REPLICATE_INSWAPPER_VERSION, inputs=inputs, trace=trace, label="v264_prod_inswapper_fullhd")
             if len(raw) >= 1024 and fs.sha(raw) != fs.sha(provider_target):
-                log("AI_SELFIE_V263_IDENTITY trace=%s provider=replicate_inswapper stage=success sha=%s dims=%s bytes=%s", trace, fs.sha(raw), fs.dims(raw), len(raw))
-                return raw, "replicate_inswapper_fullres_restore_off"
+                log("AI_SELFIE_V264_IDENTITY trace=%s provider=replicate_inswapper stage=success sha=%s dims=%s bytes=%s", trace, fs.sha(raw), fs.dims(raw), len(raw))
+                return raw, "replicate_inswapper_fullhd_restore90"
             raise RuntimeError("InSwapper returned unchanged/empty target")
         except Exception as exc:
-            log("AI_SELFIE_V263_IDENTITY trace=%s provider=replicate_inswapper stage=fallback error_type=%s error=%s", trace, type(exc).__name__, str(exc)[:700])
+            log("AI_SELFIE_V264_IDENTITY trace=%s provider=replicate_inswapper stage=fallback error_type=%s error=%s", trace, type(exc).__name__, str(exc)[:700])
 
     if str(os.getenv("PIAPI_API_KEY") or "").strip():
-        provider_target = _supersample(target_crop, min_long_side=1250)
-        provider_source = _supersample(source_crop, min_long_side=1250)
+        provider_target = _supersample(target_crop, min_long_side=1500)
+        provider_source = _supersample(source_crop, min_long_side=1500)
         raw = await fs.piapi_swap_once(provider_target, provider_source, log, trace=trace)
         if fs.sha(raw) == fs.sha(provider_target):
             raise RuntimeError("PiAPI returned unchanged target crop")
@@ -203,7 +199,7 @@ async def _identity_swap(target_crop: bytes, source_crop: bytes, log: Any, *, tr
 
 
 def _edge_composite_fullres(base_img: Any, target: fs.FaceTarget, swapped_crop_raw: bytes) -> bytes:
-    """Integrate the identity crop without the old 2048px final downscale."""
+    """Integrate restored provider detail while preserving the native 1856x2304 scene."""
     from PIL import Image, ImageDraw, ImageFilter
 
     cl, ct, cr, cb = target.crop_box
@@ -211,12 +207,12 @@ def _edge_composite_fullres(base_img: Any, target: fs.FaceTarget, swapped_crop_r
     provider = fs.image(swapped_crop_raw)
     resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
     provider = provider.resize((cw, ch), resampling)
-    provider = provider.filter(ImageFilter.UnsharpMask(radius=0.55, percent=70, threshold=4))
+    provider = provider.filter(ImageFilter.UnsharpMask(radius=0.45, percent=55, threshold=5))
 
     original_crop = base_img.crop(target.crop_box)
     fx, fy, fw, fh = target.face_box
     local_face = (fx - cl, fy - ct, fw, fh)
-    region = fs._expand(local_face, (cw, ch), 1.84, 2.08, 0.010)
+    region = fs._expand(local_face, (cw, ch), 1.82, 2.04, 0.010)
     left, top, right, bottom = region
     rw, rh = right - left, bottom - top
     provider_region = provider.crop(region)
@@ -227,14 +223,14 @@ def _edge_composite_fullres(base_img: Any, target: fs.FaceTarget, swapped_crop_r
     mx = max(2, int(rw * 0.014))
     my = max(2, int(rh * 0.013))
     draw.ellipse((mx, my, rw - mx, rh - my), fill=255)
-    mask = mask.filter(ImageFilter.GaussianBlur(max(2, int(min(rw, rh) * 0.009))))
+    mask = mask.filter(ImageFilter.GaussianBlur(max(2, int(min(rw, rh) * 0.008))))
 
     merged_region = Image.composite(provider_region, original_region, mask)
     merged_crop = original_crop.copy()
     merged_crop.paste(merged_region, (left, top))
     output = base_img.copy()
     output.paste(merged_crop, (cl, ct))
-    return fs.jpeg(output, max_side=2560, quality=99)
+    return fs.jpeg(output, max_side=2560, quality=100)
 
 
 async def generate(update: Any, context: Any, scene: str = "") -> bool:
@@ -315,7 +311,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             for attempt in range(1, max_attempts + 1):
                 try:
                     prompt = _prompt(str(meta["name"]), scene_text, v215._shot_label(shot_mode), has_scene_image, attempt)
-                    composition, model = await v229._call_google(prompt, refs, f"v263_scene_hero_body_attempt_{attempt}")
+                    composition, model = await v229._call_google(prompt, refs, f"v264_scene_hero_body_attempt_{attempt}")
                     _trace(v229._log, trace, started, "composition_candidate", attempt=attempt, model=model, sha=fs.sha(composition), dims=fs.dims(composition), bytes=len(composition), scene_image=has_scene_image)
                     stage_ref["value"] = "person_a_target_lock"
                     base_image, target, metrics = _target(composition, scene_image=has_scene_image, log=v229._log)
@@ -338,7 +334,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             if diag:
                 await _diag_document(delivery, message, target.crop_raw, f"DIAG TARGET\ntrace={trace}\nsha={fs.sha(target.crop_raw)} dims={fs.dims(target.crop_raw)}", v229._log, trace, "target")
 
-            await delivery._safe_text(message, "🧬 Этап 2/3: переношу лицо с вашей портретной фотографии.")
+            await delivery._safe_text(message, "🧬 Этап 2/3: переношу лицо с вашей портретной фотографии в повышенном качестве.")
             stage_ref["value"] = "identity_transfer"
             swapped, identity_provider = await _identity_swap(target.crop_raw, source.crop_raw, v229._log, trace=trace)
             _trace(v229._log, trace, started, "identity_ready", provider=identity_provider, swapped_sha=fs.sha(swapped), swapped_dims=fs.dims(swapped), swapped_bytes=len(swapped), source_sha=fs.sha(source.crop_raw), target_sha=fs.sha(target.crop_raw))
@@ -347,7 +343,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
 
             stage_ref["value"] = "integration"
             final = _edge_composite_fullres(base_image, target, swapped)
-            _trace(v229._log, trace, started, "final_ready", composition_sha=fs.sha(composition), swapped_sha=fs.sha(swapped), final_sha=fs.sha(final), final_dims=fs.dims(final), final_bytes=len(final), identity_provider=identity_provider, gemini_after_faceswap=False, edge_only=True, preserve_native_resolution=True)
+            _trace(v229._log, trace, started, "final_ready", composition_sha=fs.sha(composition), swapped_sha=fs.sha(swapped), final_sha=fs.sha(final), final_dims=fs.dims(final), final_bytes=len(final), identity_provider=identity_provider, gemini_after_faceswap=False, edge_only=True, preserve_native_resolution=True, fullhd_face_path=True)
 
             await delivery._safe_text(message, "📤 Этап 3/3: готово, отправляю итоговое фото.")
             caption = f"🎭 AI-фото с персонажем «{meta['name']}» готово ✅\nФото создано ИИ и не подтверждает реальную встречу или поддержку."
@@ -359,7 +355,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             return bool(delivered)
         except Exception as exc:
             _trace(v229._log, trace, started, "failed", active_stage=stage_ref.get("value"), error_type=type(exc).__name__, error=str(exc)[:1200])
-            delivery._log_exception(f"V263 trace={trace} production AI Selfie failed", exc)
+            delivery._log_exception(f"V264 trace={trace} production AI Selfie failed", exc)
             await delivery._safe_text(message, "❌ Не удалось завершить AI-фото. " f"Код: {trace}. Причина: {type(exc).__name__}: {str(exc)[:320]}")
             return False
         finally:
@@ -370,11 +366,11 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             _trace(v229._log, trace, started, "finished", ok=bool(result["ok"]))
 
     kwargs = {
-        "remember_kind": "celebrity_selfie_v263_production_fullres_resilient",
+        "remember_kind": "celebrity_selfie_v264_production_fullhd_face",
         "remember_payload": {
             "character": slug,
             "composition_provider": "google_gemini_direct",
-            "identity_provider": "replicate_inswapper_fullres_restore_off_preferred_piapi_fallback",
+            "identity_provider": "replicate_inswapper_fullhd_restore90_preferred_piapi_fallback",
             "terminal_face_source": "user_photo_3_face_centric_crop_only",
             "body_references": "user_photo_1_2_only",
             "strict_person_a_target": True,
@@ -386,10 +382,11 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             "edge_only_integration": True,
             "scene_hero_locked": True,
             "provider_target_supersample": True,
-            "provider_min_long_side": 1400,
-            "inswapper_upscale": 2,
+            "provider_min_long_side": 1800,
+            "inswapper_upscale": 4,
             "inswapper_face_upsample": True,
-            "inswapper_face_restore": False,
+            "inswapper_face_restore": True,
+            "codeformer_fidelity": 0.90,
             "final_max_side": 2560,
         },
     }
