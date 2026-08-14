@@ -16,7 +16,7 @@ from typing import Any
 
 from neyrobot_prod import face_swap_service_v257 as fs
 
-VERSION = "v259-identity-diagnostic-runtime-2026-08-09"
+VERSION = "v259-identity-diagnostic-runtime-2026-08-14"
 TRACE_PREFIX = "AI_SELFIE_V259"
 
 
@@ -102,10 +102,17 @@ def _v258_target(composition: bytes, *, scene_image: bool, log: Any) -> tuple[An
     _, ih = base_img.size
     face_h = int(located.face_box[3])
     ratio = face_h / float(max(1, ih))
-    min_px = 280 if scene_image else 260
-    min_ratio = 0.115 if scene_image else 0.108
+
+    # The lower-level locator already rejects weak, ambiguous and unsafe face hits.
+    # V258's old 260px/0.108 gate was only a quality preference, but in practice it
+    # rejected otherwise strong targets such as 246px/0.1068 and forced an expensive
+    # second Gemini generation. Keep a real quality floor while accepting these
+    # marginal-but-safe preset compositions. Scene-image mode remains stricter.
+    min_px = 270 if scene_image else 220
+    min_ratio = 0.110 if scene_image else 0.095
     if face_h < min_px or ratio < min_ratio:
         raise ValueError(f"PERSON A face below V258 production resolution: face_h={face_h}px ratio={ratio:.4f} required={min_px}px/{min_ratio:.4f}")
+
     crop_box = fs._expand(located.face_box, base_img.size, 2.15, 2.45, 0.015)
     crop_img = base_img.crop(crop_box)
     crop_raw = fs.jpeg(crop_img, max_side=1250, quality=97)
@@ -177,6 +184,12 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
         diag = _diag_enabled(int(user.id))
         try:
             _trace(v229._log, trace, started, "start", version=VERSION, user_id=int(user.id), diagnostic=diag, character=slug, shot=shot_mode, scene_mode=scene_mode, photo3_sha=fs.sha(photo3), photo3_dims=fs.dims(photo3), photo3_bytes=len(photo3))
+
+            # Immediate user feedback: source-face analysis can take tens of seconds on
+            # Render CPU, so acknowledge the scene selection before any heavy CV work.
+            await delivery._safe_text(message, "✅ Сцена выбрана. AI-фото запущено — анализирую ваши фотографии и готовлю композицию. Это может занять несколько минут.")
+            _trace(v229._log, trace, started, "user_start_ack_sent")
+
             source = _v258_source(photo3, v229._log)
             _trace(v229._log, trace, started, "source_ready", face=source.face_box, crop=source.crop_box, source_sha=fs.sha(source.crop_raw), source_dims=fs.dims(source.crop_raw), support=source.support, eyes=source.eye_count)
             if diag:
