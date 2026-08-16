@@ -11,13 +11,15 @@ provider-resilient identity transfer with geometry-safe restoration after padded
 remote face-swap retries, V287 first-pass native reference quality with
 principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
 deterministic source-native identity after the runtime has verified PERSON A, and
-V290 lens-directed gaze, high-resolution local native-face transfer and single-flight
-protection against duplicate callback/generation execution. Remote providers remain
-fallbacks for weak source evidence or catastrophic local-transfer failures.
+V290b lens-directed gaze, high-resolution local native-face transfer, local-first
+recovery back to the proven V289b identity path, and single-flight protection
+against duplicate callback/generation execution. Remote providers remain last-resort
+fallbacks for weak source evidence or genuine local-transfer failures; an optional
+V290 hi-res enhancement failure must not by itself force PiAPI.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v290-gaze-hires-singleflight-2026-08-16"
+AI_SELFIE_VERSION = "v290b-local-first-gaze-hires-singleflight-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
