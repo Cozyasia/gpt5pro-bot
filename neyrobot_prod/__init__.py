@@ -4,11 +4,11 @@
 V257 removes legacy AI Selfie production monkey-patch bootstraps from package
 import. The stable secret_loader owner routes production generation to the
 consolidated V257 runtime. The production fidelity overlay enforces camera framing,
-bounded latency, and source-expression identity preservation.
+bounded latency, universal FullHD face quality, and source-expression preservation.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v279-source-expression-lock-2026-08-16"
+AI_SELFIE_VERSION = "v280-universal-selfie-pov-source-core-2026-08-16"
 
 try:
     from .selfie_v246_faceswap_diag_bootstrap import install as _install_faceswap_diag
