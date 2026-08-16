@@ -4,23 +4,22 @@
 V257 removes legacy AI Selfie production monkey-patch bootstraps from package
 import. The stable secret_loader owner routes production generation to the
 consolidated V257 runtime. The production fidelity overlay enforces camera framing,
-bounded latency, universal FullHD face quality, source-expression preservation,
-restart-safe AI Selfie upload state, bounded target rescue, close composition
-normalization, a mandatory fresh hero-selection gate for new photo sets,
-provider-resilient identity transfer with geometry-safe restoration after padded
-remote face-swap retries, V287 first-pass native reference quality with
-principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
-deterministic source-native identity after the runtime has verified PERSON A, and
-V291 memory-safe native-first identity transfer with lens-directed gaze and
-single-flight protection. The former V290 1800/1900px working-canvas strategy was
-removed from the production path because it could exceed the Render Starter memory
-limit while the full Gemini composition and image-processing buffers were resident.
-Remote providers remain last-resort fallbacks for weak source evidence or genuine
-local-transfer failures.
+bounded latency, source-expression preservation, restart-safe upload state,
+bounded target rescue, close composition normalization, mandatory fresh hero
+selection, detector-safe provider fallback and deterministic source-native identity.
+
+V292 is the terminal production overlay: photo #3 is authoritative for PERSON A's
+facial geometry and texture, identity mapping uses a uniform-scale similarity
+transform instead of morphing the source into the generated target proportions,
+intermediate identity images stay lossless PNG, camera-gaze correction is limited
+to tiny iris regions, and final full-resolution integration is constrained to a
+face-safe PERSON-A ROI so a nearby hero is never touched by the blend. The V291
+memory-safe / single-flight constraints remain in force and remote providers are
+last-resort fallbacks only.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v291-memory-safe-native-gaze-singleflight-2026-08-16"
+AI_SELFIE_VERSION = "v292-source-authoritative-face-safe-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -77,10 +76,10 @@ except Exception as _v289_error:
     print(f"[neyrobot-prod] V289 native identity primary bootstrap failed: {_v289_error!r}", flush=True)
 
 try:
-    from .selfie_v290_gaze_quality_singleflight import install as _install_selfie_v291
-    _install_selfie_v291()
-except Exception as _v291_error:
-    print(f"[neyrobot-prod] V291 memory-safe gaze/singleflight bootstrap failed: {_v291_error!r}", flush=True)
+    from .selfie_v290_gaze_quality_singleflight import install as _install_selfie_v292
+    _install_selfie_v292()
+except Exception as _v292_error:
+    print(f"[neyrobot-prod] V292 identity/face-safe integration bootstrap failed: {_v292_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
