@@ -1,25 +1,24 @@
 # -*- coding: utf-8 -*-
-"""V290b camera-gaze, high-resolution native identity and single-flight guard.
+"""V291 memory-safe camera-gaze identity transfer and single-flight guard.
 
-Goals:
-- PERSON A and PERSON B look into the actual shot lens in selfie mode;
-- photo #3 remains the identity source, but its incidental gaze direction must not
-  override the requested camera gaze;
-- run the deterministic source-native facial-core transfer on a larger working
-  canvas for cleaner sub-pixel geometry, then return to the exact native target size;
-- preserve the target composition's eye/gaze region after identity transfer so the
-  generated front-camera gaze survives the source-photo transplant;
-- suppress duplicate callback execution and concurrent duplicate generation for the
-  same user before billing/provider work starts;
-- IMPORTANT: if the V290 hi-res enhancement itself fails after the upstream target
-  and source have already passed the local gate, degrade to the proven V289b local
-  identity path first. Do not jump straight into V288/PiAPI just because the optional
-  hi-res/gaze enhancement had a detector or geometry hiccup.
+This supersedes the V290/V290b oversized working-canvas experiment. The previous
+1800/1900px local canvases could keep several RGB/PIL/OpenCV copies alive at once
+while the full Gemini composition and Telegram payloads were also resident. On the
+Render Starter instance that is enough to cross the memory limit and restart the
+service mid-generation.
+
+Production rules:
+- keep the proven V289b deterministic local identity path as the primary path;
+- never upscale a crop more than 2x and never exceed a small bounded pixel budget;
+- prefer native crops when they already contain enough facial information;
+- preserve the generated target eye region so selfie gaze remains lens-directed;
+- aggressively release temporary image buffers after the identity stage;
+- keep duplicate callback / concurrent generation suppression.
 """
 from __future__ import annotations
 
-import asyncio
 import contextlib
+import gc
 import time
 from io import BytesIO
 from typing import Any
@@ -29,14 +28,10 @@ from neyrobot_prod import selfie_v257_consolidated_runtime as terminal
 from neyrobot_prod import selfie_v277_production_fidelity_patch as fidelity
 from neyrobot_prod import selfie_v289_native_identity_primary as v289
 
-VERSION = "v290b-local-first-gaze-hires-singleflight-2026-08-16"
+VERSION = "v291-memory-safe-native-gaze-singleflight-2026-08-16"
 _INSTALLED = False
 _ORIGINAL_PROMPT = terminal._prompt
 _ORIGINAL_GENERATE = terminal.generate
-# This is intentionally the pre-V289 remote stack. It may only be used when the
-# strong local source/target gate does not pass at all. A V290 enhancement failure
-# must first fall back to v289._identity_swap(), which retries the authoritative
-# native source-core path before considering remote providers.
 _REMOTE_FALLBACK = v289._ORIGINAL_IDENTITY_SWAP
 
 _SEEN: dict[str, float] = {}
@@ -72,133 +67,185 @@ def _resize_exact(raw: bytes, size: tuple[int, int], *, sharpen: bool = False) -
     from PIL import Image, ImageFilter
 
     img = fs.image(raw).convert("RGB")
-    if img.size != size:
-        resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
-        img = img.resize(size, resampling)
-    if sharpen:
-        img = img.filter(ImageFilter.UnsharpMask(radius=0.42, percent=52, threshold=3))
-    out = BytesIO()
-    img.save(out, "JPEG", quality=100, subsampling=0, optimize=True, progressive=False)
-    return out.getvalue()
+    try:
+        if img.size != size:
+            resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+            img = img.resize(size, resampling)
+        if sharpen:
+            img = img.filter(ImageFilter.UnsharpMask(radius=0.36, percent=42, threshold=4))
+        out = BytesIO()
+        img.save(out, "JPEG", quality=98, subsampling=0, optimize=True, progressive=False)
+        return out.getvalue()
+    finally:
+        with contextlib.suppress(Exception):
+            img.close()
 
 
-def _work_canvas(raw: bytes, min_long_side: int = 1800) -> bytes:
-    """High-resolution local working canvas; no generative restoration."""
+def _bounded_work_canvas(raw: bytes, *, min_long_side: int, max_scale: float = 2.0, max_pixels: int = 1_450_000) -> bytes:
+    """Create a modest working canvas without the V290 multi-megapixel RAM spike."""
     from PIL import Image, ImageFilter
 
     img = fs.image(raw).convert("RGB")
-    long_side = max(img.size)
-    if long_side >= min_long_side:
-        return raw
-    scale = min(4.0, float(min_long_side) / float(max(1, long_side)))
-    size = (max(1, int(round(img.width * scale))), max(1, int(round(img.height * scale))))
-    resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
-    img = img.resize(size, resampling)
-    img = img.filter(ImageFilter.UnsharpMask(radius=0.45, percent=38, threshold=4))
-    out = BytesIO()
-    img.save(out, "JPEG", quality=100, subsampling=0, optimize=True, progressive=False)
-    return out.getvalue()
+    try:
+        w, h = img.size
+        long_side = max(w, h)
+        if long_side >= min_long_side:
+            return raw
+
+        scale = min(max_scale, float(min_long_side) / float(max(1, long_side)))
+        # Hard pixel-budget clamp. This matters more than JPEG byte size because PIL
+        # and OpenCV expand images into several raw RGB/array copies in memory.
+        projected = float(w * h) * scale * scale
+        if projected > float(max_pixels):
+            scale = min(scale, (float(max_pixels) / float(max(1, w * h))) ** 0.5)
+        if scale <= 1.04:
+            return raw
+
+        size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+        resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+        resized = img.resize(size, resampling)
+        try:
+            resized = resized.filter(ImageFilter.UnsharpMask(radius=0.32, percent=28, threshold=5))
+            out = BytesIO()
+            resized.save(out, "JPEG", quality=98, subsampling=0, optimize=True, progressive=False)
+            return out.getvalue()
+        finally:
+            with contextlib.suppress(Exception):
+                resized.close()
+    finally:
+        with contextlib.suppress(Exception):
+            img.close()
 
 
 def _preserve_camera_gaze(target_raw: bytes, identity_raw: bytes, log: Any, *, trace: str) -> bytes:
-    """Restore the target's eye/gaze region over the identity result."""
+    """Blend only the target eye/iris region back over the identity result."""
     from PIL import Image, ImageDraw, ImageFilter
 
     target = fs.image(target_raw).convert("RGB")
     identity = fs.image(identity_raw).convert("RGB")
-    if identity.size != target.size:
-        resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
-        identity = identity.resize(target.size, resampling)
-
     try:
-        face = fs.source_face_crop(target_raw, None)
-        fx, fy, fw, fh = [float(v) for v in face.face_box]
-    except Exception as exc:
-        log("AI_SELFIE_V290B_GAZE trace=%s status=skip reason=face_detection error=%s", trace, str(exc)[:300])
-        return identity_raw
+        if identity.size != target.size:
+            resampling = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+            resized_identity = identity.resize(target.size, resampling)
+            identity.close()
+            identity = resized_identity
 
-    centers = [
-        (fx + fw * 0.315, fy + fh * 0.405),
-        (fx + fw * 0.685, fy + fh * 0.405),
-    ]
-    eye_w = max(18.0, fw * 0.205)
-    eye_h = max(10.0, fh * 0.095)
-    mask = Image.new("L", target.size, 0)
-    draw = ImageDraw.Draw(mask)
-    for cx, cy in centers:
-        draw.ellipse((cx - eye_w / 2.0, cy - eye_h / 2.0, cx + eye_w / 2.0, cy + eye_h / 2.0), fill=235)
-    mask = mask.filter(ImageFilter.GaussianBlur(max(1.2, fw * 0.009)))
-    merged = Image.composite(target, identity, mask)
-    out = BytesIO()
-    merged.save(out, "JPEG", quality=100, subsampling=0, optimize=True, progressive=False)
-    payload = out.getvalue()
-    log(
-        "AI_SELFIE_V290B_GAZE trace=%s status=applied face=%s eye_masks=2 target_sha=%s identity_sha=%s out_sha=%s",
-        trace, face.face_box, fs.sha(target_raw), fs.sha(identity_raw), fs.sha(payload),
-    )
-    return payload
+        try:
+            face = fs.source_face_crop(target_raw, None)
+            fx, fy, fw, fh = [float(v) for v in face.face_box]
+        except Exception as exc:
+            log("AI_SELFIE_V291_GAZE trace=%s status=skip reason=face_detection error=%s", trace, str(exc)[:300])
+            return identity_raw
+
+        centers = [
+            (fx + fw * 0.315, fy + fh * 0.405),
+            (fx + fw * 0.685, fy + fh * 0.405),
+        ]
+        eye_w = max(18.0, fw * 0.205)
+        eye_h = max(10.0, fh * 0.095)
+        mask = Image.new("L", target.size, 0)
+        try:
+            draw = ImageDraw.Draw(mask)
+            for cx, cy in centers:
+                draw.ellipse((cx - eye_w / 2.0, cy - eye_h / 2.0, cx + eye_w / 2.0, cy + eye_h / 2.0), fill=235)
+            blurred = mask.filter(ImageFilter.GaussianBlur(max(1.0, fw * 0.008)))
+            try:
+                merged = Image.composite(target, identity, blurred)
+                try:
+                    out = BytesIO()
+                    merged.save(out, "JPEG", quality=98, subsampling=0, optimize=True, progressive=False)
+                    payload = out.getvalue()
+                finally:
+                    merged.close()
+            finally:
+                blurred.close()
+        finally:
+            mask.close()
+
+        log(
+            "AI_SELFIE_V291_GAZE trace=%s status=applied face=%s target_sha=%s identity_sha=%s out_sha=%s",
+            trace, face.face_box, fs.sha(target_raw), fs.sha(identity_raw), fs.sha(payload),
+        )
+        return payload
+    finally:
+        with contextlib.suppress(Exception):
+            target.close()
+        with contextlib.suppress(Exception):
+            identity.close()
 
 
 async def _identity_swap(target_crop: bytes, source_crop: bytes, log: Any, *, trace: str) -> tuple[bytes, str]:
     safe, reason = v289._local_gate(target_crop, source_crop, log, trace=trace)
-    if safe:
-        try:
-            native_size = fs.image(target_crop).size
-            target_hi = _work_canvas(target_crop, 1800)
-            source_hi = _work_canvas(source_crop, 1900)
-            log(
-                "AI_SELFIE_V290B_HIRES trace=%s stage=prepare target_native=%s target_work=%s source_native=%s source_work=%s gate=%s",
-                trace, fs.dims(target_crop), fs.dims(target_hi), fs.dims(source_crop), fs.dims(source_hi), reason,
-            )
-            candidate_hi, meta = fidelity._source_native_face_core(source_hi, target_hi, log, trace=trace)
-            if len(candidate_hi) < 1024 or fs.sha(candidate_hi) == fs.sha(target_hi):
-                raise RuntimeError("high-resolution native core returned unchanged/empty target")
+    if not safe:
+        log("AI_SELFIE_V291_IDENTITY trace=%s stage=local_gate_failed fallback=remote_stack reason=%s", trace, reason)
+        return await _REMOTE_FALLBACK(target_crop, source_crop, log, trace=trace)
 
-            candidate_hi = _preserve_camera_gaze(target_hi, candidate_hi, log, trace=trace)
-            candidate = _resize_exact(candidate_hi, native_size, sharpen=True)
-            if len(candidate) < 1024 or fs.sha(candidate) == fs.sha(target_crop):
-                raise RuntimeError("V290b native identity returned unchanged/empty target")
+    # First use the proven V289b native path. It already knows how to fall back safely
+    # when local evidence is insufficient. This avoids allocating giant V290 canvases.
+    try:
+        candidate, provider = await v289._identity_swap(target_crop, source_crop, log, trace=trace)
+        if len(candidate) < 1024 or fs.sha(candidate) == fs.sha(target_crop):
+            raise RuntimeError("V289b returned unchanged/empty target")
 
-            geometry_ok, geometry_reason = v289._geometry_status(target_crop, candidate, log, trace=trace)
-            if not geometry_ok:
-                raise RuntimeError(f"V290b catastrophic geometry change: {geometry_reason}")
-            log(
-                "AI_SELFIE_V290B_IDENTITY trace=%s stage=hires_native_success mode=%s target_native=%s source_native=%s work_target=%s work_source=%s out=%s remote_provider=false gaze=camera_target_eyes quality=hires_local",
-                trace, meta.get("mode"), fs.dims(target_crop), fs.dims(source_crop), fs.dims(target_hi), fs.dims(source_hi), fs.dims(candidate),
-            )
-            return candidate, "source_native_face_core_v290b_hires_camera_gaze"
-        except Exception as exc:
-            # Critical regression fix: V290 used to jump directly to the pre-V289
-            # remote stack here. That turned a harmless optional enhancement failure
-            # into a PiAPI `no face found` fatal error. Retry the already-proven V289b
-            # authoritative local path first, on the untouched native crops.
-            log(
-                "AI_SELFIE_V290B_IDENTITY trace=%s stage=hires_native_failed error_type=%s error=%s fallback=v289b_native_first",
-                trace, type(exc).__name__, str(exc)[:700],
-            )
-            try:
-                candidate, provider = await v289._identity_swap(target_crop, source_crop, log, trace=trace)
-                if len(candidate) >= 1024 and fs.sha(candidate) != fs.sha(target_crop):
-                    # Apply gaze preservation only if it can be localized safely. The
-                    # identity result remains valid even when the eye detector is not.
-                    with contextlib.suppress(Exception):
-                        candidate = _preserve_camera_gaze(target_crop, candidate, log, trace=trace)
-                    log(
-                        "AI_SELFIE_V290B_IDENTITY trace=%s stage=v289b_native_recovery_success provider=%s remote_provider=%s out=%s",
-                        trace, provider, "true" if "piapi" in provider or "replicate" in provider else "false", fs.dims(candidate),
-                    )
-                    return candidate, provider + "+v290b_gaze_recovery"
-                raise RuntimeError("V289b recovery returned unchanged/empty target")
-            except Exception as recovery_exc:
-                log(
-                    "AI_SELFIE_V290B_IDENTITY trace=%s stage=v289b_native_recovery_failed error_type=%s error=%s fallback=remote_last_resort",
-                    trace, type(recovery_exc).__name__, str(recovery_exc)[:700],
-                )
-                return await _REMOTE_FALLBACK(target_crop, source_crop, log, trace=trace)
+        # Keep camera-directed eyes from the generated composition. This is cheap at
+        # native target-crop size and does not invoke another model/provider.
+        with contextlib.suppress(Exception):
+            candidate = _preserve_camera_gaze(target_crop, candidate, log, trace=trace)
 
-    # Weak/ambiguous source evidence: preserve the historical remote fallback.
-    log("AI_SELFIE_V290B_IDENTITY trace=%s stage=local_gate_failed fallback=remote_stack reason=%s", trace, reason)
-    return await _REMOTE_FALLBACK(target_crop, source_crop, log, trace=trace)
+        # Mild native-size finishing only; no 4x/1900px canvas.
+        native_size = fs.image(target_crop).size
+        candidate = _resize_exact(candidate, native_size, sharpen=True)
+        log(
+            "AI_SELFIE_V291_IDENTITY trace=%s stage=native_primary_success provider=%s remote_provider=%s target=%s source=%s out=%s memory_profile=native",
+            trace, provider, "true" if "piapi" in provider or "replicate" in provider else "false", fs.dims(target_crop), fs.dims(source_crop), fs.dims(candidate),
+        )
+        return candidate, provider + "+v291_camera_gaze"
+    except Exception as native_exc:
+        log(
+            "AI_SELFIE_V291_IDENTITY trace=%s stage=native_primary_failed error_type=%s error=%s fallback=bounded_local",
+            trace, type(native_exc).__name__, str(native_exc)[:700],
+        )
+
+    # A bounded second local attempt can improve a genuinely tiny target without the
+    # previous 1800/1900px memory explosion. Target <= ~900 long side, source <= ~1100.
+    target_work = source_work = candidate_work = None
+    try:
+        target_work = _bounded_work_canvas(target_crop, min_long_side=900, max_scale=2.0, max_pixels=1_050_000)
+        source_work = _bounded_work_canvas(source_crop, min_long_side=1100, max_scale=1.6, max_pixels=1_450_000)
+        log(
+            "AI_SELFIE_V291_MEMORY trace=%s stage=bounded_prepare target_native=%s target_work=%s source_native=%s source_work=%s",
+            trace, fs.dims(target_crop), fs.dims(target_work), fs.dims(source_crop), fs.dims(source_work),
+        )
+        candidate_work, meta = fidelity._source_native_face_core(source_work, target_work, log, trace=trace)
+        if len(candidate_work) < 1024 or fs.sha(candidate_work) == fs.sha(target_work):
+            raise RuntimeError("bounded local core returned unchanged/empty target")
+
+        with contextlib.suppress(Exception):
+            candidate_work = _preserve_camera_gaze(target_work, candidate_work, log, trace=trace)
+        native_size = fs.image(target_crop).size
+        candidate = _resize_exact(candidate_work, native_size, sharpen=True)
+        geometry_ok, geometry_reason = v289._geometry_status(target_crop, candidate, log, trace=trace)
+        if not geometry_ok:
+            raise RuntimeError(f"bounded local geometry change: {geometry_reason}")
+        log(
+            "AI_SELFIE_V291_IDENTITY trace=%s stage=bounded_local_success mode=%s out=%s remote_provider=false memory_profile=bounded",
+            trace, meta.get("mode"), fs.dims(candidate),
+        )
+        return candidate, "source_native_face_core_v291_bounded_camera_gaze"
+    except Exception as bounded_exc:
+        log(
+            "AI_SELFIE_V291_IDENTITY trace=%s stage=bounded_local_failed error_type=%s error=%s fallback=remote_last_resort",
+            trace, type(bounded_exc).__name__, str(bounded_exc)[:700],
+        )
+        return await _REMOTE_FALLBACK(target_crop, source_crop, log, trace=trace)
+    finally:
+        # Bytes objects are released as soon as this stage ends; explicit GC is useful
+        # here because PIL/OpenCV temporary arrays may otherwise survive until a later
+        # collection while the full composition is still resident.
+        target_work = None
+        source_work = None
+        candidate_work = None
+        gc.collect()
 
 
 def _event_key(update: Any, user_id: int) -> str:
@@ -233,23 +280,24 @@ async def _generate_singleflight(update: Any, context: Any, scene: str = "") -> 
     key = _event_key(update, user_id)
 
     if key in _SEEN:
-        _log("AI_SELFIE_V290B_SINGLEFLIGHT status=duplicate_callback_suppressed user_id=%s key=%s", user_id, key)
+        _log("AI_SELFIE_V291_SINGLEFLIGHT status=duplicate_callback_suppressed user_id=%s key=%s", user_id, key)
         return True
     if user_id and user_id in _ACTIVE_USERS:
         _SEEN[key] = now
-        _log("AI_SELFIE_V290B_SINGLEFLIGHT status=concurrent_generation_suppressed user_id=%s key=%s", user_id, key)
+        _log("AI_SELFIE_V291_SINGLEFLIGHT status=concurrent_generation_suppressed user_id=%s key=%s", user_id, key)
         return True
 
     _SEEN[key] = now
     if user_id:
         _ACTIVE_USERS[user_id] = now
-    _log("AI_SELFIE_V290B_SINGLEFLIGHT status=acquired user_id=%s key=%s", user_id, key)
+    _log("AI_SELFIE_V291_SINGLEFLIGHT status=acquired user_id=%s key=%s", user_id, key)
     try:
         return bool(await _ORIGINAL_GENERATE(update, context, scene))
     finally:
         if user_id:
             _ACTIVE_USERS.pop(user_id, None)
-        _log("AI_SELFIE_V290B_SINGLEFLIGHT status=released user_id=%s key=%s", user_id, key)
+        gc.collect()
+        _log("AI_SELFIE_V291_SINGLEFLIGHT status=released user_id=%s key=%s", user_id, key)
 
 
 def install() -> bool:
@@ -260,13 +308,12 @@ def install() -> bool:
     terminal._identity_swap = _identity_swap
     terminal.generate = _generate_singleflight
     terminal.VERSION = VERSION
-    terminal.TRACE_PREFIX = "AI_SELFIE_V290B"
-    setattr(terminal, "_v290_camera_gaze", True)
-    setattr(terminal, "_v290_hires_native_identity", True)
-    setattr(terminal, "_v290_singleflight", True)
-    setattr(terminal, "_v290b_local_first_recovery", True)
+    terminal.TRACE_PREFIX = "AI_SELFIE_V291"
+    setattr(terminal, "_v291_camera_gaze", True)
+    setattr(terminal, "_v291_memory_safe_identity", True)
+    setattr(terminal, "_v291_singleflight", True)
     _INSTALLED = True
-    print(f"[neyrobot-prod] V290b local-first gaze + hires identity + singleflight installed version={VERSION}", flush=True)
+    print(f"[neyrobot-prod] V291 memory-safe native gaze + singleflight installed version={VERSION}", flush=True)
     return True
 
 
