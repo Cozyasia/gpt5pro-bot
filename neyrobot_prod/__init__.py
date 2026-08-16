@@ -7,12 +7,12 @@ consolidated V257 runtime. The production fidelity overlay enforces camera frami
 bounded latency, universal FullHD face quality, source-expression preservation,
 restart-safe AI Selfie upload state, bounded target rescue, close composition
 normalization, a mandatory fresh hero-selection gate for new photo sets, and
-provider-resilient identity transfer when a remote face-swap service rejects a
-locally verified face crop.
+provider-resilient identity transfer with geometry-safe restoration after padded
+remote face-swap retries.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v285-identity-no-face-resilience-2026-08-16"
+AI_SELFIE_VERSION = "v286-identity-geometry-safe-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -45,10 +45,10 @@ except Exception as _v284_error:
     print(f"[neyrobot-prod] V284 close framing/hero gate bootstrap failed: {_v284_error!r}", flush=True)
 
 try:
-    from .selfie_v285_identity_fallback import install as _install_selfie_v285
-    _install_selfie_v285()
-except Exception as _v285_error:
-    print(f"[neyrobot-prod] V285 identity resilience bootstrap failed: {_v285_error!r}", flush=True)
+    from .selfie_v285_identity_fallback import install as _install_selfie_v286
+    _install_selfie_v286()
+except Exception as _v286_error:
+    print(f"[neyrobot-prod] V286 identity geometry resilience bootstrap failed: {_v286_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
