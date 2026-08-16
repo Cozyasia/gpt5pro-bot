@@ -6,13 +6,15 @@ import. The stable secret_loader owner routes production generation to the
 consolidated V257 runtime. The production fidelity overlay enforces camera framing,
 bounded latency, universal FullHD face quality, source-expression preservation,
 restart-safe AI Selfie upload state, bounded target rescue, close composition
-normalization, a mandatory fresh hero-selection gate for new photo sets, and
+normalization, a mandatory fresh hero-selection gate for new photo sets,
 provider-resilient identity transfer with geometry-safe restoration after padded
-remote face-swap retries.
+remote face-swap retries, and V287 first-pass native reference quality with
+principal-face-pair reframing so distant Gemini compositions do not normally
+require a second or third paid-latency render.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v286-identity-geometry-safe-2026-08-16"
+AI_SELFIE_VERSION = "v287-first-pass-native-input-principal-pair-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -49,6 +51,12 @@ try:
     _install_selfie_v286()
 except Exception as _v286_error:
     print(f"[neyrobot-prod] V286 identity geometry resilience bootstrap failed: {_v286_error!r}", flush=True)
+
+try:
+    from .selfie_v287_first_pass_quality import install as _install_selfie_v287
+    _install_selfie_v287()
+except Exception as _v287_error:
+    print(f"[neyrobot-prod] V287 first-pass quality bootstrap failed: {_v287_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
