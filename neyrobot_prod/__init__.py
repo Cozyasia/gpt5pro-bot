@@ -11,15 +11,16 @@ provider-resilient identity transfer with geometry-safe restoration after padded
 remote face-swap retries, V287 first-pass native reference quality with
 principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
 deterministic source-native identity after the runtime has verified PERSON A, and
-V290b lens-directed gaze, high-resolution local native-face transfer, local-first
-recovery back to the proven V289b identity path, and single-flight protection
-against duplicate callback/generation execution. Remote providers remain last-resort
-fallbacks for weak source evidence or genuine local-transfer failures; an optional
-V290 hi-res enhancement failure must not by itself force PiAPI.
+V291 memory-safe native-first identity transfer with lens-directed gaze and
+single-flight protection. The former V290 1800/1900px working-canvas strategy was
+removed from the production path because it could exceed the Render Starter memory
+limit while the full Gemini composition and image-processing buffers were resident.
+Remote providers remain last-resort fallbacks for weak source evidence or genuine
+local-transfer failures.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v290b-local-first-gaze-hires-singleflight-2026-08-16"
+AI_SELFIE_VERSION = "v291-memory-safe-native-gaze-singleflight-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -76,10 +77,10 @@ except Exception as _v289_error:
     print(f"[neyrobot-prod] V289 native identity primary bootstrap failed: {_v289_error!r}", flush=True)
 
 try:
-    from .selfie_v290_gaze_quality_singleflight import install as _install_selfie_v290
-    _install_selfie_v290()
-except Exception as _v290_error:
-    print(f"[neyrobot-prod] V290 gaze/quality/singleflight bootstrap failed: {_v290_error!r}", flush=True)
+    from .selfie_v290_gaze_quality_singleflight import install as _install_selfie_v291
+    _install_selfie_v291()
+except Exception as _v291_error:
+    print(f"[neyrobot-prod] V291 memory-safe gaze/singleflight bootstrap failed: {_v291_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
