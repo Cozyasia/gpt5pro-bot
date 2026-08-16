@@ -5,11 +5,11 @@ V257 removes legacy AI Selfie production monkey-patch bootstraps from package
 import. The stable secret_loader owner routes production generation to the
 consolidated V257 runtime. The production fidelity overlay enforces camera framing,
 bounded latency, universal FullHD face quality, source-expression preservation,
-and restart-safe AI Selfie upload state.
+restart-safe AI Selfie upload state, and a bounded final-attempt target rescue.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v282-render-lifecycle-diagnostic-2026-08-16"
+AI_SELFIE_VERSION = "v283-terminal-target-rescue-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -28,6 +28,12 @@ try:
     _install_selfie_fidelity()
 except Exception as _fidelity_error:
     print(f"[neyrobot-prod] production selfie fidelity bootstrap failed: {_fidelity_error!r}", flush=True)
+
+try:
+    from .selfie_v283_terminal_target_rescue import install as _install_selfie_target_rescue
+    _install_selfie_target_rescue()
+except Exception as _target_rescue_error:
+    print(f"[neyrobot-prod] selfie terminal target rescue bootstrap failed: {_target_rescue_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
