@@ -9,7 +9,13 @@ and restart-safe AI Selfie upload state.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v281-selfie-restart-resilience-2026-08-16"
+AI_SELFIE_VERSION = "v282-render-lifecycle-diagnostic-2026-08-16"
+
+try:
+    from .render_lifecycle_diag import install as _install_render_lifecycle_diag
+    _install_render_lifecycle_diag()
+except Exception as _lifecycle_error:
+    print(f"[neyrobot-prod] Render lifecycle diagnostic bootstrap failed: {_lifecycle_error!r}", flush=True)
 
 try:
     from .selfie_v246_faceswap_diag_bootstrap import install as _install_faceswap_diag
