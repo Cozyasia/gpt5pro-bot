@@ -9,12 +9,14 @@ restart-safe AI Selfie upload state, bounded target rescue, close composition
 normalization, a mandatory fresh hero-selection gate for new photo sets,
 provider-resilient identity transfer with geometry-safe restoration after padded
 remote face-swap retries, V287 first-pass native reference quality with
-principal-face-pair reframing, and V288 detector-safe PiAPI identity canvases so a
-valid close face is not rejected upstream as ``no face found``.
+principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, and V289
+deterministic source-native identity as the primary path when both locally verified
+faces are strong enough. Remote providers are now fallbacks for unusual geometry
+rather than mandatory gates for ordinary near-frontal AI Selfies.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v288-detector-safe-identity-2026-08-16"
+AI_SELFIE_VERSION = "v289-native-identity-primary-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -63,6 +65,12 @@ try:
     _install_selfie_v288()
 except Exception as _v288_error:
     print(f"[neyrobot-prod] V288 detector-safe identity bootstrap failed: {_v288_error!r}", flush=True)
+
+try:
+    from .selfie_v289_native_identity_primary import install as _install_selfie_v289
+    _install_selfie_v289()
+except Exception as _v289_error:
+    print(f"[neyrobot-prod] V289 native identity primary bootstrap failed: {_v289_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
