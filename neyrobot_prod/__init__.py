@@ -8,13 +8,13 @@ bounded latency, universal FullHD face quality, source-expression preservation,
 restart-safe AI Selfie upload state, bounded target rescue, close composition
 normalization, a mandatory fresh hero-selection gate for new photo sets,
 provider-resilient identity transfer with geometry-safe restoration after padded
-remote face-swap retries, and V287 first-pass native reference quality with
-principal-face-pair reframing so distant Gemini compositions do not normally
-require a second or third paid-latency render.
+remote face-swap retries, V287 first-pass native reference quality with
+principal-face-pair reframing, and V288 detector-safe PiAPI identity canvases so a
+valid close face is not rejected upstream as ``no face found``.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v287-first-pass-native-input-principal-pair-2026-08-16"
+AI_SELFIE_VERSION = "v288-detector-safe-identity-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -57,6 +57,12 @@ try:
     _install_selfie_v287()
 except Exception as _v287_error:
     print(f"[neyrobot-prod] V287 first-pass quality bootstrap failed: {_v287_error!r}", flush=True)
+
+try:
+    from .selfie_v288_detector_safe_identity import install as _install_selfie_v288
+    _install_selfie_v288()
+except Exception as _v288_error:
+    print(f"[neyrobot-prod] V288 detector-safe identity bootstrap failed: {_v288_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
