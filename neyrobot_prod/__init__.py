@@ -9,15 +9,15 @@ restart-safe AI Selfie upload state, bounded target rescue, close composition
 normalization, a mandatory fresh hero-selection gate for new photo sets,
 provider-resilient identity transfer with geometry-safe restoration after padded
 remote face-swap retries, V287 first-pass native reference quality with
-principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, and V289b
-deterministic source-native identity as the authoritative primary path after the
-runtime has already verified PERSON A. Remote providers remain fallbacks for weak
-source evidence or catastrophic local-transfer failures rather than a second face-
-detection gate for ordinary AI Selfies.
+principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
+deterministic source-native identity after the runtime has verified PERSON A, and
+V290 lens-directed gaze, high-resolution local native-face transfer and single-flight
+protection against duplicate callback/generation execution. Remote providers remain
+fallbacks for weak source evidence or catastrophic local-transfer failures.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v289b-native-identity-authoritative-target-2026-08-16"
+AI_SELFIE_VERSION = "v290-gaze-hires-singleflight-2026-08-16"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -72,6 +72,12 @@ try:
     _install_selfie_v289()
 except Exception as _v289_error:
     print(f"[neyrobot-prod] V289 native identity primary bootstrap failed: {_v289_error!r}", flush=True)
+
+try:
+    from .selfie_v290_gaze_quality_singleflight import install as _install_selfie_v290
+    _install_selfie_v290()
+except Exception as _v290_error:
+    print(f"[neyrobot-prod] V290 gaze/quality/singleflight bootstrap failed: {_v290_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
