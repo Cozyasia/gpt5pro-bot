@@ -17,13 +17,13 @@ bounded Stage-1, V301 fast source detection plus cross-provider Stage-1 recovery
 V302 rescue from an unavailable OpenAI Responses fallback to Gemini Pro, V303
 direct OpenAI Images fallback without a text-model orchestrator, V304 compact
 OpenAI-first Stage-1 for production selfie latency, V305 fast PERSON-A target
-locking with no repeated legacy detector passes, and V306 asynchronous Replicate
-identity transport with real provider failover. Photo #3 remains the sole user
-identity source.
+locking with no repeated legacy detector passes, V306 asynchronous Replicate
+identity transport with real provider failover, and V307 bounded parallel identity
+providers with face-aware PiAPI rescue. Photo #3 remains the sole user identity source.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v306-async-replicate-provider-failover-2026-08-17"
+AI_SELFIE_VERSION = "v307-bounded-identity-race-face-aware-piapi-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -139,14 +139,19 @@ try:
 except Exception as _v305_error:
     print(f"[neyrobot-prod] V305 fast target bootstrap failed: {_v305_error!r}", flush=True)
 
-# V306 is deliberately after V299/V305. It changes only the transport/failover
-# semantics of Stage-2 identity transfer; composition and target locking remain
-# untouched.
 try:
     from .selfie_v306_identity_transport import install as _install_selfie_v306
     _install_selfie_v306()
 except Exception as _v306_error:
     print(f"[neyrobot-prod] V306 identity transport bootstrap failed: {_v306_error!r}", flush=True)
+
+# V307 is last on purpose: it keeps V306's async Replicate transport but replaces
+# the sequential provider policy with a bounded race and a face-aware PiAPI branch.
+try:
+    from .selfie_v307_identity_race import install as _install_selfie_v307
+    _install_selfie_v307()
+except Exception as _v307_error:
+    print(f"[neyrobot-prod] V307 identity race bootstrap failed: {_v307_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
