@@ -14,12 +14,13 @@ deterministic source-native identity after the runtime has verified PERSON A,
 V292 source-authoritative facial geometry with face-safe final integration, V297
 close-selfie prompting, V299 low-memory sequential identity transfer, V300
 bounded Stage-1, V301 fast source detection plus cross-provider Stage-1 recovery,
-and V302 rescue from an unavailable OpenAI fallback to Gemini Pro inside the same
-bounded Stage-1. Photo #3 remains the sole user identity source.
+V302 rescue from an unavailable OpenAI Responses fallback to Gemini Pro, and V303
+direct OpenAI Images fallback without a text-model orchestrator. Photo #3 remains
+the sole user identity source.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v302-openai-failure-rescue-2026-08-17"
+AI_SELFIE_VERSION = "v303-direct-openai-images-stage1-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -113,13 +114,19 @@ try:
 except Exception as _v301_error:
     print(f"[neyrobot-prod] V301 fast/cross-provider Stage-1 bootstrap failed: {_v301_error!r}", flush=True)
 
-# V302 is intentionally installed after V301. It does not replace the Stage-1
-# owner; it only makes V301's OpenAI fallback non-terminal and budget-safe.
 try:
     from .selfie_v302_openai_fallback_rescue import install as _install_selfie_v302
     _install_selfie_v302()
 except Exception as _v302_error:
     print(f"[neyrobot-prod] V302 OpenAI fallback rescue bootstrap failed: {_v302_error!r}", flush=True)
+
+# V303 is intentionally last among Stage-1 overlays. It bypasses the Responses
+# orchestrator and calls the OpenAI Images endpoint directly.
+try:
+    from .selfie_v303_direct_openai_images import install as _install_selfie_v303
+    _install_selfie_v303()
+except Exception as _v303_error:
+    print(f"[neyrobot-prod] V303 direct OpenAI Images bootstrap failed: {_v303_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
