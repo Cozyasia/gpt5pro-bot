@@ -4,28 +4,22 @@
 V257 removes legacy AI Selfie production monkey-patch bootstraps from package
 import. The stable secret_loader owner routes production generation to the
 consolidated V257 runtime. The production fidelity overlay enforces camera framing,
-bounded latency, universal face quality, source-expression preservation,
-restart-safe AI Selfie upload state, bounded target rescue, close composition
-normalization, a mandatory fresh hero-selection gate for new photo sets,
-provider-resilient identity transfer with geometry-safe restoration after padded
-remote face-swap retries, V287 first-pass native reference quality with
-principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
-deterministic source-native identity after the runtime has verified PERSON A,
-V292 source-authoritative facial geometry with face-safe final integration, V297
-close-selfie prompting, V299 low-memory sequential identity transfer, V300
-bounded Stage-1, V301 fast source detection plus cross-provider Stage-1 recovery,
-V302 rescue from an unavailable OpenAI Responses fallback to Gemini Pro, V303
-direct OpenAI Images fallback without a text-model orchestrator, V304 compact
-OpenAI-first Stage-1 for production selfie latency, V305 fast PERSON-A target
-locking with no repeated legacy detector passes, V306 asynchronous Replicate
-identity transport with real provider failover, V307 bounded parallel identity
-providers with face-aware PiAPI rescue, and V308 a three-way Stage-2 identity race
-that adds a fast OpenAI Images identity edit rescue. Photo #3 remains the sole user
-identity source.
+bounded latency, source-expression preservation, restart-safe upload state,
+bounded target rescue, close composition normalization, mandatory fresh hero
+selection, detector-safe provider fallback and deterministic source-native identity.
+
+V292 is the terminal production overlay: photo #3 is authoritative for PERSON A's
+facial geometry and texture, identity mapping uses a uniform-scale similarity
+transform instead of morphing the source into the generated target proportions,
+intermediate identity images stay lossless PNG, camera-gaze correction is limited
+to tiny iris regions, and final full-resolution integration is constrained to a
+face-safe PERSON-A ROI so a nearby hero is never touched by the blend. The V291
+memory-safe / single-flight constraints remain in force and remote providers are
+last-resort fallbacks only.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v308-openai-identity-rescue-race-2026-08-17"
+AI_SELFIE_VERSION = "v292-source-authoritative-face-safe-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -85,81 +79,7 @@ try:
     from .selfie_v290_gaze_quality_singleflight import install as _install_selfie_v292
     _install_selfie_v292()
 except Exception as _v292_error:
-    print(f"[neyrobot-prod] V292 identity/integration bootstrap failed: {_v292_error!r}", flush=True)
-
-try:
-    from .selfie_v293_selfie_composition_gate import install as _install_selfie_v293
-    _install_selfie_v293()
-except Exception as _v293_error:
-    print(f"[neyrobot-prod] V297 selfie prompt bootstrap failed: {_v293_error!r}", flush=True)
-
-try:
-    from .selfie_v294_stage1_watchdog import install as _install_selfie_v294
-    _install_selfie_v294()
-except Exception as _v294_error:
-    print(f"[neyrobot-prod] V297 Stage-1 total-budget bootstrap failed: {_v294_error!r}", flush=True)
-
-try:
-    from .selfie_v295_identity_fidelity_lock import install as _install_selfie_v295
-    _install_selfie_v295()
-except Exception as _v295_error:
-    print(f"[neyrobot-prod] V299 low-memory identity bootstrap failed: {_v295_error!r}", flush=True)
-
-try:
-    from .selfie_v298_single_pass_stage1 import install as _install_selfie_v300
-    _install_selfie_v300()
-except Exception as _v300_error:
-    print(f"[neyrobot-prod] V300 bounded Stage-1 bootstrap failed: {_v300_error!r}", flush=True)
-
-try:
-    from .selfie_v301_fast_resilient_stage1 import install as _install_selfie_v301
-    _install_selfie_v301()
-except Exception as _v301_error:
-    print(f"[neyrobot-prod] V301 fast/cross-provider Stage-1 bootstrap failed: {_v301_error!r}", flush=True)
-
-try:
-    from .selfie_v302_openai_fallback_rescue import install as _install_selfie_v302
-    _install_selfie_v302()
-except Exception as _v302_error:
-    print(f"[neyrobot-prod] V302 OpenAI fallback rescue bootstrap failed: {_v302_error!r}", flush=True)
-
-try:
-    from .selfie_v303_direct_openai_images import install as _install_selfie_v303
-    _install_selfie_v303()
-except Exception as _v303_error:
-    print(f"[neyrobot-prod] V303 direct OpenAI Images bootstrap failed: {_v303_error!r}", flush=True)
-
-try:
-    from .selfie_v304_compact_stage1 import install as _install_selfie_v304
-    _install_selfie_v304()
-except Exception as _v304_error:
-    print(f"[neyrobot-prod] V304 compact Stage-1 bootstrap failed: {_v304_error!r}", flush=True)
-
-try:
-    from .selfie_v305_fast_target_lock import install as _install_selfie_v305
-    _install_selfie_v305()
-except Exception as _v305_error:
-    print(f"[neyrobot-prod] V305 fast target bootstrap failed: {_v305_error!r}", flush=True)
-
-try:
-    from .selfie_v306_identity_transport import install as _install_selfie_v306
-    _install_selfie_v306()
-except Exception as _v306_error:
-    print(f"[neyrobot-prod] V306 identity transport bootstrap failed: {_v306_error!r}", flush=True)
-
-try:
-    from .selfie_v307_identity_race import install as _install_selfie_v307
-    _install_selfie_v307()
-except Exception as _v307_error:
-    print(f"[neyrobot-prod] V307 identity race bootstrap failed: {_v307_error!r}", flush=True)
-
-# V308 is deliberately last among identity transports. It preserves both V307
-# remote branches and adds a fast OpenAI Images identity edit as a third racer.
-try:
-    from .selfie_v308_identity_openai_rescue import install as _install_selfie_v308
-    _install_selfie_v308()
-except Exception as _v308_error:
-    print(f"[neyrobot-prod] V308 OpenAI identity rescue bootstrap failed: {_v308_error!r}", flush=True)
+    print(f"[neyrobot-prod] V292 identity/face-safe integration bootstrap failed: {_v292_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
