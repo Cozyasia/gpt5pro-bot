@@ -14,7 +14,9 @@ V298 makes the normal selfie path deterministic:
 - V287 principal-face geometry is applied immediately to every selfie composition,
   so a wide image is cropped/reframed locally instead of regenerated;
 - all composition attempts share a hard provider budget and later attempts reuse the
-  first composition instead of buying another image solely for camera distance.
+  first composition instead of buying another image solely for camera distance;
+- legacy retry status messages that falsely claim "the frame is too far" are hidden
+  because V298 does not perform distance-based regeneration.
 
 No face identity pixels are changed here. V296 provider-race identity remains the
 owner of face transfer after the deterministic target has been acquired.
@@ -28,18 +30,20 @@ import re
 import time
 from typing import Any
 
+from neyrobot_prod import selfie_v211_delivery as delivery
 from neyrobot_prod import selfie_v229_canonical_two_stage as v229
 from neyrobot_prod import selfie_v257_consolidated_runtime as terminal
 from neyrobot_prod import selfie_v287_first_pass_quality as v287
 from neyrobot_prod import selfie_v293_selfie_composition_gate as v293
 
-VERSION = "v298-single-pass-stage1-deterministic-selfie-2026-08-17"
+VERSION = "v298-single-pass-stage1-deterministic-selfie-r2-2026-08-17"
 _INSTALLED = False
 
 # State at V298 import time: V297 watchdog is the public Google owner and V287 is
 # the deterministic target owner. Keep both for non-selfie/fallback behavior.
 _PUBLIC_GOOGLE_CALL = v229._call_google
 _PUBLIC_TARGET = terminal._target
+_PUBLIC_SAFE_TEXT = delivery._safe_text
 
 # V293 captured the pre-validator chain when it was imported. That chain still
 # contains V287 native-input/upper-body reference preparation and the canonical
@@ -63,11 +67,27 @@ def _stage_attempt(stage: str) -> int:
 
 
 def _budget_s() -> float:
+    # Production cap is intentionally strict. Even if an old Render variable still
+    # says 120/150 s, V298 will not let Stage-1 occupy more than 100 s.
     try:
-        value = float(os.getenv("AI_SELFIE_STAGE1_TOTAL_BUDGET_S") or "95")
+        value = float(os.getenv("AI_SELFIE_STAGE1_TOTAL_BUDGET_S") or "90")
     except Exception:
-        value = 95.0
-    return max(70.0, min(120.0, value))
+        value = 90.0
+    return max(70.0, min(100.0, value))
+
+
+async def _safe_text_v298(message: Any, text: str) -> None:
+    value = str(text or "")
+    # These two strings come from the legacy generic retry loop and are no longer
+    # truthful under V298. If deterministic target acquisition somehow fails, the
+    # cached first composition is retried locally without another Gemini purchase.
+    if (
+        "Для максимальной чёткости лица кадр нужно сделать ближе" in value
+        or "Второй кадр тоже получился слишком дальним" in value
+    ):
+        _log("AI_SELFIE_V298_UI status=legacy_distance_retry_suppressed")
+        return
+    await _PUBLIC_SAFE_TEXT(message, text)
 
 
 async def _call_google_single_pass(
@@ -172,10 +192,12 @@ def install() -> bool:
 
     v229._call_google = _call_google_single_pass
     terminal._target = _target_single_pass
+    delivery._safe_text = _safe_text_v298
     terminal.VERSION = VERSION
     terminal.TRACE_PREFIX = "AI_SELFIE_V298"
     setattr(terminal, "_v298_single_pass_stage1", True)
     setattr(terminal, "_v298_distance_regeneration_disabled", True)
+    setattr(terminal, "_v298_stage1_budget_hard_cap", 100)
     _INSTALLED = True
     print(f"[neyrobot-prod] V298 single-pass deterministic Stage-1 installed version={VERSION}", flush=True)
     return True
