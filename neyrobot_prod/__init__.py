@@ -11,15 +11,16 @@ provider-resilient identity transfer with geometry-safe restoration after padded
 remote face-swap retries, V287 first-pass native reference quality with
 principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
 deterministic source-native identity after the runtime has verified PERSON A,
-V292 source-authoritative facial geometry with face-safe final integration, V293
-strict selfie anatomy/close-framing validation, and V296 production latency caps:
-composition provider work is bounded to a 100-second default SLA and identity
-transfer races Replicate/PiAPI under a 95-second default SLA. Photo #3 remains the
-identity source and direct affine/source-pixel face pasting stays disabled.
+V292 source-authoritative facial geometry with face-safe final integration, V297
+close-selfie prompting and request-wide Stage-1 budgeting, V296 fast provider-race
+identity transfer, and V298 single-pass deterministic Stage-1. For selfie mode the
+first valid Gemini composition is now reframed locally around the principal pair
+instead of regenerating solely because the camera is too far away. Photo #3 remains
+the identity source and direct affine/source-pixel face pasting stays disabled.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v296-production-latency-provider-race-2026-08-17"
+AI_SELFIE_VERSION = "v298-single-pass-stage1-deterministic-selfie-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -85,19 +86,28 @@ try:
     from .selfie_v293_selfie_composition_gate import install as _install_selfie_v293
     _install_selfie_v293()
 except Exception as _v293_error:
-    print(f"[neyrobot-prod] V293 selfie anatomy/framing gate bootstrap failed: {_v293_error!r}", flush=True)
+    print(f"[neyrobot-prod] V297 selfie prompt bootstrap failed: {_v293_error!r}", flush=True)
 
 try:
     from .selfie_v294_stage1_watchdog import install as _install_selfie_v294
     _install_selfie_v294()
 except Exception as _v294_error:
-    print(f"[neyrobot-prod] V296 Stage-1 latency-cap bootstrap failed: {_v294_error!r}", flush=True)
+    print(f"[neyrobot-prod] V297 Stage-1 total-budget bootstrap failed: {_v294_error!r}", flush=True)
 
 try:
     from .selfie_v295_identity_fidelity_lock import install as _install_selfie_v295
     _install_selfie_v295()
 except Exception as _v295_error:
     print(f"[neyrobot-prod] V296 fast identity bootstrap failed: {_v295_error!r}", flush=True)
+
+# Must be installed AFTER V295: V295 owns only identity transfer but also sets the
+# terminal trace prefix. V298 is the final Stage-1 owner and restores the production
+# trace/version markers while leaving the V296 identity provider race intact.
+try:
+    from .selfie_v298_single_pass_stage1 import install as _install_selfie_v298
+    _install_selfie_v298()
+except Exception as _v298_error:
+    print(f"[neyrobot-prod] V298 single-pass Stage-1 bootstrap failed: {_v298_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
