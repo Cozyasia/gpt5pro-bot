@@ -13,14 +13,14 @@ principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
 deterministic source-native identity after the runtime has verified PERSON A,
 V292 source-authoritative facial geometry with face-safe final integration, V293
 strict selfie anatomy/close-framing validation, V294 nonblocking Stage-1
-reference preparation with a hard composition watchdog, and V295 an authoritative
-photo-3 likeness lock that fixes PIL affine resampling and re-locks the source face
-after any remote fallback. Remote providers remain last-resort pose/lighting helpers,
-not final identity owners.
+reference preparation with a hard composition watchdog, and V295b provider-adapted
+identity transfer that deliberately disables the V295 direct source-pixel face
+re-lock. Photo #3 remains the identity source, while the provider adapts identity
+to target pose and lighting without a pasted affine facial patch.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v295-source-photo3-likeness-lock-2026-08-17"
+AI_SELFIE_VERSION = "v295b-provider-adapted-identity-no-source-paste-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -98,7 +98,7 @@ try:
     from .selfie_v295_identity_fidelity_lock import install as _install_selfie_v295
     _install_selfie_v295()
 except Exception as _v295_error:
-    print(f"[neyrobot-prod] V295 source likeness lock bootstrap failed: {_v295_error!r}", flush=True)
+    print(f"[neyrobot-prod] V295b provider-adapted identity bootstrap failed: {_v295_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
