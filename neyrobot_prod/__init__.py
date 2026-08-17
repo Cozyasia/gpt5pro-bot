@@ -14,13 +14,14 @@ deterministic source-native identity after the runtime has verified PERSON A,
 V292 source-authoritative facial geometry with face-safe final integration, V297
 close-selfie prompting, V299 low-memory sequential identity transfer, V300
 bounded Stage-1, V301 fast source detection plus cross-provider Stage-1 recovery,
-V302 rescue from an unavailable OpenAI Responses fallback to Gemini Pro, and V303
-direct OpenAI Images fallback without a text-model orchestrator. Photo #3 remains
-the sole user identity source.
+V302 rescue from an unavailable OpenAI Responses fallback to Gemini Pro, V303
+direct OpenAI Images fallback without a text-model orchestrator, and V304 compact
+OpenAI-first Stage-1 for production selfie latency. Photo #3 remains the sole user
+identity source.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v303-direct-openai-images-stage1-2026-08-17"
+AI_SELFIE_VERSION = "v304-compact-openai-first-stage1-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -100,8 +101,6 @@ try:
 except Exception as _v295_error:
     print(f"[neyrobot-prod] V299 low-memory identity bootstrap failed: {_v295_error!r}", flush=True)
 
-# First install the bounded Gemini owner, then V301 replaces only the selfie
-# Stage-1/source hooks while preserving the rest of the established runtime.
 try:
     from .selfie_v298_single_pass_stage1 import install as _install_selfie_v300
     _install_selfie_v300()
@@ -120,13 +119,19 @@ try:
 except Exception as _v302_error:
     print(f"[neyrobot-prod] V302 OpenAI fallback rescue bootstrap failed: {_v302_error!r}", flush=True)
 
-# V303 is intentionally last among Stage-1 overlays. It bypasses the Responses
-# orchestrator and calls the OpenAI Images endpoint directly.
 try:
     from .selfie_v303_direct_openai_images import install as _install_selfie_v303
     _install_selfie_v303()
 except Exception as _v303_error:
     print(f"[neyrobot-prod] V303 direct OpenAI Images bootstrap failed: {_v303_error!r}", flush=True)
+
+# V304 is last among Stage-1 overlays and becomes the active selfie composition
+# owner. Identity transfer/final integration remain unchanged.
+try:
+    from .selfie_v304_compact_stage1 import install as _install_selfie_v304
+    _install_selfie_v304()
+except Exception as _v304_error:
+    print(f"[neyrobot-prod] V304 compact Stage-1 bootstrap failed: {_v304_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
