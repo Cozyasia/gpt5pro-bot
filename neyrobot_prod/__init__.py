@@ -16,13 +16,14 @@ close-selfie prompting, V299 low-memory sequential identity transfer, V300
 bounded Stage-1, V301 fast source detection plus cross-provider Stage-1 recovery,
 V302 rescue from an unavailable OpenAI Responses fallback to Gemini Pro, V303
 direct OpenAI Images fallback without a text-model orchestrator, V304 compact
-OpenAI-first Stage-1 for production selfie latency, and V305 fast PERSON-A target
-locking with no repeated legacy detector passes. Photo #3 remains the sole user
+OpenAI-first Stage-1 for production selfie latency, V305 fast PERSON-A target
+locking with no repeated legacy detector passes, and V306 asynchronous Replicate
+identity transport with real provider failover. Photo #3 remains the sole user
 identity source.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v305-fast-target-lock-full-openai-2026-08-17"
+AI_SELFIE_VERSION = "v306-async-replicate-provider-failover-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -132,13 +133,20 @@ try:
 except Exception as _v304_error:
     print(f"[neyrobot-prod] V304 compact Stage-1 bootstrap failed: {_v304_error!r}", flush=True)
 
-# V305 is deliberately last: it replaces only the selfie target-lock hook and
-# wraps the already-active V304 Stage-1 to prevent cached failed-target repeats.
 try:
     from .selfie_v305_fast_target_lock import install as _install_selfie_v305
     _install_selfie_v305()
 except Exception as _v305_error:
     print(f"[neyrobot-prod] V305 fast target bootstrap failed: {_v305_error!r}", flush=True)
+
+# V306 is deliberately after V299/V305. It changes only the transport/failover
+# semantics of Stage-2 identity transfer; composition and target locking remain
+# untouched.
+try:
+    from .selfie_v306_identity_transport import install as _install_selfie_v306
+    _install_selfie_v306()
+except Exception as _v306_error:
+    print(f"[neyrobot-prod] V306 identity transport bootstrap failed: {_v306_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
