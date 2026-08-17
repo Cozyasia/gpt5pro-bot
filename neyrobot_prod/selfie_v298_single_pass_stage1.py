@@ -1,54 +1,39 @@
 # -*- coding: utf-8 -*-
-"""V298 single-pass Stage-1 for production AI Selfie.
+"""V299 truly single-request Stage-1 for production AI Selfie.
 
-V297 fixed the request-wide timeout, but the core runtime still interpreted every
-Stage-1 exception as "the frame is too distant" and could request a second/third
-Gemini image. In the latest production trace this consumed the whole 120 s budget
-without ever reaching identity transfer.
+V298 removed distance retries at the orchestration layer, but still called the
+historical wrapped Gemini chain. That chain contained older policy/compatibility
+logic and could remain inside one nominal attempt for ~200 seconds. V299 bypasses
+that wrapper stack for selfie composition and performs exactly one direct Gemini
+image request with one model, one payload and one transport timeout.
 
-V298 makes the normal selfie path deterministic:
-- one Gemini composition is the authoritative scene candidate;
-- the V297 close-selfie prompt remains active;
-- the expensive V293 post-generation validator is bypassed for Stage-1 because it
-  can reject an otherwise repairable frame and trigger regeneration;
-- V287 principal-face geometry is applied immediately to every selfie composition,
-  so a wide image is cropped/reframed locally instead of regenerated;
-- all composition attempts share a hard provider budget and later attempts reuse the
-  first composition instead of buying another image solely for camera distance;
-- legacy retry status messages that falsely claim "the frame is too far" are hidden
-  because V298 does not perform distance-based regeneration.
-
-No face identity pixels are changed here. V296 provider-race identity remains the
-owner of face transfer after the deterministic target has been acquired.
+After the image arrives, V287 principal-pair reframing is applied locally. A wide
+composition is never regenerated merely because the people are too far away.
 """
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import os
 import re
 import time
 from typing import Any
 
+from neyrobot_prod import celebrity_selfie as base
+from neyrobot_prod import celebrity_selfie_v204 as extractor
 from neyrobot_prod import selfie_v211_delivery as delivery
 from neyrobot_prod import selfie_v229_canonical_two_stage as v229
 from neyrobot_prod import selfie_v257_consolidated_runtime as terminal
 from neyrobot_prod import selfie_v287_first_pass_quality as v287
 from neyrobot_prod import selfie_v293_selfie_composition_gate as v293
 
-VERSION = "v298-single-pass-stage1-deterministic-selfie-r2-2026-08-17"
+VERSION = "v299-direct-single-request-stage1-2026-08-17"
 _INSTALLED = False
 
-# State at V298 import time: V297 watchdog is the public Google owner and V287 is
-# the deterministic target owner. Keep both for non-selfie/fallback behavior.
 _PUBLIC_GOOGLE_CALL = v229._call_google
 _PUBLIC_TARGET = terminal._target
 _PUBLIC_SAFE_TEXT = delivery._safe_text
-
-# V293 captured the pre-validator chain when it was imported. That chain still
-# contains V287 native-input/upper-body reference preparation and the canonical
-# Gemini transport, but does not run the extra post-generation validator.
-_STAGE1_PROVIDER_CALL = v293._ORIGINAL_GOOGLE_CALL
 
 
 def _log(message: str, *args: Any) -> None:
@@ -67,92 +52,126 @@ def _stage_attempt(stage: str) -> int:
 
 
 def _budget_s() -> float:
-    # Production cap is intentionally strict. Even if an old Render variable still
-    # says 120/150 s, V298 will not let Stage-1 occupy more than 100 s.
     try:
-        value = float(os.getenv("AI_SELFIE_STAGE1_TOTAL_BUDGET_S") or "90")
+        value = float(os.getenv("AI_SELFIE_STAGE1_TOTAL_BUDGET_S") or "80")
     except Exception:
-        value = 90.0
-    return max(70.0, min(100.0, value))
+        value = 80.0
+    return max(60.0, min(90.0, value))
 
 
-async def _safe_text_v298(message: Any, text: str) -> None:
+def _image_size() -> str:
+    value = str(os.getenv("AI_SELFIE_STAGE1_IMAGE_SIZE") or "1K").strip().upper()
+    return value if value in {"1K", "2K"} else "1K"
+
+
+async def _safe_text_v299(message: Any, text: str) -> None:
     value = str(text or "")
-    # These two strings come from the legacy generic retry loop and are no longer
-    # truthful under V298. If deterministic target acquisition somehow fails, the
-    # cached first composition is retried locally without another Gemini purchase.
     if (
         "Для максимальной чёткости лица кадр нужно сделать ближе" in value
         or "Второй кадр тоже получился слишком дальним" in value
     ):
-        _log("AI_SELFIE_V298_UI status=legacy_distance_retry_suppressed")
+        _log("AI_SELFIE_V299_UI status=legacy_distance_retry_suppressed")
         return
     await _PUBLIC_SAFE_TEXT(message, text)
 
 
-async def _call_google_single_pass(
-    prompt: str,
-    labeled_images: list[tuple[str, bytes]],
-    stage: str,
-) -> tuple[bytes, str]:
+def _prepare_refs(labeled_images: list[tuple[str, bytes]]) -> list[tuple[str, str, str]]:
+    prepared: list[tuple[str, str, str]] = []
+    for label, raw in labeled_images:
+        data = bytes(raw or b"")
+        if "USER AGE/BUILD REFERENCE" in str(label):
+            data = v287._upper_body_reference(data)
+            label = str(label) + " CAMERA-FRAMING NOTE: ignore source camera distance; use only age/build/proportions."
+        encoded, mime = v229._prepare(data)
+        prepared.append((str(label), encoded, mime))
+    return prepared
+
+
+async def _direct_gemini_once(prompt: str, labeled_images: list[tuple[str, bytes]], stage: str, timeout_s: float) -> tuple[bytes, str]:
+    import httpx
+
+    key = v229._key()
+    if not key:
+        raise RuntimeError("GEMINI_IMAGE_API_KEY is missing")
+    models = list(v229._models())
+    if not models:
+        raise RuntimeError("No Gemini image model configured")
+    model = str(models[0])
+
+    # Prepare only once. No compatibility retry and no post-generation vision call.
+    prepared = _prepare_refs(labeled_images)
+    parts: list[dict[str, Any]] = [{"text": prompt}]
+    for label, encoded, mime in prepared:
+        parts.append({"text": label})
+        parts.append({"inlineData": {"mimeType": mime, "data": encoded}})
+
+    config: dict[str, Any] = {
+        "responseModalities": ["TEXT", "IMAGE"],
+        "imageConfig": {
+            "aspectRatio": base._aspect_ratio(),
+            "imageSize": _image_size(),
+        },
+    }
+    payload = {"contents": [{"role": "user", "parts": parts}], "generationConfig": config}
+    headers = {"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"}
+    transport = httpx.Timeout(timeout_s, connect=min(15.0, timeout_s), read=timeout_s, write=min(45.0, timeout_s), pool=15.0)
+
+    _log(
+        "AI_SELFIE_V299_STAGE1 stage=%s status=provider_enter model=%s refs=%s image_size=%s timeout=%.0fs direct=true compatibility_retry=false validator=false",
+        stage, model, len(prepared), _image_size(), timeout_s,
+    )
+    async with httpx.AsyncClient(follow_redirects=True, timeout=transport) as client:
+        response = await client.post(
+            f"{v229._base_url()}/models/{model}:generateContent",
+            headers=headers,
+            json=payload,
+        )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Gemini composition HTTP {response.status_code}: {response.text[:500]}")
+    output = extractor._extract_final_image(response.json())
+    if not output or len(output) <= 1024:
+        raise RuntimeError("Gemini composition response contained no final image")
+    return bytes(output), model
+
+
+async def _call_google_single_pass(prompt: str, labeled_images: list[tuple[str, bytes]], stage: str) -> tuple[bytes, str]:
     attempt = _stage_attempt(stage)
     is_selfie = bool(attempt and v293._is_selfie_prompt(prompt))
     if not is_selfie:
         return await _PUBLIC_GOOGLE_CALL(prompt, labeled_images, stage)
 
     task = asyncio.current_task()
-    now = time.monotonic()
-    budget = _budget_s()
-
     if task is not None:
-        setattr(task, "_ai_selfie_v298_selfie_job", True)
-        deadline = getattr(task, "_ai_selfie_v298_deadline", None)
-        if deadline is None:
-            deadline = now + budget
-            setattr(task, "_ai_selfie_v298_deadline", deadline)
-            _log(
-                "AI_SELFIE_V298_STAGE1 stage=%s status=start policy=single_generation+deterministic_reframe budget=%.0fs validator=false",
-                stage, budget,
-            )
-
-        cached = getattr(task, "_ai_selfie_v298_composition", None)
-        cached_model = getattr(task, "_ai_selfie_v298_model", None)
+        setattr(task, "_ai_selfie_v299_selfie_job", True)
+        cached = getattr(task, "_ai_selfie_v299_composition", None)
+        cached_model = getattr(task, "_ai_selfie_v299_model", None)
         if attempt > 1 and isinstance(cached, (bytes, bytearray)) and len(cached) > 1024:
             _log(
-                "AI_SELFIE_V298_STAGE1 stage=%s status=reuse_first_composition attempt=%s provider_call=false bytes=%s",
+                "AI_SELFIE_V299_STAGE1 stage=%s status=reuse_first_composition attempt=%s provider_call=false bytes=%s",
                 stage, attempt, len(cached),
             )
-            return bytes(cached), str(cached_model or "google_gemini_direct_v298_cached")
-        remaining = float(deadline) - now
-    else:
-        remaining = budget
+            return bytes(cached), str(cached_model or "google_gemini_direct_v299_cached")
 
-    if remaining <= 1.0:
-        _log(
-            "AI_SELFIE_V298_STAGE1 stage=%s status=budget_exhausted remaining=%.2fs provider_call=false",
-            stage, remaining,
-        )
-        raise TimeoutError(f"AI Selfie composition exceeded production budget ({budget:.0f}s)")
-
+    budget = _budget_s()
     started = time.monotonic()
     try:
         output, model = await asyncio.wait_for(
-            _STAGE1_PROVIDER_CALL(prompt, labeled_images, stage),
-            timeout=max(1.0, remaining),
+            _direct_gemini_once(prompt, labeled_images, stage, budget),
+            timeout=budget + 2.0,
         )
     except asyncio.TimeoutError as exc:
         _log(
-            "AI_SELFIE_V298_STAGE1 stage=%s status=timeout elapsed=%.2fs budget=%.0fs",
+            "AI_SELFIE_V299_STAGE1 stage=%s status=timeout elapsed=%.2fs budget=%.0fs direct=true",
             stage, time.monotonic() - started, budget,
         )
         raise TimeoutError(f"AI Selfie composition provider exceeded production budget ({budget:.0f}s)") from exc
 
     if task is not None:
-        setattr(task, "_ai_selfie_v298_composition", bytes(output))
-        setattr(task, "_ai_selfie_v298_model", str(model))
+        setattr(task, "_ai_selfie_v299_composition", bytes(output))
+        setattr(task, "_ai_selfie_v299_model", str(model))
 
     _log(
-        "AI_SELFIE_V298_STAGE1 stage=%s status=composition_ready elapsed=%.2fs attempt=%s bytes=%s validator=false",
+        "AI_SELFIE_V299_STAGE1 stage=%s status=composition_ready elapsed=%.2fs attempt=%s bytes=%s direct=true validator=false",
         stage, time.monotonic() - started, attempt, len(output),
     )
     return output, model
@@ -160,26 +179,22 @@ async def _call_google_single_pass(
 
 def _target_single_pass(composition: bytes, *, scene_image: bool, log: Any):
     task = asyncio.current_task()
-    is_selfie = bool(task is not None and getattr(task, "_ai_selfie_v298_selfie_job", False))
+    is_selfie = bool(task is not None and getattr(task, "_ai_selfie_v299_selfie_job", False))
     if not is_selfie:
         return _PUBLIC_TARGET(composition, scene_image=scene_image, log=log)
-
-    # V287's principal-pair method is exactly the deterministic repair needed here:
-    # detect the two principal faces, crop around them and restore the native canvas.
-    # It does not invent a new person and does not call Gemini again.
     try:
         base_img, target, metrics = v287._first_pass_target(composition, log)
         metrics = dict(metrics)
-        metrics["v298_single_pass"] = 1.0
-        metrics["v298_regeneration_for_distance"] = 0.0
+        metrics["v299_single_request"] = 1.0
+        metrics["v299_regeneration_for_distance"] = 0.0
         log(
-            "AI_SELFIE_V298_TARGET status=accepted action=deterministic_principal_pair_reframe face=%s crop=%s dims=%s regeneration=false",
+            "AI_SELFIE_V299_TARGET status=accepted action=deterministic_principal_pair_reframe face=%s crop=%s dims=%s regeneration=false",
             target.face_box, target.crop_box, getattr(base_img, "size", None),
         )
         return base_img, target, metrics
     except Exception as exc:
         log(
-            "AI_SELFIE_V298_TARGET status=principal_pair_failed error_type=%s error=%s action=legacy_target_fallback",
+            "AI_SELFIE_V299_TARGET status=principal_pair_failed error_type=%s error=%s action=legacy_target_fallback",
             type(exc).__name__, str(exc)[:500],
         )
         return _PUBLIC_TARGET(composition, scene_image=scene_image, log=log)
@@ -189,17 +204,16 @@ def install() -> bool:
     global _INSTALLED
     if _INSTALLED:
         return True
-
     v229._call_google = _call_google_single_pass
     terminal._target = _target_single_pass
-    delivery._safe_text = _safe_text_v298
+    delivery._safe_text = _safe_text_v299
     terminal.VERSION = VERSION
-    terminal.TRACE_PREFIX = "AI_SELFIE_V298"
-    setattr(terminal, "_v298_single_pass_stage1", True)
-    setattr(terminal, "_v298_distance_regeneration_disabled", True)
-    setattr(terminal, "_v298_stage1_budget_hard_cap", 100)
+    terminal.TRACE_PREFIX = "AI_SELFIE_V299"
+    setattr(terminal, "_v298_single_pass_stage1", False)
+    setattr(terminal, "_v299_direct_single_request_stage1", True)
+    setattr(terminal, "_v299_distance_regeneration_disabled", True)
     _INSTALLED = True
-    print(f"[neyrobot-prod] V298 single-pass deterministic Stage-1 installed version={VERSION}", flush=True)
+    print(f"[neyrobot-prod] V299 direct single-request Stage-1 installed version={VERSION}", flush=True)
     return True
 
 
