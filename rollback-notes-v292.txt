@@ -1,0 +1,1 @@
+Temporary marker: before rollback investigation on 2026-08-17. Current head 9b8bba65b670cb4b6dd6fda1e3d18b40f9badf45; intended rollback target 7c5904d1841bf1932ad946796712f5e312219802 (Expose V292 AI Selfie identity and integration runtime).
