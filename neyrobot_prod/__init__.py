@@ -12,15 +12,14 @@ remote face-swap retries, V287 first-pass native reference quality with
 principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
 deterministic source-native identity after the runtime has verified PERSON A,
 V292 source-authoritative facial geometry with face-safe final integration, V297
-close-selfie prompting and request-wide Stage-1 budgeting, V296 fast provider-race
-identity transfer, and V298 single-pass deterministic Stage-1. For selfie mode the
-first valid Gemini composition is now reframed locally around the principal pair
-instead of regenerating solely because the camera is too far away. Photo #3 remains
-the identity source and direct affine/source-pixel face pasting stays disabled.
+close-selfie prompting, and V299 direct single-request Stage-1 plus low-memory
+sequential identity transfer. Selfie composition uses one Gemini image request and
+local principal-pair reframing; identity uses bounded provider canvases and avoids
+concurrent Replicate/PiAPI memory duplication. Photo #3 remains the identity source.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v298-single-pass-stage1-deterministic-selfie-2026-08-17"
+AI_SELFIE_VERSION = "v299-direct-stage1-low-memory-identity-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -98,16 +97,14 @@ try:
     from .selfie_v295_identity_fidelity_lock import install as _install_selfie_v295
     _install_selfie_v295()
 except Exception as _v295_error:
-    print(f"[neyrobot-prod] V296 fast identity bootstrap failed: {_v295_error!r}", flush=True)
+    print(f"[neyrobot-prod] V299 low-memory identity bootstrap failed: {_v295_error!r}", flush=True)
 
-# Must be installed AFTER V295: V295 owns only identity transfer but also sets the
-# terminal trace prefix. V298 is the final Stage-1 owner and restores the production
-# trace/version markers while leaving the V296 identity provider race intact.
+# Installed after identity ownership: this module is the final public Stage-1 owner.
 try:
-    from .selfie_v298_single_pass_stage1 import install as _install_selfie_v298
-    _install_selfie_v298()
-except Exception as _v298_error:
-    print(f"[neyrobot-prod] V298 single-pass Stage-1 bootstrap failed: {_v298_error!r}", flush=True)
+    from .selfie_v298_single_pass_stage1 import install as _install_selfie_v299
+    _install_selfie_v299()
+except Exception as _v299_error:
+    print(f"[neyrobot-prod] V299 direct Stage-1 bootstrap failed: {_v299_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
