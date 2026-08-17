@@ -12,14 +12,15 @@ remote face-swap retries, V287 first-pass native reference quality with
 principal-face-pair reframing, V288 detector-safe PiAPI identity canvases, V289b
 deterministic source-native identity after the runtime has verified PERSON A,
 V292 source-authoritative facial geometry with face-safe final integration, V297
-close-selfie prompting, and V299 direct single-request Stage-1 plus low-memory
-sequential identity transfer. Selfie composition uses one Gemini image request and
-local principal-pair reframing; identity uses bounded provider canvases and avoids
-concurrent Replicate/PiAPI memory duplication. Photo #3 remains the identity source.
+close-selfie prompting, V299 low-memory sequential identity transfer, and V300
+bounded Stage-1. Selfie composition now prefers the fast Gemini image model, keeps
+all model fallback inside one request-wide deadline, blocks the legacy outer
+three-attempt retry loop after a provider failure, and locally reframes wide scenes
+instead of regenerating for camera distance. Photo #3 remains the identity source.
 """
 
 VERSION = "v206-selfie-command-routing-2026-07-25"
-AI_SELFIE_VERSION = "v299-direct-stage1-low-memory-identity-2026-08-17"
+AI_SELFIE_VERSION = "v300-bounded-stage1-low-memory-identity-2026-08-17"
 
 try:
     from .render_lifecycle_diag import install as _install_render_lifecycle_diag
@@ -101,10 +102,10 @@ except Exception as _v295_error:
 
 # Installed after identity ownership: this module is the final public Stage-1 owner.
 try:
-    from .selfie_v298_single_pass_stage1 import install as _install_selfie_v299
-    _install_selfie_v299()
-except Exception as _v299_error:
-    print(f"[neyrobot-prod] V299 direct Stage-1 bootstrap failed: {_v299_error!r}", flush=True)
+    from .selfie_v298_single_pass_stage1 import install as _install_selfie_v300
+    _install_selfie_v300()
+except Exception as _v300_error:
+    print(f"[neyrobot-prod] V300 bounded Stage-1 bootstrap failed: {_v300_error!r}", flush=True)
 
 try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
