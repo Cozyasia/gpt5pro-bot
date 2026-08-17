@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-"""V293 strict selfie composition gate.
+"""V297 selfie composition gate.
 
-V292 fixed identity fidelity and hero-edge contamination. The remaining visible
-failure mode is upstream composition: Gemini can still draw a long foreground arm
-as if PERSON A were physically holding an invisible phone. That arm is already part
-of the scene before identity transfer, so no face-swap or integration patch can fix
-it afterwards.
+The previous V293 validator treated a loose/wide selfie as a hard generation failure.
+That was counterproductive because V284 already has a deterministic two-face crop
+that can reframe a wide composition without another generative call. Rejecting the
+wide frame here caused two or three expensive Gemini retries and turned a usable
+composition into a multi-minute timeout.
 
-V293 therefore tightens the selfie prompt and adds one inexpensive vision gate after
-the existing V280 device/POV validator. It rejects elongated foreground limbs,
-invisible-phone holding poses and overly loose selfie framing before identity work.
+V297 therefore keeps only the failures that cannot be repaired downstream:
+- visible/implicit phone-holding anatomy;
+- stretched or malformed foreground limbs;
+- a principal face strongly obstructed or turned away.
+
+Camera distance is now enforced strongly in the generation prompt, but a merely
+wide result is accepted and handed to V284 for deterministic close reframing.
 """
 from __future__ import annotations
 
@@ -20,7 +24,7 @@ from typing import Any
 from neyrobot_prod import selfie_v257_consolidated_runtime as terminal
 from neyrobot_prod import selfie_v229_canonical_two_stage as v229
 
-VERSION = "v293-selfie-anatomy-framing-gate-2026-08-17"
+VERSION = "v297-selfie-close-prompt-no-distance-regeneration-2026-08-17"
 _INSTALLED = False
 _ORIGINAL_PROMPT = terminal._prompt
 _ORIGINAL_GOOGLE_CALL = v229._call_google
@@ -42,18 +46,21 @@ def _prompt(name: str, scene_text: str, shot_label: str, has_scene_image: bool, 
     if "селфи" not in label and "selfie" not in label:
         return text
     return text + (
-        " SELFIE ANATOMY/FRAMING CONTRACT — NON-NEGOTIABLE: the phone camera is a virtual invisible viewpoint; "
-        "neither PERSON A nor PERSON B needs to physically hold it. DO NOT draw a camera-holding arm, an arm reaching toward the lens, "
-        "an oversized foreground forearm, a hand disappearing beyond the frame as if gripping an invisible phone, or any extreme wide-angle limb distortion. "
-        "Both principal people must have normal human shoulder/arm proportions. An arm may rest naturally beside the body or around the companion, "
-        "but it must not project toward the camera. Compose a believable close front-camera portrait, preferably shoulders-up or chest-up; "
-        "do not show thighs/knees or a seated half-body composition when a normal close selfie is possible. Both principal faces must be clear, near-frontal, "
-        "similar in apparent camera distance, unobstructed, and looking naturally into the same lens. If any foreground limb looks stretched, enlarged, malformed, "
-        "or implies an invisible phone outside the frame, discard the draft and render another composition."
+        " V297 TRUE ARM-LENGTH SELFIE CONTRACT — ABSOLUTE: render the frame as if a normal phone front camera were held at ordinary arm length, approximately 45-75 cm from the two principal faces. "
+        "This is NOT an event portrait and NOT an establishing shot. The two faces are the dominant visual subject and together fill most of the upper frame. "
+        "Use shoulders-up or upper-chest-up framing. Each principal face should be roughly 20-30% of total image height, with the two heads close together at approximately the same camera distance. "
+        "Do not show knees, thighs, full torsos, large empty floor/ceiling/background areas, or a distant view of the venue. The venue is only background context behind the faces. "
+        "The virtual phone/camera itself is invisible. DO NOT draw a phone, camera, selfie stick, camera-holding arm, arm reaching toward the lens, oversized foreground forearm, or a hand disappearing beyond frame as if gripping a device. "
+        "Both people must have normal shoulder/arm proportions, unobstructed near-frontal faces, and look naturally toward the same front-camera lens."
     )
 
 
 async def _anatomy_gate(raw: bytes, *, stage: str) -> bool:
+    """Reject only defects that deterministic reframing cannot repair.
+
+    IMPORTANT: camera distance / loose framing is deliberately NOT a rejection reason.
+    V284 owns deterministic close reframing after generation.
+    """
     import httpx
 
     key = v229._key()
@@ -63,13 +70,13 @@ async def _anatomy_gate(raw: bytes, *, stage: str) -> bool:
         data, mime = v229._prepare(raw)
         model = str(os.getenv("GEMINI_SELFIE_VALIDATOR_MODEL") or "gemini-2.5-flash").strip()
         prompt = (
-            "Judge ONLY whether this image is a production-quality close front-camera selfie. Return exactly PASS or FAIL. "
+            "Judge ONLY whether this generated image has an UNREPAIRABLE selfie anatomy/face defect. Return exactly PASS or FAIL. "
             "FAIL if either principal person has an arm/forearm stretched toward the lens, an oversized foreground limb, extreme perspective elongation, "
             "a hand or arm exiting the frame as though holding an invisible phone, malformed arm anatomy, or an implausibly long arm. "
-            "FAIL if the framing is unnecessarily loose/half-body with thighs or knees visible instead of a normal shoulders-up/chest-up selfie. "
-            "FAIL if one principal face is strongly obstructed, strongly turned away, or clearly not looking toward the camera. "
-            "A normal arm around the companion or resting naturally at the side is allowed. PASS only if body anatomy, selfie perspective, close framing, "
-            "and both principal faces all look immediately believable."
+            "FAIL if a principal face is strongly obstructed or strongly turned away so later identity transfer cannot work. "
+            "DO NOT FAIL merely because the people are too far away, the framing is too wide, too much background is visible, or more torso is visible than desired; "
+            "those distance/framing problems are corrected deterministically after this check. "
+            "A normal arm around the companion or resting naturally at the side is allowed. PASS whenever anatomy and both usable face orientations are believable."
         )
         parts = [{"text": prompt}, v229._inline(data, mime)]
         payload = {
@@ -77,11 +84,11 @@ async def _anatomy_gate(raw: bytes, *, stage: str) -> bool:
             "generationConfig": {"responseModalities": ["TEXT"], "temperature": 0.0},
         }
         headers = {"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"}
-        timeout = httpx.Timeout(35.0, connect=12.0, read=35.0, write=25.0, pool=12.0)
+        timeout = httpx.Timeout(25.0, connect=10.0, read=25.0, write=20.0, pool=10.0)
         async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
             response = await client.post(f"{v229._base_url()}/models/{model}:generateContent", headers=headers, json=payload)
         if response.status_code >= 400:
-            _log("AI_SELFIE_V293_GATE stage=%s status=validator_unavailable http=%s body=%s", stage, response.status_code, response.text[:240])
+            _log("AI_SELFIE_V297_GATE stage=%s status=validator_unavailable http=%s body=%s", stage, response.status_code, response.text[:240])
             return True
         texts: list[str] = []
         for candidate in (response.json().get("candidates") or []):
@@ -90,11 +97,10 @@ async def _anatomy_gate(raw: bytes, *, stage: str) -> bool:
                     texts.append(str(part["text"]))
         verdict = " ".join(texts).strip().upper()
         ok = verdict.startswith("PASS") and "FAIL" not in verdict[:20]
-        _log("AI_SELFIE_V293_GATE stage=%s status=%s verdict=%s", stage, "pass" if ok else "reject", verdict[:100])
+        _log("AI_SELFIE_V297_GATE stage=%s status=%s verdict=%s distance_reject=false", stage, "pass" if ok else "reject", verdict[:100])
         return ok
     except Exception as exc:
-        # Optional quality gate must not make the product unavailable on validator outage.
-        _log("AI_SELFIE_V293_GATE stage=%s status=validator_exception error_type=%s error=%s", stage, type(exc).__name__, str(exc)[:350])
+        _log("AI_SELFIE_V297_GATE stage=%s status=validator_exception error_type=%s error=%s", stage, type(exc).__name__, str(exc)[:350])
         return True
 
 
@@ -102,7 +108,7 @@ async def _call_google_with_anatomy_gate(prompt: str, labeled_images: list[tuple
     output, model = await _ORIGINAL_GOOGLE_CALL(prompt, labeled_images, stage)
     if _is_selfie_prompt(prompt) and "scene_hero_body_attempt" in str(stage):
         if not await _anatomy_gate(output, stage=stage):
-            raise ValueError("SELFIE_ANATOMY_POLICY_REJECTED: stretched foreground limb, invisible-phone pose, loose framing or camera-facing failure")
+            raise ValueError("SELFIE_ANATOMY_POLICY_REJECTED: unrecoverable limb anatomy or face orientation")
     return output, model
 
 
@@ -113,10 +119,11 @@ def install() -> bool:
     terminal._prompt = _prompt
     v229._call_google = _call_google_with_anatomy_gate
     terminal.VERSION = VERSION
-    terminal.TRACE_PREFIX = "AI_SELFIE_V293"
+    terminal.TRACE_PREFIX = "AI_SELFIE_V297"
     setattr(terminal, "_v293_selfie_anatomy_gate", True)
+    setattr(terminal, "_v297_distance_reject_disabled", True)
     _INSTALLED = True
-    print(f"[neyrobot-prod] V293 selfie anatomy + close-framing gate installed version={VERSION}", flush=True)
+    print(f"[neyrobot-prod] V297 selfie close prompt + no-distance-regeneration installed version={VERSION}", flush=True)
     return True
 
 
