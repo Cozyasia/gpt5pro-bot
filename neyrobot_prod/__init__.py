@@ -82,6 +82,12 @@ except Exception as _v292_error:
     print(f"[neyrobot-prod] V292 identity/face-safe integration bootstrap failed: {_v292_error!r}", flush=True)
 
 try:
+    from .selfie_v309_stage1_timeout_guard import install as _install_selfie_v309
+    _install_selfie_v309()
+except Exception as _v309_error:
+    print(f"[neyrobot-prod] V309 Stage-1 timeout guard bootstrap failed: {_v309_error!r}", flush=True)
+
+try:
     from .selfie_v281_restart_resilience import install as _install_selfie_restart_resilience
     _install_selfie_restart_resilience()
 except Exception as _restart_error:
