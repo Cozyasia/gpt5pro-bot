@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
-"""V234: stable V232 scene generation + authoritative real FaceSwap.
+"""V235: stable Gemini scene + isolated real FaceSwap for PERSON A only.
 
-This module deliberately separates composition from identity. Gemini creates only the
-scene/body/pose and is instructed to expose PERSON A in a transfer-friendly pose that
-matches the chosen real source photo's head angle and expression. A real FaceSwap then
-replaces PERSON A's face. A very-early Telegram callback owner prevents legacy V219
-Comet generation handlers from winning the same button press.
+The key rule is separation of identities:
+- Gemini gets ONE user source photo only for pose/expression/body guidance.
+- PERSON B gets ONLY the three hero references and must never inherit user traits.
+- FaceSwap runs on an isolated left-side crop containing PERSON A, not on the full
+  two-person composition. This removes provider face-index ambiguity and guarantees
+  that the hero/right side is never modified by the FaceSwap provider.
 """
 from __future__ import annotations
 
 import contextlib
 import hashlib
+import io
 from typing import Any
 
-VERSION = "v234-v232-scene-authoritative-faceswap-expression-2026-08-18-r2"
+VERSION = "v235-isolated-person-a-faceswap-hero-protect-2026-08-18"
 _HANDLER_FLAG = "_neyrobot_v234_real_faceswap_handler"
 _STARTED = False
 _GENERATION_PATTERN = r"^(?:cs201:preset:|cs201:generate_current$|cs201:reuse:repeat$)"
@@ -29,6 +31,17 @@ def _log(message: str, *args: Any) -> None:
     v229._log(message, *args)
 
 
+def _detect(runtime: Any, image: bytes) -> list[dict[str, Any]]:
+    """Best-effort only. Detection failure must never choose a different person."""
+    detector = getattr(runtime, "_detect_faces_for_choice", None)
+    if not callable(detector):
+        return []
+    try:
+        return [dict(x) for x in (detector(bytes(image)) or [])]
+    except Exception:
+        return []
+
+
 def _face_area(face: dict[str, Any]) -> int:
     try:
         return max(1, int(face.get("w", 0))) * max(1, int(face.get("h", 0)))
@@ -36,51 +49,8 @@ def _face_area(face: dict[str, Any]) -> int:
         return 0
 
 
-def _opencv_detect(image: bytes) -> list[dict[str, Any]]:
-    """Independent fallback detector used only when the legacy runtime detector misses."""
-    try:
-        import cv2
-        import numpy as np
-        raw = np.frombuffer(bytes(image), dtype=np.uint8)
-        frame = cv2.imdecode(raw, cv2.IMREAD_COLOR)
-        if frame is None:
-            return []
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        if cascade.empty():
-            return []
-        detected = cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=(48, 48))
-        faces: list[dict[str, Any]] = []
-        for i, (x, y, w, h) in enumerate(detected):
-            faces.append({
-                "x": int(x), "y": int(y), "w": int(w), "h": int(h),
-                "cx": int(x + w / 2), "cy": int(y + h / 2),
-                "display_index": i, "api_index": i,
-                "detector": "opencv_haar",
-            })
-        faces.sort(key=lambda f: (int(f.get("cx", 0)), int(f.get("cy", 0))))
-        for i, face in enumerate(faces):
-            face["display_index"] = i
-            face["api_index"] = i
-        return faces
-    except Exception:
-        return []
-
-
-def _detect(runtime: Any, image: bytes) -> list[dict[str, Any]]:
-    detector = getattr(runtime, "_detect_faces_for_choice", None)
-    if callable(detector):
-        try:
-            faces = [dict(x) for x in (detector(bytes(image)) or [])]
-            if faces:
-                return faces
-        except Exception:
-            pass
-    return _opencv_detect(bytes(image))
-
-
 def _select_source_photo(runtime: Any, photos: list[bytes]) -> tuple[bytes, int, dict[str, Any] | None]:
-    """Pick the strongest clean single-face source. Prefer #3 only on a true tie."""
+    """Use strongest single-face original when detectable; otherwise keep photo #3."""
     candidates: list[tuple[int, int, bytes, dict[str, Any]]] = []
     for idx, raw in enumerate(photos, 1):
         faces = _detect(runtime, bytes(raw))
@@ -90,127 +60,125 @@ def _select_source_photo(runtime: Any, photos: list[bytes]) -> tuple[bytes, int,
         _, idx, raw, face = max(candidates, key=lambda item: (item[0], item[1]))
         return raw, idx, face
     raw = bytes(photos[-1])
-    faces = _detect(runtime, raw)
-    face = max(faces, key=_face_area) if faces else None
-    return raw, 3, face
-
-
-def _select_person_a_face(runtime: Any, image: bytes) -> dict[str, Any]:
-    """Choose left PERSON A when possible; never block FaceSwap solely on local detection."""
-    faces = _detect(runtime, image)
-    if len(faces) >= 2:
-        principal = sorted(faces, key=_face_area, reverse=True)[:2]
-        person_a = min(principal, key=lambda f: (int(f.get("cx", f.get("x", 0))), int(f.get("cy", f.get("y", 0)))))
-        # Provider face indices are not guaranteed to match area sorting. Because V234
-        # forces PERSON A to be the leftmost principal face, use the left-to-right index.
-        ordered = sorted(faces, key=lambda f: (int(f.get("cx", f.get("x", 0))), int(f.get("cy", f.get("y", 0)))))
-        provider_index = ordered.index(person_a)
-        person_a = dict(person_a)
-        person_a["api_index"] = provider_index
-        person_a["_fallback"] = False
-        _log(
-            "AI_SELFIE_V234_TARGET faces=%s detector=%s target_index=%s box=%sx%s@%s,%s",
-            len(faces), person_a.get("detector", "runtime"), provider_index,
-            person_a.get("w"), person_a.get("h"), person_a.get("x"), person_a.get("y"),
-        )
-        return person_a
-    if len(faces) == 1:
-        person_a = dict(faces[0])
-        person_a["api_index"] = 0
-        person_a["_fallback"] = False
-        _log("AI_SELFIE_V234_TARGET faces=1 detector=%s target_index=0 degraded=true", person_a.get("detector", "runtime"))
-        return person_a
-
-    # Local OpenCV/runtime detection can miss a perfectly usable Gemini image. Do not
-    # abort before the actual FaceSwap provider gets a chance to run. Stage-1 prompt
-    # guarantees PERSON A is the leftmost principal face, so provider index 0 is the
-    # deterministic fallback. No local ROI composite is attempted without a real box.
-    _log("AI_SELFIE_V234_TARGET faces=0 target_index=0 fallback=provider_leftmost")
-    return {"api_index": 0, "display_index": 0, "_fallback": True}
+    return raw, 3, None
 
 
 def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool, source_photo_no: int) -> str:
-    from neyrobot_prod import selfie_v229_canonical_two_stage as v229
-    base_prompt = v229._stage1_prompt(name, scene, shot_label, has_scene_image)
+    scene_rule = (
+        "The first reference is the AUTHORITATIVE SCENE BASE. Preserve its architecture, furniture, camera viewpoint, perspective and lighting. "
+        if has_scene_image else
+        f"Create this location faithfully: {scene}. "
+    )
     return (
-        base_prompt
-        + f" AUTHORITATIVE FACE-TRANSFER SOURCE is the specially labelled USER SOURCE PHOTO #{source_photo_no}. "
-        + "Do NOT invent a new facial identity for PERSON A. Build PERSON A's body, hair, head placement and lighting, but make the face transfer-friendly. "
-        + "PERSON A must be the LEFTMOST principal person and PERSON B the RIGHT principal person. PERSON A must be slightly closer to camera and at least as large as PERSON B. "
-        + "Match PERSON A's HEAD ANGLE, FACIAL EXPRESSION, mouth openness/smile, eyebrow state and eye direction as closely as possible to the AUTHORITATIVE FACE-TRANSFER SOURCE. "
-        + "Keep PERSON A near-frontal or only a very mild three-quarter angle, upright head, no strong yaw/pitch/roll, no hand or hair covering the face, no glasses added, no extreme grin, no profile. "
-        + "PERSON A's face must be large and sharp: target face width at least about 24% of image width and fully inside frame. "
-        + "The later stage will physically replace PERSON A's face, therefore pose/expression compatibility is more important than synthesizing PERSON A's facial details. "
-        + "Exactly two principal faces only. Do not place any extra/background face to the left of PERSON A."
+        "Create ONE photorealistic vertical photograph with EXACTLY TWO principal people and no other visible faces. "
+        f"SHOT MODE: {shot_label}. {scene_rule}"
+        f"PERSON A is the USER and must be on the LEFT. The reference labelled USER SOURCE PHOTO #{source_photo_no} belongs ONLY to PERSON A. "
+        "Use that user reference ONLY to copy PERSON A's body build, hair, head angle, facial expression, mouth openness, eye direction and natural pose. "
+        "PERSON A's generated facial identity is temporary and will be physically replaced later; therefore do not spend identity capacity inventing or beautifying PERSON A. "
+        "Make PERSON A near-frontal, upright, unobstructed, sharp and sufficiently large for a direct face transfer. Keep PERSON A clearly inside the LEFT 48 percent of the image. "
+        f"PERSON B is {name} and must be on the RIGHT. The three HERO PORTRAIT references belong ONLY to PERSON B and are the sole identity authority for PERSON B. "
+        "ABSOLUTE IDENTITY SEPARATION: never copy any USER facial feature, hair feature, age, jaw, eyes, nose, mouth, skin or expression into PERSON B. "
+        "Likewise never copy PERSON B identity into PERSON A. PERSON B must remain unmistakably the hero defined by the HERO PORTRAIT references. "
+        "Keep the two heads separated horizontally with visible space between them. PERSON B must stay entirely in the RIGHT 48 percent of the image. "
+        "Natural anatomy, realistic skin and optics. No text, watermark, duplicated face, merged identity, morphing or hybrid face."
     )
 
 
-async def _true_face_transfer(runtime: Any, stage1: bytes, source: bytes, source_photo_no: int) -> tuple[bytes, str]:
-    target_face = _select_person_a_face(runtime, stage1)
-    target_index = int(target_face.get("api_index", 0) or 0)
-    target_is_fallback = bool(target_face.get("_fallback"))
+def _left_person_crop(image: bytes) -> tuple[bytes, tuple[int, int, int, int]]:
+    """Crop only PERSON A's reserved left-side region; hero is excluded by construction."""
+    from PIL import Image
+    im = Image.open(io.BytesIO(image)).convert("RGB")
+    w, h = im.size
+    # V235 prompt reserves the left half for PERSON A. Keep a little margin but never
+    # reach the right-side hero. Vertical crop includes head/neck/upper torso.
+    x0 = 0
+    y0 = 0
+    x1 = max(256, min(w, int(w * 0.52)))
+    y1 = max(256, min(h, int(h * 0.78)))
+    crop = im.crop((x0, y0, x1, y1))
+    out = io.BytesIO()
+    crop.save(out, format="JPEG", quality=96, subsampling=0)
+    return out.getvalue(), (x0, y0, x1, y1)
 
+
+def _merge_left_crop(base: bytes, swapped_crop: bytes, box: tuple[int, int, int, int]) -> bytes:
+    """Blend provider output back only into PERSON A region; right-side hero is pixel-locked."""
+    from PIL import Image, ImageFilter
+    base_im = Image.open(io.BytesIO(base)).convert("RGB")
+    crop_im = Image.open(io.BytesIO(swapped_crop)).convert("RGB")
+    x0, y0, x1, y1 = box
+    cw, ch = x1 - x0, y1 - y0
+    if crop_im.size != (cw, ch):
+        crop_im = crop_im.resize((cw, ch), Image.Resampling.LANCZOS)
+
+    # Rectangular feather mask: provider may alter pixels inside user crop, but nothing
+    # outside it. The soft edge prevents a visible seam at the crop boundary.
+    mask = Image.new("L", (cw, ch), 255)
+    feather = max(12, min(48, int(min(cw, ch) * 0.04)))
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    base_im.paste(crop_im, (x0, y0), mask)
+
+    out = io.BytesIO()
+    base_im.save(out, format="JPEG", quality=96, subsampling=0)
+    return out.getvalue()
+
+
+async def _true_face_transfer(runtime: Any, stage1: bytes, source: bytes, source_photo_no: int) -> tuple[bytes, str]:
+    """Swap a single isolated PERSON A crop, then merge it into untouched stage1."""
     segmind = getattr(runtime, "_segmind_faceswap_v2", None)
     piapi = getattr(runtime, "_piapi_faceswap", None)
-    composite = getattr(runtime, "_faceswap_composite_selected_region", None)
     normalize = getattr(runtime, "_maybe_resize_output_image", None)
 
+    target_crop, box = _left_person_crop(stage1)
+    target_sha = hashlib.sha256(target_crop).hexdigest()[:12]
     errors: list[str] = []
-    swapped: bytes | None = None
+    swapped_crop: bytes | None = None
     provider = ""
-    before_sha = hashlib.sha256(stage1).hexdigest()[:12]
 
-    # Indexed Segmind is authoritative for a two-person image. Provider detection is
-    # allowed to proceed even if our local detector missed the faces.
+    _log(
+        "AI_SELFIE_V235_CROP box=%s,%s,%s,%s target_sha=%s bytes=%s mode=isolated_person_a",
+        box[0], box[1], box[2], box[3], target_sha, len(target_crop),
+    )
+
+    # Single-face crop means target_index=0 is unambiguous. The hero is not present in
+    # this provider request at all, so FaceSwap cannot modify or acquire hero identity.
     if callable(segmind) and bool(getattr(runtime, "SEGMIND_API_KEY", "")):
         try:
-            _log("AI_SELFIE_V234_TRANSFER provider=segmind_v2 target_index=%s source_photo=%s local_fallback=%s", target_index, source_photo_no, target_is_fallback)
-            candidate = await segmind(stage1, source, target_index=target_index, source_index=0)
-            if candidate and len(candidate) > 1024 and hashlib.sha256(bytes(candidate)).hexdigest()[:12] != before_sha:
-                swapped = bytes(candidate)
-                provider = "segmind_faceswap_v2"
+            _log("AI_SELFIE_V235_TRANSFER provider=segmind_v2 isolated=true target_index=0 source_photo=%s", source_photo_no)
+            candidate = await segmind(target_crop, source, target_index=0, source_index=0)
+            if candidate and len(candidate) > 1024 and hashlib.sha256(bytes(candidate)).hexdigest()[:12] != target_sha:
+                swapped_crop = bytes(candidate)
+                provider = "segmind_faceswap_v2_isolated"
             else:
                 errors.append("segmind:no_effect_or_empty")
         except Exception as exc:
             errors.append(f"segmind:{type(exc).__name__}:{exc}")
 
-    # PiAPI is fallback only. Never silently return the synthetic Gemini face.
-    if swapped is None and callable(piapi) and bool(getattr(runtime, "PIAPI_API_KEY", "")):
+    if swapped_crop is None and callable(piapi) and bool(getattr(runtime, "PIAPI_API_KEY", "")):
         try:
-            _log("AI_SELFIE_V234_TRANSFER provider=piapi target_index=%s source_photo=%s local_fallback=%s", target_index, source_photo_no, target_is_fallback)
-            candidate = await piapi(stage1, source, quality="fast", target_index=target_index, source_index=0)
-            if candidate and len(candidate) > 1024 and hashlib.sha256(bytes(candidate)).hexdigest()[:12] != before_sha:
-                swapped = bytes(candidate)
-                provider = "piapi_faceswap"
+            _log("AI_SELFIE_V235_TRANSFER provider=piapi isolated=true target_index=0 source_photo=%s", source_photo_no)
+            candidate = await piapi(target_crop, source, quality="fast", target_index=0, source_index=0)
+            if candidate and len(candidate) > 1024 and hashlib.sha256(bytes(candidate)).hexdigest()[:12] != target_sha:
+                swapped_crop = bytes(candidate)
+                provider = "piapi_faceswap_isolated"
             else:
                 errors.append("piapi:no_effect_or_empty")
         except Exception as exc:
             errors.append(f"piapi:{type(exc).__name__}:{exc}")
 
-    if swapped is None:
-        raise RuntimeError("real FaceSwap produced no usable face transfer: " + (" | ".join(errors) if errors else "no provider configured"))
+    if swapped_crop is None:
+        raise RuntimeError("isolated real FaceSwap produced no usable transfer: " + (" | ".join(errors) if errors else "no provider configured"))
 
-    # When a reliable local face box exists, retain the old local integration step.
-    # If local detection failed, keep the provider's indexed swap result intact rather
-    # than fabricating a region and risking damage to the celebrity/background.
-    has_box = all(int(target_face.get(k, 0) or 0) > 0 for k in ("w", "h"))
-    if callable(composite) and has_box and not target_is_fallback:
-        try:
-            swapped = bytes(composite(stage1, swapped, target_face))
-        except Exception as exc:
-            errors.append(f"composite:{type(exc).__name__}:{exc}")
-    else:
-        _log("AI_SELFIE_V234_COMPOSITE skipped=%s reason=%s", True, "no_reliable_local_face_box" if target_is_fallback or not has_box else "composite_unavailable")
-
+    final = _merge_left_crop(stage1, swapped_crop, box)
     if callable(normalize):
         with contextlib.suppress(Exception):
-            swapped = bytes(normalize(swapped))
+            final = bytes(normalize(final))
 
     _log(
-        "AI_SELFIE_V234_TRANSFER status=success provider=%s source_photo=%s target_index=%s local_fallback=%s before_sha=%s after_sha=%s bytes=%s",
-        provider, source_photo_no, target_index, target_is_fallback, before_sha, hashlib.sha256(swapped).hexdigest()[:12], len(swapped),
+        "AI_SELFIE_V235_TRANSFER status=success provider=%s source_photo=%s isolated=true base_sha=%s final_sha=%s bytes=%s hero_region=untouched",
+        provider, source_photo_no, hashlib.sha256(stage1).hexdigest()[:12], hashlib.sha256(final).hexdigest()[:12], len(final),
     )
-    return swapped, provider
+    return final, provider
 
 
 async def generate(update: Any, context: Any, scene: str = "") -> bool:
@@ -251,30 +219,32 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
 
     source, source_photo_no, _ = _select_source_photo(runtime, photos)
     result = {"ok": False}
-    user_refs, hero_refs = v229._identity_refs(photos, slug)
+
+    # Critical V235 change: do NOT feed Gemini six user identity references. That was
+    # contaminating PERSON B. Gemini receives exactly one user source + three hero refs.
+    _, hero_refs = v229._identity_refs(photos, slug)
     has_scene_image = bool(scene_image and len(scene_image) > 1024)
     stage1_refs: list[tuple[str, bytes]] = []
     if has_scene_image:
-        stage1_refs.append(("AUTHORITATIVE SCENE BASE: preserve exact location and composition", bytes(scene_image)))
-    stage1_refs.append((f"AUTHORITATIVE FACE-TRANSFER SOURCE — USER PHOTO #{source_photo_no}: match head angle and expression", source))
-    stage1_refs.extend(user_refs)
+        stage1_refs.append(("AUTHORITATIVE SCENE BASE — location only; contains no identity authority", bytes(scene_image)))
+    stage1_refs.append((f"USER SOURCE PHOTO #{source_photo_no} — PERSON A ONLY: pose/expression/body; NEVER apply to PERSON B", source))
     stage1_refs.extend(hero_refs)
 
     async def action() -> bool:
         try:
-            await delivery._safe_text(message, f"⏳ Этап 1/2: создаю сцену и ставлю лицо пользователя в позу под прямой перенос. Источник лица — фото №{source_photo_no}.")
+            await delivery._safe_text(message, f"⏳ Этап 1/2: создаю сцену. Пользователь слева, герой справа; личности разделены. Источник лица — фото №{source_photo_no}.")
             stage1, model1 = await v229._call_google(
                 _stage1_prompt(str(meta['name']), scene_text, v215._shot_label(shot_mode), has_scene_image, source_photo_no),
                 stage1_refs,
-                "composition_for_real_faceswap",
+                "composition_identity_separated",
             )
-            await delivery._safe_text(message, "🧬 Этап 2/2: выполняю реальный FaceSwap — переношу лицо с исходного фото, а не генерирую его заново.")
+            await delivery._safe_text(message, "🧬 Этап 2/2: изолирую левую область пользователя и переношу туда реальное лицо. Область героя в FaceSwap не отправляется.")
             final, provider = await _true_face_transfer(runtime, stage1, source, source_photo_no)
 
             caption = (
                 f"🎭 AI-селфи с персонажем «{meta['name']}» готово ✅\n"
-                f"Сцена: Gemini {model1}. Лицо пользователя: реальный FaceSwap ({provider}), источник — фото №{source_photo_no}.\n"
-                "Поза и выражение лица в сцене предварительно согласованы с исходным фото. "
+                f"Сцена: Gemini {model1}. Лицо пользователя: изолированный реальный FaceSwap ({provider}), источник — фото №{source_photo_no}.\n"
+                "Личность героя защищена отдельными референсами и не передаётся в FaceSwap. "
                 "Изображение создано ИИ и не подтверждает реальную встречу или поддержку."
             )
             delivered = await delivery._deliver(message, final, caption, prefer_document=bool(getattr(runtime, "AI_SELFIE_SEND_AS_DOCUMENT", True)))
@@ -283,16 +253,21 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
                 await message.reply_text("✅ Что сделать дальше? Три фото пользователя, герой, тип кадра и сцена сохранены.", reply_markup=v215._continuation_keyboard(runtime, slug))
             return bool(delivered)
         except Exception as exc:
-            delivery._log_exception("V234 authoritative real face-transfer selfie failed", exc)
+            delivery._log_exception("V235 isolated real face-transfer selfie failed", exc)
             await delivery._safe_text(message, f"❌ Реальный перенос лица не выполнен; синтетическое лицо не отправляю. Причина: {type(exc).__name__}: {str(exc)[:700]}")
             return False
 
     kwargs = {
-        "remember_kind": "celebrity_selfie_v234_authoritative_faceswap",
+        "remember_kind": "celebrity_selfie_v235_isolated_faceswap",
         "remember_payload": {
-            "character": slug, "scene_provider": "google_gemini_direct",
-            "identity_provider": "segmind_v2_then_piapi", "stages": 2,
-            "source_photo": source_photo_no, "expression_pose_lock": True,
+            "character": slug,
+            "scene_provider": "google_gemini_direct",
+            "identity_provider": "segmind_then_piapi_isolated_person_a",
+            "stages": 2,
+            "source_photo": source_photo_no,
+            "hero_region_protected": True,
+            "gemini_user_refs": 1,
+            "hero_refs": 3,
         },
     }
     if delivery._runner_accepts_silent_failure(runner):
@@ -302,7 +277,7 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
 
 
 async def generation_callback(update: Any, context: Any) -> None:
-    """Hard owner for the three generation buttons; runs before every legacy callback."""
+    """Hard owner for the three generation buttons; blocks all legacy owners."""
     from telegram.ext import ApplicationHandlerStop
     from neyrobot_prod import celebrity_selfie as base
     from neyrobot_prod import selfie_v215_shot_scene_modes as v215
@@ -343,7 +318,7 @@ def bind_application(app: Any) -> bool:
     from telegram.ext import CallbackQueryHandler
     app.add_handler(CallbackQueryHandler(generation_callback, pattern=_GENERATION_PATTERN), group=-1000000)
     setattr(app, _HANDLER_FLAG, True)
-    _log("AI_SELFIE_V234_BIND status=ok group=-1000000")
+    _log("AI_SELFIE_V235_BIND status=ok group=-1000000")
     return True
 
 
@@ -366,7 +341,7 @@ def install() -> None:
         v219.public_callback.__globals__["generate"] = generate
     _bind_runtime_apps()
     if not getattr(install, "_logged", False):
-        _log("[neyrobot-prod] V234 authoritative real FaceSwap overlay installed version=%s", VERSION)
+        _log("[neyrobot-prod] V235 isolated PERSON-A FaceSwap installed version=%s", VERSION)
         setattr(install, "_logged", True)
 
 
