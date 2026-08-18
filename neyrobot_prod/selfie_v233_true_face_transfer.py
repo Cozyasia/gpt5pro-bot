@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""V235: stable Gemini scene + isolated real FaceSwap for PERSON A only.
+"""V236: stable Gemini scene + isolated real FaceSwap + native Full-HD/2K delivery.
 
 The key rule is separation of identities:
 - Gemini gets ONE user source photo only for pose/expression/body guidance.
@@ -7,6 +7,9 @@ The key rule is separation of identities:
 - FaceSwap runs on an isolated left-side crop containing PERSON A, not on the full
   two-person composition. This removes provider face-index ambiguity and guarantees
   that the hero/right side is never modified by the FaceSwap provider.
+- Final delivery never passes through the legacy output normalizer that downscaled
+  a successful 2K Gemini composition. Native scene resolution is preserved; output
+  is only enlarged when it is below Full-HD class dimensions.
 """
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ import hashlib
 import io
 from typing import Any
 
-VERSION = "v235-isolated-person-a-faceswap-hero-protect-2026-08-18"
+VERSION = "v236-native-fullhd-isolated-faceswap-2026-08-18"
 _HANDLER_FLAG = "_neyrobot_v234_real_faceswap_handler"
 _STARTED = False
 _GENERATION_PATTERN = r"^(?:cs201:preset:|cs201:generate_current$|cs201:reuse:repeat$)"
@@ -84,20 +87,26 @@ def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool
     )
 
 
+def _image_dims(image: bytes) -> tuple[int, int]:
+    from PIL import Image
+    with Image.open(io.BytesIO(image)) as im:
+        return int(im.width), int(im.height)
+
+
 def _left_person_crop(image: bytes) -> tuple[bytes, tuple[int, int, int, int]]:
     """Crop only PERSON A's reserved left-side region; hero is excluded by construction."""
     from PIL import Image
     im = Image.open(io.BytesIO(image)).convert("RGB")
     w, h = im.size
-    # V235 prompt reserves the left half for PERSON A. Keep a little margin but never
-    # reach the right-side hero. Vertical crop includes head/neck/upper torso.
     x0 = 0
     y0 = 0
     x1 = max(256, min(w, int(w * 0.52)))
     y1 = max(256, min(h, int(h * 0.78)))
     crop = im.crop((x0, y0, x1, y1))
     out = io.BytesIO()
-    crop.save(out, format="JPEG", quality=96, subsampling=0)
+    # 4:4:4 JPEG at very high quality: avoids introducing extra chroma blocks before
+    # the face-swap provider sees the user's target region.
+    crop.save(out, format="JPEG", quality=98, subsampling=0, optimize=True)
     return out.getvalue(), (x0, y0, x1, y1)
 
 
@@ -108,26 +117,55 @@ def _merge_left_crop(base: bytes, swapped_crop: bytes, box: tuple[int, int, int,
     crop_im = Image.open(io.BytesIO(swapped_crop)).convert("RGB")
     x0, y0, x1, y1 = box
     cw, ch = x1 - x0, y1 - y0
+    provider_size = crop_im.size
     if crop_im.size != (cw, ch):
         crop_im = crop_im.resize((cw, ch), Image.Resampling.LANCZOS)
+        # FaceSwap providers can return a lower-resolution crop. A conservative
+        # post-resize sharpen restores local edge definition without changing identity.
+        crop_im = crop_im.filter(ImageFilter.UnsharpMask(radius=1.1, percent=105, threshold=3))
 
-    # Rectangular feather mask: provider may alter pixels inside user crop, but nothing
-    # outside it. The soft edge prevents a visible seam at the crop boundary.
     mask = Image.new("L", (cw, ch), 255)
     feather = max(12, min(48, int(min(cw, ch) * 0.04)))
     mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
     base_im.paste(crop_im, (x0, y0), mask)
 
     out = io.BytesIO()
-    base_im.save(out, format="JPEG", quality=96, subsampling=0)
+    base_im.save(out, format="JPEG", quality=98, subsampling=0, optimize=True)
+    _log(
+        "AI_SELFIE_V236_MERGE provider_crop=%sx%s merged_crop=%sx%s base=%sx%s quality=98 subsampling=0",
+        provider_size[0], provider_size[1], cw, ch, base_im.width, base_im.height,
+    )
+    return out.getvalue()
+
+
+def _ensure_full_hd(image: bytes) -> bytes:
+    """Never downscale. Enlarge only if either axis is below Full-HD-class minimums."""
+    from PIL import Image, ImageFilter
+    im = Image.open(io.BytesIO(image)).convert("RGB")
+    w, h = im.size
+    short_side = min(w, h)
+    long_side = max(w, h)
+    # Full-HD class minimum: >=1080 on the short side and >=1920 on the long side.
+    # Preserve native aspect ratio; never crop and never shrink a Gemini 2K result.
+    scale = max(1.0, 1080.0 / max(1, short_side), 1920.0 / max(1, long_side))
+    if scale > 1.0001:
+        nw = max(1080, int(round(w * scale)))
+        nh = max(1080, int(round(h * scale)))
+        im = im.resize((nw, nh), Image.Resampling.LANCZOS)
+        im = im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=75, threshold=3))
+    out = io.BytesIO()
+    im.save(out, format="JPEG", quality=98, subsampling=0, optimize=True)
+    _log(
+        "AI_SELFIE_V236_FULLHD input=%sx%s output=%sx%s scale=%.3f downscale=false quality=98 subsampling=0",
+        w, h, im.width, im.height, scale,
+    )
     return out.getvalue()
 
 
 async def _true_face_transfer(runtime: Any, stage1: bytes, source: bytes, source_photo_no: int) -> tuple[bytes, str]:
-    """Swap a single isolated PERSON A crop, then merge it into untouched stage1."""
+    """Swap a single isolated PERSON A crop, merge it into untouched stage1, preserve 2K."""
     segmind = getattr(runtime, "_segmind_faceswap_v2", None)
     piapi = getattr(runtime, "_piapi_faceswap", None)
-    normalize = getattr(runtime, "_maybe_resize_output_image", None)
 
     target_crop, box = _left_person_crop(stage1)
     target_sha = hashlib.sha256(target_crop).hexdigest()[:12]
@@ -135,13 +173,14 @@ async def _true_face_transfer(runtime: Any, stage1: bytes, source: bytes, source
     swapped_crop: bytes | None = None
     provider = ""
 
+    stage1_dims = _image_dims(stage1)
+    target_dims = _image_dims(target_crop)
     _log(
-        "AI_SELFIE_V235_CROP box=%s,%s,%s,%s target_sha=%s bytes=%s mode=isolated_person_a",
+        "AI_SELFIE_V235_CROP box=%s,%s,%s,%s target_sha=%s bytes=%s dims=%sx%s base_dims=%sx%s mode=isolated_person_a",
         box[0], box[1], box[2], box[3], target_sha, len(target_crop),
+        target_dims[0], target_dims[1], stage1_dims[0], stage1_dims[1],
     )
 
-    # Single-face crop means target_index=0 is unambiguous. The hero is not present in
-    # this provider request at all, so FaceSwap cannot modify or acquire hero identity.
     if callable(segmind) and bool(getattr(runtime, "SEGMIND_API_KEY", "")):
         try:
             _log("AI_SELFIE_V235_TRANSFER provider=segmind_v2 isolated=true target_index=0 source_photo=%s", source_photo_no)
@@ -169,14 +208,23 @@ async def _true_face_transfer(runtime: Any, stage1: bytes, source: bytes, source
     if swapped_crop is None:
         raise RuntimeError("isolated real FaceSwap produced no usable transfer: " + (" | ".join(errors) if errors else "no provider configured"))
 
+    swapped_dims = _image_dims(swapped_crop)
+    _log(
+        "AI_SELFIE_V236_PROVIDER_OUTPUT provider=%s dims=%sx%s bytes=%s",
+        provider, swapped_dims[0], swapped_dims[1], len(swapped_crop),
+    )
+
+    # Critical V236 rule: do NOT call runtime._maybe_resize_output_image here. That
+    # legacy helper was reducing successful 2K compositions to ~1536 px on the long
+    # side. Merge at native Gemini resolution and only upscale if still below FHD.
     final = _merge_left_crop(stage1, swapped_crop, box)
-    if callable(normalize):
-        with contextlib.suppress(Exception):
-            final = bytes(normalize(final))
+    final = _ensure_full_hd(final)
+    final_dims = _image_dims(final)
 
     _log(
-        "AI_SELFIE_V235_TRANSFER status=success provider=%s source_photo=%s isolated=true base_sha=%s final_sha=%s bytes=%s hero_region=untouched",
+        "AI_SELFIE_V236_TRANSFER status=success provider=%s source_photo=%s isolated=true base_sha=%s final_sha=%s bytes=%s hero_region=untouched final_dims=%sx%s native_resolution_preserved=true",
         provider, source_photo_no, hashlib.sha256(stage1).hexdigest()[:12], hashlib.sha256(final).hexdigest()[:12], len(final),
+        final_dims[0], final_dims[1],
     )
     return final, provider
 
@@ -220,8 +268,6 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
     source, source_photo_no, _ = _select_source_photo(runtime, photos)
     result = {"ok": False}
 
-    # Critical V235 change: do NOT feed Gemini six user identity references. That was
-    # contaminating PERSON B. Gemini receives exactly one user source + three hero refs.
     _, hero_refs = v229._identity_refs(photos, slug)
     has_scene_image = bool(scene_image and len(scene_image) > 1024)
     stage1_refs: list[tuple[str, bytes]] = []
@@ -238,12 +284,14 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
                 stage1_refs,
                 "composition_identity_separated",
             )
-            await delivery._safe_text(message, "🧬 Этап 2/2: изолирую левую область пользователя и переношу туда реальное лицо. Область героя в FaceSwap не отправляется.")
+            await delivery._safe_text(message, "🧬 Этап 2/2: изолирую левую область пользователя, переношу реальное лицо и сохраняю исходное 2K/Full HD качество сцены.")
             final, provider = await _true_face_transfer(runtime, stage1, source, source_photo_no)
 
+            dims = _image_dims(final)
             caption = (
                 f"🎭 AI-селфи с персонажем «{meta['name']}» готово ✅\n"
                 f"Сцена: Gemini {model1}. Лицо пользователя: изолированный реальный FaceSwap ({provider}), источник — фото №{source_photo_no}.\n"
+                f"Качество: Full HD/2K, итоговое разрешение {dims[0]}×{dims[1]}. "
                 "Личность героя защищена отдельными референсами и не передаётся в FaceSwap. "
                 "Изображение создано ИИ и не подтверждает реальную встречу или поддержку."
             )
@@ -253,12 +301,12 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
                 await message.reply_text("✅ Что сделать дальше? Три фото пользователя, герой, тип кадра и сцена сохранены.", reply_markup=v215._continuation_keyboard(runtime, slug))
             return bool(delivered)
         except Exception as exc:
-            delivery._log_exception("V235 isolated real face-transfer selfie failed", exc)
+            delivery._log_exception("V236 native Full-HD isolated face-transfer selfie failed", exc)
             await delivery._safe_text(message, f"❌ Реальный перенос лица не выполнен; синтетическое лицо не отправляю. Причина: {type(exc).__name__}: {str(exc)[:700]}")
             return False
 
     kwargs = {
-        "remember_kind": "celebrity_selfie_v235_isolated_faceswap",
+        "remember_kind": "celebrity_selfie_v236_native_fullhd_faceswap",
         "remember_payload": {
             "character": slug,
             "scene_provider": "google_gemini_direct",
@@ -268,6 +316,8 @@ async def generate(update: Any, context: Any, scene: str = "") -> bool:
             "hero_region_protected": True,
             "gemini_user_refs": 1,
             "hero_refs": 3,
+            "native_resolution_preserved": True,
+            "fullhd_floor": True,
         },
     }
     if delivery._runner_accepts_silent_failure(runner):
@@ -318,7 +368,7 @@ def bind_application(app: Any) -> bool:
     from telegram.ext import CallbackQueryHandler
     app.add_handler(CallbackQueryHandler(generation_callback, pattern=_GENERATION_PATTERN), group=-1000000)
     setattr(app, _HANDLER_FLAG, True)
-    _log("AI_SELFIE_V235_BIND status=ok group=-1000000")
+    _log("AI_SELFIE_V236_BIND status=ok group=-1000000")
     return True
 
 
@@ -341,7 +391,7 @@ def install() -> None:
         v219.public_callback.__globals__["generate"] = generate
     _bind_runtime_apps()
     if not getattr(install, "_logged", False):
-        _log("[neyrobot-prod] V235 isolated PERSON-A FaceSwap installed version=%s", VERSION)
+        _log("[neyrobot-prod] V236 native Full-HD isolated PERSON-A FaceSwap installed version=%s", VERSION)
         setattr(install, "_logged", True)
 
 
