@@ -146,22 +146,34 @@ def enforce_runtime(bind_generate: bool = True) -> None:
     )
 
 
+def _install_v248_overlay() -> None:
+    """Load the provider-only V248 experiment after V247 is fully installed."""
+    try:
+        from neyrobot_prod.selfie_v248_faceswap_v4_quality import install as install_v248_quality
+        install_v248_quality()
+    except Exception as exc:
+        _log("AI_SELFIE_V248_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+
+
 def install() -> None:
     global _INSTALLED, _BASE_V246_ENFORCE
     if _INSTALLED:
         enforce_runtime(bind_generate=True)
+        _install_v248_overlay()
         return
 
     _, _, v246, _, _, _ = _modules()
     current = v246.enforce_runtime
     if current is enforce_runtime:
         _INSTALLED = True
+        _install_v248_overlay()
         return
     _BASE_V246_ENFORCE = current
     v246.enforce_runtime = enforce_runtime
     enforce_runtime(bind_generate=True)
     _INSTALLED = True
     print("[neyrobot-prod] V247 provider supersample quality overlay installed over frozen V246", flush=True)
+    _install_v248_overlay()
 
 
 __all__ = ["VERSION", "install", "enforce_runtime"]
