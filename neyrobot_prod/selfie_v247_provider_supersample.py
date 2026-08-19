@@ -57,8 +57,6 @@ def _provider_supersample_roi(image: bytes):
     iw, ih = im.size
     long_side = max(iw, ih)
 
-    # Stay below the provider's observed ~1600 px ceiling. Do not shrink already
-    # large ROIs; do not exceed 1.55x so geometry/context remain unchanged.
     target_long = 1440
     if long_side >= 1380:
         _log(
@@ -91,9 +89,6 @@ def _merge_supersampled_provider(base: bytes, swapped_crop: bytes, box):
         provider_w, provider_h = int(src.width), int(src.height)
     cw, ch = int(box[2] - box[0]), int(box[3] - box[1])
 
-    # V245 already performs Lanczos when provider dimensions differ and applies
-    # only a very mild target-only micro-contrast. This is preferable here to the
-    # V246 2x sharpen/downsample pass, which can accentuate JPEG block boundaries.
     merged = v245._merge_clean_face_roi(bytes(base), bytes(swapped_crop), box)
     _log(
         "AI_SELFIE_V247_MERGE provider=%sx%s native_roi=%sx%s supersample_downsample=%s v246_detail_bypassed=true source_pixels=false hero=pixel_locked",
@@ -116,9 +111,6 @@ def enforce_runtime(bind_generate: bool = True) -> None:
     transfer._merge_left_crop = _merge_supersampled_provider
     transfer._ensure_full_hd = v246._ensure_full_hd_lossless
 
-    # V246's guarded generate() resolves v246.enforce_runtime dynamically. Point
-    # that name at this wrapper so every generation reasserts V247 after all old
-    # V241/V245 enforcers have run.
     v246.enforce_runtime = enforce_runtime
     v241.enforce_runtime = lambda: enforce_runtime(bind_generate=True)
 
@@ -147,12 +139,14 @@ def enforce_runtime(bind_generate: bool = True) -> None:
 
 
 def _install_v248_overlay() -> None:
-    """Load the provider-only V248 experiment after V247 is fully installed."""
+    """Load V249 reporting/provider layer, then the final V250 identity owner."""
     try:
         from neyrobot_prod.selfie_v248_faceswap_v4_quality import install as install_v248_quality
         install_v248_quality()
+        from neyrobot_prod.selfie_v250_hyperswap_identity import install as install_v250_identity
+        install_v250_identity()
     except Exception as exc:
-        _log("AI_SELFIE_V248_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+        _log("AI_SELFIE_V250_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
 
 
 def install() -> None:
