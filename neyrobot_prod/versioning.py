@@ -7,14 +7,13 @@ package release and reports component versions separately.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 from typing import Any
 
 from . import VERSION
 
-# Run before every historical /version owner. A deliberately distant group
-# prevents old overlays from taking ownership again after future refactors.
 VERSION_HANDLER_GROUP = -100000
 _VERSION_BUILDER_HOOKED = False
 
@@ -28,16 +27,22 @@ def _runtime_module() -> Any | None:
 
 
 def _deploy_revision() -> str:
-    """Return Render's deployed Git revision without exposing environment data."""
     raw = (os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or "").strip()
     return raw[:7] if raw else "unknown"
 
 
 async def command(update: Any, context: Any) -> None:
-    """Return the package release plus the active production component versions."""
+    """Return package release plus active production component versions."""
     from telegram.ext import ApplicationHandlerStop
 
     try:
+        # /version is also a cheap integrity check: re-assert the authoritative
+        # selfie bindings before reporting them, so stale compatibility metadata
+        # cannot make a healthy V241 deployment look like V239/V236.
+        with contextlib.suppress(Exception):
+            from neyrobot_prod.selfie_v241_authoritative_runtime import enforce_runtime
+            enforce_runtime()
+
         message = getattr(update, "effective_message", None)
         if message is not None:
             runtime = _runtime_module()
@@ -61,7 +66,6 @@ async def command(update: Any, context: Any) -> None:
 
 
 def install_builder_hook() -> bool:
-    """Install exactly one highest-priority /version handler."""
     global _VERSION_BUILDER_HOOKED
     if _VERSION_BUILDER_HOOKED:
         return True
