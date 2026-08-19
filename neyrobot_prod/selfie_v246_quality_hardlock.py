@@ -9,11 +9,13 @@ NON-NEGOTIABLE invariants:
 - PERSON B / hero pixels are never passed to FaceSwap and remain untouched;
 - no second generative face model, no source-texture injection, no redraw.
 
-V246 changes only three boundaries:
+V246 changes only four boundaries:
 1) guaranteed acknowledgement/duplicate guard at the actual generate() boundary;
 2) suppress Telegram TimedOut from reaching the legacy generic «Упс…» error UI;
 3) preserve FaceSwap pixels losslessly through the final pipeline and apply a
-   deterministic target-only micro-detail pass to PERSON A's swapped face.
+   deterministic target-only micro-detail pass to PERSON A's swapped face;
+4) own the final ApplicationBuilder boundary so older V239/V245 builder hooks can
+   never be the last writer after the Telegram Application is constructed.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ from neyrobot_prod import selfie_v244_runtime_lock as v245
 VERSION = "v246-lossless-target-detail-ux-hardlock-2026-08-19"
 _INSTALLED = False
 _ERROR_PROCESS_HOOKED = False
+_BUILDER_HOOKED = False
 _BUSY_KEY = "_v246_selfie_generation_busy"
 
 
@@ -49,12 +52,7 @@ def _face_box(image: bytes):
 
 
 def _target_only_detail(swapped_crop: bytes) -> bytes:
-    """Sharpen only provider pixels; never mix source photo pixels into the result.
-
-    The face is enlarged temporarily with Lanczos, receives conservative multiscale
-    unsharp masking, and is reduced back to its exact original geometry. This is a
-    deterministic resampling/detail operation, not generation and not identity edit.
-    """
+    """Sharpen only provider pixels; never mix source photo pixels into the result."""
     from PIL import Image, ImageDraw, ImageFilter
 
     raw = bytes(swapped_crop or b"")
@@ -77,8 +75,6 @@ def _target_only_detail(swapped_crop: bytes) -> bytes:
         return raw
 
     patch = im.crop((x0, y0, x1, y1))
-    # Oversampled deterministic detail recovery. Geometry never changes because the
-    # patch is returned to the exact same pixel dimensions before compositing.
     up = patch.resize((pw * 2, ph * 2), Image.Resampling.LANCZOS)
     up = up.filter(ImageFilter.UnsharpMask(radius=1.15, percent=92, threshold=3))
     up = up.filter(ImageFilter.UnsharpMask(radius=0.42, percent=42, threshold=4))
@@ -111,13 +107,7 @@ def _merge_lossless(base: bytes, swapped_crop: bytes, box):
 
 
 def _ensure_full_hd_lossless(image: bytes) -> bytes:
-    """Never re-encode an already-FHD/2K result.
-
-    V236 historically JPEG-encoded even when scale=1.0. In the latest trace the
-    V245 merge was ~3.0 MB and then immediately JPEG-encoded again to ~1.9 MB.
-    That second lossy pass discards exactly the small facial edges we are trying to
-    preserve. V246 returns the bytes untouched whenever no enlargement is needed.
-    """
+    """Never re-encode an already-FHD/2K result."""
     from PIL import Image, ImageFilter
 
     raw = bytes(image or b"")
@@ -150,12 +140,7 @@ def _ensure_full_hd_lossless(image: bytes) -> bytes:
 
 
 async def _generate_guarded(update: Any, context: Any, scene: str = "") -> bool:
-    """Actual generation boundary: immediate feedback and duplicate protection.
-
-    This works even when the historical CallbackQueryHandler was created before
-    V245/V246, because that callback resolves its module-global generate symbol at
-    execution time and V246 owns that symbol.
-    """
+    """Actual generation boundary: immediate feedback and duplicate protection."""
     if bool(context.user_data.get(_BUSY_KEY)):
         query = getattr(update, "callback_query", None)
         if query is not None:
@@ -168,8 +153,6 @@ async def _generate_guarded(update: Any, context: Any, scene: str = "") -> bool:
         _log("AI_SELFIE_V246_DUPLICATE blocked=true")
         return False
 
-    # If V245's priority owner is active it has already sent the acknowledgement.
-    # Otherwise V246 sends it here before payment/provider work begins.
     called_from_v245_owner = bool(context.user_data.get("_v245_selfie_generation_busy"))
     context.user_data[_BUSY_KEY] = True
     try:
@@ -184,9 +167,6 @@ async def _generate_guarded(update: Any, context: Any, scene: str = "") -> bool:
         else:
             _log("AI_SELFIE_V246_IMMEDIATE_ACK sent=false reason=v245_owner_already_acknowledged")
 
-        # Reassert and KEEP V246 as the global generate owner before the base action.
-        # Using bind_generate=False here would let V245/V241 silently put the old
-        # generate symbol back for the next callback.
         enforce_runtime(bind_generate=True)
         if not callable(v241._BASE_GENERATE):
             raise RuntimeError("V246 base selfie generator is unavailable")
@@ -243,7 +223,6 @@ def enforce_runtime(bind_generate: bool = True) -> None:
         with contextlib.suppress(Exception):
             ui.public_callback.__globals__["generate"] = _generate_guarded
 
-    # Any late V241/V242 guard must return through V246, not overwrite these fixes.
     v241.enforce_runtime = lambda: enforce_runtime(bind_generate=True)
 
     transfer.VERSION = VERSION
@@ -272,10 +251,43 @@ def enforce_runtime(bind_generate: bool = True) -> None:
     )
 
 
+def _install_final_builder_hook() -> None:
+    """Make V246 the last writer after every older ApplicationBuilder wrapper."""
+    global _BUILDER_HOOKED
+    if _BUILDER_HOOKED:
+        return
+    from telegram.ext import ApplicationBuilder
+
+    flag = "_neyrobot_v246_final_builder_lock"
+    if getattr(ApplicationBuilder, flag, False):
+        _BUILDER_HOOKED = True
+        return
+
+    previous_build = ApplicationBuilder.build
+
+    def build(self: Any, *args: Any, **kwargs: Any):
+        app = previous_build(self, *args, **kwargs)
+        enforce_runtime(bind_generate=True)
+        with contextlib.suppress(Exception):
+            v245._bind_priority_generation_owner(app)
+        with contextlib.suppress(Exception):
+            from neyrobot_prod import selfie_v233_true_face_transfer as transfer
+            transfer.bind_application(app)
+        enforce_runtime(bind_generate=True)
+        setattr(app, "_neyrobot_v246_final_owner", True)
+        _log("AI_SELFIE_V246_BIND status=ok final_builder=true priority_owner=true")
+        return app
+
+    ApplicationBuilder.build = build
+    setattr(ApplicationBuilder, flag, True)
+    _BUILDER_HOOKED = True
+
+
 def install() -> None:
     global _INSTALLED
     _install_process_error_filter()
     v245.install()
+    _install_final_builder_hook()
     enforce_runtime(bind_generate=True)
     if not _INSTALLED:
         _INSTALLED = True
