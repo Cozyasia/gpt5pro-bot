@@ -36,12 +36,16 @@ async def command(update: Any, context: Any) -> None:
     from telegram.ext import ApplicationHandlerStop
 
     try:
-        # /version is also a cheap integrity check: re-assert the authoritative
-        # selfie bindings before reporting them, so stale compatibility metadata
-        # cannot make a healthy V241 deployment look like V239/V236.
+        # /version is also a cheap integrity check. It must initialize V241 first,
+        # not call enforce_runtime() directly: enforce_runtime() replaces
+        # transfer.generate, while install() first captures the real V236/V233
+        # base generator into V241's _BASE_GENERATE and only then asserts the
+        # authoritative bindings. Calling enforce_runtime() on an uninitialized
+        # V241 module can otherwise leave _BASE_GENERATE=None and break the next
+        # selfie generation with "V241 base selfie generator is unavailable".
         with contextlib.suppress(Exception):
-            from neyrobot_prod.selfie_v241_authoritative_runtime import enforce_runtime
-            enforce_runtime()
+            from neyrobot_prod.selfie_v241_authoritative_runtime import install
+            install()
 
         message = getattr(update, "effective_message", None)
         if message is not None:
