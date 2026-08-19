@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """Compatibility entrypoint retained for sitecustomize.
 
-V240/V241/V242 are superseded by V243. Importing/installing this module now
-installs the authoritative V243 quality overlay, which preserves the proven
-V242 source-expression route and adds source-guided PERSON-A facial detail
-restoration without introducing another generation owner.
+Historical V240/V241/V242/V243 entrypoints are superseded by V244. Importing
+this module now installs the final V244 runtime lock, which preserves V243's
+real FaceSwap/detail route and prevents older builder wrappers from taking
+ownership again after startup.
 """
 from __future__ import annotations
 
-from neyrobot_prod.selfie_v243_face_detail_restore import VERSION, enforce_runtime, install
+from neyrobot_prod.selfie_v244_runtime_lock import VERSION, enforce_runtime, install
 
 __all__ = ["VERSION", "install", "enforce_runtime"]
