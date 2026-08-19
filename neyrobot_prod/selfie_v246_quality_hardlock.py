@@ -293,5 +293,15 @@ def install() -> None:
         _INSTALLED = True
         print("[neyrobot-prod] V246 lossless target-detail UX hard lock installed over V245", flush=True)
 
+    # V247 is a quality-only overlay loaded from the proven V246 owner itself.
+    # Keeping the chain here means sitecustomize does not need another callback or
+    # builder owner: all V246 UX/runtime locks remain authoritative and V247 only
+    # replaces the isolated FaceSwap pixel path.
+    try:
+        from neyrobot_prod.selfie_v247_provider_supersample import install as install_v247_quality
+        install_v247_quality()
+    except Exception as exc:
+        _log("AI_SELFIE_V247_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+
 
 __all__ = ["VERSION", "install", "enforce_runtime"]
