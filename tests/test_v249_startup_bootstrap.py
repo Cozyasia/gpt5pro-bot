@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import types
 import unittest
 
 
@@ -32,6 +33,43 @@ class V249StartupBootstrapTests(unittest.TestCase):
             "_generation_owner",
             names,
             "The V245/V246 priority owner is missing, so legacy V236 callbacks could win again",
+        )
+
+
+class V249ProviderReportingTests(unittest.IsolatedAsyncioTestCase):
+    async def _run_case(self, marker: str, expected: str) -> None:
+        from neyrobot_prod import selfie_v248_faceswap_v4_quality as v249
+
+        old_base = v249._BASE_TRUE_FACE_TRANSFER
+        old_log = v249._log
+        runtime = types.SimpleNamespace(AI_SELFIE_LAST_FACESWAP_PROVIDER="")
+
+        async def fake_base(rt, stage1, source, source_photo_no):
+            rt.AI_SELFIE_LAST_FACESWAP_PROVIDER = marker
+            return b"final-image", "segmind_faceswap_v2_isolated"
+
+        try:
+            v249._BASE_TRUE_FACE_TRANSFER = fake_base
+            v249._log = lambda *args, **kwargs: None
+            final, provider = await v249._true_face_transfer_with_actual_provider(
+                runtime, b"stage1", b"source", 3
+            )
+            self.assertEqual(final, b"final-image")
+            self.assertEqual(provider, expected)
+        finally:
+            v249._BASE_TRUE_FACE_TRANSFER = old_base
+            v249._log = old_log
+
+    async def test_v4_success_is_not_mislabeled_as_v2(self) -> None:
+        await self._run_case(
+            "segmind_faceswap_v4_quality_face",
+            "segmind_faceswap_v4_quality_face_isolated",
+        )
+
+    async def test_v2_fallback_is_reported_as_fallback(self) -> None:
+        await self._run_case(
+            "segmind_faceswap_v2_fallback",
+            "segmind_faceswap_v2_fallback_isolated",
         )
 
 
