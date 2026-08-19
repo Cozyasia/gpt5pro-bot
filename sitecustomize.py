@@ -321,3 +321,16 @@ try:
     install_v240_quality()
 except Exception as exc:
     print(f"[neyrobot-prod] V240 quality overlay warning: {type(exc).__name__}: {exc}", flush=True)
+
+# FINAL production owner. This must be installed from sitecustomize, before main.py
+# constructs the Telegram Application. Previously V246 was installed lazily only
+# when /version was called, so the already-registered V236 callback could execute
+# the old V229/V235/V236 route while /version still reported V246. Installing here
+# makes V246's builder wrapper the outermost/last writer, binds the priority owner,
+# and reasserts the exact V242 -> V245 -> V246 path after all legacy builder hooks.
+try:
+    from neyrobot_prod.selfie_v246_quality_hardlock import install as install_v246_final_owner
+    install_v246_final_owner()
+    print("[neyrobot-prod] V246 final selfie owner armed before Application build", flush=True)
+except Exception as exc:
+    print(f"[neyrobot-prod] V246 final selfie owner warning: {type(exc).__name__}: {exc}", flush=True)
