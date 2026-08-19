@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v250-hyperswap-identity-lock-2026-08-19"
+VERSION = "v251-v2-identity-source-detail-lock-2026-08-20"
 
 __all__ = ["VERSION"]
