@@ -36,12 +36,10 @@ async def command(update: Any, context: Any) -> None:
     from telegram.ext import ApplicationHandlerStop
 
     try:
-        # /version is also an integrity reassertion. The active V245 implementation
-        # currently lives in selfie_v244_runtime_lock for bootstrap compatibility.
-        # Reassert CURRENT behavior; never roll the selfie route backwards merely
-        # because the operator asked for /version.
+        # /version is also an integrity reassertion. Always reinstall the current
+        # V246 owner; checking the version must never roll image behavior backwards.
         with contextlib.suppress(Exception):
-            from neyrobot_prod.selfie_v244_runtime_lock import install
+            from neyrobot_prod.selfie_v246_quality_hardlock import install
             install()
 
         message = getattr(update, "effective_message", None)
