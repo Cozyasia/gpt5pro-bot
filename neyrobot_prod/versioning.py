@@ -36,13 +36,11 @@ async def command(update: Any, context: Any) -> None:
     from telegram.ext import ApplicationHandlerStop
 
     try:
-        # /version is also a cheap runtime-integrity check. Initialize V242,
-        # which in turn initializes the authoritative V241 plumbing first and
-        # then reasserts the stronger source-expression lock. Calling the old
-        # V241 enforcer directly could silently restore its weaker Stage-1
-        # expression prompt.
+        # /version doubles as a runtime-integrity check. Initialize V243, which
+        # preserves V242's proven expression/FaceSwap route and reasserts the
+        # source-guided PERSON-A detail restoration at the last runtime boundary.
         with contextlib.suppress(Exception):
-            from neyrobot_prod.selfie_v242_expression_lock import install
+            from neyrobot_prod.selfie_v243_face_detail_restore import install
             install()
 
         message = getattr(update, "effective_message", None)
