@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v232-selfie-hard-source-google-two-stage-2026-07-29"
+VERSION = "v239-single-owner-front-camera-source-expression-2026-08-19"
 
 __all__ = ["VERSION"]
