@@ -18,8 +18,6 @@ Identity/expression authority is unchanged: source photo #3 remains authoritativ
 from __future__ import annotations
 
 import asyncio
-import base64
-import contextlib
 import io
 import os
 import time
@@ -29,6 +27,7 @@ VERSION = "v240-pro-fast-fail-face-roi-2026-08-19"
 
 _PRO_CIRCUIT_OPEN_UNTIL = 0.0
 _PRO_FAILURES = 0
+_ORIGINAL_LEFT_PERSON_CROP = None
 
 
 def _log(message: str, *args: Any) -> None:
@@ -48,6 +47,78 @@ def _model_order() -> list[str]:
     return models
 
 
+def _verified_expression_crop(raw: bytes) -> bytes:
+    """V239-compatible face/expression-only crop. Never pass phone/hand/body to Gemini."""
+    from PIL import Image
+    from neyrobot_prod import selfie_v233_true_face_transfer as transfer
+
+    data = bytes(raw or b"")
+    if len(data) < 1024:
+        raise RuntimeError("photo #3 is too small for reliable expression reference")
+
+    im = Image.open(io.BytesIO(data)).convert("RGB")
+    w, h = im.size
+    runtime = transfer._runtime()
+    faces = transfer._detect(runtime, data) if runtime is not None else []
+    if len(faces) != 1:
+        raise RuntimeError(f"photo #3 must contain exactly one clearly detectable face; detected {len(faces)}")
+
+    f = faces[0]
+    x = int(f.get("x", 0)); y = int(f.get("y", 0))
+    fw = int(f.get("w", 0)); fh = int(f.get("h", 0))
+    if fw < 40 or fh < 40:
+        raise RuntimeError("detected face in photo #3 is too small")
+
+    cx = x + fw / 2.0
+    cy = y + fh / 2.0
+    crop_w = fw * 1.42
+    crop_h = fh * 1.55
+    x0 = max(0, int(cx - crop_w / 2.0))
+    x1 = min(w, int(cx + crop_w / 2.0))
+    y0 = max(0, int(cy - crop_h * 0.54))
+    y1 = min(h, int(cy + crop_h * 0.46))
+    if x1 - x0 < 80 or y1 - y0 < 80:
+        raise RuntimeError("verified face crop is too small")
+
+    crop = im.crop((x0, y0, x1, y1))
+    if max(crop.size) > 1200:
+        crop.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+    out = io.BytesIO()
+    crop.save(out, format="JPEG", quality=98, subsampling=0, optimize=True)
+    encoded = out.getvalue()
+    if len(encoded) < 1024:
+        raise RuntimeError("verified face crop encoding failed")
+
+    _log(
+        "AI_SELFIE_V240_EXPRESSION_REF status=verified crop=%s,%s,%s,%s dims=%sx%s bytes=%s phone_hand_body_removed=true",
+        x0, y0, x1, y1, crop.width, crop.height, len(encoded),
+    )
+    return encoded
+
+
+def _prepare_stage_refs(labeled_images: list[tuple[str, bytes]], stage: str) -> list[tuple[str, bytes]]:
+    refs = list(labeled_images or [])
+    if str(stage) != "composition_identity_separated":
+        return refs
+
+    patched: list[tuple[str, bytes]] = []
+    user_refs = 0
+    for label, raw in refs:
+        label_s = str(label or "")
+        if label_s.startswith("USER SOURCE PHOTO"):
+            user_refs += 1
+            patched.append((
+                "USER VERIFIED FACE/EXPRESSION CROP #3 — PERSON A ONLY. Use facial expression only; do not infer phone, hands, pose, clothing or background.",
+                _verified_expression_crop(bytes(raw)),
+            ))
+        else:
+            patched.append((label, bytes(raw)))
+    if user_refs != 1:
+        raise RuntimeError(f"expected exactly one user expression reference, got {user_refs}")
+    _log("AI_SELFIE_V240_STAGE1_REFS user_ref=verified_face_expression_only full_source_reserved_for_faceswap=true")
+    return patched
+
+
 async def _call_google_resilient(prompt: str, labeled_images: list[tuple[str, bytes]], stage: str) -> tuple[bytes, str]:
     """Bounded Gemini routing with 503 fast-fail and a short Pro circuit breaker."""
     global _PRO_CIRCUIT_OPEN_UNTIL, _PRO_FAILURES
@@ -61,8 +132,8 @@ async def _call_google_resilient(prompt: str, labeled_images: list[tuple[str, by
     if not key:
         raise RuntimeError("GEMINI_IMAGE_API_KEY is missing")
 
-    prepared = [(label, *v229._prepare(raw)) for label, raw in labeled_images]
-    # We want a bounded user wait, not a 5-10 minute provider stall.
+    safe_refs = _prepare_stage_refs(labeled_images, stage)
+    prepared = [(label, *v229._prepare(raw)) for label, raw in safe_refs]
     request_timeout_s = max(75.0, min(150.0, float(os.environ.get("GEMINI_SELFIE_REQUEST_TIMEOUT_S", "120") or 120)))
     timeout = httpx.Timeout(request_timeout_s, connect=30.0, read=request_timeout_s, write=90.0, pool=30.0)
     headers = {"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"}
@@ -79,7 +150,7 @@ async def _call_google_resilient(prompt: str, labeled_images: list[tuple[str, by
 
     _log(
         "AI_SELFIE_V240_STAGE_START stage=%s models=%s refs=%s timeout=%.0fs",
-        stage, ",".join(models), len(labeled_images), request_timeout_s,
+        stage, ",".join(models), len(safe_refs), request_timeout_s,
     )
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
@@ -88,7 +159,6 @@ async def _call_google_resilient(prompt: str, labeled_images: list[tuple[str, by
             if is_pro and _PRO_CIRCUIT_OPEN_UNTIL > time.monotonic():
                 continue
 
-            # Pro: original try + one retry only. Flash: one request; no long loop.
             max_attempts = 2 if is_pro else 1
             for attempt in range(1, max_attempts + 1):
                 parts: list[dict[str, Any]] = [{"text": prompt}]
@@ -124,10 +194,8 @@ async def _call_google_resilient(prompt: str, labeled_images: list[tuple[str, by
                             if attempt < max_attempts:
                                 await asyncio.sleep(1.5 * attempt)
                                 continue
-                            # Two transient Pro failures: skip Pro for five minutes.
                             _PRO_CIRCUIT_OPEN_UNTIL = time.monotonic() + 300.0
                             _log("AI_SELFIE_V240_CIRCUIT state=opened duration=300s failures=%s", _PRO_FAILURES)
-                        # Do not issue a second 'compatibility' request after 5xx.
                         break
 
                     output = extractor._extract_final_image(response.json())
@@ -143,7 +211,7 @@ async def _call_google_resilient(prompt: str, labeled_images: list[tuple[str, by
                             runtime.AI_SELFIE_LAST_STAGE = stage
                         _log(
                             "AI_SELFIE_V240_STAGE_SUCCESS stage=%s model=%s attempt=%s refs=%s bytes=%s elapsed=%.2fs",
-                            stage, model, attempt, len(labeled_images), len(output), elapsed,
+                            stage, model, attempt, len(safe_refs), len(output), elapsed,
                         )
                         return output, model
 
@@ -182,8 +250,6 @@ def _face_roi_crop(image: bytes) -> tuple[bytes, tuple[int, int, int, int]]:
     runtime = transfer._runtime()
     faces = transfer._detect(runtime, bytes(image)) if runtime is not None else []
 
-    # PERSON A is contractually on the left. Choose the largest face whose center
-    # is in the left 55% and never include the right-side hero in the provider crop.
     candidates = []
     for f in faces:
         try:
@@ -196,16 +262,13 @@ def _face_roi_crop(image: bytes) -> tuple[bytes, tuple[int, int, int, int]]:
             continue
 
     if not candidates:
-        # Fail-safe keeps the proven V236 geometry rather than guessing a face.
+        _log("AI_SELFIE_V240_FACE_ROI status=fallback reason=no_left_face")
         return _ORIGINAL_LEFT_PERSON_CROP(bytes(image))
 
     _, x, y, fw, fh = max(candidates, key=lambda t: t[0])
     cx = x + fw / 2.0
     cy = y + fh / 2.0
 
-    # Head + hair + neck/upper shoulders. Compact enough to give the provider far
-    # more source pixels per facial feature, with enough surrounding context for a
-    # seamless feathered merge.
     roi_w = max(360.0, fw * 2.45)
     roi_h = max(440.0, fh * 2.85)
     x0 = max(0, int(cx - roi_w * 0.50))
@@ -213,8 +276,8 @@ def _face_roi_crop(image: bytes) -> tuple[bytes, tuple[int, int, int, int]]:
     y0 = max(0, int(cy - roi_h * 0.43))
     y1 = min(h, int(cy + roi_h * 0.57))
 
-    # Keep provider input useful even when the face is near an edge.
     if x1 - x0 < 300 or y1 - y0 < 360:
+        _log("AI_SELFIE_V240_FACE_ROI status=fallback reason=roi_too_small")
         return _ORIGINAL_LEFT_PERSON_CROP(bytes(image))
 
     crop = im.crop((x0, y0, x1, y1))
@@ -229,7 +292,7 @@ def _face_roi_crop(image: bytes) -> tuple[bytes, tuple[int, int, int, int]]:
 
 
 def _merge_face_roi(base: bytes, swapped_crop: bytes, box: tuple[int, int, int, int]) -> bytes:
-    """Merge a compact swapped ROI with an actual feathered edge, preserving native 2K."""
+    """Merge compact swapped ROI with a real feathered edge, preserving native 2K."""
     from PIL import Image, ImageDraw, ImageFilter
 
     base_im = Image.open(io.BytesIO(bytes(base))).convert("RGB")
@@ -240,7 +303,6 @@ def _merge_face_roi(base: bytes, swapped_crop: bytes, box: tuple[int, int, int, 
 
     if crop_im.size != (cw, ch):
         crop_im = crop_im.resize((cw, ch), Image.Resampling.LANCZOS)
-        # Mild detail recovery only; avoid strong sharpening that changes lips/eyes.
         crop_im = crop_im.filter(ImageFilter.UnsharpMask(radius=0.65, percent=55, threshold=4))
 
     feather = max(12, min(34, int(min(cw, ch) * 0.035)))
@@ -286,6 +348,3 @@ def install() -> None:
 
     setattr(transfer, "_neyrobot_v240_quality_installed", True)
     print("[neyrobot-prod] V240 quality/resilience overlay installed", flush=True)
-
-
-_ORIGINAL_LEFT_PERSON_CROP = None
