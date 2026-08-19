@@ -12,8 +12,11 @@ Guarantees at the last runtime boundary:
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import io
+import os
+import time
 from typing import Any
 
 VERSION = "v241-authoritative-selfie-runtime-2026-08-19"
@@ -21,6 +24,8 @@ VERSION = "v241-authoritative-selfie-runtime-2026-08-19"
 _BASE_GENERATE = None
 _BASE_DETECT = None
 _INSTALLED = False
+_PRO_CIRCUIT_OPEN_UNTIL = 0.0
+_PRO_FAILURES = 0
 
 
 def _log(message: str, *args: Any) -> None:
@@ -34,7 +39,6 @@ def _runtime() -> Any | None:
 
 
 def _detect(runtime: Any, image: bytes) -> list[dict[str, Any]]:
-    """Deterministic face detection with OpenCV fallback."""
     data = bytes(image or b"")
     global _BASE_DETECT
     if callable(_BASE_DETECT):
@@ -87,7 +91,6 @@ def _select_source_photo(runtime: Any, photos: list[bytes]):
 
 def _expression_crop(raw: bytes) -> bytes:
     from PIL import Image
-    from neyrobot_prod import selfie_v233_true_face_transfer as transfer
 
     data = bytes(raw or b"")
     if len(data) < 1024:
@@ -129,10 +132,115 @@ def _expression_crop(raw: bytes) -> bytes:
     return encoded
 
 
-async def _call_google(prompt: str, refs: list[tuple[str, bytes]], stage: str):
-    """Compose V239 expression firewall with the bounded V240 Pro->Flash router."""
-    from neyrobot_prod import selfie_v240_quality_resilience as compat
+def _model_order() -> list[str]:
+    raw = (os.environ.get("GEMINI_SELFIE_MODELS") or "gemini-3-pro-image,gemini-3.1-flash-image").strip()
+    models = [x.strip() for x in raw.split(",") if x.strip()]
+    return models or ["gemini-3-pro-image", "gemini-3.1-flash-image"]
 
+
+def _is_transient_status(status: int) -> bool:
+    return status in {408, 429, 500, 502, 503, 504}
+
+
+async def _google_request(prompt: str, labeled_images: list[tuple[str, bytes]], stage: str):
+    """Bounded Pro retry with immediate Flash fallback on temporary provider failures."""
+    global _PRO_CIRCUIT_OPEN_UNTIL, _PRO_FAILURES
+
+    import httpx
+    from neyrobot_prod import celebrity_selfie as base
+    from neyrobot_prod import celebrity_selfie_v204 as extractor
+    from neyrobot_prod import selfie_v229_canonical_two_stage as google
+
+    key = google._key()
+    if not key:
+        raise RuntimeError("GEMINI_IMAGE_API_KEY is missing")
+
+    prepared = [(label, *google._prepare(raw)) for label, raw in labeled_images]
+    timeout_s = max(75.0, min(150.0, float(os.environ.get("GEMINI_SELFIE_REQUEST_TIMEOUT_S", "120") or 120)))
+    timeout = httpx.Timeout(timeout_s, connect=30.0, read=timeout_s, write=90.0, pool=30.0)
+    headers = {"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"}
+    errors: list[str] = []
+
+    models = _model_order()
+    if _PRO_CIRCUIT_OPEN_UNTIL > time.monotonic():
+        models = [m for m in models if "pro" not in m.lower()] + [m for m in models if "pro" in m.lower()]
+        _log("AI_SELFIE_V241_CIRCUIT state=open route=%s", ",".join(models))
+
+    _log("AI_SELFIE_V241_STAGE_START stage=%s models=%s refs=%s timeout=%.0fs", stage, ",".join(models), len(labeled_images), timeout_s)
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
+        for model in models:
+            is_pro = "pro" in model.lower()
+            if is_pro and _PRO_CIRCUIT_OPEN_UNTIL > time.monotonic():
+                continue
+            max_attempts = 2 if is_pro else 1
+            for attempt in range(1, max_attempts + 1):
+                parts: list[dict[str, Any]] = [{"text": prompt}]
+                for label, data, mime in prepared:
+                    parts.append({"text": label})
+                    parts.append(google._inline(data, mime))
+                config = {
+                    "responseModalities": ["TEXT", "IMAGE"],
+                    "imageConfig": {
+                        "aspectRatio": base._aspect_ratio(),
+                        "imageSize": os.environ.get("GEMINI_SELFIE_IMAGE_SIZE", "2K"),
+                    },
+                }
+                payload = {"contents": [{"role": "user", "parts": parts}], "generationConfig": config}
+                started = time.monotonic()
+                try:
+                    response = await client.post(
+                        f"{google._base_url()}/models/{model}:generateContent",
+                        headers=headers,
+                        json=payload,
+                    )
+                    elapsed = time.monotonic() - started
+                    status = int(response.status_code)
+                    _log("AI_SELFIE_V241_PROVIDER stage=%s model=%s attempt=%s status=%s elapsed=%.2fs", stage, model, attempt, status, elapsed)
+                    if status >= 400:
+                        errors.append(f"{stage}/{model}/attempt{attempt}: HTTP {status}: {response.text[:350]}")
+                        if is_pro and _is_transient_status(status):
+                            _PRO_FAILURES += 1
+                            if attempt < max_attempts:
+                                await asyncio.sleep(1.5 * attempt)
+                                continue
+                            _PRO_CIRCUIT_OPEN_UNTIL = time.monotonic() + 300.0
+                        break
+
+                    output = extractor._extract_final_image(response.json())
+                    if output and len(output) > 1024:
+                        if is_pro:
+                            _PRO_FAILURES = 0
+                            _PRO_CIRCUIT_OPEN_UNTIL = 0.0
+                        runtime = _runtime()
+                        if runtime is not None:
+                            runtime.AI_SELFIE_LAST_PROVIDER = "google_gemini_direct_v241"
+                            runtime.AI_SELFIE_LAST_MODEL = model
+                            runtime.AI_SELFIE_LAST_IMAGE_SIZE = os.environ.get("GEMINI_SELFIE_IMAGE_SIZE", "2K")
+                            runtime.AI_SELFIE_LAST_STAGE = stage
+                        _log("AI_SELFIE_V241_STAGE_SUCCESS stage=%s model=%s attempt=%s refs=%s bytes=%s elapsed=%.2fs", stage, model, attempt, len(labeled_images), len(output), elapsed)
+                        return output, model
+                    errors.append(f"{stage}/{model}/attempt{attempt}: response contained no final image")
+                    break
+                except (httpx.TimeoutException, httpx.TransportError) as exc:
+                    elapsed = time.monotonic() - started
+                    errors.append(f"{stage}/{model}/attempt{attempt}: {type(exc).__name__}: {exc}")
+                    _log("AI_SELFIE_V241_PROVIDER stage=%s model=%s attempt=%s status=transport_error elapsed=%.2fs", stage, model, attempt, elapsed)
+                    if is_pro:
+                        _PRO_FAILURES += 1
+                        if attempt < max_attempts:
+                            await asyncio.sleep(1.5 * attempt)
+                            continue
+                        _PRO_CIRCUIT_OPEN_UNTIL = time.monotonic() + 300.0
+                    break
+                except Exception as exc:
+                    errors.append(f"{stage}/{model}/attempt{attempt}: {type(exc).__name__}: {exc}")
+                    break
+
+    raise RuntimeError("Google Gemini V241 route failed: " + " | ".join(errors[-6:]))
+
+
+async def _call_google(prompt: str, refs: list[tuple[str, bytes]], stage: str):
     patched = list(refs or [])
     if str(stage) == "composition_identity_separated":
         out: list[tuple[str, bytes]] = []
@@ -152,9 +260,7 @@ async def _call_google(prompt: str, refs: list[tuple[str, bytes]], stage: str):
             raise RuntimeError(f"expected exactly one user source reference, got {count}")
         patched = out
         _log("AI_SELFIE_V241_STAGE1_REFS user_ref=face_expression_only full_photo3_reserved_for_faceswap=true")
-
-    # The compatibility module exposes the resilient request implementation.
-    return await compat._call_google_resilient(prompt, patched, stage)
+    return await _google_request(prompt, patched, stage)
 
 
 def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool, source_photo_no: int) -> str:
@@ -166,16 +272,13 @@ def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool
     if is_selfie:
         shot_rule = (
             "TRUE FRONT-CAMERA SELFIE RESULT, NOT A THIRD-PERSON PHOTO OF SOMEONE TAKING A SELFIE. "
-            "The viewer is the phone's front camera. The capturing phone is behind the image plane and MUST NOT be visible. "
+            "The viewer IS the phone front camera. The capturing device is behind the image plane and must be absent from the picture. "
             "ABSOLUTELY NO phone, smartphone, phone edge, phone case, screen, rear cameras, selfie stick, camera device, mirror-phone reflection, camera UI, foreground hand, foreground arm, or hand holding a device. "
-            "Do not depict the act of taking a selfie. Show only the resulting front-camera photograph. "
-            "Frame exactly two people close to the lens at natural arm-length wide-angle perspective, heads/shoulders/upper torsos. "
-            "PERSON A hands and forearms are outside the frame. Both people look toward the lens. "
+            "Do not illustrate the act of taking a selfie. Show only the resulting front-camera photograph. "
+            "Exactly two people close to the lens at natural arm-length wide-angle perspective, heads/shoulders/upper torsos. PERSON A hands and forearms stay outside the frame. Both look toward the lens. "
         )
     else:
-        shot_rule = (
-            "THIRD-PERSON JOINT PHOTO taken by another person. No visible phone, selfie stick, foreground device, camera UI or mirror-phone reflection. "
-        )
+        shot_rule = "THIRD-PERSON JOINT PHOTO taken by another person. No visible phone, selfie stick, foreground device, camera UI or mirror-phone reflection. "
 
     return (
         "Create ONE photorealistic vertical photograph with EXACTLY TWO principal people and no other visible faces. "
@@ -190,6 +293,75 @@ def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool
     )
 
 
+def _face_roi_crop(image: bytes):
+    """Compact PERSON-A head/shoulder crop to maximize provider pixels per face."""
+    from PIL import Image
+    from neyrobot_prod import selfie_v233_true_face_transfer as transfer
+
+    im = Image.open(io.BytesIO(bytes(image))).convert("RGB")
+    w, h = im.size
+    runtime = _runtime()
+    faces = _detect(runtime, bytes(image)) if runtime is not None else []
+    candidates = []
+    for f in faces:
+        try:
+            x = int(f.get("x", 0)); y = int(f.get("y", 0))
+            fw = int(f.get("w", 0)); fh = int(f.get("h", 0))
+            cx = x + fw / 2.0
+            if fw >= 48 and fh >= 48 and cx < w * 0.55:
+                candidates.append((fw * fh, x, y, fw, fh))
+        except Exception:
+            continue
+
+    if not candidates:
+        raise RuntimeError("V241 could not locate PERSON A face for compact FaceSwap ROI")
+
+    _, x, y, fw, fh = max(candidates, key=lambda t: t[0])
+    cx = x + fw / 2.0
+    cy = y + fh / 2.0
+    roi_w = max(360.0, fw * 2.35)
+    roi_h = max(440.0, fh * 2.70)
+    x0 = max(0, int(cx - roi_w * 0.50))
+    x1 = min(int(w * 0.54), int(cx + roi_w * 0.50))
+    y0 = max(0, int(cy - roi_h * 0.43))
+    y1 = min(h, int(cy + roi_h * 0.57))
+    if x1 - x0 < 300 or y1 - y0 < 360:
+        raise RuntimeError("V241 compact FaceSwap ROI is too small")
+
+    crop = im.crop((x0, y0, x1, y1))
+    out = io.BytesIO()
+    crop.save(out, format="JPEG", quality=100, subsampling=0, optimize=True)
+    data = out.getvalue()
+    _log("AI_SELFIE_V241_FACE_ROI status=compact box=%s,%s,%s,%s face=%s,%s,%s,%s crop=%sx%s base=%sx%s", x0, y0, x1, y1, x, y, fw, fh, crop.width, crop.height, w, h)
+    return data, (x0, y0, x1, y1)
+
+
+def _merge_face_roi(base: bytes, swapped_crop: bytes, box):
+    from PIL import Image, ImageDraw, ImageFilter
+
+    base_im = Image.open(io.BytesIO(bytes(base))).convert("RGB")
+    crop_im = Image.open(io.BytesIO(bytes(swapped_crop))).convert("RGB")
+    x0, y0, x1, y1 = box
+    cw, ch = x1 - x0, y1 - y0
+    provider_size = crop_im.size
+    if crop_im.size != (cw, ch):
+        crop_im = crop_im.resize((cw, ch), Image.Resampling.LANCZOS)
+        crop_im = crop_im.filter(ImageFilter.UnsharpMask(radius=0.55, percent=45, threshold=4))
+
+    feather = max(10, min(30, int(min(cw, ch) * 0.03)))
+    mask = Image.new("L", (cw, ch), 0)
+    draw = ImageDraw.Draw(mask)
+    inset = max(8, feather)
+    draw.rectangle((inset, inset, max(inset + 1, cw - inset - 1), max(inset + 1, ch - inset - 1)), fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    base_im.paste(crop_im, (x0, y0), mask)
+
+    out = io.BytesIO()
+    base_im.save(out, format="JPEG", quality=98, subsampling=0, optimize=True)
+    _log("AI_SELFIE_V241_MERGE provider_crop=%sx%s roi=%sx%s base=%sx%s feather=%s native_resolution=true", provider_size[0], provider_size[1], cw, ch, base_im.width, base_im.height, feather)
+    return out.getvalue()
+
+
 async def _generate_guarded(update: Any, context: Any, scene: str = "") -> bool:
     enforce_runtime()
     if not callable(_BASE_GENERATE):
@@ -198,17 +370,15 @@ async def _generate_guarded(update: Any, context: Any, scene: str = "") -> bool:
 
 
 def enforce_runtime() -> None:
-    """Re-assert V241 immediately before every generation and after app build."""
     from neyrobot_prod import selfie_v219_triref_scene_owner as ui
     from neyrobot_prod import selfie_v229_canonical_two_stage as google
     from neyrobot_prod import selfie_v233_true_face_transfer as transfer
-    from neyrobot_prod import selfie_v240_quality_resilience as compat
 
     transfer._detect = _detect
     transfer._select_source_photo = _select_source_photo
     transfer._stage1_prompt = _stage1_prompt
-    transfer._left_person_crop = compat._face_roi_crop
-    transfer._merge_left_crop = compat._merge_face_roi
+    transfer._left_person_crop = _face_roi_crop
+    transfer._merge_left_crop = _merge_face_roi
     google._call_google = _call_google
 
     transfer.generate = _generate_guarded
@@ -220,7 +390,6 @@ def enforce_runtime() -> None:
     transfer.VERSION = VERSION
     google.VERSION = VERSION
     ui.VERSION = VERSION
-    compat.VERSION = VERSION
 
     runtime = _runtime()
     if runtime is not None:
@@ -233,10 +402,7 @@ def enforce_runtime() -> None:
         runtime.AI_SELFIE_PROVIDER = "Gemini Pro bounded retry -> Flash + verified expression crop + compact isolated Segmind/PiAPI FaceSwap"
         runtime.AI_SELFIE_GENERATION_STAGES = 2
 
-    _log(
-        "AI_SELFIE_V241_ENFORCE status=ok google_call=v241 prompt=v241 source=photo3 faceswap_roi=compact version=%s",
-        VERSION,
-    )
+    _log("AI_SELFIE_V241_ENFORCE status=ok google_call=v241 prompt=v241 source=photo3 faceswap_roi=compact version=%s", VERSION)
 
 
 def _install_builder_hook() -> None:
@@ -250,7 +416,7 @@ def _install_builder_hook() -> None:
 
     def build(self: Any, *args: Any, **kwargs: Any):
         app = original(self, *args, **kwargs)
-        enforce_runtime()  # deliberately last, after every older builder wrapper
+        enforce_runtime()
         transfer.bind_application(app)
         enforce_runtime()
         return app
@@ -267,7 +433,6 @@ def install() -> None:
         _BASE_GENERATE = transfer.generate
     if _BASE_DETECT is None:
         _BASE_DETECT = transfer._detect
-
     _install_builder_hook()
     enforce_runtime()
     if not _INSTALLED:
