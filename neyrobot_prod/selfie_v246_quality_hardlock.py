@@ -184,7 +184,10 @@ async def _generate_guarded(update: Any, context: Any, scene: str = "") -> bool:
         else:
             _log("AI_SELFIE_V246_IMMEDIATE_ACK sent=false reason=v245_owner_already_acknowledged")
 
-        enforce_runtime(bind_generate=False)
+        # Reassert and KEEP V246 as the global generate owner before the base action.
+        # Using bind_generate=False here would let V245/V241 silently put the old
+        # generate symbol back for the next callback.
+        enforce_runtime(bind_generate=True)
         if not callable(v241._BASE_GENERATE):
             raise RuntimeError("V246 base selfie generator is unavailable")
         return await v241._BASE_GENERATE(update, context, scene)
