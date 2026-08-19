@@ -145,8 +145,6 @@ try:
         if fw < 40 or fh < 40:
             raise RuntimeError("detected face in photo #3 is too small")
 
-        # Tight head crop: enough forehead/chin to convey expression but too tight
-        # to carry a phone, hand, torso pose or source background into Gemini.
         cx = x + fw / 2.0
         cy = y + fh / 2.0
         crop_w = fw * 1.42
@@ -249,7 +247,6 @@ try:
     def _legacy_noop(*args, **kwargs):
         return True
 
-    # Preserve already-built UI callbacks, then prevent its owner from mutating runtime.
     with contextlib.suppress(Exception):
         selfie_ui.patch_runtime()
     selfie_ui.patch_runtime = _legacy_noop
@@ -258,7 +255,6 @@ try:
     selfie_ui.install_async = lambda *args, **kwargs: None
     selfie_ui.install = lambda *args, **kwargs: None
 
-    # Compatibility module is one-shot only in V239; its source no longer starts a watchdog.
     compat_owner.VERSION = CANONICAL_SELFIE_VERSION
     with contextlib.suppress(Exception):
         compat_owner.patch_runtime()
@@ -316,3 +312,12 @@ try:
     )
 except Exception as exc:
     print(f"[neyrobot-prod] canonical selfie V239 warning: {type(exc).__name__}: {exc}", flush=True)
+
+# V240 is an internal overlay only: it does not register callbacks or replace the
+# V239 single owner. It adds bounded Pro->Flash failover and a compact isolated
+# FaceSwap ROI to improve facial detail while preserving source #3 expression.
+try:
+    from neyrobot_prod.selfie_v240_quality_resilience import install as install_v240_quality
+    install_v240_quality()
+except Exception as exc:
+    print(f"[neyrobot-prod] V240 quality overlay warning: {type(exc).__name__}: {exc}", flush=True)
