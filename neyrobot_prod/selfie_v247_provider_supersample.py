@@ -139,7 +139,7 @@ def enforce_runtime(bind_generate: bool = True) -> None:
 
 
 def _install_v248_overlay() -> None:
-    """Load historical V249/V250 layers, then make V251 the final identity owner."""
+    """Load historical provider layers, V251 owner, then final V252 quality overlay."""
     try:
         from neyrobot_prod.selfie_v248_faceswap_v4_quality import install as install_v248_quality
         install_v248_quality()
@@ -147,8 +147,10 @@ def _install_v248_overlay() -> None:
         install_v250_identity()
         from neyrobot_prod.selfie_v251_v2_identity_detail import install as install_v251_identity
         install_v251_identity()
+        from neyrobot_prod.selfie_v252_v3_png_quality import install as install_v252_quality
+        install_v252_quality()
     except Exception as exc:
-        _log("AI_SELFIE_V251_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+        _log("AI_SELFIE_V252_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
 
 
 def install() -> None:
