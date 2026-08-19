@@ -15,6 +15,9 @@ ebooklib==0.18
 
 # Images and background removal
 Pillow==10.4.0
+# Pin a stable OpenCV 4.x build. The transitive OpenCV 5 preview installed by rembg
+# removed CascadeClassifier in this environment and broke selfie face detection.
+opencv-python-headless==4.10.0.84
 rembg==2.0.67
 
 # Presentation and PDF generation
