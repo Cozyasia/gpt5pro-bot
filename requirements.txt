@@ -1,3 +1,8 @@
+# Install the repository itself in editable mode so Python can discover and import
+# sitecustomize.py during interpreter startup on Render, before main.py builds the
+# Telegram Application and registers any legacy selfie callbacks.
+-e .
+
 python-telegram-bot[webhooks]==21.6
 openai==1.51.0
 # OpenAI 1.51 still passes the legacy `proxies` argument to httpx.
