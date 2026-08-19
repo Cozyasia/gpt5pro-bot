@@ -36,11 +36,11 @@ async def command(update: Any, context: Any) -> None:
     from telegram.ext import ApplicationHandlerStop
 
     try:
-        # /version also acts as an integrity reassertion. V244 does not change
-        # image behavior; it only guarantees that the proven V243/V242/real-
-        # FaceSwap route is the final runtime owner after legacy wrappers.
+        # /version is also an integrity reassertion. Reinstall the CURRENT selfie
+        # owner, never an older compatibility layer, otherwise merely checking the
+        # version can silently roll image behavior backwards.
         with contextlib.suppress(Exception):
-            from neyrobot_prod.selfie_v244_runtime_lock import install
+            from neyrobot_prod.selfie_v245_clean_faceswap import install
             install()
 
         message = getattr(update, "effective_message", None)
