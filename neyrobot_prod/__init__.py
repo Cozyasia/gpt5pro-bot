@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package."""
 
-VERSION = "v253-yunet-source-pixel-lossless-2026-08-21"
+VERSION = "v254-landmark-fit-seamless-source-2026-08-22"
 
 __all__ = ["VERSION"]

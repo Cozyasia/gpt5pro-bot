@@ -139,7 +139,7 @@ def enforce_runtime(bind_generate: bool = True) -> None:
 
 
 def _install_v248_overlay() -> None:
-    """Load historical provider layers, V251/V252, then final V253 transfer owner."""
+    """Load historical provider layers, then V253 and final V254 compositor owner."""
     try:
         from neyrobot_prod.selfie_v248_faceswap_v4_quality import install as install_v248_quality
         install_v248_quality()
@@ -151,8 +151,10 @@ def _install_v248_overlay() -> None:
         install_v252_quality()
         from neyrobot_prod.selfie_v253_yunet_source_pixels import install as install_v253_source_pixels
         install_v253_source_pixels()
+        from neyrobot_prod.selfie_v254_landmark_fit_seamless_source import install as install_v254_source_fit
+        install_v254_source_fit()
     except Exception as exc:
-        _log("AI_SELFIE_V253_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+        _log("AI_SELFIE_V254_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
 
 
 def install() -> None:
