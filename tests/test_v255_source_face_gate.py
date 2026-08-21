@@ -20,6 +20,11 @@ class V255SourceFaceGateTests(unittest.TestCase):
         self.assertIn("source_gate_coverage", source)
         self.assertIn("coverage < 0.50", source)
 
+    def test_blurred_fallback_and_detail_alpha_cannot_escape_hard_gate(self) -> None:
+        source = Path("neyrobot_prod/selfie_v255_source_face_gate.py").read_text(encoding="utf-8")
+        self.assertIn("soft = cv2.min(soft, hard_mask)", source)
+        self.assertIn("inner = cv2.min(inner, hard_mask)", source)
+
     def test_v255_preserves_no_neck_detail_poisson_and_hero_firewall(self) -> None:
         source = Path("neyrobot_prod/selfie_v255_source_face_gate.py").read_text(encoding="utf-8")
         self.assertIn("bottom = min(h, int(round(y + fh * 0.885)))", source)
