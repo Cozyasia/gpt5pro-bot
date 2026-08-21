@@ -50,6 +50,7 @@ class V253YuNetSourcePixelTests(unittest.TestCase):
         self.assertTrue(
             "v253-yunet-source-pixel-lossless-2026-08-21" in source
             or "v254-landmark-fit-seamless-source-2026-08-22" in source
+            or "v255-source-face-gate-lossless-2026-08-22" in source
         )
 
 
