@@ -45,9 +45,12 @@ class V253YuNetSourcePixelTests(unittest.TestCase):
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("add_handler", source)
 
-    def test_package_version_is_v253(self) -> None:
+    def test_package_version_has_v253_or_newer_successor(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v253-yunet-source-pixel-lossless-2026-08-21", source)
+        self.assertTrue(
+            "v253-yunet-source-pixel-lossless-2026-08-21" in source
+            or "v254-landmark-fit-seamless-source-2026-08-22" in source
+        )
 
 
 if __name__ == "__main__":
