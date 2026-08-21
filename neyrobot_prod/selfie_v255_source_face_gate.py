@@ -13,6 +13,7 @@ V255 changes only the PERSON-A compositor:
 - that source mask is warped with the exact same affine matrix as the pixels;
 - the final clone mask is the intersection of V254's target no-neck mask and
   the warped source-face gate;
+- every fallback/detail alpha is clamped back inside that hard intersection;
 - Poisson boundary integration, 88% real-source interior detail, PERSON-B
   firewall and V253 lossless original-document delivery are unchanged;
 - V254 is the immediate fallback if the intersection is implausibly small.
@@ -154,6 +155,10 @@ def _source_pixel_transfer_v255(stage1: bytes, source: bytes, model_path) -> byt
         _log("AI_SELFIE_V255_POISSON status=fallback reason=%s:%s", type(exc).__name__, str(exc)[:220])
         sigma = max(6.0, min(20.0, float(min(target_bbox[2], target_bbox[3])) * 0.025))
         soft = cv2.GaussianBlur(hard_mask, (0, 0), sigmaX=sigma, sigmaY=sigma)
+        # Gaussian blur has infinite support. Clamp it back to the accepted
+        # source/target intersection so fallback blending can never re-admit
+        # a rejected source pixel (neck/shirt/hair/background/border).
+        soft = cv2.min(soft, hard_mask)
         alpha = (soft.astype(np.float32) / 255.0)[:, :, None]
         integrated = np.clip(
             matched.astype(np.float32) * alpha + target.astype(np.float32) * (1.0 - alpha),
@@ -169,6 +174,8 @@ def _source_pixel_transfer_v255(stage1: bytes, source: bytes, model_path) -> byt
     inner = cv2.erode(hard_mask, kernel, iterations=1)
     inner_sigma = max(4.0, min(14.0, face_min * 0.018))
     inner = cv2.GaussianBlur(inner, (0, 0), sigmaX=inner_sigma, sigmaY=inner_sigma)
+    # Apply the same hard safety invariant to the blurred detail-alpha tail.
+    inner = cv2.min(inner, hard_mask)
     detail_alpha = (inner.astype(np.float32) / 255.0 * 0.88)[:, :, None]
     final = np.clip(
         matched.astype(np.float32) * detail_alpha + integrated.astype(np.float32) * (1.0 - detail_alpha),
