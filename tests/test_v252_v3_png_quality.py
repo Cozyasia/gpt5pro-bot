@@ -33,8 +33,8 @@ class V252V3PngQualityTests(unittest.TestCase):
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("add_handler", source)
 
-    def test_package_version_is_v252(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+    def test_v252_release_marker_remains_in_v252_module(self) -> None:
+        source = Path("neyrobot_prod/selfie_v252_v3_png_quality.py").read_text(encoding="utf-8")
         self.assertIn("v252-v3-png-quality-lock-2026-08-20", source)
 
 
