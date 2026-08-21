@@ -36,9 +36,12 @@ class V254LandmarkFitSeamlessSourceTests(unittest.TestCase):
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("add_handler", source)
 
-    def test_package_version_is_v254(self) -> None:
+    def test_package_version_has_v254_or_newer_successor(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v254-landmark-fit-seamless-source-2026-08-22", source)
+        self.assertTrue(
+            "v254-landmark-fit-seamless-source-2026-08-22" in source
+            or "v255-source-face-gate-lossless-2026-08-22" in source
+        )
 
 
 if __name__ == "__main__":
