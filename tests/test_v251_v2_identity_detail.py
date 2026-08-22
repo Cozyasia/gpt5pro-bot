@@ -38,17 +38,17 @@ class V251V2IdentityDetailTests(unittest.TestCase):
         from neyrobot_prod import selfie_v247_provider_supersample as v247
         from neyrobot_prod import selfie_v250_hyperswap_identity as v250
         from neyrobot_prod import selfie_v252_v3_png_quality as v252
-        from neyrobot_prod import selfie_v255_source_face_gate as v255
+        from neyrobot_prod import selfie_v256_large_scale_source_pixels as v256
         from neyrobot_prod import selfie_v233_true_face_transfer as transfer
 
         # V251 remains the proven callback/UX owner. V252 remains the frozen
-        # provider fallback, while V255 owns only the final safe PERSON-A pixel
+        # provider fallback, while V256 owns only the final PERSON-A source-pixel
         # transfer and preserves the established V251/V247 geometry contracts.
-        v255.enforce_runtime(bind_generate=True)
+        v256.enforce_runtime(bind_generate=True)
         self.assertIs(transfer._left_person_crop, v247._provider_supersample_roi)
         self.assertIs(transfer._merge_left_crop, v250._merge_face_local)
         self.assertIs(transfer._ensure_full_hd, v246._ensure_full_hd_lossless)
-        self.assertIs(transfer._true_face_transfer, v255._true_face_transfer_v255)
+        self.assertIs(transfer._true_face_transfer, v256._true_face_transfer_v256)
         runtime = v241._runtime()
         if runtime is not None:
             self.assertIs(runtime._segmind_faceswap_v2, v252._segmind_v3_png)
