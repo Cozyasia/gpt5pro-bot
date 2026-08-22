@@ -139,7 +139,7 @@ def enforce_runtime(bind_generate: bool = True) -> None:
 
 
 def _install_v248_overlay() -> None:
-    """Load historical provider layers, then V253-V255 and final V256 source-pixel owner."""
+    """Load historical provider layers, then V253-V256 and final V257 sampling guard."""
     try:
         from neyrobot_prod.selfie_v248_faceswap_v4_quality import install as install_v248_quality
         install_v248_quality()
@@ -157,8 +157,10 @@ def _install_v248_overlay() -> None:
         install_v255_source_gate()
         from neyrobot_prod.selfie_v256_large_scale_source_pixels import install as install_v256_large_scale
         install_v256_large_scale()
+        from neyrobot_prod.selfie_v257_native_sampling_guard import install as install_v257_native_sampling
+        install_v257_native_sampling()
     except Exception as exc:
-        _log("AI_SELFIE_V256_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+        _log("AI_SELFIE_V257_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
 
 
 def install() -> None:
