@@ -16,7 +16,7 @@ class V257NativeSamplingGuardTests(unittest.TestCase):
         self.assertIn("v256._MIN_PROJECTED_FACE_SHORT = 0.0", source)
         self.assertIn("v256._MAX_REAL_SOURCE_SCALE", source)
         self.assertIn("v256._MIN_NATIVE_FACE_SHORT", source)
-        self.assertIn("330 px face at 1.50x", source)
+        self.assertIn("easier 1.50x enlargement", source)
         self.assertIn("_BASE_TRUE_FACE_TRANSFER", source)
 
     def test_v257_preserves_v255_gate_lossless_delivery_and_handler_architecture(self) -> None:
