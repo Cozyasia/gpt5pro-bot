@@ -45,7 +45,7 @@ class V258InnerFaceIntegrationTests(unittest.TestCase):
         self.assertIn("fallback_v257", source)
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("add_handler", source)
-        self.assertNotIn("payment", source.lower().split("add no Telegram callback, payment", 1)[-1] if "add no Telegram callback, payment" in source else "")
+        self.assertNotIn("PreCheckoutQueryHandler", source)
 
     def test_package_version_is_v258_with_v257_compatibility_marker(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
