@@ -1,0 +1,58 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+
+class V258InnerFaceIntegrationTests(unittest.TestCase):
+    def test_v258_is_loaded_after_v257(self) -> None:
+        source = Path("neyrobot_prod/selfie_v247_provider_supersample.py").read_text(encoding="utf-8")
+        self.assertIn("selfie_v258_inner_face_integration", source)
+        self.assertLess(source.index("install_v257_native_sampling()"), source.index("install_v258_inner_face()"))
+        self.assertIn("AI_SELFIE_V258_INSTALL", source)
+
+    def test_v258_uses_two_zone_target_heavy_outer_ring(self) -> None:
+        source = Path("neyrobot_prod/selfie_v258_inner_face_integration.py").read_text(encoding="utf-8")
+        self.assertIn("core = _elliptic_erode(hard_mask, core_erode_px)", source)
+        self.assertIn("integration_support = cv2.GaussianBlur(core", source)
+        self.assertIn("poisson.astype(np.float32) * integration_alpha", source)
+        self.assertIn("target.astype(np.float32) * (1.0 - integration_alpha)", source)
+        self.assertIn("detail_core = _elliptic_erode(core, detail_erode_px)", source)
+        self.assertIn("outer_ring_target_heavy=true", source)
+        self.assertIn("detail_core_only=true", source)
+
+    def test_v258_adapts_reinject_and_core_for_broad_masks(self) -> None:
+        source = Path("neyrobot_prod/selfie_v258_inner_face_integration.py").read_text(encoding="utf-8")
+        self.assertIn("_REINJECT_DEFAULT = 0.89", source)
+        self.assertIn("_REINJECT_MID = 0.88", source)
+        self.assertIn("_REINJECT_HIGH = 0.87", source)
+        self.assertIn("_COVERAGE_HIGH = 0.90", source)
+        self.assertIn("return 0.075", source)
+        self.assertIn("return 0.065", source)
+        self.assertIn("return 0.055", source)
+        self.assertNotIn("detail_reinject=0.94", source)
+
+    def test_v258_preserves_v255_gate_v257_sampling_firewall_and_lossless_delivery(self) -> None:
+        source = Path("neyrobot_prod/selfie_v258_inner_face_integration.py").read_text(encoding="utf-8")
+        self.assertIn("v255._warp_source_face_gate", source)
+        self.assertIn("v254._target_face_mask", source)
+        self.assertIn("v256._MAX_REAL_SOURCE_SCALE", source)
+        self.assertIn("v256._MIN_NATIVE_FACE_SHORT", source)
+        self.assertIn("projected_gate=false", source)
+        self.assertIn("final[:, firewall_x:] = target[:, firewall_x:]", source)
+        self.assertIn("delivery._deliver = v253._deliver_original", source)
+        self.assertIn("fallback_v257", source)
+        self.assertNotIn("CallbackQueryHandler", source)
+        self.assertNotIn("add_handler", source)
+        self.assertNotIn("payment", source.lower().split("add no Telegram callback, payment", 1)[-1] if "add no Telegram callback, payment" in source else "")
+
+    def test_package_version_is_v258_with_v257_compatibility_marker(self) -> None:
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn('VERSION = "v258-inner-face-integration-2026-08-24"', source)
+        self.assertIn("v257-native-sampling-guard-2026-08-22", source)
+        self.assertIn("v255-source-face-gate-lossless-2026-08-22", source)
+
+
+if __name__ == "__main__":
+    unittest.main()
