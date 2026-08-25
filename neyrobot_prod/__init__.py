@@ -7,6 +7,7 @@
 # v255-source-face-gate-lossless-2026-08-22
 # v256-large-scale-source-pixels-2026-08-22
 # v257-native-sampling-guard-2026-08-22
-VERSION = "v258-inner-face-integration-2026-08-24"
+# v258-inner-face-integration-2026-08-24
+VERSION = "v259-eye-landmark-protection-2026-08-26"
 
 __all__ = ["VERSION"]
