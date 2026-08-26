@@ -16,8 +16,23 @@ VERSION = "v261-edge-harmonization-2026-08-26"
 # ApplicationBuilder wrapper and patches the already-existing main.py helpers only
 # after main.py has defined them.  No callback/message/payment handlers are added.
 try:
-    from neyrobot_prod.retouch_v261_batch import install as _install_retouch_v261
-    _install_retouch_v261()
+    from neyrobot_prod import retouch_v261_batch as _retouch_v261_module
+
+    # PTB creates a fresh CallbackContext for each update in a Telegram media group,
+    # while user_data is shared. Bind batch continuity to the shared user_data uid,
+    # not object identity, and refresh the context used by the sequential worker.
+    def _retouch_v261_shared_context(context):
+        try:
+            uid = int(context.user_data.get("_retouch_v261_uid") or 0)
+        except Exception:
+            uid = 0
+        state = _retouch_v261_module._BATCH_STATES.get(uid)
+        if state is not None:
+            state["context"] = context
+        return state
+
+    _retouch_v261_module._state_for_context = _retouch_v261_shared_context
+    _retouch_v261_module.install()
 except Exception as _retouch_v261_exc:
     print(
         f"[neyrobot-prod] retouch V261 overlay warning: {type(_retouch_v261_exc).__name__}: {_retouch_v261_exc}",
