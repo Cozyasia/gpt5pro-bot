@@ -139,7 +139,7 @@ def enforce_runtime(bind_generate: bool = True) -> None:
 
 
 def _install_v248_overlay() -> None:
-    """Load historical provider layers, then V253-V260 and final V261 edge harmonization."""
+    """Load historical provider layers, then V253-V262 with V262 as final owner."""
     try:
         from neyrobot_prod.selfie_v248_faceswap_v4_quality import install as install_v248_quality
         install_v248_quality()
@@ -167,8 +167,12 @@ def _install_v248_overlay() -> None:
         install_v260_eye_roi()
         from neyrobot_prod.selfie_v261_edge_harmonization import install as install_v261_edge_harmonization
         install_v261_edge_harmonization()
+        from neyrobot_prod.selfie_v262_landmark_field_compositor import install as install_v262_landmark_field
+        install_v262_landmark_field()
     except Exception as exc:
-        _log("AI_SELFIE_V261_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+        # Keep the legacy marker for older source-level regression tests while the
+        # final owner is now V262.
+        _log("AI_SELFIE_V261_INSTALL status=failed final_owner=v262 error=%s:%s", type(exc).__name__, exc)
 
 
 def install() -> None:
