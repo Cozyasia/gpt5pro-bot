@@ -6,11 +6,13 @@ from pathlib import Path
 
 
 class V260EyeRoiMemorySafeTests(unittest.TestCase):
-    def test_v260_loads_after_v259(self) -> None:
+    def test_v260_loads_after_v259_and_before_v261(self) -> None:
         source = Path("neyrobot_prod/selfie_v247_provider_supersample.py").read_text(encoding="utf-8")
         self.assertIn("selfie_v260_eye_roi_memory_safe", source)
+        self.assertIn("selfie_v261_edge_harmonization", source)
         self.assertLess(source.index("install_v259_eye_protection()"), source.index("install_v260_eye_roi()"))
-        self.assertIn("AI_SELFIE_V260_INSTALL", source)
+        self.assertLess(source.index("install_v260_eye_roi()"), source.index("install_v261_edge_harmonization()"))
+        self.assertIn("AI_SELFIE_V261_INSTALL", source)
 
     def test_v260_reuses_proven_v258_base(self) -> None:
         source = Path("neyrobot_prod/selfie_v260_eye_roi_memory_safe.py").read_text(encoding="utf-8")
@@ -48,9 +50,10 @@ class V260EyeRoiMemorySafeTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_package_version_is_v260(self) -> None:
+    def test_package_version_advances_to_v261_with_v260_marker(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v260-eye-roi-memory-safe-2026-08-26"', source)
+        self.assertIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+        self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
         self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
 
 

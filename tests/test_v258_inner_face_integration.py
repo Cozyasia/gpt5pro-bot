@@ -6,14 +6,16 @@ from pathlib import Path
 
 
 class V258InnerFaceIntegrationTests(unittest.TestCase):
-    def test_v258_is_loaded_after_v257(self) -> None:
+    def test_v258_is_loaded_before_v259_v260_v261(self) -> None:
         source = Path("neyrobot_prod/selfie_v247_provider_supersample.py").read_text(encoding="utf-8")
         self.assertIn("selfie_v258_inner_face_integration", source)
         self.assertLess(source.index("install_v257_native_sampling()"), source.index("install_v258_inner_face()"))
         self.assertIn("selfie_v259_eye_landmark_protection", source)
         self.assertIn("selfie_v260_eye_roi_memory_safe", source)
+        self.assertIn("selfie_v261_edge_harmonization", source)
         self.assertLess(source.index("install_v258_inner_face()"), source.index("install_v259_eye_protection()"))
         self.assertLess(source.index("install_v259_eye_protection()"), source.index("install_v260_eye_roi()"))
+        self.assertLess(source.index("install_v260_eye_roi()"), source.index("install_v261_edge_harmonization()"))
 
     def test_v258_uses_two_zone_target_heavy_outer_ring(self) -> None:
         source = Path("neyrobot_prod/selfie_v258_inner_face_integration.py").read_text(encoding="utf-8")
@@ -50,9 +52,10 @@ class V258InnerFaceIntegrationTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_v258_is_retained_as_v260_compatibility_base(self) -> None:
+    def test_v258_is_retained_as_v261_compatibility_base(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v260-eye-roi-memory-safe-2026-08-26"', source)
+        self.assertIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+        self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
         self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
         self.assertIn("v258-inner-face-integration-2026-08-24", source)
         self.assertIn("v257-native-sampling-guard-2026-08-22", source)
