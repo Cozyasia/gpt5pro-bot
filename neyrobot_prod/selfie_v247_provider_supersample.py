@@ -139,7 +139,7 @@ def enforce_runtime(bind_generate: bool = True) -> None:
 
 
 def _install_v248_overlay() -> None:
-    """Load historical provider layers, then V253-V258 and final V259 eye protection."""
+    """Load historical provider layers, then V253-V259 and final V260 ROI hotfix."""
     try:
         from neyrobot_prod.selfie_v248_faceswap_v4_quality import install as install_v248_quality
         install_v248_quality()
@@ -163,8 +163,10 @@ def _install_v248_overlay() -> None:
         install_v258_inner_face()
         from neyrobot_prod.selfie_v259_eye_landmark_protection import install as install_v259_eye_protection
         install_v259_eye_protection()
+        from neyrobot_prod.selfie_v260_eye_roi_memory_safe import install as install_v260_eye_roi
+        install_v260_eye_roi()
     except Exception as exc:
-        _log("AI_SELFIE_V259_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
+        _log("AI_SELFIE_V260_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
 
 
 def install() -> None:
