@@ -32,8 +32,10 @@ class V262LandmarkFieldCompositorTests(unittest.TestCase):
         self.assertIn("mask=landmark_anatomical_hull", source)
         self.assertIn("ellipse_final_mask=false", source)
         self.assertNotIn("cv2.ellipse", source)
-        self.assertNotIn("v255._warp_source_face_gate", source)
-        self.assertNotIn("v254._target_face_mask", source)
+        # Descriptive comments may mention the historical V255 gate; forbid an
+        # executable call rather than the symbol name itself.
+        self.assertNotIn("v255._warp_source_face_gate(", source)
+        self.assertNotIn("v254._target_face_mask(", source)
 
     def test_v262_has_no_broad_raw_source_core(self) -> None:
         source = Path("neyrobot_prod/selfie_v262_landmark_field_compositor.py").read_text(encoding="utf-8")
