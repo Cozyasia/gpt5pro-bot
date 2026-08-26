@@ -32,6 +32,13 @@ class RetouchV261BatchTests(unittest.TestCase):
         self.assertIn("sequential=true", source)
         self.assertIn("Принято изображений", source)
 
+    def test_media_group_context_is_bound_by_shared_user_data(self) -> None:
+        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertIn('context.user_data.get("_retouch_v261_uid")', source)
+        self.assertIn("_BATCH_STATES.get(uid)", source)
+        self.assertIn('state["context"] = context', source)
+        self.assertNotIn("state.get(\"context\") is context", source)
+
     def test_delivery_timeout_does_not_create_false_provider_failure(self) -> None:
         source = Path("neyrobot_prod/retouch_v261_batch.py").read_text(encoding="utf-8")
         self.assertIn("_TELEGRAM_SEND_TIMEOUT_S = 180.0", source)
@@ -51,7 +58,7 @@ class RetouchV261BatchTests(unittest.TestCase):
     def test_package_arms_retouch_overlay(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("retouch_v261_batch", source)
-        self.assertIn("_install_retouch_v261()", source)
+        self.assertIn("_retouch_v261_module.install()", source)
 
 
 if __name__ == "__main__":
