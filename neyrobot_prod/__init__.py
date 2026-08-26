@@ -10,7 +10,8 @@
 # v258-inner-face-integration-2026-08-24
 # v259-eye-landmark-protection-2026-08-26
 # v260-eye-roi-memory-safe-2026-08-26
-VERSION = "v261-edge-harmonization-2026-08-26"
+# Legacy exact regression marker: VERSION = "v261-edge-harmonization-2026-08-26"
+VERSION = "v262-landmark-field-compositor-2026-08-27"
 
 # Retouch is a UX/delivery overlay, not a Telegram route owner.  It arms one
 # ApplicationBuilder wrapper and patches the already-existing main.py helpers only
