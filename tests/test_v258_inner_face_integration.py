@@ -11,7 +11,9 @@ class V258InnerFaceIntegrationTests(unittest.TestCase):
         self.assertIn("selfie_v258_inner_face_integration", source)
         self.assertLess(source.index("install_v257_native_sampling()"), source.index("install_v258_inner_face()"))
         self.assertIn("selfie_v259_eye_landmark_protection", source)
+        self.assertIn("selfie_v260_eye_roi_memory_safe", source)
         self.assertLess(source.index("install_v258_inner_face()"), source.index("install_v259_eye_protection()"))
+        self.assertLess(source.index("install_v259_eye_protection()"), source.index("install_v260_eye_roi()"))
 
     def test_v258_uses_two_zone_target_heavy_outer_ring(self) -> None:
         source = Path("neyrobot_prod/selfie_v258_inner_face_integration.py").read_text(encoding="utf-8")
@@ -48,9 +50,10 @@ class V258InnerFaceIntegrationTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_v258_is_retained_as_v259_compatibility_base(self) -> None:
+    def test_v258_is_retained_as_v260_compatibility_base(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v259-eye-landmark-protection-2026-08-26"', source)
+        self.assertIn('VERSION = "v260-eye-roi-memory-safe-2026-08-26"', source)
+        self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
         self.assertIn("v258-inner-face-integration-2026-08-24", source)
         self.assertIn("v257-native-sampling-guard-2026-08-22", source)
         self.assertIn("v255-source-face-gate-lossless-2026-08-22", source)
