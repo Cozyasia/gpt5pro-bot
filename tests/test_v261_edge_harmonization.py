@@ -6,11 +6,12 @@ from pathlib import Path
 
 
 class V261EdgeHarmonizationTests(unittest.TestCase):
-    def test_v261_loads_after_v260(self) -> None:
+    def test_v261_loads_after_v260_and_before_v262_final_owner(self) -> None:
         source = Path("neyrobot_prod/selfie_v247_provider_supersample.py").read_text(encoding="utf-8")
         self.assertIn("selfie_v261_edge_harmonization", source)
+        self.assertIn("selfie_v262_landmark_field_compositor", source)
         self.assertLess(source.index("install_v260_eye_roi()"), source.index("install_v261_edge_harmonization()"))
-        self.assertIn("AI_SELFIE_V261_INSTALL", source)
+        self.assertLess(source.index("install_v261_edge_harmonization()"), source.index("install_v262_landmark_field()"))
 
     def test_v261_uses_distance_to_real_mask_boundary_not_new_ellipse(self) -> None:
         source = Path("neyrobot_prod/selfie_v261_edge_harmonization.py").read_text(encoding="utf-8")
@@ -44,10 +45,11 @@ class V261EdgeHarmonizationTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_package_version_is_v261(self) -> None:
+    def test_package_version_advances_to_v262_successor(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+        self.assertIn("v261-edge-harmonization-2026-08-26", source)
         self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
+        self.assertIn('VERSION = "v262-landmark-field-compositor-2026-08-27"', source)
 
 
 if __name__ == "__main__":
