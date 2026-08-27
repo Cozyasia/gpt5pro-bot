@@ -64,7 +64,8 @@ class V262LandmarkFieldCompositorTests(unittest.TestCase):
 
     def test_package_version_is_v262_and_keeps_historical_successor_markers(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v262-landmark-field-compositor-2026-08-27"', source)
+        self.assertIn("v262-landmark-field-compositor-2026-08-27", source)
+        self.assertIn('VERSION = "v263-dense-identity-lock-2026-08-27"', source)
         self.assertIn("v261-edge-harmonization-2026-08-26", source)
         self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
         self.assertNotIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)

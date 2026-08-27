@@ -54,7 +54,8 @@ class V258InnerFaceIntegrationTests(unittest.TestCase):
 
     def test_v258_is_retained_as_v262_compatibility_base(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v262-landmark-field-compositor-2026-08-27"', source)
+        self.assertIn("v262-landmark-field-compositor-2026-08-27", source)
+        self.assertIn('VERSION = "v263-dense-identity-lock-2026-08-27"', source)
         self.assertIn("v261-edge-harmonization-2026-08-26", source)
         self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
         self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
