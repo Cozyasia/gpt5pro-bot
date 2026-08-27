@@ -1,5 +1,6 @@
 name: V263 CI Diagnostic
 
+# Temporary verification workflow; remove before merge.
 on:
   push:
     branches: ["work/v263-dense-identity-lock"]
