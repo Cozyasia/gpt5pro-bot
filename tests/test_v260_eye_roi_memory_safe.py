@@ -50,11 +50,13 @@ class V260EyeRoiMemorySafeTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_package_version_advances_to_v261_with_v260_marker(self) -> None:
+    def test_package_version_advances_to_v262_with_v260_v261_markers(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+        self.assertIn('VERSION = "v262-landmark-field-compositor-2026-08-27"', source)
+        self.assertIn("v261-edge-harmonization-2026-08-26", source)
         self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
         self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
+        self.assertNotIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
 
 
 if __name__ == "__main__":

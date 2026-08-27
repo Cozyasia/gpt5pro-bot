@@ -52,14 +52,16 @@ class V258InnerFaceIntegrationTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_v258_is_retained_as_v261_compatibility_base(self) -> None:
+    def test_v258_is_retained_as_v262_compatibility_base(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+        self.assertIn('VERSION = "v262-landmark-field-compositor-2026-08-27"', source)
+        self.assertIn("v261-edge-harmonization-2026-08-26", source)
         self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
         self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
         self.assertIn("v258-inner-face-integration-2026-08-24", source)
         self.assertIn("v257-native-sampling-guard-2026-08-22", source)
         self.assertIn("v255-source-face-gate-lossless-2026-08-22", source)
+        self.assertNotIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
 
 
 if __name__ == "__main__":
