@@ -123,6 +123,13 @@ class V263DenseIdentityLockTests(unittest.TestCase):
         self.assertIn("raw_low_frequency_reinject=false", source)
         self.assertIn("solid_source_core=false", source)
 
+    def test_small_face_mask_guard_is_scale_normalized_without_relaxing_large_face_cap(self) -> None:
+        source = Path("neyrobot_prod/selfie_v263_dense_identity_lock.py").read_text(encoding="utf-8")
+        self.assertIn("min(12000.0, max(3200.0, face_min * face_min * 0.30))", source)
+        self.assertIn("if mask_pixels < min_mask_pixels:", source)
+        self.assertIn("mask_min_pixels=%s", source)
+        self.assertNotIn("if mask_pixels < 12000:", source)
+
     def test_startup_activation_has_explicit_v262_rollback_boundary(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn("V247's original overlay first", source)

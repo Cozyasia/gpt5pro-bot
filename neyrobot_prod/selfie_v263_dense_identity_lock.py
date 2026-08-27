@@ -504,8 +504,14 @@ def _transfer_attempt(stage1: bytes, source: bytes, yunet_path: Path, dense_path
     )
     mask = v262._landmark_anatomy_mask(target.shape, target_bbox, target_pts5, firewall_x)
     mask_pixels = int((mask > 80).sum())
-    if mask_pixels < 12000:
-        raise RuntimeError(f"V263 anatomical identity mask too small: {mask_pixels}")
+    # Preserve the original 12k guard for normal/large faces, but scale the
+    # minimum for legitimately small PERSON-A faces. An absolute 12k floor
+    # false-rejected the two-person 136px target despite a valid anatomical hull.
+    min_mask_pixels = int(round(min(12000.0, max(3200.0, face_min * face_min * 0.30))))
+    if mask_pixels < min_mask_pixels:
+        raise RuntimeError(
+            f"V263 anatomical identity mask too small: {mask_pixels} < {min_mask_pixels}"
+        )
     pad = int(round(max(30.0, min(76.0, face_min * 0.090))))
     box = v262._mask_box(mask, pad=pad, firewall_x=firewall_x)
     x0, y0, x1, y1 = box
@@ -535,12 +541,12 @@ def _transfer_attempt(stage1: bytes, source: bytes, yunet_path: Path, dense_path
         "AI_SELFIE_V263_TRANSFER status=success path=%s method=dense68_identity_field_structure_first "
         "geometry_mode=pipnet_68 landmarks=68 source_face=%.0fx%.0f target_face=%.0fx%.0f "
         "global_transform=similarity similarity_rms=%.2f scale=%.3f native_face_short=%.1f "
-        "max_dense_shift=%.2f field_sigma=%.1f mask=landmark_anatomical_hull mask_pixels=%s roi=%sx%s "
+        "max_dense_shift=%.2f field_sigma=%.1f mask=landmark_anatomical_hull mask_pixels=%s mask_min_pixels=%s roi=%sx%s "
         "blend=%s structure_first=true structure_strength=%.2f detail_strength=%.2f boundary=%.1f "
         "independent_eye_patch=false raw_low_frequency_reinject=false solid_source_core=false no_neck=true "
         "person_b_untouched=true delivery=v253_original_document output=png bytes=%s source_pixels=true synthetic_face=false",
         path, sfw, sfh, tfw, tfh, sim_rms, scale, native_face_short, max_dense_shift, field_sigma,
-        mask_pixels, x1 - x0, y1 - y0, blend_mode, structure_strength, detail_strength, boundary, len(output),
+        mask_pixels, min_mask_pixels, x1 - x0, y1 - y0, blend_mode, structure_strength, detail_strength, boundary, len(output),
     )
     return output, metrics, desired_dense
 
