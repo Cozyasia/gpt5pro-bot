@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   apply-fix:
-    if: github.event.head_commit.message == 'ci: add one-shot V263 fix runner'
+    if: "${{ github.event.head_commit.message == 'ci: repair one-shot V263 fix runner' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
