@@ -6,15 +6,17 @@ from pathlib import Path
 
 
 class V259EyeLandmarkProtectionTests(unittest.TestCase):
-    def test_v259_is_loaded_after_v258_and_before_v260_v261(self) -> None:
+    def test_v259_is_loaded_after_v258_and_before_v260_v261_v262(self) -> None:
         source = Path("neyrobot_prod/selfie_v247_provider_supersample.py").read_text(encoding="utf-8")
         self.assertIn("selfie_v259_eye_landmark_protection", source)
         self.assertIn("selfie_v260_eye_roi_memory_safe", source)
         self.assertIn("selfie_v261_edge_harmonization", source)
+        self.assertIn("selfie_v262_landmark_field_compositor", source)
         self.assertLess(source.index("install_v258_inner_face()"), source.index("install_v259_eye_protection()"))
         self.assertLess(source.index("install_v259_eye_protection()"), source.index("install_v260_eye_roi()"))
         self.assertLess(source.index("install_v260_eye_roi()"), source.index("install_v261_edge_harmonization()"))
-        self.assertIn("AI_SELFIE_V261_INSTALL", source)
+        self.assertLess(source.index("install_v261_edge_harmonization()"), source.index("install_v262_landmark_field()"))
+        self.assertIn("AI_SELFIE_V262_INSTALL", source)
 
     def test_v259_historical_full_frame_eye_path_remains_documented(self) -> None:
         source = Path("neyrobot_prod/selfie_v259_eye_landmark_protection.py").read_text(encoding="utf-8")
