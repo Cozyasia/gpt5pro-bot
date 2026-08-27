@@ -1,0 +1,56 @@
+name: V263 Identity Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "neyrobot_prod/selfie_v263_*.py"
+      - "neyrobot_prod/__init__.py"
+      - "tests/test_v263_dense_identity_lock.py"
+      - "scripts/v263_identity_smoke.py"
+      - ".github/workflows/v263-identity-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "neyrobot_prod/selfie_v263_*.py"
+      - "neyrobot_prod/__init__.py"
+      - "tests/test_v263_dense_identity_lock.py"
+      - "scripts/v263_identity_smoke.py"
+      - ".github/workflows/v263-identity-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  identity-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install production dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download public portrait fixtures
+        run: |
+          mkdir -p /tmp/v263-fixtures
+          base="https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source"
+          curl -L --fail --retry 3 "$base/verify_now_2024.jpg" -o /tmp/v263-fixtures/verify_now_2024.jpg
+          curl -L --fail --retry 3 "$base/verify_curie.jpg" -o /tmp/v263-fixtures/verify_curie.jpg
+          curl -L --fail --retry 3 "$base/pose_left.jpg" -o /tmp/v263-fixtures/pose_left.jpg
+          curl -L --fail --retry 3 "$base/verify_einstein_1921.jpg" -o /tmp/v263-fixtures/verify_einstein_1921.jpg
+      - name: Run real-model identity matrix
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python scripts/v263_identity_smoke.py --fixtures /tmp/v263-fixtures --output /tmp/v263-two-person-output.png
+      - name: Upload two-person smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v263-two-person-smoke-output
+          path: /tmp/v263-two-person-output.png
+          if-no-files-found: ignore
