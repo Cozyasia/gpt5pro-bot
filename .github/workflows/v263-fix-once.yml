@@ -1,0 +1,113 @@
+name: V263 One-Shot Fix
+
+on:
+  push:
+    branches: ["work/v263-dense-identity-lock"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: github.event.head_commit.message == 'ci: add one-shot V263 fix runner'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v263-dense-identity-lock
+      - name: Apply localized V263 CI fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          version_old = '        self.assertIn(\'VERSION = "v262-landmark-field-compositor-2026-08-27"\', source)'
+          version_new = (
+              '        self.assertIn("v262-landmark-field-compositor-2026-08-27", source)\n'
+              '        self.assertIn(\'VERSION = "v263-dense-identity-lock-2026-08-27"\', source)'
+          )
+          for path in (
+              "tests/test_v258_inner_face_integration.py",
+              "tests/test_v259_eye_landmark_protection.py",
+              "tests/test_v260_eye_roi_memory_safe.py",
+              "tests/test_v261_edge_harmonization.py",
+              "tests/test_v262_landmark_field_compositor.py",
+          ):
+              replace_once(path, version_old, version_new)
+
+          replace_once(
+              "tests/test_v251_v2_identity_detail.py",
+              "        from neyrobot_prod import selfie_v262_landmark_field_compositor as v262\n",
+              "        from neyrobot_prod import selfie_v262_landmark_field_compositor as v262\n"
+              "        from neyrobot_prod import selfie_v263_dense_identity_lock as v263\n",
+          )
+          replace_once(
+              "tests/test_v251_v2_identity_detail.py",
+              "        v262.enforce_runtime(bind_generate=True)\n",
+              "        v263.enforce_runtime(bind_generate=True)\n",
+          )
+          replace_once(
+              "tests/test_v251_v2_identity_detail.py",
+              "        self.assertIs(transfer._true_face_transfer, v262._true_face_transfer_v262)\n",
+              "        self.assertIs(transfer._true_face_transfer, v263._true_face_transfer_v263)\n",
+          )
+
+          replace_once(
+              "neyrobot_prod/selfie_v263_dense_identity_lock.py",
+              "    mask_pixels = int((mask > 80).sum())\n"
+              "    if mask_pixels < 12000:\n"
+              "        raise RuntimeError(f\"V263 anatomical identity mask too small: {mask_pixels}\")\n",
+              "    mask_pixels = int((mask > 80).sum())\n"
+              "    # Preserve the original 12k guard for normal/large faces, but scale the\n"
+              "    # minimum for legitimately small PERSON-A faces. An absolute 12k floor\n"
+              "    # false-rejected the two-person 136px target despite a valid anatomical hull.\n"
+              "    min_mask_pixels = int(round(min(12000.0, max(3200.0, face_min * face_min * 0.30))))\n"
+              "    if mask_pixels < min_mask_pixels:\n"
+              "        raise RuntimeError(\n"
+              "            f\"V263 anatomical identity mask too small: {mask_pixels} < {min_mask_pixels}\"\n"
+              "        )\n",
+          )
+          replace_once(
+              "neyrobot_prod/selfie_v263_dense_identity_lock.py",
+              '        "max_dense_shift=%.2f field_sigma=%.1f mask=landmark_anatomical_hull mask_pixels=%s roi=%sx%s "\n',
+              '        "max_dense_shift=%.2f field_sigma=%.1f mask=landmark_anatomical_hull mask_pixels=%s mask_min_pixels=%s roi=%sx%s "\n',
+          )
+          replace_once(
+              "neyrobot_prod/selfie_v263_dense_identity_lock.py",
+              "        mask_pixels, x1 - x0, y1 - y0, blend_mode, structure_strength, detail_strength, boundary, len(output),\n",
+              "        mask_pixels, min_mask_pixels, x1 - x0, y1 - y0, blend_mode, structure_strength, detail_strength, boundary, len(output),\n",
+          )
+
+          test_path = Path("tests/test_v263_dense_identity_lock.py")
+          test_text = test_path.read_text(encoding="utf-8")
+          anchor = "    def test_startup_activation_has_explicit_v262_rollback_boundary(self) -> None:\n"
+          if test_text.count(anchor) != 1:
+              raise SystemExit("V263 test insertion anchor missing or ambiguous")
+          regression = (
+              "    def test_small_face_mask_guard_is_scale_normalized_without_relaxing_large_face_cap(self) -> None:\n"
+              "        source = Path(\"neyrobot_prod/selfie_v263_dense_identity_lock.py\").read_text(encoding=\"utf-8\")\n"
+              "        self.assertIn(\"min(12000.0, max(3200.0, face_min * face_min * 0.30))\", source)\n"
+              "        self.assertIn(\"if mask_pixels < min_mask_pixels:\", source)\n"
+              "        self.assertIn(\"mask_min_pixels=%s\", source)\n"
+              "        self.assertNotIn(\"if mask_pixels < 12000:\", source)\n\n"
+          )
+          test_path.write_text(test_text.replace(anchor, regression + anchor, 1), encoding="utf-8")
+          PY
+          git diff --check
+      - name: Commit fix to working branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add neyrobot_prod/selfie_v263_dense_identity_lock.py tests/test_v251_v2_identity_detail.py tests/test_v258_inner_face_integration.py tests/test_v259_eye_landmark_protection.py tests/test_v260_eye_roi_memory_safe.py tests/test_v261_edge_harmonization.py tests/test_v262_landmark_field_compositor.py tests/test_v263_dense_identity_lock.py
+          git commit -m "fix: scale V263 mask guard and update successor regressions"
+          git push origin HEAD:work/v263-dense-identity-lock
