@@ -14,6 +14,38 @@
 # v262-landmark-field-compositor-2026-08-27
 VERSION = "v263-dense-identity-lock-2026-08-27"
 
+# V263 activation is attached to V247's existing internal overlay boundary instead
+# of adding another Telegram callback/builder owner. V247's original overlay first
+# installs V248..V262; only then is V263 armed. If V263 fails, V262 remains active.
+try:
+    from neyrobot_prod import selfie_v247_provider_supersample as _selfie_v247_module
+
+    _v247_base_overlay = _selfie_v247_module._install_v248_overlay
+
+    def _v263_after_v262_overlay() -> None:
+        _v247_base_overlay()
+        try:
+            from neyrobot_prod import selfie_v262_landmark_field_compositor as _v262
+            if not bool(getattr(_v262, "_INSTALLED", False)):
+                return
+            from neyrobot_prod.selfie_v263_runtime_safety import install as _install_v263_runtime_safety
+            _install_v263_runtime_safety()
+            from neyrobot_prod.selfie_v263_dense_identity_lock import install as _install_v263_identity
+            _install_v263_identity()
+            _selfie_v247_module._log("AI_SELFIE_V263_INSTALL status=ok base=v262 rollback=v262")
+        except Exception as _v263_activation_exc:
+            _selfie_v247_module._log(
+                "AI_SELFIE_V263_INSTALL status=failed rollback=v262 error=%s:%s",
+                type(_v263_activation_exc).__name__, _v263_activation_exc,
+            )
+
+    _selfie_v247_module._install_v248_overlay = _v263_after_v262_overlay
+except Exception as _v263_hook_exc:
+    print(
+        f"[neyrobot-prod] V263 activation hook warning: {type(_v263_hook_exc).__name__}: {_v263_hook_exc}",
+        flush=True,
+    )
+
 # Retouch is a UX/delivery overlay, not a Telegram route owner.  It arms one
 # ApplicationBuilder wrapper and patches the already-existing main.py helpers only
 # after main.py has defined them.  No callback/message/payment handlers are added.
