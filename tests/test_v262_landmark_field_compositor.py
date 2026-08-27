@@ -13,6 +13,7 @@ class V262LandmarkFieldCompositorTests(unittest.TestCase):
             source.index("install_v261_edge_harmonization()"),
             source.index("install_v262_landmark_field()"),
         )
+        self.assertIn("AI_SELFIE_V262_INSTALL", source)
 
     def test_v262_replaces_independent_eye_patch_with_one_all5_field(self) -> None:
         source = Path("neyrobot_prod/selfie_v262_landmark_field_compositor.py").read_text(encoding="utf-8")
@@ -61,11 +62,12 @@ class V262LandmarkFieldCompositorTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_package_version_is_v262_and_keeps_v261_compatibility_marker(self) -> None:
+    def test_package_version_is_v262_and_keeps_historical_successor_markers(self) -> None:
         source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
         self.assertIn('VERSION = "v262-landmark-field-compositor-2026-08-27"', source)
-        self.assertIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+        self.assertIn("v261-edge-harmonization-2026-08-26", source)
         self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
+        self.assertNotIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
 
 
 if __name__ == "__main__":
