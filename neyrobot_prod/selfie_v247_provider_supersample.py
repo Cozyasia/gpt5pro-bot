@@ -170,9 +170,7 @@ def _install_v248_overlay() -> None:
         from neyrobot_prod.selfie_v262_landmark_field_compositor import install as install_v262_landmark_field
         install_v262_landmark_field()
     except Exception as exc:
-        # Keep the legacy marker for older source-level regression tests while the
-        # final owner is now V262.
-        _log("AI_SELFIE_V261_INSTALL status=failed final_owner=v262 error=%s:%s", type(exc).__name__, exc)
+        _log("AI_SELFIE_V262_INSTALL status=failed error=%s:%s", type(exc).__name__, exc)
 
 
 def install() -> None:
