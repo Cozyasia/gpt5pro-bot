@@ -11,7 +11,8 @@
 # v259-eye-landmark-protection-2026-08-26
 # v260-eye-roi-memory-safe-2026-08-26
 # v261-edge-harmonization-2026-08-26
-VERSION = "v262-landmark-field-compositor-2026-08-27"
+# v262-landmark-field-compositor-2026-08-27
+VERSION = "v263-dense-identity-lock-2026-08-27"
 
 # Retouch is a UX/delivery overlay, not a Telegram route owner.  It arms one
 # ApplicationBuilder wrapper and patches the already-existing main.py helpers only
