@@ -73,4 +73,16 @@ except Exception as _retouch_v261_exc:
         flush=True,
     )
 
+# TEMPORARY one-shot rollout verifier. It waits for the real V263 runtime, performs
+# one production provider test without Telegram billing/user data, and is removed
+# immediately after the rollout check.
+try:
+    from neyrobot_prod.v263_production_selftest_once import install_async as _install_v263_prod_selftest
+    _install_v263_prod_selftest()
+except Exception as _v263_prod_selftest_exc:
+    print(
+        f"[neyrobot-prod] V263 production selftest arm warning: {type(_v263_prod_selftest_exc).__name__}: {_v263_prod_selftest_exc}",
+        flush=True,
+    )
+
 __all__ = ["VERSION"]
