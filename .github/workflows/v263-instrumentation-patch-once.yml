@@ -1,0 +1,272 @@
+name: V263 Instrumentation Patch Once
+
+on:
+  push:
+    branches: ["work/v263-runtime-crash-investigation"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v263-runtime-crash-investigation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply granular V263 crash checkpoints
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("neyrobot_prod/selfie_v263_dense_identity_lock.py")
+          s = path.read_text(encoding="utf-8")
+          if "AI_SELFIE_V263_CHECKPOINT" in s:
+              print("instrumentation already present")
+              raise SystemExit(0)
+
+          def one(old: str, new: str) -> None:
+              global s
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f"replacement mismatch count={count}: {old[:100]!r}")
+              s = s.replace(old, new, 1)
+
+          one(
+              "from neyrobot_prod import selfie_v262_landmark_field_compositor as v262\n",
+              "from neyrobot_prod import selfie_v262_landmark_field_compositor as v262\n"
+              "from neyrobot_prod import selfie_v263_diagnostics as v263diag\n",
+          )
+
+          one(
+              "    net = _pipnet_net(model_path)\n    net.setInput(blob)\n    try:\n",
+              "    pip_ckpt = v263diag.checkpoint(\n"
+              "        _log, f\"pipnet_{label}.before\",\n"
+              "        dims=f\"frame={w}x{h};crop={crop_w}x{crop_h};input=256x256\",\n"
+              "        arrays=((\"frame\", frame), (\"crop\", crop), (\"resized\", resized), (\"blob\", blob)),\n"
+              "    )\n"
+              "    net = _pipnet_net(model_path)\n    net.setInput(blob)\n    try:\n",
+          )
+          one(
+              "        cls_map, offset_x, offset_y = outputs[:3]\n\n    cls_map = np.asarray(cls_map, dtype=np.float32)\n",
+              "        cls_map, offset_x, offset_y = outputs[:3]\n\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, f\"pipnet_{label}.after\", started=pip_ckpt,\n"
+              "        dims=f\"frame={w}x{h};crop={crop_w}x{crop_h};input=256x256\",\n"
+              "        arrays=((\"cls_map\", cls_map), (\"offset_x\", offset_x), (\"offset_y\", offset_y)),\n"
+              "    )\n"
+              "    cls_map = np.asarray(cls_map, dtype=np.float32)\n",
+          )
+
+          one(
+              "    sigma = max(_DENSE_SIGMA_MIN, min(_DENSE_SIGMA_MAX, float(face_min) * _DENSE_SIGMA_FRACTION))\n    gx = np.arange(x0, x1, dtype=np.float32)[None, :]\n",
+              "    sigma = max(_DENSE_SIGMA_MIN, min(_DENSE_SIGMA_MAX, float(face_min) * _DENSE_SIGMA_FRACTION))\n"
+              "    field_ckpt = v263diag.checkpoint(\n"
+              "        _log, \"dense_field.before\", dims=f\"roi={roi_w}x{roi_h};face_min={float(face_min):.1f}\",\n"
+              "        arrays=((\"warped\", warped), (\"projected_dense\", projected_dense), (\"desired_dense\", desired_dense)),\n"
+              "    )\n"
+              "    gx = np.arange(x0, x1, dtype=np.float32)[None, :]\n",
+          )
+          one(
+              "    map_y = np.broadcast_to(gy, (roi_h, roi_w)).copy() - disp_y\n    corrected = cv2.remap(\n",
+              "    map_y = np.broadcast_to(gy, (roi_h, roi_w)).copy() - disp_y\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, \"dense_field.after\", started=field_ckpt, dims=f\"roi={roi_w}x{roi_h}\",\n"
+              "        arrays=((\"sum_w\", sum_w), (\"sum_dx\", sum_dx), (\"sum_dy\", sum_dy), (\"inv\", inv),\n"
+              "                (\"support\", support), (\"disp_x\", disp_x), (\"disp_y\", disp_y),\n"
+              "                (\"map_x\", map_x), (\"map_y\", map_y)),\n"
+              "    )\n"
+              "    remap_ckpt = v263diag.checkpoint(\n"
+              "        _log, \"remap.before\", dims=f\"roi={roi_w}x{roi_h}\",\n"
+              "        arrays=((\"warped\", warped), (\"map_x\", map_x), (\"map_y\", map_y)),\n"
+              "    )\n"
+              "    corrected = cv2.remap(\n",
+          )
+          one(
+              "        borderMode=cv2.BORDER_REFLECT_101,\n    )\n    return corrected, sigma, residuals\n",
+              "        borderMode=cv2.BORDER_REFLECT_101,\n    )\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, \"remap.after\", started=remap_ckpt, dims=f\"roi={roi_w}x{roi_h}\",\n"
+              "        arrays=((\"corrected_roi\", corrected), (\"map_x\", map_x), (\"map_y\", map_y)),\n"
+              "    )\n"
+              "    return corrected, sigma, residuals\n",
+          )
+
+          one(
+              "    matched = v253._colour_match_lab(corrected, target, mask)\n    ys, xs = np.where(mask > 80)\n",
+              "    compositor_ckpt = v263diag.checkpoint(\n"
+              "        _log, \"structure_first_compositor.before\",\n"
+              "        dims=f\"frame={target.shape[1]}x{target.shape[0]}\",\n"
+              "        arrays=((\"corrected\", corrected), (\"target\", target), (\"mask\", mask)),\n"
+              "    )\n"
+              "    colour_ckpt = v263diag.checkpoint(\n"
+              "        _log, \"colour_match.before\", arrays=((\"corrected\", corrected), (\"target\", target), (\"mask\", mask)),\n"
+              "    )\n"
+              "    matched = v253._colour_match_lab(corrected, target, mask)\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, \"colour_match.after\", started=colour_ckpt, arrays=((\"matched\", matched), (\"target\", target), (\"mask\", mask)),\n"
+              "    )\n"
+              "    ys, xs = np.where(mask > 80)\n",
+          )
+          one(
+              "    try:\n        integrated = cv2.seamlessClone(matched, target, mask, center, cv2.NORMAL_CLONE)\n        blend_mode = \"poisson_structure_first\"\n",
+              "    clone_ckpt = v263diag.checkpoint(\n"
+              "        _log, \"seamless_clone.before\", arrays=((\"matched\", matched), (\"target\", target), (\"mask\", mask)),\n"
+              "    )\n"
+              "    try:\n        integrated = cv2.seamlessClone(matched, target, mask, center, cv2.NORMAL_CLONE)\n"
+              "        v263diag.checkpoint(\n"
+              "            _log, \"seamless_clone.after\", started=clone_ckpt, arrays=((\"integrated\", integrated),), note=\"poisson\",\n"
+              "        )\n"
+              "        blend_mode = \"poisson_structure_first\"\n",
+          )
+          one(
+              "        integrated = target.copy()\n        blend_mode = \"target_plus_controlled_structure\"\n\n    x0, y0, x1, y1 = [int(v) for v in box]\n",
+              "        integrated = target.copy()\n"
+              "        v263diag.checkpoint(\n"
+              "            _log, \"seamless_clone.after\", started=clone_ckpt, arrays=((\"integrated\", integrated),), note=\"fallback\",\n"
+              "        )\n"
+              "        blend_mode = \"target_plus_controlled_structure\"\n\n    x0, y0, x1, y1 = [int(v) for v in box]\n",
+          )
+          one(
+              "    final = integrated\n    final[y0:y1, x0:x1] = composed\n    return final, blend_mode, boundary, structure_strength, detail_strength\n",
+              "    final = integrated\n    final[y0:y1, x0:x1] = composed\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, \"structure_first_compositor.after\", started=compositor_ckpt,\n"
+              "        dims=f\"frame={target.shape[1]}x{target.shape[0]};roi={x1-x0}x{y1-y0}\",\n"
+              "        arrays=((\"matched\", matched), (\"integrated\", integrated), (\"src_f32\", src), (\"base_f32\", base),\n"
+              "                (\"fine_low\", fine_low), (\"coarse_low\", coarse_low), (\"structure\", structure),\n"
+              "                (\"detail\", detail), (\"composed\", composed), (\"final\", final)),\n"
+              "    )\n"
+              "    return final, blend_mode, boundary, structure_strength, detail_strength\n",
+          )
+
+          one(
+              "def _mobileface_embedding(frame, dense68, model_path: Path):\n",
+              "def _mobileface_embedding(frame, dense68, model_path: Path, *, label: str = \"unspecified\"):\n",
+          )
+          one(
+              "    net = _mobileface_net(model_path)\n    net.setInput(blob)\n    feature = np.asarray(net.forward(), dtype=np.float32).reshape(-1)\n",
+              "    mobile_ckpt = v263diag.checkpoint(\n"
+              "        _log, f\"mobileface_{label}.before\", dims=f\"frame={frame.shape[1]}x{frame.shape[0]};input=112x112\",\n"
+              "        arrays=((\"frame\", frame), (\"aligned\", aligned), (\"blob\", blob)),\n"
+              "    )\n"
+              "    net = _mobileface_net(model_path)\n    net.setInput(blob)\n"
+              "    raw_feature = net.forward()\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, f\"mobileface_{label}.after\", started=mobile_ckpt, arrays=((\"raw_feature\", raw_feature),),\n"
+              "    )\n"
+              "    feature = np.asarray(raw_feature, dtype=np.float32).reshape(-1)\n",
+          )
+
+          one(
+              "    target = v253._decode_bgr(stage1)\n    source_im = v253._decode_bgr(source)\n    th, tw = target.shape[:2]\n",
+              "    target = v253._decode_bgr(stage1)\n    source_im = v253._decode_bgr(source)\n    th, tw = target.shape[:2]\n"
+              "    attempt_name = \"strict\" if strict else \"standard\"\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, f\"transfer_{attempt_name}.start\", dims=f\"target={tw}x{th};source={source_im.shape[1]}x{source_im.shape[0]}\",\n"
+              "        arrays=((\"target\", target), (\"source\", source_im)),\n"
+              "    )\n",
+          )
+          one(
+              "    source_dense = _dense_landmarks_68(source_im, source_bbox, dense_path, label=\"source_photo3\")\n    target_dense = _dense_landmarks_68(target, target_bbox, dense_path, label=\"target_person_a\")\n",
+              "    src_pip = v263diag.checkpoint(_log, f\"{attempt_name}.pipnet_source.before\", arrays=((\"source\", source_im),))\n"
+              "    source_dense = _dense_landmarks_68(source_im, source_bbox, dense_path, label=\"source_photo3\")\n"
+              "    v263diag.checkpoint(_log, f\"{attempt_name}.pipnet_source.after\", started=src_pip, arrays=((\"source_dense\", source_dense),))\n"
+              "    tgt_pip = v263diag.checkpoint(_log, f\"{attempt_name}.pipnet_target.before\", arrays=((\"target\", target),))\n"
+              "    target_dense = _dense_landmarks_68(target, target_bbox, dense_path, label=\"target_person_a\")\n"
+              "    v263diag.checkpoint(_log, f\"{attempt_name}.pipnet_target.after\", started=tgt_pip, arrays=((\"target_dense\", target_dense),))\n",
+          )
+          one(
+              "    warped = cv2.warpAffine(\n        source_im, matrix, (tw, th), flags=cv2.INTER_LANCZOS4,\n        borderMode=cv2.BORDER_REFLECT_101,\n    )\n    mask = v262._landmark_anatomy_mask(target.shape, target_bbox, target_pts5, firewall_x)\n",
+              "    warp_ckpt = v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.warp_affine.before\", dims=f\"output={tw}x{th}\", arrays=((\"source\", source_im), (\"matrix\", matrix)),\n"
+              "    )\n"
+              "    warped = cv2.warpAffine(\n        source_im, matrix, (tw, th), flags=cv2.INTER_LANCZOS4,\n        borderMode=cv2.BORDER_REFLECT_101,\n    )\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.warp_affine.after\", started=warp_ckpt, dims=f\"output={tw}x{th}\", arrays=((\"warped\", warped),),\n"
+              "    )\n"
+              "    mask_ckpt = v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.anatomical_mask.before\", dims=f\"frame={tw}x{th};firewall_x={firewall_x}\", arrays=((\"target\", target),),\n"
+              "    )\n"
+              "    mask = v262._landmark_anatomy_mask(target.shape, target_bbox, target_pts5, firewall_x)\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.anatomical_mask.after\", started=mask_ckpt, arrays=((\"mask\", mask),),\n"
+              "    )\n",
+          )
+          one(
+              "    corrected_roi, field_sigma, dense_residuals = _dense_deform_roi(\n        warped, projected_dense, desired_dense, box, face_min\n    )\n",
+              "    deform_ckpt = v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.dense_deform.before\", dims=f\"roi={x1-x0}x{y1-y0}\", arrays=((\"warped\", warped),),\n"
+              "    )\n"
+              "    corrected_roi, field_sigma, dense_residuals = _dense_deform_roi(\n        warped, projected_dense, desired_dense, box, face_min\n    )\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.dense_deform.after\", started=deform_ckpt, arrays=((\"corrected_roi\", corrected_roi), (\"dense_residuals\", dense_residuals)),\n"
+              "    )\n",
+          )
+          one(
+              "    final, blend_mode, boundary, structure_strength, detail_strength = _structure_first_compose(\n        corrected, target, mask, box, face_min, strict=strict\n    )\n",
+              "    compose_ckpt = v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.structure_first_compositor.before\", arrays=((\"corrected\", corrected), (\"target\", target), (\"mask\", mask)),\n"
+              "    )\n"
+              "    final, blend_mode, boundary, structure_strength, detail_strength = _structure_first_compose(\n        corrected, target, mask, box, face_min, strict=strict\n    )\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.structure_first_compositor.after\", started=compose_ckpt, arrays=((\"final\", final),),\n"
+              "    )\n",
+          )
+          one(
+              "    source_embedding = _mobileface_embedding(source_im, source_dense, recognition_path)\n    final_embedding = _mobileface_embedding(final, final_dense, recognition_path)\n    metrics = _quality_metrics(source_embedding, final_embedding, desired_dense, final_dense)\n",
+              "    source_embedding = _mobileface_embedding(source_im, source_dense, recognition_path, label=\"source\")\n"
+              "    final_embedding = _mobileface_embedding(final, final_dense, recognition_path, label=\"final\")\n"
+              "    metrics_ckpt = v263diag.checkpoint(\n"
+              "        _log, f\"{attempt_name}.metrics.before\", arrays=((\"source_embedding\", source_embedding), (\"final_embedding\", final_embedding),\n"
+              "                (\"desired_dense\", desired_dense), (\"final_dense\", final_dense)),\n"
+              "    )\n"
+              "    metrics = _quality_metrics(source_embedding, final_embedding, desired_dense, final_dense)\n"
+              "    v263diag.checkpoint(_log, f\"{attempt_name}.metrics.after\", started=metrics_ckpt)\n",
+          )
+          one(
+              "    standard, metrics, _ = _transfer_attempt(\n        bytes(stage1 or b\"\"), bytes(source or b\"\"), yunet_path, dense_path, recognition_path, strict=False\n    )\n    passed, failures = _quality_gate(metrics)\n",
+              "    standard_ckpt = v263diag.checkpoint(_log, \"standard_attempt.before\", note=\"strict=false\")\n"
+              "    standard, metrics, _ = _transfer_attempt(\n        bytes(stage1 or b\"\"), bytes(source or b\"\"), yunet_path, dense_path, recognition_path, strict=False\n    )\n"
+              "    v263diag.checkpoint(_log, \"standard_attempt.after\", started=standard_ckpt, note=\"strict=false\")\n"
+              "    gate_ckpt = v263diag.checkpoint(_log, \"standard_quality_gate.before\")\n"
+              "    passed, failures = _quality_gate(metrics)\n"
+              "    v263diag.checkpoint(_log, \"standard_quality_gate.after\", started=gate_ckpt, note=\"pass\" if passed else \"fail\")\n",
+          )
+          one(
+              "    strict, strict_metrics, _ = _transfer_attempt(\n        bytes(stage1 or b\"\"), bytes(source or b\"\"), yunet_path, dense_path, recognition_path, strict=True\n    )\n    strict_passed, strict_failures = _quality_gate(strict_metrics)\n",
+              "    strict_ckpt = v263diag.checkpoint(_log, \"strict_retry.before\", note=\"strict=true\")\n"
+              "    strict, strict_metrics, _ = _transfer_attempt(\n        bytes(stage1 or b\"\"), bytes(source or b\"\"), yunet_path, dense_path, recognition_path, strict=True\n    )\n"
+              "    v263diag.checkpoint(_log, \"strict_retry.transfer_after\", started=strict_ckpt, note=\"strict=true\")\n"
+              "    strict_gate_ckpt = v263diag.checkpoint(_log, \"strict_quality_gate.before\")\n"
+              "    strict_passed, strict_failures = _quality_gate(strict_metrics)\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, \"strict_quality_gate.after\", started=strict_gate_ckpt, note=\"pass\" if strict_passed else \"fail\",\n"
+              "    )\n"
+              "    v263diag.checkpoint(\n"
+              "        _log, \"strict_retry.after\", started=strict_ckpt, note=\"pass\" if strict_passed else \"fail\",\n"
+              "    )\n",
+          )
+
+          path.write_text(s, encoding="utf-8")
+          print("V263 instrumentation patch applied")
+          PY
+          python -m compileall -q neyrobot_prod/selfie_v263_dense_identity_lock.py neyrobot_prod/selfie_v263_diagnostics.py
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No patch changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add neyrobot_prod/selfie_v263_dense_identity_lock.py
+          git commit -m "diag: instrument V263 native crash checkpoints"
+          git push origin HEAD:work/v263-runtime-crash-investigation
