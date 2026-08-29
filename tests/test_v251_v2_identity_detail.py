@@ -43,9 +43,10 @@ class V251V2IdentityDetailTests(unittest.TestCase):
         from neyrobot_prod import selfie_v233_true_face_transfer as transfer
 
         # V251 remains the proven callback/UX owner. V252 remains the frozen
-        # provider fallback, while V262 is the final PERSON-A transfer owner
-        # over the V261 compatibility/base layer and preserves the established geometry contracts.
-        v263.enforce_runtime(bind_generate=True)
+        # provider fallback, while V262 is the production-default PERSON-A transfer
+        # owner. V263 remains an explicit experimental successor and must still be
+        # installable on demand without becoming the startup default.
+        v263.install()
         self.assertIs(transfer._left_person_crop, v247._provider_supersample_roi)
         self.assertIs(transfer._merge_left_crop, v250._merge_face_local)
         self.assertIs(transfer._ensure_full_hd, v246._ensure_full_hd_lossless)

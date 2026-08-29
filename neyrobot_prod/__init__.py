@@ -14,9 +14,15 @@
 # v262-landmark-field-compositor-2026-08-27
 VERSION = "v263-dense-identity-lock-2026-08-27"
 
+# V263 remains fully present for diagnostics and regression coverage, but it is not
+# production-accepted after the production-size runtime validation failure. Keep the
+# default user traffic on the verified V262 owner until V263 passes the full gate.
+V263_PRODUCTION_ACCEPTED = False
+
 # V263 activation is attached to V247's existing internal overlay boundary instead
 # of adding another Telegram callback/builder owner. V247's original overlay first
-# installs V248..V262; only then is V263 armed. If V263 fails, V262 remains active.
+# installs V248..V262; only then is V263 armed when production acceptance is enabled.
+# If V263 fails, V262 remains active.
 try:
     from neyrobot_prod import selfie_v247_provider_supersample as _selfie_v247_module
 
@@ -27,6 +33,12 @@ try:
         try:
             from neyrobot_prod import selfie_v262_landmark_field_compositor as _v262
             if not bool(getattr(_v262, "_INSTALLED", False)):
+                return
+            if not V263_PRODUCTION_ACCEPTED:
+                _selfie_v247_module._log(
+                    "AI_SELFIE_RUNTIME_DEFAULT active=v262 v263=experimental "
+                    "production_accepted=false rollback=v262"
+                )
                 return
             from neyrobot_prod.selfie_v263_runtime_safety import install as _install_v263_runtime_safety
             _install_v263_runtime_safety()
