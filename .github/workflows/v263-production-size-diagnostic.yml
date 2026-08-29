@@ -1,0 +1,113 @@
+name: V263 Production Size Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "neyrobot_prod/selfie_v263_*.py"
+      - "neyrobot_prod/v263_validation_sentinel.py"
+      - "scripts/v263_production_size_fixture.py"
+      - "tests/test_v263_runtime_crash_investigation.py"
+      - ".github/workflows/v263-production-size-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-size-memory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install production dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download public portrait fixtures
+        run: |
+          mkdir -p /tmp/v263-fixtures /tmp/v263-diag
+          base="https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source"
+          curl -L --fail --retry 3 "$base/verify_now_2024.jpg" -o /tmp/v263-fixtures/verify_now_2024.jpg
+          curl -L --fail --retry 3 "$base/verify_curie.jpg" -o /tmp/v263-fixtures/verify_curie.jpg
+      - name: Run unbounded 1856x2304 diagnostic
+        shell: bash
+        run: |
+          set +e
+          PROD_HARDENING_ENABLED=0 python scripts/v263_production_size_fixture.py \
+            --fixtures /tmp/v263-fixtures --output /tmp/v263-diag/unbounded.png \
+            > /tmp/v263-diag/unbounded.log 2>&1
+          rc=$?
+          echo "$rc" > /tmp/v263-diag/unbounded.exit
+          tail -n 120 /tmp/v263-diag/unbounded.log
+          echo "unbounded_exit=$rc"
+          exit 0
+      - name: Build production-dependency diagnostic image
+        shell: bash
+        run: |
+          cat > /tmp/v263-diag/Dockerfile <<'EOF'
+          FROM python:3.12-slim
+          COPY requirements.txt /tmp/requirements.txt
+          RUN python -m pip install --upgrade pip && pip install -r /tmp/requirements.txt
+          WORKDIR /app
+          EOF
+          docker build -t v263-prodsize-diag -f /tmp/v263-diag/Dockerfile .
+      - name: Run under Render-equivalent 512 MiB cgroup
+        shell: bash
+        run: |
+          set +e
+          docker rm -f v263-memtest >/dev/null 2>&1 || true
+          docker run --name v263-memtest \
+            --memory=536870912 --memory-swap=536870912 \
+            -e PROD_HARDENING_ENABLED=0 \
+            -v "$PWD:/app:ro" \
+            -v "/tmp/v263-fixtures:/fixtures:ro" \
+            -v "/tmp/v263-diag:/diag" \
+            v263-prodsize-diag \
+            python scripts/v263_production_size_fixture.py --fixtures /fixtures --output /diag/limited.png \
+            > /tmp/v263-diag/limited.log 2>&1
+          rc=$?
+          oom=$(docker inspect -f '{{.State.OOMKilled}}' v263-memtest 2>/dev/null || echo unknown)
+          state_rc=$(docker inspect -f '{{.State.ExitCode}}' v263-memtest 2>/dev/null || echo unknown)
+          echo "$rc" > /tmp/v263-diag/limited.exit
+          echo "$oom" > /tmp/v263-diag/limited.oom
+          echo "$state_rc" > /tmp/v263-diag/limited.container_exit
+          tail -n 160 /tmp/v263-diag/limited.log
+          echo "limited_shell_exit=$rc oom_killed=$oom container_exit=$state_rc"
+          exit 0
+      - name: Write diagnostic summary
+        shell: bash
+        run: |
+          {
+            echo '## V263 production-size memory diagnostic'
+            echo "Render memory limit reference: 536870912 bytes (512 MiB)"
+            echo "Unbounded exit: $(cat /tmp/v263-diag/unbounded.exit)"
+            echo "512MiB shell exit: $(cat /tmp/v263-diag/limited.exit)"
+            echo "512MiB OOMKilled: $(cat /tmp/v263-diag/limited.oom)"
+            echo "512MiB container exit: $(cat /tmp/v263-diag/limited.container_exit)"
+            echo '### Unbounded tail'
+            echo '```text'
+            tail -n 60 /tmp/v263-diag/unbounded.log
+            echo '```'
+            echo '### 512 MiB tail'
+            echo '```text'
+            tail -n 80 /tmp/v263-diag/limited.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v263-production-size-diagnostic
+          path: |
+            /tmp/v263-diag/*.log
+            /tmp/v263-diag/*.exit
+            /tmp/v263-diag/*.oom
+            /tmp/v263-diag/*.container_exit
+            /tmp/v263-diag/*.png
+          if-no-files-found: warn
+          retention-days: 2
