@@ -19,8 +19,8 @@ class V263RuntimeCrashInvestigationTests(unittest.TestCase):
             "remap.before", "remap.after",
             "anatomical_mask.before", "anatomical_mask.after",
             "structure_first_compositor.before", "structure_first_compositor.after",
-            "mobileface_source.before", "mobileface_source.after",
-            "mobileface_final.before", "mobileface_final.after",
+            "mobileface_{label}.before", "mobileface_{label}.after",
+            'label="source"', 'label="final"',
             "metrics.before", "metrics.after",
             "standard_quality_gate.before", "standard_quality_gate.after",
             "strict_retry.before", "strict_retry.after",
@@ -36,8 +36,6 @@ class V263RuntimeCrashInvestigationTests(unittest.TestCase):
 
     def test_quality_thresholds_and_dense_geometry_are_not_relaxed(self) -> None:
         source = Path("neyrobot_prod/selfie_v263_dense_identity_lock.py").read_text(encoding="utf-8")
-        # Freeze the exact investigation-branch gate/geometry values. Instrumentation
-        # must not move these numbers merely to obtain an output image.
         expected = (
             "_IDENTITY_COSINE_MIN = 0.50",
             "_INNER_FACE_NME_MAX = 0.080",
@@ -67,7 +65,6 @@ class V263RuntimeCrashInvestigationTests(unittest.TestCase):
             self.assertEqual(sentinel.read_state(path)["state"], "armed")
             self.assertTrue(sentinel.mark_started(path, run_id="diagnostic-1"))
             self.assertEqual(sentinel.read_state(path)["state"], "started")
-            # Simulated process restart: the next startup must not re-arm or re-run.
             self.assertFalse(sentinel.arm(path, run_id="diagnostic-1"))
             self.assertFalse(sentinel.mark_started(path, run_id="diagnostic-1"))
             self.assertEqual(sentinel.read_state(path)["state"], "started")
