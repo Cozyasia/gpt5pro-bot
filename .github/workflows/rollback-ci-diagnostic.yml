@@ -3,6 +3,8 @@ name: Rollback CI Diagnostic
 on:
   push:
     branches: ["work/v263-safe-default-v262"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
