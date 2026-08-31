@@ -1,0 +1,44 @@
+name: V262 Stage1 Geometry Patch Once
+
+on:
+  push:
+    branches: ["work/v262-quality-stability-20260831"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v262-quality-stability-20260831
+      - name: Tighten PERSON-A scaffold geometry without identity leakage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("neyrobot_prod/selfie_v241_authoritative_runtime.py")
+          s = p.read_text(encoding="utf-8")
+          old = '''        "Match its expression geometry before FaceSwap: exact lip closure/opening, mouth width, smile amount, mouth-corner asymmetry, teeth visibility, jaw opening, cheek tension, eyelid opening/squint, eyebrow height and gaze. "\n        "Never invent a smile or teeth. PERSON A temporary identity is disposable and will be physically replaced by real FaceSwap. "\n'''
+          new = '''        "Match its expression geometry before FaceSwap: exact lip closure/opening, mouth width, smile amount, mouth-corner asymmetry, teeth visibility, jaw opening, cheek tension, eyelid opening/squint, eyebrow height and gaze. "\n        "GEOMETRY COMPATIBILITY FOR PERSON A: preserve the verified crop's normalized five-point scaffold and facial proportions — interocular distance relative to face width, eye-line tilt, eye-to-nose distance, nose-to-mouth distance, mouth-corner spacing, nose width/length and lower-face/chin placement. Do not widen, narrow, stretch or stylize the face scaffold. "\n        "Never invent a smile or teeth. PERSON A temporary texture/identity is disposable and will be physically replaced, but its landmark geometry must remain source-compatible. "\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding="utf-8")
+
+          p = Path("tests/test_v262_quality_stability.py")
+          s = p.read_text(encoding="utf-8")
+          marker = '''    def test_http_transport_info_logs_are_suppressed(self) -> None:\n'''
+          test = '''    def test_stage1_prompt_requires_source_compatible_scaffold_geometry(self) -> None:\n        source = Path("neyrobot_prod/selfie_v241_authoritative_runtime.py").read_text(encoding="utf-8")\n        self.assertIn("GEOMETRY COMPATIBILITY FOR PERSON A", source)\n        self.assertIn("interocular distance relative to face width", source)\n        self.assertIn("nose-to-mouth distance", source)\n        self.assertIn("landmark geometry must remain source-compatible", source)\n\n'''
+          assert marker in s
+          s = s.replace(marker, test + marker, 1)
+          p.write_text(s, encoding="utf-8")
+          PY
+          python -m py_compile neyrobot_prod/selfie_v241_authoritative_runtime.py tests/test_v262_quality_stability.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add neyrobot_prod/selfie_v241_authoritative_runtime.py tests/test_v262_quality_stability.py
+          git commit -m "fix: constrain Gemini PERSON-A scaffold geometry for V262"
+          git push origin HEAD:work/v262-quality-stability-20260831
