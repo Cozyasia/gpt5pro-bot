@@ -26,8 +26,8 @@ V264_PRODUCTION_ACCEPTED = True
 # V264 activation is attached to V247's existing internal overlay boundary instead
 # of adding another Telegram callback/builder owner. V247 first installs V248..V262;
 # then V263 model/runtime safety is armed and V264 becomes the sole final transfer
-# owner. The bounded identity-core overlay refines only V264's already-existing
-# strict candidate; if that optional refinement cannot install, base V264 remains.
+# owner. Optional V264 overlays refine only internal stage/quality behavior; none adds
+# Telegram handlers. Failure of an optional overlay leaves the prior V264 layer active.
 # If V264 startup activation itself fails, the already-installed V262 owner remains.
 try:
     from neyrobot_prod import selfie_v247_provider_supersample as _selfie_v247_module
@@ -47,6 +47,7 @@ try:
             _install_v263_runtime_safety()
             from neyrobot_prod.selfie_v264_dense68_roi_production import install as _install_v264_identity
             _install_v264_identity()
+
             identity_core = "base_v264"
             try:
                 from neyrobot_prod.selfie_v264_identity_core_refinement import install as _install_v264_identity_core
@@ -57,10 +58,33 @@ try:
                     "AI_SELFIE_V264_IDENTITY_CORE_INSTALL status=failed fallback=base_v264 error=%s:%s",
                     type(_identity_core_exc).__name__, _identity_core_exc,
                 )
+
+            stage1_scaffold = "base_v241"
+            try:
+                from neyrobot_prod.selfie_v264_stage1_scaffold_guard import install as _install_v264_stage1_scaffold
+                _install_v264_stage1_scaffold()
+                stage1_scaffold = "age_head_hair_locked"
+            except Exception as _stage1_scaffold_exc:
+                _selfie_v247_module._log(
+                    "AI_SELFIE_V264_STAGE1_SCAFFOLD_INSTALL status=failed fallback=base_v241 error=%s:%s",
+                    type(_stage1_scaffold_exc).__name__, _stage1_scaffold_exc,
+                )
+
+            production_guard = "base_v264"
+            try:
+                from neyrobot_prod.selfie_v264_production_quality_rescue import install as _install_v264_production_guard
+                _install_v264_production_guard()
+                production_guard = "production_gate_plus_isolated_provider_rescue"
+            except Exception as _production_guard_exc:
+                _selfie_v247_module._log(
+                    "AI_SELFIE_V264_PRODUCTION_GUARD_INSTALL status=failed fallback=base_v264 error=%s:%s",
+                    type(_production_guard_exc).__name__, _production_guard_exc,
+                )
+
             _selfie_v247_module._log(
                 "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true "
-                "identity_core=%s rollback=v262_infra_only",
-                identity_core,
+                "identity_core=%s stage1_scaffold=%s production_guard=%s rollback=v262_infra_only",
+                identity_core, stage1_scaffold, production_guard,
             )
         except Exception as _v264_activation_exc:
             _selfie_v247_module._log(
