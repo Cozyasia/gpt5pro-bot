@@ -1,0 +1,65 @@
+name: V264 CI Decomposition
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Baseline tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Baseline without V264/startup files
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          set -e
+          for f in tests/test_*.py; do
+            case "$f" in
+              tests/test_v263_dense_identity_lock.py|tests/test_v249_startup_bootstrap.py|tests/test_version_active_selfie_runtime.py|tests/test_version_owner.py) continue ;;
+            esac
+            python -m unittest discover -s tests -p "$(basename "$f")" -v
+          done
+
+  v264-unit-regression:
+    name: V264 68 unit regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python -m unittest discover -s tests -p 'test_v263_dense_identity_lock.py' -v
+
+  startup-bootstrap:
+    name: Startup import bootstrap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python -c "import neyrobot_prod; print(neyrobot_prod.VERSION)"
+      - env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python -m unittest discover -s tests -p 'test_v249_startup_bootstrap.py' -v
+      - env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python -m unittest discover -s tests -p 'test_version_active_selfie_runtime.py' -v
+      - env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python -m unittest discover -s tests -p 'test_version_owner.py' -v
