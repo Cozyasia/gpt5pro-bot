@@ -156,7 +156,7 @@ async def _google_request(prompt: str, labeled_images: list[tuple[str, bytes]], 
         raise RuntimeError("GEMINI_IMAGE_API_KEY is missing")
 
     prepared = [(label, *google._prepare(raw)) for label, raw in labeled_images]
-    timeout_s = max(75.0, min(150.0, float(os.environ.get("GEMINI_SELFIE_REQUEST_TIMEOUT_S", "120") or 120)))
+    timeout_s = max(60.0, min(120.0, float(os.environ.get("GEMINI_SELFIE_REQUEST_TIMEOUT_S", "90") or 90)))
     timeout = httpx.Timeout(timeout_s, connect=30.0, read=timeout_s, write=90.0, pool=30.0)
     headers = {"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"}
     errors: list[str] = []
@@ -166,14 +166,16 @@ async def _google_request(prompt: str, labeled_images: list[tuple[str, bytes]], 
         models = [m for m in models if "pro" not in m.lower()] + [m for m in models if "pro" in m.lower()]
         _log("AI_SELFIE_V241_CIRCUIT state=open route=%s", ",".join(models))
 
-    _log("AI_SELFIE_V241_STAGE_START stage=%s models=%s refs=%s timeout=%.0fs", stage, ",".join(models), len(labeled_images), timeout_s)
+    _log("AI_SELFIE_V241_STAGE_START stage=%s models=%s refs=%s timeout=%.0fs pro_attempts=1 circuit_seconds=300", stage, ",".join(models), len(labeled_images), timeout_s)
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
         for model in models:
             is_pro = "pro" in model.lower()
             if is_pro and _PRO_CIRCUIT_OPEN_UNTIL > time.monotonic():
                 continue
-            max_attempts = 2 if is_pro else 1
+            # One bounded Pro attempt preserves preferred quality without a second long stall.
+            # A transient failure opens the existing circuit and immediately routes to Flash.
+            max_attempts = 1
             for attempt in range(1, max_attempts + 1):
                 parts: list[dict[str, Any]] = [{"text": prompt}]
                 for label, data, mime in prepared:
