@@ -85,12 +85,19 @@ def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool
 
 def install() -> None:
     global _INSTALLED
+    from neyrobot_prod import selfie_v229_canonical_two_stage as google
+    from neyrobot_prod import selfie_v233_true_face_transfer as transfer
+
+    # Patch both the authoritative source module and the already-bound active modules.
+    # Later V241 reassertions also use these replaced globals.
     v241._call_google = _call_google
     v241._stage1_prompt = _stage1_prompt
+    google._call_google = _call_google
+    transfer._stage1_prompt = _stage1_prompt
     _INSTALLED = True
     _log(
         "AI_SELFIE_V264_STAGE1_SCAFFOLD_INSTALL status=ok age_lock=true head_shape_lock=true "
-        "hair_lock=true expression_lock=true full_photo_to_gemini=false"
+        "hair_lock=true expression_lock=true full_photo_to_gemini=false active_boundary=true"
     )
 
 
