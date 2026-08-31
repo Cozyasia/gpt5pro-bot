@@ -4,11 +4,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_v209_is_bootstrapped_after_v208() -> None:
+def test_sitecustomize_bootstraps_production_before_final_selfie_owner() -> None:
     source = (ROOT / "sitecustomize.py").read_text(encoding="utf-8")
-    assert "install_selfie_v208" in source
-    assert "install_selfie_v209" in source
-    assert source.index("install_selfie_v209") > source.index("install_selfie_v208")
+    assert "from neyrobot_prod.bootstrap import install_early" in source
+    assert "from neyrobot_prod.selfie_v246_quality_hardlock import install as install_v246_final_owner" in source
+    assert source.index("install_early()") < source.index("install_v246_final_owner()")
 
 
 def test_v209_is_installed_from_guaranteed_main_bootstrap_after_v207() -> None:
