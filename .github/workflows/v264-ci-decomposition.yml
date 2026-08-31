@@ -59,10 +59,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Run isolated test file
+      - name: Run isolated test file with pytest
         env:
           PROD_HARDENING_ENABLED: "0"
-        run: python -m unittest discover -s tests -p '${{ matrix.file }}' -v
+        run: python -m pytest -q "tests/${{ matrix.file }}"
 
   v264-unit-regression:
     name: V264 68 unit regression
