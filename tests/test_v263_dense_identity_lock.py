@@ -121,6 +121,60 @@ class DenseIdentityProductionTests(unittest.TestCase):
         self.assertNotIn("PreCheckoutQueryHandler", source)
         self.assertNotIn("add_handler", source)
 
+    def test_v264_borderline_large_face_eye_metrics_trigger_visual_refinement(self) -> None:
+        # Production sample from the 2026-08-31 real Telegram test: the hard
+        # identity gate correctly passed, but the high-resolution eye geometry was
+        # visually borderline and should now use the one available strict attempt.
+        metrics = {
+            "identity_similarity_cosine": 0.7916,
+            "left_eye_error": 0.0163,
+            "right_eye_error": 0.0358,
+            "interocular_ratio_delta": 0.0346,
+            "nose_mouth_axis_delta": 0.0136,
+            "inner_face_landmark_nme": 0.0306,
+            "eye_asymmetry_delta": 0.0096,
+            "target_face_short": 643.0,
+        }
+        passed, failures = v263._quality_gate(metrics)
+        self.assertTrue(passed)
+        self.assertEqual(failures, [])
+        reasons = v264._visual_refinement_reasons(metrics)
+        self.assertTrue(any(item.startswith("eye_error=") for item in reasons))
+        self.assertTrue(any(item.startswith("interocular=") for item in reasons))
+        self.assertTrue(any(item.startswith("eye_asymmetry=") for item in reasons))
+        self.assertEqual(v264._visual_refinement_reasons(dict(metrics, target_face_short=300.0)), [])
+
+    def test_v264_refinement_selects_eye_improvement_without_identity_collapse(self) -> None:
+        standard = {
+            "identity_similarity_cosine": 0.7916,
+            "left_eye_error": 0.0163,
+            "right_eye_error": 0.0358,
+            "interocular_ratio_delta": 0.0346,
+            "nose_mouth_axis_delta": 0.0136,
+            "inner_face_landmark_nme": 0.0306,
+            "eye_asymmetry_delta": 0.0096,
+        }
+        improved = dict(
+            standard,
+            identity_similarity_cosine=0.7600,
+            right_eye_error=0.0220,
+            interocular_ratio_delta=0.0200,
+            inner_face_landmark_nme=0.0250,
+            eye_asymmetry_delta=0.0060,
+        )
+        self.assertGreater(v264._visual_quality_score(improved), v264._visual_quality_score(standard))
+        self.assertTrue(v264._prefer_strict_refinement(standard, improved))
+        identity_collapse = dict(improved, identity_similarity_cosine=0.6200)
+        self.assertFalse(v264._prefer_strict_refinement(standard, identity_collapse))
+
+    def test_v264_transfer_exposes_size_normalized_refinement_diagnostics(self) -> None:
+        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
+        body = source[source.index("def _transfer_attempt_roi"):source.index("async def _true_face_transfer_v264")]
+        self.assertIn('"target_face_short": float(face_min)', body)
+        self.assertIn('"source_face_short": float(native_face_short)', body)
+        self.assertIn('"similarity_rms_normalized"', body)
+        self.assertIn('"max_dense_shift_normalized"', body)
+
     def test_v264_retry_is_exactly_standard_then_one_strict_attempt(self) -> None:
         source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
         body = source[source.index("async def _true_face_transfer_v264"):source.index("def enforce_runtime")]
@@ -129,6 +183,8 @@ class DenseIdentityProductionTests(unittest.TestCase):
         self.assertIn("strict=True", body)
         self.assertNotIn("while ", body)
         self.assertNotIn("for attempt", body)
+        self.assertIn("AI_SELFIE_V264_REFINEMENT_RETRY", body)
+        self.assertIn("AI_SELFIE_V264_REFINEMENT_SELECT", body)
         self.assertIn("AI_SELFIE_V264_IDENTITY_REJECT", body)
 
     def test_only_infrastructure_failure_may_fall_back_to_v262(self) -> None:
