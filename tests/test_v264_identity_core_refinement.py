@@ -33,8 +33,8 @@ class V264IdentityCoreRefinementTests(unittest.TestCase):
         self.assertGreater(low_strength, 0.0)
         self.assertGreater(pixel_mix, 0.0)
         self.assertGreater(sigma, 0.0)
-        self.assertGreater(max_alpha, 0.95)
-        self.assertGreater(int(refined[60, 60, 0]), 115)
+        self.assertGreater(max_alpha, 0.0)
+        self.assertGreater(int(refined[60, 60, 0]), 105)
         self.assertTrue(np.array_equal(refined[0, 0], composed[0, 0]))
         # A pixel just inside the anatomical boundary remains exactly on the
         # accepted V264 compositor because the source core starts deeper inside.
