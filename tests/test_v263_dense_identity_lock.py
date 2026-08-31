@@ -122,9 +122,6 @@ class DenseIdentityProductionTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
 
     def test_v264_borderline_large_face_eye_metrics_trigger_visual_refinement(self) -> None:
-        # Production sample from the 2026-08-31 real Telegram test: the hard
-        # identity gate correctly passed, but the high-resolution eye geometry was
-        # visually borderline and should now use the one available strict attempt.
         metrics = {
             "identity_similarity_cosine": 0.7916,
             "left_eye_error": 0.0163,
@@ -144,7 +141,7 @@ class DenseIdentityProductionTests(unittest.TestCase):
         self.assertTrue(any(item.startswith("eye_asymmetry=") for item in reasons))
         self.assertEqual(v264._visual_refinement_reasons(dict(metrics, target_face_short=300.0)), [])
 
-    def test_v264_refinement_selects_eye_improvement_without_identity_collapse(self) -> None:
+    def test_v264_refinement_selects_geometry_improvement_only_with_bounded_identity_loss(self) -> None:
         standard = {
             "identity_similarity_cosine": 0.7916,
             "left_eye_error": 0.0163,
@@ -156,7 +153,7 @@ class DenseIdentityProductionTests(unittest.TestCase):
         }
         improved = dict(
             standard,
-            identity_similarity_cosine=0.7600,
+            identity_similarity_cosine=0.7800,
             right_eye_error=0.0220,
             interocular_ratio_delta=0.0200,
             inner_face_landmark_nme=0.0250,
@@ -164,6 +161,8 @@ class DenseIdentityProductionTests(unittest.TestCase):
         )
         self.assertGreater(v264._visual_quality_score(improved), v264._visual_quality_score(standard))
         self.assertTrue(v264._prefer_strict_refinement(standard, improved))
+        excessive_identity_loss = dict(improved, identity_similarity_cosine=0.7600)
+        self.assertFalse(v264._prefer_strict_refinement(standard, excessive_identity_loss))
         identity_collapse = dict(improved, identity_similarity_cosine=0.6200)
         self.assertFalse(v264._prefer_strict_refinement(standard, identity_collapse))
 
