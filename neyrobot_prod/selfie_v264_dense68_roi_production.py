@@ -15,6 +15,9 @@ V264 keeps the identity contract and removes that memory failure mode:
 - PERSON-B remains pixel-locked, the no-neck anatomical boundary is retained, and
   final Telegram delivery remains the original lossless PNG document path;
 - MobileFace + dense landmark metrics gate the result; one strict retry is allowed;
+- a hard-passing standard result with borderline high-resolution eye geometry may
+  use that same single strict attempt as a visual refinement, then keep whichever
+  hard-passing candidate has the stronger identity/geometry score;
 - only model/inference infrastructure failure may fall back to concrete V262.
 
 No Telegram callback, payment, scene-selection or delivery route is added here.
@@ -33,9 +36,97 @@ VERSION = "v264-dense68-roi-production-2026-08-31"
 _INSTALLED = False
 _BASE_V262_ENFORCE = None
 
+_REFINEMENT_LARGE_FACE_MIN = 500.0
+_REFINEMENT_MEDIUM_FACE_MIN = 360.0
+_REFINEMENT_LARGE_EYE_ERROR = 0.032
+_REFINEMENT_LARGE_INTEROCULAR = 0.030
+_REFINEMENT_LARGE_EYE_ASYMMETRY = 0.008
+_REFINEMENT_LARGE_INNER_NME = 0.040
+_REFINEMENT_MEDIUM_EYE_ERROR = 0.045
+_REFINEMENT_MEDIUM_INTEROCULAR = 0.040
+_REFINEMENT_MEDIUM_EYE_ASYMMETRY = 0.020
+_REFINEMENT_MEDIUM_INNER_NME = 0.055
+
 
 def _log(message: str, *args: Any) -> None:
     v253._log(message, *args)
+
+
+def _visual_refinement_reasons(metrics: dict[str, float]) -> list[str]:
+    """Detect borderline geometry that a permissive hard gate intentionally accepts."""
+    face_short = float(metrics.get("target_face_short", 0.0) or 0.0)
+    if face_short < _REFINEMENT_MEDIUM_FACE_MIN:
+        return []
+
+    if face_short >= _REFINEMENT_LARGE_FACE_MIN:
+        eye_limit = _REFINEMENT_LARGE_EYE_ERROR
+        interocular_limit = _REFINEMENT_LARGE_INTEROCULAR
+        asym_limit = _REFINEMENT_LARGE_EYE_ASYMMETRY
+        inner_limit = _REFINEMENT_LARGE_INNER_NME
+    else:
+        eye_limit = _REFINEMENT_MEDIUM_EYE_ERROR
+        interocular_limit = _REFINEMENT_MEDIUM_INTEROCULAR
+        asym_limit = _REFINEMENT_MEDIUM_EYE_ASYMMETRY
+        inner_limit = _REFINEMENT_MEDIUM_INNER_NME
+
+    reasons: list[str] = []
+    worst_eye = max(
+        float(metrics.get("left_eye_error", 0.0) or 0.0),
+        float(metrics.get("right_eye_error", 0.0) or 0.0),
+    )
+    if worst_eye > eye_limit:
+        reasons.append(f"eye_error={worst_eye:.4f}>{eye_limit:.4f}")
+    interocular = float(metrics.get("interocular_ratio_delta", 0.0) or 0.0)
+    if interocular > interocular_limit:
+        reasons.append(f"interocular={interocular:.4f}>{interocular_limit:.4f}")
+    asymmetry = float(metrics.get("eye_asymmetry_delta", 0.0) or 0.0)
+    if asymmetry > asym_limit:
+        reasons.append(f"eye_asymmetry={asymmetry:.4f}>{asym_limit:.4f}")
+    inner_nme = float(metrics.get("inner_face_landmark_nme", 0.0) or 0.0)
+    if inner_nme > inner_limit:
+        reasons.append(f"inner_nme={inner_nme:.4f}>{inner_limit:.4f}")
+    return reasons
+
+
+def _visual_quality_score(metrics: dict[str, float]) -> float:
+    """Rank two already hard-passing candidates; higher is better."""
+    identity = float(metrics.get("identity_similarity_cosine", 0.0) or 0.0)
+    worst_eye = max(
+        float(metrics.get("left_eye_error", 1.0) or 1.0),
+        float(metrics.get("right_eye_error", 1.0) or 1.0),
+    )
+    interocular = float(metrics.get("interocular_ratio_delta", 1.0) or 1.0)
+    inner_nme = float(metrics.get("inner_face_landmark_nme", 1.0) or 1.0)
+    eye_asymmetry = float(metrics.get("eye_asymmetry_delta", 1.0) or 1.0)
+    nose_mouth = float(metrics.get("nose_mouth_axis_delta", 1.0) or 1.0)
+    return (
+        identity
+        - 2.8 * worst_eye
+        - 1.8 * interocular
+        - 1.0 * inner_nme
+        - 1.2 * eye_asymmetry
+        - 0.5 * nose_mouth
+    )
+
+
+def _prefer_strict_refinement(standard_metrics: dict[str, float], strict_metrics: dict[str, float]) -> bool:
+    """Prefer strict only when it improves visual geometry without sacrificing identity."""
+    standard_score = _visual_quality_score(standard_metrics)
+    strict_score = _visual_quality_score(strict_metrics)
+    if strict_score >= standard_score + 0.004:
+        return True
+
+    standard_eye = max(
+        float(standard_metrics.get("left_eye_error", 1.0) or 1.0),
+        float(standard_metrics.get("right_eye_error", 1.0) or 1.0),
+    )
+    strict_eye = max(
+        float(strict_metrics.get("left_eye_error", 1.0) or 1.0),
+        float(strict_metrics.get("right_eye_error", 1.0) or 1.0),
+    )
+    standard_identity = float(standard_metrics.get("identity_similarity_cosine", 0.0) or 0.0)
+    strict_identity = float(strict_metrics.get("identity_similarity_cosine", 0.0) or 0.0)
+    return strict_eye <= standard_eye - 0.003 and strict_identity >= standard_identity - 0.080
 
 
 def _colour_match_lab_roi_only(source_roi, target_roi, mask_roi):
@@ -237,13 +328,19 @@ def _transfer_attempt_roi(stage1: bytes, source: bytes, yunet_path, dense_path, 
     final_dense = v263._dense_landmarks_68(final, final_bbox, dense_path, label="final_person_a")
     source_embedding = v263._mobileface_embedding(source_im, source_dense, recognition_path)
     final_embedding = v263._mobileface_embedding(final, final_dense, recognition_path)
-    metrics = v263._quality_metrics(source_embedding, final_embedding, desired_dense, final_dense)
+    metrics = dict(v263._quality_metrics(source_embedding, final_embedding, desired_dense, final_dense))
+    max_dense_shift = float(np.linalg.norm(dense_residuals, axis=1).max())
+    metrics.update({
+        "source_face_short": float(native_face_short),
+        "target_face_short": float(face_min),
+        "similarity_rms_normalized": float(sim_rms / max(face_min, 1.0)),
+        "max_dense_shift_normalized": float(max_dense_shift / max(face_min, 1.0)),
+    })
 
     ok, encoded = cv2.imencode(".png", final, [cv2.IMWRITE_PNG_COMPRESSION, 2])
     if not ok:
         raise RuntimeError("V264 OpenCV PNG encode failed")
     output = bytes(encoded.tobytes())
-    max_dense_shift = float(np.linalg.norm(dense_residuals, axis=1).max())
     path = "strict" if strict else "standard"
     _log(
         "AI_SELFIE_V264_TRANSFER status=success path=%s method=dense68_identity_field_roi_only "
@@ -274,7 +371,8 @@ async def _true_face_transfer_v264(runtime: Any, stage1: bytes, source: bytes, s
             bytes(stage1 or b""), bytes(source or b""), yunet_path, dense_path, recognition_path, strict=False
         )
         passed, failures = v263._quality_gate(metrics)
-        if passed:
+        refinement_reasons = _visual_refinement_reasons(metrics) if passed else []
+        if passed and not refinement_reasons:
             v263._log_quality(
                 metrics, path="v264_standard", passed=True,
                 strict_retry_triggered=False, strict_retry_success=False, failures=[]
@@ -284,11 +382,26 @@ async def _true_face_transfer_v264(runtime: Any, stage1: bytes, source: bytes, s
             runtime.AI_SELFIE_LAST_IDENTITY_METRICS = dict(metrics)
             return standard, "opencv_dense68_roi_identity_lock_standard"
 
-        v263._log_quality(
-            metrics, path="v264_standard", passed=False,
-            strict_retry_triggered=True, strict_retry_success=False, failures=failures
-        )
-        _log("AI_SELFIE_V264_STRICT_RETRY strict_retry_triggered=true reason=identity_quality_gate")
+        if passed:
+            v263._log_quality(
+                metrics, path="v264_standard", passed=True,
+                strict_retry_triggered=True, strict_retry_success=False, failures=[]
+            )
+            retry_reason = "visual_refinement:" + "|".join(refinement_reasons)
+            _log(
+                "AI_SELFIE_V264_REFINEMENT_RETRY status=triggered strict_retry_triggered=true reason=%s "
+                "target_face_short=%.1f standard_score=%.5f",
+                "|".join(refinement_reasons), float(metrics.get("target_face_short", 0.0)),
+                _visual_quality_score(metrics),
+            )
+        else:
+            v263._log_quality(
+                metrics, path="v264_standard", passed=False,
+                strict_retry_triggered=True, strict_retry_success=False, failures=failures
+            )
+            retry_reason = "identity_quality_gate"
+
+        _log("AI_SELFIE_V264_STRICT_RETRY strict_retry_triggered=true reason=%s", retry_reason)
         strict, strict_metrics, _ = _transfer_attempt_roi(
             bytes(stage1 or b""), bytes(source or b""), yunet_path, dense_path, recognition_path, strict=True
         )
@@ -297,6 +410,29 @@ async def _true_face_transfer_v264(runtime: Any, stage1: bytes, source: bytes, s
             strict_metrics, path="v264_strict", passed=strict_passed,
             strict_retry_triggered=True, strict_retry_success=strict_passed, failures=strict_failures
         )
+
+        if passed:
+            prefer_strict = bool(strict_passed and _prefer_strict_refinement(metrics, strict_metrics))
+            selected_metrics = strict_metrics if prefer_strict else metrics
+            standard_score = _visual_quality_score(metrics)
+            strict_score = _visual_quality_score(strict_metrics) if strict_passed else float("-inf")
+            selected = "strict" if prefer_strict else "standard"
+            _log(
+                "AI_SELFIE_V264_REFINEMENT_SELECT status=success selected=%s strict_passed=%s "
+                "standard_score=%.5f strict_score=%.5f standard_worst_eye=%.4f strict_worst_eye=%.4f",
+                selected, str(bool(strict_passed)).lower(), standard_score, strict_score,
+                max(float(metrics.get("left_eye_error", 1.0)), float(metrics.get("right_eye_error", 1.0))),
+                max(float(strict_metrics.get("left_eye_error", 1.0)), float(strict_metrics.get("right_eye_error", 1.0))),
+            )
+            runtime.AI_SELFIE_LAST_IDENTITY_METRICS = dict(selected_metrics)
+            if prefer_strict:
+                runtime.AI_SELFIE_LAST_FACESWAP_PROVIDER = "opencv_dense68_roi_v264_refined_strict"
+                runtime.AI_SELFIE_LAST_IDENTITY_PATH = "v264_refined_strict"
+                return strict, "opencv_dense68_roi_identity_lock_refined_strict"
+            runtime.AI_SELFIE_LAST_FACESWAP_PROVIDER = "opencv_dense68_roi_v264_standard_retained"
+            runtime.AI_SELFIE_LAST_IDENTITY_PATH = "v264_standard_retained"
+            return standard, "opencv_dense68_roi_identity_lock_standard_retained"
+
         runtime.AI_SELFIE_LAST_IDENTITY_PATH = "v264_strict"
         runtime.AI_SELFIE_LAST_IDENTITY_METRICS = dict(strict_metrics)
         if strict_passed:
@@ -375,7 +511,7 @@ def enforce_runtime(bind_generate: bool = True) -> None:
         runtime.AI_SELFIE_PROVIDER = (
             "Gemini scene/PERSON-B -> V262 safety base -> YuNet global similarity only -> "
             "PIPNet 68-point source-dominant ROI geometry -> ROI-only LAB/Poisson/detail -> "
-            "MobileFace+dense identity gate -> one strict retry -> V253 original document"
+            "MobileFace+dense identity gate -> one strict retry/refinement -> V253 original document"
         )
         runtime.AI_SELFIE_GENERATION_STAGES = 2
 
@@ -383,8 +519,8 @@ def enforce_runtime(bind_generate: bool = True) -> None:
         "AI_SELFIE_V264_ENFORCE status=ok base=v262 final_owner=v264 landmarks=68 "
         "geometry=source_dominant_dense_identity_field roi_only=true full_frame_source_warp=false "
         "full_frame_float=false colour_match=lab_roi_only quality_gate=mobileface_plus_dense "
-        "strict_retry=automatic independent_eye_patch=false mask=landmark_anatomical_hull "
-        "source_gate=anatomical_inner_face no_neck=true person_b=pixel_locked "
+        "strict_retry=automatic visual_refinement=size_aware independent_eye_patch=false "
+        "mask=landmark_anatomical_hull source_gate=anatomical_inner_face no_neck=true person_b=pixel_locked "
         "delivery=v253_original_document callback_payment_scene_unchanged=true version=%s",
         VERSION,
     )
@@ -409,4 +545,5 @@ __all__ = [
     "VERSION", "install", "enforce_runtime", "_true_face_transfer_v264",
     "_transfer_attempt_roi", "_dense_deform_local_roi", "_colour_match_lab_roi_only",
     "_warp_source_direct_to_roi", "_structure_first_compose_roi",
+    "_visual_refinement_reasons", "_visual_quality_score", "_prefer_strict_refinement",
 ]
