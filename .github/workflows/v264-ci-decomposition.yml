@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  baseline:
-    name: Baseline tests
+  baseline-legacy:
+    name: Baseline legacy through V216
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,15 +17,48 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Baseline without V264/startup files
+      - name: Run legacy baseline files
         env:
           PROD_HARDENING_ENABLED: "0"
         run: |
           set -e
-          for f in tests/test_*.py; do
-            case "$f" in
-              tests/test_v263_dense_identity_lock.py|tests/test_v249_startup_bootstrap.py|tests/test_version_active_selfie_runtime.py|tests/test_version_owner.py) continue ;;
-            esac
+          for f in tests/test_celebrity_selfie*.py tests/test_commercial_numbers_v201.py tests/test_credit_selfie_v201.py tests/test_medical_v119_activation.py tests/test_openai_httpx_compat.py tests/test_prod_core.py tests/test_selfie_*.py; do
+            python -m unittest discover -s tests -p "$(basename "$f")" -v
+          done
+
+  baseline-v250-v256:
+    name: Baseline V250 through V256
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run V250-V256 files
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          set -e
+          for f in tests/test_v25[0-6]*.py; do
+            python -m unittest discover -s tests -p "$(basename "$f")" -v
+          done
+
+  baseline-v257-v262:
+    name: Baseline V257 through V262
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run V257-V262 files
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          set -e
+          for f in tests/test_v25[7-9]*.py tests/test_v26[0-2]*.py tests/test_retouch_v261_batch.py; do
             python -m unittest discover -s tests -p "$(basename "$f")" -v
           done
 
@@ -51,15 +84,42 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - env:
+      - name: Import production package
+        env:
           PROD_HARDENING_ENABLED: "0"
         run: python -c "import neyrobot_prod; print(neyrobot_prod.VERSION)"
-      - env:
+      - name: Startup bootstrap regression
+        env:
           PROD_HARDENING_ENABLED: "0"
         run: python -m unittest discover -s tests -p 'test_v249_startup_bootstrap.py' -v
-      - env:
+      - name: Active runtime regression
+        env:
           PROD_HARDENING_ENABLED: "0"
         run: python -m unittest discover -s tests -p 'test_version_active_selfie_runtime.py' -v
-      - env:
+      - name: Version owner regression
+        env:
           PROD_HARDENING_ENABLED: "0"
         run: python -m unittest discover -s tests -p 'test_version_owner.py' -v
+
+  real-model-smoke:
+    name: Real-model dense68 smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Download public fixtures
+        run: |
+          mkdir -p /tmp/v264-fixtures
+          base="https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source"
+          curl -L --fail --retry 3 "$base/verify_now_2024.jpg" -o /tmp/v264-fixtures/verify_now_2024.jpg
+          curl -L --fail --retry 3 "$base/verify_curie.jpg" -o /tmp/v264-fixtures/verify_curie.jpg
+          curl -L --fail --retry 3 "$base/pose_left.jpg" -o /tmp/v264-fixtures/pose_left.jpg
+          curl -L --fail --retry 3 "$base/verify_einstein_1921.jpg" -o /tmp/v264-fixtures/verify_einstein_1921.jpg
+      - name: Run real-model matrix
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python scripts/v263_identity_smoke.py --fixtures /tmp/v264-fixtures --output /tmp/v264-two-person-output.png
