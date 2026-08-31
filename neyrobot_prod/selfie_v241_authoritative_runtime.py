@@ -156,7 +156,7 @@ async def _google_request(prompt: str, labeled_images: list[tuple[str, bytes]], 
         raise RuntimeError("GEMINI_IMAGE_API_KEY is missing")
 
     prepared = [(label, *google._prepare(raw)) for label, raw in labeled_images]
-    timeout_s = max(75.0, min(150.0, float(os.environ.get("GEMINI_SELFIE_REQUEST_TIMEOUT_S", "120") or 120)))
+    timeout_s = max(60.0, min(120.0, float(os.environ.get("GEMINI_SELFIE_REQUEST_TIMEOUT_S", "90") or 90)))
     timeout = httpx.Timeout(timeout_s, connect=30.0, read=timeout_s, write=90.0, pool=30.0)
     headers = {"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"}
     errors: list[str] = []
@@ -166,14 +166,16 @@ async def _google_request(prompt: str, labeled_images: list[tuple[str, bytes]], 
         models = [m for m in models if "pro" not in m.lower()] + [m for m in models if "pro" in m.lower()]
         _log("AI_SELFIE_V241_CIRCUIT state=open route=%s", ",".join(models))
 
-    _log("AI_SELFIE_V241_STAGE_START stage=%s models=%s refs=%s timeout=%.0fs", stage, ",".join(models), len(labeled_images), timeout_s)
+    _log("AI_SELFIE_V241_STAGE_START stage=%s models=%s refs=%s timeout=%.0fs pro_attempts=1 circuit_seconds=300", stage, ",".join(models), len(labeled_images), timeout_s)
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
         for model in models:
             is_pro = "pro" in model.lower()
             if is_pro and _PRO_CIRCUIT_OPEN_UNTIL > time.monotonic():
                 continue
-            max_attempts = 2 if is_pro else 1
+            # One bounded Pro attempt preserves preferred quality without a second long stall.
+            # A transient failure opens the existing circuit and immediately routes to Flash.
+            max_attempts = 1
             for attempt in range(1, max_attempts + 1):
                 parts: list[dict[str, Any]] = [{"text": prompt}]
                 for label, data, mime in prepared:
@@ -285,7 +287,8 @@ def _stage1_prompt(name: str, scene: str, shot_label: str, has_scene_image: bool
         f"{shot_rule}{scene_rule}"
         f"PERSON A is the USER on the LEFT. Source #{source_photo_no} supplied here is ONLY a verified face/expression crop. "
         "Match its expression geometry before FaceSwap: exact lip closure/opening, mouth width, smile amount, mouth-corner asymmetry, teeth visibility, jaw opening, cheek tension, eyelid opening/squint, eyebrow height and gaze. "
-        "Never invent a smile or teeth. PERSON A temporary identity is disposable and will be physically replaced by real FaceSwap. "
+        "GEOMETRY COMPATIBILITY FOR PERSON A: preserve the verified crop's normalized five-point scaffold and facial proportions — interocular distance relative to face width, eye-line tilt, eye-to-nose distance, nose-to-mouth distance, mouth-corner spacing, nose width/length and lower-face/chin placement. Do not widen, narrow, stretch or stylize the face scaffold. "
+        "Never invent a smile or teeth. PERSON A temporary texture/identity is disposable and will be physically replaced, but its landmark geometry must remain source-compatible. "
         "Keep PERSON A near-frontal, unobstructed, sharp, large, fully inside the LEFT 48 percent, with clean separation from PERSON B. "
         f"PERSON B is {name} on the RIGHT. The three HERO PORTRAIT references belong ONLY to PERSON B and are the sole identity authority for PERSON B. "
         "STRICT IDENTITY FIREWALL: never copy USER face, hair, age, eyes, nose, lips, jaw, skin, expression or clothing identity into PERSON B; never copy PERSON B into PERSON A. "

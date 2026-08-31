@@ -40,6 +40,8 @@ _INSTALLED = False
 _BASE_V261_ENFORCE = None
 
 _MAX_LANDMARK_RESIDUAL = 28.0
+_MAX_LANDMARK_RESIDUAL_FRACTION = 0.060
+_MAX_LANDMARK_RESIDUAL_CAP = 48.0
 _FIELD_SIGMA_X_FRACTION = 0.075
 _FIELD_SIGMA_Y_FRACTION = 0.065
 _FIELD_SIGMA_MIN = 28.0
@@ -73,6 +75,57 @@ def _smoothstep01(values):
 
     t = np.clip(values, 0.0, 1.0).astype(np.float32, copy=False)
     return t * t * (3.0 - 2.0 * t)
+
+
+def _landmark_residual_limit(face_min: float) -> float:
+    """Scale the all-five correction budget with PERSON-A face size, with hard bounds.
+
+    V262 historically used a fixed 28px ceiling.  On a production 736px face that
+    turned a geometrically moderate 40.54px residual (5.51% of face short side) into
+    an unnecessary V258 fallback.  Keep 28px for small/normal faces, permit up to 6%
+    on large faces, and retain a hard 48px ceiling so pathological fits still fail.
+    """
+    face = max(1.0, float(face_min))
+    return min(
+        _MAX_LANDMARK_RESIDUAL_CAP,
+        max(_MAX_LANDMARK_RESIDUAL, face * _MAX_LANDMARK_RESIDUAL_FRACTION),
+    )
+
+
+def _colour_match_lab_roi(warped, target, mask, box):
+    """V253-equivalent LAB statistics, but only inside the compact PERSON-A ROI.
+
+    This intentionally preserves V253 colour math while avoiding three full-frame
+    float32 LAB buffers at 1856x2304.  Outside the ROI the warped uint8 frame is
+    unchanged; PERSON-B is restored by the existing firewall later.
+    """
+    import cv2
+    import numpy as np
+
+    x0, y0, x1, y1 = [int(v) for v in box]
+    src_roi = warped[y0:y1, x0:x1]
+    tgt_roi = target[y0:y1, x0:x1]
+    mask_roi = mask[y0:y1, x0:x1]
+    region = mask_roi > 80
+    if int(region.sum()) < 500:
+        return warped.copy()
+
+    src_lab = cv2.cvtColor(src_roi, cv2.COLOR_BGR2LAB).astype(np.float32)
+    tgt_lab = cv2.cvtColor(tgt_roi, cv2.COLOR_BGR2LAB).astype(np.float32)
+    out_lab = src_lab.copy()
+    for channel in range(3):
+        src_values = src_lab[:, :, channel][region]
+        tgt_values = tgt_lab[:, :, channel][region]
+        src_mean, tgt_mean = float(src_values.mean()), float(tgt_values.mean())
+        src_std, tgt_std = float(src_values.std()), float(tgt_values.std())
+        gain = 1.0 if src_std < 1.0 else max(0.78, min(1.22, tgt_std / src_std))
+        adjusted = (src_lab[:, :, channel] - src_mean) * gain + tgt_mean
+        out_lab[:, :, channel] = np.clip(adjusted, 0.0, 255.0)
+
+    matched_roi = cv2.cvtColor(out_lab.astype(np.uint8), cv2.COLOR_LAB2BGR)
+    matched = warped.copy()
+    matched[y0:y1, x0:x1] = matched_roi
+    return matched
 
 
 def _landmark_anatomy_mask(shape, bbox, landmarks, firewall_x: int):
@@ -230,8 +283,12 @@ def _source_pixel_transfer_v262(stage1: bytes, source: bytes, model_path) -> byt
     residuals = np.asarray(target_pts, dtype=np.float32) - np.asarray(projected_pts, dtype=np.float32)
     residual_norms = np.linalg.norm(residuals, axis=1)
     max_residual = float(residual_norms.max())
-    if max_residual > _MAX_LANDMARK_RESIDUAL:
-        raise RuntimeError(f"V262 landmark residual too large: max={max_residual:.2f}px")
+    residual_limit = _landmark_residual_limit(face_min)
+    if max_residual > residual_limit:
+        raise RuntimeError(
+            f"V262 landmark residual too large: max={max_residual:.2f}px "
+            f"limit={residual_limit:.2f}px normalized={max_residual / max(1.0, face_min):.4f}"
+        )
 
     # One global source warp only.  All local geometry correction happens together
     # in the compact PERSON-A ROI below; there are no later eye/mouth patch warps.
@@ -257,7 +314,7 @@ def _source_pixel_transfer_v262(stage1: bytes, source: bytes, model_path) -> byt
     corrected = warped.copy()
     corrected[y0:y1, x0:x1] = corrected_roi
 
-    matched = v253._colour_match_lab(corrected, target, anatomy_mask)
+    matched = _colour_match_lab_roi(corrected, target, anatomy_mask, box)
     ys, xs = np.where(anatomy_mask > 80)
     clone_center = (
         int(round((int(xs.min()) + int(xs.max())) / 2.0)),
@@ -318,8 +375,8 @@ def _source_pixel_transfer_v262(stage1: bytes, source: bytes, model_path) -> byt
         "AI_SELFIE_V262_TRANSFER status=success method=all5_landmark_field_anatomical_poisson_detail "
         "source=%sx%s target=%sx%s source_face=%.0fx%.0f target_face=%.0fx%.0f "
         "transform=%s similarity_rms=%.2f fit_rms=%.2f anisotropy=%.3f scale=%.3f "
-        "native_face_short=%.1f landmark_residuals=%s landmark_shifts=%s max_residual=%.2f "
-        "landmark_field=all5 field_sigma=%.1f,%.1f independent_eye_patch=false "
+        "native_face_short=%.1f landmark_residuals=%s landmark_shifts=%s max_residual=%.2f residual_limit=%.2f "
+        "landmark_field=all5 field_sigma=%.1f,%.1f colour_match=lab_roi independent_eye_patch=false "
         "mask=landmark_anatomical_hull ellipse_final_mask=false mask_pixels=%s roi=%sx%s "
         "blend=%s source_high_frequency_only=true detail_sigma=%.1f detail_strength=%.2f "
         "detail_boundary=%.1f raw_low_frequency_reinject=false solid_source_core=false "
@@ -327,7 +384,7 @@ def _source_pixel_transfer_v262(stage1: bytes, source: bytes, model_path) -> byt
         "output=png bytes=%s source_pixels=true synthetic_face=false",
         sw, sh, tw, th, sfw, sfh, tfw, tfh,
         transform_mode, sim_err, fit_err, anisotropy, mean_scale, native_face_short,
-        residual_text, shift_text, max_residual, field_sigma_x, field_sigma_y,
+        residual_text, shift_text, max_residual, residual_limit, field_sigma_x, field_sigma_y,
         mask_pixels, x1 - x0, y1 - y0, blend_mode,
         _DETAIL_SIGMA, _DETAIL_STRENGTH, detail_boundary, len(output),
     )
@@ -407,7 +464,8 @@ def enforce_runtime(bind_generate: bool = True) -> None:
         "AI_SELFIE_V262_ENFORCE status=ok base=gemini_stage1 source=photo3 landmarks=5 "
         "geometry=unified_all5_landmark_field independent_eye_patch=false "
         "mask=landmark_anatomical_hull ellipse_final_mask=false blend=poisson_plus_source_high_frequency "
-        "raw_low_frequency_reinject=false solid_source_core=false full_frame_float_blend=false "
+        "colour_match=lab_roi residual_guard=scale_normalized_28_48px raw_low_frequency_reinject=false "
+        "solid_source_core=false full_frame_float_blend=false "
         "source_gate=anatomical_inner_face no_neck=true delivery=v253_original_document "
         "hero=pixel_locked version=%s",
         VERSION,
@@ -439,4 +497,6 @@ __all__ = [
     "_true_face_transfer_v262",
     "_landmark_anatomy_mask",
     "_deform_all_landmarks_roi",
+    "_landmark_residual_limit",
+    "_colour_match_lab_roi",
 ]

@@ -107,6 +107,11 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 log = logging.getLogger("gpt-bot")
+# httpx INFO request logs include full Telegram Bot API URLs, which contain the bot
+# credential in the path.  Application-owned provider/delivery logs already record
+# status and timing without secrets, so keep transport libraries at WARNING.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 PATCH_VERSION = "v104-presentation-preflight-self-heal-2026-07-16"
 
