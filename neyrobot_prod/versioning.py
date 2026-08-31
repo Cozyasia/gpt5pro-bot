@@ -31,6 +31,18 @@ def _deploy_revision() -> str:
     return raw[:7] if raw else "unknown"
 
 
+def _active_selfie_runtime() -> tuple[str, str]:
+    """Return the production-default selfie owner separately from package VERSION."""
+    try:
+        from neyrobot_prod import V263_PRODUCTION_ACCEPTED
+        accepted = bool(V263_PRODUCTION_ACCEPTED)
+    except Exception:
+        accepted = False
+    if accepted:
+        return "v263", "production accepted"
+    return "v262", "experimental / not production accepted"
+
+
 async def command(update: Any, context: Any) -> None:
     """Return package release plus active production component versions."""
     from telegram.ext import ApplicationHandlerStop
@@ -45,7 +57,12 @@ async def command(update: Any, context: Any) -> None:
         message = getattr(update, "effective_message", None)
         if message is not None:
             runtime = _runtime_module()
-            lines = [f"✅ Код запущен: {VERSION}"]
+            active_selfie, v263_status = _active_selfie_runtime()
+            lines = [
+                f"✅ Код/пакет: {VERSION}",
+                f"✅ Production AI-селфи runtime: {active_selfie}",
+                f"• V263: {v263_status}",
+            ]
             if runtime is not None:
                 lines.extend([
                     "Компоненты:",
@@ -57,6 +74,9 @@ async def command(update: Any, context: Any) -> None:
                     f"• команды AI-селфи: {getattr(runtime, 'SELFIE_COMMANDS_VERSION', '—')}",
                     f"• маршрут AI-селфи: {getattr(runtime, 'CELEBRITY_SELFIE_ROUTE', '—')}",
                 ])
+                last_provider = str(getattr(runtime, "AI_SELFIE_LAST_FACESWAP_PROVIDER", "") or "").strip()
+                if last_provider:
+                    lines.append(f"• последний фактический transfer: {last_provider}")
             lines.append(f"Git revision: {_deploy_revision()}")
             lines.append("Render: main.py · Start Command: python -u main.py")
             await message.reply_text("\n".join(lines))
