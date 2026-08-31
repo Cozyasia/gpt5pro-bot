@@ -29,6 +29,13 @@ class V262QualityStabilityTests(unittest.TestCase):
         self.assertIn("pro_attempts=1", source)
         self.assertIn("_PRO_CIRCUIT_OPEN_UNTIL = time.monotonic() + 300.0", source)
 
+    def test_stage1_prompt_requires_source_compatible_scaffold_geometry(self) -> None:
+        source = Path("neyrobot_prod/selfie_v241_authoritative_runtime.py").read_text(encoding="utf-8")
+        self.assertIn("GEOMETRY COMPATIBILITY FOR PERSON A", source)
+        self.assertIn("interocular distance relative to face width", source)
+        self.assertIn("nose-to-mouth distance", source)
+        self.assertIn("landmark geometry must remain source-compatible", source)
+
     def test_http_transport_info_logs_are_suppressed(self) -> None:
         source = Path("main.py").read_text(encoding="utf-8")
         self.assertIn('logging.getLogger("httpx").setLevel(logging.WARNING)', source)
