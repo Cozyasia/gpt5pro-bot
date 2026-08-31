@@ -15,9 +15,10 @@ V264 keeps the identity contract and removes that memory failure mode:
 - PERSON-B remains pixel-locked, the no-neck anatomical boundary is retained, and
   final Telegram delivery remains the original lossless PNG document path;
 - MobileFace + dense landmark metrics gate the result; one strict retry is allowed;
-- a hard-passing standard result with borderline high-resolution eye geometry may
-  use that same single strict attempt as a visual refinement, then keep whichever
-  hard-passing candidate has the stronger identity/geometry score;
+- a hard-passing standard result may use that same single strict attempt when either
+  high-resolution geometry is borderline or identity similarity is still suboptimal;
+- candidate selection is identity-dominant but keeps hard geometry guardrails so a
+  more similar face can never win by visibly damaging eyes or facial proportions;
 - only model/inference infrastructure failure may fall back to concrete V262.
 
 No Telegram callback, payment, scene-selection or delivery route is added here.
@@ -38,6 +39,8 @@ _BASE_V262_ENFORCE = None
 
 _REFINEMENT_LARGE_FACE_MIN = 500.0
 _REFINEMENT_MEDIUM_FACE_MIN = 360.0
+_REFINEMENT_LARGE_IDENTITY = 0.825
+_REFINEMENT_MEDIUM_IDENTITY = 0.790
 _REFINEMENT_LARGE_EYE_ERROR = 0.032
 _REFINEMENT_LARGE_INTEROCULAR = 0.030
 _REFINEMENT_LARGE_EYE_ASYMMETRY = 0.008
@@ -47,29 +50,38 @@ _REFINEMENT_MEDIUM_INTEROCULAR = 0.040
 _REFINEMENT_MEDIUM_EYE_ASYMMETRY = 0.020
 _REFINEMENT_MEDIUM_INNER_NME = 0.055
 
+_IDENTITY_GAIN_MIN = 0.012
+_IDENTITY_GEOMETRY_LOSS_MAX = 0.020
+
 
 def _log(message: str, *args: Any) -> None:
     v253._log(message, *args)
 
 
 def _visual_refinement_reasons(metrics: dict[str, float]) -> list[str]:
-    """Detect borderline geometry that a permissive hard gate intentionally accepts."""
+    """Detect hard-passing results worth one bounded strict production attempt."""
     face_short = float(metrics.get("target_face_short", 0.0) or 0.0)
     if face_short < _REFINEMENT_MEDIUM_FACE_MIN:
         return []
 
     if face_short >= _REFINEMENT_LARGE_FACE_MIN:
+        identity_limit = _REFINEMENT_LARGE_IDENTITY
         eye_limit = _REFINEMENT_LARGE_EYE_ERROR
         interocular_limit = _REFINEMENT_LARGE_INTEROCULAR
         asym_limit = _REFINEMENT_LARGE_EYE_ASYMMETRY
         inner_limit = _REFINEMENT_LARGE_INNER_NME
     else:
+        identity_limit = _REFINEMENT_MEDIUM_IDENTITY
         eye_limit = _REFINEMENT_MEDIUM_EYE_ERROR
         interocular_limit = _REFINEMENT_MEDIUM_INTEROCULAR
         asym_limit = _REFINEMENT_MEDIUM_EYE_ASYMMETRY
         inner_limit = _REFINEMENT_MEDIUM_INNER_NME
 
     reasons: list[str] = []
+    identity = float(metrics.get("identity_similarity_cosine", 0.0) or 0.0)
+    if identity < identity_limit:
+        reasons.append(f"identity={identity:.4f}<{identity_limit:.4f}")
+
     worst_eye = max(
         float(metrics.get("left_eye_error", 0.0) or 0.0),
         float(metrics.get("right_eye_error", 0.0) or 0.0),
@@ -89,7 +101,7 @@ def _visual_refinement_reasons(metrics: dict[str, float]) -> list[str]:
 
 
 def _visual_quality_score(metrics: dict[str, float]) -> float:
-    """Rank two already hard-passing candidates; higher is better."""
+    """Secondary geometry-aware ranking for two already hard-passing candidates."""
     identity = float(metrics.get("identity_similarity_cosine", 0.0) or 0.0)
     worst_eye = max(
         float(metrics.get("left_eye_error", 1.0) or 1.0),
@@ -109,13 +121,8 @@ def _visual_quality_score(metrics: dict[str, float]) -> float:
     )
 
 
-def _prefer_strict_refinement(standard_metrics: dict[str, float], strict_metrics: dict[str, float]) -> bool:
-    """Prefer strict only when it improves visual geometry without sacrificing identity."""
-    standard_score = _visual_quality_score(standard_metrics)
-    strict_score = _visual_quality_score(strict_metrics)
-    if strict_score >= standard_score + 0.004:
-        return True
-
+def _strict_geometry_safe(standard_metrics: dict[str, float], strict_metrics: dict[str, float]) -> bool:
+    """Reject an identity gain if strict visibly degrades otherwise-good geometry."""
     standard_eye = max(
         float(standard_metrics.get("left_eye_error", 1.0) or 1.0),
         float(standard_metrics.get("right_eye_error", 1.0) or 1.0),
@@ -124,9 +131,38 @@ def _prefer_strict_refinement(standard_metrics: dict[str, float], strict_metrics
         float(strict_metrics.get("left_eye_error", 1.0) or 1.0),
         float(strict_metrics.get("right_eye_error", 1.0) or 1.0),
     )
+    standard_interocular = float(standard_metrics.get("interocular_ratio_delta", 1.0) or 1.0)
+    strict_interocular = float(strict_metrics.get("interocular_ratio_delta", 1.0) or 1.0)
+    standard_inner = float(standard_metrics.get("inner_face_landmark_nme", 1.0) or 1.0)
+    strict_inner = float(strict_metrics.get("inner_face_landmark_nme", 1.0) or 1.0)
+    standard_asym = float(standard_metrics.get("eye_asymmetry_delta", 1.0) or 1.0)
+    strict_asym = float(strict_metrics.get("eye_asymmetry_delta", 1.0) or 1.0)
+    standard_axis = float(standard_metrics.get("nose_mouth_axis_delta", 1.0) or 1.0)
+    strict_axis = float(strict_metrics.get("nose_mouth_axis_delta", 1.0) or 1.0)
+
+    return (
+        strict_eye <= max(0.028, standard_eye + 0.008)
+        and strict_interocular <= max(0.025, standard_interocular + 0.010)
+        and strict_inner <= max(0.040, standard_inner + 0.012)
+        and strict_asym <= max(0.015, standard_asym + 0.008)
+        and strict_axis <= max(0.040, standard_axis + 0.012)
+    )
+
+
+def _prefer_strict_refinement(standard_metrics: dict[str, float], strict_metrics: dict[str, float]) -> bool:
+    """Identity first; geometry is a hard safety boundary, not the primary objective."""
     standard_identity = float(standard_metrics.get("identity_similarity_cosine", 0.0) or 0.0)
     strict_identity = float(strict_metrics.get("identity_similarity_cosine", 0.0) or 0.0)
-    return strict_eye <= standard_eye - 0.003 and strict_identity >= standard_identity - 0.080
+    if strict_identity >= standard_identity + _IDENTITY_GAIN_MIN:
+        return _strict_geometry_safe(standard_metrics, strict_metrics)
+
+    standard_score = _visual_quality_score(standard_metrics)
+    strict_score = _visual_quality_score(strict_metrics)
+    return (
+        strict_score >= standard_score + 0.010
+        and strict_identity >= standard_identity - _IDENTITY_GEOMETRY_LOSS_MAX
+        and _strict_geometry_safe(standard_metrics, strict_metrics)
+    )
 
 
 def _colour_match_lab_roi_only(source_roi, target_roi, mask_roi):
@@ -390,9 +426,9 @@ async def _true_face_transfer_v264(runtime: Any, stage1: bytes, source: bytes, s
             retry_reason = "visual_refinement:" + "|".join(refinement_reasons)
             _log(
                 "AI_SELFIE_V264_REFINEMENT_RETRY status=triggered strict_retry_triggered=true reason=%s "
-                "target_face_short=%.1f standard_score=%.5f",
+                "target_face_short=%.1f standard_identity=%.4f standard_score=%.5f",
                 "|".join(refinement_reasons), float(metrics.get("target_face_short", 0.0)),
-                _visual_quality_score(metrics),
+                float(metrics.get("identity_similarity_cosine", 0.0)), _visual_quality_score(metrics),
             )
         else:
             v263._log_quality(
@@ -419,10 +455,17 @@ async def _true_face_transfer_v264(runtime: Any, stage1: bytes, source: bytes, s
             selected = "strict" if prefer_strict else "standard"
             _log(
                 "AI_SELFIE_V264_REFINEMENT_SELECT status=success selected=%s strict_passed=%s "
-                "standard_score=%.5f strict_score=%.5f standard_worst_eye=%.4f strict_worst_eye=%.4f",
-                selected, str(bool(strict_passed)).lower(), standard_score, strict_score,
+                "standard_identity=%.4f strict_identity=%.4f identity_gain=%.4f "
+                "standard_score=%.5f strict_score=%.5f standard_worst_eye=%.4f strict_worst_eye=%.4f "
+                "geometry_safe=%s",
+                selected, str(bool(strict_passed)).lower(),
+                float(metrics.get("identity_similarity_cosine", 0.0)),
+                float(strict_metrics.get("identity_similarity_cosine", 0.0)),
+                float(strict_metrics.get("identity_similarity_cosine", 0.0)) - float(metrics.get("identity_similarity_cosine", 0.0)),
+                standard_score, strict_score,
                 max(float(metrics.get("left_eye_error", 1.0)), float(metrics.get("right_eye_error", 1.0))),
                 max(float(strict_metrics.get("left_eye_error", 1.0)), float(strict_metrics.get("right_eye_error", 1.0))),
+                str(_strict_geometry_safe(metrics, strict_metrics)).lower(),
             )
             runtime.AI_SELFIE_LAST_IDENTITY_METRICS = dict(selected_metrics)
             if prefer_strict:
@@ -447,9 +490,6 @@ async def _true_face_transfer_v264(runtime: Any, stage1: bytes, source: bytes, s
         raise RuntimeError("V264 identity quality gate rejected final PERSON-A after strict retry")
 
     except Exception as exc:
-        # Only V263 model/cache/inference infrastructure failures are allowed to
-        # downgrade to the concrete V262 availability path. Identity rejection and
-        # ordinary input/geometry failures remain visible failures, never silent V262.
         try:
             from neyrobot_prod.selfie_v263_runtime_safety import V263InfrastructureUnavailable
         except Exception:
@@ -511,7 +551,7 @@ def enforce_runtime(bind_generate: bool = True) -> None:
         runtime.AI_SELFIE_PROVIDER = (
             "Gemini scene/PERSON-B -> V262 safety base -> YuNet global similarity only -> "
             "PIPNet 68-point source-dominant ROI geometry -> ROI-only LAB/Poisson/detail -> "
-            "MobileFace+dense identity gate -> one strict retry/refinement -> V253 original document"
+            "MobileFace+dense identity gate -> one identity-aware strict refinement -> V253 original document"
         )
         runtime.AI_SELFIE_GENERATION_STAGES = 2
 
@@ -519,9 +559,10 @@ def enforce_runtime(bind_generate: bool = True) -> None:
         "AI_SELFIE_V264_ENFORCE status=ok base=v262 final_owner=v264 landmarks=68 "
         "geometry=source_dominant_dense_identity_field roi_only=true full_frame_source_warp=false "
         "full_frame_float=false colour_match=lab_roi_only quality_gate=mobileface_plus_dense "
-        "strict_retry=automatic visual_refinement=size_aware independent_eye_patch=false "
-        "mask=landmark_anatomical_hull source_gate=anatomical_inner_face no_neck=true person_b=pixel_locked "
-        "delivery=v253_original_document callback_payment_scene_unchanged=true version=%s",
+        "strict_retry=automatic visual_refinement=identity_and_geometry_size_aware max_attempts=2 "
+        "independent_eye_patch=false mask=landmark_anatomical_hull source_gate=anatomical_inner_face "
+        "no_neck=true person_b=pixel_locked delivery=v253_original_document "
+        "callback_payment_scene_unchanged=true version=%s",
         VERSION,
     )
 
@@ -545,5 +586,6 @@ __all__ = [
     "VERSION", "install", "enforce_runtime", "_true_face_transfer_v264",
     "_transfer_attempt_roi", "_dense_deform_local_roi", "_colour_match_lab_roi_only",
     "_warp_source_direct_to_roi", "_structure_first_compose_roi",
-    "_visual_refinement_reasons", "_visual_quality_score", "_prefer_strict_refinement",
+    "_visual_refinement_reasons", "_visual_quality_score", "_strict_geometry_safe",
+    "_prefer_strict_refinement",
 ]
