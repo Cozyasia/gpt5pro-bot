@@ -8,59 +8,61 @@ permissions:
   contents: read
 
 jobs:
-  baseline-legacy:
-    name: Baseline legacy through V216
+  baseline-file-matrix:
+    name: Baseline ${{ matrix.file }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - test_celebrity_selfie.py
+          - test_celebrity_selfie_v203.py
+          - test_celebrity_selfie_v204.py
+          - test_commercial_numbers_v201.py
+          - test_credit_selfie_v201.py
+          - test_medical_v119_activation.py
+          - test_openai_httpx_compat.py
+          - test_prod_core.py
+          - test_retouch_v261_batch.py
+          - test_selfie_admin_v202.py
+          - test_selfie_commands_v206.py
+          - test_selfie_runtime_v207.py
+          - test_selfie_storage_v205.py
+          - test_selfie_v208_overlay.py
+          - test_selfie_v209_canonical.py
+          - test_selfie_v210_generation_guard.py
+          - test_selfie_v211_delivery.py
+          - test_selfie_v213_user_identity_lock.py
+          - test_selfie_v214_reuse_controls.py
+          - test_selfie_v215_shot_scene_modes.py
+          - test_selfie_v216_admin_upload_priority.py
+          - test_v249_startup_bootstrap.py
+          - test_v250_hyperswap_identity.py
+          - test_v251_v2_identity_detail.py
+          - test_v252_v3_png_quality.py
+          - test_v253_yunet_source_pixels.py
+          - test_v254_landmark_fit_seamless_source.py
+          - test_v255_source_face_gate.py
+          - test_v256_large_scale_source_pixels.py
+          - test_v257_native_sampling_guard.py
+          - test_v258_inner_face_integration.py
+          - test_v259_eye_landmark_protection.py
+          - test_v260_eye_roi_memory_safe.py
+          - test_v261_edge_harmonization.py
+          - test_v262_landmark_field_compositor.py
+          - test_v262_quality_stability.py
+          - test_version_active_selfie_runtime.py
+          - test_version_owner.py
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Run legacy baseline files
+      - name: Run isolated test file
         env:
           PROD_HARDENING_ENABLED: "0"
-        run: |
-          set -e
-          for f in tests/test_celebrity_selfie*.py tests/test_commercial_numbers_v201.py tests/test_credit_selfie_v201.py tests/test_medical_v119_activation.py tests/test_openai_httpx_compat.py tests/test_prod_core.py tests/test_selfie_*.py; do
-            python -m unittest discover -s tests -p "$(basename "$f")" -v
-          done
-
-  baseline-v250-v256:
-    name: Baseline V250 through V256
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -r requirements.txt
-      - name: Run V250-V256 files
-        env:
-          PROD_HARDENING_ENABLED: "0"
-        run: |
-          set -e
-          for f in tests/test_v25[0-6]*.py; do
-            python -m unittest discover -s tests -p "$(basename "$f")" -v
-          done
-
-  baseline-v257-v262:
-    name: Baseline V257 through V262
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -r requirements.txt
-      - name: Run V257-V262 files
-        env:
-          PROD_HARDENING_ENABLED: "0"
-        run: |
-          set -e
-          for f in tests/test_v25[7-9]*.py tests/test_v26[0-2]*.py tests/test_retouch_v261_batch.py; do
-            python -m unittest discover -s tests -p "$(basename "$f")" -v
-          done
+        run: python -m unittest discover -s tests -p '${{ matrix.file }}' -v
 
   v264-unit-regression:
     name: V264 68 unit regression
@@ -75,8 +77,8 @@ jobs:
           PROD_HARDENING_ENABLED: "0"
         run: python -m unittest discover -s tests -p 'test_v263_dense_identity_lock.py' -v
 
-  startup-bootstrap:
-    name: Startup import bootstrap
+  startup-import:
+    name: Startup import only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,22 +86,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Import production package
-        env:
+      - env:
           PROD_HARDENING_ENABLED: "0"
         run: python -c "import neyrobot_prod; print(neyrobot_prod.VERSION)"
-      - name: Startup bootstrap regression
-        env:
-          PROD_HARDENING_ENABLED: "0"
-        run: python -m unittest discover -s tests -p 'test_v249_startup_bootstrap.py' -v
-      - name: Active runtime regression
-        env:
-          PROD_HARDENING_ENABLED: "0"
-        run: python -m unittest discover -s tests -p 'test_version_active_selfie_runtime.py' -v
-      - name: Version owner regression
-        env:
-          PROD_HARDENING_ENABLED: "0"
-        run: python -m unittest discover -s tests -p 'test_version_owner.py' -v
 
   real-model-smoke:
     name: Real-model dense68 smoke
