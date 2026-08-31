@@ -26,7 +26,9 @@ V264_PRODUCTION_ACCEPTED = True
 # V264 activation is attached to V247's existing internal overlay boundary instead
 # of adding another Telegram callback/builder owner. V247 first installs V248..V262;
 # then V263 model/runtime safety is armed and V264 becomes the sole final transfer
-# owner. If V264 startup activation fails, the already-installed V262 owner remains.
+# owner. The bounded identity-core overlay refines only V264's already-existing
+# strict candidate; if that optional refinement cannot install, base V264 remains.
+# If V264 startup activation itself fails, the already-installed V262 owner remains.
 try:
     from neyrobot_prod import selfie_v247_provider_supersample as _selfie_v247_module
 
@@ -45,8 +47,20 @@ try:
             _install_v263_runtime_safety()
             from neyrobot_prod.selfie_v264_dense68_roi_production import install as _install_v264_identity
             _install_v264_identity()
+            identity_core = "base_v264"
+            try:
+                from neyrobot_prod.selfie_v264_identity_core_refinement import install as _install_v264_identity_core
+                _install_v264_identity_core()
+                identity_core = "bounded_source_identity_core"
+            except Exception as _identity_core_exc:
+                _selfie_v247_module._log(
+                    "AI_SELFIE_V264_IDENTITY_CORE_INSTALL status=failed fallback=base_v264 error=%s:%s",
+                    type(_identity_core_exc).__name__, _identity_core_exc,
+                )
             _selfie_v247_module._log(
-                "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true rollback=v262_infra_only"
+                "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true "
+                "identity_core=%s rollback=v262_infra_only",
+                identity_core,
             )
         except Exception as _v264_activation_exc:
             _selfie_v247_module._log(
