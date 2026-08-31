@@ -12,55 +12,58 @@
 # v260-eye-roi-memory-safe-2026-08-26
 # v261-edge-harmonization-2026-08-26
 # v262-landmark-field-compositor-2026-08-27
-VERSION = "v263-dense-identity-lock-2026-08-27"
+# v263-dense-identity-lock-2026-08-27
+VERSION = "v264-dense68-roi-production-2026-08-31"
 
-# V263 remains fully present for diagnostics and regression coverage, but it is not
-# production-accepted after the production-size runtime validation failure. Keep the
-# default user traffic on the verified V262 owner until V263 passes the full gate.
+# Production ownership is explicit. V263 remains as the dense-identity algorithm and
+# model utility layer, but its old full-frame compositor is not production-accepted
+# because production-size validation could restart a 512 MB Render process. V264 is
+# the same 68-point identity contract with heavy image work restricted to PERSON-A ROI.
+PRODUCTION_SELFIE_RUNTIME = "v264"
 V263_PRODUCTION_ACCEPTED = False
+V264_PRODUCTION_ACCEPTED = True
 
-# V263 activation is attached to V247's existing internal overlay boundary instead
-# of adding another Telegram callback/builder owner. V247's original overlay first
-# installs V248..V262; only then is V263 armed when production acceptance is enabled.
-# If V263 fails, V262 remains active.
+# V264 activation is attached to V247's existing internal overlay boundary instead
+# of adding another Telegram callback/builder owner. V247 first installs V248..V262;
+# then V263 model/runtime safety is armed and V264 becomes the sole final transfer
+# owner. If V264 startup activation fails, the already-installed V262 owner remains.
 try:
     from neyrobot_prod import selfie_v247_provider_supersample as _selfie_v247_module
 
     _v247_base_overlay = _selfie_v247_module._install_v248_overlay
 
-    def _v263_after_v262_overlay() -> None:
+    def _v264_after_v262_overlay() -> None:
         _v247_base_overlay()
         try:
             from neyrobot_prod import selfie_v262_landmark_field_compositor as _v262
             if not bool(getattr(_v262, "_INSTALLED", False)):
-                return
-            if not V263_PRODUCTION_ACCEPTED:
                 _selfie_v247_module._log(
-                    "AI_SELFIE_RUNTIME_DEFAULT active=v262 v263=experimental "
-                    "production_accepted=false rollback=v262"
+                    "AI_SELFIE_V264_INSTALL status=skipped reason=v262_not_installed rollback=v262"
                 )
                 return
             from neyrobot_prod.selfie_v263_runtime_safety import install as _install_v263_runtime_safety
             _install_v263_runtime_safety()
-            from neyrobot_prod.selfie_v263_dense_identity_lock import install as _install_v263_identity
-            _install_v263_identity()
-            _selfie_v247_module._log("AI_SELFIE_V263_INSTALL status=ok base=v262 rollback=v262")
-        except Exception as _v263_activation_exc:
+            from neyrobot_prod.selfie_v264_dense68_roi_production import install as _install_v264_identity
+            _install_v264_identity()
             _selfie_v247_module._log(
-                "AI_SELFIE_V263_INSTALL status=failed rollback=v262 error=%s:%s",
-                type(_v263_activation_exc).__name__, _v263_activation_exc,
+                "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true rollback=v262_infra_only"
+            )
+        except Exception as _v264_activation_exc:
+            _selfie_v247_module._log(
+                "AI_SELFIE_V264_INSTALL status=failed rollback=v262 error=%s:%s",
+                type(_v264_activation_exc).__name__, _v264_activation_exc,
             )
 
-    _selfie_v247_module._install_v248_overlay = _v263_after_v262_overlay
-except Exception as _v263_hook_exc:
+    _selfie_v247_module._install_v248_overlay = _v264_after_v262_overlay
+except Exception as _v264_hook_exc:
     print(
-        f"[neyrobot-prod] V263 activation hook warning: {type(_v263_hook_exc).__name__}: {_v263_hook_exc}",
+        f"[neyrobot-prod] V264 activation hook warning: {type(_v264_hook_exc).__name__}: {_v264_hook_exc}",
         flush=True,
     )
 
-# Retouch is a UX/delivery overlay, not a Telegram route owner.  It arms one
+# Retouch is a UX/delivery overlay, not a Telegram route owner. It arms one
 # ApplicationBuilder wrapper and patches the already-existing main.py helpers only
-# after main.py has defined them.  No callback/message/payment handlers are added.
+# after main.py has defined them. No callback/message/payment handlers are added.
 try:
     from neyrobot_prod import retouch_v261_batch as _retouch_v261_module
 
@@ -85,4 +88,6 @@ except Exception as _retouch_v261_exc:
         flush=True,
     )
 
-__all__ = ["VERSION"]
+__all__ = [
+    "VERSION", "PRODUCTION_SELFIE_RUNTIME", "V263_PRODUCTION_ACCEPTED", "V264_PRODUCTION_ACCEPTED"
+]
