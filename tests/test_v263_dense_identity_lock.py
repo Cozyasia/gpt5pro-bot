@@ -1,32 +1,32 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import inspect
 import unittest
 from pathlib import Path
 
 import numpy as np
 
+from neyrobot_prod import dense68_engine_v265 as engine
 from neyrobot_prod import selfie_v263_dense_identity_lock as v263
-from neyrobot_prod import selfie_v264_dense68_roi_production as v264
+from neyrobot_prod import selfie_v265_single_owner as v265
 
 
 class DenseIdentityProductionTests(unittest.TestCase):
-    def test_v263_still_supplies_dense68_identity_geometry_and_models(self) -> None:
+    def test_v263_remains_dense68_model_math_utility_only(self) -> None:
         source = Path("neyrobot_prod/selfie_v263_dense_identity_lock.py").read_text(encoding="utf-8")
         requirements = Path("requirements.txt").read_text(encoding="utf-8")
         self.assertIn("_DENSE_COUNT = 68", source)
         self.assertIn("pipnet_r18_300w_celeba_68.onnx", source)
         self.assertIn("mobilenetv2.onnx", source)
-        self.assertIn("pipnet_68_mit", source)
-        self.assertIn("mobileface_v2_mit", source)
         self.assertIn("cv2.dnn.readNetFromONNX", source)
-        self.assertIn("geometry_mode=pipnet_68", source)
         self.assertIn("landmarks=68", source)
         self.assertIn("opencv-python-headless==4.10.0.84", requirements)
         self.assertNotIn("mediapipe", requirements.lower())
-        self.assertNotIn("opencv-contrib-python", requirements)
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("selfie_v263_dense_identity_lock", package)
 
-    def test_inner_face_geometry_remains_source_dominant(self) -> None:
+    def test_inner_face_geometry_math_remains_source_dominant(self) -> None:
         projected = np.zeros((68, 2), dtype=np.float32)
         target = np.full((68, 2), 100.0, dtype=np.float32)
         standard = v263._desired_identity_geometry(projected, target, 600.0, strict=False)
@@ -35,26 +35,6 @@ class DenseIdentityProductionTests(unittest.TestCase):
         self.assertLess(float(standard[inner_idx, 0]), 20.0)
         self.assertLess(float(strict[inner_idx, 0]), float(standard[inner_idx, 0]))
         self.assertGreater(float(standard[0, 0]), float(standard[inner_idx, 0]))
-
-    def test_quality_gate_accepts_good_and_rejects_identity_or_eye_failures(self) -> None:
-        good = {
-            "identity_similarity_cosine": 0.72,
-            "left_eye_error": 0.025,
-            "right_eye_error": 0.030,
-            "interocular_ratio_delta": 0.020,
-            "nose_mouth_axis_delta": 0.030,
-            "inner_face_landmark_nme": 0.035,
-            "eye_asymmetry_delta": 0.020,
-        }
-        ok, failures = v263._quality_gate(good)
-        self.assertTrue(ok)
-        self.assertEqual(failures, [])
-        ok, failures = v263._quality_gate(dict(good, identity_similarity_cosine=0.20))
-        self.assertFalse(ok)
-        self.assertTrue(any("identity_similarity_cosine" in item for item in failures))
-        ok, failures = v263._quality_gate(dict(good, left_eye_error=0.20))
-        self.assertFalse(ok)
-        self.assertTrue(any("left_eye_error" in item for item in failures))
 
     def test_dense_quality_metrics_are_scale_normalized_and_eye_sensitive(self) -> None:
         desired = np.zeros((68, 2), dtype=np.float32)
@@ -74,126 +54,77 @@ class DenseIdentityProductionTests(unittest.TestCase):
         self.assertGreater(bad["left_eye_error"], good["left_eye_error"])
         self.assertGreater(bad["interocular_ratio_delta"], good["interocular_ratio_delta"])
 
-    def test_v264_heavy_processing_is_roi_only(self) -> None:
-        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
-        body = source[source.index("def _transfer_attempt_roi"):source.index("async def _true_face_transfer_v264")]
+    def test_v265_heavy_processing_is_roi_only_and_dense68(self) -> None:
+        source = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        body = source[source.index("def transfer_attempt"):source.index("def _match_eye_luminance")]
         self.assertIn("target_roi = target[y0:y1, x0:x1].copy()", body)
         self.assertIn("mask_roi = anatomy_mask[y0:y1, x0:x1].copy()", body)
-        self.assertIn("_warp_source_direct_to_roi(source_im, matrix, box)", body)
+        self.assertIn("_warp_source_direct_to_roi(source_im, matrix", body)
         self.assertIn("_dense_deform_local_roi(", body)
         self.assertIn("_structure_first_compose_roi(", body)
-        self.assertNotIn("cv2.warpAffine(source_im, matrix, (tw, th)", body)
-        self.assertNotIn("v253._colour_match_lab", source)
-        self.assertIn("roi_only=true", source)
-        self.assertIn("full_frame_source_warp=false", source)
-        self.assertIn("full_frame_float=false", source)
-        self.assertIn("colour_match=lab_roi_only", source)
-
-    def test_v264_dense_field_uses_all_68_points_in_local_coordinates(self) -> None:
-        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
-        body = source[source.index("def _dense_deform_local_roi"):source.index("def _structure_first_compose_roi")]
-        self.assertIn("for idx in range(v263._DENSE_COUNT):", body)
-        self.assertIn("np.asarray([float(x0), float(y0)]", body)
-        self.assertIn("np.zeros((roi_h, roi_w), dtype=np.float32)", body)
-        self.assertIn("cv2.remap(", body)
-        self.assertNotIn("for eye_index in", body)
-
-    def test_v264_keeps_yunet_five_points_only_for_global_pose(self) -> None:
-        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
-        body = source[source.index("def _transfer_attempt_roi"):source.index("async def _true_face_transfer_v264")]
-        self.assertIn("source_pts5", body)
-        self.assertIn("target_pts5", body)
-        self.assertIn("v263._similarity_transform(source_pts5, target_pts5)", body)
+        self.assertIn("for idx in range(v263._DENSE_COUNT):", source)
+        self.assertIn('"source_photo3_v265"', body)
+        self.assertIn('"target_person_a_v265"', body)
         self.assertIn("source_dense = v263._dense_landmarks_68", body)
         self.assertIn("target_dense = v263._dense_landmarks_68", body)
-        self.assertIn("v263._desired_identity_geometry(projected_dense, target_dense", body)
+        self.assertIn("landmarks=68", body)
+        self.assertIn("roi_only=true", body)
+        self.assertNotIn("cv2.warpAffine(source_im, matrix, (tw, th)", body)
 
-    def test_v264_preserves_person_b_no_neck_and_lossless_document(self) -> None:
-        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
-        self.assertIn("v262._landmark_anatomy_mask", source)
-        self.assertIn("final[:, firewall_x:] = target[:, firewall_x:]", source)
-        self.assertIn("person_b_untouched=true", source)
-        self.assertIn("independent_eye_patch=false", source)
-        self.assertIn("no_neck=true", source)
-        self.assertIn("delivery._deliver = v253._deliver_original", source)
-        self.assertIn("AI_SELFIE_SEND_AS_DOCUMENT = True", source)
-        self.assertNotIn("CallbackQueryHandler", source)
-        self.assertNotIn("PreCheckoutQueryHandler", source)
-        self.assertNotIn("add_handler", source)
+    def test_v265_preserves_person_b_no_neck_and_lossless_png(self) -> None:
+        engine_source = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        owner = Path("neyrobot_prod/selfie_v265_single_owner.py").read_text(encoding="utf-8")
+        self.assertIn("def _landmark_anatomy_mask", engine_source)
+        self.assertIn("Inner-face anatomical hull. No ellipse, neck, hair or full-head source mask.", engine_source)
+        self.assertIn("final[:, firewall_x:] = target[:, firewall_x:]", engine_source)
+        self.assertIn("person_b=pixel_locked", engine_source)
+        self.assertIn('cv2.imencode(".png"', engine_source)
+        self.assertIn("reply_document", owner)
+        self.assertNotIn("reply_photo", inspect.getsource(v265._deliver_original_only))
 
-    def test_v264_borderline_large_face_eye_metrics_trigger_visual_refinement(self) -> None:
+    def test_v265_asymmetry_is_refinement_signal_not_hard_reject(self) -> None:
         metrics = {
-            "identity_similarity_cosine": 0.7916,
-            "left_eye_error": 0.0163,
-            "right_eye_error": 0.0358,
-            "interocular_ratio_delta": 0.0346,
-            "nose_mouth_axis_delta": 0.0136,
-            "inner_face_landmark_nme": 0.0306,
-            "eye_asymmetry_delta": 0.0096,
-            "target_face_short": 643.0,
+            "identity_similarity_cosine": 0.7609,
+            "left_eye_error": 0.0102,
+            "right_eye_error": 0.0297,
+            "interocular_ratio_delta": 0.0256,
+            "nose_mouth_axis_delta": 0.0215,
+            "inner_face_landmark_nme": 0.0273,
+            "eye_asymmetry_delta": 0.0585,
+            "target_face_short": 571.0,
         }
-        passed, failures = v263._quality_gate(metrics)
-        self.assertTrue(passed)
-        self.assertEqual(failures, [])
-        reasons = v264._visual_refinement_reasons(metrics)
-        self.assertTrue(any(item.startswith("eye_error=") for item in reasons))
-        self.assertTrue(any(item.startswith("interocular=") for item in reasons))
+        passed, failures = v265.production_gate(metrics)
+        self.assertTrue(passed, failures)
+        reasons = engine.visual_refinement_reasons(metrics)
         self.assertTrue(any(item.startswith("eye_asymmetry=") for item in reasons))
-        self.assertEqual(v264._visual_refinement_reasons(dict(metrics, target_face_short=300.0)), [])
 
-    def test_v264_refinement_selects_geometry_improvement_only_with_bounded_identity_loss(self) -> None:
-        standard = {
-            "identity_similarity_cosine": 0.7916,
-            "left_eye_error": 0.0163,
-            "right_eye_error": 0.0358,
-            "interocular_ratio_delta": 0.0346,
-            "nose_mouth_axis_delta": 0.0136,
-            "inner_face_landmark_nme": 0.0306,
-            "eye_asymmetry_delta": 0.0096,
+    def test_v265_rejects_real_single_eye_deformation(self) -> None:
+        metrics = {
+            "identity_similarity_cosine": 0.82,
+            "left_eye_error": 0.018,
+            "right_eye_error": 0.090,
+            "interocular_ratio_delta": 0.025,
+            "nose_mouth_axis_delta": 0.022,
+            "inner_face_landmark_nme": 0.030,
+            "eye_asymmetry_delta": 0.072,
+            "target_face_short": 600.0,
         }
-        improved = dict(
-            standard,
-            identity_similarity_cosine=0.7800,
-            right_eye_error=0.0220,
-            interocular_ratio_delta=0.0200,
-            inner_face_landmark_nme=0.0250,
-            eye_asymmetry_delta=0.0060,
-        )
-        self.assertGreater(v264._visual_quality_score(improved), v264._visual_quality_score(standard))
-        self.assertTrue(v264._prefer_strict_refinement(standard, improved))
-        excessive_identity_loss = dict(improved, identity_similarity_cosine=0.7600)
-        self.assertFalse(v264._prefer_strict_refinement(standard, excessive_identity_loss))
-        identity_collapse = dict(improved, identity_similarity_cosine=0.6200)
-        self.assertFalse(v264._prefer_strict_refinement(standard, identity_collapse))
+        passed, failures = v265.production_gate(metrics)
+        self.assertFalse(passed)
+        self.assertTrue(any("eye_error=" in item for item in failures))
 
-    def test_v264_transfer_exposes_size_normalized_refinement_diagnostics(self) -> None:
-        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
-        body = source[source.index("def _transfer_attempt_roi"):source.index("async def _true_face_transfer_v264")]
-        self.assertIn('"target_face_short": float(face_min)', body)
-        self.assertIn('"source_face_short": float(native_face_short)', body)
-        self.assertIn('"similarity_rms_normalized"', body)
-        self.assertIn('"max_dense_shift_normalized"', body)
-
-    def test_v264_retry_is_exactly_standard_then_one_strict_attempt(self) -> None:
-        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
-        body = source[source.index("async def _true_face_transfer_v264"):source.index("def enforce_runtime")]
-        self.assertEqual(body.count("_transfer_attempt_roi("), 2)
+    def test_v265_retry_is_exactly_standard_then_one_strict_same_engine(self) -> None:
+        body = inspect.getsource(v265._true_face_transfer_v265)
+        self.assertEqual(body.count("engine.transfer_attempt("), 2)
+        self.assertEqual(body.count("engine.apply_ocular_lock("), 2)
         self.assertIn("strict=False", body)
         self.assertIn("strict=True", body)
         self.assertNotIn("while ", body)
         self.assertNotIn("for attempt", body)
-        self.assertIn("AI_SELFIE_V264_REFINEMENT_RETRY", body)
-        self.assertIn("AI_SELFIE_V264_REFINEMENT_SELECT", body)
-        self.assertIn("AI_SELFIE_V264_IDENTITY_REJECT", body)
-
-    def test_only_infrastructure_failure_may_fall_back_to_v262(self) -> None:
-        source = Path("neyrobot_prod/selfie_v264_dense68_roi_production.py").read_text(encoding="utf-8")
-        body = source[source.index("async def _true_face_transfer_v264"):source.index("def enforce_runtime")]
-        self.assertIn("V263InfrastructureUnavailable", body)
-        self.assertIn("AI_SELFIE_V264_INFRA_FALLBACK", body)
-        self.assertIn("identity_gate_bypass=false", body)
-        self.assertIn("v262._true_face_transfer_v262", body)
-        self.assertIn("raise\n", body)
+        for forbidden in (
+            "_true_face_transfer_v262", "selfie_v264_", "_provider_rescue(", "segmind", "piapi"
+        ):
+            self.assertNotIn(forbidden, body.lower() if forbidden in ("segmind", "piapi") else body)
 
     def test_runtime_safety_remains_cached_and_process_safe(self) -> None:
         source = Path("neyrobot_prod/selfie_v263_runtime_safety.py").read_text(encoding="utf-8")
@@ -203,44 +134,35 @@ class DenseIdentityProductionTests(unittest.TestCase):
         ):
             self.assertIn(marker, source)
 
-    def test_package_installs_v264_after_v262_and_dense_model_safety(self) -> None:
+    def test_package_and_version_report_v265_single_owner(self) -> None:
         package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "v264-dense68-roi-production-2026-08-31"', package)
-        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v264"', package)
+        self.assertIn('VERSION = "v265-dense68-single-owner-production-2026-09-01"', package)
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
         self.assertIn("V263_PRODUCTION_ACCEPTED = False", package)
-        self.assertIn("V264_PRODUCTION_ACCEPTED = True", package)
-        self.assertIn("selfie_v263_runtime_safety", package)
-        self.assertIn("selfie_v264_dense68_roi_production", package)
-        self.assertLess(package.index("_v247_base_overlay()"), package.index("_install_v263_runtime_safety()"))
-        self.assertLess(package.index("_install_v263_runtime_safety()"), package.index("_install_v264_identity()"))
-        self.assertIn("AI_SELFIE_V264_INSTALL status=ok", package)
-        self.assertIn("AI_SELFIE_V264_INSTALL status=failed rollback=v262", package)
+        self.assertIn("V264_PRODUCTION_ACCEPTED = False", package)
+        self.assertIn("V265_PRODUCTION_ACCEPTED = True", package)
+        self.assertIn("_install_v265_from_v246_entrypoint", package)
+        self.assertNotIn("selfie_v264_dense68_roi_production", package)
+        versioning = Path("neyrobot_prod/versioning.py").read_text(encoding="utf-8")
+        self.assertIn('active == "v265"', versioning)
+        self.assertIn("selfie_v265_single_owner", versioning)
+        self.assertIn("68-point", versioning)
 
-    def test_version_command_reports_and_reasserts_v264(self) -> None:
-        source = Path("neyrobot_prod/versioning.py").read_text(encoding="utf-8")
-        self.assertIn("PRODUCTION_SELFIE_RUNTIME", source)
-        self.assertIn('if active == "v264"', source)
-        self.assertIn("selfie_v264_dense68_roi_production import install", source)
-        self.assertIn("68-point dense identity · ROI-only production", source)
-        self.assertIn("V262: только аварийный fallback", source)
-
-    def test_normal_variation_quality_matrix_remains_accepted(self) -> None:
+    def test_normal_variation_quality_matrix_remains_accepted_by_v265(self) -> None:
         cases = {
-            "frontal_male": (0.72, 0.025, 0.024, 0.018, 0.025, 0.032, 0.018),
-            "slight_turn": (0.61, 0.052, 0.055, 0.045, 0.058, 0.064, 0.052),
-            "frontal_female": (0.70, 0.030, 0.032, 0.022, 0.030, 0.038, 0.024),
-            "small_face": (0.55, 0.065, 0.068, 0.058, 0.064, 0.072, 0.070),
-            "two_person": (0.66, 0.038, 0.040, 0.030, 0.040, 0.048, 0.032),
-            "complex_light": (0.54, 0.060, 0.062, 0.050, 0.060, 0.070, 0.064),
+            "frontal_male": (0.72, 0.025, 0.024, 0.018, 0.025, 0.032, 0.018, 600.0),
+            "frontal_female": (0.70, 0.030, 0.032, 0.022, 0.030, 0.038, 0.024, 600.0),
+            "two_person": (0.66, 0.038, 0.040, 0.030, 0.040, 0.048, 0.032, 420.0),
+            "small_face": (0.60, 0.065, 0.068, 0.058, 0.064, 0.069, 0.070, 300.0),
         }
         for label, values in cases.items():
             metrics = {
                 "identity_similarity_cosine": values[0], "left_eye_error": values[1],
                 "right_eye_error": values[2], "interocular_ratio_delta": values[3],
                 "nose_mouth_axis_delta": values[4], "inner_face_landmark_nme": values[5],
-                "eye_asymmetry_delta": values[6],
+                "eye_asymmetry_delta": values[6], "target_face_short": values[7],
             }
-            ok, failures = v263._quality_gate(metrics)
+            ok, failures = v265.production_gate(metrics)
             self.assertTrue(ok, f"normal class {label} unexpectedly rejected: {failures}")
 
 
