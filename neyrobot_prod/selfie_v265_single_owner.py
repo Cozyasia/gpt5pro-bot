@@ -2,7 +2,7 @@
 """V265 single production owner for AI-selfie generation.
 
 There is exactly one PERSON-A identity-transfer algorithm in this runtime: the local
-ROI-only 68-landmark engine in :mod:`dense68_engine_v265`.  Historical V247..V264
+ROI-only 68-landmark engine in :mod:`dense68_engine_v265`. Historical V247..V264
 modules are not installed and are not recovery routes.
 
 Contract:
@@ -13,6 +13,7 @@ Contract:
 - one standard local candidate and at most one strict local candidate are allowed.
 - no Segmind/PiAPI rescue, no V262 rollback, no alternate compositor, no compressed
   delivery fallback. Any infrastructure/algorithm failure fails closed.
+- V265 production_gate is the sole ACCEPT/REJECT decision gate. V263 is utility-only.
 - natural eye asymmetry is a refinement/ranking signal, not a hard rejection metric.
   Hard delivery checks cover identity, eye landmark error, inner-face NME,
   interocular ratio and nose/mouth axis.
@@ -60,8 +61,19 @@ def _log(message: str, *args: Any) -> None:
     v241._log(message, *args)
 
 
+def _metric(metrics: dict[str, float], key: str, default: float) -> float:
+    """Read a metric without treating a valid 0.0 measurement as missing."""
+    value = metrics.get(key, default)
+    if value is None:
+        value = default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
 def _thresholds(face_short: float) -> dict[str, float]:
-    face = float(face_short or 0.0)
+    face = float(face_short)
     if face >= _LARGE_FACE_MIN:
         return {
             "identity": _LARGE_IDENTITY_MIN,
@@ -88,19 +100,19 @@ def _thresholds(face_short: float) -> dict[str, float]:
 
 
 def production_gate(metrics: dict[str, float]) -> tuple[bool, list[str]]:
-    """Hard delivery gate. Natural eye asymmetry is deliberately not a blocker."""
-    face_short = float(metrics.get("target_face_short", 0.0) or 0.0)
+    """Sole V265 hard delivery gate. Natural eye asymmetry is not a blocker."""
+    face_short = _metric(metrics, "target_face_short", 0.0)
     limits = _thresholds(face_short)
-    identity = float(metrics.get("identity_similarity_cosine", 0.0) or 0.0)
-    left_eye = float(metrics.get("left_eye_error", 1.0) or 1.0)
-    right_eye = float(metrics.get("right_eye_error", 1.0) or 1.0)
+    identity = _metric(metrics, "identity_similarity_cosine", 0.0)
+    left_eye = _metric(metrics, "left_eye_error", 1.0)
+    right_eye = _metric(metrics, "right_eye_error", 1.0)
     worst_eye = max(left_eye, right_eye)
-    inner = float(metrics.get("inner_face_landmark_nme", 1.0) or 1.0)
-    interocular = float(metrics.get("interocular_ratio_delta", 1.0) or 1.0)
-    axis = float(metrics.get("nose_mouth_axis_delta", 1.0) or 1.0)
-    asym = float(metrics.get("eye_asymmetry_delta", 0.0) or 0.0)
+    inner = _metric(metrics, "inner_face_landmark_nme", 1.0)
+    interocular = _metric(metrics, "interocular_ratio_delta", 1.0)
+    axis = _metric(metrics, "nose_mouth_axis_delta", 1.0)
+    asym = _metric(metrics, "eye_asymmetry_delta", 0.0)
 
-    if not all(math.isfinite(v) for v in (identity, worst_eye, inner, interocular, axis, asym)):
+    if not all(math.isfinite(v) for v in (face_short, identity, worst_eye, inner, interocular, axis, asym)):
         return False, ["nonfinite_metric"]
 
     failures: list[str] = []
@@ -129,18 +141,18 @@ def _quality_log(path: str, metrics: dict[str, float], hard_passed: bool, failur
         "interocular=%.4f axis=%.4f eye_asymmetry=%.4f asymmetry_hard_gate=false failures=%s",
         path,
         "pass" if hard_passed else "fail",
-        float(metrics.get("identity_similarity_cosine", 0.0)),
-        max(float(metrics.get("left_eye_error", 1.0)), float(metrics.get("right_eye_error", 1.0))),
-        float(metrics.get("inner_face_landmark_nme", 1.0)),
-        float(metrics.get("interocular_ratio_delta", 1.0)),
-        float(metrics.get("nose_mouth_axis_delta", 1.0)),
-        float(metrics.get("eye_asymmetry_delta", 0.0)),
+        _metric(metrics, "identity_similarity_cosine", 0.0),
+        max(_metric(metrics, "left_eye_error", 1.0), _metric(metrics, "right_eye_error", 1.0)),
+        _metric(metrics, "inner_face_landmark_nme", 1.0),
+        _metric(metrics, "interocular_ratio_delta", 1.0),
+        _metric(metrics, "nose_mouth_axis_delta", 1.0),
+        _metric(metrics, "eye_asymmetry_delta", 0.0),
         "none" if not failures else "|".join(failures),
     )
 
 
 async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, source_photo_no: int):
-    """Two local dense68 attempts maximum. There is no recovery algorithm."""
+    """Two local dense68 attempts maximum. V265 production_gate is the sole decision gate."""
     if int(source_photo_no) != 3:
         raise RuntimeError(f"V265 requires authoritative photo #3, got #{source_photo_no}")
 
@@ -162,17 +174,16 @@ async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, s
         recognition_path,
         standard_metrics,
     )
-    standard_legacy, standard_legacy_failures = v263._quality_gate(standard_metrics)
     standard_hard, standard_failures = production_gate(standard_metrics)
-    _quality_log("standard", standard_metrics, bool(standard_legacy and standard_hard), standard_failures or standard_legacy_failures)
+    _quality_log("standard", standard_metrics, standard_hard, standard_failures)
 
-    refinement = engine.visual_refinement_reasons(standard_metrics) if standard_legacy and standard_hard else []
-    if standard_legacy and standard_hard and not refinement:
+    refinement = engine.visual_refinement_reasons(standard_metrics) if standard_hard else []
+    if standard_hard and not refinement:
         _set_runtime_result(runtime, path="v265_standard", metrics=standard_metrics)
         _log("AI_SELFIE_V265_SELECT selected=standard attempts=1 reason=hard_pass_no_refinement")
         return standard, "opencv_dense68_roi_v265_standard"
 
-    retry_reasons = refinement or standard_failures or standard_legacy_failures or ["quality_gate"]
+    retry_reasons = refinement or standard_failures or ["quality_gate"]
     _log(
         "AI_SELFIE_V265_STRICT_RETRY status=triggered attempts=2 route=same_local_dense68 reason=%s "
         "provider_rescue=false legacy_fallback=false",
@@ -192,12 +203,11 @@ async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, s
         recognition_path,
         strict_metrics,
     )
-    strict_legacy, strict_legacy_failures = v263._quality_gate(strict_metrics)
     strict_hard, strict_failures = production_gate(strict_metrics)
-    _quality_log("strict", strict_metrics, bool(strict_legacy and strict_hard), strict_failures or strict_legacy_failures)
+    _quality_log("strict", strict_metrics, strict_hard, strict_failures)
 
-    standard_ok = bool(standard_legacy and standard_hard)
-    strict_ok = bool(strict_legacy and strict_hard)
+    standard_ok = bool(standard_hard)
+    strict_ok = bool(strict_hard)
     if standard_ok and strict_ok:
         prefer_strict = engine.prefer_strict_refinement(standard_metrics, strict_metrics)
         if prefer_strict:
@@ -205,8 +215,8 @@ async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, s
             _log(
                 "AI_SELFIE_V265_SELECT selected=strict attempts=2 standard_identity=%.4f strict_identity=%.4f "
                 "standard_score=%.5f strict_score=%.5f",
-                float(standard_metrics.get("identity_similarity_cosine", 0.0)),
-                float(strict_metrics.get("identity_similarity_cosine", 0.0)),
+                _metric(standard_metrics, "identity_similarity_cosine", 0.0),
+                _metric(strict_metrics, "identity_similarity_cosine", 0.0),
                 engine.visual_quality_score(standard_metrics),
                 engine.visual_quality_score(strict_metrics),
             )
@@ -215,8 +225,8 @@ async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, s
         _log(
             "AI_SELFIE_V265_SELECT selected=standard attempts=2 reason=strict_not_better "
             "standard_identity=%.4f strict_identity=%.4f",
-            float(standard_metrics.get("identity_similarity_cosine", 0.0)),
-            float(strict_metrics.get("identity_similarity_cosine", 0.0)),
+            _metric(standard_metrics, "identity_similarity_cosine", 0.0),
+            _metric(strict_metrics, "identity_similarity_cosine", 0.0),
         )
         return standard, "opencv_dense68_roi_v265_standard_retained"
 
@@ -225,7 +235,7 @@ async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, s
         _log(
             "AI_SELFIE_V265_SELECT selected=strict attempts=2 reason=standard_hard_fail_strict_pass "
             "standard_failures=%s",
-            "|".join(standard_failures or standard_legacy_failures) or "quality_gate",
+            "|".join(standard_failures) or "quality_gate",
         )
         return strict, "opencv_dense68_roi_v265_strict_recovery"
 
@@ -234,15 +244,15 @@ async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, s
         _log(
             "AI_SELFIE_V265_SELECT selected=standard attempts=2 reason=strict_hard_fail_standard_pass "
             "strict_failures=%s",
-            "|".join(strict_failures or strict_legacy_failures) or "quality_gate",
+            "|".join(strict_failures) or "quality_gate",
         )
         return standard, "opencv_dense68_roi_v265_standard_retained"
 
     _log(
         "AI_SELFIE_V265_REJECT status=rejected attempts=2 provider_rescue=false legacy_fallback=false "
         "standard_failures=%s strict_failures=%s",
-        "|".join(standard_failures or standard_legacy_failures) or "quality_gate",
-        "|".join(strict_failures or strict_legacy_failures) or "quality_gate",
+        "|".join(standard_failures) or "quality_gate",
+        "|".join(strict_failures) or "quality_gate",
     )
     raise RuntimeError("V265 quality gate rejected PERSON-A after two local dense68 attempts")
 
@@ -391,14 +401,16 @@ def enforce_runtime(bind_generate: bool = True) -> None:
         runtime.AI_SELFIE_PROVIDER = (
             "Gemini scene/PERSON-B + photo3 head/expression scaffold -> YuNet similarity -> "
             "PIPNet 68-point source-dominant ROI geometry -> source ocular lock -> "
-            "MobileFace+dense hard gate -> optional same-engine strict attempt -> original PNG document"
+            "MobileFace -> V265 production_gate -> optional same-engine strict attempt -> original PNG document"
         )
         runtime.AI_SELFIE_GENERATION_STAGES = 2
 
     _log(
-        "AI_SELFIE_V265_ENFORCE status=ok final_owner=v265 landmarks=68 roi_only=true "
-        "max_local_attempts=2 provider_rescue=false v262_fallback=false legacy_fallback=false "
-        "eye_asymmetry_hard_gate=false person_b=pixel_locked delivery=original_document_only version=%s",
+        "AI_SELFIE_V265_ENFORCE status=ok owner=v265 single_owner=true engine=dense68_engine_v265 landmarks=68 "
+        "roi_only=true max_local_attempts=2 strict_same_engine=true provider_rescue=false v262_fallback=false "
+        "legacy_runtime_fallback=false v263_quality_gate_in_execution=false eye_asymmetry_hard_gate=false "
+        "person_b_protection=pixel_locked no_neck=true independent_eye_patch=false png=true "
+        "delivery=original_document_only version=%s",
         VERSION,
     )
 
