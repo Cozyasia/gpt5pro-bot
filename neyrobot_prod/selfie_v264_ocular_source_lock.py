@@ -26,8 +26,6 @@ VERSION = v264.VERSION
 _INSTALLED = False
 _BASE_ATTEMPT: Callable[..., Any] | None = None
 
-# Strong enough to keep real iris/pupil signal, but feathered enough to preserve scene
-# lighting and avoid a pasted-eye edge.
 _OCULAR_ALPHA = 0.92
 _OCULAR_MARGIN_FRACTION = 0.20
 _OCULAR_FEATHER_FRACTION = 0.075
@@ -112,9 +110,6 @@ def _restore_one_eye_shared_field(
     x0, y0, x1, y1, eye_span = _eye_box(eye_points, fw, fh)
     box = (x0, y0, x1, y1)
 
-    # This is not an independent eye transform. The source is rendered through the
-    # same global similarity and same 68-point inverse field used by V264 for the
-    # whole face; only the output allocation is restricted to a tiny ocular ROI.
     warped = v264._warp_source_direct_to_roi(source_im, matrix, box)
     corrected, _field_sigma, _residuals = v264._dense_deform_local_roi(
         warped, projected_dense, desired_dense, box, face_min
@@ -144,15 +139,25 @@ def _prepare_shared_geometry(stage1: bytes, output: bytes, source: bytes, yunet_
         )
     firewall_x = max(256, min(tw, int(round(tw * 0.55))))
     source_bbox, source_pts5 = v253._yunet_face(source_im, yunet_path, label="source_photo3_v264_ocular")
-    target_bbox, target_pts5 = v253._yunet_face(target[:, :firewall_x], yunet_path, label="target_person_a_v264_ocular")
+    _target_bbox, target_pts5 = v253._yunet_face(target[:, :firewall_x], yunet_path, label="target_person_a_v264_ocular")
     matrix, _ = v263._similarity_transform(source_pts5, target_pts5)
     source_dense = v263._dense_landmarks_68(source_im, source_bbox, dense_path, label="source_photo3_ocular")
     projected_dense = v264.v262._project_points(matrix, source_dense)
-    return final, source_im, source_dense, projected_dense, firewall_x
+    return final, source_im, source_dense, projected_dense, firewall_x, matrix
 
 
-def _score_locked_candidate(final, source_im, source_dense, desired_dense, firewall_x, dense_path, recognition_path, base_metrics):
-    final_bbox, _ = v253._yunet_face(final[:, :firewall_x], v253._YUNET_PATH, label="final_person_a_v264_ocular_eval")
+def _score_locked_candidate(
+    final,
+    source_im,
+    source_dense,
+    desired_dense,
+    firewall_x,
+    yunet_path,
+    dense_path,
+    recognition_path,
+    base_metrics,
+):
+    final_bbox, _ = v253._yunet_face(final[:, :firewall_x], yunet_path, label="final_person_a_v264_ocular_eval")
     final_dense = v263._dense_landmarks_68(final, final_bbox, dense_path, label="final_person_a_ocular_eval")
     source_embedding = v263._mobileface_embedding(source_im, source_dense, recognition_path)
     final_embedding = v263._mobileface_embedding(final, final_dense, recognition_path)
@@ -168,16 +173,26 @@ def _score_locked_candidate(final, source_im, source_dense, desired_dense, firew
 
 def _encode_png(frame) -> bytes:
     import cv2
+
     ok, encoded = cv2.imencode(".png", frame, [cv2.IMWRITE_PNG_COMPRESSION, 2])
     if not ok:
         raise RuntimeError("V264 ocular source lock PNG encode failed")
     return bytes(encoded.tobytes())
 
 
-def _apply_ocular_lock(stage1: bytes, output: bytes, source: bytes, desired_dense, yunet_path, dense_path, recognition_path, base_metrics):
+def _apply_ocular_lock(
+    stage1: bytes,
+    output: bytes,
+    source: bytes,
+    desired_dense,
+    yunet_path,
+    dense_path,
+    recognition_path,
+    base_metrics,
+):
     """Keep dense68 geometry but make actual iris/pupil texture source-owned."""
     try:
-        final, source_im, source_dense, projected_dense, firewall_x = _prepare_shared_geometry(
+        final, source_im, source_dense, projected_dense, firewall_x, matrix = _prepare_shared_geometry(
             stage1, output, source, yunet_path, dense_path
         )
         face_min = float(base_metrics.get("target_face_short", 0.0) or 0.0)
@@ -187,11 +202,13 @@ def _apply_ocular_lock(stage1: bytes, output: bytes, source: bytes, desired_dens
         sigmas: list[float] = []
         for eye_ids in (v263._RIGHT_EYE, v263._LEFT_EYE):
             ok, sigma = _restore_one_eye_shared_field(
-                final, source_im, None if False else v263._similarity_transform(
-                    v253._yunet_face(source_im, yunet_path, label="source_photo3_v264_ocular_matrix")[1],
-                    v253._yunet_face(v253._decode_bgr(stage1)[:, :firewall_x], yunet_path, label="target_person_a_v264_ocular_matrix")[1],
-                )[0],
-                projected_dense, desired_dense, eye_ids, face_min,
+                final,
+                source_im,
+                matrix,
+                projected_dense,
+                desired_dense,
+                eye_ids,
+                face_min,
             )
             if not ok:
                 raise RuntimeError("V264 ocular shared-field eye restore failed")
@@ -199,8 +216,15 @@ def _apply_ocular_lock(stage1: bytes, output: bytes, source: bytes, desired_dens
 
         encoded = _encode_png(final)
         metrics_after = _score_locked_candidate(
-            final, source_im, source_dense, desired_dense, firewall_x,
-            dense_path, recognition_path, base_metrics,
+            final,
+            source_im,
+            source_dense,
+            desired_dense,
+            firewall_x,
+            yunet_path,
+            dense_path,
+            recognition_path,
+            base_metrics,
         )
         _log(
             "AI_SELFIE_V264_OCULAR_LOCK status=applied method=shared_global_plus_dense68_field "
@@ -217,8 +241,6 @@ def _apply_ocular_lock(stage1: bytes, output: bytes, source: bytes, desired_dens
         )
         return encoded, metrics_after
     except Exception as exc:
-        # This refinement never turns a previously valid candidate into a hard
-        # failure. Production quality gates still evaluate the original candidate.
         _log(
             "AI_SELFIE_V264_OCULAR_LOCK status=fallback_original reason=%s:%s",
             type(exc).__name__, str(exc)[:260],
@@ -233,8 +255,14 @@ def _transfer_attempt_ocular_locked(stage1, source, yunet_path, dense_path, reco
         stage1, source, yunet_path, dense_path, recognition_path, strict=strict
     )
     locked_output, locked_metrics = _apply_ocular_lock(
-        bytes(stage1 or b""), bytes(output or b""), bytes(source or b""), desired_dense,
-        yunet_path, dense_path, recognition_path, metrics,
+        bytes(stage1 or b""),
+        bytes(output or b""),
+        bytes(source or b""),
+        desired_dense,
+        yunet_path,
+        dense_path,
+        recognition_path,
+        metrics,
     )
     return locked_output, locked_metrics, desired_dense
 
@@ -260,6 +288,10 @@ def install() -> None:
 
 
 __all__ = [
-    "VERSION", "install", "_apply_ocular_lock", "_restore_one_eye_shared_field",
-    "_match_eye_luminance", "_transfer_attempt_ocular_locked",
+    "VERSION",
+    "install",
+    "_apply_ocular_lock",
+    "_restore_one_eye_shared_field",
+    "_match_eye_luminance",
+    "_transfer_attempt_ocular_locked",
 ]
