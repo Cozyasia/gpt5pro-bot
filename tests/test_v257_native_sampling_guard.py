@@ -28,11 +28,14 @@ class V257NativeSamplingGuardTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("/v1/faceswap", source)
 
-    def test_package_version_is_v257(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v257-native-sampling-guard-2026-08-22", source)
-        self.assertIn("v256-large-scale-source-pixels-2026-08-22", source)
-        self.assertIn("v255-source-face-gate-lossless-2026-08-22", source)
+    def test_v257_is_historical_and_v265_enforces_native_sampling_directly(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("native_face_short < v256._MIN_NATIVE_FACE_SHORT", engine)
+        self.assertIn("scale <= v256._MAX_REAL_SOURCE_SCALE", engine)
+        self.assertNotIn("selfie_v257_native_sampling_guard", package)
+        self.assertNotIn("selfie_v257_native_sampling_guard", engine)
 
 
 if __name__ == "__main__":
