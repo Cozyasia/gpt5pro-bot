@@ -32,27 +32,18 @@ class V251V2IdentityDetailTests(unittest.TestCase):
         self.assertNotIn("/v1/hyperswap-image-faceswap-by-facefusion-labs", source)
         self.assertNotIn("/v1/faceswap-v4", source)
 
-    def test_v251_owner_accepts_newer_final_transfer_overlays(self) -> None:
-        from neyrobot_prod import selfie_v241_authoritative_runtime as v241
-        from neyrobot_prod import selfie_v246_quality_hardlock as v246
-        from neyrobot_prod import selfie_v247_provider_supersample as v247
-        from neyrobot_prod import selfie_v250_hyperswap_identity as v250
-        from neyrobot_prod import selfie_v252_v3_png_quality as v252
-        from neyrobot_prod import selfie_v264_dense68_roi_production as v264
-        from neyrobot_prod import selfie_v263_dense_identity_lock as v263
-        from neyrobot_prod import selfie_v233_true_face_transfer as transfer
-
-        # V251 remains the proven callback/UX owner. V252 remains the frozen
-        # provider fallback. A direct legacy V263 install request must not
-        # displace the accepted V264 production transfer owner.
-        v263.install()
-        self.assertIs(transfer._left_person_crop, v247._provider_supersample_roi)
-        self.assertIs(transfer._merge_left_crop, v250._merge_face_local)
-        self.assertIs(transfer._ensure_full_hd, v246._ensure_full_hd_lossless)
-        self.assertIs(transfer._true_face_transfer, v264._true_face_transfer_v264)
-        runtime = v241._runtime()
-        if runtime is not None:
-            self.assertIs(runtime._segmind_faceswap_v2, v252._segmind_v3_png)
+    def test_v251_is_historical_and_does_not_own_v265_transfer(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        owner = Path("neyrobot_prod/selfie_v265_single_owner.py").read_text(encoding="utf-8")
+        transfer_body = owner[owner.index("async def _true_face_transfer_v265"):owner.index("async def _call_google")]
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("V265_PRODUCTION_ACCEPTED = True", package)
+        self.assertNotIn("selfie_v251_v2_identity_detail", package)
+        self.assertNotIn("selfie_v251_v2_identity_detail", transfer_body)
+        self.assertNotIn("segmind", transfer_body.lower())
+        self.assertNotIn("piapi", transfer_body.lower())
+        self.assertNotIn("selfie_v264", transfer_body)
+        self.assertNotIn("selfie_v262", transfer_body)
 
     def test_source_detail_is_frequency_only_and_png_intermediate(self) -> None:
         source = Path("neyrobot_prod/selfie_v251_v2_identity_detail.py").read_text(encoding="utf-8")
