@@ -77,7 +77,7 @@ except Exception as _retouch_v261_exc:
 # claims a persistent /data sentinel before fixture/model/Gemini/image work.
 if _production_hardening_enabled():
     try:
-        from neyrobot_prod.v265_production_verifier import start_once as _start_v265_production_verifier
+        from neyrobot_prod.v265_production_verifier_runtime_ready import start_once as _start_v265_production_verifier
         _start_v265_production_verifier()
     except Exception as _v265_verify_exc:
         print(
