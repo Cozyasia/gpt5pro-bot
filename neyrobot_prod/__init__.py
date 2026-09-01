@@ -1,23 +1,48 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package.
 
-AI-selfie activation is intentionally NOT performed from package import.  Historical
-V247..V264 modules remain source history only until they are removed/migrated; package
-initialization must never build a fallback chain as a side effect.  sitecustomize.py
-installs the stable V246 Telegram/UX base and then exactly one final selfie owner:
-V265.
+AI-selfie generation has one production owner: V265.  Historical selfie modules are
+not chained from package import and are never used as recovery routes.  The existing
+sitecustomize bootstrap still asks V246 to install because V246 owns useful Telegram
+UX/error/builder plumbing; that entrypoint is redirected below to initialize only the
+V246 base primitives and then install V265.  Crucially, V246's historical V247
+successor call is never executed, so V247..V264 cannot become intermediate owners.
 """
 
 VERSION = "v265-dense68-single-owner-production-2026-09-01"
 PRODUCTION_SELFIE_RUNTIME = "v265"
-
-# Compatibility exports for code/tests that inspect historical acceptance flags.
 V263_PRODUCTION_ACCEPTED = False
 V264_PRODUCTION_ACCEPTED = False
 V265_PRODUCTION_ACCEPTED = True
 
-# Retouch is a separate UX feature, not an AI-selfie generation owner.  It may patch
-# retouch helpers, but it must not install any historical selfie runtime or fallback.
+# ---------------------------------------------------------------------------
+# Compatibility bootstrap: V246 base -> V265, with the V247 successor chain cut.
+# Merely defining this wrapper has no generation-side effect; sitecustomize invokes
+# it at the normal final-owner bootstrap point.
+# ---------------------------------------------------------------------------
+try:
+    from neyrobot_prod import selfie_v246_quality_hardlock as _v246_bootstrap
+
+    def _install_v265_from_v246_entrypoint() -> None:
+        if not bool(getattr(_v246_bootstrap, "_INSTALLED", False)):
+            _v246_bootstrap._install_process_error_filter()
+            _v246_bootstrap.v245.install()
+            _v246_bootstrap._install_final_builder_hook()
+            _v246_bootstrap.enforce_runtime(bind_generate=True)
+            _v246_bootstrap._INSTALLED = True
+        from neyrobot_prod.selfie_v265_single_owner import install as _install_v265
+        _install_v265()
+
+    # Physical production cut: the callable that sitecustomize imports as V246's
+    # installer no longer contains or reaches install_v247_quality().
+    _v246_bootstrap.install = _install_v265_from_v246_entrypoint
+except Exception as _bootstrap_patch_exc:
+    print(
+        f"[neyrobot-prod] V265 bootstrap patch warning: {type(_bootstrap_patch_exc).__name__}: {_bootstrap_patch_exc}",
+        flush=True,
+    )
+
+# Retouch is a separate UX feature, not an AI-selfie generation owner.
 try:
     from neyrobot_prod import retouch_v261_batch as _retouch_v261_module
 
