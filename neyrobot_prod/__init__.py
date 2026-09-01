@@ -41,8 +41,9 @@ if _production_hardening_enabled():
                 _v246_bootstrap._INSTALLED = True
             from neyrobot_prod.selfie_v265_single_owner import install as _install_v265
             _install_v265()
-            # Temporary production fail-closed guard: keep the V265 single owner and
-            # unchanged hard gate, but do not execute the unproven strict second pass.
+            # V265 remains the only algorithm owner. The strict second pass is allowed
+            # only after the fail-closed cgroup/native-memory preflight proves sufficient
+            # effective headroom; the V265 hard quality gate itself is unchanged.
             from neyrobot_prod.v265_strict_runtime_safety import install as _install_v265_strict_safety
             _install_v265_strict_safety()
 
