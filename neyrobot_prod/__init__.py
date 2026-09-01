@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 """Neyro-Bot production package.
 
-AI-selfie generation has one production owner: V265.  Historical selfie modules are
-not chained from package import and are never used as recovery routes.  The existing
-sitecustomize bootstrap still asks V246 to install because V246 owns useful Telegram
-UX/error/builder plumbing; that entrypoint is redirected below to initialize only the
-V246 base primitives and then install V265.  Crucially, V246's historical V247
-successor call is never executed, so V247..V264 cannot become intermediate owners.
+AI-selfie generation has one production owner: V265. Historical selfie modules are
+not chained from package import and are never used as recovery routes in production.
+The existing sitecustomize bootstrap still asks V246 to install because V246 owns
+useful Telegram UX/error/builder plumbing; in production that entrypoint is redirected
+below to initialize only the V246 base primitives and then install V265. Crucially,
+V246's historical V247 successor call is never executed.
 """
+from __future__ import annotations
+
+import os
 
 VERSION = "v265-dense68-single-owner-production-2026-09-01"
 PRODUCTION_SELFIE_RUNTIME = "v265"
@@ -15,32 +18,40 @@ V263_PRODUCTION_ACCEPTED = False
 V264_PRODUCTION_ACCEPTED = False
 V265_PRODUCTION_ACCEPTED = True
 
-# ---------------------------------------------------------------------------
-# Compatibility bootstrap: V246 base -> V265, with the V247 successor chain cut.
-# Merely defining this wrapper has no generation-side effect; sitecustomize invokes
-# it at the normal final-owner bootstrap point.
-# ---------------------------------------------------------------------------
-try:
-    from neyrobot_prod import selfie_v246_quality_hardlock as _v246_bootstrap
 
-    def _install_v265_from_v246_entrypoint() -> None:
-        if not bool(getattr(_v246_bootstrap, "_INSTALLED", False)):
-            _v246_bootstrap._install_process_error_filter()
-            _v246_bootstrap.v245.install()
-            _v246_bootstrap._install_final_builder_hook()
-            _v246_bootstrap.enforce_runtime(bind_generate=True)
-            _v246_bootstrap._INSTALLED = True
-        from neyrobot_prod.selfie_v265_single_owner import install as _install_v265
-        _install_v265()
+def _production_hardening_enabled() -> bool:
+    return str(os.environ.get("PROD_HARDENING_ENABLED", "1") or "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
 
-    # Physical production cut: the callable that sitecustomize imports as V246's
-    # installer no longer contains or reaches install_v247_quality().
-    _v246_bootstrap.install = _install_v265_from_v246_entrypoint
-except Exception as _bootstrap_patch_exc:
-    print(
-        f"[neyrobot-prod] V265 bootstrap patch warning: {type(_bootstrap_patch_exc).__name__}: {_bootstrap_patch_exc}",
-        flush=True,
-    )
+
+# ---------------------------------------------------------------------------
+# Production compatibility bootstrap: V246 base -> V265, V247 successor cut.
+# CI sets PROD_HARDENING_ENABLED=0 so historical unit tests can exercise their own
+# isolated versions without V265 intentionally replacing their installers.
+# ---------------------------------------------------------------------------
+if _production_hardening_enabled():
+    try:
+        from neyrobot_prod import selfie_v246_quality_hardlock as _v246_bootstrap
+
+        def _install_v265_from_v246_entrypoint() -> None:
+            if not bool(getattr(_v246_bootstrap, "_INSTALLED", False)):
+                _v246_bootstrap._install_process_error_filter()
+                _v246_bootstrap.v245.install()
+                _v246_bootstrap._install_final_builder_hook()
+                _v246_bootstrap.enforce_runtime(bind_generate=True)
+                _v246_bootstrap._INSTALLED = True
+            from neyrobot_prod.selfie_v265_single_owner import install as _install_v265
+            _install_v265()
+
+        # The function object imported by sitecustomize as V246's installer now
+        # initializes the UX base and V265 only; install_v247_quality is unreachable.
+        _v246_bootstrap.install = _install_v265_from_v246_entrypoint
+    except Exception as _bootstrap_patch_exc:
+        print(
+            f"[neyrobot-prod] V265 bootstrap patch warning: {type(_bootstrap_patch_exc).__name__}: {_bootstrap_patch_exc}",
+            flush=True,
+        )
 
 # Retouch is a separate UX feature, not an AI-selfie generation owner.
 try:
