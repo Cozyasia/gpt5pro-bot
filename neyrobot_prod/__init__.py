@@ -92,6 +92,18 @@ try:
                     type(_production_guard_exc).__name__, _production_guard_exc,
                 )
 
+            local_quality_recovery = "base_production_guard"
+            if production_guard == "production_gate_plus_isolated_provider_rescue":
+                try:
+                    from neyrobot_prod.selfie_v264_local_strict_quality_recovery import install as _install_v264_local_quality_recovery
+                    _install_v264_local_quality_recovery()
+                    local_quality_recovery = "legacy_valid_to_strict_dense68_ocular"
+                except Exception as _local_quality_recovery_exc:
+                    _selfie_v247_module._log(
+                        "AI_SELFIE_V264_LOCAL_QUALITY_RECOVERY_INSTALL status=failed fallback=production_guard error=%s:%s",
+                        type(_local_quality_recovery_exc).__name__, _local_quality_recovery_exc,
+                    )
+
             preflight_rescue = "base_production_guard"
             if production_guard == "production_gate_plus_isolated_provider_rescue":
                 try:
@@ -106,9 +118,10 @@ try:
 
             _selfie_v247_module._log(
                 "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true "
-                "identity_core=%s ocular_lock=%s stage1_scaffold=%s production_guard=%s preflight_rescue=%s "
-                "rollback=v262_infra_only",
-                identity_core, ocular_lock, stage1_scaffold, production_guard, preflight_rescue,
+                "identity_core=%s ocular_lock=%s stage1_scaffold=%s production_guard=%s "
+                "local_quality_recovery=%s preflight_rescue=%s rollback=v262_infra_only",
+                identity_core, ocular_lock, stage1_scaffold, production_guard,
+                local_quality_recovery, preflight_rescue,
             )
         except Exception as _v264_activation_exc:
             _selfie_v247_module._log(
