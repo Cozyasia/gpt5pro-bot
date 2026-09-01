@@ -11,26 +11,34 @@ from neyrobot_prod import selfie_v264_ocular_source_lock as ocular
 
 
 class V264OcularSourceLockTests(unittest.TestCase):
-    def test_local_eye_restore_changes_only_small_destination_region(self) -> None:
+    def test_shared_dense_field_eye_restore_is_local(self) -> None:
         source = np.zeros((120, 120, 3), dtype=np.uint8)
         final = np.zeros((160, 160, 3), dtype=np.uint8)
         source_eye = np.asarray(
             [[35, 50], [40, 45], [48, 45], [54, 50], [48, 55], [40, 55]],
             dtype=np.float32,
         )
-        final_eye = np.asarray(
-            [[76, 78], [82, 72], [92, 72], [99, 78], [92, 84], [82, 84]],
-            dtype=np.float32,
-        )
         cv2.ellipse(source, (45, 50), (13, 8), 0, 0, 360, (210, 180, 150), -1)
         cv2.circle(source, (45, 50), 4, (40, 80, 130), -1)
 
-        ok, scale, sigma = ocular._restore_one_eye(final, source, source_eye, final_eye)
+        matrix = np.asarray([[1.0, 0.0, 40.0], [0.0, 1.0, 28.0]], dtype=np.float32)
+        projected = np.tile(np.asarray([[80.0, 80.0]], dtype=np.float32), (68, 1))
+        desired = projected.copy()
+        desired[36:42] = source_eye + np.asarray([40.0, 28.0], dtype=np.float32)
+        projected[36:42] = desired[36:42]
+
+        ok, sigma = ocular._restore_one_eye_shared_field(
+            final,
+            source,
+            matrix,
+            projected,
+            desired,
+            tuple(range(36, 42)),
+            100.0,
+        )
         self.assertTrue(ok)
-        self.assertGreater(scale, 0.45)
         self.assertGreater(sigma, 0.0)
         self.assertGreater(int(final.sum()), 0)
-        # The operation is local: a distant corner remains untouched.
         self.assertEqual(int(final[:25, :25].sum()), 0)
 
     def test_eye_luminance_match_preserves_source_chroma_path(self) -> None:
@@ -41,12 +49,15 @@ class V264OcularSourceLockTests(unittest.TestCase):
         self.assertEqual(matched.shape, source.shape)
         self.assertFalse(np.array_equal(matched, target))
 
-    def test_overlay_has_no_new_route_or_provider(self) -> None:
+    def test_overlay_has_no_new_route_provider_or_eye_geometry_transform(self) -> None:
         source = Path("neyrobot_prod/selfie_v264_ocular_source_lock.py").read_text(encoding="utf-8")
         self.assertIn("iris_pupil_source_owned=true", source)
-        self.assertIn("independent_geometry_warp=false", source)
+        self.assertIn("independent_eye_transform=false", source)
+        self.assertIn("_warp_source_direct_to_roi", source)
+        self.assertIn("_dense_deform_local_roi", source)
         self.assertIn("v263._RIGHT_EYE", source)
         self.assertIn("v263._LEFT_EYE", source)
+        self.assertNotIn("estimateAffinePartial2D", source)
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
         self.assertNotIn("add_handler", source)
@@ -64,7 +75,7 @@ class V264OcularSourceLockTests(unittest.TestCase):
         ocular_pos = package.index("_install_v264_ocular_lock()")
         guard_pos = package.index("_install_v264_production_guard()")
         self.assertLess(ocular_pos, guard_pos)
-        self.assertIn("ocular_lock=dense68_source_eye_texture", package.replace("%s", "dense68_source_eye_texture"))
+        self.assertIn("dense68_source_eye_texture", package)
 
 
 if __name__ == "__main__":
