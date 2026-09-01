@@ -38,7 +38,7 @@ class V264ProductionQualityRescueTests(unittest.TestCase):
         self.assertFalse(passed)
         joined = "|".join(failures)
         self.assertIn("identity=0.5470<0.6800", joined)
-        self.assertIn("eye_error=0.0666>0.0450", joined)
+        self.assertIn("eye_error=0.0666>0.0500", joined)
         self.assertIn("inner_nme=0.0526>0.0500", joined)
         self.assertIn("eye_asymmetry=0.0472>0.0300", joined)
 
@@ -55,6 +55,27 @@ class V264ProductionQualityRescueTests(unittest.TestCase):
         }
         passed, failures = guard._production_gate(metrics)
         self.assertTrue(passed, failures)
+
+    def test_render_regression_near_threshold_ocular_case_stays_on_local_v264_path(self) -> None:
+        # Exact production metrics observed on 2026-09-01. The transfer itself had
+        # succeeded with strong identity, but the old 0.045/0.040 thresholds routed
+        # it into provider rescue and ultimately blocked Telegram delivery.
+        metrics = {
+            "target_face_short": 562.5,
+            "identity_similarity_cosine": 0.8010,
+            "left_eye_error": 0.0081,
+            "right_eye_error": 0.0454,
+            "interocular_ratio_delta": 0.0437,
+            "nose_mouth_axis_delta": 0.0164,
+            "inner_face_landmark_nme": 0.0320,
+            "eye_asymmetry_delta": 0.0075,
+        }
+        passed, failures = guard._production_gate(metrics)
+        self.assertTrue(passed, failures)
+        refinement = guard.v264._visual_refinement_reasons(metrics)
+        self.assertTrue(refinement)
+        self.assertTrue(any(reason.startswith("eye_error=") for reason in refinement))
+        self.assertTrue(any(reason.startswith("interocular=") for reason in refinement))
 
     def test_guard_keeps_two_candidate_contract(self) -> None:
         source = Path("neyrobot_prod/selfie_v264_production_quality_rescue.py").read_text(encoding="utf-8")
