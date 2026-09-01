@@ -54,11 +54,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Complete strict in daemon context with explicit safe headroom
+      - name: Complete strict in daemon context without synthetic pressure
         env:
           PROD_HARDENING_ENABLED: "0"
           PYTHONUNBUFFERED: "1"
-          V265_PROBE_BASELINE_BYTES: "33554432"
+          V265_PROBE_BASELINE_BYTES: "0"
         run: python -u scripts/v265_strict_daemon_probe.py
 
   production-baseline-pressure:
