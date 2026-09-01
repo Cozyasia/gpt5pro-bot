@@ -4,13 +4,17 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "neyrobot_prod/__init__.py"
       - "neyrobot_prod/v265_production_verifier.py"
+      - "neyrobot_prod/v265_production_verifier_runtime_ready.py"
       - "tests/test_v265_verifier_readiness.py"
       - ".github/workflows/v265-verifier-fix-ci.yml"
   push:
     branches: [main]
     paths:
+      - "neyrobot_prod/__init__.py"
       - "neyrobot_prod/v265_production_verifier.py"
+      - "neyrobot_prod/v265_production_verifier_runtime_ready.py"
       - "tests/test_v265_verifier_readiness.py"
       - ".github/workflows/v265-verifier-fix-ci.yml"
 
@@ -31,8 +35,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Compile verifier
-        run: python -m py_compile neyrobot_prod/v265_production_verifier.py
+      - name: Compile verifier modules
+        run: |
+          python -m py_compile neyrobot_prod/v265_production_verifier.py
+          python -m py_compile neyrobot_prod/v265_production_verifier_runtime_ready.py
       - name: Run verifier regression
         env:
           PROD_HARDENING_ENABLED: "0"
