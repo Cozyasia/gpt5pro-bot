@@ -7,8 +7,10 @@ on:
       - "neyrobot_prod/__init__.py"
       - "neyrobot_prod/dense68_engine_v265.py"
       - "neyrobot_prod/selfie_v265_single_owner.py"
+      - "neyrobot_prod/v265_strict_runtime_safety.py"
       - "neyrobot_prod/versioning.py"
       - "tests/test_v265_single_owner.py"
+      - "tests/test_v265_strict_runtime_safety.py"
       - "tests/test_version_active_selfie_runtime.py"
       - ".github/workflows/v265-single-owner-ci.yml"
   push:
@@ -17,8 +19,10 @@ on:
       - "neyrobot_prod/__init__.py"
       - "neyrobot_prod/dense68_engine_v265.py"
       - "neyrobot_prod/selfie_v265_single_owner.py"
+      - "neyrobot_prod/v265_strict_runtime_safety.py"
       - "neyrobot_prod/versioning.py"
       - "tests/test_v265_single_owner.py"
+      - "tests/test_v265_strict_runtime_safety.py"
       - "tests/test_version_active_selfie_runtime.py"
       - ".github/workflows/v265-single-owner-ci.yml"
 
@@ -43,6 +47,7 @@ jobs:
         run: |
           python -m py_compile neyrobot_prod/dense68_engine_v265.py
           python -m py_compile neyrobot_prod/selfie_v265_single_owner.py
+          python -m py_compile neyrobot_prod/v265_strict_runtime_safety.py
           python -m py_compile neyrobot_prod/versioning.py
       - name: Run V265 single-owner regressions
         env:
@@ -50,8 +55,9 @@ jobs:
         run: |
           python -m unittest tests.test_v265_single_owner -v
           python -m unittest tests.test_version_active_selfie_runtime -v
+          python -m unittest tests.test_v265_strict_runtime_safety -v
       - name: Verify production bootstrap import
         env:
           PROD_HARDENING_ENABLED: "1"
         run: |
-          python -c "import neyrobot_prod; import neyrobot_prod.selfie_v265_single_owner as v; print(neyrobot_prod.VERSION, v.VERSION)"
+          python -c "import neyrobot_prod; import neyrobot_prod.selfie_v265_single_owner as v; import neyrobot_prod.v265_strict_runtime_safety as s; print(neyrobot_prod.VERSION, v.VERSION, s._INSTALLED)"
