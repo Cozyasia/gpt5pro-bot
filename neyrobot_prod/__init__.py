@@ -63,7 +63,7 @@ try:
             try:
                 from neyrobot_prod.selfie_v264_stage1_scaffold_guard import install as _install_v264_stage1_scaffold
                 _install_v264_stage1_scaffold()
-                stage1_scaffold = "age_head_hair_locked"
+                stage1_scaffold = "age_head_hair_locked_durable_v242"
             except Exception as _stage1_scaffold_exc:
                 _selfie_v247_module._log(
                     "AI_SELFIE_V264_STAGE1_SCAFFOLD_INSTALL status=failed fallback=base_v241 error=%s:%s",
@@ -81,10 +81,23 @@ try:
                     type(_production_guard_exc).__name__, _production_guard_exc,
                 )
 
+            preflight_rescue = "base_production_guard"
+            if production_guard == "production_gate_plus_isolated_provider_rescue":
+                try:
+                    from neyrobot_prod.selfie_v264_preflight_provider_rescue import install as _install_v264_preflight_rescue
+                    _install_v264_preflight_rescue()
+                    preflight_rescue = "overscale_small_source_to_provider"
+                except Exception as _preflight_rescue_exc:
+                    _selfie_v247_module._log(
+                        "AI_SELFIE_V264_PREFLIGHT_RESCUE_INSTALL status=failed fallback=production_guard error=%s:%s",
+                        type(_preflight_rescue_exc).__name__, _preflight_rescue_exc,
+                    )
+
             _selfie_v247_module._log(
                 "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true "
-                "identity_core=%s stage1_scaffold=%s production_guard=%s rollback=v262_infra_only",
-                identity_core, stage1_scaffold, production_guard,
+                "identity_core=%s stage1_scaffold=%s production_guard=%s preflight_rescue=%s "
+                "rollback=v262_infra_only",
+                identity_core, stage1_scaffold, production_guard, preflight_rescue,
             )
         except Exception as _v264_activation_exc:
             _selfie_v247_module._log(
