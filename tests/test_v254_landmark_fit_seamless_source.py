@@ -36,12 +36,14 @@ class V254LandmarkFitSeamlessSourceTests(unittest.TestCase):
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("add_handler", source)
 
-    def test_package_version_has_v254_or_newer_successor(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertTrue(
-            "v254-landmark-fit-seamless-source-2026-08-22" in source
-            or "v255-source-face-gate-lossless-2026-08-22" in source
-        )
+    def test_v254_is_historical_and_v265_owns_current_dense_geometry(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("_similarity_transform(source_pts5, target_pts5)", engine)
+        self.assertIn("_landmark_anatomy_mask", engine)
+        self.assertIn("cv2.seamlessClone", engine)
+        self.assertNotIn("selfie_v254_landmark_fit_seamless_source", package)
 
 
 if __name__ == "__main__":
