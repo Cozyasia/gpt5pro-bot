@@ -41,6 +41,10 @@ if _production_hardening_enabled():
                 _v246_bootstrap._INSTALLED = True
             from neyrobot_prod.selfie_v265_single_owner import install as _install_v265
             _install_v265()
+            # Temporary production fail-closed guard: keep the V265 single owner and
+            # unchanged hard gate, but do not execute the unproven strict second pass.
+            from neyrobot_prod.v265_strict_runtime_safety import install as _install_v265_strict_safety
+            _install_v265_strict_safety()
 
         # The function imported by sitecustomize at its existing V246 bootstrap point
         # now initializes only the UX base and V265; historical successors are absent.
