@@ -26,15 +26,16 @@ from neyrobot_prod import selfie_v264_dense68_roi_production as v264
 VERSION = v264.VERSION
 _INSTALLED = False
 
-# Large-face production thresholds are deliberately much tighter than V263 smoke
-# thresholds. The known good V264 examples remain comfortably inside these bounds,
-# while the visibly broken 0.50-0.55 identity / 0.06+ eye-error case is blocked.
+# Large-face thresholds stay strict enough to block the known visibly broken
+# 0.50-0.55 identity / 0.06+ eye-error case, but allow a tiny ocular-geometry
+# measurement tolerance. A near-threshold candidate then follows V264's bounded
+# local strict-refinement path instead of being needlessly diverted to a provider.
 _LARGE_FACE_MIN = 500.0
 _MEDIUM_FACE_MIN = 360.0
 _LARGE_IDENTITY_MIN = 0.680
 _MEDIUM_IDENTITY_MIN = 0.640
 _SMALL_IDENTITY_MIN = 0.580
-_LARGE_EYE_MAX = 0.045
+_LARGE_EYE_MAX = 0.050
 _MEDIUM_EYE_MAX = 0.055
 _SMALL_EYE_MAX = 0.070
 _LARGE_INNER_NME_MAX = 0.050
@@ -43,7 +44,7 @@ _SMALL_INNER_NME_MAX = 0.070
 _LARGE_ASYMMETRY_MAX = 0.030
 _MEDIUM_ASYMMETRY_MAX = 0.040
 _SMALL_ASYMMETRY_MAX = 0.060
-_LARGE_INTEROCULAR_MAX = 0.040
+_LARGE_INTEROCULAR_MAX = 0.045
 _MEDIUM_INTEROCULAR_MAX = 0.050
 _SMALL_INTEROCULAR_MAX = 0.065
 _LARGE_AXIS_MAX = 0.050
@@ -378,9 +379,3 @@ def install() -> None:
         "bad_standard_retry=isolated_provider normal_retry=strict_dense max_attempts=2 "
         "person_b=pixel_restored provider_shared_state_mutation=false"
     )
-
-
-__all__ = [
-    "VERSION", "install", "_production_gate", "_thresholds", "_provider_rescue",
-    "_normalize_provider_rescue", "_evaluate_candidate", "_true_face_transfer_v264_guarded",
-]
