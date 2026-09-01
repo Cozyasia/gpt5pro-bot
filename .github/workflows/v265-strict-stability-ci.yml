@@ -1,0 +1,41 @@
+name: V265 Strict Stability CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "neyrobot_prod/dense68_engine_v265.py"
+      - "neyrobot_prod/selfie_v265_single_owner.py"
+      - "neyrobot_prod/v265_strict_runtime_safety.py"
+      - "scripts/v265_strict_stability_probe.py"
+      - ".github/workflows/v265-strict-stability-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-size-strict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: python:3.12-slim
+      options: --memory=512m --cpus=0.5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run 1856x2304 standard-fail to strict-complete regression
+        env:
+          PROD_HARDENING_ENABLED: "0"
+          PYTHONUNBUFFERED: "1"
+        run: python -u scripts/v265_strict_stability_probe.py
+      - name: Upload probe images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v265-strict-stability-probe
+          path: /tmp/v265_strict_probe/
+          if-no-files-found: ignore
