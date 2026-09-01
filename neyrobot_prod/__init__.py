@@ -6,7 +6,7 @@ not chained from package import and are never used as recovery routes in product
 The existing sitecustomize bootstrap still asks V246 to install because V246 owns
 useful Telegram UX/error/builder plumbing; in production that entrypoint is redirected
 below to initialize only the V246 base primitives and then install V265. Crucially,
-V246's historical V247 successor call is never executed.
+V246's historical successor chain is never executed.
 """
 from __future__ import annotations
 
@@ -25,11 +25,9 @@ def _production_hardening_enabled() -> bool:
     }
 
 
-# ---------------------------------------------------------------------------
-# Production compatibility bootstrap: V246 base -> V265, V247 successor cut.
+# Production compatibility bootstrap: V246 base -> V265, with successors cut.
 # CI sets PROD_HARDENING_ENABLED=0 so historical unit tests can exercise their own
 # isolated versions without V265 intentionally replacing their installers.
-# ---------------------------------------------------------------------------
 if _production_hardening_enabled():
     try:
         from neyrobot_prod import selfie_v246_quality_hardlock as _v246_bootstrap
@@ -44,8 +42,8 @@ if _production_hardening_enabled():
             from neyrobot_prod.selfie_v265_single_owner import install as _install_v265
             _install_v265()
 
-        # The function object imported by sitecustomize as V246's installer now
-        # initializes the UX base and V265 only; install_v247_quality is unreachable.
+        # The function imported by sitecustomize at its existing V246 bootstrap point
+        # now initializes only the UX base and V265; historical successors are absent.
         _v246_bootstrap.install = _install_v265_from_v246_entrypoint
     except Exception as _bootstrap_patch_exc:
         print(
