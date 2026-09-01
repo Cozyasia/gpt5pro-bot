@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 class V261EdgeHarmonizationTests(unittest.TestCase):
-    def test_v261_loads_after_v260_and_before_v262_final_owner(self) -> None:
+    def test_v261_loads_after_v260_and_before_v262_historical_owner(self) -> None:
         source = Path("neyrobot_prod/selfie_v247_provider_supersample.py").read_text(encoding="utf-8")
         self.assertIn("selfie_v261_edge_harmonization", source)
         self.assertIn("selfie_v262_landmark_field_compositor", source)
@@ -45,14 +45,14 @@ class V261EdgeHarmonizationTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_package_version_advances_to_v264_successor(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v261-edge-harmonization-2026-08-26", source)
-        self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
-        self.assertIn("v262-landmark-field-compositor-2026-08-27", source)
-        self.assertIn("v263-dense-identity-lock-2026-08-27", source)
-        self.assertIn('VERSION = "v264-dense68-roi-production-2026-08-31"', source)
-        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v264"', source)
+    def test_v261_is_historical_and_v265_owns_current_edge_composition(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("cv2.distanceTransform", engine)
+        self.assertIn("_structure_first_compose_roi", engine)
+        self.assertNotIn("selfie_v261_edge_harmonization", package)
+        self.assertNotIn("selfie_v261_edge_harmonization", engine)
 
 
 if __name__ == "__main__":

@@ -1,150 +1,60 @@
 # -*- coding: utf-8 -*-
-"""Neyro-Bot production package."""
+"""Neyro-Bot production package.
 
-# Successor compatibility markers retained for source-level regression tests:
-# v253-yunet-source-pixel-lossless-2026-08-21
-# v254-landmark-fit-seamless-source-2026-08-22
-# v255-source-face-gate-lossless-2026-08-22
-# v256-large-scale-source-pixels-2026-08-22
-# v257-native-sampling-guard-2026-08-22
-# v258-inner-face-integration-2026-08-24
-# v259-eye-landmark-protection-2026-08-26
-# v260-eye-roi-memory-safe-2026-08-26
-# v261-edge-harmonization-2026-08-26
-# v262-landmark-field-compositor-2026-08-27
-# v263-dense-identity-lock-2026-08-27
-VERSION = "v264-dense68-roi-production-2026-08-31"
+AI-selfie generation has one production owner: V265. Historical selfie modules are
+not chained from package import and are never used as recovery routes in production.
+The existing sitecustomize bootstrap still asks V246 to install because V246 owns
+useful Telegram UX/error/builder plumbing; in production that entrypoint is redirected
+below to initialize only the V246 base primitives and then install V265. Crucially,
+V246's historical successor chain is never executed.
+"""
+from __future__ import annotations
 
-# Production ownership is explicit. V263 remains as the dense-identity algorithm and
-# model utility layer, but its old full-frame compositor is not production-accepted
-# because production-size validation could restart a 512 MB Render process. V264 is
-# the same 68-point identity contract with heavy image work restricted to PERSON-A ROI.
-PRODUCTION_SELFIE_RUNTIME = "v264"
+import os
+
+VERSION = "v265-dense68-single-owner-production-2026-09-01"
+PRODUCTION_SELFIE_RUNTIME = "v265"
 V263_PRODUCTION_ACCEPTED = False
-V264_PRODUCTION_ACCEPTED = True
+V264_PRODUCTION_ACCEPTED = False
+V265_PRODUCTION_ACCEPTED = True
 
-# V264 activation is attached to V247's existing internal overlay boundary instead
-# of adding another Telegram callback/builder owner. V247 first installs V248..V262;
-# then V263 model/runtime safety is armed and V264 becomes the sole final transfer
-# owner. Optional V264 overlays refine only internal stage/quality behavior; none adds
-# Telegram handlers. Failure of an optional overlay leaves the prior V264 layer active.
-# If V264 startup activation itself fails, the already-installed V262 owner remains.
-try:
-    from neyrobot_prod import selfie_v247_provider_supersample as _selfie_v247_module
 
-    _v247_base_overlay = _selfie_v247_module._install_v248_overlay
+def _production_hardening_enabled() -> bool:
+    return str(os.environ.get("PROD_HARDENING_ENABLED", "1") or "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
 
-    def _v264_after_v262_overlay() -> None:
-        _v247_base_overlay()
-        try:
-            from neyrobot_prod import selfie_v262_landmark_field_compositor as _v262
-            if not bool(getattr(_v262, "_INSTALLED", False)):
-                _selfie_v247_module._log(
-                    "AI_SELFIE_V264_INSTALL status=skipped reason=v262_not_installed rollback=v262"
-                )
-                return
-            from neyrobot_prod.selfie_v263_runtime_safety import install as _install_v263_runtime_safety
-            _install_v263_runtime_safety()
-            from neyrobot_prod.selfie_v264_dense68_roi_production import install as _install_v264_identity
-            _install_v264_identity()
 
-            identity_core = "base_v264"
-            try:
-                from neyrobot_prod.selfie_v264_identity_core_refinement import install as _install_v264_identity_core
-                _install_v264_identity_core()
-                identity_core = "bounded_source_identity_core"
-            except Exception as _identity_core_exc:
-                _selfie_v247_module._log(
-                    "AI_SELFIE_V264_IDENTITY_CORE_INSTALL status=failed fallback=base_v264 error=%s:%s",
-                    type(_identity_core_exc).__name__, _identity_core_exc,
-                )
+# Production compatibility bootstrap: V246 base -> V265, with successors cut.
+# CI sets PROD_HARDENING_ENABLED=0 so historical unit tests can exercise their own
+# isolated versions without V265 intentionally replacing their installers.
+if _production_hardening_enabled():
+    try:
+        from neyrobot_prod import selfie_v246_quality_hardlock as _v246_bootstrap
 
-            ocular_lock = "base_v264"
-            try:
-                from neyrobot_prod.selfie_v264_ocular_source_lock import install as _install_v264_ocular_lock
-                _install_v264_ocular_lock()
-                ocular_lock = "dense68_source_eye_texture"
-            except Exception as _ocular_lock_exc:
-                _selfie_v247_module._log(
-                    "AI_SELFIE_V264_OCULAR_LOCK_INSTALL status=failed fallback=base_v264 error=%s:%s",
-                    type(_ocular_lock_exc).__name__, _ocular_lock_exc,
-                )
+        def _install_v265_from_v246_entrypoint() -> None:
+            if not bool(getattr(_v246_bootstrap, "_INSTALLED", False)):
+                _v246_bootstrap._install_process_error_filter()
+                _v246_bootstrap.v245.install()
+                _v246_bootstrap._install_final_builder_hook()
+                _v246_bootstrap.enforce_runtime(bind_generate=True)
+                _v246_bootstrap._INSTALLED = True
+            from neyrobot_prod.selfie_v265_single_owner import install as _install_v265
+            _install_v265()
 
-            stage1_scaffold = "base_v241"
-            try:
-                from neyrobot_prod.selfie_v264_stage1_scaffold_guard import install as _install_v264_stage1_scaffold
-                _install_v264_stage1_scaffold()
-                stage1_scaffold = "age_head_hair_locked_durable_v242"
-            except Exception as _stage1_scaffold_exc:
-                _selfie_v247_module._log(
-                    "AI_SELFIE_V264_STAGE1_SCAFFOLD_INSTALL status=failed fallback=base_v241 error=%s:%s",
-                    type(_stage1_scaffold_exc).__name__, _stage1_scaffold_exc,
-                )
+        # The function imported by sitecustomize at its existing V246 bootstrap point
+        # now initializes only the UX base and V265; historical successors are absent.
+        _v246_bootstrap.install = _install_v265_from_v246_entrypoint
+    except Exception as _bootstrap_patch_exc:
+        print(
+            f"[neyrobot-prod] V265 bootstrap patch warning: {type(_bootstrap_patch_exc).__name__}: {_bootstrap_patch_exc}",
+            flush=True,
+        )
 
-            production_guard = "base_v264"
-            try:
-                from neyrobot_prod.selfie_v264_production_quality_rescue import install as _install_v264_production_guard
-                _install_v264_production_guard()
-                production_guard = "production_gate_plus_isolated_provider_rescue"
-            except Exception as _production_guard_exc:
-                _selfie_v247_module._log(
-                    "AI_SELFIE_V264_PRODUCTION_GUARD_INSTALL status=failed fallback=base_v264 error=%s:%s",
-                    type(_production_guard_exc).__name__, _production_guard_exc,
-                )
-
-            local_quality_recovery = "base_production_guard"
-            if production_guard == "production_gate_plus_isolated_provider_rescue":
-                try:
-                    from neyrobot_prod.selfie_v264_local_strict_quality_recovery import install as _install_v264_local_quality_recovery
-                    _install_v264_local_quality_recovery()
-                    local_quality_recovery = "legacy_valid_to_strict_dense68_ocular"
-                except Exception as _local_quality_recovery_exc:
-                    _selfie_v247_module._log(
-                        "AI_SELFIE_V264_LOCAL_QUALITY_RECOVERY_INSTALL status=failed fallback=production_guard error=%s:%s",
-                        type(_local_quality_recovery_exc).__name__, _local_quality_recovery_exc,
-                    )
-
-            preflight_rescue = "base_production_guard"
-            if production_guard == "production_gate_plus_isolated_provider_rescue":
-                try:
-                    from neyrobot_prod.selfie_v264_preflight_provider_rescue import install as _install_v264_preflight_rescue
-                    _install_v264_preflight_rescue()
-                    preflight_rescue = "overscale_small_source_to_provider"
-                except Exception as _preflight_rescue_exc:
-                    _selfie_v247_module._log(
-                        "AI_SELFIE_V264_PREFLIGHT_RESCUE_INSTALL status=failed fallback=production_guard error=%s:%s",
-                        type(_preflight_rescue_exc).__name__, _preflight_rescue_exc,
-                    )
-
-            _selfie_v247_module._log(
-                "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true "
-                "identity_core=%s ocular_lock=%s stage1_scaffold=%s production_guard=%s "
-                "local_quality_recovery=%s preflight_rescue=%s rollback=v262_infra_only",
-                identity_core, ocular_lock, stage1_scaffold, production_guard,
-                local_quality_recovery, preflight_rescue,
-            )
-        except Exception as _v264_activation_exc:
-            _selfie_v247_module._log(
-                "AI_SELFIE_V264_INSTALL status=failed rollback=v262 error=%s:%s",
-                type(_v264_activation_exc).__name__, _v264_activation_exc,
-            )
-
-    _selfie_v247_module._install_v248_overlay = _v264_after_v262_overlay
-except Exception as _v264_hook_exc:
-    print(
-        f"[neyrobot-prod] V264 activation hook warning: {type(_v264_hook_exc).__name__}: {_v264_hook_exc}",
-        flush=True,
-    )
-
-# Retouch is a UX/delivery overlay, not a Telegram route owner. It arms one
-# ApplicationBuilder wrapper and patches the already-existing main.py helpers only
-# after main.py has defined them. No callback/message/payment handlers are added.
+# Retouch is a separate UX feature, not an AI-selfie generation owner.
 try:
     from neyrobot_prod import retouch_v261_batch as _retouch_v261_module
 
-    # PTB creates a fresh CallbackContext for each update in a Telegram media group,
-    # while user_data is shared. Bind batch continuity to the shared user_data uid,
-    # not object identity, and refresh the context used by the sequential worker.
     def _retouch_v261_shared_context(context):
         try:
             uid = int(context.user_data.get("_retouch_v261_uid") or 0)
@@ -164,5 +74,9 @@ except Exception as _retouch_v261_exc:
     )
 
 __all__ = [
-    "VERSION", "PRODUCTION_SELFIE_RUNTIME", "V263_PRODUCTION_ACCEPTED", "V264_PRODUCTION_ACCEPTED"
+    "VERSION",
+    "PRODUCTION_SELFIE_RUNTIME",
+    "V263_PRODUCTION_ACCEPTED",
+    "V264_PRODUCTION_ACCEPTED",
+    "V265_PRODUCTION_ACCEPTED",
 ]

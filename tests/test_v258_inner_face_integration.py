@@ -52,19 +52,16 @@ class V258InnerFaceIntegrationTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_v258_is_retained_as_v264_compatibility_base(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v262-landmark-field-compositor-2026-08-27", source)
-        self.assertIn("v263-dense-identity-lock-2026-08-27", source)
-        self.assertIn('VERSION = "v264-dense68-roi-production-2026-08-31"', source)
-        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v264"', source)
-        self.assertIn("v261-edge-harmonization-2026-08-26", source)
-        self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
-        self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
-        self.assertIn("v258-inner-face-integration-2026-08-24", source)
-        self.assertIn("v257-native-sampling-guard-2026-08-22", source)
-        self.assertIn("v255-source-face-gate-lossless-2026-08-22", source)
-        self.assertNotIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+    def test_v258_is_historical_and_not_a_v265_runtime_compatibility_base(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        owner = Path("neyrobot_prod/selfie_v265_single_owner.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("_structure_first_compose_roi", engine)
+        self.assertIn("_inject_bounded_identity_core", engine)
+        self.assertNotIn("selfie_v258_inner_face_integration", package)
+        self.assertNotIn("selfie_v258_inner_face_integration", engine)
+        self.assertNotIn("selfie_v258_inner_face_integration", owner)
 
 
 if __name__ == "__main__":

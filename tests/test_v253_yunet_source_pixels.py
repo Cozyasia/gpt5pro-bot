@@ -45,13 +45,12 @@ class V253YuNetSourcePixelTests(unittest.TestCase):
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("add_handler", source)
 
-    def test_package_version_has_v253_or_newer_successor(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertTrue(
-            "v253-yunet-source-pixel-lossless-2026-08-21" in source
-            or "v254-landmark-fit-seamless-source-2026-08-22" in source
-            or "v255-source-face-gate-lossless-2026-08-22" in source
-        )
+    def test_v253_is_retained_only_as_v265_yunet_utility(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("selfie_v253_yunet_source_pixels as v253", engine)
+        self.assertNotIn("selfie_v253_yunet_source_pixels", package)
 
 
 if __name__ == "__main__":

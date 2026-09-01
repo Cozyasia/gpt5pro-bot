@@ -42,9 +42,13 @@ class V255SourceFaceGateTests(unittest.TestCase):
         self.assertNotIn("CallbackQueryHandler", source)
         self.assertNotIn("add_handler", source)
 
-    def test_package_version_is_v255(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v255-source-face-gate-lossless-2026-08-22", source)
+    def test_v255_no_neck_contract_is_superseded_by_v265_anatomical_mask(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("No ellipse, neck, hair or full-head source mask", engine)
+        self.assertIn("_landmark_anatomy_mask", engine)
+        self.assertNotIn("selfie_v255_source_face_gate", package)
 
 
 if __name__ == "__main__":

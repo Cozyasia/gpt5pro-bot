@@ -42,9 +42,14 @@ class V256LargeScaleSourcePixelTests(unittest.TestCase):
         self.assertNotIn("detailEnhance", source)
         self.assertNotIn("unsharp", source.lower())
 
-    def test_package_version_is_v256(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v256-large-scale-source-pixels-2026-08-22", source)
+    def test_v256_sampling_constants_are_retained_only_as_v265_math_utility(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertIn("selfie_v256_large_scale_source_pixels as v256", engine)
+        self.assertIn("v256._MAX_REAL_SOURCE_SCALE", engine)
+        self.assertIn("v256._MIN_NATIVE_FACE_SHORT", engine)
+        self.assertNotIn("selfie_v256_large_scale_source_pixels", package)
 
 
 if __name__ == "__main__":

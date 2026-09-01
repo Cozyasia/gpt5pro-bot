@@ -1,0 +1,57 @@
+name: V265 Single Owner CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "neyrobot_prod/__init__.py"
+      - "neyrobot_prod/dense68_engine_v265.py"
+      - "neyrobot_prod/selfie_v265_single_owner.py"
+      - "neyrobot_prod/versioning.py"
+      - "tests/test_v265_single_owner.py"
+      - "tests/test_version_active_selfie_runtime.py"
+      - ".github/workflows/v265-single-owner-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "neyrobot_prod/__init__.py"
+      - "neyrobot_prod/dense68_engine_v265.py"
+      - "neyrobot_prod/selfie_v265_single_owner.py"
+      - "neyrobot_prod/versioning.py"
+      - "tests/test_v265_single_owner.py"
+      - "tests/test_version_active_selfie_runtime.py"
+      - ".github/workflows/v265-single-owner-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  focused-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile V265 modules
+        run: |
+          python -m py_compile neyrobot_prod/dense68_engine_v265.py
+          python -m py_compile neyrobot_prod/selfie_v265_single_owner.py
+          python -m py_compile neyrobot_prod/versioning.py
+      - name: Run V265 single-owner regressions
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          python -m unittest tests.test_v265_single_owner -v
+          python -m unittest tests.test_version_active_selfie_runtime -v
+      - name: Verify production bootstrap import
+        env:
+          PROD_HARDENING_ENABLED: "1"
+        run: |
+          python -c "import neyrobot_prod; import neyrobot_prod.selfie_v265_single_owner as v; print(neyrobot_prod.VERSION, v.VERSION)"
