@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Canonical Telegram /version owner for Neyro-Bot releases.
-
-The legacy monolith and historical runtime overlays may still expose their own
-``PATCH_VERSION`` attributes. The public /version command is owned by the package
-release and reports the actual production selfie owner separately.
-"""
+"""Canonical Telegram /version owner for Neyro-Bot releases."""
 from __future__ import annotations
 
 import contextlib
@@ -12,7 +7,7 @@ import os
 import sys
 from typing import Any
 
-from . import PRODUCTION_SELFIE_RUNTIME, VERSION, V263_PRODUCTION_ACCEPTED, V264_PRODUCTION_ACCEPTED
+from . import PRODUCTION_SELFIE_RUNTIME, VERSION, V263_PRODUCTION_ACCEPTED, V264_PRODUCTION_ACCEPTED, V265_PRODUCTION_ACCEPTED
 
 VERSION_HANDLER_GROUP = -100000
 _VERSION_BUILDER_HOOKED = False
@@ -32,34 +27,26 @@ def _deploy_revision() -> str:
 
 
 def _active_selfie_runtime() -> tuple[str, str]:
-    """Return the configured production selfie owner and an explicit status."""
     active = str(PRODUCTION_SELFIE_RUNTIME or "").strip().lower() or "unknown"
+    if active == "v265" and bool(V265_PRODUCTION_ACCEPTED):
+        return "v265", "68-point dense identity · single-owner ROI-only production"
     if active == "v264" and bool(V264_PRODUCTION_ACCEPTED):
-        return "v264", "68-point dense identity · ROI-only production"
+        return "v264", "68-point dense identity · retired"
     if active == "v263" and bool(V263_PRODUCTION_ACCEPTED):
-        return "v263", "68-point dense identity"
-    if active == "v262":
-        return "v262", "5-point availability runtime"
+        return "v263", "68-point dense identity · retired"
     return active, "configuration mismatch"
 
 
 def _reassert_production_selfie_runtime() -> None:
-    """Reassert the configured final owner; /version must never roll image logic back."""
+    """Reassert only V265; /version cannot activate a historical runtime."""
     active, _ = _active_selfie_runtime()
-    if active == "v264":
-        from neyrobot_prod.selfie_v264_dense68_roi_production import install
-        install()
-        return
-    if active == "v263":
-        from neyrobot_prod.selfie_v263_dense_identity_lock import install
-        install()
-        return
-    from neyrobot_prod.selfie_v262_landmark_field_compositor import install
+    if active != "v265":
+        raise RuntimeError(f"Unsupported production selfie runtime: {active}")
+    from neyrobot_prod.selfie_v265_single_owner import install
     install()
 
 
 async def command(update: Any, context: Any) -> None:
-    """Return package release plus active production component versions."""
     from telegram.ext import ApplicationHandlerStop
 
     try:
@@ -74,7 +61,7 @@ async def command(update: Any, context: Any) -> None:
                 f"✅ Код/пакет: {VERSION}",
                 f"✅ Production AI-селфи runtime: {active_selfie}",
                 f"• Геометрия: {runtime_status}",
-                "• V262: только аварийный fallback при недоступности dense-моделей",
+                "• Резервный face-transfer: отсутствует; при ошибке V265 завершает операцию без отката",
             ]
             if runtime is not None:
                 lines.extend([
@@ -101,18 +88,15 @@ def install_builder_hook() -> bool:
     global _VERSION_BUILDER_HOOKED
     if _VERSION_BUILDER_HOOKED:
         return True
-
     try:
         from telegram.ext import ApplicationBuilder, CommandHandler
     except Exception:
         return False
-
     class_flag = "_neyrobot_canonical_version_hooked"
     app_flag = "_neyrobot_canonical_version_handler"
     if getattr(ApplicationBuilder, class_flag, False):
         _VERSION_BUILDER_HOOKED = True
         return True
-
     original_build = ApplicationBuilder.build
 
     def build(self: Any, *args: Any, **kwargs: Any):
