@@ -39,6 +39,26 @@ class V265SingleOwnerTests(unittest.TestCase):
         passed, failures = v265.production_gate(metrics)
         self.assertTrue(passed, failures)
 
+    def test_v265_gate_preserves_zero_valued_error_metrics(self) -> None:
+        metrics = {
+            "target_face_short": 571.0,
+            "identity_similarity_cosine": 0.8000,
+            "left_eye_error": 0.0,
+            "right_eye_error": 0.0,
+            "interocular_ratio_delta": 0.0,
+            "nose_mouth_axis_delta": 0.0,
+            "inner_face_landmark_nme": 0.0,
+            "eye_asymmetry_delta": 0.0,
+        }
+        passed, failures = v265.production_gate(metrics)
+        self.assertTrue(passed, failures)
+        self.assertEqual(failures, [])
+
+    def test_v265_runtime_never_calls_v263_quality_gate(self) -> None:
+        source = inspect.getsource(v265._true_face_transfer_v265)
+        self.assertNotIn("v263._quality_gate(", source)
+        self.assertEqual(source.count("production_gate("), 2)
+
     def test_visibly_bad_candidate_is_still_blocked(self) -> None:
         metrics = {
             "target_face_short": 600.0,
@@ -105,6 +125,20 @@ class V265SingleOwnerTests(unittest.TestCase):
         }
         reasons = engine.visual_refinement_reasons(metrics)
         self.assertTrue(any(reason.startswith("eye_asymmetry=") for reason in reasons))
+
+    def test_runtime_contract_log_declares_single_owner_invariants(self) -> None:
+        source = inspect.getsource(v265.enforce_runtime)
+        self.assertIn("owner=v265", source)
+        self.assertIn("single_owner=true", source)
+        self.assertIn("engine=dense68_engine_v265", source)
+        self.assertIn("landmarks=68", source)
+        self.assertIn("strict_same_engine=true", source)
+        self.assertIn("legacy_runtime_fallback=false", source)
+        self.assertIn("v263_quality_gate_in_execution=false", source)
+        self.assertIn("person_b_protection=pixel_locked", source)
+        self.assertIn("no_neck=true", source)
+        self.assertIn("independent_eye_patch=false", source)
+        self.assertIn("delivery=original_document_only", source)
 
 
 if __name__ == "__main__":
