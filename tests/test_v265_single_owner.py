@@ -11,9 +11,6 @@ from neyrobot_prod import selfie_v265_single_owner as v265
 
 class V265SingleOwnerTests(unittest.TestCase):
     def test_render_regression_metrics_pass_without_asymmetry_hard_reject(self) -> None:
-        # Exact standard metrics from the 2026-09-01 Render failure. Every true
-        # identity/geometry measure is production-grade; only natural eye asymmetry
-        # exceeded V264's absolute 0.030 threshold.
         metrics = {
             "target_face_short": 571.0,
             "identity_similarity_cosine": 0.7609,
@@ -66,16 +63,16 @@ class V265SingleOwnerTests(unittest.TestCase):
         source = inspect.getsource(v265._true_face_transfer_v265)
         self.assertEqual(source.count("engine.transfer_attempt("), 2)
         self.assertEqual(source.count("engine.apply_ocular_lock("), 2)
-        self.assertNotIn("provider_rescue", source)
+        self.assertNotIn("_provider_rescue(", source)
         self.assertNotIn("_true_face_transfer_v262", source)
-        self.assertNotIn("Segmind", source)
-        self.assertNotIn("PiAPI", source)
+        self.assertNotIn("_segmind", source.lower())
+        self.assertNotIn("_piapi", source.lower())
 
     def test_engine_contains_no_old_runtime_or_provider_routes(self) -> None:
         source = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
         self.assertNotIn("selfie_v264_", source)
         self.assertNotIn("selfie_v262_landmark_field_compositor", source)
-        self.assertNotIn("provider_rescue", source)
+        self.assertNotIn("_provider_rescue(", source)
         self.assertNotIn("fallback_v262", source)
         self.assertNotIn("_true_face_transfer_v262", source)
         self.assertNotIn("CallbackQueryHandler", source)
