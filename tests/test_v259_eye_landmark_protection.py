@@ -40,17 +40,15 @@ class V259EyeLandmarkProtectionTests(unittest.TestCase):
         self.assertNotIn("add_handler", source)
         self.assertNotIn("PreCheckoutQueryHandler", source)
 
-    def test_package_version_advances_to_v264_with_legacy_markers(self) -> None:
-        source = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("v262-landmark-field-compositor-2026-08-27", source)
-        self.assertIn("v263-dense-identity-lock-2026-08-27", source)
-        self.assertIn('VERSION = "v264-dense68-roi-production-2026-08-31"', source)
-        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v264"', source)
-        self.assertIn("v261-edge-harmonization-2026-08-26", source)
-        self.assertIn("v260-eye-roi-memory-safe-2026-08-26", source)
-        self.assertIn("v259-eye-landmark-protection-2026-08-26", source)
-        self.assertIn("v258-inner-face-integration-2026-08-24", source)
-        self.assertNotIn('VERSION = "v261-edge-harmonization-2026-08-26"', source)
+    def test_v259_eye_patch_is_historical_and_not_in_v265_execution(self) -> None:
+        package = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        engine = Path("neyrobot_prod/dense68_engine_v265.py").read_text(encoding="utf-8")
+        owner = Path("neyrobot_prod/selfie_v265_single_owner.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', package)
+        self.assertNotIn("selfie_v259_eye_landmark_protection", package)
+        self.assertNotIn("selfie_v259_eye_landmark_protection", engine)
+        self.assertNotIn("selfie_v259_eye_landmark_protection", owner)
+        self.assertNotIn("_shift_frame(", engine)
 
 
 if __name__ == "__main__":
