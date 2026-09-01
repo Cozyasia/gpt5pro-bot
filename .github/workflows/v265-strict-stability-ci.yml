@@ -58,7 +58,7 @@ jobs:
         env:
           PROD_HARDENING_ENABLED: "0"
           PYTHONUNBUFFERED: "1"
-          V265_PROBE_BASELINE_BYTES: "134217728"
+          V265_PROBE_BASELINE_BYTES: "100663296"
         run: python -u scripts/v265_strict_daemon_probe.py
 
   production-baseline-pressure:
