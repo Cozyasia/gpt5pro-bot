@@ -59,6 +59,17 @@ try:
                     type(_identity_core_exc).__name__, _identity_core_exc,
                 )
 
+            ocular_lock = "base_v264"
+            try:
+                from neyrobot_prod.selfie_v264_ocular_source_lock import install as _install_v264_ocular_lock
+                _install_v264_ocular_lock()
+                ocular_lock = "dense68_source_eye_texture"
+            except Exception as _ocular_lock_exc:
+                _selfie_v247_module._log(
+                    "AI_SELFIE_V264_OCULAR_LOCK_INSTALL status=failed fallback=base_v264 error=%s:%s",
+                    type(_ocular_lock_exc).__name__, _ocular_lock_exc,
+                )
+
             stage1_scaffold = "base_v241"
             try:
                 from neyrobot_prod.selfie_v264_stage1_scaffold_guard import install as _install_v264_stage1_scaffold
@@ -95,9 +106,9 @@ try:
 
             _selfie_v247_module._log(
                 "AI_SELFIE_V264_INSTALL status=ok base=v262 landmarks=68 roi_only=true "
-                "identity_core=%s stage1_scaffold=%s production_guard=%s preflight_rescue=%s "
+                "identity_core=%s ocular_lock=%s stage1_scaffold=%s production_guard=%s preflight_rescue=%s "
                 "rollback=v262_infra_only",
-                identity_core, stage1_scaffold, production_guard, preflight_rescue,
+                identity_core, ocular_lock, stage1_scaffold, production_guard, preflight_rescue,
             )
         except Exception as _v264_activation_exc:
             _selfie_v247_module._log(
