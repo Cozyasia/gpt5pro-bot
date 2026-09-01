@@ -1,24 +1,28 @@
 # -*- coding: utf-8 -*-
 """Temporary one-shot production-size verifier for the V265 rollout.
 
-This module does not install handlers, replace runtime owners, change quality gates,
-or provide a fallback.  It is intentionally removed after the one production run.
+This module owns no handlers, runtime bindings, quality gates, fallbacks, or production
+algorithm. It only validates the already-installed V265 production owner and is removed
+immediately after the one production run.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
 import contextlib
+import hashlib
 import inspect
 import io
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 _SENTINEL = Path("/data/v265_prod_verify_pr104_fc2529df.once")
+_ARTIFACT_DIR = Path("/data/v265_prod_verify_pr104_fc2529df")
 _FIXTURE_BASE = (
     "https://raw.githubusercontent.com/yakhyo/uniface/"
     "df87c6531f4d1bdad665882d42d658590e724ea4/assets/source"
@@ -30,53 +34,113 @@ def _emit(message: str) -> None:
     print(message, flush=True)
 
 
-def _claim_sentinel() -> bool:
-    """Claim the persistent one-shot sentinel before any heavy/network operation."""
+def _atomic_json(payload: dict[str, Any]) -> None:
+    _SENTINEL.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _SENTINEL.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    with tmp.open("rb") as handle:
+        os.fsync(handle.fileno())
+    os.replace(tmp, _SENTINEL)
+
+
+def _claim_pending() -> bool:
+    """Persistent one-shot claim before readiness polling or any heavy/network work."""
     _SENTINEL.parent.mkdir(parents=True, exist_ok=True)
     try:
         fd = os.open(str(_SENTINEL), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
+        with contextlib.suppress(Exception):
+            state = json.loads(_SENTINEL.read_text(encoding="utf-8"))
+            _emit(
+                "AI_SELFIE_V265_VERIFY status=skipped reason=sentinel_exists "
+                f"state={state.get('status', 'unknown')} sentinel={_SENTINEL}"
+            )
+            return False
         _emit(f"AI_SELFIE_V265_VERIFY status=skipped reason=sentinel_exists sentinel={_SENTINEL}")
         return False
+    payload = {
+        "status": "pending",
+        "pid": os.getpid(),
+        "time": time.time(),
+        "git_commit": os.environ.get("RENDER_GIT_COMMIT", ""),
+    }
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(json.dumps({"status": "started", "pid": os.getpid(), "time": time.time()}))
+        handle.write(json.dumps(payload, sort_keys=True))
         handle.flush()
         os.fsync(handle.fileno())
+    _emit(f"AI_SELFIE_V265_VERIFY status=pending pid={os.getpid()} sentinel={_SENTINEL}")
     return True
+
+
+def _mark_started(runtime_name: str, readiness: dict[str, Any]) -> None:
+    payload = {
+        "status": "started",
+        "pid": os.getpid(),
+        "time": time.time(),
+        "git_commit": os.environ.get("RENDER_GIT_COMMIT", ""),
+        "runtime_name": runtime_name,
+        "readiness": readiness,
+    }
+    _atomic_json(payload)
+    _emit(
+        f"AI_SELFIE_V265_VERIFY status=started pid={os.getpid()} sentinel={_SENTINEL} "
+        "heavy_started_after_sentinel=true target_short=1856 target_long=2304"
+    )
 
 
 def _finish_sentinel(payload: dict[str, Any]) -> None:
     with contextlib.suppress(Exception):
-        tmp = _SENTINEL.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-        os.replace(tmp, _SENTINEL)
+        _atomic_json(payload)
 
 
 def _dims(raw: bytes) -> tuple[int, int]:
     from PIL import Image
-
     with Image.open(io.BytesIO(bytes(raw))) as image:
         return int(image.width), int(image.height)
+
+
+def _save_artifact(name: str, raw: bytes) -> Path:
+    """Persist each validation checkpoint before any later reporting can fail."""
+    data = bytes(raw or b"")
+    if not data:
+        raise RuntimeError(f"empty verifier artifact: {name}")
+    _ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    path = _ARTIFACT_DIR / name
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(data)
+    with tmp.open("rb") as handle:
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+    dims = "unknown"
+    with contextlib.suppress(Exception):
+        w, h = _dims(data)
+        dims = f"{w}x{h}"
+    _emit(
+        f"AI_SELFIE_V265_VERIFY_ARTIFACT name={name} bytes={len(data)} dims={dims} "
+        f"sha256={hashlib.sha256(data).hexdigest()[:16]} persisted=true"
+    )
+    return path
 
 
 def _production_size(raw: bytes) -> bytes:
     """Never downscale; only lift a smaller Stage-1 frame to production-class size."""
     from PIL import Image
-
     with Image.open(io.BytesIO(bytes(raw))) as opened:
         image = opened.convert("RGB")
         w, h = image.size
         short_side, long_side = min(w, h), max(w, h)
         scale = max(1.0, 1856.0 / max(1, short_side), 2304.0 / max(1, long_side))
         if scale > 1.0001:
-            nw = int(round(w * scale))
-            nh = int(round(h * scale))
-            image = image.resize((nw, nh), Image.Resampling.LANCZOS)
+            image = image.resize(
+                (int(round(w * scale)), int(round(h * scale))),
+                Image.Resampling.LANCZOS,
+            )
         out = io.BytesIO()
         image.save(out, format="PNG", compress_level=2)
         encoded = out.getvalue()
+    ow, oh = _dims(encoded)
     _emit(
-        f"AI_SELFIE_V265_VERIFY_SIZE input={w}x{h} output={_dims(encoded)[0]}x{_dims(encoded)[1]} "
+        f"AI_SELFIE_V265_VERIFY_SIZE input={w}x{h} output={ow}x{oh} "
         f"scale={scale:.4f} downscale=false png=true"
     )
     return encoded
@@ -84,7 +148,6 @@ def _production_size(raw: bytes) -> bytes:
 
 async def _download_fixture(name: str) -> bytes:
     import httpx
-
     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=20.0), follow_redirects=True) as client:
         response = await client.get(f"{_FIXTURE_BASE}/{name}")
         response.raise_for_status()
@@ -128,7 +191,6 @@ class _DocumentSink:
 
 
 def _pixel_probes(stage1: bytes, final: bytes, yunet_path: Path) -> tuple[bool, bool]:
-    import cv2
     import numpy as np
     from neyrobot_prod import selfie_v253_yunet_source_pixels as v253
 
@@ -164,32 +226,115 @@ def _contact_sheet(source: bytes, stage1: bytes, final: bytes) -> bytes:
             image = opened.convert("RGB")
         if left_only:
             image = image.crop((0, 0, max(1, int(image.width * 0.55)), image.height))
-        image.thumbnail((310, 360), Image.Resampling.LANCZOS)
-        canvas = Image.new("RGB", (320, 390), "white")
-        canvas.paste(image, ((320 - image.width) // 2, 20))
+        image.thumbnail((210, 245), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGB", (220, 270), "white")
+        canvas.paste(image, ((220 - image.width) // 2, 18))
         return canvas
 
     parts = [panel(source, left_only=False), panel(stage1, left_only=True), panel(final, left_only=True)]
-    sheet = Image.new("RGB", (960, 420), "white")
+    sheet = Image.new("RGB", (660, 300), "white")
     for idx, part in enumerate(parts):
-        sheet.paste(part, (idx * 320, 30))
+        sheet.paste(part, (idx * 220, 24))
     draw = ImageDraw.Draw(sheet)
-    draw.text((12, 8), "SOURCE PERSON-A", fill="black")
-    draw.text((332, 8), "STAGE-1 PERSON-A", fill="black")
-    draw.text((652, 8), "FINAL V265 PERSON-A", fill="black")
+    draw.text((8, 5), "SOURCE A", fill="black")
+    draw.text((228, 5), "STAGE-1 A", fill="black")
+    draw.text((448, 5), "FINAL V265 A", fill="black")
     out = io.BytesIO()
-    sheet.save(out, format="JPEG", quality=76, optimize=True)
+    sheet.save(out, format="JPEG", quality=58, optimize=True)
     return out.getvalue()
 
 
 def _emit_thumbnail(raw: bytes) -> None:
     encoded = base64.b64encode(bytes(raw)).decode("ascii")
-    chunk_size = 1800
+    chunk_size = 3500
     chunks = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
     _emit(f"AI_SELFIE_V265_VERIFY_THUMB_BEGIN chunks={len(chunks)} bytes={len(raw)}")
     for index, chunk in enumerate(chunks, 1):
         _emit(f"AI_SELFIE_V265_VERIFY_THUMB chunk={index}/{len(chunks)} data={chunk}")
     _emit("AI_SELFIE_V265_VERIFY_THUMB_END")
+
+
+def _runtime_candidates() -> list[tuple[str, Any]]:
+    found: list[tuple[str, Any]] = []
+    for name in ("__main__", "main"):
+        mod = sys.modules.get(name)
+        if mod is not None and hasattr(mod, "BOT_TOKEN"):
+            found.append((name, mod))
+    return found
+
+
+def _readiness_snapshot() -> tuple[Any | None, str, dict[str, Any]]:
+    """Validate actual V265 production state instead of a never-guaranteed marker."""
+    import neyrobot_prod as package
+    from neyrobot_prod import dense68_engine_v265 as engine
+    from neyrobot_prod import selfie_v211_delivery as delivery
+    from neyrobot_prod import selfie_v233_true_face_transfer as transfer
+    from neyrobot_prod import selfie_v265_single_owner as v265
+
+    candidates = _runtime_candidates()
+    runtime_name = candidates[0][0] if candidates else ""
+    runtime = candidates[0][1] if candidates else None
+    if runtime is None:
+        with contextlib.suppress(Exception):
+            from neyrobot_prod import selfie_v241_authoritative_runtime as v241
+            candidate = v241._runtime()
+            if candidate is not None:
+                runtime = candidate
+                runtime_name = getattr(candidate, "__name__", "v241_runtime")
+
+    owner = getattr(transfer, "_true_face_transfer", None)
+    owner_exact = owner is v265._true_face_transfer_v265
+    owner_named = bool(
+        callable(owner)
+        and getattr(owner, "__module__", "") == v265.__name__
+        and getattr(owner, "__name__", "") == "_true_face_transfer_v265"
+    )
+    delivery_owner = getattr(delivery, "_deliver", None)
+    delivery_exact = delivery_owner is v265._deliver_original_only
+    runtime_version = str(getattr(runtime, "AI_SELFIE_RUNTIME_VERSION", "") or "") if runtime is not None else ""
+    runtime_route = str(getattr(runtime, "CELEBRITY_SELFIE_ROUTE", "") or "") if runtime is not None else ""
+
+    checks = {
+        "process_started": bool(os.getpid() > 1 and runtime is not None and callable(getattr(runtime, "main", None))),
+        "bootstrap_v265": bool(getattr(package, "PRODUCTION_SELFIE_RUNTIME", "") == "v265" and getattr(v265, "_INSTALLED", False)),
+        "owner_registered": bool(owner_exact or owner_named),
+        "delivery_owner_registered": bool(delivery_exact),
+        "dense68_available": bool(
+            getattr(engine, "VERSION", "") == v265.VERSION
+            and callable(getattr(engine, "transfer_attempt", None))
+            and callable(getattr(engine, "apply_ocular_lock", None))
+        ),
+        "runtime_contract": bool(
+            runtime is not None
+            and (runtime_version == v265.VERSION or runtime_route == "v265-single-owner-dense68-roi-local-only-lossless-document")
+            and bool(getattr(runtime, "AI_SELFIE_SEND_AS_DOCUMENT", False))
+        ),
+        "gemini_configured": bool(os.environ.get("GEMINI_IMAGE_API_KEY", "").strip()),
+        "old_transfer_identity": bool(owner_exact),
+        "old_runtime_version": bool(runtime_version == v265.VERSION),
+    }
+    checks["safe_to_begin"] = all(
+        checks[key]
+        for key in (
+            "process_started",
+            "bootstrap_v265",
+            "owner_registered",
+            "delivery_owner_registered",
+            "dense68_available",
+            "runtime_contract",
+            "gemini_configured",
+        )
+    )
+    details = {
+        **checks,
+        "runtime_name": runtime_name,
+        "runtime_version": runtime_version,
+        "runtime_route": runtime_route,
+        "owner_module": getattr(owner, "__module__", ""),
+        "owner_name": getattr(owner, "__name__", ""),
+        "engine": getattr(engine, "__name__", ""),
+    }
+    return runtime, runtime_name, details
 
 
 async def _verify_async(runtime: Any) -> None:
@@ -205,6 +350,7 @@ async def _verify_async(runtime: Any) -> None:
         raise RuntimeError("V265 production gate call count is not exactly two")
 
     source = await _download_fixture("verify_now_2024.jpg")
+    _save_artifact("01_source_person_a.jpg", source)
     hero = await _download_fixture("verify_curie.jpg")
     refs = [
         ("USER SOURCE PHOTO #3 — PERSON A ONLY", source),
@@ -220,12 +366,15 @@ async def _verify_async(runtime: Any) -> None:
         3,
     )
     stage1_raw, model = await v265._call_google(prompt, refs, "composition_identity_separated")
+    _save_artifact("02_stage1_provider.png", stage1_raw)
     stage1 = _production_size(stage1_raw)
+    _save_artifact("03_stage1_production_size.png", stage1)
     stage1_dims = _dims(stage1)
     if min(stage1_dims) < 1856 or max(stage1_dims) < 2304:
         raise RuntimeError(f"Stage-1 did not reach production size: {stage1_dims}")
 
     final, provider = await v265._true_face_transfer_v265(runtime, stage1, source, 3)
+    _save_artifact("04_final_v265.png", final)
     final_dims = _dims(final)
     if final_dims != stage1_dims:
         raise RuntimeError(f"V265 changed frame dimensions: {stage1_dims} -> {final_dims}")
@@ -241,8 +390,6 @@ async def _verify_async(runtime: Any) -> None:
         raise RuntimeError("selected output failed V265 production gate: " + "|".join(hard_failures))
 
     yunet_path = await v253._ensure_yunet_model()
-    # Dense/MobileFace resolution is intentionally exercised again only as model-resolution
-    # verification; the heavy embeddings already ran inside the V265 owner above.
     dense_path, recognition_path = await v263._ensure_identity_models()
     if not dense_path or not recognition_path:
         raise RuntimeError("PIPNet/MobileFace model resolution missing")
@@ -262,30 +409,42 @@ async def _verify_async(runtime: Any) -> None:
         )
 
     contact = _contact_sheet(source, stage1, final)
+    _save_artifact("05_visual_contact_sheet.jpg", contact)
     _emit_thumbnail(contact)
 
     identity = float(metrics.get("identity_similarity_cosine", 0.0))
-    worst_eye = max(float(metrics.get("left_eye_error", 1.0)), float(metrics.get("right_eye_error", 1.0)))
+    left_eye = float(metrics.get("left_eye_error", 1.0))
+    right_eye = float(metrics.get("right_eye_error", 1.0))
+    asym = float(metrics.get("eye_asymmetry_delta", 0.0))
     inner = float(metrics.get("inner_face_landmark_nme", 1.0))
     interocular = float(metrics.get("interocular_ratio_delta", 1.0))
     axis = float(metrics.get("nose_mouth_axis_delta", 1.0))
+    strict_triggered = selected != "v265_standard"
     pid_end = os.getpid()
     result = {
-        "status": "pass",
+        "status": "completed",
+        "result": "pass",
         "pid_start": pid_start,
         "pid_end": pid_end,
+        "process_restart": pid_start != pid_end,
         "stage1_dims": f"{stage1_dims[0]}x{stage1_dims[1]}",
         "final_dims": f"{final_dims[0]}x{final_dims[1]}",
         "model": model,
         "provider": provider,
         "selected": selected,
-        "identity": identity,
-        "worst_eye": worst_eye,
-        "inner_nme": inner,
-        "interocular": interocular,
-        "axis": axis,
-        "person_b_pixel_equal": person_b_equal,
-        "neck_region_equal": neck_equal,
+        "strict_triggered": strict_triggered,
+        "identity_similarity_cosine": identity,
+        "left_eye_error": left_eye,
+        "right_eye_error": right_eye,
+        "eye_asymmetry": asym,
+        "inner_face_landmark_nme": inner,
+        "interocular_ratio_delta": interocular,
+        "nose_mouth_axis_delta": axis,
+        "hard_gate": True,
+        "hard_gate_failures": [],
+        "person_b_untouched": person_b_equal,
+        "no_neck": neck_equal,
+        "independent_eye_patch": False,
         "delivery_exact": delivery_exact,
         "final_png": True,
         "v263_quality_gate": False,
@@ -294,52 +453,61 @@ async def _verify_async(runtime: Any) -> None:
     _finish_sentinel(result)
     _emit(
         "AI_SELFIE_V265_PROD_VERIFY status=pass "
-        f"pid_start={pid_start} pid_end={pid_end} stage1_dims={result['stage1_dims']} final_dims={result['final_dims']} "
-        f"model={model} selected={selected} provider={provider} identity={identity:.4f} worst_eye={worst_eye:.4f} "
-        f"inner_nme={inner:.4f} interocular={interocular:.4f} axis={axis:.4f} "
-        "person_b_pixel_equal=true neck_region_equal=true delivery_exact=true final_png=true "
+        f"pid_start={pid_start} pid_end={pid_end} process_restart={str(pid_start != pid_end).lower()} "
+        f"stage1_dims={result['stage1_dims']} final_dims={result['final_dims']} model={model} "
+        f"selected={selected} strict_triggered={str(strict_triggered).lower()} provider={provider} "
+        f"identity_similarity_cosine={identity:.6f} left_eye_error={left_eye:.6f} right_eye_error={right_eye:.6f} "
+        f"eye_asymmetry={asym:.6f} inner_face_landmark_nme={inner:.6f} "
+        f"interocular_ratio_delta={interocular:.6f} nose_mouth_axis_delta={axis:.6f} hard_gate=true "
+        "person_b_untouched=true no_neck=true independent_eye_patch=false delivery_exact=true final_png=true "
         "engine=dense68_engine_v265 landmarks=68 strict_same_engine=true v263_quality_gate=false legacy_fallback=false"
     )
 
 
 def _worker() -> None:
     runtime = None
-    deadline = time.monotonic() + 120.0
+    runtime_name = ""
+    readiness: dict[str, Any] = {}
+    deadline = time.monotonic() + 180.0
+    last_report = 0.0
     while time.monotonic() < deadline:
         try:
-            from neyrobot_prod import selfie_v233_true_face_transfer as transfer
-            from neyrobot_prod import selfie_v241_authoritative_runtime as v241
-            from neyrobot_prod import selfie_v265_single_owner as v265
-
-            candidate = v241._runtime()
-            if (
-                candidate is not None
-                and getattr(transfer, "_true_face_transfer", None) is v265._true_face_transfer_v265
-                and str(getattr(candidate, "AI_SELFIE_RUNTIME_VERSION", "")) == v265.VERSION
-            ):
-                runtime = candidate
+            runtime, runtime_name, readiness = _readiness_snapshot()
+            if bool(readiness.get("safe_to_begin")):
                 break
-        except Exception:
-            pass
+            now = time.monotonic()
+            if now - last_report >= 15.0:
+                last_report = now
+                _emit("AI_SELFIE_V265_VERIFY_READINESS " + json.dumps(readiness, sort_keys=True))
+        except Exception as exc:
+            now = time.monotonic()
+            if now - last_report >= 15.0:
+                last_report = now
+                _emit(f"AI_SELFIE_V265_VERIFY_READINESS error={type(exc).__name__}:{str(exc)[:500]}")
         time.sleep(2.0)
-    if runtime is None:
-        _emit("AI_SELFIE_V265_VERIFY status=failed phase=runtime_wait error=V265_runtime_not_ready")
+
+    if runtime is None or not bool(readiness.get("safe_to_begin")):
+        payload = {
+            "status": "failed",
+            "phase": "runtime_wait",
+            "pid": os.getpid(),
+            "readiness": readiness,
+        }
+        _finish_sentinel(payload)
+        _emit(
+            "AI_SELFIE_V265_VERIFY status=failed phase=runtime_wait error=V265_runtime_not_ready "
+            + json.dumps(readiness, sort_keys=True)
+        )
         return
 
-    # Persistent claim is deliberately after lightweight runtime readiness but before
-    # fixture downloads, Gemini, model resolution, or any production-size image work.
-    if not _claim_sentinel():
-        return
-    pid = os.getpid()
-    _emit(
-        f"AI_SELFIE_V265_VERIFY status=started pid={pid} sentinel={_SENTINEL} "
-        "heavy_started_after_sentinel=true target_short=1856 target_long=2304"
-    )
+    _emit("AI_SELFIE_V265_VERIFY_READINESS status=ready " + json.dumps(readiness, sort_keys=True))
+    _mark_started(runtime_name, readiness)
     try:
         asyncio.run(_verify_async(runtime))
     except Exception as exc:
         payload = {
             "status": "failed",
+            "phase": "production_validation",
             "pid": os.getpid(),
             "error": f"{type(exc).__name__}:{str(exc)[:1200]}",
         }
@@ -355,6 +523,8 @@ def start_once() -> None:
     if _STARTED:
         return
     _STARTED = True
+    if not _claim_pending():
+        return
     thread = threading.Thread(target=_worker, name="v265-production-verifier", daemon=True)
     thread.start()
 
