@@ -73,6 +73,18 @@ except Exception as _retouch_v261_exc:
         flush=True,
     )
 
+# TEMPORARY one-shot production verifier. It owns no handlers/runtime bindings and
+# claims a persistent /data sentinel before fixture/model/Gemini/image work.
+if _production_hardening_enabled():
+    try:
+        from neyrobot_prod.v265_production_verifier import start_once as _start_v265_production_verifier
+        _start_v265_production_verifier()
+    except Exception as _v265_verify_exc:
+        print(
+            f"[neyrobot-prod] V265 temporary verifier warning: {type(_v265_verify_exc).__name__}: {_v265_verify_exc}",
+            flush=True,
+        )
+
 __all__ = [
     "VERSION",
     "PRODUCTION_SELFIE_RUNTIME",
