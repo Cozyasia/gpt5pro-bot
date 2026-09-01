@@ -78,6 +78,19 @@ except Exception as _retouch_v261_exc:
         flush=True,
     )
 
+# TEMPORARY validation hook. The verifier claims its persistent one-shot sentinel
+# immediately, then waits for the normal V265 owner + strict-memory guard to be ready.
+# It observes returned candidates only; it does not alter quality gates or generation.
+if _production_hardening_enabled():
+    try:
+        from neyrobot_prod.v265_production_verifier import start_once as _start_v265_production_verifier
+        _start_v265_production_verifier()
+    except Exception as _v265_verify_exc:
+        print(
+            f"[neyrobot-prod] V265 temporary verifier warning: {type(_v265_verify_exc).__name__}: {_v265_verify_exc}",
+            flush=True,
+        )
+
 __all__ = [
     "VERSION",
     "PRODUCTION_SELFIE_RUNTIME",
