@@ -2,6 +2,9 @@
 import unittest
 
 
+MiB = 1024 * 1024
+
+
 class V265StrictRuntimeSafetyTests(unittest.TestCase):
     def test_strict_runs_only_after_preflight_without_changing_gate(self):
         from neyrobot_prod import dense68_engine_v265 as engine
@@ -40,14 +43,54 @@ class V265StrictRuntimeSafetyTests(unittest.TestCase):
             safety._INSTALLED = False
             safety._BASE_TRANSFER = None
 
-    def test_low_headroom_fails_closed_before_strict(self):
+    def test_reclaimable_file_cache_can_restore_real_headroom(self):
+        import neyrobot_prod.v265_strict_runtime_safety as safety
+
+        effective, headroom, reclaimable = safety._effective_memory(
+            500 * MiB, 512 * MiB, 300 * MiB, 120 * MiB
+        )
+        self.assertEqual(reclaimable, 120 * MiB)
+        self.assertEqual(effective, 380 * MiB)
+        self.assertEqual(headroom, 132 * MiB)
+
+    def test_cache_credit_never_drops_below_rss_floor(self):
+        import neyrobot_prod.v265_strict_runtime_safety as safety
+
+        effective, headroom, reclaimable = safety._effective_memory(
+            500 * MiB, 512 * MiB, 470 * MiB, 120 * MiB
+        )
+        self.assertEqual(reclaimable, 30 * MiB)
+        self.assertEqual(effective, 470 * MiB)
+        self.assertEqual(headroom, 42 * MiB)
+
+    def test_low_effective_headroom_fails_closed_before_strict(self):
         import neyrobot_prod.v265_strict_runtime_safety as safety
 
         base_reclaim = safety._reclaim_before_strict
-        safety._reclaim_before_strict = lambda: (500 * 1024 * 1024, 512 * 1024 * 1024, 480 * 1024 * 1024)
+        safety._reclaim_before_strict = lambda: (
+            500 * MiB,
+            512 * MiB,
+            470 * MiB,
+            120 * MiB,
+        )
         try:
             with self.assertRaisesRegex(RuntimeError, "insufficient container memory headroom"):
                 safety._strict_preflight()
+        finally:
+            safety._reclaim_before_strict = base_reclaim
+
+    def test_high_raw_usage_but_reclaimable_cache_allows_strict_preflight(self):
+        import neyrobot_prod.v265_strict_runtime_safety as safety
+
+        base_reclaim = safety._reclaim_before_strict
+        safety._reclaim_before_strict = lambda: (
+            500 * MiB,
+            512 * MiB,
+            300 * MiB,
+            120 * MiB,
+        )
+        try:
+            safety._strict_preflight()
         finally:
             safety._reclaim_before_strict = base_reclaim
 
