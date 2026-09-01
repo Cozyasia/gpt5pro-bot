@@ -6,12 +6,17 @@ photo, but that crop is authoritative for PERSON-A age/head/hair scaffold as wel
 expression geometry. The inner facial identity remains disposable because V264 will
 replace it, while cranial proportions, jaw, forehead, hairline and age category must
 not be re-invented by the scene model.
+
+V242 owns the per-generation reassertion boundary, so this overlay patches V242's
+module-level prompt/call symbols as well as the currently bound runtime modules. That
+keeps the V264 scaffold contract active after every V242 enforce_runtime() call.
 """
 from __future__ import annotations
 
 from typing import Any
 
 from neyrobot_prod import selfie_v241_authoritative_runtime as v241
+from neyrobot_prod import selfie_v242_expression_lock as v242
 
 VERSION = v241.VERSION
 _INSTALLED = False
@@ -44,7 +49,7 @@ async def _call_google(prompt: str, refs: list[tuple[str, bytes]], stage: str):
         patched = out
         _log(
             "AI_SELFIE_V264_STAGE1_SCAFFOLD ref=head_expression_crop age_lock=true head_shape_lock=true "
-            "hair_lock=true full_photo3_reserved_for_faceswap=true"
+            "hair_lock=true full_photo3_reserved_for_faceswap=true durable_v242_binding=true"
         )
     return await v241._google_request(prompt, patched, stage)
 
@@ -88,16 +93,28 @@ def install() -> None:
     from neyrobot_prod import selfie_v229_canonical_two_stage as google
     from neyrobot_prod import selfie_v233_true_face_transfer as transfer
 
-    # Patch both the authoritative source module and the already-bound active modules.
-    # Later V241 reassertions also use these replaced globals.
+    # V242 is the durable per-generation owner: V241's guarded generator calls
+    # v241.enforce_runtime(), which V242 replaced with v242.enforce_runtime(). Patch
+    # V242's own globals so every later reassertion binds the V264 scaffold functions
+    # instead of restoring V242's older expression-only prompt.
+    v242._call_google = _call_google
+    v242._stage1_prompt = _stage1_prompt
+
+    # Bind the current runtime immediately too; then run V242 once to prove that its
+    # normal reassertion path resolves to the patched V264 symbols.
     v241._call_google = _call_google
     v241._stage1_prompt = _stage1_prompt
     google._call_google = _call_google
     transfer._stage1_prompt = _stage1_prompt
+    v242.enforce_runtime()
+    google._call_google = _call_google
+    transfer._stage1_prompt = _stage1_prompt
+
     _INSTALLED = True
     _log(
         "AI_SELFIE_V264_STAGE1_SCAFFOLD_INSTALL status=ok age_lock=true head_shape_lock=true "
-        "hair_lock=true expression_lock=true full_photo_to_gemini=false active_boundary=true"
+        "hair_lock=true expression_lock=true full_photo_to_gemini=false active_boundary=true "
+        "durable_v242_binding=true"
     )
 
 
