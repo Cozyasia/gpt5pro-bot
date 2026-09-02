@@ -91,6 +91,18 @@ if _production_hardening_enabled():
             flush=True,
         )
 
+# TEMPORARY read-only visual dump of artifacts from the already-completed verifier.
+# It performs zero generation/model/provider calls and exists only for visual review.
+if _production_hardening_enabled():
+    try:
+        from neyrobot_prod.v265_saved_visual_dump import emit_saved_visuals_once as _emit_v265_saved_visuals
+        _emit_v265_saved_visuals()
+    except Exception as _v265_saved_visual_exc:
+        print(
+            f"[neyrobot-prod] V265 saved visual dump warning: {type(_v265_saved_visual_exc).__name__}: {_v265_saved_visual_exc}",
+            flush=True,
+        )
+
 __all__ = [
     "VERSION",
     "PRODUCTION_SELFIE_RUNTIME",
