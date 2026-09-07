@@ -594,14 +594,14 @@ async def _deliver_original_only(message: Any, raw: bytes, caption: str, *, pref
                 pool_timeout=60.0,
             )
             _log(
-                "AI_SELFIE_V265_DELIVERY status=success attempt=%s original_document=true compressed_fallback=false bytes=%s",
+                "AI_SELFIE_V265_DELIVERY status=success attempt=%s route=original_document_only original_document=true compressed_fallback=false bytes=%s",
                 attempt, len(data),
             )
             return data
         except Exception as exc:
             errors.append(f"{type(exc).__name__}:{exc}")
             _log(
-                "AI_SELFIE_V265_DELIVERY status=retry attempt=%s original_retained=true reason=%s:%s",
+                "AI_SELFIE_V265_DELIVERY status=retry attempt=%s route=original_document_only original_retained=true reason=%s:%s",
                 attempt, type(exc).__name__, str(exc)[:220],
             )
             if attempt < 3:
