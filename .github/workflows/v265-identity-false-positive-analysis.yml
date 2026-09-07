@@ -1,0 +1,34 @@
+name: V265 Identity False-Positive Analysis
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/v265-identity-false-positive-analysis.yml"
+      - "neyrobot_prod/v265_identity_consensus.py"
+      - "tests/test_v265_identity_consensus.py"
+      - "scripts/v265_identity_public_calibration.py"
+
+permissions:
+  contents: read
+
+jobs:
+  model-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned analysis models
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/v265-id-models
+          curl -L --fail --retry 3             https://github.com/yakhyo/uniface/releases/download/weights/mobilenetv2.onnx             -o /tmp/v265-id-models/mobileface_mcp.onnx
+          curl -L --fail --retry 3             https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/w600k_mbf.onnx             -o /tmp/v265-id-models/arcface_w600k_mbf.onnx
+          curl -L --fail --retry 3             https://github.com/yakhyo/pipnet-onnx/releases/download/weights/pipnet_r18_300w_celeba_68.onnx             -o /tmp/v265-id-models/pipnet68.onnx
+          curl -L --fail --retry 3             https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx             -o /tmp/v265-id-models/yunet.onnx
+          sha256sum /tmp/v265-id-models/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-identity-analysis-models
+          path: /tmp/v265-id-models/
+          if-no-files-found: error
