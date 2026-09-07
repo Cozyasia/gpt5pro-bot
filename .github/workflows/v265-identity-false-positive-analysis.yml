@@ -27,6 +27,20 @@ jobs:
           curl -L --fail --retry 3             https://github.com/yakhyo/pipnet-onnx/releases/download/weights/pipnet_r18_300w_celeba_68.onnx             -o /tmp/v265-id-models/pipnet68.onnx
           curl -L --fail --retry 3             https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx             -o /tmp/v265-id-models/yunet.onnx
           sha256sum /tmp/v265-id-models/*
+          mkdir -p /tmp/v265-id-fixtures
+          fixture_base=https://raw.githubusercontent.com/yakhyo/uniface/main/assets/source
+          for name in \
+            verify_now_2010.jpg verify_now_2014.jpg verify_now_2024.jpg \
+            verify_bohr_1910.jpg verify_bohr_1935.jpg \
+            verify_einstein_1921.jpg verify_einstein_1947.jpg verify_curie.jpg \
+            pose_center.jpg pose_left.jpg pose_right.jpg; do
+            curl -L --fail --retry 3 "$fixture_base/$name" -o "/tmp/v265-id-fixtures/$name"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-identity-public-fixtures
+          path: /tmp/v265-id-fixtures/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: v265-identity-analysis-models
