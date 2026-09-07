@@ -151,108 +151,360 @@ def _quality_log(path: str, metrics: dict[str, float], hard_passed: bool, failur
     )
 
 
+_MONOTONIC_EPS = 1.0e-6
+
+
+def _process_identity() -> tuple[int, str]:
+    import os
+
+    pid = int(os.getpid())
+    host = str(os.environ.get("RENDER_INSTANCE_ID") or os.environ.get("HOSTNAME") or "unknown")
+    return pid, host
+
+
+def _capture_replay_inputs(stage1: bytes, source: bytes) -> str | None:
+    """Optionally persist exact replay inputs on a non-production test branch.
+
+    Disabled unless V265_REPLAY_CAPTURE_DIR is explicitly set. The directory is
+    intentionally caller-controlled so production has no implicit persistence.
+    """
+    import hashlib
+    import os
+    from pathlib import Path
+
+    root_s = str(os.environ.get("V265_REPLAY_CAPTURE_DIR") or "").strip()
+    if not root_s:
+        return None
+    root = Path(root_s)
+    root.mkdir(parents=True, exist_ok=True)
+    stage1_b = bytes(stage1 or b"")
+    source_b = bytes(source or b"")
+    token = hashlib.sha256(source_b + b"\0" + stage1_b).hexdigest()[:20]
+    (root / f"{token}.source_photo3.bin").write_bytes(source_b)
+    (root / f"{token}.stage1.bin").write_bytes(stage1_b)
+    _log(
+        "AI_SELFIE_V265_REPLAY_CAPTURE status=saved token=%s stage1_bytes=%s source_bytes=%s "
+        "path=%s diagnostic_only=true",
+        token,
+        len(stage1_b),
+        len(source_b),
+        str(root),
+    )
+    return token
+
+
+def _metric_block_log(path: str, phase: str, metrics: dict[str, float], hard_passed: bool, failures: list[str]) -> None:
+    pid, host = _process_identity()
+    _log(
+        "AI_SELFIE_V265_METRICS path=%s phase=%s identity_similarity_cosine=%.6f "
+        "left_eye_error=%.6f right_eye_error=%.6f worst_eye=%.6f eye_asymmetry=%.6f "
+        "interocular_ratio_delta=%.6f nose_mouth_axis_delta=%.6f inner_face_landmark_nme=%.6f "
+        "hard_gate=%s failures=%s person_b=pixel_locked no_neck=true independent_eye_patch=false "
+        "same_dense68_engine=true pid=%s host=%s",
+        path,
+        phase,
+        _metric(metrics, "identity_similarity_cosine", 0.0),
+        _metric(metrics, "left_eye_error", 1.0),
+        _metric(metrics, "right_eye_error", 1.0),
+        max(_metric(metrics, "left_eye_error", 1.0), _metric(metrics, "right_eye_error", 1.0)),
+        _metric(metrics, "eye_asymmetry_delta", 0.0),
+        _metric(metrics, "interocular_ratio_delta", 1.0),
+        _metric(metrics, "nose_mouth_axis_delta", 1.0),
+        _metric(metrics, "inner_face_landmark_nme", 1.0),
+        "PASS" if hard_passed else "FAIL",
+        "none" if not failures else "|".join(failures),
+        pid,
+        host,
+    )
+
+
+def _ocular_monotonic_decision(
+    pre_metrics: dict[str, float],
+    post_metrics: dict[str, float],
+) -> tuple[bool, list[str]]:
+    """Return whether post-ocular is a non-destructive improvement of one V265 candidate."""
+    pre_hard, _ = production_gate(pre_metrics)
+    post_hard, _ = production_gate(post_metrics)
+    regressions: list[str] = []
+
+    pre_identity = _metric(pre_metrics, "identity_similarity_cosine", 0.0)
+    post_identity = _metric(post_metrics, "identity_similarity_cosine", 0.0)
+    if post_identity + _MONOTONIC_EPS < pre_identity:
+        regressions.append(f"identity={post_identity:.6f}<{pre_identity:.6f}")
+
+    for key in (
+        "left_eye_error",
+        "right_eye_error",
+        "eye_asymmetry_delta",
+        "interocular_ratio_delta",
+        "nose_mouth_axis_delta",
+        "inner_face_landmark_nme",
+    ):
+        before = _metric(pre_metrics, key, 1.0 if key != "eye_asymmetry_delta" else 0.0)
+        after = _metric(post_metrics, key, 1.0 if key != "eye_asymmetry_delta" else 0.0)
+        if after > before + _MONOTONIC_EPS:
+            regressions.append(f"{key}={after:.6f}>{before:.6f}")
+
+    if pre_hard and not post_hard:
+        regressions.append("hard_pass_to_fail")
+
+    if regressions:
+        return False, regressions
+
+    improvements: list[str] = []
+    if post_identity > pre_identity + _MONOTONIC_EPS:
+        improvements.append("identity")
+    for key in (
+        "left_eye_error",
+        "right_eye_error",
+        "eye_asymmetry_delta",
+        "interocular_ratio_delta",
+        "nose_mouth_axis_delta",
+        "inner_face_landmark_nme",
+    ):
+        before = _metric(pre_metrics, key, 1.0 if key != "eye_asymmetry_delta" else 0.0)
+        after = _metric(post_metrics, key, 1.0 if key != "eye_asymmetry_delta" else 0.0)
+        if after + _MONOTONIC_EPS < before:
+            improvements.append(key)
+    if post_hard and not pre_hard:
+        improvements.append("hard_fail_to_pass")
+
+    # No measurable benefit means there is no reason to replace the original candidate.
+    if not improvements:
+        return False, ["no_measurable_improvement"]
+    return True, improvements
+
+
+def _evaluate_candidate(path: str, phase: str, metrics: dict[str, float]) -> tuple[bool, list[str]]:
+    hard, failures = production_gate(metrics)
+    _metric_block_log(path, phase, metrics, hard, failures)
+    return hard, failures
+
+
+def _select_ocular_candidate(
+    path: str,
+    pre_output: bytes,
+    pre_metrics: dict[str, float],
+    post_output: bytes,
+    post_metrics: dict[str, float],
+) -> tuple[bytes, dict[str, float], str, bool, list[str]]:
+    pre_hard, pre_failures = _evaluate_candidate(path, "pre_ocular", pre_metrics)
+    post_hard, post_failures = _evaluate_candidate(path, "post_ocular", post_metrics)
+    accept_post, decision = _ocular_monotonic_decision(pre_metrics, post_metrics)
+    if accept_post:
+        _log(
+            "AI_SELFIE_V265_OCULAR_SELECT path=%s selected=post_ocular reason=%s pre_hard=%s post_hard=%s",
+            path,
+            "|".join(decision),
+            "PASS" if pre_hard else "FAIL",
+            "PASS" if post_hard else "FAIL",
+        )
+        return bytes(post_output), dict(post_metrics), "post_ocular", post_hard, post_failures
+    _log(
+        "AI_SELFIE_V265_OCULAR_SELECT path=%s selected=pre_ocular reason=discard_destructive_refinement:%s "
+        "pre_hard=%s post_hard=%s",
+        path,
+        "|".join(decision),
+        "PASS" if pre_hard else "FAIL",
+        "PASS" if post_hard else "FAIL",
+    )
+    return bytes(pre_output), dict(pre_metrics), "pre_ocular", pre_hard, pre_failures
+
+
+def _final_candidate_decision(
+    standard_hard: bool,
+    standard_metrics: dict[str, float],
+    strict_hard: bool,
+    strict_metrics: dict[str, float],
+) -> str:
+    """Choose the best valid V265 candidate; strict never wins merely by running last."""
+    if standard_hard and strict_hard:
+        return "strict" if engine.prefer_strict_refinement(standard_metrics, strict_metrics) else "standard"
+    if strict_hard:
+        return "strict"
+    if standard_hard:
+        return "standard"
+    return "reject"
+
+
 async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, source_photo_no: int):
-    """Two local dense68 attempts maximum. V265 production_gate is the sole decision gate."""
+    """Two same-engine dense68 attempts maximum with monotonic ocular/strict selection."""
     if int(source_photo_no) != 3:
         raise RuntimeError(f"V265 requires authoritative photo #3, got #{source_photo_no}")
+
+    request_pid, request_host = _process_identity()
+    _log(
+        "AI_SELFIE_V265_REQUEST_CONTINUITY phase=start pid=%s host=%s source_photo=3 "
+        "single_owner=true engine=dense68_engine_v265 legacy_fallback=false",
+        request_pid,
+        request_host,
+    )
 
     yunet_path = await v253._ensure_yunet_model()
     dense_path, recognition_path = await v263._ensure_identity_models()
     stage1_b = bytes(stage1 or b"")
     source_b = bytes(source or b"")
+    _capture_replay_inputs(stage1_b, source_b)
 
-    standard, standard_metrics, standard_desired = engine.transfer_attempt(
+    standard_pre, standard_pre_metrics, standard_desired = engine.transfer_attempt(
         stage1_b, source_b, yunet_path, dense_path, recognition_path, strict=False
     )
-    standard, standard_metrics = engine.apply_ocular_lock(
+    standard_post, standard_post_metrics = engine.apply_ocular_lock(
         stage1_b,
-        standard,
+        standard_pre,
         source_b,
         standard_desired,
         yunet_path,
         dense_path,
         recognition_path,
-        standard_metrics,
+        standard_pre_metrics,
     )
-    standard_hard, standard_failures = production_gate(standard_metrics)
-    _quality_log("standard", standard_metrics, standard_hard, standard_failures)
+    (
+        standard,
+        standard_metrics,
+        standard_phase,
+        standard_hard,
+        standard_failures,
+    ) = _select_ocular_candidate(
+        "standard",
+        standard_pre,
+        standard_pre_metrics,
+        standard_post,
+        standard_post_metrics,
+    )
+    _quality_log(f"standard_{standard_phase}", standard_metrics, standard_hard, standard_failures)
 
     refinement = engine.visual_refinement_reasons(standard_metrics) if standard_hard else []
     if standard_hard and not refinement:
-        _set_runtime_result(runtime, path="v265_standard", metrics=standard_metrics)
-        _log("AI_SELFIE_V265_SELECT selected=standard attempts=1 reason=hard_pass_no_refinement")
-        return standard, "opencv_dense68_roi_v265_standard"
+        _set_runtime_result(runtime, path=f"v265_standard_{standard_phase}", metrics=standard_metrics)
+        pid, host = _process_identity()
+        _log(
+            "AI_SELFIE_V265_SELECT selected=standard_%s attempts=1 reason=hard_pass_no_refinement "
+            "delivery_route=original_document_only person_b=pixel_locked no_neck=true "
+            "independent_eye_patch=false pid_start=%s pid_end=%s host_start=%s host_end=%s",
+            standard_phase,
+            request_pid,
+            pid,
+            request_host,
+            host,
+        )
+        return standard, f"opencv_dense68_roi_v265_standard_{standard_phase}"
 
     retry_reasons = refinement or standard_failures or ["quality_gate"]
     _log(
         "AI_SELFIE_V265_STRICT_RETRY status=triggered attempts=2 route=same_local_dense68 reason=%s "
-        "provider_rescue=false legacy_fallback=false",
+        "provider_rescue=false legacy_fallback=false standard_candidate=%s",
         "|".join(retry_reasons),
+        standard_phase,
     )
 
-    strict, strict_metrics, strict_desired = engine.transfer_attempt(
+    strict_pre, strict_pre_metrics, strict_desired = engine.transfer_attempt(
         stage1_b, source_b, yunet_path, dense_path, recognition_path, strict=True
     )
-    strict, strict_metrics = engine.apply_ocular_lock(
+    strict_post, strict_post_metrics = engine.apply_ocular_lock(
         stage1_b,
-        strict,
+        strict_pre,
         source_b,
         strict_desired,
         yunet_path,
         dense_path,
         recognition_path,
+        strict_pre_metrics,
+    )
+    (
+        strict,
+        strict_metrics,
+        strict_phase,
+        strict_hard,
+        strict_failures,
+    ) = _select_ocular_candidate(
+        "strict",
+        strict_pre,
+        strict_pre_metrics,
+        strict_post,
+        strict_post_metrics,
+    )
+    _quality_log(f"strict_{strict_phase}", strict_metrics, strict_hard, strict_failures)
+
+    decision = _final_candidate_decision(
+        standard_hard,
+        standard_metrics,
+        strict_hard,
         strict_metrics,
     )
-    strict_hard, strict_failures = production_gate(strict_metrics)
-    _quality_log("strict", strict_metrics, strict_hard, strict_failures)
+    pid, host = _process_identity()
 
-    standard_ok = bool(standard_hard)
-    strict_ok = bool(strict_hard)
-    if standard_ok and strict_ok:
-        prefer_strict = engine.prefer_strict_refinement(standard_metrics, strict_metrics)
-        if prefer_strict:
-            _set_runtime_result(runtime, path="v265_strict_selected", metrics=strict_metrics)
-            _log(
-                "AI_SELFIE_V265_SELECT selected=strict attempts=2 standard_identity=%.4f strict_identity=%.4f "
-                "standard_score=%.5f strict_score=%.5f",
-                _metric(standard_metrics, "identity_similarity_cosine", 0.0),
-                _metric(strict_metrics, "identity_similarity_cosine", 0.0),
-                engine.visual_quality_score(standard_metrics),
-                engine.visual_quality_score(strict_metrics),
-            )
-            return strict, "opencv_dense68_roi_v265_strict_selected"
-        _set_runtime_result(runtime, path="v265_standard_retained", metrics=standard_metrics)
+    if decision == "strict":
+        reason = (
+            "standard_hard_fail_strict_pass"
+            if not standard_hard
+            else "strict_proven_better"
+        )
+        _set_runtime_result(runtime, path=f"v265_strict_{strict_phase}_selected", metrics=strict_metrics)
         _log(
-            "AI_SELFIE_V265_SELECT selected=standard attempts=2 reason=strict_not_better "
-            "standard_identity=%.4f strict_identity=%.4f",
+            "AI_SELFIE_V265_SELECT selected=strict_%s attempts=2 reason=%s "
+            "standard_candidate=%s standard_hard=%s strict_hard=%s "
+            "standard_identity=%.6f strict_identity=%.6f standard_score=%.6f strict_score=%.6f "
+            "delivery_route=original_document_only person_b=pixel_locked no_neck=true "
+            "independent_eye_patch=false pid_start=%s pid_end=%s host_start=%s host_end=%s",
+            strict_phase,
+            reason,
+            standard_phase,
+            "PASS" if standard_hard else "FAIL",
+            "PASS" if strict_hard else "FAIL",
             _metric(standard_metrics, "identity_similarity_cosine", 0.0),
             _metric(strict_metrics, "identity_similarity_cosine", 0.0),
+            engine.visual_quality_score(standard_metrics),
+            engine.visual_quality_score(strict_metrics),
+            request_pid,
+            pid,
+            request_host,
+            host,
         )
-        return standard, "opencv_dense68_roi_v265_standard_retained"
+        return strict, f"opencv_dense68_roi_v265_strict_{strict_phase}_selected"
 
-    if strict_ok:
-        _set_runtime_result(runtime, path="v265_strict_recovery", metrics=strict_metrics)
-        _log(
-            "AI_SELFIE_V265_SELECT selected=strict attempts=2 reason=standard_hard_fail_strict_pass "
-            "standard_failures=%s",
-            "|".join(standard_failures) or "quality_gate",
+    if decision == "standard":
+        reason = (
+            "strict_hard_fail_standard_pass"
+            if not strict_hard
+            else "strict_not_proven_better"
         )
-        return strict, "opencv_dense68_roi_v265_strict_recovery"
-
-    if standard_ok:
-        _set_runtime_result(runtime, path="v265_standard_retained", metrics=standard_metrics)
+        _set_runtime_result(runtime, path=f"v265_standard_{standard_phase}_retained", metrics=standard_metrics)
         _log(
-            "AI_SELFIE_V265_SELECT selected=standard attempts=2 reason=strict_hard_fail_standard_pass "
-            "strict_failures=%s",
-            "|".join(strict_failures) or "quality_gate",
+            "AI_SELFIE_V265_SELECT selected=standard_%s attempts=2 reason=%s "
+            "strict_candidate=%s standard_hard=%s strict_hard=%s "
+            "standard_identity=%.6f strict_identity=%.6f standard_score=%.6f strict_score=%.6f "
+            "delivery_route=original_document_only person_b=pixel_locked no_neck=true "
+            "independent_eye_patch=false pid_start=%s pid_end=%s host_start=%s host_end=%s",
+            standard_phase,
+            reason,
+            strict_phase,
+            "PASS" if standard_hard else "FAIL",
+            "PASS" if strict_hard else "FAIL",
+            _metric(standard_metrics, "identity_similarity_cosine", 0.0),
+            _metric(strict_metrics, "identity_similarity_cosine", 0.0),
+            engine.visual_quality_score(standard_metrics),
+            engine.visual_quality_score(strict_metrics),
+            request_pid,
+            pid,
+            request_host,
+            host,
         )
-        return standard, "opencv_dense68_roi_v265_standard_retained"
+        return standard, f"opencv_dense68_roi_v265_standard_{standard_phase}_retained"
 
     _log(
         "AI_SELFIE_V265_REJECT status=rejected attempts=2 provider_rescue=false legacy_fallback=false "
-        "standard_failures=%s strict_failures=%s",
+        "standard_candidate=%s strict_candidate=%s standard_failures=%s strict_failures=%s "
+        "person_b=pixel_locked no_neck=true independent_eye_patch=false "
+        "pid_start=%s pid_end=%s host_start=%s host_end=%s",
+        standard_phase,
+        strict_phase,
         "|".join(standard_failures) or "quality_gate",
         "|".join(strict_failures) or "quality_gate",
+        request_pid,
+        pid,
+        request_host,
+        host,
     )
     raise RuntimeError("V265 quality gate rejected PERSON-A after two local dense68 attempts")
 
@@ -342,14 +594,14 @@ async def _deliver_original_only(message: Any, raw: bytes, caption: str, *, pref
                 pool_timeout=60.0,
             )
             _log(
-                "AI_SELFIE_V265_DELIVERY status=success attempt=%s original_document=true compressed_fallback=false bytes=%s",
+                "AI_SELFIE_V265_DELIVERY status=success attempt=%s route=original_document_only original_document=true compressed_fallback=false bytes=%s",
                 attempt, len(data),
             )
             return data
         except Exception as exc:
             errors.append(f"{type(exc).__name__}:{exc}")
             _log(
-                "AI_SELFIE_V265_DELIVERY status=retry attempt=%s original_retained=true reason=%s:%s",
+                "AI_SELFIE_V265_DELIVERY status=retry attempt=%s route=original_document_only original_retained=true reason=%s:%s",
                 attempt, type(exc).__name__, str(exc)[:220],
             )
             if attempt < 3:

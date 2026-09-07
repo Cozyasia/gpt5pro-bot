@@ -10,6 +10,7 @@ on:
       - "neyrobot_prod/v265_strict_runtime_safety.py"
       - "neyrobot_prod/versioning.py"
       - "tests/test_v265_single_owner.py"
+      - "tests/test_v265_monotonic_refinement.py"
       - "tests/test_v265_strict_runtime_safety.py"
       - "tests/test_version_active_selfie_runtime.py"
       - ".github/workflows/v265-single-owner-ci.yml"
@@ -22,6 +23,7 @@ on:
       - "neyrobot_prod/v265_strict_runtime_safety.py"
       - "neyrobot_prod/versioning.py"
       - "tests/test_v265_single_owner.py"
+      - "tests/test_v265_monotonic_refinement.py"
       - "tests/test_v265_strict_runtime_safety.py"
       - "tests/test_version_active_selfie_runtime.py"
       - ".github/workflows/v265-single-owner-ci.yml"
@@ -54,6 +56,7 @@ jobs:
           PROD_HARDENING_ENABLED: "0"
         run: |
           python -m unittest tests.test_v265_single_owner -v
+          python -m unittest tests.test_v265_monotonic_refinement -v
           python -m unittest tests.test_version_active_selfie_runtime -v
           python -m unittest tests.test_v265_strict_runtime_safety -v
       - name: Verify production bootstrap import
