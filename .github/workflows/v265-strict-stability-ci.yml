@@ -30,6 +30,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Preload pinned models with bounded download retries
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          python -m scripts.v265_matrix_prepare --case case04 --models /tmp/models --output /tmp/prepared
+          mkdir -p /tmp/neyrobot_models
+          cp /tmp/models/yunet.onnx /tmp/neyrobot_models/face_detection_yunet_2023mar.onnx
+          cp /tmp/models/pipnet.onnx /tmp/neyrobot_models/pipnet_r18_300w_celeba_68.onnx
+          cp /tmp/models/mobileface.onnx /tmp/neyrobot_models/mobilenetv2.onnx
       - name: Run 1856x2304 standard-fail to strict-complete regression
         env:
           PROD_HARDENING_ENABLED: "0"
@@ -55,6 +64,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Preload pinned models with bounded download retries
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          python -m scripts.v265_matrix_prepare --case case04 --models /tmp/models --output /tmp/prepared
+          mkdir -p /tmp/neyrobot_models
+          cp /tmp/models/yunet.onnx /tmp/neyrobot_models/face_detection_yunet_2023mar.onnx
+          cp /tmp/models/pipnet.onnx /tmp/neyrobot_models/pipnet_r18_300w_celeba_68.onnx
+          cp /tmp/models/mobileface.onnx /tmp/neyrobot_models/mobilenetv2.onnx
       - name: Complete strict in daemon context without synthetic pressure
         env:
           PROD_HARDENING_ENABLED: "0"
@@ -74,6 +92,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Preload pinned models with bounded download retries
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          python -m scripts.v265_matrix_prepare --case case04 --models /tmp/models --output /tmp/prepared
+          mkdir -p /tmp/neyrobot_models
+          cp /tmp/models/yunet.onnx /tmp/neyrobot_models/face_detection_yunet_2023mar.onnx
+          cp /tmp/models/pipnet.onnx /tmp/neyrobot_models/pipnet_r18_300w_celeba_68.onnx
+          cp /tmp/models/mobileface.onnx /tmp/neyrobot_models/mobilenetv2.onnx
       - name: Fail closed before strict heavy work under 208 MiB baseline
         env:
           PROD_HARDENING_ENABLED: "0"
@@ -94,9 +121,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Complete strict in verifier-like daemon context under reclaimable-cache pressure
+      - name: Preload pinned models with bounded download retries
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          python -m scripts.v265_matrix_prepare --case case04 --models /tmp/models --output /tmp/prepared
+          mkdir -p /tmp/neyrobot_models
+          cp /tmp/models/yunet.onnx /tmp/neyrobot_models/face_detection_yunet_2023mar.onnx
+          cp /tmp/models/pipnet.onnx /tmp/neyrobot_models/pipnet_r18_300w_celeba_68.onnx
+          cp /tmp/models/mobileface.onnx /tmp/neyrobot_models/mobilenetv2.onnx
+      - name: Fail closed in daemon context under resident anonymous pressure
         env:
           PROD_HARDENING_ENABLED: "0"
           PYTHONUNBUFFERED: "1"
-          V265_PROBE_BASELINE_BYTES: "201326592"
+          V265_PROBE_BASELINE_BYTES: "218103808"
+          V265_EXPECT_MEMORY_BLOCK: "1"
         run: python -u scripts/v265_strict_daemon_probe.py

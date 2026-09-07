@@ -26,3 +26,52 @@ class EyeLabTests(unittest.TestCase):
     def test_flat_eye_is_invalid(self):
         with self.assertRaises(ValueError):
             descriptors(np.full((400, 320, 3), 100, np.uint8), points())
+
+    def test_missing_and_nonfinite_evidence_is_not_pass(self):
+        with self.assertRaises(ValueError):
+            compare({}, {})
+        with self.assertRaises(ValueError):
+            compare({"left_band": np.array([1.0])}, {})
+        with self.assertRaises(ValueError):
+            compare({"left_band": np.array([np.nan])}, {"left_band": np.array([1.0])})
+
+
+class RecordedSourceAdaptiveCalibrationTests(unittest.TestCase):
+    def test_private_rejected_final_fails_without_recognition_veto(self):
+        import json
+        from pathlib import Path
+        from neyrobot_prod.v265_source_fidelity import compare_limits
+
+        report = json.loads(
+            Path(
+                "docs/engineering/v265-transfer-matrix/fidelity-followup.json"
+            ).read_text()
+        )
+        bad = report["human_rejected_generated"]
+        failures = compare_limits(
+            bad["morphology"], bad["limits_fitted_only_on_benign_source"]["morphology"]
+        )
+        for channel in ["nose", "mouth", "central_chin", "lower_face"]:
+            self.assertIn(channel, failures)
+        self.assertTrue(bad["old_geometry_pass"])
+        self.assertEqual(bad["old_production_recognition"], 0.778736)
+        self.assertFalse(report["production_ready"])
+
+    def test_original_mixed_holdout_replay_reduces_false_rejects(self):
+        import json
+        from pathlib import Path
+
+        report = json.loads(
+            Path(
+                "docs/engineering/v265-transfer-matrix/fidelity-followup.json"
+            ).read_text()
+        )
+        rows = report["legacy_holdout_replay"]
+        self.assertEqual(len(rows), 20)
+        self.assertTrue(all("error" not in r for r in rows))
+        failures = sum(
+            bool(r["morphology_exceeded"])
+            or any(k.endswith("hog") for k in r["appearance_exceeded"])
+            for r in rows
+        )
+        self.assertLess(failures, 12)

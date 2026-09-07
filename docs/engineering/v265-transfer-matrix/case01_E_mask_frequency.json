@@ -1,24 +1,25 @@
 {
   "case": "case01",
   "cgroup_after": [
-    1755107328,
+    1982406656,
     15032385536,
-    356732928,
-    892616704
+    355221504,
+    1012793344
   ],
   "cgroup_before": [
-    1694068736,
+    2043568128,
     15032385536,
-    308068352,
-    876900352
+    306679808,
+    1007390720
   ],
+  "cgroup_sampling_interval_ms": 20,
   "daemon_context": true,
   "decision": "standard",
   "dimensions": [
     1856,
     2304
   ],
-  "elapsed_s": 8.977268538000317,
+  "elapsed_s": 9.631183741999848,
   "generated_by": "ImageGen, not production Gemini",
   "inspection_candidate": "standard",
   "mask_coverage": {
@@ -27,10 +28,12 @@
     "lip": 20
   },
   "mode": "E_mask_frequency",
-  "peak_rss_kib": 415064,
+  "peak_rss_kib": 413600,
   "pid_stable": true,
+  "qualification": "offline only; no production daemon baseline load",
   "results": [
     {
+      "changed_pixels_outside_dense_support": 0,
       "metrics": {
         "eye_asymmetry_delta": 0.004127260627193763,
         "identity_similarity_cosine": 0.8610191345214844,
@@ -58,7 +61,7 @@
       "old_gate_failures": [],
       "old_gate_pass": true,
       "path": "standard",
-      "peak_rss_kib": 415064,
+      "peak_rss_kib": 413472,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "8c053fb4289bf94a04a12b21765b0c95ca6af2cff7456793379affcd34e986f9",
@@ -75,6 +78,7 @@
       }
     },
     {
+      "changed_pixels_outside_dense_support": 0,
       "metrics": {
         "eye_asymmetry_delta": 0.009433236873327921,
         "identity_similarity_cosine": 0.8721593618392944,
@@ -102,7 +106,7 @@
       "old_gate_failures": [],
       "old_gate_pass": true,
       "path": "strict",
-      "peak_rss_kib": 415064,
+      "peak_rss_kib": 413600,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "072074acc5497ed43dee3eac5d44dceb01b50f1743429387c53d06180dbc3b32",
@@ -119,6 +123,7 @@
       }
     }
   ],
+  "sampled_cgroup_peak_bytes": 2107670528,
   "source_sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
   "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e"
 }

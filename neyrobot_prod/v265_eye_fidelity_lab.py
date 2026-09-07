@@ -57,8 +57,14 @@ def descriptors(image, points, *, include_face=False):
 
 
 def compare(a, b):
+    if not a or set(a) != set(b):
+        raise ValueError("missing local descriptor evidence")
     result = {}
     for k in a:
+        if a[k].shape != b[k].shape or not a[k].size:
+            raise ValueError("incompatible local descriptors")
+        if not np.isfinite(a[k]).all() or not np.isfinite(b[k]).all():
+            raise ValueError("nonfinite local descriptors")
         if k.endswith("census"):
             result[k] = float(np.mean(a[k] != b[k]))
         elif k.endswith("band"):

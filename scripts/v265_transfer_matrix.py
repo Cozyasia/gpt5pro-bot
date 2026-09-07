@@ -85,6 +85,11 @@ def worker(args):
     face_min = float(min(tb[2:4]))
     firewall = round(target.shape[1] * 0.55)
     support = lab.full_face_support(target.shape, td, firewall)
+    used_support = (
+        support
+        if args.mode in ("B_mask", "D_mask_core", "E_mask_frequency")
+        else e._landmark_anatomy_mask(target.shape, tb, t5, firewall)
+    )
     pose_target = pose_signature(td)
     results = []
     outputs = {}
@@ -132,6 +137,19 @@ def worker(args):
             )
             if not b_safe:
                 raise AssertionError("PERSON-B firewall mutation")
+            if not neck_safe:
+                raise AssertionError("neck sample mutation")
+            # Row-at-a-time verification adds no full-frame temporary array.
+            outside_changes = sum(
+                int(
+                    np.count_nonzero(
+                        np.any(image[y] != target[y], axis=1) & (support[y] == 0)
+                    )
+                )
+                for y in range(target.shape[0])
+            )
+            if args.mode in ("D_mask_core", "E_mask_frequency") and outside_changes:
+                raise AssertionError("source core escaped semantic face support")
             name = "strict" if strict else "standard"
             outpath = args.output / args.case / (args.mode + "_" + name + ".png")
             outpath.write_bytes(selected)
@@ -149,6 +167,7 @@ def worker(args):
                     "roll_delta_deg": abs(pose["roll_deg"] - pose_target["roll_deg"]),
                     "person_b_unchanged": bool(b_safe),
                     "neck_sample_unchanged": bool(neck_safe),
+                    "changed_pixels_outside_dense_support": outside_changes,
                     "png_sha256": sha(selected),
                     "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                 }
@@ -166,7 +185,7 @@ def worker(args):
         outputs[inspect_name][0]
     )
     coverage = {
-        r: sum(int(support[round(td[i, 1]), round(td[i, 0])] > 0) for i in ids)
+        r: sum(int(used_support[round(td[i, 1]), round(td[i, 0])] > 80) for i in ids)
         for r, ids in {
             "jaw": range(17),
             "chin": (7, 8, 9),

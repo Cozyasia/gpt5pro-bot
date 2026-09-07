@@ -1,36 +1,39 @@
 {
   "case": "case02",
   "cgroup_after": [
-    1810022400,
+    2014920704,
     15032385536,
-    357142528,
-    914739200
+    367562752,
+    1025699840
   ],
   "cgroup_before": [
-    1737990144,
+    1962881024,
     15032385536,
-    298201088,
-    895664128
+    310190080,
+    1019183104
   ],
+  "cgroup_sampling_interval_ms": 20,
   "daemon_context": true,
   "decision": "strict",
   "dimensions": [
     1856,
     2304
   ],
-  "elapsed_s": 9.963940172000093,
+  "elapsed_s": 12.305865443000584,
   "generated_by": "ImageGen, not production Gemini",
   "inspection_candidate": "strict",
   "mask_coverage": {
-    "chin": 3,
-    "jaw": 17,
-    "lip": 20
+    "chin": 0,
+    "jaw": 0,
+    "lip": 12
   },
   "mode": "A_baseline",
-  "peak_rss_kib": 438156,
+  "peak_rss_kib": 444900,
   "pid_stable": true,
+  "qualification": "offline only; no production daemon baseline load",
   "results": [
     {
+      "changed_pixels_outside_dense_support": 16927,
       "metrics": {
         "eye_asymmetry_delta": 0.005565657290818704,
         "identity_similarity_cosine": 0.8463764190673828,
@@ -58,7 +61,7 @@
       "old_gate_failures": [],
       "old_gate_pass": true,
       "path": "standard",
-      "peak_rss_kib": 407244,
+      "peak_rss_kib": 412088,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "a89b82cda51354680340ef1dfa22a8f1cbcc26482fd860a752369114cfbcc21a",
@@ -75,6 +78,7 @@
       }
     },
     {
+      "changed_pixels_outside_dense_support": 16929,
       "metrics": {
         "eye_asymmetry_delta": 0.017780158386855205,
         "identity_similarity_cosine": 0.8664218187332153,
@@ -102,7 +106,7 @@
       "old_gate_failures": [],
       "old_gate_pass": true,
       "path": "strict",
-      "peak_rss_kib": 438156,
+      "peak_rss_kib": 444900,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "9413f2fe95120658fd0c885d2d8c839b06c8fca3591e76272a2b09aaefe8e3a6",
@@ -119,6 +123,7 @@
       }
     }
   ],
+  "sampled_cgroup_peak_bytes": 2099716096,
   "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
   "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b"
 }

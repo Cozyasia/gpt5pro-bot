@@ -1,36 +1,39 @@
 {
   "case": "case04",
   "cgroup_after": [
-    1892028416,
+    2084786176,
     15032385536,
-    359866368,
-    1003646976
+    347586560,
+    1139720192
   ],
   "cgroup_before": [
-    1821294592,
+    2048618496,
     15032385536,
-    297549824,
-    988979200
+    307679232,
+    1134653440
   ],
+  "cgroup_sampling_interval_ms": 20,
   "daemon_context": true,
   "decision": "standard",
   "dimensions": [
     1856,
     2304
   ],
-  "elapsed_s": 10.344144861000132,
+  "elapsed_s": 8.817291597000803,
   "generated_by": "ImageGen, not production Gemini",
   "inspection_candidate": "standard",
   "mask_coverage": {
-    "chin": 3,
-    "jaw": 17,
-    "lip": 20
+    "chin": 0,
+    "jaw": 0,
+    "lip": 12
   },
   "mode": "A_baseline",
-  "peak_rss_kib": 410344,
+  "peak_rss_kib": 414912,
   "pid_stable": true,
+  "qualification": "offline only; no production daemon baseline load",
   "results": [
     {
+      "changed_pixels_outside_dense_support": 12463,
       "metrics": {
         "eye_asymmetry_delta": 0.08146859923151417,
         "identity_similarity_cosine": 0.8282375931739807,
@@ -58,7 +61,7 @@
       "old_gate_failures": [],
       "old_gate_pass": true,
       "path": "standard",
-      "peak_rss_kib": 394076,
+      "peak_rss_kib": 402880,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "25f77c7ba3d909c090ad652d44c7b8ce2d585dbeb697579f7a1608edb3937567",
@@ -75,6 +78,7 @@
       }
     },
     {
+      "changed_pixels_outside_dense_support": 12495,
       "metrics": {
         "eye_asymmetry_delta": 0.08298399891305458,
         "identity_similarity_cosine": 0.8157366514205933,
@@ -104,7 +108,7 @@
       ],
       "old_gate_pass": false,
       "path": "strict",
-      "peak_rss_kib": 410344,
+      "peak_rss_kib": 414912,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "94134923617c00228f7d1977d8b61ff2770569767462fb8dbed34f0f3c94c5b6",
@@ -121,6 +125,7 @@
       }
     }
   ],
+  "sampled_cgroup_peak_bytes": 2174631936,
   "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
   "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2"
 }

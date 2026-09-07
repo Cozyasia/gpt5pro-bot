@@ -1,36 +1,39 @@
 {
   "case": "case01",
   "cgroup_after": [
-    1727811584,
+    1977892864,
     15032385536,
-    362250240,
-    861007872
+    354684928,
+    1001791488
   ],
   "cgroup_before": [
-    1661095936,
+    1939599360,
     15032385536,
-    307896320,
-    845430784
+    313663488,
+    996433920
   ],
+  "cgroup_sampling_interval_ms": 20,
   "daemon_context": true,
   "decision": "standard",
   "dimensions": [
     1856,
     2304
   ],
-  "elapsed_s": 8.32434472399973,
+  "elapsed_s": 8.990871364999293,
   "generated_by": "ImageGen, not production Gemini",
   "inspection_candidate": "standard",
   "mask_coverage": {
-    "chin": 3,
-    "jaw": 17,
-    "lip": 20
+    "chin": 0,
+    "jaw": 0,
+    "lip": 15
   },
   "mode": "C_core",
-  "peak_rss_kib": 414140,
+  "peak_rss_kib": 432136,
   "pid_stable": true,
+  "qualification": "offline only; no production daemon baseline load",
   "results": [
     {
+      "changed_pixels_outside_dense_support": 8010,
       "metrics": {
         "eye_asymmetry_delta": 0.0016890651116792665,
         "identity_similarity_cosine": 0.8685746192932129,
@@ -58,7 +61,7 @@
       "old_gate_failures": [],
       "old_gate_pass": true,
       "path": "standard",
-      "peak_rss_kib": 409324,
+      "peak_rss_kib": 414632,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "2ef6078ef5efe0528f60b3b7206aa5833a522d7bbe733b096af03b626ee04e03",
@@ -75,6 +78,7 @@
       }
     },
     {
+      "changed_pixels_outside_dense_support": 8008,
       "metrics": {
         "eye_asymmetry_delta": 0.005512375473596287,
         "identity_similarity_cosine": 0.8740230202674866,
@@ -102,7 +106,7 @@
       "old_gate_failures": [],
       "old_gate_pass": true,
       "path": "strict",
-      "peak_rss_kib": 414140,
+      "peak_rss_kib": 432136,
       "person_b_unchanged": true,
       "phase": "pre_ocular",
       "png_sha256": "e1ec19c2998b3afd9b5b26b2b17fded7d4e3574ac18042919dcd685262f35973",
@@ -119,6 +123,7 @@
       }
     }
   ],
+  "sampled_cgroup_peak_bytes": 2068418560,
   "source_sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
   "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e"
 }

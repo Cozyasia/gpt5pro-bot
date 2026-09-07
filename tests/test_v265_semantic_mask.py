@@ -34,3 +34,17 @@ class FullFaceMaskTests(unittest.TestCase):
             self.assertEqual(mask[y, x], 0)
             self.assertEqual(mask[:, 400:].max(), 0)
             self.assertEqual(alpha[mask == 0].max(), 0)
+
+    def test_offline_patch_restores_engine_after_error(self):
+        from neyrobot_prod import dense68_engine_v265 as engine
+        from neyrobot_prod.v265_transfer_lab import variant
+
+        compose, mask = (
+            engine._structure_first_compose_roi,
+            engine._landmark_anatomy_mask,
+        )
+        with self.assertRaises(RuntimeError):
+            with variant("D_mask_core", fixture(), fixture(), fixture(), 300):
+                raise RuntimeError("test cancellation")
+        self.assertIs(engine._structure_first_compose_roi, compose)
+        self.assertIs(engine._landmark_anatomy_mask, mask)
