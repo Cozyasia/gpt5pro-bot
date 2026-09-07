@@ -18,8 +18,7 @@ print(
 from neyrobot_prod import v265_strict_runtime_safety as safety
 safety.install()
 if expect_block:
-    from scripts.v265_pressure_fixture import arm_measured_pressure
-    arm_measured_pressure()
+    runpy.run_path("scripts/v265_pressure_fixture.py")["arm_measured_pressure"]()
 try:
     runpy.run_path("scripts/v265_strict_stability_probe.py", run_name="__main__")
 except RuntimeError as exc:
