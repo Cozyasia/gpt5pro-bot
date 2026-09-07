@@ -81,6 +81,9 @@ def eye_stress(im, p, kind):
 
 
 def run(a):
+    global landmarks
+    if a.landmark_mode == "median_boxes":
+        from neyrobot_prod.v265_landmark_measurement_lab import landmarks
     cv2.setNumThreads(1)
     cv2.setRNGSeed(0)
     names = [
@@ -94,6 +97,7 @@ def run(a):
     ]
     report = {
         "method": "per-source observed nuisance maxima; no tuned multiplier",
+        "landmark_mode": a.landmark_mode,
         "cases": [],
         "source_limits": {},
         "production_ready": False,
@@ -108,8 +112,19 @@ def run(a):
         try:
             cp = landmarks(candidate, a.models)
             row["morphology"] = f.morphology(sp, cp)
+            from neyrobot_prod.v265_shape_lab import configuration
+
+            source_config, candidate_config = configuration(sp), configuration(cp)
+            row["configuration_2d"] = {
+                k: abs(float(candidate_config[k]) - float(source_config[k]))
+                for k in source_config
+                if k != "configuration_signed"
+            }
             row["eye"] = eye.compare(
-                ed, eye.descriptors(candidate, cp, include_face=True)
+                ed,
+                eye.descriptors(
+                    candidate, cp, include_face=True, include_profiles=True
+                ),
             )
             try:
                 row["old_exceeded"] = f.compare_limits(
@@ -125,7 +140,7 @@ def run(a):
         raw = (a.fixtures / name).read_bytes()
         im = cv2.imdecode(np.frombuffer(raw, np.uint8), 1)
         sp = landmarks(im, a.models)
-        ed = eye.descriptors(im, sp, include_face=True)
+        ed = eye.descriptors(im, sp, include_face=True, include_profiles=True)
         training = [
             process(name, im, sp, ed, v, c, n, "source_self_fit")
             for c, n, v in transforms(im)
@@ -134,6 +149,9 @@ def run(a):
         limits = {
             "morphology": f.measured_limits([r["morphology"] for r in good]),
             "eye": f.measured_limits([r["eye"] for r in good]),
+            "configuration_2d": f.measured_limits(
+                [r["configuration_2d"] for r in good]
+            ),
             "source_sha256": hashlib.sha256(raw).hexdigest(),
         }
         report["source_limits"][name] = limits
@@ -171,6 +189,9 @@ def run(a):
                     row["morphology"], limits["morphology"]
                 )
                 row["eye_exceeded"] = f.compare_limits(row["eye"], limits["eye"])
+                row["configuration_exceeded"] = f.compare_limits(
+                    row["configuration_2d"], limits["configuration_2d"]
+                )
         report["cases"].extend(rows)
         print("CALIBRATED_SOURCE", name, flush=True)
     # Real pose/expression pairs remain unlabelled source-photo changes, never benign PASS truth.
@@ -189,4 +210,7 @@ if __name__ == "__main__":
     p.add_argument("--models", type=Path, required=True)
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument(
+        "--landmark-mode", choices=["production", "median_boxes"], default="production"
+    )
     run(p.parse_args())

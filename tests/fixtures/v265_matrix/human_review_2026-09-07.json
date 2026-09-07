@@ -1,0 +1,24 @@
+{
+  "reviewer": "user",
+  "scope": "human_comparison.jpg at PR119 712bf4b",
+  "production_approved": false,
+  "cases": {
+    "case01": {
+      "preferred": "A_baseline",
+      "approved": false,
+      "reason": "D/E lower-face and chin less source-like despite internal improvements"
+    },
+    "case02": {
+      "preferred": "D_mask_core",
+      "provisional": true,
+      "approved": false,
+      "reason": "better nose/mouth/lower-face; mouth expression and proportions still differ"
+    },
+    "case04": {
+      "preferred": "A_baseline",
+      "approved": false,
+      "reason": "D/E smoother rounder lower-face loses source individuality despite better regional metrics"
+    }
+  },
+  "use": "ranking evidence only; never threshold fitting"
+}

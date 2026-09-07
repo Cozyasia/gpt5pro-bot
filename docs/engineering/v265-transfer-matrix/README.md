@@ -38,7 +38,7 @@ Pose telemetry contains roll and nose/mouth 2D proxies only. These confound iden
 
 ## Calibration results and remaining failures
 
-Per-source observed maxima are fitted using 29 exact-source nuisance transforms per photograph, with no rejected candidate and no multiplier. Seven public photographs represent five identities. This is source-adaptive repeatability calibration, not population calibration from human-labelled generations. Disjoint transform parameters are evaluated after fitting; perspective proxies are not fitted or labelled as real 3D pose.
+Per-source observed maxima are fitted using 29 exact-source nuisance transforms per photograph, with no rejected candidate and no multiplier. Seven public photographs are used. No authoritative same-identity grouping is asserted for the three pose_* fixtures; the earlier five-identity count was unsupported. This is source-adaptive repeatability calibration, not population calibration from human-labelled generations. Disjoint transform parameters are evaluated after fitting; perspective proxies are not fitted or labelled as real 3D pose.
 
 - Original mixed holdout replay: **19 PASS, 1 FAIL, 0 invalid**, versus former 7 PASS, 12 FAIL, 1 invalid.
 - New isolated holdout: **101/105 PASS**, 4 false rejects using morphology + local HOG. Same-bank old gate rejects39/105.

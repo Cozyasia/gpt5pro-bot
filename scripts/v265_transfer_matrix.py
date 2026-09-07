@@ -87,14 +87,22 @@ def worker(args):
     support = lab.full_face_support(target.shape, td, firewall)
     used_support = (
         support
-        if args.mode in ("B_mask", "D_mask_core", "E_mask_frequency")
+        if args.mode in ("B_mask", "D_mask_core", "E_mask_frequency", "T_exact_field")
         else e._landmark_anatomy_mask(target.shape, tb, t5, firewall)
     )
     pose_target = pose_signature(td)
     results = []
     outputs = {}
     before_cgroup = memory._memory_state()
-    with lab.variant(args.mode, sd, td, projected, face_min):
+    with lab.variant(
+        args.mode,
+        sd,
+        td,
+        projected,
+        face_min,
+        source_shape=source.shape,
+        target_shape=target.shape,
+    ) as shape_diagnostics:
         for strict in [False, True]:
             if strict:
                 memory._strict_preflight()
@@ -123,6 +131,19 @@ def worker(args):
             image = cv2.imdecode(np.frombuffer(selected, np.uint8), 1)
             _, _, fd = pointset(image, args.models, True)
             source_morph = morphology(sd, fd)
+            from neyrobot_prod.v265_shape_lab import configuration
+
+            config_source, config_final = configuration(sd), configuration(fd)
+            if args.mode in ("F_jaw_shape", "G_face_shape", "H_jaw_silhouette"):
+                owned = td.copy()
+                owned[:17] = desired[:17]
+                support = lab.full_face_support(target.shape, owned, firewall)
+                if args.mode == "H_jaw_silhouette":
+                    support = cv2.bitwise_or(
+                        support, lab.full_face_support(target.shape, td, firewall)
+                    )
+                used_support = support
+
             pose = pose_signature(fd)
             b_safe = np.array_equal(image[:, firewall:], target[:, firewall:])
             # Neck sample is in face coordinates, beyond chin away from eye midpoint.
@@ -148,7 +169,18 @@ def worker(args):
                 )
                 for y in range(target.shape[0])
             )
-            if args.mode in ("D_mask_core", "E_mask_frequency") and outside_changes:
+            if (
+                args.mode
+                in (
+                    "D_mask_core",
+                    "E_mask_frequency",
+                    "T_exact_field",
+                    "F_jaw_shape",
+                    "G_face_shape",
+                    "H_jaw_silhouette",
+                )
+                and outside_changes
+            ):
                 raise AssertionError("source core escaped semantic face support")
             name = "strict" if strict else "standard"
             outpath = args.output / args.case / (args.mode + "_" + name + ".png")
@@ -161,6 +193,8 @@ def worker(args):
                     "old_gate_pass": passed,
                     "old_gate_failures": failures,
                     "morphology": source_morph,
+                    "source_configuration_2d": config_source,
+                    "candidate_configuration_2d": config_final,
                     "metrics": metrics,
                     "pose_proxy": pose,
                     "target_pose_proxy": pose_target,
@@ -184,8 +218,19 @@ def worker(args):
     (args.output / args.case / (args.mode + "_selected.png")).write_bytes(
         outputs[inspect_name][0]
     )
+    coverage_points = (
+        owned
+        if args.mode in ("F_jaw_shape", "G_face_shape", "H_jaw_silhouette")
+        else td
+    )
     coverage = {
-        r: sum(int(used_support[round(td[i, 1]), round(td[i, 0])] > 80) for i in ids)
+        r: sum(
+            int(
+                used_support[round(coverage_points[i, 1]), round(coverage_points[i, 0])]
+                > 80
+            )
+            for i in ids
+        )
         for r, ids in {
             "jaw": range(17),
             "chin": (7, 8, 9),
@@ -211,6 +256,7 @@ def worker(args):
         "cgroup_sampling_interval_ms": 20,
         "qualification": "offline only; no production daemon baseline load",
         "mask_coverage": coverage,
+        "shape_diagnostics": shape_diagnostics,
         "results": results,
     }
     (args.output / args.case / (args.mode + ".json")).write_text(

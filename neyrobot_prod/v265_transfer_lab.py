@@ -11,7 +11,17 @@ import cv2
 import numpy as np
 from neyrobot_prod import dense68_engine_v265 as engine
 
-MODES = ("A_baseline", "B_mask", "C_core", "D_mask_core", "E_mask_frequency")
+MODES = (
+    "A_baseline",
+    "B_mask",
+    "C_core",
+    "D_mask_core",
+    "E_mask_frequency",
+    "T_exact_field",
+    "F_jaw_shape",
+    "G_face_shape",
+    "H_jaw_silhouette",
+)
 
 
 def full_face_support(shape, dense, firewall_x):
@@ -95,31 +105,126 @@ def frequency_core(source, target, mask, face_min):
 
 
 @contextmanager
-def variant(mode, source_dense, target_dense, projected_dense, face_min):
+def variant(
+    mode,
+    source_dense,
+    target_dense,
+    projected_dense,
+    face_min,
+    *,
+    source_shape=None,
+    target_shape=None,
+):
     if mode not in MODES:
         raise ValueError("unknown ablation")
     original_compose = engine._structure_first_compose_roi
     original_mask = engine._landmark_anatomy_mask
+    original_geometry = engine.v263._desired_identity_geometry
+    original_deform = engine._dense_deform_local_roi
+    shape_modes = ("F_jaw_shape", "G_face_shape", "H_jaw_silhouette")
+    shape_owner = np.asarray(target_dense).copy()
+    diagnostics = {}
+    current_box = None
+    current_firewall = None
+    if mode in shape_modes:
+        if source_shape is None or target_shape is None:
+            raise ValueError("shape experiment needs actual image dimensions")
+        from .v265_shape_lab import pose_projected_source, expression_mouth
+
+        source_pose, pose_info = pose_projected_source(
+            source_dense, target_dense, source_shape, target_shape
+        )
+        diagnostics.update(pose_info)
+
+    def geometry(projected, target, minimum, *, strict):
+        desired = original_geometry(projected, target, minimum, strict=strict)
+        desired[:17] = source_pose[:17]
+        if mode == "G_face_shape":
+            desired[27:36] = source_pose[27:36]
+            desired[48:68] = expression_mouth(source_pose, target)[48:68]
+        shape_owner[:] = target
+        shape_owner[:17] = desired[:17]
+        diagnostics["desired_dense"] = desired.tolist()
+        return desired
+
+    def deform(warped, projected, desired, box, minimum):
+        nonlocal current_box
+        current_box = box
+        from .v265_shape_lab import tps_inverse_roi
+
+        out, error, residual = tps_inverse_roi(warped, projected, desired, box, minimum)
+        diagnostics.setdefault("tps_control_errors_px", []).append(error)
+        # TPS has no Gaussian sigma; retain the numeric telemetry slot as zero.
+        return out, 0.0, residual
 
     # Target semantic boundary is used as support. desired landmarks own source
     # warp, not the support silhouette; never extrapolate source pixels into neck.
     def mask(shape, bbox, points, firewall):
-        return full_face_support(shape, target_dense, firewall)
+        nonlocal current_firewall
+        current_firewall = firewall
+        owned = full_face_support(shape, shape_owner, firewall)
+        if mode == "H_jaw_silhouette":
+            # ROI must include both the old and new silhouettes to remove the old edge.
+            owned = cv2.bitwise_or(
+                owned, full_face_support(shape, target_dense, firewall)
+            )
+        return owned
 
     def compose(corrected, target, support, minimum, *, strict):
-        if mode == "E_mask_frequency":
+        if mode == "H_jaw_silhouette":
+            from .v265_shape_lab import tps_inverse_roi
+
+            x0, y0, x1, y1 = current_box
+            # Transport target boundary/context, but never insert source-neck pixels.
+            shifted, error, _ = tps_inverse_roi(
+                target, target_dense, shape_owner, current_box, minimum
+            )
+            diagnostics.setdefault("silhouette_control_errors_px", []).append(error)
+            owned = full_face_support(target_shape, shape_owner, current_firewall)[
+                y0:y1, x0:x1
+            ]
+            union_alpha = interior_alpha(support, minimum)
+            context = target.copy()
+            for c in range(3):
+                context[:, :, c] = np.clip(
+                    shifted[:, :, c] * union_alpha
+                    + target[:, :, c] * (1 - union_alpha),
+                    0,
+                    255,
+                ).astype(np.uint8)
+            out = planar_core(corrected, context, owned, minimum)
+            out[support <= 80] = target[support <= 80]
+        elif mode == "E_mask_frequency":
             out = frequency_core(corrected, target, support, minimum)
         else:
             out = planar_core(corrected, target, support, minimum)
         return out, "offline_" + mode, 0, 0, 0
 
     try:
-        if mode in ("B_mask", "D_mask_core", "E_mask_frequency"):
+        if mode in (
+            "B_mask",
+            "D_mask_core",
+            "E_mask_frequency",
+            "T_exact_field",
+            *shape_modes,
+        ):
             engine._landmark_anatomy_mask = mask
-        if mode in ("C_core", "D_mask_core", "E_mask_frequency"):
+        if mode in (
+            "C_core",
+            "D_mask_core",
+            "E_mask_frequency",
+            "T_exact_field",
+            *shape_modes,
+        ):
             engine._structure_first_compose_roi = compose
-        yield
+        if mode in shape_modes:
+            engine.v263._desired_identity_geometry = geometry
+        if mode in ("T_exact_field", *shape_modes):
+            engine._dense_deform_local_roi = deform
+        yield diagnostics
     finally:
+        engine.v263._desired_identity_geometry = original_geometry
+        engine._dense_deform_local_roi = original_deform
         engine._structure_first_compose_roi = original_compose
         engine._landmark_anatomy_mask = original_mask
 

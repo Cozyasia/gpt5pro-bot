@@ -5,7 +5,7 @@ import numpy as np
 from .v265_source_fidelity import canonical_crop
 
 
-def descriptors(image, points, *, include_face=False):
+def descriptors(image, points, *, include_face=False, include_profiles=False):
     crop, valid = canonical_crop(image, points)
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
     out = {}
@@ -22,6 +22,20 @@ def descriptors(image, points, *, include_face=False):
         if norm < 1e-4:
             raise ValueError("unmeasurable eye contrast")
         out[side + "_band"] = (band / norm).ravel()
+        if include_profiles and side in ("left", "right"):
+            # Fixed global eye frame: no iris-local registration that can hide drift.
+            # Central eye band suppresses brows and retains within-HOG-cell shifts.
+            central = band[23:47, 15:65]
+            energy = np.maximum(-central, 0)
+            total = float(energy.sum())
+            if total < 1e-6:
+                raise ValueError("unmeasurable central-eye structure")
+            xprofile = cv2.GaussianBlur(energy.sum(0)[None, :], (0, 0), 1).ravel()
+            yprofile = cv2.GaussianBlur(energy.sum(1)[:, None], (0, 0), 1).ravel()
+            # Cumulative dark-structure profiles retain displacement, unlike cell sums.
+            out[side + "_profile"] = (
+                np.r_[np.cumsum(xprofile), np.cumsum(yprofile)] / total
+            )
         # Smoothed ordinal comparisons, positive affine photometric invariant.
         center = a[3:-3, 3:-3]
         out[side + "_census"] = np.stack(
