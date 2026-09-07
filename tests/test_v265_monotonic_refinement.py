@@ -102,6 +102,27 @@ class V265MonotonicRefinementTests(unittest.TestCase):
         self.assertFalse(accepted)
         self.assertTrue(any(reason.startswith("identity=") for reason in reasons))
 
+    def test_replay_capture_is_disabled_by_default_and_exact_when_enabled(self) -> None:
+        import os
+        import tempfile
+        from pathlib import Path
+
+        old = os.environ.pop("V265_REPLAY_CAPTURE_DIR", None)
+        try:
+            self.assertIsNone(v265._capture_replay_inputs(b"stage1-exact", b"source-exact"))
+            with tempfile.TemporaryDirectory() as td:
+                os.environ["V265_REPLAY_CAPTURE_DIR"] = td
+                token = v265._capture_replay_inputs(b"stage1-exact", b"source-exact")
+                self.assertTrue(token)
+                root = Path(td)
+                self.assertEqual((root / f"{token}.stage1.bin").read_bytes(), b"stage1-exact")
+                self.assertEqual((root / f"{token}.source_photo3.bin").read_bytes(), b"source-exact")
+        finally:
+            if old is None:
+                os.environ.pop("V265_REPLAY_CAPTURE_DIR", None)
+            else:
+                os.environ["V265_REPLAY_CAPTURE_DIR"] = old
+
     def test_metric_block_contract_includes_full_pre_post_fields(self) -> None:
         import inspect
 
