@@ -56,8 +56,11 @@ class V265SingleOwnerTests(unittest.TestCase):
 
     def test_v265_runtime_never_calls_v263_quality_gate(self) -> None:
         source = inspect.getsource(v265._true_face_transfer_v265)
+        evaluator = inspect.getsource(v265._evaluate_candidate)
         self.assertNotIn("v263._quality_gate(", source)
-        self.assertEqual(source.count("production_gate("), 2)
+        self.assertNotIn("v263._quality_gate(", evaluator)
+        self.assertEqual(source.count("_select_ocular_candidate("), 2)
+        self.assertEqual(evaluator.count("production_gate("), 1)
 
     def test_visibly_bad_candidate_is_still_blocked(self) -> None:
         metrics = {
