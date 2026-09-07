@@ -162,6 +162,37 @@ def _process_identity() -> tuple[int, str]:
     return pid, host
 
 
+def _capture_replay_inputs(stage1: bytes, source: bytes) -> str | None:
+    """Optionally persist exact replay inputs on a non-production test branch.
+
+    Disabled unless V265_REPLAY_CAPTURE_DIR is explicitly set. The directory is
+    intentionally caller-controlled so production has no implicit persistence.
+    """
+    import hashlib
+    import os
+    from pathlib import Path
+
+    root_s = str(os.environ.get("V265_REPLAY_CAPTURE_DIR") or "").strip()
+    if not root_s:
+        return None
+    root = Path(root_s)
+    root.mkdir(parents=True, exist_ok=True)
+    stage1_b = bytes(stage1 or b"")
+    source_b = bytes(source or b"")
+    token = hashlib.sha256(source_b + b"\0" + stage1_b).hexdigest()[:20]
+    (root / f"{token}.source_photo3.bin").write_bytes(source_b)
+    (root / f"{token}.stage1.bin").write_bytes(stage1_b)
+    _log(
+        "AI_SELFIE_V265_REPLAY_CAPTURE status=saved token=%s stage1_bytes=%s source_bytes=%s "
+        "path=%s diagnostic_only=true",
+        token,
+        len(stage1_b),
+        len(source_b),
+        str(root),
+    )
+    return token
+
+
 def _metric_block_log(path: str, phase: str, metrics: dict[str, float], hard_passed: bool, failures: list[str]) -> None:
     pid, host = _process_identity()
     _log(
@@ -313,6 +344,7 @@ async def _true_face_transfer_v265(runtime: Any, stage1: bytes, source: bytes, s
     dense_path, recognition_path = await v263._ensure_identity_models()
     stage1_b = bytes(stage1 or b"")
     source_b = bytes(source or b"")
+    _capture_replay_inputs(stage1_b, source_b)
 
     standard_pre, standard_pre_metrics, standard_desired = engine.transfer_attempt(
         stage1_b, source_b, yunet_path, dense_path, recognition_path, strict=False
