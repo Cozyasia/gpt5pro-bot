@@ -1,0 +1,2097 @@
+{
+  "cases": [
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0,
+        "central_chin": 0.0,
+        "eye_left_appearance": 1.0485614378336666e-15,
+        "eye_left_gradient": 5.135054183482324e-16,
+        "eye_right_appearance": 3.460856799855389e-16,
+        "eye_right_gradient": 4.69262633076646e-16,
+        "eyes": 0.0,
+        "inner_face": 0.0,
+        "lower_face": 0.0,
+        "mouth": 0.0,
+        "nose": 0.0,
+        "outline": 0.0
+      },
+      "source": "pose_center.jpg",
+      "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+      "split": "holdout",
+      "variant": 0
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "eye_left_gradient",
+        "eye_right_gradient"
+      ],
+      "metrics": {
+        "all68": 0.01273452894735267,
+        "central_chin": 0.028956221895490897,
+        "eye_left_appearance": 0.36516708980603174,
+        "eye_left_gradient": 1.2333657631360522,
+        "eye_right_appearance": 0.27638133342594295,
+        "eye_right_gradient": 1.0132191353887614,
+        "eyes": 0.002320136349919471,
+        "inner_face": 0.011684902904799233,
+        "lower_face": 0.017607177805693017,
+        "mouth": 0.015576636995141089,
+        "nose": 0.008664379117963722,
+        "outline": 0.018931286896899747
+      },
+      "source": "pose_center.jpg",
+      "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+      "split": "holdout",
+      "variant": 1
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.007420494212607337,
+        "central_chin": 0.007673636543443769,
+        "eye_left_appearance": 0.3905925251962858,
+        "eye_left_gradient": 1.0039218414128055,
+        "eye_right_appearance": 0.19843162657478358,
+        "eye_right_gradient": 0.5529999962577914,
+        "eyes": 0.0020111639537125814,
+        "inner_face": 0.006773927171351619,
+        "lower_face": 0.008361641026796804,
+        "mouth": 0.007986723487237172,
+        "nose": 0.004613415412863992,
+        "outline": 0.009518967578508387
+      },
+      "source": "pose_center.jpg",
+      "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+      "split": "holdout",
+      "variant": 2
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "eye_right_gradient"
+      ],
+      "metrics": {
+        "all68": 0.008913122331576283,
+        "central_chin": 0.012147045964737585,
+        "eye_left_appearance": 0.3718190607150089,
+        "eye_left_gradient": 1.0830092546602779,
+        "eye_right_appearance": 0.31945967323618335,
+        "eye_right_gradient": 1.068616466426106,
+        "eyes": 0.0025932537889284913,
+        "inner_face": 0.008089366549071398,
+        "lower_face": 0.009936910596409632,
+        "mouth": 0.008159704732133245,
+        "nose": 0.00507734259815707,
+        "outline": 0.012100450752443795
+      },
+      "source": "pose_center.jpg",
+      "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+      "split": "holdout",
+      "variant": 3
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "eye_left_gradient",
+        "eye_right_gradient"
+      ],
+      "metrics": {
+        "all68": 0.01325360650782583,
+        "central_chin": 0.03400753572973948,
+        "eye_left_appearance": 0.4343728520073943,
+        "eye_left_gradient": 1.1611455786156932,
+        "eye_right_appearance": 0.3073919278575715,
+        "eye_right_gradient": 0.902425642600923,
+        "eyes": 0.002332584180380673,
+        "inner_face": 0.01209962015589388,
+        "lower_face": 0.02080856761026882,
+        "mouth": 0.01728172624578456,
+        "nose": 0.006490889429737583,
+        "outline": 0.020581668311947382
+      },
+      "source": "pose_center.jpg",
+      "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+      "split": "holdout",
+      "variant": 4
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0,
+        "central_chin": 0.0,
+        "eye_left_appearance": 1.0957385014904428e-15,
+        "eye_left_gradient": 4.019446730326221e-16,
+        "eye_right_appearance": 9.196894944408205e-16,
+        "eye_right_gradient": 7.864045111964261e-16,
+        "eyes": 0.0,
+        "inner_face": 0.0,
+        "lower_face": 0.0,
+        "mouth": 0.0,
+        "nose": 0.0,
+        "outline": 0.0
+      },
+      "source": "pose_left.jpg",
+      "source_sha256": "b9cbae753e502c91b945066c123654338996573b30c98e516334ba7bc07012c2",
+      "split": "holdout",
+      "variant": 0
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.05516362986165064,
+        "central_chin": 0.0889129323793408,
+        "eye_left_appearance": 0.2889689433000813,
+        "eye_left_gradient": 0.9790913870253102,
+        "eye_right_appearance": 0.3154473703704943,
+        "eye_right_gradient": 0.8126770057246926,
+        "eyes": 0.010834987324601192,
+        "inner_face": 0.051586973945768125,
+        "lower_face": 0.08078241918219442,
+        "mouth": 0.07943055138119597,
+        "nose": 0.06723096064681124,
+        "outline": 0.07248053145051694
+      },
+      "source": "pose_left.jpg",
+      "source_sha256": "b9cbae753e502c91b945066c123654338996573b30c98e516334ba7bc07012c2",
+      "split": "holdout",
+      "variant": 1
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.038060625109607796,
+        "central_chin": 0.09111986432134513,
+        "eye_left_appearance": 0.37354606525179884,
+        "eye_left_gradient": 1.0004470165167498,
+        "eye_right_appearance": 0.24938131159417443,
+        "eye_right_gradient": 0.6333581613418106,
+        "eyes": 0.004264201041013389,
+        "inner_face": 0.03233282139370048,
+        "lower_face": 0.05847814978328621,
+        "mouth": 0.052088327085183864,
+        "nose": 0.022608961484683273,
+        "outline": 0.06561822030338474
+      },
+      "source": "pose_left.jpg",
+      "source_sha256": "b9cbae753e502c91b945066c123654338996573b30c98e516334ba7bc07012c2",
+      "split": "holdout",
+      "variant": 2
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.02704395311478086,
+        "central_chin": 0.07274385954399051,
+        "eye_left_appearance": 0.2407461734735673,
+        "eye_left_gradient": 0.773020779993073,
+        "eye_right_appearance": 0.23934314880530072,
+        "eye_right_gradient": 0.7484746042172592,
+        "eyes": 0.006027844251720753,
+        "inner_face": 0.022653577355677683,
+        "lower_face": 0.04075120429851303,
+        "mouth": 0.03173120003427141,
+        "nose": 0.012936702051852454,
+        "outline": 0.04905454195473385
+      },
+      "source": "pose_left.jpg",
+      "source_sha256": "b9cbae753e502c91b945066c123654338996573b30c98e516334ba7bc07012c2",
+      "split": "holdout",
+      "variant": 3
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.052064862306892244,
+        "central_chin": 0.16137538076142455,
+        "eye_left_appearance": 0.1233941815440503,
+        "eye_left_gradient": 0.36626260428262913,
+        "eye_right_appearance": 0.49487572659802986,
+        "eye_right_gradient": 0.9812890851458791,
+        "eyes": 0.003664568790227004,
+        "inner_face": 0.04505483931045639,
+        "lower_face": 0.09348102434839295,
+        "mouth": 0.07446023954220295,
+        "nose": 0.026768014276472747,
+        "outline": 0.0936220856699001
+      },
+      "source": "pose_left.jpg",
+      "source_sha256": "b9cbae753e502c91b945066c123654338996573b30c98e516334ba7bc07012c2",
+      "split": "holdout",
+      "variant": 4
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0,
+        "central_chin": 0.0,
+        "eye_left_appearance": 2.111387586915836e-15,
+        "eye_left_gradient": 1.0015359600351966e-15,
+        "eye_right_appearance": 3.3118938798909368e-15,
+        "eye_right_gradient": 3.3852584295971575e-15,
+        "eyes": 0.0,
+        "inner_face": 0.0,
+        "lower_face": 0.0,
+        "mouth": 0.0,
+        "nose": 0.0,
+        "outline": 0.0
+      },
+      "source": "pose_right.jpg",
+      "source_sha256": "4fdab024f3528d3e753de224ad5473319e260dac7674c792321aca3a6d7de90f",
+      "split": "holdout",
+      "variant": 0
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.027984149501123587,
+        "central_chin": 0.05220163562602854,
+        "eye_left_appearance": 0.33245009732848596,
+        "eye_left_gradient": 0.8646119913088626,
+        "eye_right_appearance": 0.25677626480244287,
+        "eye_right_gradient": 0.5414601406856303,
+        "eyes": 0.005780110593751446,
+        "inner_face": 0.024039514658843304,
+        "lower_face": 0.03798891026661586,
+        "mouth": 0.03174909945853315,
+        "nose": 0.01708928121710461,
+        "outline": 0.04478784008099712
+      },
+      "source": "pose_right.jpg",
+      "source_sha256": "4fdab024f3528d3e753de224ad5473319e260dac7674c792321aca3a6d7de90f",
+      "split": "holdout",
+      "variant": 1
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.02955561871032857,
+        "central_chin": 0.07286708771875856,
+        "eye_left_appearance": 0.37262039063149643,
+        "eye_left_gradient": 0.6894398283712568,
+        "eye_right_appearance": 0.963113379225843,
+        "eye_right_gradient": 3.630767518783819,
+        "eyes": 0.003837226773241189,
+        "inner_face": 0.02689596708421431,
+        "lower_face": 0.048989068050660875,
+        "mouth": 0.04301955481077816,
+        "nose": 0.021745893328127437,
+        "outline": 0.045647124288885045
+      },
+      "source": "pose_right.jpg",
+      "source_sha256": "4fdab024f3528d3e753de224ad5473319e260dac7674c792321aca3a6d7de90f",
+      "split": "holdout",
+      "variant": 2
+    },
+    {
+      "category": "benign",
+      "error": "unmeasurable eye contrast or light shift",
+      "source": "pose_right.jpg",
+      "split": "holdout",
+      "variant": 3
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "eyes"
+      ],
+      "metrics": {
+        "all68": 0.01144331862185112,
+        "central_chin": 0.01655587602399729,
+        "eye_left_appearance": 0.36195688804484555,
+        "eye_left_gradient": 0.6881330667699181,
+        "eye_right_appearance": 0.3238745616763092,
+        "eye_right_gradient": 0.5411525889827826,
+        "eyes": 0.004962409451267938,
+        "inner_face": 0.01077370936473082,
+        "lower_face": 0.010980674761913856,
+        "mouth": 0.010936979793698601,
+        "nose": 0.012027702687033653,
+        "outline": 0.01447252874484729
+      },
+      "source": "pose_right.jpg",
+      "source_sha256": "4fdab024f3528d3e753de224ad5473319e260dac7674c792321aca3a6d7de90f",
+      "split": "holdout",
+      "variant": 4
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0,
+        "central_chin": 0.0,
+        "eye_left_appearance": 5.136336823162282e-16,
+        "eye_left_gradient": 7.033400318856764e-16,
+        "eye_right_appearance": 1.162992246218308e-14,
+        "eye_right_gradient": 4.000049594026903e-15,
+        "eyes": 0.0,
+        "inner_face": 0.0,
+        "lower_face": 0.0,
+        "mouth": 0.0,
+        "nose": 0.0,
+        "outline": 0.0
+      },
+      "source": "verify_bohr_1935.jpg",
+      "source_sha256": "f5f789cae6fe087a79169e38e3ff31c9583592bcc7dd81e76fe6f4ea9871703c",
+      "split": "train",
+      "variant": 0
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.015576496270521108,
+        "central_chin": 0.023794912606641152,
+        "eye_left_appearance": 0.14537479057228317,
+        "eye_left_gradient": 0.45036455802436887,
+        "eye_right_appearance": 0.05397430793403178,
+        "eye_right_gradient": 0.197739994413786,
+        "eyes": 0.002209844074536492,
+        "inner_face": 0.013655482180503045,
+        "lower_face": 0.02174287701563723,
+        "mouth": 0.01975988080973768,
+        "nose": 0.012476932493836558,
+        "outline": 0.023128849792246726
+      },
+      "source": "verify_bohr_1935.jpg",
+      "source_sha256": "f5f789cae6fe087a79169e38e3ff31c9583592bcc7dd81e76fe6f4ea9871703c",
+      "split": "train",
+      "variant": 1
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.01341710866510168,
+        "central_chin": 0.03227877014471481,
+        "eye_left_appearance": 0.1447534807660153,
+        "eye_left_gradient": 0.3472603765012079,
+        "eye_right_appearance": 0.05018707592190696,
+        "eye_right_gradient": 0.14591170151833913,
+        "eyes": 0.0020364419729912253,
+        "inner_face": 0.011684031520456339,
+        "lower_face": 0.017766734871397204,
+        "mouth": 0.01487858847990738,
+        "nose": 0.009614126440677502,
+        "outline": 0.022250705738612733
+      },
+      "source": "verify_bohr_1935.jpg",
+      "source_sha256": "f5f789cae6fe087a79169e38e3ff31c9583592bcc7dd81e76fe6f4ea9871703c",
+      "split": "train",
+      "variant": 2
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.013271164988126801,
+        "central_chin": 0.024579147199982332,
+        "eye_left_appearance": 0.11216147522636384,
+        "eye_left_gradient": 0.31784530539942274,
+        "eye_right_appearance": 0.03070400257975906,
+        "eye_right_gradient": 0.13692319612142173,
+        "eyes": 0.0027443509605095235,
+        "inner_face": 0.011461902322208742,
+        "lower_face": 0.015421632012296991,
+        "mouth": 0.013151987152029008,
+        "nose": 0.012723074099775699,
+        "outline": 0.02101376090548808
+      },
+      "source": "verify_bohr_1935.jpg",
+      "source_sha256": "f5f789cae6fe087a79169e38e3ff31c9583592bcc7dd81e76fe6f4ea9871703c",
+      "split": "train",
+      "variant": 3
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.008030209607484014,
+        "central_chin": 0.012686767494106565,
+        "eye_left_appearance": 0.08876845356016044,
+        "eye_left_gradient": 0.23751147389078284,
+        "eye_right_appearance": 0.04374547836325775,
+        "eye_right_gradient": 0.14293370072468248,
+        "eyes": 0.0018315615594178935,
+        "inner_face": 0.006878947309832069,
+        "lower_face": 0.010991221473765344,
+        "mouth": 0.009889021941394342,
+        "nose": 0.005337793935684918,
+        "outline": 0.012508905944723585
+      },
+      "source": "verify_bohr_1935.jpg",
+      "source_sha256": "f5f789cae6fe087a79169e38e3ff31c9583592bcc7dd81e76fe6f4ea9871703c",
+      "split": "train",
+      "variant": 4
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0,
+        "central_chin": 0.0,
+        "eye_left_appearance": 2.2841549305857905e-15,
+        "eye_left_gradient": 7.721014377096349e-16,
+        "eye_right_appearance": 4.0653496802861664e-16,
+        "eye_right_gradient": 5.105354306460744e-16,
+        "eyes": 0.0,
+        "inner_face": 0.0,
+        "lower_face": 0.0,
+        "mouth": 0.0,
+        "nose": 0.0,
+        "outline": 0.0
+      },
+      "source": "verify_curie.jpg",
+      "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+      "split": "train",
+      "variant": 0
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.006752408227248451,
+        "central_chin": 0.029926623949558726,
+        "eye_left_appearance": 0.023386488404218357,
+        "eye_left_gradient": 0.11456525274937363,
+        "eye_right_appearance": 0.09229185510323996,
+        "eye_right_gradient": 0.31806369302300175,
+        "eyes": 0.00210265876149278,
+        "inner_face": 0.006707069447040735,
+        "lower_face": 0.008531484617487324,
+        "mouth": 0.005733287397673476,
+        "nose": 0.004713225463720689,
+        "outline": 0.010985993009492418
+      },
+      "source": "verify_curie.jpg",
+      "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+      "split": "train",
+      "variant": 1
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.011477956223270528,
+        "central_chin": 0.046055047327042575,
+        "eye_left_appearance": 0.14543633434720138,
+        "eye_left_gradient": 0.44131393309494993,
+        "eye_right_appearance": 0.1909705257305863,
+        "eye_right_gradient": 0.5614316474168111,
+        "eyes": 0.0030566032116686945,
+        "inner_face": 0.01097810004102013,
+        "lower_face": 0.01832443914918444,
+        "mouth": 0.013672589331379168,
+        "nose": 0.006833155704466139,
+        "outline": 0.019167574291084517
+      },
+      "source": "verify_curie.jpg",
+      "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+      "split": "train",
+      "variant": 2
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0053263142486653006,
+        "central_chin": 0.02588930798274343,
+        "eye_left_appearance": 0.0657492618544054,
+        "eye_left_gradient": 0.24654678805340816,
+        "eye_right_appearance": 0.10857613879500033,
+        "eye_right_gradient": 0.3627161694039463,
+        "eyes": 0.0017864682399956532,
+        "inner_face": 0.00436152546212331,
+        "lower_face": 0.007179685523965962,
+        "mouth": 0.0031628072248255216,
+        "nose": 0.00349563972372187,
+        "outline": 0.01201970105310658
+      },
+      "source": "verify_curie.jpg",
+      "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+      "split": "train",
+      "variant": 3
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.007315385597409365,
+        "central_chin": 0.023857668692978642,
+        "eye_left_appearance": 0.09488748949029413,
+        "eye_left_gradient": 0.3208826303660683,
+        "eye_right_appearance": 0.20217210271231237,
+        "eye_right_gradient": 0.606249789619453,
+        "eyes": 0.002521110161551016,
+        "inner_face": 0.005979731356402151,
+        "lower_face": 0.00913961019607199,
+        "mouth": 0.005406885622836186,
+        "nose": 0.005067572496025875,
+        "outline": 0.014477278438650392
+      },
+      "source": "verify_curie.jpg",
+      "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+      "split": "train",
+      "variant": 4
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0,
+        "central_chin": 0.0,
+        "eye_left_appearance": 4.264724750940888e-16,
+        "eye_left_gradient": 5.294901614887209e-16,
+        "eye_right_appearance": 2.1133585910312924e-15,
+        "eye_right_gradient": 1.2567892309197063e-15,
+        "eyes": 0.0,
+        "inner_face": 0.0,
+        "lower_face": 0.0,
+        "mouth": 0.0,
+        "nose": 0.0,
+        "outline": 0.0
+      },
+      "source": "verify_einstein_1921.jpg",
+      "source_sha256": "efb248e4bb29aa261e3b5abcd4a3c87c6a532dbda0256dc1b38a54a06d25f05c",
+      "split": "holdout",
+      "variant": 0
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.008866106472038206,
+        "central_chin": 0.02463850846369671,
+        "eye_left_appearance": 0.07929851631285421,
+        "eye_left_gradient": 0.22569121188959254,
+        "eye_right_appearance": 0.10004959635103919,
+        "eye_right_gradient": 0.30720104436289736,
+        "eyes": 0.0028243074975367395,
+        "inner_face": 0.007575166865525645,
+        "lower_face": 0.010840832478136627,
+        "mouth": 0.007039224558267122,
+        "nose": 0.005192418027422676,
+        "outline": 0.015750103220664894
+      },
+      "source": "verify_einstein_1921.jpg",
+      "source_sha256": "efb248e4bb29aa261e3b5abcd4a3c87c6a532dbda0256dc1b38a54a06d25f05c",
+      "split": "holdout",
+      "variant": 1
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.01223308538117208,
+        "central_chin": 0.012009576890152853,
+        "eye_left_appearance": 0.2060491958759183,
+        "eye_left_gradient": 0.43822589827756075,
+        "eye_right_appearance": 0.119684299843937,
+        "eye_right_gradient": 0.2892460497905536,
+        "eyes": 0.0022230772166683317,
+        "inner_face": 0.010436048589709286,
+        "lower_face": 0.01001447510461511,
+        "mouth": 0.009506471498259176,
+        "nose": 0.01060404956957249,
+        "outline": 0.01790187722034462
+      },
+      "source": "verify_einstein_1921.jpg",
+      "source_sha256": "efb248e4bb29aa261e3b5abcd4a3c87c6a532dbda0256dc1b38a54a06d25f05c",
+      "split": "holdout",
+      "variant": 2
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "eyes",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.014008893912217721,
+        "central_chin": 0.03411073797294818,
+        "eye_left_appearance": 0.24742425112083102,
+        "eye_left_gradient": 0.56516922142287,
+        "eye_right_appearance": 0.1414063101350393,
+        "eye_right_gradient": 0.3798093382273966,
+        "eyes": 0.004082391176435764,
+        "inner_face": 0.007649953602008852,
+        "lower_face": 0.011550254409303717,
+        "mouth": 0.004681931643689455,
+        "nose": 0.008190918628979464,
+        "outline": 0.03775526502595127
+      },
+      "source": "verify_einstein_1921.jpg",
+      "source_sha256": "efb248e4bb29aa261e3b5abcd4a3c87c6a532dbda0256dc1b38a54a06d25f05c",
+      "split": "holdout",
+      "variant": 3
+    },
+    {
+      "category": "benign",
+      "exceeded": [
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.011990872278505932,
+        "central_chin": 0.02878928283075699,
+        "eye_left_appearance": 0.18498622964565606,
+        "eye_left_gradient": 0.3967833816373571,
+        "eye_right_appearance": 0.1681291985143323,
+        "eye_right_gradient": 0.40470057669203274,
+        "eyes": 0.002373831705576435,
+        "inner_face": 0.007661433919854931,
+        "lower_face": 0.013368966694758117,
+        "mouth": 0.005944006906366907,
+        "nose": 0.007197000783967202,
+        "outline": 0.028707631279912237
+      },
+      "source": "verify_einstein_1921.jpg",
+      "source_sha256": "efb248e4bb29aa261e3b5abcd4a3c87c6a532dbda0256dc1b38a54a06d25f05c",
+      "split": "holdout",
+      "variant": 4
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.0,
+        "central_chin": 0.0,
+        "eye_left_appearance": 4.61672495195408e-16,
+        "eye_left_gradient": 3.6745435502319063e-16,
+        "eye_right_appearance": 5.686660361872276e-15,
+        "eye_right_gradient": 1.3023625685097606e-15,
+        "eyes": 0.0,
+        "inner_face": 0.0,
+        "lower_face": 0.0,
+        "mouth": 0.0,
+        "nose": 0.0,
+        "outline": 0.0
+      },
+      "source": "verify_now_2024.jpg",
+      "source_sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
+      "split": "train",
+      "variant": 0
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.010154466395952313,
+        "central_chin": 0.016402052708986387,
+        "eye_left_appearance": 0.14284941536163753,
+        "eye_left_gradient": 0.38109803036568435,
+        "eye_right_appearance": 0.30956378474088203,
+        "eye_right_gradient": 0.7253474945869691,
+        "eyes": 0.0016571095217434231,
+        "inner_face": 0.007205005607357105,
+        "lower_face": 0.013220346208723848,
+        "mouth": 0.008701324988251416,
+        "nose": 0.006634908604653041,
+        "outline": 0.020625857073790173
+      },
+      "source": "verify_now_2024.jpg",
+      "source_sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
+      "split": "train",
+      "variant": 1
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.010039546734996718,
+        "central_chin": 0.018133134476368763,
+        "eye_left_appearance": 0.48189181293656425,
+        "eye_left_gradient": 1.1114127229110502,
+        "eye_right_appearance": 0.32076130494254973,
+        "eye_right_gradient": 0.5747772820580815,
+        "eyes": 0.0024695536456057514,
+        "inner_face": 0.008713668412716641,
+        "lower_face": 0.012401650231266664,
+        "mouth": 0.00915057250277136,
+        "nose": 0.008113725123815899,
+        "outline": 0.01567944041895202
+      },
+      "source": "verify_now_2024.jpg",
+      "source_sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
+      "split": "train",
+      "variant": 2
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.009268343785104301,
+        "central_chin": 0.007525703315584688,
+        "eye_left_appearance": 0.40879542389182033,
+        "eye_left_gradient": 1.0821376059717582,
+        "eye_right_appearance": 0.35681594919727955,
+        "eye_right_gradient": 0.7578766587631767,
+        "eyes": 0.0018665726965575024,
+        "inner_face": 0.008267643878747897,
+        "lower_face": 0.010218165036677287,
+        "mouth": 0.00897416100871694,
+        "nose": 0.009225094642511695,
+        "outline": 0.012139512816556468
+      },
+      "source": "verify_now_2024.jpg",
+      "source_sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
+      "split": "train",
+      "variant": 3
+    },
+    {
+      "category": "benign",
+      "exceeded": [],
+      "metrics": {
+        "all68": 0.008310574452302844,
+        "central_chin": 0.007781980470762087,
+        "eye_left_appearance": 0.2524919156524192,
+        "eye_left_gradient": 0.5506675024125031,
+        "eye_right_appearance": 0.38868418245580416,
+        "eye_right_gradient": 0.7366068014318528,
+        "eyes": 0.0014298521278317555,
+        "inner_face": 0.006426076009808808,
+        "lower_face": 0.010314448012127754,
+        "mouth": 0.007757367559229203,
+        "nose": 0.007725405587055,
+        "outline": 0.014203347037600247
+      },
+      "source": "verify_now_2024.jpg",
+      "source_sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
+      "split": "train",
+      "variant": 4
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_gradient",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.025485377026362457,
+        "central_chin": 0.06057413353400715,
+        "eye_left_appearance": 0.4198029356499209,
+        "eye_left_gradient": 1.1840792566235403,
+        "eye_right_appearance": 0.2339440718692469,
+        "eye_right_gradient": 0.7187001864697699,
+        "eyes": 0.0021733016582524273,
+        "inner_face": 0.020332603911366952,
+        "lower_face": 0.04300627955070752,
+        "mouth": 0.03312067250687939,
+        "nose": 0.01261999732419495,
+        "outline": 0.04804514277534432
+      },
+      "source": "pose_center.jpg",
+      "variant": "mouth"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.0366144622641595,
+        "central_chin": 0.0681716267122106,
+        "eye_left_appearance": 0.4391324333072451,
+        "eye_left_gradient": 1.2853209291563465,
+        "eye_right_appearance": 0.434958658099206,
+        "eye_right_gradient": 1.3777601566882647,
+        "eyes": 0.00507244813977121,
+        "inner_face": 0.032669755819790494,
+        "lower_face": 0.05624368448538002,
+        "mouth": 0.05326123335365428,
+        "nose": 0.032248980878703065,
+        "outline": 0.054713617637105375
+      },
+      "source": "pose_center.jpg",
+      "variant": "nose"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.09367497031305493,
+        "central_chin": 0.17121105306538179,
+        "eye_left_appearance": 0.34416722788472537,
+        "eye_left_gradient": 0.9509566191894142,
+        "eye_right_appearance": 0.30528694143939566,
+        "eye_right_gradient": 0.967991759277412,
+        "eyes": 0.0035294904278989465,
+        "inner_face": 0.09445582467151052,
+        "lower_face": 0.17737441664140488,
+        "mouth": 0.18588683062253586,
+        "nose": 0.07315548579697527,
+        "outline": 0.10487744754248893
+      },
+      "source": "pose_center.jpg",
+      "variant": "jaw_chin"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.09907549379082879,
+        "central_chin": 0.1519983851681446,
+        "eye_left_appearance": 0.4996002782593527,
+        "eye_left_gradient": 1.4151710301163698,
+        "eye_right_appearance": 0.34278560384702816,
+        "eye_right_gradient": 1.0717591125985768,
+        "eyes": 0.005470619477464939,
+        "inner_face": 0.10257958116348866,
+        "lower_face": 0.175505759751628,
+        "mouth": 0.19022604907965796,
+        "nose": 0.11808658508988243,
+        "outline": 0.0972841970854356
+      },
+      "source": "pose_center.jpg",
+      "variant": "lower_face"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.09917525686678144,
+        "central_chin": 0.21920572732471974,
+        "eye_left_appearance": 0.5866586567032497,
+        "eye_left_gradient": 1.4701748603042475,
+        "eye_right_appearance": 0.49351532035008083,
+        "eye_right_gradient": 1.5107487176226577,
+        "eyes": 0.00845755041724256,
+        "inner_face": 0.0867241035530972,
+        "lower_face": 0.16607486517236023,
+        "mouth": 0.15009407287704318,
+        "nose": 0.07193017561772608,
+        "outline": 0.1599078268851793
+      },
+      "source": "pose_center.jpg",
+      "variant": "eyes"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.046808726734353996,
+        "central_chin": 0.09481657673451062,
+        "eye_left_appearance": 0.6599493696733787,
+        "eye_left_gradient": 1.5042538268331065,
+        "eye_right_appearance": 0.46416423660073297,
+        "eye_right_gradient": 1.3559636355874112,
+        "eyes": 0.006818932058442348,
+        "inner_face": 0.03149704682155648,
+        "lower_face": 0.055460825555712225,
+        "mouth": 0.0390786929447261,
+        "nose": 0.01579783667010612,
+        "outline": 0.10391780116326789
+      },
+      "source": "pose_center.jpg",
+      "variant": "combined"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "lower_face",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.014334910522738267,
+        "central_chin": 0.03952453752007808,
+        "eye_left_appearance": 0.2280779423197617,
+        "eye_left_gradient": 0.7365207465876042,
+        "eye_right_appearance": 0.04993665738492425,
+        "eye_right_gradient": 0.21985831499767863,
+        "eyes": 0.0016474752524717983,
+        "inner_face": 0.00934813742492045,
+        "lower_face": 0.0229501743576302,
+        "mouth": 0.01357092584708675,
+        "nose": 0.00459889485798352,
+        "outline": 0.03462047689180778
+      },
+      "source": "pose_left.jpg",
+      "variant": "mouth"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.03042344148978454,
+        "central_chin": 0.057496070338605154,
+        "eye_left_appearance": 0.35672659025685965,
+        "eye_left_gradient": 1.0126107042256738,
+        "eye_right_appearance": 0.3017272314767307,
+        "eye_right_gradient": 0.6278249066164743,
+        "eyes": 0.0028068970962151587,
+        "inner_face": 0.026609257657475772,
+        "lower_face": 0.049547690212598174,
+        "mouth": 0.0468087603733289,
+        "nose": 0.020290385630195924,
+        "outline": 0.04731660698926307
+      },
+      "source": "pose_left.jpg",
+      "variant": "nose"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.061756779174262304,
+        "central_chin": 0.13542985404446592,
+        "eye_left_appearance": 0.17456953752882773,
+        "eye_left_gradient": 0.5731444565212064,
+        "eye_right_appearance": 0.20569799905070144,
+        "eye_right_gradient": 0.6284973877661181,
+        "eyes": 0.006798252708456396,
+        "inner_face": 0.060955885067164886,
+        "lower_face": 0.11371836656745345,
+        "mouth": 0.11097008470320022,
+        "nose": 0.053155685592595064,
+        "outline": 0.07730192660919594
+      },
+      "source": "pose_left.jpg",
+      "variant": "jaw_chin"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.10859664632427776,
+        "central_chin": 0.2078383486329544,
+        "eye_left_appearance": 0.27722171317921124,
+        "eye_left_gradient": 0.8581482262136552,
+        "eye_right_appearance": 0.11297370967646256,
+        "eye_right_gradient": 0.3606036494943443,
+        "eyes": 0.010100917595734818,
+        "inner_face": 0.10790613693110519,
+        "lower_face": 0.19249431438738995,
+        "mouth": 0.19614683514845901,
+        "nose": 0.11095342454209467,
+        "outline": 0.12830327068647474
+      },
+      "source": "pose_left.jpg",
+      "variant": "lower_face"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.055884720772694886,
+        "central_chin": 0.1149146138952581,
+        "eye_left_appearance": 0.4545116803459601,
+        "eye_left_gradient": 1.0675594558208186,
+        "eye_right_appearance": 1.0865445666431208,
+        "eye_right_gradient": 1.5972883579189414,
+        "eyes": 0.0038961942352829597,
+        "inner_face": 0.05009118559842918,
+        "lower_face": 0.0907358789324008,
+        "mouth": 0.08519281272061612,
+        "nose": 0.04313870776130499,
+        "outline": 0.0847047548184618
+      },
+      "source": "pose_left.jpg",
+      "variant": "eyes"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.07099862054246167,
+        "central_chin": 0.1403970721304543,
+        "eye_left_appearance": 0.4432733629661047,
+        "eye_left_gradient": 1.027723735172795,
+        "eye_right_appearance": 1.043172346403502,
+        "eye_right_gradient": 1.5349294719438276,
+        "eyes": 0.0055717288515331346,
+        "inner_face": 0.05937647838634871,
+        "lower_face": 0.11310202053725868,
+        "mouth": 0.10137436945997993,
+        "nose": 0.05320936038942707,
+        "outline": 0.12016279884799559
+      },
+      "source": "pose_left.jpg",
+      "variant": "combined"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.01842919758376682,
+        "central_chin": 0.028815925752958244,
+        "eye_left_appearance": 0.2909507068751227,
+        "eye_left_gradient": 0.6456280153306029,
+        "eye_right_appearance": 0.17328815516655166,
+        "eye_right_gradient": 0.2806506432946318,
+        "eyes": 0.0025969765840138746,
+        "inner_face": 0.016073140480345416,
+        "lower_face": 0.029769595924830687,
+        "mouth": 0.02864322344881385,
+        "nose": 0.010885253512233998,
+        "outline": 0.02774609570684506
+      },
+      "source": "pose_right.jpg",
+      "variant": "mouth"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.028489478593384007,
+        "central_chin": 0.06783696147490909,
+        "eye_left_appearance": 0.6991000164507037,
+        "eye_left_gradient": 2.1423753621435306,
+        "eye_right_appearance": 0.39503213856976455,
+        "eye_right_gradient": 0.7891235592528851,
+        "eyes": 0.006787465267038224,
+        "inner_face": 0.025941372145531823,
+        "lower_face": 0.04591377918282392,
+        "mouth": 0.04001960131251121,
+        "nose": 0.02020118515782328,
+        "outline": 0.04352713723036008
+      },
+      "source": "pose_right.jpg",
+      "variant": "nose"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.07968517021844299,
+        "central_chin": 0.17108518013166232,
+        "eye_left_appearance": 0.5669672535493889,
+        "eye_left_gradient": 1.3059475477152658,
+        "eye_right_appearance": 0.35472012382051227,
+        "eye_right_gradient": 0.6214193934919674,
+        "eyes": 0.0036835036200379687,
+        "inner_face": 0.07386534348107349,
+        "lower_face": 0.14978387036624682,
+        "mouth": 0.1465682779891196,
+        "nose": 0.04349724249135126,
+        "outline": 0.11430109219242011
+      },
+      "source": "pose_right.jpg",
+      "variant": "jaw_chin"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.07650657700090344,
+        "central_chin": 0.08650598476575251,
+        "eye_left_appearance": 0.46660342611975436,
+        "eye_left_gradient": 1.0638151551867672,
+        "eye_right_appearance": 0.8074381182220617,
+        "eye_right_gradient": 2.0822276719149255,
+        "eyes": 0.004929561599336816,
+        "inner_face": 0.0793911293252347,
+        "lower_face": 0.13021659979398692,
+        "mouth": 0.14804563624277048,
+        "nose": 0.08767642742397376,
+        "outline": 0.06910848275270694
+      },
+      "source": "pose_right.jpg",
+      "variant": "lower_face"
+    },
+    {
+      "category": "controlled_drift",
+      "error": "unmeasurable eye contrast or light shift",
+      "source": "pose_right.jpg",
+      "variant": "eyes"
+    },
+    {
+      "category": "controlled_drift",
+      "error": "unmeasurable eye contrast or light shift",
+      "source": "pose_right.jpg",
+      "variant": "combined"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "lower_face",
+        "mouth"
+      ],
+      "metrics": {
+        "all68": 0.01277017531337827,
+        "central_chin": 0.01606183802799077,
+        "eye_left_appearance": 0.0364438663334708,
+        "eye_left_gradient": 0.1246881346782996,
+        "eye_right_appearance": 0.04310430238929984,
+        "eye_right_gradient": 0.12419316934122143,
+        "eyes": 0.001545640121352006,
+        "inner_face": 0.010624360295608572,
+        "lower_face": 0.022016466028920257,
+        "mouth": 0.02110244825556441,
+        "nose": 0.004200197453538282,
+        "outline": 0.020167175260637174
+      },
+      "source": "verify_bohr_1935.jpg",
+      "variant": "mouth"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.025642507054467616,
+        "central_chin": 0.05294730741067575,
+        "eye_left_appearance": 0.19646375986283096,
+        "eye_left_gradient": 0.4879558453665718,
+        "eye_right_appearance": 0.1631165955295281,
+        "eye_right_gradient": 0.39110337851004134,
+        "eyes": 0.002741934242049968,
+        "inner_face": 0.021710538719955208,
+        "lower_face": 0.03909344796848279,
+        "mouth": 0.03423373847533219,
+        "nose": 0.019394475409099794,
+        "outline": 0.042950783003426134
+      },
+      "source": "verify_bohr_1935.jpg",
+      "variant": "nose"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.08309931895046976,
+        "central_chin": 0.1587068875578169,
+        "eye_left_appearance": 0.06451658715532026,
+        "eye_left_gradient": 0.2113614995318597,
+        "eye_right_appearance": 0.10214995867530657,
+        "eye_right_gradient": 0.26107822470077835,
+        "eyes": 0.003914797118687284,
+        "inner_face": 0.08273843095158052,
+        "lower_face": 0.16001057694476586,
+        "mouth": 0.1683892156539284,
+        "nose": 0.05472376789872199,
+        "outline": 0.09758818117176742
+      },
+      "source": "verify_bohr_1935.jpg",
+      "variant": "jaw_chin"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.09620614819699003,
+        "central_chin": 0.16704245481139424,
+        "eye_left_appearance": 0.11539793961903697,
+        "eye_left_gradient": 0.2987400754386698,
+        "eye_right_appearance": 0.1343544366289745,
+        "eye_right_gradient": 0.32983342504224733,
+        "eyes": 0.00580743169618887,
+        "inner_face": 0.09726077298579636,
+        "lower_face": 0.17064963455715562,
+        "mouth": 0.1809089896997212,
+        "nose": 0.10509881139326613,
+        "outline": 0.10535668827038241
+      },
+      "source": "verify_bohr_1935.jpg",
+      "variant": "lower_face"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_gradient",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.10890366724617587,
+        "central_chin": 0.23683315654829343,
+        "eye_left_appearance": 0.43523282574748784,
+        "eye_left_gradient": 1.1255851884807055,
+        "eye_right_appearance": 0.3412918788050431,
+        "eye_right_gradient": 0.7985971988912939,
+        "eyes": 0.008978985710179717,
+        "inner_face": 0.09457668217227372,
+        "lower_face": 0.17749021214355779,
+        "mouth": 0.1578827123256536,
+        "nose": 0.07055866932337282,
+        "outline": 0.1769887061812975
+      },
+      "source": "verify_bohr_1935.jpg",
+      "variant": "eyes"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.06317744658699119,
+        "central_chin": 0.18586755295322485,
+        "eye_left_appearance": 0.39861233655159173,
+        "eye_left_gradient": 1.0210253759038985,
+        "eye_right_appearance": 0.3910269458505755,
+        "eye_right_gradient": 0.9097384534082754,
+        "eyes": 0.006786375419884835,
+        "inner_face": 0.042155190139000674,
+        "lower_face": 0.08567523783211087,
+        "mouth": 0.046654929088818166,
+        "nose": 0.017435539631338492,
+        "outline": 0.15160522113347288
+      },
+      "source": "verify_bohr_1935.jpg",
+      "variant": "combined"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "mouth"
+      ],
+      "metrics": {
+        "all68": 0.011362838443640154,
+        "central_chin": 0.011422688227251473,
+        "eye_left_appearance": 0.0581484340815629,
+        "eye_left_gradient": 0.21581189940302684,
+        "eye_right_appearance": 0.053947060673040254,
+        "eye_right_gradient": 0.16830999737554378,
+        "eyes": 0.0009655680490636169,
+        "inner_face": 0.009696062609722686,
+        "lower_face": 0.0200916789800798,
+        "mouth": 0.019836099435246585,
+        "nose": 0.006107077561418101,
+        "outline": 0.016667864583779994
+      },
+      "source": "verify_curie.jpg",
+      "variant": "mouth"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_gradient",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.02767594472508947,
+        "central_chin": 0.05806114918855248,
+        "eye_left_appearance": 0.21613648606167002,
+        "eye_left_gradient": 0.7206302307164179,
+        "eye_right_appearance": 0.33172250193066016,
+        "eye_right_gradient": 1.0275908610656106,
+        "eyes": 0.0026616427529303453,
+        "inner_face": 0.023513125665521623,
+        "lower_face": 0.04233911660865958,
+        "mouth": 0.037429802641801777,
+        "nose": 0.02181595489049231,
+        "outline": 0.046261111937269006
+      },
+      "source": "verify_curie.jpg",
+      "variant": "nose"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.07781676516478905,
+        "central_chin": 0.14109574706587455,
+        "eye_left_appearance": 0.09951783795294823,
+        "eye_left_gradient": 0.3577553901513501,
+        "eye_right_appearance": 0.11370227305894079,
+        "eye_right_gradient": 0.34491308362480955,
+        "eyes": 0.0024775474304780374,
+        "inner_face": 0.07761068875984999,
+        "lower_face": 0.15444445403977375,
+        "mouth": 0.16391810483710528,
+        "nose": 0.041471972584156996,
+        "outline": 0.08963823996302227
+      },
+      "source": "verify_curie.jpg",
+      "variant": "jaw_chin"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.08156421767358318,
+        "central_chin": 0.0846751630122794,
+        "eye_left_appearance": 0.14087073817031337,
+        "eye_left_gradient": 0.49678217861357954,
+        "eye_right_appearance": 0.24903627330912242,
+        "eye_right_gradient": 0.7554380962324218,
+        "eyes": 0.005002217286303015,
+        "inner_face": 0.0850134630081425,
+        "lower_face": 0.14295196231930601,
+        "mouth": 0.1637628366922527,
+        "nose": 0.09608363066674866,
+        "outline": 0.0711567816706353
+      },
+      "source": "verify_curie.jpg",
+      "variant": "lower_face"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.10168529192985244,
+        "central_chin": 0.21776477666974645,
+        "eye_left_appearance": 0.47469337176624027,
+        "eye_left_gradient": 1.1788082083036864,
+        "eye_right_appearance": 0.6138976249099002,
+        "eye_right_gradient": 1.5542028908291445,
+        "eyes": 0.00977499103845229,
+        "inner_face": 0.08658392467839879,
+        "lower_face": 0.16155927316943225,
+        "mouth": 0.1424105013617951,
+        "nose": 0.0664193577718723,
+        "outline": 0.1701389558003336
+      },
+      "source": "verify_curie.jpg",
+      "variant": "eyes"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.061725390788952,
+        "central_chin": 0.18636202108262379,
+        "eye_left_appearance": 0.5012894207789531,
+        "eye_left_gradient": 1.196883321410877,
+        "eye_right_appearance": 0.6088407133920289,
+        "eye_right_gradient": 1.4752548984441103,
+        "eyes": 0.009289714285957184,
+        "inner_face": 0.03925507800076436,
+        "lower_face": 0.07692801567416559,
+        "mouth": 0.038260226633207814,
+        "nose": 0.019436514219206856,
+        "outline": 0.15509637793266662
+      },
+      "source": "verify_curie.jpg",
+      "variant": "combined"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.011810451681205529,
+        "central_chin": 0.009796500216186292,
+        "eye_left_appearance": 0.04182531067439714,
+        "eye_left_gradient": 0.10218199319406569,
+        "eye_right_appearance": 0.06905930194464938,
+        "eye_right_gradient": 0.18311732490458096,
+        "eyes": 0.001116489012861375,
+        "inner_face": 0.006742650908887377,
+        "lower_face": 0.01567022432576212,
+        "mouth": 0.0126193248472392,
+        "nose": 0.003801555450666295,
+        "outline": 0.02755276858180097
+      },
+      "source": "verify_einstein_1921.jpg",
+      "variant": "mouth"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.03539814270635797,
+        "central_chin": 0.07552908852180806,
+        "eye_left_appearance": 0.29239849581586447,
+        "eye_left_gradient": 0.6361029697531678,
+        "eye_right_appearance": 0.26590149673348246,
+        "eye_right_gradient": 0.6908774774029345,
+        "eyes": 0.00541201571194995,
+        "inner_face": 0.03261300368403098,
+        "lower_face": 0.05570518843314224,
+        "mouth": 0.05026122160757248,
+        "nose": 0.03107951872542368,
+        "outline": 0.05132698650941727
+      },
+      "source": "verify_einstein_1921.jpg",
+      "variant": "nose"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.07180826889973975,
+        "central_chin": 0.1451845960500747,
+        "eye_left_appearance": 0.20147834061892622,
+        "eye_left_gradient": 0.45077780583018123,
+        "eye_right_appearance": 0.06960786099125926,
+        "eye_right_gradient": 0.19370887813758278,
+        "eyes": 0.0017709539012839143,
+        "inner_face": 0.07101601669382081,
+        "lower_face": 0.14133732583177816,
+        "mouth": 0.1480751108993453,
+        "nose": 0.03729412833508087,
+        "outline": 0.08727359834507077
+      },
+      "source": "verify_einstein_1921.jpg",
+      "variant": "jaw_chin"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.0900609913794671,
+        "central_chin": 0.1180994872896501,
+        "eye_left_appearance": 0.2363752970950456,
+        "eye_left_gradient": 0.5093791822385555,
+        "eye_right_appearance": 0.1439688006999763,
+        "eye_right_gradient": 0.3634963316448976,
+        "eyes": 0.005859338577033962,
+        "inner_face": 0.09409942554233844,
+        "lower_face": 0.15708373682916674,
+        "mouth": 0.1783896571607441,
+        "nose": 0.10968128304058475,
+        "outline": 0.08218099390508454
+      },
+      "source": "verify_einstein_1921.jpg",
+      "variant": "lower_face"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.1031319597730863,
+        "central_chin": 0.20633380066522888,
+        "eye_left_appearance": 0.5169309256178761,
+        "eye_left_gradient": 1.1714751873052653,
+        "eye_right_appearance": 0.5486745592575626,
+        "eye_right_gradient": 1.610114951430138,
+        "eyes": 0.01065279487102768,
+        "inner_face": 0.09191275361961557,
+        "lower_face": 0.16594600129179565,
+        "mouth": 0.15002785938448174,
+        "nose": 0.07464746810408511,
+        "outline": 0.1569815277121361
+      },
+      "source": "verify_einstein_1921.jpg",
+      "variant": "eyes"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.053857778797742395,
+        "central_chin": 0.14514185622269646,
+        "eye_left_appearance": 0.544347061062696,
+        "eye_left_gradient": 1.1566508898812402,
+        "eye_right_appearance": 0.5769129440135019,
+        "eye_right_gradient": 1.675014907005359,
+        "eyes": 0.008442756212238724,
+        "inner_face": 0.03793618069199831,
+        "lower_face": 0.06927065159038705,
+        "mouth": 0.03581988293375764,
+        "nose": 0.025511867955531207,
+        "outline": 0.12054122173803898
+      },
+      "source": "verify_einstein_1921.jpg",
+      "variant": "combined"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "lower_face",
+        "mouth"
+      ],
+      "metrics": {
+        "all68": 0.01536769278003041,
+        "central_chin": 0.011572824702758625,
+        "eye_left_appearance": 0.32378047858201814,
+        "eye_left_gradient": 0.7354169715396769,
+        "eye_right_appearance": 0.2916509075404376,
+        "eye_right_gradient": 0.553555686900533,
+        "eyes": 0.0022310009603326996,
+        "inner_face": 0.013534388825501072,
+        "lower_face": 0.02370008705421235,
+        "mouth": 0.02391505426564655,
+        "nose": 0.006997474595234865,
+        "outline": 0.020521446269016804
+      },
+      "source": "verify_now_2024.jpg",
+      "variant": "mouth"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.031466504744291565,
+        "central_chin": 0.0601913607113729,
+        "eye_left_appearance": 0.4813499278504816,
+        "eye_left_gradient": 1.2756015916081234,
+        "eye_right_appearance": 0.5413480722716446,
+        "eye_right_gradient": 1.2123097442497843,
+        "eyes": 0.005114667906614381,
+        "inner_face": 0.026794495009021112,
+        "lower_face": 0.047148066147973504,
+        "mouth": 0.040659505265053554,
+        "nose": 0.024954475476846497,
+        "outline": 0.051376098485812066
+      },
+      "source": "verify_now_2024.jpg",
+      "variant": "nose"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.06264680179387995,
+        "central_chin": 0.1626244910493374,
+        "eye_left_appearance": 0.32210457479548454,
+        "eye_left_gradient": 0.7501082466243987,
+        "eye_right_appearance": 0.42332016133873196,
+        "eye_right_gradient": 0.8372645932324475,
+        "eyes": 0.002056001860559017,
+        "inner_face": 0.05971800276776308,
+        "lower_face": 0.12769378764092681,
+        "mouth": 0.12381536135699603,
+        "nose": 0.016636960457499846,
+        "outline": 0.0895931673925083
+      },
+      "source": "verify_now_2024.jpg",
+      "variant": "jaw_chin"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.0835635416301164,
+        "central_chin": 0.10173581643406242,
+        "eye_left_appearance": 0.41752999417954906,
+        "eye_left_gradient": 0.9314760622442254,
+        "eye_right_appearance": 0.5961492096153097,
+        "eye_right_gradient": 1.2096386867445759,
+        "eyes": 0.004111652814269677,
+        "inner_face": 0.08859663305066609,
+        "lower_face": 0.14780237174432634,
+        "mouth": 0.16958113942615538,
+        "nose": 0.09720701414349568,
+        "outline": 0.07078294678906669
+      },
+      "source": "verify_now_2024.jpg",
+      "variant": "lower_face"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.11792818352544635,
+        "central_chin": 0.26021706936750877,
+        "eye_left_appearance": 0.5967347475771007,
+        "eye_left_gradient": 1.7716944045176013,
+        "eye_right_appearance": 0.7837794961868292,
+        "eye_right_gradient": 2.3507950875760177,
+        "eyes": 0.009035659037015137,
+        "inner_face": 0.09888485477710185,
+        "lower_face": 0.18798634089058222,
+        "mouth": 0.15990859431802626,
+        "nose": 0.07612749875310594,
+        "outline": 0.20352856058055172
+      },
+      "source": "verify_now_2024.jpg",
+      "variant": "eyes"
+    },
+    {
+      "category": "controlled_drift",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_left_appearance",
+        "eye_left_gradient",
+        "eye_right_appearance",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.07157772683947312,
+        "central_chin": 0.22490605615306444,
+        "eye_left_appearance": 0.5825003138925733,
+        "eye_left_gradient": 1.7601172621812178,
+        "eye_right_appearance": 0.7209139582286979,
+        "eye_right_gradient": 1.8945257251901024,
+        "eyes": 0.008419043093282933,
+        "inner_face": 0.04525890145618499,
+        "lower_face": 0.09857664690828469,
+        "mouth": 0.04751425358307047,
+        "nose": 0.019230601977129273,
+        "outline": 0.1822366420534927
+      },
+      "source": "verify_now_2024.jpg",
+      "variant": "combined"
+    },
+    {
+      "candidate": "verify_curie.jpg",
+      "category": "cross_person",
+      "error": "unmeasurable eye contrast or light shift",
+      "source": "verify_now_2024.jpg"
+    },
+    {
+      "candidate": "verify_einstein_1921.jpg",
+      "category": "cross_person",
+      "error": "unmeasurable eye contrast or light shift",
+      "source": "pose_center.jpg"
+    },
+    {
+      "candidate_sha256": "a0ebf263ac967e7ae2b6444895a53b8bad022d223bd0b788672ffb37250a3cf2",
+      "category": "human_rejected_generated",
+      "exceeded": [
+        "all68",
+        "central_chin",
+        "eye_right_gradient",
+        "eyes",
+        "inner_face",
+        "lower_face",
+        "mouth",
+        "nose",
+        "outline"
+      ],
+      "metrics": {
+        "all68": 0.053860717639106104,
+        "central_chin": 0.13633735676922376,
+        "eye_left_appearance": 0.37663134742464366,
+        "eye_left_gradient": 0.8268670484761701,
+        "eye_right_appearance": 0.28561905311920516,
+        "eye_right_gradient": 0.905866281909291,
+        "eyes": 0.0034345049147700315,
+        "inner_face": 0.04089482554295204,
+        "lower_face": 0.07213367743996212,
+        "mouth": 0.055732439166699364,
+        "nose": 0.025528327216045414,
+        "outline": 0.10960119355573392
+      },
+      "recognition_cosine": 0.7857398986816406,
+      "source_sha256": "bbfe9b30c1ce42ab2faaaf8ad197956325eab068d177c2a563d2b089742760c2"
+    }
+  ],
+  "human_approved_generated_positives": 0,
+  "limitations": [
+    "Diagnostic envelope failed held-out benign validation; not a production gate.",
+    "Four poses/photos in holdout represent two identities, not four independent people.",
+    "Two cross-person eye appearance measurements were unavailable, not measured rejections.",
+    "Controlled drifts are known synthetic perturbations, not human-labelled generated positives.",
+    "The private delivered attachment is not an exact Stage-1 replay input."
+  ],
+  "limits": {
+    "all68": 0.015576496270521108,
+    "central_chin": 0.046055047327042575,
+    "eye_left_appearance": 0.48189181293656425,
+    "eye_left_gradient": 1.1114127229110502,
+    "eye_right_appearance": 0.38868418245580416,
+    "eye_right_gradient": 0.7578766587631767,
+    "eyes": 0.0030566032116686945,
+    "inner_face": 0.013655482180503045,
+    "lower_face": 0.02174287701563723,
+    "mouth": 0.01975988080973768,
+    "nose": 0.012723074099775699,
+    "outline": 0.023128849792246726
+  },
+  "model_sha256": {
+    "mobileface.onnx": "38b148284dd48cc898d5d4453104252fbdcbacc105fe3f0b80e78954d9d20d89",
+    "pipnet.onnx": "63fa56fd4b8f6ccc4b88f2b36e00fa3d8c21a2c4244ab9381e8b432cef35197b",
+    "yunet.onnx": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+  },
+  "opencv": "4.10.0",
+  "production_ready": false
+}
