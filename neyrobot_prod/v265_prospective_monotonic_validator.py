@@ -605,6 +605,33 @@ def _worker() -> None:
         )
 
 
+def _emit_compact_saved_visual() -> None:
+    """Read-only post-validation visual dump; zero model/generation/transfer calls."""
+    from PIL import Image
+
+    sentinel = _ROOT / ".compact_visual_emitted"
+    source = _ROOT / "08_visual_comparison.jpg"
+    if sentinel.exists() or not source.exists():
+        return
+    with Image.open(source) as im:
+        vis = im.convert("RGB")
+        vis.thumbnail((660, 405), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        vis.save(out, format="JPEG", quality=28, optimize=True)
+        raw = out.getvalue()
+    _save("09_visual_compact.jpg", raw)
+    encoded = base64.b64encode(raw).decode("ascii")
+    chunks = [encoded[i:i + 2800] for i in range(0, len(encoded), 2800)]
+    _emit(
+        f"AI_SELFIE_V265_PROSPECTIVE_COMPACT_VISUAL_BEGIN chunks={len(chunks)} bytes={len(raw)} "
+        f"sha256={hashlib.sha256(raw).hexdigest()} generation_calls=0 transfer_calls=0"
+    )
+    for idx, chunk in enumerate(chunks, 1):
+        _emit(f"AI_SELFIE_V265_PROSPECTIVE_COMPACT_VISUAL chunk={idx}/{len(chunks)} data={chunk}")
+    _emit("AI_SELFIE_V265_PROSPECTIVE_COMPACT_VISUAL_END")
+    sentinel.write_text("done", encoding="utf-8")
+
+
 def start_once() -> None:
     global _STARTED
     if _STARTED or not _flag():
@@ -613,6 +640,11 @@ def start_once() -> None:
     state = _read_state()
     if state.get("status") == "completed":
         _emit("AI_SELFIE_V265_PROSPECTIVE status=skipped reason=completed_sentinel")
+        threading.Thread(
+            target=_emit_compact_saved_visual,
+            daemon=True,
+            name="v265-prospective-compact-visual",
+        ).start()
         return
     if state.get("gemini_started") and not (_ROOT / "02_stage1_exact.png").exists():
         _emit(
