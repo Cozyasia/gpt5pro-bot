@@ -1,0 +1,50 @@
+{
+  "generator": "built-in ImageGen; NOT production Gemini",
+  "normalized_size": [
+    1856,
+    2304
+  ],
+  "resize": "one Lanczos4 normalization; original generator pixels not native 2K",
+  "upstream_commit": "df87c6531f4d1bdad665882d42d658590e724ea4",
+  "files": {
+    "case01_source.jpg": {
+      "sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
+      "source_url": "https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source/verify_now_2024.jpg"
+    },
+    "case01_stage1.png": {
+      "sha256": "d8099f5b056d41082764f6f9a30e51fb39b0f0407b981afd4fcb85b95638d21d",
+      "source_url": null
+    },
+    "case02_source.jpg": {
+      "sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+      "source_url": "https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source/pose_center.jpg"
+    },
+    "case02_stage1.png": {
+      "sha256": "c0ebef9ddc17fb8b7ff08c47ca79991a0d27e56c43f5d1d786ef94054b5b8a5b",
+      "source_url": null
+    },
+    "case03_source.jpg": {
+      "sha256": "efb248e4bb29aa261e3b5abcd4a3c87c6a532dbda0256dc1b38a54a06d25f05c",
+      "source_url": "https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source/verify_einstein_1921.jpg"
+    },
+    "case03_stage1.png": {
+      "sha256": "961690446a2f6a2ef3129b786f976172ff91491ea67782dddfc2991db552c1bb",
+      "source_url": null
+    },
+    "case04_source.jpg": {
+      "sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+      "source_url": "https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source/verify_curie.jpg"
+    },
+    "case04_stage1.png": {
+      "sha256": "124dbe21fddc74428afa90aaa785925ca1748a60f485fff1162ac1b0ab405673",
+      "source_url": null
+    }
+  },
+  "eligible_cases": [
+    "case01",
+    "case02",
+    "case04"
+  ],
+  "ineligible_case03": "Unmodified source native face short 318.9 < 320; guard preserved. No upscale bypass.",
+  "human_approved": false
+}

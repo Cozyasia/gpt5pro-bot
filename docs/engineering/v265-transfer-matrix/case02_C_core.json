@@ -1,0 +1,124 @@
+{
+  "case": "case02",
+  "cgroup_after": [
+    1843871744,
+    15032385536,
+    346525696,
+    947429376
+  ],
+  "cgroup_before": [
+    1778200576,
+    15032385536,
+    298655744,
+    928411648
+  ],
+  "daemon_context": true,
+  "decision": "standard",
+  "dimensions": [
+    1856,
+    2304
+  ],
+  "elapsed_s": 8.27785303499968,
+  "generated_by": "ImageGen, not production Gemini",
+  "inspection_candidate": "standard",
+  "mask_coverage": {
+    "chin": 3,
+    "jaw": 17,
+    "lip": 20
+  },
+  "mode": "C_core",
+  "peak_rss_kib": 406444,
+  "pid_stable": true,
+  "results": [
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.012100592035977353,
+        "identity_similarity_cosine": 0.8552160859107971,
+        "inner_face_landmark_nme": 0.01995105668902397,
+        "interocular_ratio_delta": 0.0036324244248349125,
+        "left_eye_error": 0.01552543230354786,
+        "max_dense_shift_normalized": 0.018728229033158232,
+        "nose_mouth_axis_delta": 0.01748546212911606,
+        "right_eye_error": 0.013043896295130253,
+        "similarity_rms_normalized": 0.018031912096222756,
+        "source_face_short": 823.5021362304688,
+        "target_face_short": 610.4558715820312
+      },
+      "morphology": {
+        "all68": 0.034340445360533295,
+        "central_chin": 0.0288090145952066,
+        "eyes": 0.005524694231054617,
+        "inner_face": 0.021213344139547348,
+        "lower_face": 0.042478226364777744,
+        "mouth": 0.029295491772027928,
+        "nose": 0.020799062743761042,
+        "outline": 0.07506216145684279
+      },
+      "neck_sample_unchanged": true,
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "path": "standard",
+      "peak_rss_kib": 399712,
+      "person_b_unchanged": true,
+      "phase": "pre_ocular",
+      "png_sha256": "236911c31716610357d1dff7fc2582db1d2bf6752a0aa49a4533a3e3a011924d",
+      "pose_proxy": {
+        "mouth_aperture_proxy": 0.009297262877225876,
+        "nose_offset_proxy": -0.009838125668466091,
+        "roll_deg": 10.072944641113281
+      },
+      "roll_delta_deg": 0.42237377166748047,
+      "target_pose_proxy": {
+        "mouth_aperture_proxy": 0.01057184487581253,
+        "nose_offset_proxy": -0.0016847854712978005,
+        "roll_deg": 9.6505708694458
+      }
+    },
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.0032252303617781863,
+        "identity_similarity_cosine": 0.8577855825424194,
+        "inner_face_landmark_nme": 0.02264541946351528,
+        "interocular_ratio_delta": 0.0066292581562305,
+        "left_eye_error": 0.0177206639200449,
+        "max_dense_shift_normalized": 0.0100843906401396,
+        "nose_mouth_axis_delta": 0.016131602227687836,
+        "right_eye_error": 0.013928227126598358,
+        "similarity_rms_normalized": 0.018031912096222756,
+        "source_face_short": 823.5021362304688,
+        "target_face_short": 610.4558715820312
+      },
+      "morphology": {
+        "all68": 0.033415616302030715,
+        "central_chin": 0.027904858855105005,
+        "eyes": 0.006352171981929747,
+        "inner_face": 0.020638734342524608,
+        "lower_face": 0.04042382472527488,
+        "mouth": 0.027416802046574616,
+        "nose": 0.017656389683883843,
+        "outline": 0.07302851944747497
+      },
+      "neck_sample_unchanged": true,
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "path": "strict",
+      "peak_rss_kib": 406444,
+      "person_b_unchanged": true,
+      "phase": "pre_ocular",
+      "png_sha256": "e9fc041e77f53b8a9f97d59de8412725d290ec7130d8c578d037bf433f90d6e3",
+      "pose_proxy": {
+        "mouth_aperture_proxy": 0.009453251026570797,
+        "nose_offset_proxy": -0.015623255632817745,
+        "roll_deg": 10.011587142944336
+      },
+      "roll_delta_deg": 0.36101627349853516,
+      "target_pose_proxy": {
+        "mouth_aperture_proxy": 0.01057184487581253,
+        "nose_offset_proxy": -0.0016847854712978005,
+        "roll_deg": 9.6505708694458
+      }
+    }
+  ],
+  "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+  "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b"
+}
