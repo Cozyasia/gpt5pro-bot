@@ -56,6 +56,17 @@ if _production_hardening_enabled():
             flush=True,
         )
 
+# Temporary prospective validator. Completely inert unless explicitly armed in Render.
+if _production_hardening_enabled() and str(os.environ.get("V265_PROSPECTIVE_VALIDATION") or "").strip().lower() in {"1", "true", "yes", "on"}:
+    try:
+        from neyrobot_prod.v265_prospective_monotonic_validator import start_once as _start_v265_prospective
+        _start_v265_prospective()
+    except Exception as _v265_prospective_exc:
+        print(
+            f"[neyrobot-prod] V265 prospective validator warning: {type(_v265_prospective_exc).__name__}: {_v265_prospective_exc}",
+            flush=True,
+        )
+
 # Retouch is a separate UX feature, not an AI-selfie generation owner.
 try:
     from neyrobot_prod import retouch_v261_batch as _retouch_v261_module
