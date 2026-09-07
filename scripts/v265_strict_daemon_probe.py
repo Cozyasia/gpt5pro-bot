@@ -20,6 +20,9 @@ print(
 )
 from neyrobot_prod import v265_strict_runtime_safety as safety
 safety.install()
+if expect_block:
+    from scripts.v265_pressure_fixture import arm_measured_pressure
+    arm_measured_pressure()
 
 finished = threading.Event()
 error: list[BaseException] = []

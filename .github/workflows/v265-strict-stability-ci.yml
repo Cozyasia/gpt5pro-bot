@@ -11,6 +11,7 @@ on:
       - "scripts/v265_strict_stability_probe.py"
       - "scripts/v265_strict_pressure_probe.py"
       - "scripts/v265_strict_daemon_probe.py"
+      - "scripts/v265_pressure_fixture.py"
       - ".github/workflows/v265-strict-stability-ci.yml"
   workflow_dispatch:
 

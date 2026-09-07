@@ -65,3 +65,7 @@ Run `python -m scripts.v265_matrix_prepare --case case01 --models /tmp/models --
 `human_comparison.jpg`: three rows, Source / A baseline / B mask+planar / C mask+frequency. Separate `case*_all_variants.jpg` include Stage-1, A-E crops and full scenes. No images have human acceptance labels. Required feedback is which candidate preserves this exact source face, and whether pose, seams or pasted-face appearance make any candidate unacceptable.
 
 **Production blockers:** case01 jaw/chin regression; remaining morphology/iris stress misses; pose/expression and photorealism labels; source-relative silhouette/hairline semantics; production daemon baseline headroom; actual production-provider validation. Manual Telegram retest remains NO.
+
+### Measured-pressure correction after Strict34
+
+Model preloading increased reclaimable cache and reduced retained download buffers. Consequently even208MiB ballast left145-154MiB effective headroom, and the real guard correctly allowed completion. Fixed ballast is not an assertion about available memory. The CI pressure fixture now adds real resident4MiB chunks **at strict entry** until measured headroom reaches32MiB, then calls the unchanged64MiB production guard and requires its own controlled-block exception. No cgroup readings or production thresholds are mocked/changed. The no-pressure tests still require complete standard/strict execution. Earlier Strict33/34 failures are retained as evidence, not concealed by accepting either outcome.
