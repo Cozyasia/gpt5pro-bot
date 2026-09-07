@@ -1,4 +1,5 @@
 name: V265 Strict Stability CI
+# This production-size suite is part of the V265 cleanup acceptance gate.
 
 on:
   pull_request:
