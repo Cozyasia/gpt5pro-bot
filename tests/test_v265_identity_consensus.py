@@ -11,7 +11,6 @@ from neyrobot_prod.v265_identity_consensus import (
     source_fidelity_decision,
 )
 
-
 # Non-identifying scalar calibration captured from the visually rejected 2026-09-07
 # V265 manual result after normalizing PIPNet-68 by source/candidate eye line.
 SOURCE_SELF_ENVELOPE = SourceSelfEnvelope(
@@ -55,7 +54,9 @@ class V265IdentityConsensusAnalysisTests(unittest.TestCase):
             central_chin=SOURCE_SELF_ENVELOPE.central_chin * 1.25,
         )
         self.assertTrue(
-            source_fidelity_decision(candidate, SOURCE_SELF_ENVELOPE, multiplier=2.0).passed
+            source_fidelity_decision(
+                candidate, SOURCE_SELF_ENVELOPE, multiplier=2.0
+            ).passed
         )
 
     def test_one_regional_excursion_alone_is_not_enough(self) -> None:
@@ -67,7 +68,9 @@ class V265IdentityConsensusAnalysisTests(unittest.TestCase):
             central_chin=SOURCE_SELF_ENVELOPE.central_chin,
         )
         self.assertTrue(
-            source_fidelity_decision(candidate, SOURCE_SELF_ENVELOPE, multiplier=2.0).passed
+            source_fidelity_decision(
+                candidate, SOURCE_SELF_ENVELOPE, multiplier=2.0
+            ).passed
         )
 
     def test_foreign_like_shape_is_rejected(self) -> None:
@@ -79,7 +82,9 @@ class V265IdentityConsensusAnalysisTests(unittest.TestCase):
             central_chin=0.105331961510219,
         )
         self.assertFalse(
-            source_fidelity_decision(foreign, SOURCE_SELF_ENVELOPE, multiplier=2.0).passed
+            source_fidelity_decision(
+                foreign, SOURCE_SELF_ENVELOPE, multiplier=2.0
+            ).passed
         )
 
     def test_recognition_consensus_is_diagnostic_not_a_hidden_threshold(self) -> None:
@@ -90,8 +95,49 @@ class V265IdentityConsensusAnalysisTests(unittest.TestCase):
             arcface_yunet=0.7093989849,
         )
         self.assertAlmostEqual(summary["consensus_min"], 0.7093989849, places=8)
-        source = inspect.getsource(recognition_consensus_summary)
-        self.assertNotIn("threshold", source.lower())
+        self.assertAlmostEqual(
+            summary["consensus_mean"],
+            (0.7857398987 + 0.7425787449 + 0.7306643724 + 0.7093989849) / 4,
+            places=8,
+        )
+        self.assertEqual(
+            set(summary),
+            {
+                "mobile_pipnet",
+                "mobile_yunet",
+                "arcface_pipnet",
+                "arcface_yunet",
+                "consensus_min",
+                "consensus_mean",
+            },
+        )
+        for value in (-0.5, 0.0, 0.99):
+            scores = recognition_consensus_summary(
+                mobile_pipnet=value,
+                mobile_yunet=value,
+                arcface_pipnet=value,
+                arcface_yunet=value,
+            )
+            self.assertAlmostEqual(scores["consensus_mean"], value)
+
+    def test_invalid_measurements_never_pass(self):
+        from dataclasses import replace
+
+        for value in (float("nan"), float("inf"), -0.1):
+            self.assertFalse(
+                source_fidelity_decision(
+                    replace(VISUAL_FAIL_MORPHOLOGY, all68=value), SOURCE_SELF_ENVELOPE
+                ).passed
+            )
+        self.assertFalse(
+            source_fidelity_decision(
+                VISUAL_FAIL_MORPHOLOGY, replace(SOURCE_SELF_ENVELOPE, mouth=0)
+            ).passed
+        )
+        with self.assertRaises(ValueError):
+            source_fidelity_decision(
+                VISUAL_FAIL_MORPHOLOGY, SOURCE_SELF_ENVELOPE, multiplier=float("nan")
+            )
 
     def test_analysis_module_does_not_import_or_patch_v265_runtime(self) -> None:
         import neyrobot_prod.v265_identity_consensus as module

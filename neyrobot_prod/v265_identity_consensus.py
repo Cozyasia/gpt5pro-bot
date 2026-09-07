@@ -14,9 +14,11 @@ The latter is estimated from PIPNet-68 landmarks normalized only by eye-line
 translation/rotation/interocular scale, then compared against a per-source
 self-repeatability envelope. No absolute MobileFace cosine threshold is changed here.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass(frozen=True)
@@ -60,7 +62,7 @@ def source_fidelity_decision(
     regions exceed that envelope. This is intentionally conservative and remains an
     analysis prototype until calibrated on enough visually accepted generated pairs.
     """
-    if multiplier <= 1.0:
+    if not math.isfinite(multiplier) or multiplier <= 1.0:
         raise ValueError("multiplier must leave calibration headroom")
 
     vals = {
@@ -70,8 +72,18 @@ def source_fidelity_decision(
         "mouth": (candidate.mouth, envelope.mouth),
         "central_chin": (candidate.central_chin, envelope.central_chin),
     }
+    if any(
+        not math.isfinite(float(v)) or float(v) < 0
+        for pair in vals.values()
+        for v in pair
+    ):
+        return FidelityDecision(False, ("invalid_measurement",), float(multiplier))
+    if any(float(base) <= 0 for _, base in vals.values()):
+        return FidelityDecision(False, ("invalid_envelope",), float(multiplier))
+
     exceeded = [
-        name for name, (value, base) in vals.items()
+        name
+        for name, (value, base) in vals.items()
         if float(value) > float(base) * float(multiplier)
     ]
 
@@ -81,12 +93,16 @@ def source_fidelity_decision(
     if "inner_face" in exceeded:
         hard.append("inner_face")
 
-    regional = [name for name in ("outline", "mouth", "central_chin") if name in exceeded]
+    regional = [
+        name for name in ("outline", "mouth", "central_chin") if name in exceeded
+    ]
     if len(regional) >= 2:
         hard.extend(regional)
 
     failures = tuple(dict.fromkeys(hard))
-    return FidelityDecision(passed=not failures, failures=failures, multiplier=float(multiplier))
+    return FidelityDecision(
+        passed=not failures, failures=failures, multiplier=float(multiplier)
+    )
 
 
 def recognition_consensus_summary(
@@ -108,8 +124,11 @@ def recognition_consensus_summary(
         "arcface_pipnet": float(arcface_pipnet),
         "arcface_yunet": float(arcface_yunet),
     }
+    if any(not math.isfinite(v) or not -1.0 <= v <= 1.0 for v in scores.values()):
+        raise ValueError("recognition scores must be finite cosines")
+    mean = sum(scores.values()) / len(scores)
     scores["consensus_min"] = min(scores.values())
-    scores["consensus_mean"] = sum(scores.values()) / 4.0
+    scores["consensus_mean"] = mean
     return scores
 
 

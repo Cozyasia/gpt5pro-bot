@@ -8,6 +8,13 @@ on:
       - "neyrobot_prod/v265_identity_consensus.py"
       - "tests/test_v265_identity_consensus.py"
       - "scripts/v265_identity_public_calibration.py"
+      - "scripts/v265_source_fidelity_calibration.py"
+      - "scripts/v265_source_core_ablation.py"
+      - "neyrobot_prod/v265_source_fidelity.py"
+      - "neyrobot_prod/dense68_engine_v265.py"
+      - "tests/test_v265_source_fidelity.py"
+      - "tests/test_v265_source_core_experiment.py"
+      - "tests/fixtures/v265_source_fidelity_audit.json"
 
 permissions:
   contents: read
@@ -28,7 +35,7 @@ jobs:
           curl -L --fail --retry 3             https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx             -o /tmp/v265-id-models/yunet.onnx
           sha256sum /tmp/v265-id-models/*
           mkdir -p /tmp/v265-id-fixtures
-          fixture_base=https://raw.githubusercontent.com/yakhyo/uniface/main/assets/source
+          fixture_base=https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source
           for name in \
             verify_now_2010.jpg verify_now_2014.jpg verify_now_2024.jpg \
             verify_bohr_1910.jpg verify_bohr_1935.jpg \
@@ -45,4 +52,30 @@ jobs:
         with:
           name: v265-identity-analysis-models
           path: /tmp/v265-id-models/
+          if-no-files-found: error
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install production dependencies
+        run: pip install -r requirements.txt
+      - name: Measure public source fidelity (diagnostic, not production acceptance)
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          cp /tmp/v265-id-models/pipnet68.onnx /tmp/v265-id-models/pipnet.onnx
+          cp /tmp/v265-id-models/mobileface_mcp.onnx /tmp/v265-id-models/mobileface.onnx
+          python -m scripts.v265_source_fidelity_calibration --models /tmp/v265-id-models --fixtures /tmp/v265-id-fixtures --output /tmp/v265-source-fidelity-public.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-source-fidelity-public-measurements-NOT-acceptance
+          path: /tmp/v265-source-fidelity-public.json
+          if-no-files-found: error
+      - name: Public production-size transfer ablation (not Render qualification)
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python -m scripts.v265_source_core_ablation --models /tmp/v265-id-models --fixtures /tmp/v265-id-fixtures --output /tmp/v265-source-core-public.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-source-core-public-ablation-NOT-acceptance
+          path: /tmp/v265-source-core-public.json
           if-no-files-found: error

@@ -596,3 +596,61 @@ __all__ = [
     "_landmark_anatomy_mask",
     "_mask_box",
 ]
+
+
+def _source_core_compose_roi_experiment(corrected_roi, target_roi, mask_roi, face_min: float):
+    """OFFLINE ABLATION ONLY; not called by transfer_attempt.
+
+    Source owns low/mid/high spatial structure in the interior. Target contributes
+    a planar luminance field and global chroma, not spatial facial detail. Unlike
+    additive source bands over Poisson this cannot double an existing source band.
+    Geometry is supplied by the existing dense engine; this does not solve yaw,
+    pitch, expression or excluded jaw pixels. Do not enable without calibration.
+    """
+    import cv2
+    import numpy as np
+
+    if corrected_roi.shape != target_roi.shape or mask_roi.shape != target_roi.shape[:2]:
+        raise ValueError("ROI shape mismatch")
+    binary = (mask_roi > 80).astype(np.uint8)
+    if int(binary.sum()) < 500:
+        raise ValueError("insufficient source core support")
+    matched = _colour_match_lab_roi_only(corrected_roi, target_roi, mask_roi)
+    source_lab = cv2.cvtColor(matched, cv2.COLOR_BGR2LAB).astype(np.float32)
+    target_lab = cv2.cvtColor(target_roi, cv2.COLOR_BGR2LAB).astype(np.float32)
+    h, w = binary.shape
+    yy, xx = np.mgrid[-1:1:complex(h), -1:1:complex(w)]
+    design = np.column_stack([np.ones(h*w), xx.ravel(), yy.ravel()])
+    support = binary.ravel().astype(bool)
+    residual = (target_lab[:, :, 0] - source_lab[:, :, 0]).ravel()
+    coefficients = np.linalg.lstsq(design[support], residual[support], rcond=None)[0]
+    illumination = (design @ coefficients).reshape(h, w)
+    source_lab[:, :, 0] = np.clip(source_lab[:, :, 0] + illumination, 0, 255)
+    adapted = cv2.cvtColor(source_lab.astype(np.uint8), cv2.COLOR_LAB2BGR)
+    distance = cv2.distanceTransform(binary, cv2.DIST_L2, 5)
+    boundary = max(v263._BOUNDARY_MIN, min(v263._BOUNDARY_MAX, face_min*v263._BOUNDARY_FRACTION))
+    alpha = (_smoothstep01(distance/boundary)*binary)[:, :, None]
+    result = np.clip(adapted.astype(np.float32)*alpha + target_roi.astype(np.float32)*(1-alpha), 0, 255).astype(np.uint8)
+    result[binary == 0] = target_roi[binary == 0]
+    return result
+
+
+def _dense_anatomy_mask_experiment(shape, desired_dense, firewall_x: int):
+    """Offline lower-face support ablation: jaw + brows, no points below chin.
+
+    This is face-interior support, not a silhouette/occlusion solution. It must not
+    replace the production no-neck mask until scene-level human validation.
+    """
+    import cv2
+    import numpy as np
+
+    points = np.asarray(desired_dense, dtype=np.float32)
+    if points.shape != (68, 2) or not np.isfinite(points).all():
+        raise ValueError("invalid dense anatomy")
+    h, w = shape[:2]
+    boundary = np.concatenate([points[:17], points[17:27]])
+    mask = np.zeros((h, w), dtype=np.uint8)
+    hull = cv2.convexHull(np.round(boundary).astype(np.int32))
+    cv2.fillConvexPoly(mask, hull, 255)
+    mask[:, max(0, min(w, int(firewall_x))):] = 0
+    return mask
