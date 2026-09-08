@@ -47,3 +47,37 @@ jobs:
           name: public-shape-images-${{ matrix.case }}-NOT-acceptance
           path: /tmp/shape/
           if-no-files-found: error
+
+  application-memory:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [A_baseline, T_exact_field, H_jaw_silhouette]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: python:3.12-slim
+      options: --memory=512m --cpus=0.5
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r requirements.txt
+      - name: Pinned models and frozen case02
+        env:
+          PROD_HARDENING_ENABLED: '0'
+        run: python -m scripts.v265_matrix_prepare --case case02 --models /tmp/models --output /tmp/application
+      - name: Real application, warmed models, repeated daemon workers
+        env:
+          PROD_HARDENING_ENABLED: '0'
+          BOT_TOKEN: '123456:offline-memory-fixture'
+          OPENAI_API_KEY: 'offline-memory-fixture'
+          PUBLIC_URL: 'https://offline-memory-fixture.onrender.com'
+          DB_PATH: '/tmp/offline-memory-fixture.db'
+        run: python -m scripts.v265_application_memory_probe --case case02 --mode ${{ matrix.mode }} --models /tmp/models --output /tmp/application > /tmp/application/probe.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: constructed-application-${{ matrix.mode }}-NOT-live-qualification
+          path: |
+            /tmp/application/*/*.json
+            /tmp/application/*.log
+          if-no-files-found: error
