@@ -50,20 +50,11 @@ def run(a):
     canonical_state = None
     if a.canonical_assets:
         import numpy as np
-        import onnxruntime as ort
         from neyrobot_prod.v265_canonical_lab import CanonicalModel
         from scripts.v265_canonical_matrix import infer
 
         canonical_model = CanonicalModel.load(a.canonical_assets / "canonical.npz")
-        opts = ort.SessionOptions()
-        opts.intra_op_num_threads = 1
-        opts.inter_op_num_threads = 1
-        opts.enable_cpu_mem_arena = False
-        session = ort.InferenceSession(
-            str(a.canonical_assets / "regressor.onnx"),
-            sess_options=opts,
-            providers=["CPUExecutionProvider"],
-        )
+        session = cv2.dnn.readNetFromONNX(str(a.canonical_assets / "regressor.onnx"))
         detector = cv2.FaceDetectorYN_create(
             str(a.models / "yunet.onnx"), "", (320, 320), 0.7
         )

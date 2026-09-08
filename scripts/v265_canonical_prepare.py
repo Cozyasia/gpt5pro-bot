@@ -1,6 +1,6 @@
 """Reproduce offline 3DDFA V2 asset conversion; no models enter the repository.
 
-Needs torch CPU and onnx ONLY for export. Runtime experiment uses NumPy/ORT.
+Needs torch CPU and onnx ONLY for export. Runtime uses NumPy/OpenCV DNN.
 Upstream code MIT; BFM and checkpoint rights must be reviewed separately before
 commercial runtime use. The manifest does not assert commercial clearance.
 """
@@ -84,14 +84,21 @@ def run(a):
         dynamo=False,
     )
     import onnxruntime as ort
+    import cv2
 
     sess = ort.InferenceSession(
         str(a.output / "regressor.onnx"), providers=["CPUExecutionProvider"]
     )
+    dnn = cv2.dnn.readNetFromONNX(str(a.output / "regressor.onnx"))
+    cv2.setNumThreads(1)
     with torch.no_grad():
         for seed in (0, 265):
             torch.manual_seed(seed)
             x = torch.rand(1, 3, 120, 120) * 2 - 1
+            dnn.setInput(x.numpy())
+            np.testing.assert_allclose(
+                dnn.forward(), network(x).numpy(), rtol=1e-4, atol=1e-5
+            )
             np.testing.assert_allclose(
                 sess.run(None, {"input": x.numpy()})[0],
                 network(x).numpy(),

@@ -12,7 +12,10 @@ projection ambiguity and silhouette correspondence therefore survive in the
 transported coordinates. `expression_mouth` is a bounded 2D adjustment; it does
 not neutralize source appearance. The compositor transfers source pixels,
 including teeth, lip expression and glasses; accessories have no separate owner.
-Case05/06/07/08 are consistent with these limitations. They do not prove one
+The current V265 Stage-1 prompt explicitly locks source smile, mouth opening,
+teeth visibility and squint. The new target-expression contract also requires a
+future prompt change; production prompt remains frozen. Case05/06/07/08 are
+consistent with these limitations. They do not prove one
 single cause for every visible defect: TPS boundary inconsistency was separate.
 
 ## Implemented architectural experiment
@@ -70,7 +73,9 @@ These are not full daemon or production compositor qualifications.
 
 Reproduce assets with `scripts.v265_canonical_prepare` (export-only Torch CPU,
 ONNX; pinned SHA256 downloads; restricted array unpickling). It verifies ONNX
-versus Torch output parity. Runtime experiment imports no Torch. Then run
+versus Torch and OpenCV DNN output parity. Runtime uses the existing OpenCV DNN,
+imports neither Torch nor ONNX Runtime. The initial container attempt failed on
+missing ONNX Runtime before inference; it was not an OOM. Then run
 `scripts.v265_canonical_matrix` with the existing frozen fixture manifest.
 The dedicated workflow executes inside 512 MiB and holds L components alongside
 the constructed application and warmed PIPNet/MobileFace during baseline

@@ -23,7 +23,7 @@ jobs:
       - name: Export-only dependencies outside runtime budget
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install numpy onnx onnxruntime
+          pip install numpy onnx onnxruntime opencv-python-headless==4.10.0.84
       - name: Verify source assets, convert, check Torch versus ONNX parity
         env:
           PROD_HARDENING_ENABLED: '0'

@@ -13,7 +13,6 @@ import resource
 import time
 import cv2
 import numpy as np
-import onnxruntime as ort
 from neyrobot_prod.v265_canonical_lab import (
     CanonicalModel,
     Parameters,
@@ -62,7 +61,8 @@ def infer(image, detector, session, mean, std, left=False):
     face[:14] /= factor
     roi = roi_from_box(face)
     x = ((crop(image, roi).astype(np.float32) - 127.5) / 128).transpose(2, 0, 1)[None]
-    p = session.run(None, {"input": x})[0].reshape(-1) * std + mean
+    session.setInput(x)
+    p = session.forward().reshape(-1) * std + mean
     return Parameters.from62(p), roi
 
 
@@ -73,15 +73,7 @@ def run(a):
     model = CanonicalModel.load(a.assets / "canonical.npz")
     with np.load(a.assets / "canonical.npz", allow_pickle=False) as z:
         mean, std = z["param_mean"], z["param_std"]
-    opts = ort.SessionOptions()
-    opts.intra_op_num_threads = 1
-    opts.inter_op_num_threads = 1
-    opts.enable_cpu_mem_arena = False
-    session = ort.InferenceSession(
-        str(a.assets / "regressor.onnx"),
-        sess_options=opts,
-        providers=["CPUExecutionProvider"],
-    )
+    session = cv2.dnn.readNetFromONNX(str(a.assets / "regressor.onnx"))
     detector = cv2.FaceDetectorYN_create(
         str(a.models / "yunet.onnx"), "", (320, 320), 0.7
     )
