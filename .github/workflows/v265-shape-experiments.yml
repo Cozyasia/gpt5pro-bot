@@ -9,6 +9,7 @@ on:
       - 'scripts/v265_transfer_matrix.py'
       - 'tests/test_v265_shape_lab.py'
       - 'tests/fixtures/v265_shape/**'
+      - 'tests/fixtures/v265_matrix/**'
       - '.github/workflows/v265-shape-experiments.yml'
   workflow_dispatch:
 permissions:
@@ -18,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [case01, case02, case04]
+        case: [case01, case02, case04, case05, case06, case07, case08]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -34,7 +35,7 @@ jobs:
       - name: Execute ablations, recording geometric rejections separately
         env:
           PROD_HARDENING_ENABLED: '0'
-        run: python -m scripts.v265_shape_batch --case ${{ matrix.case }} --models /tmp/models --output /tmp/shape
+        run: python -m scripts.v265_shape_batch --case ${{ matrix.case }} --models /tmp/models --output /tmp/shape --modes A_baseline D_mask_core I_ortho_jaw K_ortho_silhouette
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -52,7 +53,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [A_baseline, T_exact_field, H_jaw_silhouette, I_ortho_jaw, K_ortho_silhouette]
+        include:
+          - mode: I_ortho_jaw
+            resident: 0
+          - mode: K_ortho_silhouette
+            resident: 0
+          - mode: I_ortho_jaw
+            resident: 64
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -72,11 +79,11 @@ jobs:
           OPENAI_API_KEY: 'offline-memory-fixture'
           PUBLIC_URL: 'https://offline-memory-fixture.onrender.com'
           DB_PATH: '/tmp/offline-memory-fixture.db'
-        run: python -m scripts.v265_application_memory_probe --case case02 --mode ${{ matrix.mode }} --models /tmp/models --output /tmp/application > /tmp/application/probe.log 2>&1
+        run: python -m scripts.v265_application_memory_probe --case case02 --mode ${{ matrix.mode }} --models /tmp/models --output /tmp/application --resident-extra-mib ${{ matrix.resident }} > /tmp/application/probe.log 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: constructed-application-${{ matrix.mode }}-NOT-live-qualification
+          name: constructed-application-${{ matrix.mode }}-resident${{ matrix.resident }}-NOT-live-qualification
           path: |
             /tmp/application/*/*.json
             /tmp/application/*.log

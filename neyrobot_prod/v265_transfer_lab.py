@@ -24,6 +24,7 @@ MODES = (
     "I_ortho_jaw",
     "J_ortho_face",
     "K_ortho_silhouette",
+    "I_adaptive_jaw",
 )
 
 
@@ -131,17 +132,26 @@ def variant(
         "I_ortho_jaw",
         "J_ortho_face",
         "K_ortho_silhouette",
+        "I_adaptive_jaw",
     )
     shape_owner = np.asarray(target_dense).copy()
     diagnostics = {}
     current_box = None
+    current_domain_box = None
+    pending_full_face = False
     current_firewall = None
     if mode in shape_modes:
         if source_shape is None or target_shape is None:
             raise ValueError("shape experiment needs actual image dimensions")
         from .v265_shape_lab import pose_projected_source, expression_mouth
 
-        if mode in ("I_ortho_jaw", "J_ortho_face", "K_ortho_silhouette"):
+        if mode == "I_adaptive_jaw":
+            from .v265_shape_lab import projection_jackknife
+
+            source_pose, projection_variance, pose_info = projection_jackknife(
+                source_dense, target_dense
+            )
+        elif mode in ("I_ortho_jaw", "J_ortho_face", "K_ortho_silhouette"):
             from .v265_shape_lab import orthographic_projected_source
 
             source_pose, pose_info = orthographic_projected_source(
@@ -155,7 +165,18 @@ def variant(
 
     def geometry(projected, target, minimum, *, strict):
         desired = original_geometry(projected, target, minimum, strict=strict)
-        desired[:17] = source_pose[:17]
+        if mode == "I_adaptive_jaw":
+            from .v265_shape_lab import shrink_shape_residual
+
+            adapted, weights = shrink_shape_residual(
+                desired, source_pose, projection_variance
+            )
+            desired[:17] = adapted[:17]
+            diagnostics["jaw_weights_strict" if strict else "jaw_weights_standard"] = (
+                weights[:17].tolist()
+            )
+        else:
+            desired[:17] = source_pose[:17]
         if mode in ("G_face_shape", "J_ortho_face"):
             desired[27:36] = source_pose[27:36]
             desired[48:68] = expression_mouth(source_pose, target)[48:68]
@@ -165,11 +186,32 @@ def variant(
         return desired
 
     def deform(warped, projected, desired, box, minimum):
-        nonlocal current_box
+        nonlocal current_box, current_domain_box, pending_full_face
         current_box = box
+        if pending_full_face:
+            current_domain_box = box
+            pending_full_face = False
         from .v265_shape_lab import tps_inverse_roi
 
-        out, error, residual = tps_inverse_roi(warped, projected, desired, box, minimum)
+        active = None
+        if mode in ("I_ortho_jaw", "K_ortho_silhouette", "I_adaptive_jaw"):
+            x0, y0, x1, y1 = box
+            active = full_face_support(target_shape, shape_owner, current_firewall)[
+                y0:y1, x0:x1
+            ]
+        out, error, residual = tps_inverse_roi(
+            warped,
+            projected,
+            desired,
+            box,
+            minimum,
+            active_mask=active,
+            domain_box=(
+                current_domain_box
+                if mode in ("I_ortho_jaw", "K_ortho_silhouette", "I_adaptive_jaw")
+                else None
+            ),
+        )
         diagnostics.setdefault("tps_control_errors_px", []).append(error)
         # TPS has no Gaussian sigma; retain the numeric telemetry slot as zero.
         return out, 0.0, residual
@@ -177,8 +219,9 @@ def variant(
     # Target semantic boundary is used as support. desired landmarks own source
     # warp, not the support silhouette; never extrapolate source pixels into neck.
     def mask(shape, bbox, points, firewall):
-        nonlocal current_firewall
+        nonlocal current_firewall, pending_full_face
         current_firewall = firewall
+        pending_full_face = True
         owned = full_face_support(shape, shape_owner, firewall)
         if mode in ("H_jaw_silhouette", "K_ortho_silhouette"):
             # ROI must include both the old and new silhouettes to remove the old edge.
@@ -194,7 +237,12 @@ def variant(
             x0, y0, x1, y1 = current_box
             # Transport target boundary/context, but never insert source-neck pixels.
             shifted, error, _ = tps_inverse_roi(
-                target, target_dense, shape_owner, current_box, minimum
+                target,
+                target_dense,
+                shape_owner,
+                current_box,
+                minimum,
+                active_mask=support if mode == "K_ortho_silhouette" else None,
             )
             diagnostics.setdefault("silhouette_control_errors_px", []).append(error)
             owned = full_face_support(target_shape, shape_owner, current_firewall)[

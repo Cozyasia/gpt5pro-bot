@@ -10,7 +10,7 @@ from pathlib import Path
 
 def run(a):
     ledger = []
-    for mode in (
+    for mode in a.modes or (
         "A_baseline",
         "D_mask_core",
         "T_exact_field",
@@ -69,4 +69,5 @@ if __name__ == "__main__":
     p.add_argument("--case", required=True)
     p.add_argument("--models", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--modes", nargs="+", help="Explicit bounded ablation subset")
     run(p.parse_args())

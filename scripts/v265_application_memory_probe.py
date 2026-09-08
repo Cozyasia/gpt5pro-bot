@@ -46,6 +46,12 @@ def run(a):
     del image, points
     safety._reclaim_before_strict()
     warmed_state = safety._memory_state()
+    # Explicit resident-pressure scenario, not a claim to reproduce live traffic.
+    # Keep real touched pages alive; never replace cgroup readings or the guard.
+    resident_pressure = bytearray(a.resident_extra_mib * 1024 * 1024)
+    for offset in range(0, len(resident_pressure), 4096):
+        resident_pressure[offset] = 1
+    pressure_state = safety._memory_state()
     rows = []
     for iteration in range(a.repetitions):
         a.sampler = MemorySampler()
@@ -105,6 +111,8 @@ def run(a):
         "handler_groups": len(app.handlers),
         "before_models": state,
         "after_models": warmed_state,
+        "resident_extra_mib": a.resident_extra_mib,
+        "after_resident_pressure": pressure_state,
         "rows": rows,
         "production_memory_qualified": False,
         "qualification": "real app and warmed PIPNet/MobileFace, no Telegram initialize or live request history",
@@ -114,6 +122,7 @@ def run(a):
     )
     print("APPLICATION_MEMORY_RESULT", json.dumps(ledger), flush=True)
     assert app.handlers
+    assert len(resident_pressure) == a.resident_extra_mib * 1024 * 1024
 
 
 if __name__ == "__main__":
@@ -123,4 +132,5 @@ if __name__ == "__main__":
     p.add_argument("--models", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--repetitions", type=int, default=3)
+    p.add_argument("--resident-extra-mib", type=int, choices=[0, 64], default=0)
     run(p.parse_args())

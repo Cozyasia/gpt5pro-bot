@@ -38,6 +38,38 @@
     "case04_stage1.png": {
       "sha256": "124dbe21fddc74428afa90aaa785925ca1748a60f485fff1162ac1b0ab405673",
       "source_url": null
+    },
+    "case05_source.jpg": {
+      "sha256": "c4b66510e911f373ec6bbadaa621fdfab2d77518151aa72771f06ab88a870b20",
+      "source_url": null
+    },
+    "case05_stage1.png": {
+      "sha256": "fbeefee6cf8a6979148c829257b9f7df3e01f535af3ee9734215e47dafe79698",
+      "source_url": null
+    },
+    "case06_source.jpg": {
+      "sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+      "source_url": null
+    },
+    "case06_stage1.png": {
+      "sha256": "98c550155640d6e42f6d79da2650fa53e4d24a021c25a4474adedcb4f7fede35",
+      "source_url": null
+    },
+    "case07_source.jpg": {
+      "sha256": "cb36024a9c08a11a521df0eef576c2a52b0780841a4053f10e40505b9f42d770",
+      "source_url": null
+    },
+    "case07_stage1.png": {
+      "sha256": "cf3c8f90f3fd3b2c69a35ea257fc966c4b1fcd5dae8043ef73d888a694ff4c73",
+      "source_url": null
+    },
+    "case08_source.jpg": {
+      "sha256": "99c0839c61a4127da489c23d30e7ad441bfdc53a02b928858c0f1ccf4dbca3ba",
+      "source_url": null
+    },
+    "case08_stage1.png": {
+      "sha256": "98c75f4b8d2d2138800949c912500a8335898f1e2198ed1908eeab079d901fde",
+      "source_url": null
     }
   },
   "eligible_cases": [
@@ -46,5 +78,63 @@
     "case04"
   ],
   "ineligible_case03": "Unmodified source native face short 318.9 < 320; guard preserved. No upscale bypass.",
-  "human_approved": false
+  "human_approved": false,
+  "expanded_cases": [
+    "case05",
+    "case06",
+    "case07",
+    "case08"
+  ],
+  "case_identity": {
+    "case01": "public_cillian",
+    "case05": "public_cillian",
+    "case02": "uniface_pose_center",
+    "case06": "uniface_pose_center",
+    "case04": "public_curie",
+    "case07": "public_grace_hopper",
+    "case08": "public_mae_jemison"
+  },
+  "expanded_generation_specs": [
+    {
+      "id": "case05",
+      "src": "case01_source.jpg",
+      "condition": "Outdoor seaside cafe in soft overcast daylight. PERSON-A turns head mildly 15 degrees toward the companion, chin mildly raised, relaxed slight closed-lip smile.",
+      "prompt": "Use case: identity-preserve. Create one photorealistic portrait-orientation smartphone selfie scene for an offline face-transfer engineering fixture. Input is source identity reference for PERSON-A. Preserve that person's age, individual face morphology, eyes, nose, mouth, jaw and chin while naturally adapting pose/expression and lighting. Outdoor seaside cafe in soft overcast daylight. PERSON-A turns head mildly 15 degrees toward the companion, chin mildly raised, relaxed slight closed-lip smile. Exactly two adults: PERSON-A on the LEFT, a friendly fictional adult celebrity-like companion on the RIGHT. Both heads fully visible, shoulders and upper torso visible. PERSON-A's face entirely inside left 52 percent of image, companion entirely right of 55 percent, no occlusion between faces. Faces large enough to inspect: PERSON-A face about 30 percent of image width. Natural skin texture and candid integration, no beauty retouch, no text or collage. One image only."
+    },
+    {
+      "id": "case06",
+      "src": "case02_source.jpg",
+      "condition": "Warm restaurant at night, amber side lighting. PERSON-A turns head mildly 12 degrees toward the companion, chin slightly lowered 5 degrees, a gentle smile with lips slightly parted.",
+      "prompt": "Use case: identity-preserve. Create one photorealistic portrait-orientation smartphone selfie scene for an offline face-transfer engineering fixture. Input is source identity reference for PERSON-A. Preserve that person's age, individual face morphology, eyes, nose, mouth, jaw and chin while naturally adapting pose/expression and lighting. Warm restaurant at night, amber side lighting. PERSON-A turns head mildly 12 degrees toward the companion, chin slightly lowered 5 degrees, a gentle smile with lips slightly parted. Exactly two adults: PERSON-A on the LEFT, a friendly fictional adult celebrity-like companion on the RIGHT. Both heads fully visible, shoulders and upper torso visible. PERSON-A's face entirely inside left 52 percent of image, companion entirely right of 55 percent, no occlusion between faces. Faces large enough to inspect: PERSON-A face about 30 percent of image width. Natural skin texture and candid integration, no beauty retouch, no text or collage. One image only."
+    },
+    {
+      "id": "case07",
+      "src": "case07_source.jpg",
+      "condition": "Bright modern science museum. PERSON-A keeps her characteristic glasses, hat and age, near-frontal pose, mild downward pitch, neutral relaxed expression.",
+      "prompt": "Use case: identity-preserve. Create one photorealistic portrait-orientation smartphone selfie scene for an offline face-transfer engineering fixture. Input is source identity reference for PERSON-A. Preserve that person's age, individual face morphology, eyes, nose, mouth, jaw and chin while naturally adapting pose/expression and lighting. Bright modern science museum. PERSON-A keeps her characteristic glasses, hat and age, near-frontal pose, mild downward pitch, neutral relaxed expression. Exactly two adults: PERSON-A on the LEFT, a friendly fictional adult celebrity-like companion on the RIGHT. Both heads fully visible, shoulders and upper torso visible. PERSON-A's face entirely inside left 52 percent of image, companion entirely right of 55 percent, no occlusion between faces. Faces large enough to inspect: PERSON-A face about 30 percent of image width. Natural skin texture and candid integration, no beauty retouch, no text or collage. One image only."
+    },
+    {
+      "id": "case08",
+      "src": "case08_source.jpg",
+      "condition": "Warm restaurant interior with soft window side lighting. PERSON-A wears casual dark clothing, head mildly turned 10 degrees toward companion, gentle closed-lip smile instead of broad teeth smile.",
+      "prompt": "Use case: identity-preserve. Create one photorealistic portrait-orientation smartphone selfie scene for an offline face-transfer engineering fixture. Input is source identity reference for PERSON-A. Preserve that person's age, individual face morphology, eyes, nose, mouth, jaw and chin while naturally adapting pose/expression and lighting. Warm restaurant interior with soft window side lighting. PERSON-A wears casual dark clothing, head mildly turned 10 degrees toward companion, gentle closed-lip smile instead of broad teeth smile. Exactly two adults: PERSON-A on the LEFT, a friendly fictional adult celebrity-like companion on the RIGHT. Both heads fully visible, shoulders and upper torso visible. PERSON-A's face entirely inside left 52 percent of image, companion entirely right of 55 percent, no occlusion between faces. Faces large enough to inspect: PERSON-A face about 30 percent of image width. Natural skin texture and candid integration, no beauty retouch, no text or collage. One image only."
+    }
+  ],
+  "new_source_provenance": {
+    "case07": {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/ad/Commodore_Grace_M._Hopper%2C_USN_%28covered%29.jpg",
+      "page": "https://commons.wikimedia.org/wiki/File:Commodore_Grace_M._Hopper,_USN_(covered).jpg",
+      "author": "James S. Davis / US Navy",
+      "rights": "Public domain US federal work",
+      "raw_sha256": "198babb1067fc623a57ec8955b5b7025ff2fb652cedb2d21eec65b8733a89cb4"
+    },
+    "case08": {
+      "url": "https://images-assets.nasa.gov/image/S92-40463/S92-40463~orig.jpg",
+      "page": "https://commons.wikimedia.org/wiki/File:Mae_Carol_Jemison.jpg",
+      "author": "NASA",
+      "rights": "Public domain US federal work",
+      "raw_sha256": "7f9c8203cbf9e1304e30eedc2577d245818790f74cb817c45b17fecf7f188776"
+    }
+  },
+  "new_source_preparation": "Grace maximum2048, Mae maximum3072, Pillow thumbnail/JPEG97 from full original downloads; downsample only, never upscale. Mae2048 preparation rejected native face286.3; restored more ORIGINAL resolution, not upsampled prepared pixels."
 }

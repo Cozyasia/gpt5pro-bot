@@ -139,6 +139,7 @@ def worker(args):
                 "G_face_shape",
                 "H_jaw_silhouette",
                 "I_ortho_jaw",
+                "I_adaptive_jaw",
                 "J_ortho_face",
                 "K_ortho_silhouette",
             ):
@@ -186,6 +187,7 @@ def worker(args):
                     "G_face_shape",
                     "H_jaw_silhouette",
                     "I_ortho_jaw",
+                    "I_adaptive_jaw",
                     "J_ortho_face",
                     "K_ortho_silhouette",
                 )
@@ -236,6 +238,7 @@ def worker(args):
             "G_face_shape",
             "H_jaw_silhouette",
             "I_ortho_jaw",
+            "I_adaptive_jaw",
             "J_ortho_face",
             "K_ortho_silhouette",
         )

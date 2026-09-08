@@ -133,6 +133,38 @@ class EyeProfileTests(unittest.TestCase):
 
 
 class OrthographicShapeTests(unittest.TestCase):
+    def test_same_field_is_independent_of_evaluation_roi(self):
+        points = s.template68()[:, :2] * 24 + [60, 60]
+        desired = points.copy()
+        desired[7:10, 1] += 2
+        yy, xx = np.mgrid[:120, :120]
+        image = np.stack([xx, yy, xx], axis=2).astype(np.uint8)
+        full, _, _ = s.tps_inverse_roi(image, points, desired, (0, 0, 120, 120), 60)
+        crop, _, _ = s.tps_inverse_roi(
+            image[35:85, 35:85],
+            points,
+            desired,
+            (35, 35, 85, 85),
+            60,
+            domain_box=(0, 0, 120, 120),
+        )
+        np.testing.assert_array_equal(full[42:78, 42:78], crop[7:43, 7:43])
+
+    def test_residual_shrinkage_responds_to_uncertainty_not_case_labels(self):
+        base = s.template68()[:, :2] * 100
+        proposed = base.copy()
+        proposed[8] += [3, 4]
+        result, weight = s.shrink_shape_residual(base, proposed, np.zeros(68))
+        np.testing.assert_allclose(result, proposed, atol=1e-5)
+        variance = np.zeros(68)
+        variance[8] = 25
+        result, weight = s.shrink_shape_residual(base, proposed, variance)
+        self.assertAlmostEqual(weight[8], 0.5)
+        np.testing.assert_allclose(result[8], base[8] + [1.5, 2], atol=1e-5)
+        variance[8] = -1
+        with self.assertRaises(ValueError):
+            s.shrink_shape_residual(base, proposed, variance)
+
     def test_known_weak_perspective_shape_and_canvas_translation(self):
         import cv2
 

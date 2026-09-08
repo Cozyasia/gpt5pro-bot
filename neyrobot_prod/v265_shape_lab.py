@@ -183,26 +183,43 @@ def configuration(points):
     }
 
 
-def tps_inverse_roi(warped, projected, desired, box, face_min):
+def tps_inverse_roi(
+    warped, projected, desired, box, face_min, active_mask=None, domain_box=None
+):
     """Interpolating TPS inverse map; row blocks bound memory. No eye-only patch."""
     projected = checked_points(projected)
     desired = checked_points(desired)
     x0, y0, x1, y1 = box
     h, w = warped.shape[:2]
-    origin = np.array([x0, y0])
+    domain_box = box if domain_box is None else domain_box
+    dx0, dy0, dx1, dy1 = domain_box
+    dw, dh = dx1 - dx0, dy1 - dy0
+    if dw <= 1 or dh <= 1:
+        raise ValueError("invalid deformation domain")
+    origin = np.array([dx0, dy0])
+    roi_origin = np.array([x0, y0])
     scale = float(face_min)
     if not np.isfinite(scale) or scale <= 0 or (w, h) != (x1 - x0, y1 - y0):
         raise ValueError("invalid ROI or scale")
+    if active_mask is None:
+        active = np.ones((h, w), np.uint8)
+    else:
+        if np.asarray(active_mask).shape != (h, w) or not np.any(active_mask):
+            raise ValueError("invalid active deformation support")
+        # Include the finite-difference stencil around every potentially used pixel.
+        active = cv2.dilate(
+            (np.asarray(active_mask) > 0).astype(np.uint8), np.ones((3, 3), np.uint8)
+        )
     boundary = np.array(
         [
             [0, 0],
-            [w / 2, 0],
-            [w - 1, 0],
-            [0, h / 2],
-            [w - 1, h / 2],
-            [0, h - 1],
-            [w / 2, h - 1],
-            [w - 1, h - 1],
+            [dw / 2, 0],
+            [dw - 1, 0],
+            [0, dh / 2],
+            [dw - 1, dh / 2],
+            [0, dh - 1],
+            [dw / 2, dh - 1],
+            [dw - 1, dh - 1],
         ]
     )
     q = np.vstack([np.asarray(desired) - origin, boundary]) / scale
@@ -220,21 +237,31 @@ def tps_inverse_roi(warped, projected, desired, box, face_min):
     error = float(np.max(np.linalg.norm(fit - residual, axis=1)) * scale)
     out = np.empty_like(warped)
     min_det = float("inf")
+    folded_pixels = 0
+    folded_face_pixels = 0
+    folded_active_pixels = 0
+    hull = cv2.convexHull(
+        np.round(np.vstack([desired[:17], desired[17:27]]) - roi_origin).astype(
+            np.int32
+        )
+    )
     for start in range(0, h, 48):
         stop = min(h, start + 48)
         yy, xx = np.mgrid[start:stop, :w].astype(np.float32)
+        domain_x = xx + x0 - dx0
+        domain_y = yy + y0 - dy0
         dx = (
             np.full(xx.shape, coef[-3, 0], np.float32)
-            + coef[-2, 0] * xx / scale
-            + coef[-1, 0] * yy / scale
+            + coef[-2, 0] * domain_x / scale
+            + coef[-1, 0] * domain_y / scale
         )
         dy = (
             np.full(xx.shape, coef[-3, 1], np.float32)
-            + coef[-2, 1] * xx / scale
-            + coef[-1, 1] * yy / scale
+            + coef[-2, 1] * domain_x / scale
+            + coef[-1, 1] * domain_y / scale
         )
         for i, (cx, cy) in enumerate(q):
-            r2 = (xx / scale - cx) ** 2 + (yy / scale - cy) ** 2
+            r2 = (domain_x / scale - cx) ** 2 + (domain_y / scale - cy) ** 2
             k = r2 * np.log(np.maximum(r2, 1e-12))
             dx += coef[i, 0] * k
             dy += coef[i, 1] * k
@@ -243,16 +270,39 @@ def tps_inverse_roi(warped, projected, desired, box, face_min):
         if stop - start > 1:
             mxy, mxx = np.gradient(mx)
             myy, myx = np.gradient(my)
-            min_det = min(min_det, float((mxx * myy - mxy * myx).min()))
+            det = mxx * myy - mxy * myx
+            min_det = min(min_det, float(det.min()))
+            negative = det <= 0
+            folded_pixels += int(negative.sum())
+            folded_active_pixels += int((negative & (active[start:stop] > 0)).sum())
+            local_hull = hull - np.array([0, start], np.int32)
+            face = np.zeros(negative.shape, np.uint8)
+            cv2.fillConvexPoly(face, local_hull, 1)
+            folded_face_pixels += int((negative & (face > 0)).sum())
         out[start:stop] = cv2.remap(
             warped, mx, my, cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT_101
         )
     if min_det <= 0:
+        print(
+            "TPS_FOLD_DIAGNOSTIC",
+            json.dumps(
+                {
+                    "minimum_jacobian": min_det,
+                    "folded_pixels": folded_pixels,
+                    "folded_face_hull_pixels": folded_face_pixels,
+                    "folded_active_pixels": folded_active_pixels,
+                    "roi_pixels": h * w,
+                    "maximum_control_error_px": error,
+                }
+            ),
+            flush=True,
+        )
+    if folded_active_pixels:
         raise ValueError("folded inverse geometry field")
     return out, error, np.asarray(desired) - np.asarray(projected)
 
 
-def orthographic_camera(points):
+def orthographic_camera(points, anchor_ids=None):
     """Scaled-orthographic fit, independent of image canvas/principal point.
 
     Assumes weak perspective. Does not recover subject-specific depth and does
@@ -260,7 +310,13 @@ def orthographic_camera(points):
     """
 
     p = checked_points(points)
-    ids = np.array([17, 19, 21, 22, 24, 26, 27, 28, 29, 30, 31, 33, 35, 36, 39, 42, 45])
+    ids = np.array(
+        [17, 19, 21, 22, 24, 26, 27, 28, 29, 30, 31, 33, 35, 36, 39, 42, 45]
+        if anchor_ids is None
+        else anchor_ids
+    )
+    if len(ids) < 6 or len(np.unique(ids)) != len(ids):
+        raise ValueError("insufficient independent pose anchors")
     q = template68()[ids]
     design = np.c_[q, np.ones(len(q))]
     affine = np.linalg.lstsq(design, p[ids], rcond=None)[0][:3].T
@@ -320,9 +376,9 @@ def orthographic_camera(points):
     )
 
 
-def orthographic_projected_source(source_points, target_points):
-    sr, ss, st, se = orthographic_camera(source_points)
-    tr, ts, tt, te = orthographic_camera(target_points)
+def orthographic_projected_source(source_points, target_points, anchor_ids=None):
+    sr, ss, st, se = orthographic_camera(source_points, anchor_ids)
+    tr, ts, tt, te = orthographic_camera(target_points, anchor_ids)
     if abs(np.linalg.det(sr[:2, :2])) < 1e-6:
         raise ValueError("singular source depth-plane projection")
     depth = template68()[:, 2]
@@ -350,3 +406,47 @@ def orthographic_projected_source(source_points, target_points):
         "source_pose_rvec": cv2.Rodrigues(sr)[0].ravel().tolist(),
         "target_pose_rvec": cv2.Rodrigues(tr)[0].ravel().tolist(),
     }
+
+
+def projection_jackknife(source_points, target_points):
+    """Offline sensitivity estimate; not calibrated landmark uncertainty.
+
+    Leave one internal pose anchor out, retaining every source jaw observation.
+    This measures camera-fit sensitivity, not missing subject depth or occlusion.
+    No case IDs, human labels or negative examples enter the calculation.
+    """
+    ids = [17, 19, 21, 22, 24, 26, 27, 28, 29, 30, 31, 33, 35, 36, 39, 42, 45]
+    full, info = orthographic_projected_source(source_points, target_points)
+    samples = np.array(
+        [
+            orthographic_projected_source(
+                source_points, target_points, ids[:i] + ids[i + 1 :]
+            )[0]
+            for i in range(len(ids))
+        ]
+    )
+    variance = (len(ids) - 1) * np.mean(
+        np.sum((samples - samples.mean(0)) ** 2, axis=2), axis=0
+    )
+    if not np.isfinite(variance).all():
+        raise ValueError("invalid projection sensitivity")
+    info["jackknife_variance_px2"] = variance.tolist()
+    return full, variance, info
+
+
+def shrink_shape_residual(base, proposed, variance):
+    """Unit signal-to-variance shrinkage, no fitted case-specific coefficient."""
+    base, proposed = checked_points(base), checked_points(proposed)
+    variance = np.asarray(variance, float)
+    if (
+        variance.shape != (68,)
+        or not np.isfinite(variance).all()
+        or (variance < 0).any()
+    ):
+        raise ValueError("invalid residual variance")
+    delta = proposed - base
+    signal = np.sum(delta * delta, axis=1)
+    weight = np.divide(
+        signal, signal + variance, out=np.ones(68), where=(signal + variance) > 0
+    )
+    return (base + weight[:, None] * delta).astype(np.float32), weight
