@@ -46,6 +46,35 @@ def run(a):
     del image, points
     safety._reclaim_before_strict()
     warmed_state = safety._memory_state()
+    canonical_components = None
+    canonical_state = None
+    if a.canonical_assets:
+        import numpy as np
+        import onnxruntime as ort
+        from neyrobot_prod.v265_canonical_lab import CanonicalModel
+        from scripts.v265_canonical_matrix import infer
+
+        canonical_model = CanonicalModel.load(a.canonical_assets / "canonical.npz")
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 1
+        opts.enable_cpu_mem_arena = False
+        session = ort.InferenceSession(
+            str(a.canonical_assets / "regressor.onnx"),
+            sess_options=opts,
+            providers=["CPUExecutionProvider"],
+        )
+        detector = cv2.FaceDetectorYN_create(
+            str(a.models / "yunet.onnx"), "", (320, 320), 0.7
+        )
+        with np.load(a.canonical_assets / "canonical.npz", allow_pickle=False) as z:
+            image = cv2.imread(str(a.fixtures / (a.case + "_source.jpg")))
+            parameters, _ = infer(
+                image, detector, session, z["param_mean"], z["param_std"]
+            )
+        del image
+        canonical_components = (canonical_model, session, detector, parameters)
+        canonical_state = safety._memory_state()
     # Explicit resident-pressure scenario, not a claim to reproduce live traffic.
     # Keep real touched pages alive; never replace cgroup readings or the guard.
     resident_pressure = bytearray(a.resident_extra_mib * 1024 * 1024)
@@ -111,6 +140,9 @@ def run(a):
         "handler_groups": len(app.handlers),
         "before_models": state,
         "after_models": warmed_state,
+        "canonical_components_loaded_and_warmed": canonical_components is not None,
+        "after_canonical_components": canonical_state,
+        "canonical_note": "component-residency plus baseline compositor; L renderer absent",
         "resident_extra_mib": a.resident_extra_mib,
         "after_resident_pressure": pressure_state,
         "rows": rows,
@@ -133,4 +165,5 @@ if __name__ == "__main__":
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--repetitions", type=int, default=3)
     p.add_argument("--resident-extra-mib", type=int, choices=[0, 64], default=0)
+    p.add_argument("--canonical-assets", type=Path)
     run(p.parse_args())

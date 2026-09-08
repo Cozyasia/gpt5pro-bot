@@ -1,0 +1,56 @@
+name: V265 Canonical Decomposition Experiment
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'neyrobot_prod/v265_canonical_lab.py'
+      - 'scripts/v265_canonical*.py'
+      - 'tests/test_v265_canonical_lab.py'
+      - 'tests/fixtures/v265_canonical_assets.json'
+      - '.github/workflows/v265-canonical-experiment.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Export-only dependencies outside runtime budget
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy onnx onnxruntime
+      - name: Verify source assets, convert, check Torch versus ONNX parity
+        env:
+          PROD_HARDENING_ENABLED: '0'
+        run: python -m scripts.v265_canonical_prepare --output /tmp/canonical-assets
+      - name: Prepare production dependency image without research stack
+        run: |
+          docker build -t v265-canonical-runtime -f - . <<'DOCKERFILE'
+          FROM python:3.12-slim
+          WORKDIR /app
+          COPY . /app
+          RUN pip install --no-cache-dir -r requirements.txt
+          ENV PROD_HARDENING_ENABLED=0
+          DOCKERFILE
+          mkdir -p /tmp/canonical-models /tmp/canonical-results
+          docker run --rm -v /tmp/canonical-models:/models -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_matrix_prepare --case case02 --models /models --output /results
+      - name: Seven frozen cases inside 512 MiB, no Torch
+        run: |
+          docker run --rm --memory=512m --cpus=0.5 -v /tmp/canonical-assets:/assets:ro -v /tmp/canonical-models:/models:ro -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_canonical_matrix --assets /assets --models /models --output /results/decomposition > /tmp/canonical-results/decomposition.log 2>&1
+      - name: Warm real application and models plus L components, standard and strict
+        if: always()
+        run: |
+          docker run --rm --memory=512m --cpus=0.5 --network=none -e BOT_TOKEN=123456:offline-memory-fixture -e OPENAI_API_KEY=offline-memory-fixture -e PUBLIC_URL=https://offline-memory-fixture.onrender.com -e DB_PATH=/tmp/offline-memory-fixture.db -v /tmp/canonical-assets:/assets:ro -v /tmp/canonical-models:/models:ro -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_application_memory_probe --case case02 --mode A_baseline --models /models --output /results --canonical-assets /assets > /tmp/canonical-results/application.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canonical-scalars-NOT-production-qualification
+          path: |
+            /tmp/canonical-results/**/*.json
+            /tmp/canonical-results/*.log
+          if-no-files-found: error
