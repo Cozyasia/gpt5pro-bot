@@ -17,6 +17,9 @@ def run(a):
         "F_jaw_shape",
         "G_face_shape",
         "H_jaw_silhouette",
+        "I_ortho_jaw",
+        "J_ortho_face",
+        "K_ortho_silhouette",
     ):
         log = a.output / a.case / (mode + ".log")
         command = [

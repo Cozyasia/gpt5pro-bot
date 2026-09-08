@@ -21,6 +21,9 @@ MODES = (
     "F_jaw_shape",
     "G_face_shape",
     "H_jaw_silhouette",
+    "I_ortho_jaw",
+    "J_ortho_face",
+    "K_ortho_silhouette",
 )
 
 
@@ -121,7 +124,14 @@ def variant(
     original_mask = engine._landmark_anatomy_mask
     original_geometry = engine.v263._desired_identity_geometry
     original_deform = engine._dense_deform_local_roi
-    shape_modes = ("F_jaw_shape", "G_face_shape", "H_jaw_silhouette")
+    shape_modes = (
+        "F_jaw_shape",
+        "G_face_shape",
+        "H_jaw_silhouette",
+        "I_ortho_jaw",
+        "J_ortho_face",
+        "K_ortho_silhouette",
+    )
     shape_owner = np.asarray(target_dense).copy()
     diagnostics = {}
     current_box = None
@@ -131,15 +141,22 @@ def variant(
             raise ValueError("shape experiment needs actual image dimensions")
         from .v265_shape_lab import pose_projected_source, expression_mouth
 
-        source_pose, pose_info = pose_projected_source(
-            source_dense, target_dense, source_shape, target_shape
-        )
+        if mode in ("I_ortho_jaw", "J_ortho_face", "K_ortho_silhouette"):
+            from .v265_shape_lab import orthographic_projected_source
+
+            source_pose, pose_info = orthographic_projected_source(
+                source_dense, target_dense
+            )
+        else:
+            source_pose, pose_info = pose_projected_source(
+                source_dense, target_dense, source_shape, target_shape
+            )
         diagnostics.update(pose_info)
 
     def geometry(projected, target, minimum, *, strict):
         desired = original_geometry(projected, target, minimum, strict=strict)
         desired[:17] = source_pose[:17]
-        if mode == "G_face_shape":
+        if mode in ("G_face_shape", "J_ortho_face"):
             desired[27:36] = source_pose[27:36]
             desired[48:68] = expression_mouth(source_pose, target)[48:68]
         shape_owner[:] = target
@@ -163,7 +180,7 @@ def variant(
         nonlocal current_firewall
         current_firewall = firewall
         owned = full_face_support(shape, shape_owner, firewall)
-        if mode == "H_jaw_silhouette":
+        if mode in ("H_jaw_silhouette", "K_ortho_silhouette"):
             # ROI must include both the old and new silhouettes to remove the old edge.
             owned = cv2.bitwise_or(
                 owned, full_face_support(shape, target_dense, firewall)
@@ -171,7 +188,7 @@ def variant(
         return owned
 
     def compose(corrected, target, support, minimum, *, strict):
-        if mode == "H_jaw_silhouette":
+        if mode in ("H_jaw_silhouette", "K_ortho_silhouette"):
             from .v265_shape_lab import tps_inverse_roi
 
             x0, y0, x1, y1 = current_box

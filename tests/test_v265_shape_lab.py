@@ -130,3 +130,23 @@ class EyeProfileTests(unittest.TestCase):
         )
         self.assertGreater(moved["left_profile"], benign["left_profile"] + 0.01)
         self.assertLess(moved["right_profile"], 1e-7)
+
+
+class OrthographicShapeTests(unittest.TestCase):
+    def test_known_weak_perspective_shape_and_canvas_translation(self):
+        import cv2
+
+        shape = s.template68().copy()
+        source_rot = cv2.Rodrigues(np.array([0.1, -0.15, 0.04]))[0]
+        target_rot = cv2.Rodrigues(np.array([-0.1, 0.2, -0.08]))[0]
+        shape[4:13, 0] *= 1.08
+        shape[7:10, 1] += 0.03
+        source = 180 * (shape @ source_rot[:2].T) + [400, 600]
+        target = 210 * (s.template68() @ target_rot[:2].T) + [250, 300]
+        expected = 210 * (shape @ target_rot[:2].T) + [250, 300]
+        actual, _ = s.orthographic_projected_source(source, target)
+        np.testing.assert_allclose(actual, expected, atol=4e-5)
+        shifted, _ = s.orthographic_projected_source(
+            source + [1500, 900], target + [-50, 800]
+        )
+        np.testing.assert_allclose(shifted, actual + [-50, 800], atol=1e-4)

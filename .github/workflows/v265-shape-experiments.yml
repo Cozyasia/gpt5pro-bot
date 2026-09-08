@@ -52,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [A_baseline, T_exact_field, H_jaw_silhouette]
+        mode: [A_baseline, T_exact_field, H_jaw_silhouette, I_ortho_jaw, K_ortho_silhouette]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:

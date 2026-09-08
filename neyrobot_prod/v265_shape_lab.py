@@ -250,3 +250,103 @@ def tps_inverse_roi(warped, projected, desired, box, face_min):
     if min_det <= 0:
         raise ValueError("folded inverse geometry field")
     return out, error, np.asarray(desired) - np.asarray(projected)
+
+
+def orthographic_camera(points):
+    """Scaled-orthographic fit, independent of image canvas/principal point.
+
+    Assumes weak perspective. Does not recover subject-specific depth and does
+    not qualify large yaw/occlusion. Internal anchors only, as in the PnP lab.
+    """
+
+    p = checked_points(points)
+    ids = np.array([17, 19, 21, 22, 24, 26, 27, 28, 29, 30, 31, 33, 35, 36, 39, 42, 45])
+    q = template68()[ids]
+    design = np.c_[q, np.ones(len(q))]
+    affine = np.linalg.lstsq(design, p[ids], rcond=None)[0][:3].T
+    u, singular, vh = np.linalg.svd(affine, full_matrices=False)
+    axes = u @ vh
+    rot = np.vstack([axes, np.cross(axes[0], axes[1])])
+    initial_r = cv2.Rodrigues(rot)[0].ravel()
+    scale = singular.mean()
+    translation = p[ids].mean(0) - scale * (q @ rot[:2].T).mean(0)
+    initial = np.r_[initial_r, np.log(scale), translation]
+
+    def residual(parameters):
+        r = cv2.Rodrigues(parameters[:3])[0]
+        predicted = np.exp(parameters[3]) * (q @ r[:2].T) + parameters[4:]
+        return (predicted - p[ids]).ravel()
+
+    # Six-parameter damped Gauss-Newton; avoids importing scipy.optimize into
+    # the memory-constrained compositor. Tolerances are numerical, not fidelity gates.
+    parameters = initial.copy()
+    damping = 1e-3
+    for _ in range(100):
+        value = residual(parameters)
+        cost = float(value @ value)
+        jac = np.empty((len(value), 6), float)
+        for j in range(3):
+            step = parameters.copy()
+            step[j] += 1e-6
+            jac[:, j] = (residual(step) - value) / 1e-6
+        r = cv2.Rodrigues(parameters[:3])[0]
+        jac[:, 3] = (np.exp(parameters[3]) * (q @ r[:2].T)).ravel()
+        jac[:, 4] = np.tile([1.0, 0.0], len(q))
+        jac[:, 5] = np.tile([0.0, 1.0], len(q))
+        normal = jac.T @ jac
+        gradient = jac.T @ value
+        diagonal = np.maximum(np.diag(normal), 1e-12)
+        if np.max(np.abs(gradient) / np.sqrt(diagonal)) < 1e-7:
+            break
+        delta = np.linalg.solve(normal + damping * np.diag(diagonal), -gradient)
+        candidate = parameters + delta
+        candidate_residual = residual(candidate)
+        candidate_cost = float(candidate_residual @ candidate_residual)
+        if np.isfinite(candidate_cost) and candidate_cost < cost:
+            parameters = candidate
+            damping = max(1e-12, damping * 0.25)
+            if cost - candidate_cost < 1e-12 * max(1.0, cost):
+                break
+        else:
+            damping = min(1e12, damping * 10)
+    if not np.isfinite(parameters).all():
+        raise ValueError("orthographic pose unavailable")
+    rot = cv2.Rodrigues(parameters[:3])[0]
+    return (
+        rot,
+        float(np.exp(parameters[3])),
+        parameters[4:],
+        float(np.sqrt(np.mean(residual(parameters) ** 2))),
+    )
+
+
+def orthographic_projected_source(source_points, target_points):
+    sr, ss, st, se = orthographic_camera(source_points)
+    tr, ts, tt, te = orthographic_camera(target_points)
+    if abs(np.linalg.det(sr[:2, :2])) < 1e-6:
+        raise ValueError("singular source depth-plane projection")
+    depth = template68()[:, 2]
+    xy = np.linalg.solve(
+        sr[:2, :2],
+        ((checked_points(source_points) - st) / ss - depth[:, None] * sr[:2, 2]).T,
+    ).T
+    source3 = np.c_[xy, depth]
+    out = ts * (source3 @ tr[:2].T) + tt
+    eyes = lambda p: np.array([p[36:42].mean(0), p[42:48].mean(0)])
+    a, b = eyes(out), eyes(target_points)
+    u = a[1] - a[0]
+    v = b[1] - b[0]
+    theta = np.arctan2(v[1], v[0]) - np.arctan2(u[1], u[0])
+    rot = (
+        np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        * np.linalg.norm(v)
+        / np.linalg.norm(u)
+    )
+    out = (out - a.mean(0)) @ rot.T + b.mean(0)
+    return out.astype(np.float32), {
+        "camera": "scaled orthographic generic-depth prior",
+        "source_anchor_rmse_px": se,
+        "target_anchor_rmse_px": te,
+        "source_pose_rvec": cv2.Rodrigues(sr)[0].ravel().tolist(),
+        "target_pose_rvec": cv2.Rodrigues(tr)[0].ravel().tolist(),
+    }

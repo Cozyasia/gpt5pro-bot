@@ -134,11 +134,18 @@ def worker(args):
             from neyrobot_prod.v265_shape_lab import configuration
 
             config_source, config_final = configuration(sd), configuration(fd)
-            if args.mode in ("F_jaw_shape", "G_face_shape", "H_jaw_silhouette"):
+            if args.mode in (
+                "F_jaw_shape",
+                "G_face_shape",
+                "H_jaw_silhouette",
+                "I_ortho_jaw",
+                "J_ortho_face",
+                "K_ortho_silhouette",
+            ):
                 owned = td.copy()
                 owned[:17] = desired[:17]
                 support = lab.full_face_support(target.shape, owned, firewall)
-                if args.mode == "H_jaw_silhouette":
+                if args.mode in ("H_jaw_silhouette", "K_ortho_silhouette"):
                     support = cv2.bitwise_or(
                         support, lab.full_face_support(target.shape, td, firewall)
                     )
@@ -178,6 +185,9 @@ def worker(args):
                     "F_jaw_shape",
                     "G_face_shape",
                     "H_jaw_silhouette",
+                    "I_ortho_jaw",
+                    "J_ortho_face",
+                    "K_ortho_silhouette",
                 )
                 and outside_changes
             ):
@@ -220,7 +230,15 @@ def worker(args):
     )
     coverage_points = (
         owned
-        if args.mode in ("F_jaw_shape", "G_face_shape", "H_jaw_silhouette")
+        if args.mode
+        in (
+            "F_jaw_shape",
+            "G_face_shape",
+            "H_jaw_silhouette",
+            "I_ortho_jaw",
+            "J_ortho_face",
+            "K_ortho_silhouette",
+        )
         else td
     )
     coverage = {
