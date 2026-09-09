@@ -87,10 +87,26 @@ def fit_source_diagnostic(model, source, roi, observed, coefficient_std):
         identity_expression_separation_proven=False,
     )
     info["heldout_improved"] = info["heldout_after_px"] < info["heldout_before_px"]
+
     # Principal-angle evidence: projection may make identity and expression
     # subspaces indistinguishable even though coefficient arrays are separate.
-    qa = np.linalg.qr(design[train, :, :40].reshape(-1, 40))[0]
-    qb = np.linalg.qr(design[train, :, 40:].reshape(-1, 10))[0]
+    def observable_space(a):
+        u, singular, _ = np.linalg.svd(a, full_matrices=False)
+        rank = (
+            int(
+                np.count_nonzero(
+                    singular > singular[0] * max(a.shape) * np.finfo(float).eps
+                )
+            )
+            if len(singular) and singular[0] > 0
+            else 0
+        )
+        return u[:, :rank]
+
+    qa = observable_space(design[train, :, :40].reshape(-1, 40))
+    qb = observable_space(design[train, :, 40:].reshape(-1, 10))
+    info["identity_observable_rank"] = qa.shape[1]
+    info["expression_observable_rank"] = qb.shape[1]
     info["identity_expression_subspace_cosines"] = np.linalg.svd(
         qa.T @ qb, compute_uv=False
     ).tolist()

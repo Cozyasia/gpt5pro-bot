@@ -62,11 +62,11 @@ def run(a):
     del image, points
     safety._reclaim_before_strict()
     warmed_state = safety._memory_state()
-    canonical_components = None
-    canonical_state = None
-    released_state = None
-    retained_geometry = None
-    if a.canonical_assets:
+
+    def prepare_canonical():
+        if not a.canonical_assets:
+            return None, None, None, None
+        released_state = None
         import numpy as np
         from neyrobot_prod.v265_canonical_lab import CanonicalModel, project
         from scripts.v265_canonical_matrix import infer
@@ -100,6 +100,11 @@ def run(a):
             del canonical_model, session, detector, parameters, target
             safety._reclaim_before_strict()
             released_state = safety._memory_state()
+        return canonical_components, canonical_state, released_state, retained_geometry
+
+    canonical_components, canonical_state, released_state, retained_geometry = (
+        prepare_canonical()
+    )
     # Explicit resident-pressure scenario, not a claim to reproduce live traffic.
     # Keep real touched pages alive; never replace cgroup readings or the guard.
     resident_pressure = bytearray(a.resident_extra_mib * 1024 * 1024)
@@ -108,6 +113,12 @@ def run(a):
     pressure_state = safety._memory_state()
     rows = []
     for iteration in range(a.repetitions):
+        if iteration and a.canonical_assets and a.canonical_residency == "scoped":
+            # Repeat inference after a previous complete request in the SAME process.
+            safety._reclaim_before_strict()
+            canonical_components, canonical_state, released_state, retained_geometry = (
+                prepare_canonical()
+            )
         a.sampler = MemorySampler()
         a.sampler.thread.start()
         errors = []
@@ -137,6 +148,8 @@ def run(a):
             a.sampler.thread.join()
         row = {
             "iteration": iteration,
+            "canonical_loaded_state": canonical_state,
+            "canonical_released_state": released_state,
             "strict_entry_states": entries,
             "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "memory_after": safety._memory_state(),
