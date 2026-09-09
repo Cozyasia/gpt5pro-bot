@@ -35,18 +35,26 @@ def rasterize(vertices, triangles, roi, *, max_side=256):
     depth = np.full((height, width), -np.inf, np.float32)
     owner = np.full((height, width), -1, np.int32)
     # No dense triangle x canvas tensor: each triangle uses its bounded ROI.
-    degenerate = 0
-    for index, ids in enumerate(tri):
-        p = xy[ids]
-        x0, y0 = np.maximum(0, np.floor(p.min(axis=0)).astype(int))
-        x1, y1 = np.minimum([width, height], np.ceil(p.max(axis=0)).astype(int))
-        e1, e2 = p[1] - p[0], p[2] - p[0]
-        det = float(e1[0] * e2[1] - e1[1] * e2[0])
-        if abs(det) <= 1e-8:
-            degenerate += 1
-            continue
-        if x1 <= x0 or y1 <= y0:
-            continue
+    projected = xy[tri]
+    edge1 = projected[:, 1] - projected[:, 0]
+    edge2 = projected[:, 2] - projected[:, 0]
+    determinants = edge1[:, 0] * edge2[:, 1] - edge1[:, 1] * edge2[:, 0]
+    # Pixel-centre bounds discard subpixel triangles whose boxes contain no
+    # samples before allocating any per-triangle grid. Such triangles are
+    # unobserved at this resolution, NOT proven hidden surfaces.
+    lower = np.maximum(0, np.ceil(projected.min(axis=1) - 0.5000001).astype(int))
+    upper = np.minimum(
+        [width, height], np.floor(projected.max(axis=1) - 0.4999999).astype(int) + 1
+    )
+    valid = (np.abs(determinants) > 1e-8) & np.all(upper > lower, axis=1)
+    degenerate = int(np.count_nonzero(np.abs(determinants) <= 1e-8))
+    for index in np.flatnonzero(valid):
+        ids = tri[index]
+        p = projected[index]
+        x0, y0 = lower[index]
+        x1, y1 = upper[index]
+        e1, e2 = edge1[index], edge2[index]
+        det = float(determinants[index])
         xx, yy = np.meshgrid(np.arange(x0, x1) + 0.5, np.arange(y0, y1) + 0.5)
         dx, dy = xx - p[0, 0], yy - p[0, 1]
         u = (dx * e2[1] - dy * e2[0]) / det
@@ -88,4 +96,5 @@ def visibility_audit(source, target, final, triangles, source_roi, target_roi):
         "visibility_resolution_max_side": 256,
         "accessory_safety_proven": False,
         "full_resolution_correspondence_verified": False,
+        "unobserved_triangles_may_be_subpixel_not_occluded": True,
     }
