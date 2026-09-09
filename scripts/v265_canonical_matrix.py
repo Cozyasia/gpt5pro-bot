@@ -135,6 +135,25 @@ def run(a):
             k: v for k, v in corr.items() if k not in ("source_xy", "mesh_visible")
         }
         del corr
+        native_corr = None
+        if case == "case06":
+            native_side = int(np.ceil(max(troi[2:] - troi[:2])))
+            if native_side <= 1024:
+                native = correspondence(
+                    sf, final, model.triangles, troi, max_side=native_side
+                )
+                native_corr = {
+                    k: v
+                    for k, v in native.items()
+                    if k not in ("source_xy", "mesh_visible")
+                }
+                native_corr["native_roi_side"] = native_side
+                del native
+            else:
+                native_corr = {
+                    "unsupported_native_roi_side": native_side,
+                    "render_prequalified": False,
+                }
         row = {
             "case": case,
             "source_sha256": key,
@@ -157,6 +176,7 @@ def run(a):
             "coefficient_metrics_are_algebraic_not_visual_proof": True,
             "mesh_validity": validity,
             "pointwise_correspondence": corr_scalars,
+            "case06_native_correspondence": native_corr,
             "visibility_diagnostic": visibility_audit(
                 sf, target_mesh, final, model.triangles, sroi, troi
             ),

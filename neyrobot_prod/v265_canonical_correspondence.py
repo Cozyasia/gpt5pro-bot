@@ -106,34 +106,42 @@ def correspondence(source, final, triangles, target_roi, *, max_side=256):
     target = rasterize(final, triangles, target_roi, max_side=max_side)
     owner = target["owner"]
     yy, xx = np.nonzero(owner >= 0)
-    ids = owner[yy, xx]
-    tri = np.asarray(triangles)[ids]
-    pixel = np.column_stack((xx + 0.5, yy + 0.5)) / target["scale"] + target["roi"][:2]
-    p = final[tri].astype(float)
-    e1, e2 = p[:, 1, :2] - p[:, 0, :2], p[:, 2, :2] - p[:, 0, :2]
-    delta = pixel - p[:, 0, :2]
-    det = e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]
-    u = (delta[:, 0] * e2[:, 1] - delta[:, 1] * e2[:, 0]) / det
-    v = (delta[:, 1] * e1[:, 0] - delta[:, 0] * e1[:, 1]) / det
-    weights = np.column_stack((1 - u - v, u, v))
-    points = np.einsum("nk,nkc->nc", weights, source[tri])
+    topology = np.asarray(triangles)
     rays = SourceRays(source, triangles)
-    depth, max_pairs = rays.front_depth(points[:, :2])
-    # Floating-point tolerance only; not a calibrated identity/occlusion rule.
     tolerance = (
         32 * np.finfo(np.float32).eps * max(1.0, float(np.abs(source[:, 2]).max()))
     )
-    visible = np.isfinite(depth) & (np.abs(depth - points[:, 2]) <= tolerance)
     mapping = np.full((*owner.shape, 2), np.nan, np.float32)
     mask = np.zeros(owner.shape, bool)
-    mapping[yy, xx] = points[:, :2]
-    mask[yy, xx] = visible
+    count = 0
+    max_pairs = 0
+    # Full native ROI never allocates all sample x vertex x coordinate tensors.
+    for start in range(0, len(xx), 4096):
+        x, y = xx[start : start + 4096], yy[start : start + 4096]
+        tri = topology[owner[y, x]]
+        pixel = (
+            np.column_stack((x + 0.5, y + 0.5)) / target["scale"] + target["roi"][:2]
+        )
+        p = final[tri].astype(float)
+        e1, e2 = p[:, 1, :2] - p[:, 0, :2], p[:, 2, :2] - p[:, 0, :2]
+        delta = pixel - p[:, 0, :2]
+        det = e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]
+        u = (delta[:, 0] * e2[:, 1] - delta[:, 1] * e2[:, 0]) / det
+        v = (delta[:, 1] * e1[:, 0] - delta[:, 0] * e1[:, 1]) / det
+        weights = np.column_stack((1 - u - v, u, v))
+        points = np.einsum("nk,nkc->nc", weights, source[tri])
+        depth, pairs = rays.front_depth(points[:, :2])
+        visible = np.isfinite(depth) & (np.abs(depth - points[:, 2]) <= tolerance)
+        mapping[y, x] = points[:, :2]
+        mask[y, x] = visible
+        count += int(visible.sum())
+        max_pairs = max(max_pairs, pairs)
     return {
         "source_xy": mapping,
         "mesh_visible": mask,
-        "sample_count": len(ids),
-        "mesh_visible_samples": int(visible.sum()),
-        "mesh_occluded_or_unknown_samples": int((~visible).sum()),
+        "sample_count": len(xx),
+        "mesh_visible_samples": count,
+        "mesh_occluded_or_unknown_samples": len(xx) - count,
         "max_query_triangle_pairs": max_pairs,
         "index_links": rays.links,
         "numeric_depth_tolerance": tolerance,
