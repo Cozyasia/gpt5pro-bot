@@ -115,39 +115,41 @@ def accessory_edge_hypothesis(image, landmarks):
     if im.ndim != 3 or im.shape[2] != 3 or im.dtype != np.uint8:
         raise ValueError("expected uint8 image")
     h, w = im.shape[:2]
-    gray = im.astype(np.float32).mean(2)
-    gx = np.zeros_like(gray)
-    gy = np.zeros_like(gray)
-    gx[:, 1:] = np.abs(np.diff(gray, axis=1))
-    gy[1:] = np.abs(np.diff(gray, axis=0))
-    edge = np.maximum(gx, gy)
     iod = max(float(np.linalg.norm(p[42:48].mean(0) - p[36:42].mean(0))), 1.0)
     x0 = max(0, int(np.floor(p[36:48, 0].min() - iod * 0.22)))
     x1 = min(w, int(np.ceil(p[36:48, 0].max() + iod * 0.22)))
     y0 = max(0, int(np.floor(min(p[17:27, 1].min(), p[36:48, 1].min()) - iod * 0.08)))
     y1 = min(h, int(np.ceil(p[36:48, 1].max() + iod * 0.24)))
-    band = np.zeros((h, w), bool)
-    band[y0:y1, x0:x1] = True
-    values = edge[band]
-    if not len(values):
+    if x1 <= x0 or y1 <= y0:
         raise ValueError("empty accessory search band")
-    threshold = max(22.0, float(np.percentile(values, 86)))
-    dark = gray <= np.percentile(gray[band], 55)
-    candidate = band & dark & (edge >= threshold)
+    # Keep working buffers inside the landmark-bounded ROI. A full 3072px source
+    # otherwise creates several 30-90 MiB temporaries and breaks the 512 MiB job.
+    gray = im[y0:y1, x0:x1].astype(np.float32).mean(2)
+    gx = np.zeros_like(gray)
+    gy = np.zeros_like(gray)
+    gx[:, 1:] = np.abs(np.diff(gray, axis=1))
+    gy[1:] = np.abs(np.diff(gray, axis=0))
+    edge = np.maximum(gx, gy)
+    threshold = max(22.0, float(np.percentile(edge, 86)))
+    dark = gray <= np.percentile(gray, 55)
+    candidate = dark & (edge >= threshold)
     # Small fixed dilation joins one-pixel frame edges without swallowing eyes.
-    mask = candidate.copy()
+    local = candidate.copy()
     for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-        mask |= np.roll(candidate, (dy, dx), (0, 1))
-    mask &= band
-    left = mask[:, : int((p[39, 0] + p[42, 0]) / 2)].sum()
-    right = mask[:, int((p[39, 0] + p[42, 0]) / 2) :].sum()
+        local |= np.roll(candidate, (dy, dx), (0, 1))
+    mask = np.zeros((h, w), bool)
+    mask[y0:y1, x0:x1] = local
+    split = int(np.clip((p[39, 0] + p[42, 0]) / 2 - x0, 0, local.shape[1]))
+    left = local[:, :split].sum()
+    right = local[:, split:].sum()
     minimum = max(6, int(iod * 0.12))
     present = bool(left >= minimum and right >= minimum)
     return {
         "mask": mask,
         "present": present,
         "candidate_pixels": int(mask.sum()),
-        "search_pixels": int(band.sum()),
+        "search_pixels": int(local.size),
+        "working_roi": [x0, y0, x1, y1],
         "confidence": float(min(left, right) / max(minimum, 1)),
         "segmentation_verified": False,
         "method": "landmark_bounded_dark_edge_hypothesis",

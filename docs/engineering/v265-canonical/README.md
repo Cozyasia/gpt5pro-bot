@@ -69,6 +69,13 @@ failure mode from being hidden by blending, but is still a negative checkpoint:
 retained target eyes/mouth make identity incomplete, and no segmentation or
 mouth-appearance synthesis has been implemented.
 
+The first seven-case CI attempt with semantic accounting completed cases01-07
+but the case08 process ended without a Python traceback after allocating
+full-frame float accessory working buffers. That failure is retained as memory
+evidence. The detector now computes gray/gradient/edge temporaries only inside
+the landmark-bounded eye ROI; its output mask remains image-sized boolean
+evidence. The rerun, not the interrupted attempt, determines final memory facts.
+
 Reproduce this ownership checkpoint from the repository root:
 
 ```bash

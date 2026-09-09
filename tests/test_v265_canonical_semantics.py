@@ -47,6 +47,14 @@ class SemanticOwnershipTests(unittest.TestCase):
             accessory_policy(False, True)["action"], "retain_target_accessory_layer"
         )
 
+    def test_accessory_working_buffers_are_landmark_bounded(self):
+        image = np.full((3072, 2458, 3), 210, np.uint8)
+        p = landmarks() + [1200, 500]
+        evidence = accessory_edge_hypothesis(image, p)
+        x0, y0, x1, y1 = evidence["working_roi"]
+        self.assertLess((x1 - x0) * (y1 - y0), image.shape[0] * image.shape[1] // 100)
+        self.assertEqual(evidence["mask"].shape, image.shape[:2])
+
     def test_completeness_names_every_missing_critical_region(self):
         face = np.ones((100, 100), bool)
         labels = semantic_region_map((100, 100), landmarks(), face)
