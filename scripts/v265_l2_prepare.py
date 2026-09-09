@@ -7,6 +7,8 @@ from pathlib import Path
 import urllib.request
 import numpy as np
 
+from neyrobot_prod.v265_asset_policy import assert_production_eligible, load_asset_manifest
+
 
 ASSETS = {
     "faceverse_v4_2.npy": (
@@ -34,6 +36,9 @@ def fetch(path, url, digest):
 
 
 def run(a):
+    manifest = load_asset_manifest(a.manifest)
+    if not a.allow_research_assets:
+        assert_production_eligible(manifest)
     a.output.mkdir(parents=True, exist_ok=True)
     for name, (url, digest) in ASSETS.items():
         fetch(a.output / name, url, digest)
@@ -67,4 +72,14 @@ def run(a):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument(
+        "--manifest",
+        type=Path,
+        default=Path("tests/fixtures/v265_l2_assets.json"),
+    )
+    p.add_argument(
+        "--allow-research-assets",
+        action="store_true",
+        help="Explicit local-research override. Forbidden in unattended CI and production.",
+    )
     run(p.parse_args())
