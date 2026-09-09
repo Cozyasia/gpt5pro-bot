@@ -23,6 +23,7 @@ from neyrobot_prod.v265_canonical_lab import (
 from neyrobot_prod.v265_source_fidelity import morphology
 from neyrobot_prod.v265_canonical_fit_lab import fit_source_diagnostic
 from neyrobot_prod.v265_canonical_visibility import visibility_audit
+from neyrobot_prod.v265_canonical_correspondence import correspondence
 
 
 def digest(path):
@@ -129,6 +130,11 @@ def run(a):
         sf = project(
             model.shape(source.identity, source.expression), source.camera, sroi
         )
+        corr = correspondence(sf, final, model.triangles, troi)
+        corr_scalars = {
+            k: v for k, v in corr.items() if k not in ("source_xy", "mesh_visible")
+        }
+        del corr
         row = {
             "case": case,
             "source_sha256": key,
@@ -150,6 +156,7 @@ def run(a):
             "coefficient_target_expression_retention_linf": 0.0,
             "coefficient_metrics_are_algebraic_not_visual_proof": True,
             "mesh_validity": validity,
+            "pointwise_correspondence": corr_scalars,
             "visibility_diagnostic": visibility_audit(
                 sf, target_mesh, final, model.triangles, sroi, troi
             ),
