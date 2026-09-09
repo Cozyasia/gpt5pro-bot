@@ -1,0 +1,322 @@
+{
+  "architecture": "MediaPipe FaceMesh + expression-orthogonal bounded non-learned canonical 3D residual",
+  "model_sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+  "canonical_sha256": "8bac80443397e113f41a8b565ea72c59390bc031d9defab289dba7bc0c54e618",
+  "model_bytes": 3758596,
+  "canonical_bytes": 45999,
+  "peak_rss_kib": 323572,
+  "repeated_identity": {
+    "case01_case05": true,
+    "case02_case06": true
+  },
+  "cases": [
+    {
+      "case": "case01",
+      "identity_hash": "d4728caee2758cac0053bcc9e087167ce3b50d994a703a786746b04c22e7576f",
+      "source_self_rmse_iod": 0.004565810319036245,
+      "source": {
+        "mouth_width": 0.5734972993182366,
+        "opening": 0.0014514562079027727,
+        "lip_height": 0.14973722670369796,
+        "philtrum": 0.15032431139365696,
+        "mouth_chin": 0.47503405367770796
+      },
+      "target": {
+        "mouth_width": 0.7472851641126326,
+        "opening": 0.002034623728264044,
+        "lip_height": 0.12817520337976185,
+        "philtrum": 0.15033523203172214,
+        "mouth_chin": 0.5034228217136751
+      },
+      "retarget": {
+        "mouth_width": 0.741342034145168,
+        "opening": 0.003978223815073047,
+        "lip_height": 0.17036072624180887,
+        "philtrum": 0.16226880126808846,
+        "mouth_chin": 0.580004244285169
+      },
+      "topology": {
+        "triangles": 898,
+        "orientation_failures": 51,
+        "area_ratio_min": 0.13091972470283508,
+        "area_ratio_max": 4.975697994232178,
+        "edge_stretch_min": 0.13140414655208588,
+        "edge_stretch_max": 3.73445987701416
+      },
+      "mouth_identity_width_error": 0.1678447348269314,
+      "mouth_identity_philtrum_error": 0.011944489874431502,
+      "mouth_identity_chin_error": 0.10497019060746099,
+      "target_opening_error": 0.0019436000868090029,
+      "blendshapes": {
+        "source_jawOpen": 0.003605268895626068,
+        "target_jawOpen": 0.0016575806075707078,
+        "source_smile": 0.0012277523055672646,
+        "target_smile": 0.8337011635303497
+      }
+    },
+    {
+      "case": "case02",
+      "identity_hash": "a8fd135cc3c653305bd13d6c81a7b8c3d528e12dca6fd9e8177d78856f0dacd1",
+      "source_self_rmse_iod": 0.01439193170517683,
+      "source": {
+        "mouth_width": 0.6353164956524437,
+        "opening": 0.07435019493194835,
+        "lip_height": 0.15187024678716823,
+        "philtrum": 0.15208931027843614,
+        "mouth_chin": 0.3353566684806347
+      },
+      "target": {
+        "mouth_width": 0.7917977526117526,
+        "opening": 0.09738575555075406,
+        "lip_height": 0.13970623646384417,
+        "philtrum": 0.11468816535951519,
+        "mouth_chin": 0.5749281677896027
+      },
+      "retarget": {
+        "mouth_width": 0.793511959677006,
+        "opening": 0.08581479777056338,
+        "lip_height": 0.17464332173709446,
+        "philtrum": 0.15985884520448054,
+        "mouth_chin": 0.5100265822371947
+      },
+      "topology": {
+        "triangles": 898,
+        "orientation_failures": 21,
+        "area_ratio_min": 0.3530447781085968,
+        "area_ratio_max": 10.51441478729248,
+        "edge_stretch_min": 0.24528701603412628,
+        "edge_stretch_max": 3.392835855484009
+      },
+      "mouth_identity_width_error": 0.1581954640245623,
+      "mouth_identity_philtrum_error": 0.0077695349260444024,
+      "mouth_identity_chin_error": 0.17466991375655994,
+      "target_opening_error": 0.011570957780190683,
+      "blendshapes": {
+        "source_jawOpen": 0.07741763442754745,
+        "target_jawOpen": 0.016809817403554916,
+        "source_smile": 0.029088654555380344,
+        "target_smile": 0.9212062358856201
+      }
+    },
+    {
+      "case": "case04",
+      "identity_hash": "4ed3dc616fa69241cd70709eaa300e4f23d5f3bc60a1b1d36d4835a7b12bd341",
+      "source_self_rmse_iod": 0.03658539429306984,
+      "source": {
+        "mouth_width": 0.5247417323230785,
+        "opening": 0.006194460182326455,
+        "lip_height": 0.11627683792718592,
+        "philtrum": 0.13472008093247773,
+        "mouth_chin": 0.3059021594792148
+      },
+      "target": {
+        "mouth_width": 0.6701146606078949,
+        "opening": 0.00531867591947506,
+        "lip_height": 0.16340714072712123,
+        "philtrum": 0.15065764233618223,
+        "mouth_chin": 0.4752114015816771
+      },
+      "retarget": {
+        "mouth_width": 0.5949869421606804,
+        "opening": 0.01956366120495779,
+        "lip_height": 0.16338867949322355,
+        "philtrum": 0.1415455881579175,
+        "mouth_chin": 0.6038870118967716
+      },
+      "topology": {
+        "triangles": 898,
+        "orientation_failures": 17,
+        "area_ratio_min": 0.050520509481430054,
+        "area_ratio_max": 4.559359073638916,
+        "edge_stretch_min": 0.05682870373129845,
+        "edge_stretch_max": 3.8746724128723145
+      },
+      "mouth_identity_width_error": 0.07024520983760185,
+      "mouth_identity_philtrum_error": 0.006825507225439786,
+      "mouth_identity_chin_error": 0.29798485241755684,
+      "target_opening_error": 0.01424498528548273,
+      "blendshapes": {
+        "source_jawOpen": 0.0037365686148405075,
+        "target_jawOpen": 0.0004888651892542839,
+        "source_smile": 8.722749043954536e-05,
+        "target_smile": 0.7490665912628174
+      }
+    },
+    {
+      "case": "case05",
+      "identity_hash": "d4728caee2758cac0053bcc9e087167ce3b50d994a703a786746b04c22e7576f",
+      "source_self_rmse_iod": 0.004565810319036245,
+      "source": {
+        "mouth_width": 0.5734972993182366,
+        "opening": 0.0014514562079027727,
+        "lip_height": 0.14973722670369796,
+        "philtrum": 0.15032431139365696,
+        "mouth_chin": 0.47503405367770796
+      },
+      "target": {
+        "mouth_width": 0.5915917212126551,
+        "opening": 0.003803817729138047,
+        "lip_height": 0.17333250978493872,
+        "philtrum": 0.15132974544865363,
+        "mouth_chin": 0.4760593434799972
+      },
+      "retarget": {
+        "mouth_width": 0.5997636303571509,
+        "opening": 0.009663825349492413,
+        "lip_height": 0.15361092532797044,
+        "philtrum": 0.15103041680362603,
+        "mouth_chin": 0.5327039075887914
+      },
+      "topology": {
+        "triangles": 898,
+        "orientation_failures": 30,
+        "area_ratio_min": 0.08797663450241089,
+        "area_ratio_max": 3.479485511779785,
+        "edge_stretch_min": 0.11144467443227768,
+        "edge_stretch_max": 2.2096574306488037
+      },
+      "mouth_identity_width_error": 0.026266331038914292,
+      "mouth_identity_philtrum_error": 0.0007061054099690711,
+      "mouth_identity_chin_error": 0.057669853911083424,
+      "target_opening_error": 0.005860007620354366,
+      "blendshapes": {
+        "source_jawOpen": 0.003605268895626068,
+        "target_jawOpen": 0.0006268083234317601,
+        "source_smile": 0.0012277523055672646,
+        "target_smile": 0.0324771162122488
+      }
+    },
+    {
+      "case": "case06",
+      "identity_hash": "a8fd135cc3c653305bd13d6c81a7b8c3d528e12dca6fd9e8177d78856f0dacd1",
+      "source_self_rmse_iod": 0.01439193170517683,
+      "source": {
+        "mouth_width": 0.6353164956524437,
+        "opening": 0.07435019493194835,
+        "lip_height": 0.15187024678716823,
+        "philtrum": 0.15208931027843614,
+        "mouth_chin": 0.3353566684806347
+      },
+      "target": {
+        "mouth_width": 0.7646848047866311,
+        "opening": 0.10994347498702259,
+        "lip_height": 0.17122356038130493,
+        "philtrum": 0.10524281992434553,
+        "mouth_chin": 0.5441637689130977
+      },
+      "retarget": {
+        "mouth_width": 0.7704622769894451,
+        "opening": 0.10520699423804085,
+        "lip_height": 0.1717854915126748,
+        "philtrum": 0.15937314287548887,
+        "mouth_chin": 0.5197671759651478
+      },
+      "topology": {
+        "triangles": 898,
+        "orientation_failures": 52,
+        "area_ratio_min": 0.11231085658073425,
+        "area_ratio_max": 16.210308074951172,
+        "edge_stretch_min": 0.16674748063087463,
+        "edge_stretch_max": 5.193017482757568
+      },
+      "mouth_identity_width_error": 0.1351457813370014,
+      "mouth_identity_philtrum_error": 0.007283832597052731,
+      "mouth_identity_chin_error": 0.18441050748451304,
+      "target_opening_error": 0.004736480748981739,
+      "blendshapes": {
+        "source_jawOpen": 0.07741763442754745,
+        "target_jawOpen": 0.02141350880265236,
+        "source_smile": 0.029088654555380344,
+        "target_smile": 0.9349786937236786
+      }
+    },
+    {
+      "case": "case07",
+      "identity_hash": "6b98bf61485c84315fcb93c2e8e0f75df735824d5029e30ae20a5e58098b6bfe",
+      "source_self_rmse_iod": 0.018039435148239136,
+      "source": {
+        "mouth_width": 0.5894856236559526,
+        "opening": 0.004838516486042059,
+        "lip_height": 0.1415880240562787,
+        "philtrum": 0.14918159260115,
+        "mouth_chin": 0.3978752678118579
+      },
+      "target": {
+        "mouth_width": 0.5704486715530326,
+        "opening": 0.004352518625690183,
+        "lip_height": 0.11706143476458483,
+        "philtrum": 0.17078786404686158,
+        "mouth_chin": 0.39374116382918967
+      },
+      "retarget": {
+        "mouth_width": 0.5659838170779986,
+        "opening": 0.0036871727664003068,
+        "lip_height": 0.14796716838797536,
+        "philtrum": 0.14673584451535923,
+        "mouth_chin": 0.4914558581192754
+      },
+      "topology": {
+        "triangles": 898,
+        "orientation_failures": 18,
+        "area_ratio_min": 0.10478516668081284,
+        "area_ratio_max": 2.3705413341522217,
+        "edge_stretch_min": 0.13995367288589478,
+        "edge_stretch_max": 2.464911460876465
+      },
+      "mouth_identity_width_error": 0.023501806577953976,
+      "mouth_identity_philtrum_error": 0.002445748085790761,
+      "mouth_identity_chin_error": 0.0935805903074175,
+      "target_opening_error": 0.0006653458592898766,
+      "blendshapes": {
+        "source_jawOpen": 0.0029773146379739046,
+        "target_jawOpen": 0.019216235727071762,
+        "source_smile": 0.0027910390053875744,
+        "target_smile": 0.0001791584181773942
+      }
+    },
+    {
+      "case": "case08",
+      "identity_hash": "2a07f5e108f43f913308244737c336ebe60dbe2395cdec5dd2e2db342cc16cc0",
+      "source_self_rmse_iod": 0.02460992895066738,
+      "source": {
+        "mouth_width": 0.6223993433645167,
+        "opening": 0.11493413461700187,
+        "lip_height": 0.12133952629401257,
+        "philtrum": 0.0958617079250386,
+        "mouth_chin": 0.43452116404786173
+      },
+      "target": {
+        "mouth_width": 0.6051898745415993,
+        "opening": 0.013851198506794457,
+        "lip_height": 0.15848094201001772,
+        "philtrum": 0.10630721581462463,
+        "mouth_chin": 0.4257512640545503
+      },
+      "retarget": {
+        "mouth_width": 0.603135561457386,
+        "opening": 0.046662128406182904,
+        "lip_height": 0.12477195158495197,
+        "philtrum": 0.1373901591917074,
+        "mouth_chin": 0.5671657597164479
+      },
+      "topology": {
+        "triangles": 898,
+        "orientation_failures": 14,
+        "area_ratio_min": 0.08718642592430115,
+        "area_ratio_max": 1.466821312904358,
+        "edge_stretch_min": 0.12666328251361847,
+        "edge_stretch_max": 1.4025460481643677
+      },
+      "mouth_identity_width_error": 0.01926378190713074,
+      "mouth_identity_philtrum_error": 0.041528451266668806,
+      "mouth_identity_chin_error": 0.13264459566858616,
+      "target_opening_error": 0.03281092989938845,
+      "blendshapes": {
+        "source_jawOpen": 0.15672695636749268,
+        "target_jawOpen": 0.0017399181379005313,
+        "source_smile": 0.6675620973110199,
+        "target_smile": 0.53350430727005
+      }
+    }
+  ]
+}
