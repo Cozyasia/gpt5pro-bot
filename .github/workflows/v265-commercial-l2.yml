@@ -1,0 +1,23 @@
+name: V265 Commercial L2
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'neyrobot_prod/v265_commercial_geometry.py'
+      - 'scripts/v265_commercial_*'
+      - 'tests/test_v265_commercial_geometry.py'
+      - 'tests/fixtures/v265_commercial_assets.json'
+      - 'docs/engineering/v265-commercial-l2/**'
+      - '.github/workflows/v265-commercial-l2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  commercial-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install numpy==1.26.4 pytest==8.3.4
+      - run: PYTHONPATH=. pytest -q tests/test_v265_commercial_geometry.py
