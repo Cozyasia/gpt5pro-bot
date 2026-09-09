@@ -4,8 +4,10 @@ on:
     branches: [main]
     paths:
       - 'neyrobot_prod/v265_commercial_geometry.py'
+      - 'neyrobot_prod/v265_vendor_identity.py'
       - 'scripts/v265_commercial_*'
       - 'tests/test_v265_commercial_geometry.py'
+      - 'tests/test_v265_vendor_identity.py'
       - 'tests/fixtures/v265_commercial_assets.json'
       - 'docs/engineering/v265-commercial-l2/**'
       - '.github/workflows/v265-commercial-l2.yml'
@@ -20,4 +22,4 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: pip install numpy==1.26.4 pytest==8.3.4
-      - run: PYTHONPATH=. pytest -q tests/test_v265_commercial_geometry.py
+      - run: PYTHONPATH=. pytest -q tests/test_v265_commercial_geometry.py tests/test_v265_vendor_identity.py
