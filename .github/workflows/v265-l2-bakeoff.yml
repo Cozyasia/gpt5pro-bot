@@ -1,0 +1,49 @@
+name: V265 L2 Canonical Bake-off
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'neyrobot_prod/v265_l2_geometry.py'
+      - 'scripts/v265_l2_*.py'
+      - 'tests/test_v265_l2_geometry.py'
+      - 'tests/fixtures/v265_l2_assets.json'
+      - '.github/workflows/v265-l2-bakeoff.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.1.3 opencv-python-headless==4.10.0.84 pytest==8.3.4
+      - run: pytest -q tests/test_v265_l2_geometry.py
+  frozen-seven-case-bakeoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.1.3 opencv-python-headless==4.10.0.84 onnxruntime==1.20.1 pillow==10.4.0 psutil==6.1.1
+      - run: python -m scripts.v265_matrix_prepare --case case02 --models /tmp/v265-models --output /tmp/v265-results
+      - run: python -m scripts.v265_l2_prepare --output /tmp/v265-l2-assets
+      - name: Negative geometry checkpoint under production limit
+        run: |
+          mkdir -p /tmp/v265-l2-ci
+          if docker run --rm --memory=512m --memory-swap=512m -v "$PWD":/app -v /tmp/v265-models:/models:ro -v /tmp/v265-l2-assets:/assets:ro -v /tmp/v265-l2-ci:/results -w /app python:3.12-slim sh -c 'pip install --no-cache-dir numpy==2.1.3 opencv-python-headless==4.10.0.84 onnxruntime==1.20.1 pillow==10.4.0 psutil==6.1.1 && python -m scripts.v265_l2_bakeoff --assets /assets --models /models --output /results'; then
+            echo completed > /tmp/v265-l2-ci/memory-status.txt
+          else
+            echo failed-under-512MiB > /tmp/v265-l2-ci/memory-status.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: l2-bakeoff-negative-evidence
+          path: |
+            /tmp/v265-l2-assets/asset_report.json
+            /tmp/v265-l2-ci
