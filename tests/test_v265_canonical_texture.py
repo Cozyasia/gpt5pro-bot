@@ -58,3 +58,34 @@ class TextureTests(unittest.TestCase):
                 None,
                 np.ones((1, 1), bool),
             )
+
+
+class TextureCorrespondenceTests(unittest.TestCase):
+    def test_rotated_image_mesh_maps_exact_source_pixels(self):
+        from neyrobot_prod.v265_canonical_texture import (
+            pixel_centres_to_mesh_boundaries,
+        )
+        from neyrobot_prod.v265_canonical_correspondence import correspondence
+
+        source = np.array(
+            [[-0.5, -0.5, 0], [2.5, -0.5, 0], [2.5, 2.5, 0], [-0.5, 2.5, 0]], np.float32
+        )
+        final = source.copy()
+        final[:, 0] = 2 - source[:, 1]
+        final[:, 1] = source[:, 0]
+        tri = np.array([[0, 1, 2], [0, 2, 3]])
+        mapping = correspondence(
+            pixel_centres_to_mesh_boundaries(source),
+            pixel_centres_to_mesh_boundaries(final),
+            tri,
+            [0, 0, 3, 3],
+            max_side=3,
+        )
+        image = np.arange(27, dtype=np.uint8).reshape(3, 3, 3)
+        yes = np.ones((3, 3), bool)
+        result = sample_owned_texture(
+            image, mapping["source_xy"], mapping["mesh_visible"], yes, yes
+        )
+        np.testing.assert_array_equal(result["texture"], np.rot90(image, -1))
+        self.assertEqual(result["available_samples"], 9)
+        np.testing.assert_array_equal(source[0], [-0.5, -0.5, 0])

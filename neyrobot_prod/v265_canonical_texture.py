@@ -65,3 +65,17 @@ def sample_owned_texture(image, source_xy, mesh_visible, source_owned, target_ow
         "semantic_masks_are_caller_evidence_not_inferred": True,
         "render_prequalified": False,
     }
+
+
+def pixel_centres_to_mesh_boundaries(vertices):
+    """Convert OpenCV centre coordinates to the rasterizer's boundary convention.
+
+    Apply to BOTH projected source and final meshes before correspondence.
+    Camera depth and image pixel values are unchanged.
+    """
+    points = np.asarray(vertices, dtype=np.float32)
+    if points.ndim != 2 or points.shape[1] != 3 or not np.isfinite(points).all():
+        raise ValueError("expected finite projected mesh")
+    out = points.copy()
+    out[:, :2] += 0.5
+    return out
