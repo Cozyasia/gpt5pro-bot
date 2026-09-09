@@ -144,7 +144,7 @@ def correspondence(source, final, triangles, target_roi, *, max_side=256):
         "mesh_occluded_or_unknown_samples": len(xx) - count,
         "max_query_triangle_pairs": max_pairs,
         "index_links": rays.links,
-        "numeric_depth_tolerance": tolerance,
+        "numeric_depth_tolerance": float(tolerance),
         "max_side": max_side,
         "image_semantics_verified": False,
         "render_prequalified": False,

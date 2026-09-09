@@ -1,4 +1,5 @@
 import unittest
+import json
 import numpy as np
 from neyrobot_prod.v265_canonical_correspondence import SourceRays, correspondence
 
@@ -14,6 +15,10 @@ class CorrespondenceTests(unittest.TestCase):
         self.assertEqual(r["sample_count"], r["mesh_visible_samples"])
         self.assertTrue(np.all(r["source_xy"][r["mesh_visible"]] < 0.1))
         self.assertFalse(r["render_prequalified"])
+        json.dumps(
+            {k: v for k, v in r.items() if k not in ("source_xy", "mesh_visible")},
+            allow_nan=False,
+        )
 
     def test_occluded_source_cannot_supply_newly_visible_target_surface(self):
         source = np.array(
