@@ -1,6 +1,9 @@
 import unittest
 import numpy as np
-from neyrobot_prod.v265_canonical_texture import sample_owned_texture
+from neyrobot_prod.v265_canonical_texture import (
+    composite_owned_texture,
+    sample_owned_texture,
+)
 
 
 class TextureTests(unittest.TestCase):
@@ -89,3 +92,40 @@ class TextureCorrespondenceTests(unittest.TestCase):
         np.testing.assert_array_equal(result["texture"], np.rot90(image, -1))
         self.assertEqual(result["available_samples"], 9)
         np.testing.assert_array_equal(source[0], [-0.5, -0.5, 0])
+
+
+class OwnershipCompositeTests(unittest.TestCase):
+    def test_unknown_accessory_and_mouth_pixels_retain_target_bytes(self):
+        source = np.full((3, 4, 3), [10, 20, 30], np.uint8)
+        target = np.full((3, 4, 3), [200, 210, 220], np.uint8)
+        y, x = np.indices((3, 4))
+        xy = np.stack((x + 0.5, y + 0.5), axis=2)
+        source_owned = np.ones((3, 4), bool)
+        target_owned = np.ones((3, 4), bool)
+        # Stand-ins for externally established glasses/eye and mouth ownership.
+        target_owned[0, 1:3] = False
+        target_owned[2, 1:3] = False
+        sampled = sample_owned_texture(
+            source, xy, np.ones((3, 4), bool), source_owned, target_owned
+        )
+        result = composite_owned_texture(target, sampled)
+        np.testing.assert_array_equal(result["image"][target_owned], source[target_owned])
+        np.testing.assert_array_equal(result["image"][~target_owned], target[~target_owned])
+        self.assertEqual(result["source_replaced_pixels"], 8)
+        self.assertEqual(result["target_retained_pixels"], 4)
+        self.assertTrue(result["target_retained_bit_exact"])
+        self.assertFalse(result["identity_complete"])
+
+    def test_compositor_rejects_untyped_or_mismatched_evidence(self):
+        target = np.zeros((2, 2, 3), np.uint8)
+        with self.assertRaises(ValueError):
+            composite_owned_texture(target, {})
+        with self.assertRaises(ValueError):
+            composite_owned_texture(
+                target,
+                {
+                    "texture": target,
+                    "available": np.ones((2, 2), np.uint8),
+                    "render_prequalified": False,
+                },
+            )

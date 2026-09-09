@@ -6,7 +6,10 @@ from pathlib import Path
 import resource
 import time
 import numpy as np
-from neyrobot_prod.v265_canonical_texture import sample_owned_texture
+from neyrobot_prod.v265_canonical_texture import (
+    composite_owned_texture,
+    sample_owned_texture,
+)
 
 
 def run(output):
@@ -24,15 +27,21 @@ def run(output):
     target[1000:] = False
     started = time.perf_counter()
     r = sample_owned_texture(image, xy, visible, owned, target)
+    target_image = np.full(r["texture"].shape, 211, np.uint8)
+    composed = composite_owned_texture(target_image, r)
     np.testing.assert_array_equal(r["texture"][:1000, :800], image[200:1200, 100:900])
     assert not r["texture"][~target].any()
     assert r["available_samples"] == 800000
+    np.testing.assert_array_equal(composed["image"][~target], target_image[~target])
     root = Path("/sys/fs/cgroup")
     ledger = {
         "elapsed_s": time.perf_counter() - started,
         "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         "accepted_pixels": r["available_samples"],
         "protected_pixels": int((~target).sum()),
+        "target_retained_pixels": composed["target_retained_pixels"],
+        "target_retained_bit_exact": composed["target_retained_bit_exact"],
+        "identity_complete": composed["identity_complete"],
         "exact_pixel_match": True,
         "cgroup": {
             n: (root / n).read_text().strip()

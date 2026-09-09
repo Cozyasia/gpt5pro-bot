@@ -59,6 +59,31 @@ replacement alone cannot prove that a broad source smile is absent in the image.
 Case07 has no verified accessory segmentation; protecting all eye pixels would
 leave target eye identity and would not satisfy the requirement.
 
+The offline ownership compositor now makes the incomplete policy executable:
+only mesh-visible texels with explicit source and target ownership evidence are
+replaced. Occluded, unknown, accessory-protected and expression-incompatible
+pixels remain target bytes bit-exact. There is deliberately no feather, Poisson,
+residual, or fallback fill. Synthetic eye/glasses and mouth regions verify the
+firewall, including a production-size bounded probe. This prevents the old
+failure mode from being hidden by blending, but is still a negative checkpoint:
+retained target eyes/mouth make identity incomplete, and no segmentation or
+mouth-appearance synthesis has been implemented.
+
+Reproduce this ownership checkpoint from the repository root:
+
+```bash
+python -m unittest tests.test_v265_canonical_texture \
+  tests.test_v265_canonical_correspondence \
+  tests.test_v265_canonical_visibility \
+  tests.test_v265_canonical_fit_lab tests.test_v265_canonical_lab
+python -m scripts.v265_texture_probe --output /tmp/v265-texture-probe.json
+```
+
+Expected negative scalars are `source_replaced_pixels=800000`,
+`target_retained_pixels=429730`, `target_retained_bit_exact=true`,
+`identity_complete=false`, and `render_prequalified=false`. The dedicated CI
+workflow repeats the probe in a 512 MiB, no-swap container.
+
 `require_renderable` blocks invalid geometry or missing accessory, visibility and
 mouth texture evidence. It is infrastructure, not an implemented segmentation or
 appearance generator. **L is a decomposition prototype, not yet a working image

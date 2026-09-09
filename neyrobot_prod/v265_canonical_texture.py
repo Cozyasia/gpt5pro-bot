@@ -79,3 +79,43 @@ def pixel_centres_to_mesh_boundaries(vertices):
     out = points.copy()
     out[:, :2] += 0.5
     return out
+
+
+def composite_owned_texture(target_roi, sampled):
+    """Replace only texels whose geometry and semantic ownership are proven.
+
+    This deliberately has no feather, Poisson blend, residual or fallback fill.
+    Unknown, occluded, accessory-owned and expression-incompatible pixels retain
+    the target byte exactly.  It is an offline ownership contract, not a claim
+    that leaving target eyes/mouth behind preserves source identity.
+    """
+    target = np.asarray(target_roi)
+    if target.ndim != 3 or target.shape[2] != 3 or target.dtype != np.uint8:
+        raise ValueError("expected uint8 RGB/BGR target ROI")
+    if not isinstance(sampled, dict):
+        raise ValueError("expected sampler evidence")
+    texture = np.asarray(sampled.get("texture"))
+    available = np.asarray(sampled.get("available"))
+    if (
+        texture.shape != target.shape
+        or texture.dtype != np.uint8
+        or available.shape != target.shape[:2]
+        or available.dtype != np.bool_
+    ):
+        raise ValueError("incompatible sampler evidence")
+    if bool(sampled.get("render_prequalified", True)):
+        raise ValueError("unexpected qualified sampler state")
+    output = target.copy()
+    output[available] = texture[available]
+    unchanged = ~available
+    if not np.array_equal(output[unchanged], target[unchanged]):
+        raise AssertionError("target ownership changed outside accepted texels")
+    return {
+        "image": output,
+        "source_replaced": available.copy(),
+        "source_replaced_pixels": int(available.sum()),
+        "target_retained_pixels": int(unchanged.sum()),
+        "target_retained_bit_exact": True,
+        "identity_complete": False,
+        "render_prequalified": False,
+    }
