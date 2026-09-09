@@ -84,6 +84,30 @@ Expected negative scalars are `source_replaced_pixels=800000`,
 `identity_complete=false`, and `render_prequalified=false`. The dedicated CI
 workflow repeats the probe in a 512 MiB, no-swap container.
 
+## L-next machine contracts
+
+The cull-first triangle audit now reports total/visible/rejected/degenerate
+triangles, orientation reversals before culling, inverted visible triangles,
+uncovered target-face pixels, raster bytes and local singular-value stretch.
+An orientation-reversed triangle is removed before z-ordering, so it cannot
+become a visible foldover; the resulting hole remains explicit. A controlled
+hole is not counted as a successful full render.
+
+Semantic accounting uses the same frozen seven cases and names forehead,
+eyebrows, eyes/eyelids, nose, cheeks, upper/lower lip, mouth interior, jaw,
+chin, accessories, occlusion and unknown. The current lightweight hybrid is a
+landmark partition plus a bounded dark-edge glasses hypothesis. Product policy
+is deterministic: target glasses are retained as a separate target layer;
+source glasses with no target glasses cause controlled failure. The hypothesis
+is not yet verified segmentation, so accessory-bearing output cannot pass.
+
+Mouth reporting separately records source intrinsic width, lip thickness ratio,
+cupid bow, philtrum, mouth:nose and mouth:chin ratios, and target opening, smile,
+corner elevation, stretch, teeth proxy and asymmetry. Geometry remains the 3DMM
+construction `source identity + target expression`; descriptors do not patch the
+mesh. Mouth-interior appearance compatibility remains false until teeth/lip
+texture can be synthesized without copying the source expression.
+
 `require_renderable` blocks invalid geometry or missing accessory, visibility and
 mouth texture evidence. It is infrastructure, not an implemented segmentation or
 appearance generator. **L is a decomposition prototype, not yet a working image

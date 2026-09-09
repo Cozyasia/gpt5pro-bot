@@ -25,6 +25,14 @@ from neyrobot_prod.v265_canonical_fit_lab import fit_source_diagnostic
 from neyrobot_prod.v265_canonical_visibility import mesh_render_audit, visibility_audit
 from neyrobot_prod.v265_canonical_correspondence import correspondence
 from neyrobot_prod.v265_expression_contract import mouth_decomposition_report
+from neyrobot_prod.v265_canonical_semantics import (
+    REGIONS,
+    accessory_edge_hypothesis,
+    accessory_policy,
+    completeness_report,
+    semantic_region_map,
+)
+from neyrobot_prod.v265_canonical_texture import pixel_centres_to_mesh_boundaries
 
 
 def digest(path):
@@ -95,9 +103,10 @@ def run(a):
         tp = a.fixtures / (case + "_stage1.png")
         key = digest(sp)
         # Exact same source is inferred once; target data cannot affect identity.
+        source_image = cv2.imread(str(sp))
         if key not in cache:
-            cache[key] = infer(cv2.imread(str(sp)), detector, session, mean, std)
-            observed_cache[key] = pointset(cv2.imread(str(sp)), a.models)[2]
+            cache[key] = infer(source_image, detector, session, mean, std)
+            observed_cache[key] = pointset(source_image, a.models)[2]
         source, sroi = cache[key]
         if key not in fit_cache:
             fit_cache[key] = fit_source_diagnostic(
@@ -131,10 +140,79 @@ def run(a):
         sf = project(
             model.shape(source.identity, source.expression), source.camera, sroi
         )
-        corr = correspondence(sf, final, model.triangles, troi)
+        corr = correspondence(
+            pixel_centres_to_mesh_boundaries(sf),
+            pixel_centres_to_mesh_boundaries(final),
+            model.triangles,
+            troi,
+        )
         corr_scalars = {
             k: v for k, v in corr.items() if k not in ("source_xy", "mesh_visible")
         }
+        sample_shape = corr["mesh_visible"].shape
+        sample_scale = 256 / float(max(troi[2:] - troi[:2]))
+        sampled_landmarks = (
+            final[model.landmarks, :2] - troi[:2]
+        ) * sample_scale
+        source_accessory = accessory_edge_hypothesis(
+            source_image, sf[model.landmarks, :2]
+        )
+        target_accessory = accessory_edge_hypothesis(
+            target_image, target_mesh[model.landmarks, :2]
+        )
+        yy, xx = np.indices(sample_shape)
+        target_global = np.stack(
+            (
+                (xx + 0.5) / sample_scale + troi[0],
+                (yy + 0.5) / sample_scale + troi[1],
+            ),
+            axis=2,
+        )
+        tx = np.clip(np.floor(target_global[:, :, 0]).astype(int), 0, target_image.shape[1] - 1)
+        ty = np.clip(np.floor(target_global[:, :, 1]).astype(int), 0, target_image.shape[0] - 1)
+        target_accessory_sample = target_accessory["mask"][ty, tx]
+        face_sample = np.isfinite(corr["source_xy"]).all(axis=2)
+        occluded_sample = face_sample & ~corr["mesh_visible"]
+        regions = semantic_region_map(
+            sample_shape,
+            sampled_landmarks,
+            face_sample,
+            accessory=target_accessory_sample,
+            occluded=occluded_sample,
+        )
+        source_xy = corr["source_xy"] - 0.5
+        sx = np.clip(np.floor(np.nan_to_num(source_xy[:, :, 0], nan=0)).astype(int), 0, source_image.shape[1] - 1)
+        sy = np.clip(np.floor(np.nan_to_num(source_xy[:, :, 1], nan=0)).astype(int), 0, source_image.shape[0] - 1)
+        source_accessory_sample = source_accessory["mask"][sy, sx]
+        mouth_interior = regions == REGIONS.index("mouth_interior")
+        accessory_or_occlusion = np.isin(
+            regions, [REGIONS.index("accessories"), REGIONS.index("occlusion")]
+        )
+        source_replaced = (
+            corr["mesh_visible"]
+            & ~source_accessory_sample
+            & ~target_accessory_sample
+            & ~mouth_interior
+        )
+        expression_owned = mouth_interior | accessory_or_occlusion
+        ownership = completeness_report(regions, source_replaced, expression_owned)
+        policy = accessory_policy(source_accessory["present"], target_accessory["present"])
+        ownership["identity_complete"] = bool(
+            ownership["identity_complete"]
+            and policy["compatible"]
+            and source_accessory["segmentation_verified"]
+            and target_accessory["segmentation_verified"]
+        )
+        ownership["accessory_policy"] = policy
+        ownership["source_accessory_evidence"] = {
+            k: v for k, v in source_accessory.items() if k != "mask"
+        }
+        ownership["target_accessory_evidence"] = {
+            k: v for k, v in target_accessory.items() if k != "mask"
+        }
+        ownership["critical_pixels_left_target_only"] = int(
+            sum(ownership["critical_target_unresolved"].values())
+        )
         del corr
         native_corr = None
         if case == "case06":
@@ -207,6 +285,7 @@ def run(a):
             "mouth_identity_expression_decomposition": mouth_decomposition_report(
                 observed_cache[key], observed_target, final[model.landmarks, :2]
             ),
+            "semantic_identity_completeness": ownership,
             "accessory_ownership_verified": False,
             "mouth_texture_expression_compatible": False,
             "render_prequalified": False,
@@ -235,6 +314,41 @@ def run(a):
         "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         "model_array_bytes": model.resident_array_bytes,
         "regressor_bytes": (a.assets / "regressor.onnx").stat().st_size,
+        "max_triangle_raster_bytes": max(
+            r["triangle_mesh_render"]["raster_array_bytes"] for r in rows
+        ),
+        "semantic_critical_pixels_left_target_only": {
+            r["case"]: r["semantic_identity_completeness"][
+                "critical_pixels_left_target_only"
+            ]
+            for r in rows
+        },
+        "semantic_identity_complete": {
+            r["case"]: r["semantic_identity_completeness"]["identity_complete"]
+            for r in rows
+        },
+        "case06_full_render": bool(
+            next(r for r in rows if r["case"] == "case06")["triangle_mesh_render"][
+                "render_completed"
+            ]
+            and not next(r for r in rows if r["case"] == "case06")[
+                "triangle_mesh_render"
+            ]["foldover"]
+            and next(r for r in rows if r["case"] == "case06")[
+                "triangle_mesh_render"
+            ]["uncovered_face_pixels"]
+            == 0
+        ),
+        "case07_accessory_safe": False,
+        "case08_target_expression_preserved": bool(
+            next(r for r in rows if r["case"] == "case08")[
+                "mouth_identity_expression_decomposition"
+            ]["target_expression_within_engineering_bound"]
+            and next(r for r in rows if r["case"] == "case08")[
+                "mouth_identity_expression_decomposition"
+            ]["mouth_texture_expression_compatible"]
+        ),
+        "canonical_L_machine_prequalified": False,
         "assets_sha256": {p.name: digest(p) for p in a.assets.glob("*") if p.is_file()},
         "production_memory_qualified": False,
         "daemon_baseline_included": False,
