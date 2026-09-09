@@ -24,6 +24,7 @@ from neyrobot_prod.v265_source_fidelity import morphology
 from neyrobot_prod.v265_canonical_fit_lab import fit_source_diagnostic
 from neyrobot_prod.v265_canonical_visibility import mesh_render_audit, visibility_audit
 from neyrobot_prod.v265_canonical_correspondence import correspondence
+from neyrobot_prod.v265_expression_contract import mouth_decomposition_report
 
 
 def digest(path):
@@ -202,6 +203,9 @@ def run(a):
             ),
             "pipnet_source_to_projected_L_geometry_error_NOT_render": morphology(
                 observed_cache[key], final[model.landmarks, :2]
+            ),
+            "mouth_identity_expression_decomposition": mouth_decomposition_report(
+                observed_cache[key], observed_target, final[model.landmarks, :2]
             ),
             "accessory_ownership_verified": False,
             "mouth_texture_expression_compatible": False,
