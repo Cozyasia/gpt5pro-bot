@@ -7,6 +7,7 @@ on:
       - 'scripts/v265_canonical*.py'
       - 'tests/test_v265_canonical*.py'
       - 'scripts/v265_application_memory_probe.py'
+      - 'scripts/v265_texture_probe.py'
       - 'tests/fixtures/v265_canonical_assets.json'
       - '.github/workflows/v265-canonical-experiment.yml'
   workflow_dispatch:
@@ -40,6 +41,9 @@ jobs:
           DOCKERFILE
           mkdir -p /tmp/canonical-models /tmp/canonical-results
           docker run --rm -v /tmp/canonical-models:/models -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_matrix_prepare --case case02 --models /models --output /results
+      - name: Native texture sampler with explicit synthetic ownership
+        run: |
+          docker run --rm --memory=512m --memory-swap=512m --cpus=0.5 --network=none -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_texture_probe --output /results/texture_probe.json
       - name: Seven frozen cases inside 512 MiB, no Torch
         run: |
           docker run --rm --memory=512m --memory-swap=512m --cpus=0.5 -v /tmp/canonical-assets:/assets:ro -v /tmp/canonical-models:/models:ro -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_canonical_matrix --assets /assets --models /models --output /results/decomposition > /tmp/canonical-results/decomposition.log 2>&1
