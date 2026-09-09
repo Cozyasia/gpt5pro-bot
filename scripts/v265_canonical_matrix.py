@@ -137,10 +137,16 @@ def run(a):
         del corr
         native_corr = None
         if case == "case06":
-            native_side = int(np.ceil(max(troi[2:] - troi[:2])))
-            if native_side <= 1024:
+            native_roi = np.r_[
+                np.maximum(0, np.floor(troi[:2])),
+                np.minimum(
+                    [target_image.shape[1], target_image.shape[0]], np.ceil(troi[2:])
+                ),
+            ]
+            native_side = int(max(native_roi[2:] - native_roi[:2]))
+            if native_side <= 1536:
                 native = correspondence(
-                    sf, final, model.triangles, troi, max_side=native_side
+                    sf, final, model.triangles, native_roi, max_side=native_side
                 )
                 native_corr = {
                     k: v
@@ -148,6 +154,8 @@ def run(a):
                     if k not in ("source_xy", "mesh_visible")
                 }
                 native_corr["native_roi_side"] = native_side
+                native_corr["global_integer_roi"] = native_roi.tolist()
+                native_corr["target_pixel_step"] = 1
                 del native
             else:
                 native_corr = {

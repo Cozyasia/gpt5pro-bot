@@ -24,7 +24,7 @@ def rasterize(vertices, triangles, roi, *, max_side=256):
         or tri.max() >= len(vertices)
     ):
         raise ValueError("invalid raster topology")
-    if not isinstance(max_side, int) or not 2 <= max_side <= 1024:
+    if not isinstance(max_side, int) or not 2 <= max_side <= 1536:
         raise ValueError("invalid bounded raster size")
     size = bounds[2:] - bounds[:2]
     if np.any(size <= 0):
