@@ -3,9 +3,10 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'neyrobot_prod/v265_canonical_lab.py'
+      - 'neyrobot_prod/v265_canonical*.py'
       - 'scripts/v265_canonical*.py'
-      - 'tests/test_v265_canonical_lab.py'
+      - 'tests/test_v265_canonical*.py'
+      - 'scripts/v265_application_memory_probe.py'
       - 'tests/fixtures/v265_canonical_assets.json'
       - '.github/workflows/v265-canonical-experiment.yml'
   workflow_dispatch:
@@ -41,11 +42,11 @@ jobs:
           docker run --rm -v /tmp/canonical-models:/models -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_matrix_prepare --case case02 --models /models --output /results
       - name: Seven frozen cases inside 512 MiB, no Torch
         run: |
-          docker run --rm --memory=512m --cpus=0.5 -v /tmp/canonical-assets:/assets:ro -v /tmp/canonical-models:/models:ro -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_canonical_matrix --assets /assets --models /models --output /results/decomposition > /tmp/canonical-results/decomposition.log 2>&1
+          docker run --rm --memory=512m --memory-swap=512m --cpus=0.5 -v /tmp/canonical-assets:/assets:ro -v /tmp/canonical-models:/models:ro -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_canonical_matrix --assets /assets --models /models --output /results/decomposition > /tmp/canonical-results/decomposition.log 2>&1
       - name: Warm real application and models plus L components, standard and strict
         if: always()
         run: |
-          docker run --rm --memory=512m --cpus=0.5 --network=none -e BOT_TOKEN=123456:offline-memory-fixture -e OPENAI_API_KEY=offline-memory-fixture -e PUBLIC_URL=https://offline-memory-fixture.onrender.com -e DB_PATH=/tmp/offline-memory-fixture.db -v /tmp/canonical-assets:/assets:ro -v /tmp/canonical-models:/models:ro -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_application_memory_probe --case case02 --mode A_baseline --models /models --output /results --canonical-assets /assets > /tmp/canonical-results/application.log 2>&1
+          docker run --rm --memory=512m --memory-swap=512m --cpus=0.5 --network=none -e BOT_TOKEN=123456:offline-memory-fixture -e OPENAI_API_KEY=offline-memory-fixture -e PUBLIC_URL=https://offline-memory-fixture.onrender.com -e DB_PATH=/tmp/offline-memory-fixture.db -v /tmp/canonical-assets:/assets:ro -v /tmp/canonical-models:/models:ro -v /tmp/canonical-results:/results v265-canonical-runtime python -m scripts.v265_application_memory_probe --case case02 --mode A_baseline --models /models --output /results --canonical-assets /assets --canonical-residency scoped > /tmp/canonical-results/application.log 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

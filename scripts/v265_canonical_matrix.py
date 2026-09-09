@@ -21,6 +21,7 @@ from neyrobot_prod.v265_canonical_lab import (
     mesh_validity,
 )
 from neyrobot_prod.v265_source_fidelity import morphology
+from neyrobot_prod.v265_canonical_fit_lab import fit_source_diagnostic
 
 
 def digest(path):
@@ -82,6 +83,7 @@ def run(a):
 
     cache = {}
     observed_cache = {}
+    fit_cache = {}
     rows = []
     a.output.mkdir(parents=True, exist_ok=True)
     for case in ["case01", "case02", "case04", "case05", "case06", "case07", "case08"]:
@@ -94,6 +96,11 @@ def run(a):
             cache[key] = infer(cv2.imread(str(sp)), detector, session, mean, std)
             observed_cache[key] = pointset(cv2.imread(str(sp)), a.models)[2]
         source, sroi = cache[key]
+        if key not in fit_cache:
+            fit_cache[key] = fit_source_diagnostic(
+                model, source, sroi, observed_cache[key], std[12:]
+            )
+        fitted_source, fit_evidence = fit_cache[key]
         target_image = cv2.resize(
             cv2.imread(str(tp)), (1856, 2304), interpolation=cv2.INTER_LANCZOS4
         )
@@ -130,6 +137,9 @@ def run(a):
                     1
                 ].tobytes()
             ).hexdigest(),
+            "source_fit_diagnostic": fit_evidence,
+            "fitted_source_identity_digest": identity_digest(model, fitted_source),
+            "fitted_source_is_NOT_promoted": True,
             "source_identity_digest": identity_digest(model, source),
             "source_identity_parameters": source.identity.tolist(),
             "source_expression_parameters": source.expression.tolist(),

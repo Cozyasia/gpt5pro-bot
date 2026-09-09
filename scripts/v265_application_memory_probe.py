@@ -12,6 +12,22 @@ def deny_network(*args, **kwargs):
     raise RuntimeError("network forbidden in application memory probe")
 
 
+def cgroup_evidence():
+    root = Path("/sys/fs/cgroup")
+    return {
+        name: (root / name).read_text().strip()
+        for name in (
+            "memory.current",
+            "memory.peak",
+            "memory.max",
+            "memory.swap.current",
+            "memory.swap.max",
+            "memory.events",
+        )
+        if (root / name).exists()
+    }
+
+
 def run(a):
     if a.repetitions < 1:
         raise ValueError("repetitions must be positive")
@@ -48,9 +64,11 @@ def run(a):
     warmed_state = safety._memory_state()
     canonical_components = None
     canonical_state = None
+    released_state = None
+    retained_geometry = None
     if a.canonical_assets:
         import numpy as np
-        from neyrobot_prod.v265_canonical_lab import CanonicalModel
+        from neyrobot_prod.v265_canonical_lab import CanonicalModel, project
         from scripts.v265_canonical_matrix import infer
 
         canonical_model = CanonicalModel.load(a.canonical_assets / "canonical.npz")
@@ -60,12 +78,28 @@ def run(a):
         )
         with np.load(a.canonical_assets / "canonical.npz", allow_pickle=False) as z:
             image = cv2.imread(str(a.fixtures / (a.case + "_source.jpg")))
-            parameters, _ = infer(
+            parameters, source_roi = infer(
                 image, detector, session, z["param_mean"], z["param_std"]
             )
-        del image
+            target_image = cv2.resize(
+                cv2.imread(str(a.fixtures / (a.case + "_stage1.png"))),
+                (1856, 2304),
+                interpolation=cv2.INTER_LANCZOS4,
+            )
+            target, target_roi = infer(
+                target_image, detector, session, z["param_mean"], z["param_std"], True
+            )
+        retained_geometry = project(
+            canonical_model.retarget(parameters, target), target.camera, target_roi
+        )
+        del image, target_image
         canonical_components = (canonical_model, session, detector, parameters)
         canonical_state = safety._memory_state()
+        if a.canonical_residency == "scoped":
+            canonical_components = None
+            del canonical_model, session, detector, parameters, target
+            safety._reclaim_before_strict()
+            released_state = safety._memory_state()
     # Explicit resident-pressure scenario, not a claim to reproduce live traffic.
     # Keep real touched pages alive; never replace cgroup readings or the guard.
     resident_pressure = bytearray(a.resident_extra_mib * 1024 * 1024)
@@ -131,7 +165,13 @@ def run(a):
         "handler_groups": len(app.handlers),
         "before_models": state,
         "after_models": warmed_state,
-        "canonical_components_loaded_and_warmed": canonical_components is not None,
+        "canonical_components_loaded_and_warmed": canonical_state is not None,
+        "canonical_residency": a.canonical_residency,
+        "after_canonical_release": released_state,
+        "retained_geometry_bytes": (
+            0 if retained_geometry is None else retained_geometry.nbytes
+        ),
+        "cgroup_evidence": cgroup_evidence(),
         "after_canonical_components": canonical_state,
         "canonical_note": "component-residency plus baseline compositor; L renderer absent",
         "resident_extra_mib": a.resident_extra_mib,
@@ -157,4 +197,7 @@ if __name__ == "__main__":
     p.add_argument("--repetitions", type=int, default=3)
     p.add_argument("--resident-extra-mib", type=int, choices=[0, 64], default=0)
     p.add_argument("--canonical-assets", type=Path)
+    p.add_argument(
+        "--canonical-residency", choices=["resident", "scoped"], default="resident"
+    )
     run(p.parse_args())
