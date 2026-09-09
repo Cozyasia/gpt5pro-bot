@@ -56,3 +56,12 @@ Before training, require an asset ledger granting commercial derivative-model ri
 Proposed output: 128–256 intrinsic identity coefficients plus a compact 468×3 residual code, trained against neutral canonical geometry with explicit expression orthogonality, topology/orientation/ARAP and cross-view silhouette losses. A MobileNetV3-small or comparable encoder should remain around 10–30 MB weights and roughly 80–180 MiB inference RSS. Estimated first feasibility run: 2–4 modern GPUs for 3–7 days after licensed data preparation. These are planning estimates, not measured qualification.
 
 Raw reproducible results are in `geometry/` and `parsing/`; asset hashes and licenses are in `tests/fixtures/v265_commercial_assets.json`.
+
+## Commercial identity procurement (2026-09-09)
+
+The decision-ready vendor qualification, exact vendor requests, offline export
+contract and synthetic-first procurement route are recorded in
+`vendor-identity-procurement.md`. No authorised MetaHumanSDK.io or Banuba identity
+export was available, so no vendor was assigned invented quality scores. The new
+independent glasses polygons confirm 6/6 presence classification but only 0.0212
+mean pixel IoU: MediaPipe `others/accessories` is not ownership-qualified.
