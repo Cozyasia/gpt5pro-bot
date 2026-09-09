@@ -9,7 +9,7 @@ import numpy as np
 from .v265_canonical_lab import finite
 
 
-def rasterize(vertices, triangles, roi, *, max_side=256):
+def rasterize(vertices, triangles, roi, *, max_side=256, triangle_mask=None):
     vertices = finite(vertices)
     tri = np.asarray(triangles)
     bounds = finite(roi, (4,))
@@ -46,7 +46,14 @@ def rasterize(vertices, triangles, roi, *, max_side=256):
     upper = np.minimum(
         [width, height], np.floor(projected.max(axis=1) - 0.4999999).astype(int) + 1
     )
-    valid = (np.abs(determinants) > 1e-8) & np.all(upper > lower, axis=1)
+    selected = (
+        np.ones(len(tri), dtype=bool)
+        if triangle_mask is None
+        else np.asarray(triangle_mask)
+    )
+    if selected.shape != (len(tri),) or selected.dtype != np.bool_:
+        raise ValueError("explicit boolean triangle mask required")
+    valid = selected & (np.abs(determinants) > 1e-8) & np.all(upper > lower, axis=1)
     degenerate = int(np.count_nonzero(np.abs(determinants) <= 1e-8))
     for index in np.flatnonzero(valid):
         ids = tri[index]
@@ -77,6 +84,69 @@ def rasterize(vertices, triangles, roi, *, max_side=256):
         "roi": bounds,
         "array_bytes": owner.nbytes + depth.nbytes + visible.nbytes,
         "resolution_is_diagnostic_not_pixel_safety": True,
+    }
+
+
+def mesh_render_audit(source, target, final, triangles, target_roi, *, max_side=256):
+    """Audit a cull-first triangle path in one target camera.
+
+    Target-person geometry is used only as an orientation reference. Triangles
+    whose L projection reverses that orientation are rejected before z-ordering;
+    they can never become visible folded pixels. Holes remain explicit and must
+    be handled by the completeness contract, never by a legacy warp fallback.
+    """
+    source, target, final = (finite(x) for x in (source, target, final))
+    topology = np.asarray(triangles, dtype=np.int32)
+    if source.shape != target.shape or target.shape != final.shape:
+        raise ValueError("incompatible render meshes")
+    projected = [x[topology, :2] for x in (source, target, final)]
+    determinant = []
+    for p in projected:
+        a, b = p[:, 1] - p[:, 0], p[:, 2] - p[:, 0]
+        determinant.append(a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0])
+    sd, td, fd = determinant
+    measurable = (np.abs(td) > 1e-8) & (np.abs(fd) > 1e-8)
+    orientation_ok = measurable & (td * fd > 0)
+    target_raster = rasterize(target, topology, target_roi, max_side=max_side)
+    rendered = rasterize(
+        final, topology, target_roi, max_side=max_side, triangle_mask=orientation_ok
+    )
+    target_face = target_raster["owner"] >= 0
+    covered = rendered["owner"] >= 0
+    visible = rendered["visible_triangles"]
+    # Local 2D affine scale is evaluated only for triangles admitted to render.
+    ids = np.flatnonzero(orientation_ok)
+    if len(ids):
+        ta = projected[1][ids, 1:] - projected[1][ids, :1]
+        fa = projected[2][ids, 1:] - projected[2][ids, :1]
+        tm = ta.transpose(0, 2, 1)
+        fm = fa.transpose(0, 2, 1)
+        singular = np.linalg.svd(fm @ np.linalg.inv(tm), compute_uv=False)
+        stretch_max = float(singular.max())
+        compression_min = float(singular.min())
+    else:
+        stretch_max = None
+        compression_min = None
+    visible_owner = np.unique(rendered["owner"][covered])
+    inverted_visible = int(np.count_nonzero(~orientation_ok[visible_owner]))
+    return {
+        "triangle_count": int(len(topology)),
+        "visible_triangles": int(visible.sum()),
+        "back_facing_or_orientation_rejected_triangles": int((~orientation_ok).sum()),
+        "degenerate_triangles": int((~measurable).sum()),
+        "orientation_reversals_before_cull": int((measurable & (td * fd <= 0)).sum()),
+        "inverted_visible_triangles": inverted_visible,
+        "uncovered_face_pixels": int((target_face & ~covered).sum()),
+        "target_face_pixels": int(target_face.sum()),
+        "covered_face_pixels": int((target_face & covered).sum()),
+        "max_local_stretch": stretch_max,
+        "min_local_compression": compression_min,
+        "foldover": bool(inverted_visible),
+        "render_completed": True,
+        "legacy_warp_fallback_used": False,
+        "render_prequalified": False,
+        "source_projection_orientation_observed": int(np.count_nonzero(np.abs(sd) > 1e-8)),
+        "raster_array_bytes": int(target_raster["array_bytes"] + rendered["array_bytes"]),
     }
 
 

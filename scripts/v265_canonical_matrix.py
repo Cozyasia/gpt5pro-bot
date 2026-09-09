@@ -22,7 +22,7 @@ from neyrobot_prod.v265_canonical_lab import (
 )
 from neyrobot_prod.v265_source_fidelity import morphology
 from neyrobot_prod.v265_canonical_fit_lab import fit_source_diagnostic
-from neyrobot_prod.v265_canonical_visibility import visibility_audit
+from neyrobot_prod.v265_canonical_visibility import mesh_render_audit, visibility_audit
 from neyrobot_prod.v265_canonical_correspondence import correspondence
 
 
@@ -187,6 +187,9 @@ def run(a):
             "case06_native_correspondence": native_corr,
             "visibility_diagnostic": visibility_audit(
                 sf, target_mesh, final, model.triangles, sroi, troi
+            ),
+            "triangle_mesh_render": mesh_render_audit(
+                sf, target_mesh, final, model.triangles, troi
             ),
             "model_source_to_final_2d_morphology_NOT_independent": morphology(
                 sf[model.landmarks, :2], final[model.landmarks, :2]
