@@ -22,6 +22,7 @@ from neyrobot_prod.v265_canonical_lab import (
 )
 from neyrobot_prod.v265_source_fidelity import morphology
 from neyrobot_prod.v265_canonical_fit_lab import fit_source_diagnostic
+from neyrobot_prod.v265_canonical_visibility import visibility_audit
 
 
 def digest(path):
@@ -149,6 +150,9 @@ def run(a):
             "coefficient_target_expression_retention_linf": 0.0,
             "coefficient_metrics_are_algebraic_not_visual_proof": True,
             "mesh_validity": validity,
+            "visibility_diagnostic": visibility_audit(
+                sf, target_mesh, final, model.triangles, sroi, troi
+            ),
             "model_source_to_final_2d_morphology_NOT_independent": morphology(
                 sf[model.landmarks, :2], final[model.landmarks, :2]
             ),
