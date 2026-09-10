@@ -1,0 +1,58 @@
+{
+  "scope": "public case02 bootstrap plus own TEST ONLY encoder; not identity qualification",
+  "stages": [
+    {
+      "name": "mediapipe_plus_own_encoder",
+      "rss_kib": 227676,
+      "peak_rss_kib": 257336,
+      "shared_host_cgroup": {
+        "memory.current": "156119040",
+        "memory.max": "2147483648",
+        "memory.peak": "187215872",
+        "cache_bytes": {
+          "file": 565248,
+          "inactive_file": 565248,
+          "slab_reclaimable": 2448696
+        }
+      }
+    },
+    {
+      "name": "after_release",
+      "rss_kib": 174028,
+      "peak_rss_kib": 257336,
+      "shared_host_cgroup": {
+        "memory.current": "100974592",
+        "memory.max": "2147483648",
+        "memory.peak": "187215872",
+        "cache_bytes": {
+          "file": 565248,
+          "inactive_file": 565248,
+          "slab_reclaimable": 2448696
+        }
+      }
+    },
+    {
+      "name": "sequential_bootstrap_parsing",
+      "rss_kib": 383400,
+      "peak_rss_kib": 382980,
+      "shared_host_cgroup": {
+        "memory.current": "299343872",
+        "memory.max": "2147483648",
+        "memory.peak": "299343872",
+        "cache_bytes": {
+          "file": 565248,
+          "inactive_file": 565248,
+          "slab_reclaimable": 2454656
+        }
+      }
+    }
+  ],
+  "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+  "mask_shape": [
+    2250,
+    1800
+  ],
+  "commercial_ownership_validated": false,
+  "memory_swap_max": "0",
+  "memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n"
+}
