@@ -171,6 +171,8 @@ def run(output, require_limit=False):
         "actual_memory_limit": limit,
         "isolated_2gib_verified": require_limit and limit == "2147483648",
         "final_cgroup": memory(),
+        "memory_swap_max": Path("/sys/fs/cgroup/memory.swap.max").read_text().strip(),
+        "memory_events": Path("/sys/fs/cgroup/memory.events").read_text(),
         "worker_latency_ms": report["total_ms"],
         "source_identity_hash": report["canonical_identity_sha256"],
         "machine_prequalified": False,

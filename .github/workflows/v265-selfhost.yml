@@ -32,6 +32,20 @@ jobs:
           else
             docker run --name selfhost-run --network none --memory=4g --memory-swap=4g --cpus=2 -v /tmp/selfhost-results:/results v265-selfhost python -m experiments.v265_selfhost.dryrun /results/run
           fi
+      - name: Fetch already-audited bootstrap assets outside inference sandbox
+        run: |
+          mkdir -p /tmp/bootstrap-assets
+          python - <<'PYCODE'
+          import json,hashlib,pathlib,urllib.request
+          manifest=json.load(open('tests/fixtures/v265_commercial_assets.json'))['assets']
+          for name in ['face_landmarker.task','selfie_multiclass_256x256.tflite']:
+              data=urllib.request.urlopen(manifest[name]['url'],timeout=60).read()
+              assert hashlib.sha256(data).hexdigest()==manifest[name]['sha256']
+              pathlib.Path('/tmp/bootstrap-assets',name).write_bytes(data)
+          PYCODE
+      - name: Isolated MediaPipe plus encoder and sequential parsing
+        run: |
+          docker run --rm --network none --memory=${{ matrix.memory }} --memory-swap=${{ matrix.memory }} --cpus=2 -v /tmp/bootstrap-assets:/assets:ro -v /tmp/selfhost-results:/results -v "$PWD/tests/fixtures/v265_matrix/case02_source.jpg:/public-source.jpg:ro" v265-selfhost python -m experiments.v265_selfhost.bootstrap_memory /assets /results/run/model /public-source.jpg /results/bootstrap-memory.json
       - name: Record container OOM and enforced host configuration
         if: always()
         run: docker inspect selfhost-run --format '{{json .State}} {{json .HostConfig.Memory}} {{json .HostConfig.MemorySwap}}' > /tmp/selfhost-results/container-state.txt || true
@@ -45,3 +59,4 @@ jobs:
             /tmp/selfhost-results/run/cross-view.json
             /tmp/selfhost-results/run/worker/result.json
             /tmp/selfhost-results/container-state.txt
+            /tmp/selfhost-results/bootstrap-memory.json
