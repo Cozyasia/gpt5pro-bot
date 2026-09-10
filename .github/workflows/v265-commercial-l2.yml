@@ -9,7 +9,6 @@ on:
       - 'scripts/v265_prior_toy.py'
       - 'experiments/v265_prior/**'
       - 'tests/test_v265_pilot.py'
-      - 'tests/test_v265_prior_model.py'
       - 'scripts/v265_metahuman_evaluation_access.py'
       - 'tests/test_v265_prior_toy.py'
       - 'tests/test_v265_evaluation_access.py'
@@ -64,7 +63,7 @@ jobs:
       - run: pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -r experiments/v265_prior/requirements.txt
       - name: Rights, lineage, geometry and training smoke contracts
-        run: python -m unittest tests.test_v265_pilot tests.test_v265_prior_model -v
+        run: python -m unittest tests.test_v265_pilot experiments.v265_prior.test_model -v
       - name: Untrained encoder engineering only (no identity qualification)
         run: python -m experiments.v265_prior.benchmark --output /tmp/pilot-encoders
       - uses: actions/upload-artifact@v4

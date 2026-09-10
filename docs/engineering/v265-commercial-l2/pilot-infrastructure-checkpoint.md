@@ -109,7 +109,7 @@ No pretrained torchvision weights are downloaded (weights=None).
 python -m venv /tmp/v265-training-env
 /tmp/v265-training-env/bin/pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
 /tmp/v265-training-env/bin/pip install -r experiments/v265_prior/requirements.txt
-PROD_HARDENING_ENABLED=0 /tmp/v265-training-env/bin/python -m unittest tests.test_v265_pilot tests.test_v265_prior_model -v
+PROD_HARDENING_ENABLED=0 /tmp/v265-training-env/bin/python -m unittest tests.test_v265_pilot experiments.v265_prior.test_model -v
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 /tmp/v265-training-env/bin/python -m experiments.v265_prior.benchmark --output /tmp/v265-pilot-benchmark
 ```
 
