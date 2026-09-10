@@ -9,6 +9,7 @@ on:
       - 'scripts/v265_prior_toy.py'
       - 'scripts/v265_metahuman_evaluation_access.py'
       - 'tests/test_v265_prior_toy.py'
+      - 'tests/test_v265_evaluation_access.py'
       - 'tests/test_v265_commercial_geometry.py'
       - 'tests/test_v265_vendor_identity.py'
       - 'tests/fixtures/v265_commercial_assets.json'
@@ -30,7 +31,7 @@ jobs:
         env:
           PROD_HARDENING_ENABLED: '0'
           OPENBLAS_NUM_THREADS: '1'
-        run: python -m unittest tests.test_v265_prior_toy -v
+        run: python -m unittest tests.test_v265_prior_toy tests.test_v265_evaluation_access -v
       - name: Toy train and fresh inference on Apache canonical topology
         env:
           PROD_HARDENING_ENABLED: '0'
