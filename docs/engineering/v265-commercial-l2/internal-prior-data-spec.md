@@ -135,12 +135,15 @@ Thus memory/output/optimiser wiring is feasible; 128/256 exact-identity capacity
 NOT proven. Procure only the small pilot before selecting backbone or full data scale.
 Maintain the 2 GiB full-stack target; isolated toy RSS excludes MediaPipe/parser/app.
 
-## MetaHuman evaluation status
+## MetaHuman evaluation status (updated 2026-09-10)
 
-Official registration requires name/mail/comment at POST /auth/token. No registration
-email has been designated by the user. GET https://api.metahumansdk.io/auth returned
-HTTP 504 in this session; no token request containing personal contact data was sent,
-and no fixture was uploaded. Access BLOCKED, technical quality UNTESTED, not a measured
-NO-GO. Local registration helper stores the token in a new 0600 file outside the repo,
-rejects CI invocation and never prints token/response body. No production terms are
-inferred from evaluation access. No additional FaceVerse legal action was taken.
+Three authorized POST /auth/token attempts returned HTTP 504. Support inquiry sent;
+no token or fixture upload. Technical quality UNTESTED. MetaHuman WAITING; FaceVerse
+commercial rights PENDING. READY-MADE VENDOR PATH = PENDING / UNQUALIFIED.
+See metahuman-registration-attempt.md for the registration evidence.
+
+Internal prior procurement is now ACTIVE independently of these responses.
+See pilot-infrastructure-checkpoint.md for RFQ status and executable contract v1.
+The earlier illustrative record above is superseded by ingest.py's stricter contract:
+raw RGB delivery normalizes to uint8 NPY; dense geometry stays native; correspondence,
+expression basis/displacements, rights-ledger binding and lineage are mandatory.
