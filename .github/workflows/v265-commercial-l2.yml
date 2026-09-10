@@ -6,6 +6,9 @@ on:
       - 'neyrobot_prod/v265_commercial_geometry.py'
       - 'neyrobot_prod/v265_vendor_identity.py'
       - 'scripts/v265_commercial_*'
+      - 'scripts/v265_prior_toy.py'
+      - 'scripts/v265_metahuman_evaluation_access.py'
+      - 'tests/test_v265_prior_toy.py'
       - 'tests/test_v265_commercial_geometry.py'
       - 'tests/test_v265_vendor_identity.py'
       - 'tests/fixtures/v265_commercial_assets.json'
@@ -23,3 +26,23 @@ jobs:
         with: {python-version: '3.12'}
       - run: pip install numpy==1.26.4 pytest==8.3.4
       - run: PYTHONPATH=. pytest -q tests/test_v265_commercial_geometry.py tests/test_v265_vendor_identity.py
+      - name: Internal prior numerical contracts (no pretrained weights)
+        env:
+          PROD_HARDENING_ENABLED: '0'
+          OPENBLAS_NUM_THREADS: '1'
+        run: python -m unittest tests.test_v265_prior_toy -v
+      - name: Toy train and fresh inference on Apache canonical topology
+        env:
+          PROD_HARDENING_ENABLED: '0'
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          curl --fail --location --retry 2 https://raw.githubusercontent.com/google-ai-edge/mediapipe/master/mediapipe/modules/face_geometry/data/canonical_face_model.obj -o /tmp/v265-canonical.obj
+          for dim in 128 256; do
+            python scripts/v265_prior_toy.py --canonical /tmp/v265-canonical.obj --dim "$dim" --output "/tmp/toy-$dim"
+            python scripts/v265_prior_toy.py --infer-checkpoint "/tmp/toy-$dim/toy_checkpoint.npz" --output "/tmp/toy-$dim/inference.json"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prior-toy-engineering-NOT-identity-qualification
+          path: /tmp/toy-*/*.json
