@@ -7,6 +7,9 @@ on:
       - 'neyrobot_prod/v265_vendor_identity.py'
       - 'scripts/v265_commercial_*'
       - 'scripts/v265_prior_toy.py'
+      - 'experiments/v265_prior/**'
+      - 'tests/test_v265_pilot.py'
+      - 'tests/test_v265_prior_model.py'
       - 'scripts/v265_metahuman_evaluation_access.py'
       - 'tests/test_v265_prior_toy.py'
       - 'tests/test_v265_evaluation_access.py'
@@ -47,3 +50,24 @@ jobs:
         with:
           name: prior-toy-engineering-NOT-identity-qualification
           path: /tmp/toy-*/*.json
+
+  pilot-infrastructure:
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      PROD_HARDENING_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -r experiments/v265_prior/requirements.txt
+      - name: Rights, lineage, geometry and training smoke contracts
+        run: python -m unittest tests.test_v265_pilot tests.test_v265_prior_model -v
+      - name: Untrained encoder engineering only (no identity qualification)
+        run: python -m experiments.v265_prior.benchmark --output /tmp/pilot-encoders
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pilot-encoder-engineering-NOT-identity-quality
+          path: /tmp/pilot-encoders/engineering.json
