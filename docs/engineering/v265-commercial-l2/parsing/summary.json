@@ -1,0 +1,73 @@
+{
+  "model": "MediaPipe SelfieMulticlass",
+  "classes": [
+    "background",
+    "hair",
+    "body-skin",
+    "face-skin",
+    "clothes",
+    "others/accessories"
+  ],
+  "presence_correct": 6,
+  "presence_total": 6,
+  "independent_pixel_mask_ground_truth": false,
+  "ownership_validated": false,
+  "reason": "Accessory pixels are explicit, but the broad others/accessories class has no independent glasses pixel-mask ground truth.",
+  "peak_rss_kib": 749836,
+  "samples": [
+    {
+      "case": "case07",
+      "image": "source",
+      "expected_glasses": true,
+      "predicted_accessory": true,
+      "eye_band_accessory_pixels": 3735,
+      "eye_band_accessory_fraction": 0.0700816211652125,
+      "presence_correct": true
+    },
+    {
+      "case": "case07",
+      "image": "stage1",
+      "expected_glasses": true,
+      "predicted_accessory": true,
+      "eye_band_accessory_pixels": 2442,
+      "eye_band_accessory_fraction": 0.07488041211823869,
+      "presence_correct": true
+    },
+    {
+      "case": "case01",
+      "image": "source",
+      "expected_glasses": false,
+      "predicted_accessory": false,
+      "eye_band_accessory_pixels": 0,
+      "eye_band_accessory_fraction": 0.0,
+      "presence_correct": true
+    },
+    {
+      "case": "case02",
+      "image": "source",
+      "expected_glasses": false,
+      "predicted_accessory": false,
+      "eye_band_accessory_pixels": 0,
+      "eye_band_accessory_fraction": 0.0,
+      "presence_correct": true
+    },
+    {
+      "case": "case04",
+      "image": "source",
+      "expected_glasses": false,
+      "predicted_accessory": false,
+      "eye_band_accessory_pixels": 0,
+      "eye_band_accessory_fraction": 0.0,
+      "presence_correct": true
+    },
+    {
+      "case": "case08",
+      "image": "source",
+      "expected_glasses": false,
+      "predicted_accessory": false,
+      "eye_band_accessory_pixels": 0,
+      "eye_band_accessory_fraction": 0.0,
+      "presence_correct": true
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "scope": "public frozen case02 model inference; no full application qualification",
+  "source_sha256": "207a4279ba343540ffb78aa8840f4fd35457976a23664c98123b2370f67e101a",
+  "imported_frameworks": {
+    "rss_kib": 145072,
+    "peak_rss_kib": 146324,
+    "shared_host_cgroup": {
+      "memory.current": "3324772352",
+      "memory.max": "15032385536",
+      "memory.peak": "3624022016",
+      "cache_bytes": {
+        "file": 2991636480,
+        "inactive_file": 2159902720,
+        "slab_reclaimable": 199058064
+      }
+    }
+  },
+  "stages": [
+    {
+      "stage": "landmarker_plus_encoder",
+      "rss_kib": 263900,
+      "peak_rss_kib": 263288,
+      "shared_host_cgroup": {
+        "memory.current": "3413692416",
+        "memory.max": "15032385536",
+        "memory.peak": "3624022016",
+        "cache_bytes": {
+          "file": 2991640576,
+          "inactive_file": 2159906816,
+          "slab_reclaimable": 199058064
+        }
+      }
+    },
+    {
+      "stage": "after_fit_close_trim",
+      "rss_kib": 214960,
+      "peak_rss_kib": 263288,
+      "shared_host_cgroup": {
+        "memory.current": "3363643392",
+        "memory.max": "15032385536",
+        "memory.peak": "3624022016",
+        "cache_bytes": {
+          "file": 2991640576,
+          "inactive_file": 2159906816,
+          "slab_reclaimable": 199058064
+        }
+      }
+    },
+    {
+      "stage": "sequential_parsing",
+      "rss_kib": 423584,
+      "peak_rss_kib": 422528,
+      "shared_host_cgroup": {
+        "memory.current": "3561267200",
+        "memory.max": "15032385536",
+        "memory.peak": "3624022016",
+        "cache_bytes": {
+          "file": 2991640576,
+          "inactive_file": 2159906816,
+          "slab_reclaimable": 199058064
+        }
+      }
+    }
+  ],
+  "faces_detected": 1,
+  "two_gib_limit_enforced": false,
+  "production_memory_qualified": false
+}

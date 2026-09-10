@@ -1,0 +1,131 @@
+{
+  "case": "case04",
+  "cgroup_after": [
+    2084786176,
+    15032385536,
+    347586560,
+    1139720192
+  ],
+  "cgroup_before": [
+    2048618496,
+    15032385536,
+    307679232,
+    1134653440
+  ],
+  "cgroup_sampling_interval_ms": 20,
+  "daemon_context": true,
+  "decision": "standard",
+  "dimensions": [
+    1856,
+    2304
+  ],
+  "elapsed_s": 8.817291597000803,
+  "generated_by": "ImageGen, not production Gemini",
+  "inspection_candidate": "standard",
+  "mask_coverage": {
+    "chin": 0,
+    "jaw": 0,
+    "lip": 12
+  },
+  "mode": "A_baseline",
+  "peak_rss_kib": 414912,
+  "pid_stable": true,
+  "qualification": "offline only; no production daemon baseline load",
+  "results": [
+    {
+      "changed_pixels_outside_dense_support": 12463,
+      "metrics": {
+        "eye_asymmetry_delta": 0.08146859923151417,
+        "identity_similarity_cosine": 0.8282375931739807,
+        "inner_face_landmark_nme": 0.033096298575401306,
+        "interocular_ratio_delta": 0.02436362373860268,
+        "left_eye_error": 0.035855792462825775,
+        "max_dense_shift_normalized": 0.022737866115561754,
+        "nose_mouth_axis_delta": 0.021383343264460564,
+        "right_eye_error": 0.043628569692373276,
+        "similarity_rms_normalized": 0.02119525925363498,
+        "source_face_short": 561.0137939453125,
+        "target_face_short": 533.3597412109375
+      },
+      "morphology": {
+        "all68": 0.025784819329315617,
+        "central_chin": 0.03561413112343304,
+        "eyes": 0.008708703540710008,
+        "inner_face": 0.018220844331724943,
+        "lower_face": 0.02751197385155632,
+        "mouth": 0.016801599142352498,
+        "nose": 0.011196949788657594,
+        "outline": 0.05154614787356553
+      },
+      "neck_sample_unchanged": true,
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "path": "standard",
+      "peak_rss_kib": 402880,
+      "person_b_unchanged": true,
+      "phase": "pre_ocular",
+      "png_sha256": "25f77c7ba3d909c090ad652d44c7b8ce2d585dbeb697579f7a1608edb3937567",
+      "pose_proxy": {
+        "mouth_aperture_proxy": 0.01070434134453535,
+        "nose_offset_proxy": -0.166914701461792,
+        "roll_deg": 9.643410682678223
+      },
+      "roll_delta_deg": 1.8834896087646484,
+      "target_pose_proxy": {
+        "mouth_aperture_proxy": 0.0042956070974469185,
+        "nose_offset_proxy": -0.17561237514019012,
+        "roll_deg": 11.526900291442871
+      }
+    },
+    {
+      "changed_pixels_outside_dense_support": 12495,
+      "metrics": {
+        "eye_asymmetry_delta": 0.08298399891305458,
+        "identity_similarity_cosine": 0.8157366514205933,
+        "inner_face_landmark_nme": 0.035996947437524796,
+        "interocular_ratio_delta": 0.021210949556506264,
+        "left_eye_error": 0.03469090536236763,
+        "max_dense_shift_normalized": 0.012243517879535384,
+        "nose_mouth_axis_delta": 0.02335120178759098,
+        "right_eye_error": 0.05463411286473274,
+        "similarity_rms_normalized": 0.02119525925363498,
+        "source_face_short": 561.0137939453125,
+        "target_face_short": 533.3597412109375
+      },
+      "morphology": {
+        "all68": 0.033596392479889554,
+        "central_chin": 0.05444560982580491,
+        "eyes": 0.009033780174110051,
+        "inner_face": 0.02533648071473919,
+        "lower_face": 0.040815388921329424,
+        "mouth": 0.029122507593700376,
+        "nose": 0.01880668315346751,
+        "outline": 0.06351303291258753
+      },
+      "neck_sample_unchanged": true,
+      "old_gate_failures": [
+        "eye_error=0.0546>0.0500"
+      ],
+      "old_gate_pass": false,
+      "path": "strict",
+      "peak_rss_kib": 414912,
+      "person_b_unchanged": true,
+      "phase": "pre_ocular",
+      "png_sha256": "94134923617c00228f7d1977d8b61ff2770569767462fb8dbed34f0f3c94c5b6",
+      "pose_proxy": {
+        "mouth_aperture_proxy": 0.014974377118051052,
+        "nose_offset_proxy": -0.1660565286874771,
+        "roll_deg": 9.93855094909668
+      },
+      "roll_delta_deg": 1.5883493423461914,
+      "target_pose_proxy": {
+        "mouth_aperture_proxy": 0.0042956070974469185,
+        "nose_offset_proxy": -0.17561237514019012,
+        "roll_deg": 11.526900291442871
+      }
+    }
+  ],
+  "sampled_cgroup_peak_bytes": 2174631936,
+  "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+  "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2"
+}

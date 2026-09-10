@@ -1,0 +1,54 @@
+name: V265 Frozen Transfer Matrix
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'neyrobot_prod/v265_*lab.py'
+      - 'scripts/v265_*matrix*.py'
+      - 'scripts/v265_nuisance_calibration.py'
+      - 'tests/test_v265_semantic_mask.py'
+      - 'tests/test_v265_eye_lab.py'
+      - 'tests/fixtures/v265_matrix/**'
+      - '.github/workflows/v265-transfer-matrix.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [case01, case02, case04]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: python:3.12-slim
+      options: --memory=512m --cpus=0.5
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r requirements.txt
+      - name: Verify pinned models and freeze normalized Stage-1 once
+        env:
+          PROD_HARDENING_ENABLED: '0'
+        run: python -m scripts.v265_matrix_prepare --case ${{ matrix.case }} --models /tmp/models --output /tmp/matrix
+      - name: A-E standard and strict in daemon context, same Stage-1
+        env:
+          PROD_HARDENING_ENABLED: '0'
+          PYTHONUNBUFFERED: '1'
+        run: |
+          set -eu
+          for mode in A_baseline B_mask C_core D_mask_core E_mask_frequency; do
+            python -m scripts.v265_transfer_matrix --worker --daemon --case ${{ matrix.case }} --mode "$mode" --models /tmp/models --output /tmp/matrix > "/tmp/matrix/${{ matrix.case }}/$mode.log" 2>&1
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v265-metrics-${{ matrix.case }}
+          path: /tmp/matrix/*/*.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-v265-matrix-${{ matrix.case }}-NOT-acceptance
+          path: /tmp/matrix/
+          if-no-files-found: error
