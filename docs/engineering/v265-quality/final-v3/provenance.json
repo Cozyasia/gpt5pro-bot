@@ -1,0 +1,17 @@
+{
+  "generator": "original-relief-anatomy-3",
+  "identities": 128,
+  "renders": 1024,
+  "vertices": 2009,
+  "triangles": 3840,
+  "manifest_sha256": "9e7d0017c72cd5783f320a54da2005a0fe8fe7c1ef71e716a3f3b78470a8a39f",
+  "status": "ENGINEERING_PRETRAINING_ONLY",
+  "commercial_training_allowed": false,
+  "external_assets": [],
+  "limitations": [
+    "open facial relief patch",
+    "no volumetric cavities",
+    "accessories are UV decals",
+    "not human anatomical validation"
+  ]
+}

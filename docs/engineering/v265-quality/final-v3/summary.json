@@ -1,0 +1,27 @@
+{
+  "gate": {
+    "checks": {
+      "trained": true,
+      "reconstruction": true,
+      "expression_invariance": true,
+      "pose_invariance": false,
+      "lighting_invariance": true,
+      "geometry": true,
+      "case06_full_surface": false,
+      "case08_intrinsic": false,
+      "accessory": false,
+      "deterministic": true,
+      "onnx": true
+    },
+    "v0": false,
+    "real_human_quality_proven": false,
+    "production_ready": false
+  },
+  "cgroup": {
+    "memory.max": "15032385536",
+    "memory.peak": "6373711872",
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "max"
+  },
+  "production_ready": false
+}
