@@ -1,0 +1,25 @@
+name: V265 anatomy admission evidence
+on:
+  push:
+    branches: [v265-self-hosted-l2]
+    paths: ['experiments/v265_anatomy/**', '.github/workflows/v265-anatomy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  negative-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==2.3.5
+        working-directory: /tmp
+      - run: python -m unittest experiments.v265_anatomy.test_generator -v
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_anatomy.audit /tmp/anatomy-evidence
+      - run: python -m experiments.v265_anatomy.ablation > /tmp/anatomy-evidence/ablation.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anatomy-negative-evidence
+          path: /tmp/anatomy-evidence
