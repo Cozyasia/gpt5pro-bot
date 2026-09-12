@@ -1,0 +1,38 @@
+name: V265 Original Anatomy Quality Experiment
+on:
+  pull_request:
+    branches: [v265-full-face-transfer-matrix]
+    paths:
+      - 'experiments/v265_quality/**'
+      - '.github/workflows/v265-quality.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-quality-2g:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build generic training dependencies
+        run: docker build --build-arg CODE_COMMIT=$(git rev-parse HEAD) -t v265-quality -f experiments/v265_quality/Dockerfile.cpu .
+      - name: Original generator contract tests
+        run: docker run --rm --network none --memory=2g --memory-swap=2g --cpus=2 v265-quality
+      - name: New anatomy training comparison under actual 2 GiB limit
+        run: |
+          mkdir -p /tmp/quality
+          docker run --name quality-run --network none --memory=2g --memory-swap=2g --cpus=2 -v /tmp/quality:/results v265-quality python -m experiments.v265_quality.run_suite /results
+      - name: Preserve isolation outcome
+        if: always()
+        run: docker inspect quality-run --format '{{json .State}} {{json .HostConfig.Memory}} {{json .HostConfig.MemorySwap}}' > /tmp/quality/container-state.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: original-anatomy-NOT-HUMAN-QUALITY
+          retention-days: 90
+          path: |
+            /tmp/quality/**/*.json
+            /tmp/quality/**/*.jsonl
+            /tmp/quality/**/weights.pt
+            /tmp/quality/**/*.onnx
+            /tmp/quality/container-state.txt
