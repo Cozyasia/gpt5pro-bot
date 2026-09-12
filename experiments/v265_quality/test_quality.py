@@ -36,6 +36,22 @@ class FactoryTests(unittest.TestCase):
         )
         self.assertEqual(len(np.unique(s["regions"])), 7)
 
+    def test_continuous_identity_fields_do_not_fold_stress_meshes(self):
+        from experiments.v265_prior.evaluate import topology_metrics
+
+        for level in (0, 1):
+            s = surface(level)
+            rng = np.random.default_rng(990)
+            for _ in range(32):
+                n = anatomy(s, rng.uniform(-1, 1, 24), rng.uniform(-1, 1, 12))
+                v = expression(s, n, rng.uniform(-1, 1, 8))
+                self.assertEqual(
+                    topology_metrics(v, s["neutral"], s["triangles"])[
+                        "orientation_failures"
+                    ],
+                    0,
+                )
+
     def test_no_repeated_or_degenerate_triangles(self):
         for resolution in (0, 1):
             s = surface(resolution)

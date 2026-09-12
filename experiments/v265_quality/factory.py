@@ -13,7 +13,7 @@ import time
 import numpy as np
 from experiments.v265_selfhost.geometry import raster
 
-VERSION = "original-relief-anatomy-2"
+VERSION = "original-relief-anatomy-3"
 IDENTITY = (
     "width height forehead orbital_spacing eye_aperture eyelid nose_width "
     "nose_length nose_projection bridge nostril cheek maxilla mouth_width "
@@ -44,10 +44,10 @@ def surface(resolution=0):
         (0, neutral[:, 0] * 0.09),
         (1, neutral[:, 1] * 0.07),
         (2, -0.003 * g(0, -0.7, 0.8, 0.3)),
-        (0, 0.003 * np.sign(x) * eye),
-        (1, 0.002 * np.sign(y + 0.22) * eye),
+        (0, 0.003 * np.tanh(x / 0.2) * eye),
+        (1, 0.002 * np.tanh((y + 0.22) / 0.05) * eye),
         (2, -0.0015 * eye),
-        (0, 0.002 * np.sign(x) * g(0, 0.05, 0.22, 0.3)),
+        (0, 0.002 * np.tanh(x / 0.2) * g(0, 0.05, 0.22, 0.3)),
         (1, 0.003 * g(0, 0.1, 0.2, 0.3)),
         (2, -0.004 * g(0, 0.04, 0.16, 0.27)),
         (2, -0.002 * g(0, -0.1, 0.1, 0.25)),
@@ -59,8 +59,8 @@ def surface(resolution=0):
         (2, -0.0015 * g(0, 0.46, 0.30, 0.04)),
         (2, -0.001 * (g(-0.08, 0.35, 0.04, 0.045) + g(0.08, 0.35, 0.04, 0.045))),
         (2, 0.0015 * g(0, 0.28, 0.05, 0.09)),
-        (0, 0.003 * np.sign(x) * g(0, 0.67, 1, 0.25)),
-        (0, 0.003 * np.sign(x) * g(0, 0.8, 1, 0.16)),
+        (0, 0.003 * np.tanh(x / 0.2) * g(0, 0.67, 1, 0.25)),
+        (0, 0.003 * np.tanh(x / 0.2) * g(0, 0.8, 1, 0.16)),
         (0, 0.002 * x * chin),
         (1, 0.003 * chin),
         (2, -0.003 * chin),
