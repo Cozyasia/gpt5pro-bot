@@ -1,0 +1,152 @@
+{
+  "mean": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "f8936c549176f61f2aa5053cd7638b5f0420cfa0355eccc93ba0c06fdc6eb8f5",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.014,
+      "jaw": 0.04,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "narrow": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "0dc7b592ef03822c750f5d5573c0281815ae9cb7164a04fd3e0607fa858347ea",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.018,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.014,
+      "jaw": 0.04,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "wide": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "74b911c19ad36600c78d2b1fb84244a56a8c30327f4203064acf40adc1f9be94",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.031,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.014,
+      "jaw": 0.04,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "thin": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "8c62e19ab1a51659fde7337f10b03c16c40373f637a333166dcd86b254a9b370",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.0015,
+      "lower": 0.0018,
+      "philtrum": 0.014,
+      "jaw": 0.04,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "thick": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "33bbc599bdd347cb665bf2ea8fc11419316cc2ddc29f86b2a79f89cf83ba9d44",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.0045,
+      "lower": 0.005,
+      "philtrum": 0.014,
+      "jaw": 0.04,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "short_philtrum": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "469a0c881560854d993595afa3f9786d81db44b30c77f603036f357865b627c0",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.009,
+      "jaw": 0.04,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "long_philtrum": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "a1bb8a94223170e56a194c50b53a95a4859521502e0e93bf7c619c61181943e6",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.02,
+      "jaw": 0.04,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "narrow_jaw": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "db54867b17542b05281efa73941327cda933f8b503b1ae0c7e2ad67ecc1a14af",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.014,
+      "jaw": 0.03,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "wide_jaw": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "d446c360a4ce564999c452d45e265f3c70133c6aeeead549eec5aac7a74f79dc",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.014,
+      "jaw": 0.05,
+      "asymmetry": 0.0
+    },
+    "vertices": 545,
+    "triangles": 976
+  },
+  "asymmetric": {
+    "version": "mouth-annular-v1",
+    "vertices_sha256": "62a8ee97db74db24d9122499522a41ff208b22f269c3c1897593bbe93162addf",
+    "triangles_sha256": "e67941d866f4a6fd87aaaa58b7f0332d635b4293800e3be2453d8aaecbd4ca7a",
+    "params": {
+      "width": 0.025,
+      "upper": 0.003,
+      "lower": 0.0035,
+      "philtrum": 0.014,
+      "jaw": 0.04,
+      "asymmetry": 0.08
+    },
+    "vertices": 545,
+    "triangles": 976
+  }
+}
