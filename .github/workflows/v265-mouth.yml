@@ -19,8 +19,9 @@ jobs:
         working-directory: /tmp
       - run: python -m unittest experiments.v265_mouth.test_component -v
       - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_mouth.run /tmp/mouth
-      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_mouth.expressions /tmp/mouth
-      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_mouth.full_anatomy /tmp/mouth
+      - name: Verify fail-closed sequencing
+        run: |
+          python -c "import json; d=json.load(open('/tmp/mouth/summary.json')); assert d['neutral_pass']; assert d['jaw_contact_pass']; assert not d['jaw_pass']"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

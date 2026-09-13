@@ -13,6 +13,13 @@ class MouthTests(unittest.TestCase):
   np.testing.assert_array_equal(v[u],n[u]);np.testing.assert_allclose(np.linalg.norm(v[l]-v[l[0]],axis=1),np.linalg.norm(n[l]-n[l[0]],axis=1),atol=1e-15);np.testing.assert_array_equal(n,t['vertices'])
  def test_identity_neutral(self):
   t=build();np.testing.assert_array_equal(jaw_only(t,0),t['vertices'])
+ def test_expressions_require_full_jaw_admission(self):
+  import tempfile,json
+  from pathlib import Path
+  from .expressions import run
+  with tempfile.TemporaryDirectory() as tmp:
+   Path(tmp,'summary.json').write_text(json.dumps({'jaw_pass':False,'jaw_contact_pass':True}))
+   with self.assertRaisesRegex(ValueError,'jaw admission'):run(tmp)
  def test_distances(self):
   d=segment_distance(np.array([[0.,0,0]]),np.array([[1.,0,0]]),np.array([[.5,-1,1.]]),np.array([[.5,1,1.]]));np.testing.assert_allclose(d,[1.])
   tri=np.array([[[0.,0,0],[1,0,0],[0,1,0]]]);np.testing.assert_allclose(point_triangle(np.array([[.2,.2,2.]]),tri),[2.])
