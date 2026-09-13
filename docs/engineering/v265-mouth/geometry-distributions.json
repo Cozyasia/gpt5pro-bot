@@ -1,0 +1,13 @@
+{
+  "min_correspondence_distance_m": 0.0031100365505168184,
+  "min_distance_ratio": 0.9834799106006461,
+  "area_ratio": [
+    0.9378543466803985,
+    10.599881020194887
+  ],
+  "edge_ratio": [
+    0.6858992450521767,
+    15.699558950668582
+  ],
+  "note": "correspondence distances are not globally minimal wall thickness; no calibrated benign envelope yet"
+}

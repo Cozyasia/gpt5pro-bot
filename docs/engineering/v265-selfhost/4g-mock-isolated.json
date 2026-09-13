@@ -1,0 +1,104 @@
+{
+  "engineering_end_to_end": "PASS",
+  "mock_only": true,
+  "identity_quality_evidence": false,
+  "commercial_training_allowed": false,
+  "mock_commercial_admission_rejected": true,
+  "generated": {
+    "records": 48,
+    "identities": 6,
+    "commercial_training_allowed": false
+  },
+  "admission": {
+    "records": 48,
+    "identities": 6,
+    "topology": [
+      "ORIGINAL-MOCK-DENSE520-NOT-HUMAN",
+      "6d89db76d26998ff035a8f79d7d608ca4a6925df07f85a5bb13dbae5681590da",
+      520,
+      950
+    ],
+    "commercial_training_allowed": false,
+    "manifest_sha256": "6aee3188131e86d78492d3b4b680a210904dfa206af97709e17da2c59dc711d0",
+    "rights_sha256": "3e03256cb9b8ac7241c424b1123da75530c2241327b926a66d56e577bc5822eb",
+    "near_duplicate_screen": "rigid-aligned metric RMS >0.1mm; not perceptual proof"
+  },
+  "checkpoint_onnx": "PASS",
+  "onnx_max_abs_errors": [
+    1.1175870895385742e-8,
+    7.450580596923828e-9,
+    9.313225746154785e-10,
+    5.960464477539063e-8,
+    5.960464477539063e-8
+  ],
+  "silhouette_gradient_l1": 0.7027228248431029,
+  "person_b_bit_exact": true,
+  "neck_bit_exact": true,
+  "repeat_png_bit_exact": true,
+  "training_memory": {
+    "rss_kib": 622284,
+    "peak_rss_kib": 634392,
+    "shared_host_cgroup": {
+      "memory.current": "552394752",
+      "memory.max": "4294967296",
+      "memory.peak": "565321728",
+      "cache_bytes": {
+        "file": 7659520,
+        "inactive_file": 7659520,
+        "slab_reclaimable": 5651568
+      }
+    }
+  },
+  "worker_memory": {
+    "after_inference": {
+      "rss_kib": 78408,
+      "peak_rss_kib": 78380,
+      "shared_host_cgroup": {
+        "memory.current": "104747008",
+        "memory.max": "4294967296",
+        "memory.peak": "576249856",
+        "cache_bytes": {
+          "file": 28372992,
+          "inactive_file": 28352512,
+          "slab_reclaimable": 6426320
+        }
+      }
+    },
+    "after_render": {
+      "rss_kib": 82356,
+      "peak_rss_kib": 82120,
+      "shared_host_cgroup": {
+        "memory.current": "107892736",
+        "memory.max": "4294967296",
+        "memory.peak": "576249856",
+        "cache_bytes": {
+          "file": 28454912,
+          "inactive_file": 28426240,
+          "slab_reclaimable": 6449264
+        }
+      }
+    }
+  },
+  "actual_memory_limit": "4294967296",
+  "isolated_2gib_verified": false,
+  "final_cgroup": {
+    "rss_kib": 43516,
+    "peak_rss_kib": 43244,
+    "shared_host_cgroup": {
+      "memory.current": "59461632",
+      "memory.max": "4294967296",
+      "memory.peak": "576249856",
+      "cache_bytes": {
+        "file": 28553216,
+        "inactive_file": 28516352,
+        "slab_reclaimable": 6458208
+      }
+    }
+  },
+  "memory_swap_max": "0",
+  "memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "worker_latency_ms": 172.25161000000355,
+  "source_identity_hash": "c82549aa70d84d674c904451ab098500fc97e603aea84f358b2fec6b6f7e619f",
+  "machine_prequalified": false,
+  "self_hosted_l2_mvp": false
+}

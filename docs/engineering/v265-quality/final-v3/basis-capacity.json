@@ -1,0 +1,20 @@
+{
+  "train_identities": 80,
+  "test_identities": 24,
+  "effective_rank": 36,
+  "results": [
+    {
+      "dimensions": 24,
+      "unseen_oracle_rmse_mm": 0.11040560156106949
+    },
+    {
+      "dimensions": 36,
+      "unseen_oracle_rmse_mm": 9.736941137816757e-06
+    },
+    {
+      "dimensions": 64,
+      "unseen_oracle_rmse_mm": 2.9757791253359756e-06
+    }
+  ],
+  "interpretation": "Oracle geometry projection only. The corpus cannot establish 128/256-dimensional anatomical identity capacity."
+}

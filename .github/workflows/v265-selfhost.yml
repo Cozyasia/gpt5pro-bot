@@ -1,0 +1,62 @@
+name: V265 Self-hosted L2 Engineering
+on:
+  pull_request:
+    branches: [v265-full-face-transfer-matrix]
+    paths:
+      - 'experiments/v265_selfhost/**'
+      - 'experiments/v265_prior/**'
+      - '.github/workflows/v265-selfhost.yml'
+      - 'docs/engineering/v265-selfhost/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        memory: [2g, 4g]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build only generic dependencies (no pretrained face assets)
+        run: docker build --build-arg CODE_COMMIT=$(git rev-parse HEAD) -t v265-selfhost -f experiments/v265_selfhost/Dockerfile .
+      - name: Geometry and firewall contracts without network
+        run: docker run --rm --network none --memory=${{ matrix.memory }} --memory-swap=${{ matrix.memory }} --cpus=2 v265-selfhost python -m unittest experiments.v265_selfhost.test_stack -v
+      - name: Complete mock dataset/training/export/worker/cross-view/render
+        run: |
+          mkdir -p /tmp/selfhost-results
+          if [ '${{ matrix.memory }}' = '2g' ]; then
+            docker run --name selfhost-run --network none --memory=2g --memory-swap=2g --cpus=2 -v /tmp/selfhost-results:/results v265-selfhost
+          else
+            docker run --name selfhost-run --network none --memory=4g --memory-swap=4g --cpus=2 -v /tmp/selfhost-results:/results v265-selfhost python -m experiments.v265_selfhost.dryrun /results/run
+          fi
+      - name: Fetch already-audited bootstrap assets outside inference sandbox
+        run: |
+          mkdir -p /tmp/bootstrap-assets
+          python - <<'PYCODE'
+          import json,hashlib,pathlib,urllib.request
+          manifest=json.load(open('tests/fixtures/v265_commercial_assets.json'))['assets']
+          for name in ['face_landmarker.task','selfie_multiclass_256x256.tflite']:
+              data=urllib.request.urlopen(manifest[name]['url'],timeout=60).read()
+              assert hashlib.sha256(data).hexdigest()==manifest[name]['sha256']
+              pathlib.Path('/tmp/bootstrap-assets',name).write_bytes(data)
+          PYCODE
+      - name: Isolated MediaPipe plus encoder and sequential parsing
+        run: |
+          docker run --rm --network none --memory=${{ matrix.memory }} --memory-swap=${{ matrix.memory }} --cpus=2 -v /tmp/bootstrap-assets:/assets:ro -v /tmp/selfhost-results:/results -v "$PWD/tests/fixtures/v265_matrix/case02_source.jpg:/public-source.jpg:ro" v265-selfhost python -m experiments.v265_selfhost.bootstrap_memory /assets /results/run/model /public-source.jpg /results/bootstrap-memory.json
+      - name: Record container OOM and enforced host configuration
+        if: always()
+        run: docker inspect selfhost-run --format '{{json .State}} {{json .HostConfig.Memory}} {{json .HostConfig.MemorySwap}}' > /tmp/selfhost-results/container-state.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selfhost-${{ matrix.memory }}-MOCK-NOT-QUALITY
+          path: |
+            /tmp/selfhost-results/run/summary.json
+            /tmp/selfhost-results/run/model/model-manifest.json
+            /tmp/selfhost-results/run/cross-view.json
+            /tmp/selfhost-results/run/worker/result.json
+            /tmp/selfhost-results/container-state.txt
+            /tmp/selfhost-results/bootstrap-memory.json

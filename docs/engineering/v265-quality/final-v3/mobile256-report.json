@@ -1,0 +1,161 @@
+{
+  "identities": 24,
+  "records": 192,
+  "geometry_rmse_mm": 1.2692236906538408,
+  "mean_prior_rmse_mm": 3.0547754771153754,
+  "relative_to_mean": 0.4154883722755195,
+  "regional_rmse_mm": {
+    "jaw": 1.2284177709370852,
+    "chin": 1.6830027890391648,
+    "nose": 1.7676329901441932,
+    "mouth": 1.3675115186100204,
+    "eyes": 1.137010229441027,
+    "cheeks": 1.1259609103823702,
+    "brows": 0.7803570232354105
+  },
+  "combined_pose_expression_light_accessory_drift_mm": 0.4456852536047033,
+  "coefficient_mse": 0.3362125991067539,
+  "albedo_mse": 0.004395983979899635,
+  "parsing_iou": [
+    0.9836121048051822,
+    0.911601911763824,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "parsing_present_classes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    10,
+    11,
+    12
+  ],
+  "orientation_failures": 0,
+  "area_ratio": [
+    0.7994489073753357,
+    1.1989660263061523
+  ],
+  "edge_stretch": [
+    0.8012669682502747,
+    1.1329954862594604
+  ],
+  "source_inference_only": true,
+  "expression_annotation_independent": true,
+  "case06_full_surface_acceptance": false,
+  "case08_intrinsic_acceptance": false,
+  "training_device": "cpu",
+  "cuda_peak_bytes": null,
+  "code_commit": "54c9bde087f248c9a031ab4c289561b64fa358e0",
+  "source_hashes": {
+    "__init__.py": "c7e940fd5aec5de78cf28f432393d49740bea194852f03c16d8b14ea24b650de",
+    "geometry_audit.py": "4da9f3c279cb1568c67e0ec144c0c4c5e60e0d1d5b8f7832e125da64d76d091c",
+    "gate.py": "95cbc25cd06a68be189417a5042b0459084d602a6943acb4ca77b27550bc6df5",
+    "factory.py": "f9d829b4879212105e1ab6dd7fb6f15684443fc93b88bee9c57a5e0226b3244a",
+    "train.py": "2ce5dd817947c338c335c671006b705af6eb98edc7dead831566d35367339c53",
+    "run_suite.py": "4c585e6caf700d5d1158935f77d36b1f015ac436f7437f2f9d3445194eebce5a",
+    "controlled.py": "d9ca8991817c75c525d686164ab47790e5816f4315e96319d7b0e1f52d8b084b",
+    "test_quality.py": "a0aee5d10d18425158b546909299d3c6a1acde89923100cab7eaef6a137e1d9f"
+  },
+  "backbone": "mobilenet_v3_small",
+  "latent": 256,
+  "representation": "parametric",
+  "uv_size": 64,
+  "epochs": 12,
+  "training_seconds": 78.00527990199998,
+  "peak_rss_kib": 1013996,
+  "latency_ms": 4.522960000000845,
+  "model_bytes": 4963416,
+  "deterministic": true,
+  "onnx_max_abs_error": 1.9073486328125e-06,
+  "onnx_sha256": "a32dd9545742e30a7902f0074fb04b128950b22a76a60a77595f804a36a6e45d",
+  "dataset_manifest_sha256": "9e7d0017c72cd5783f320a54da2005a0fe8fe7c1ef71e716a3f3b78470a8a39f",
+  "generator": "original-relief-anatomy-3",
+  "history": [
+    {
+      "epoch": 0,
+      "loss": 3.384282556176186,
+      "validation_mse": 4.227755570814414e-06
+    },
+    {
+      "epoch": 1,
+      "loss": 1.435260719060898,
+      "validation_mse": 4.2592241988141195e-06
+    },
+    {
+      "epoch": 2,
+      "loss": 1.1882641300559045,
+      "validation_mse": 4.231869789409852e-06
+    },
+    {
+      "epoch": 3,
+      "loss": 1.1013986721634865,
+      "validation_mse": 4.225030080166429e-06
+    },
+    {
+      "epoch": 4,
+      "loss": 1.112874771654606,
+      "validation_mse": 4.1421572663698685e-06
+    },
+    {
+      "epoch": 5,
+      "loss": 0.8775859206914902,
+      "validation_mse": 3.4076663828486176e-06
+    },
+    {
+      "epoch": 6,
+      "loss": 0.8939641326665878,
+      "validation_mse": 2.056190197959514e-06
+    },
+    {
+      "epoch": 7,
+      "loss": 0.8214037880301476,
+      "validation_mse": 7.290186270214605e-07
+    },
+    {
+      "epoch": 8,
+      "loss": 0.7411993011832237,
+      "validation_mse": 5.386860733036514e-07
+    },
+    {
+      "epoch": 9,
+      "loss": 0.7696227237582207,
+      "validation_mse": 5.669972134025869e-07
+    },
+    {
+      "epoch": 10,
+      "loss": 0.6887285903096199,
+      "validation_mse": 6.919260839843844e-07
+    },
+    {
+      "epoch": 11,
+      "loss": 0.7144221186637878,
+      "validation_mse": 6.385993496227371e-07
+    }
+  ],
+  "v0": false,
+  "real_human_quality_proven": false,
+  "weights_sha256": "10318b29aa43ecbe76a27c2dfa7ddc95615f21d14148a250fa27021a830c0ddf",
+  "loss_weights": {
+    "geometry": 1,
+    "coefficients": 0.2,
+    "crossview": 0.2,
+    "appearance": 0.2,
+    "parsing": 0.02,
+    "orientation": 1
+  }
+}
