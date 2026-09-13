@@ -23,18 +23,19 @@ def fields():
   for index,i in enumerate(outer):
    d=vn[i].copy()
    # One consistent winding normal, not per-vertex sign toggling.
-   near=np.unique(tr[np.isin(tr,i).any(1)]);edge=near[near!=i];le=np.linalg.norm(v[edge]-v[i],axis=1);change=np.linalg.norm(vn[edge]-d,axis=1);curvature=float(np.min(np.divide(le,change,out=np.full_like(le,np.inf),where=change>1e-8)))
+   incident=np.flatnonzero(np.isin(tr,i).any(1));face_normals=normal[incident]/np.linalg.norm(normal[incident],axis=1)[:,None];dots=face_normals@d;worst=int(dots.argmin())
+   near=np.unique(tr[incident]);edge=near[near!=i];le=np.linalg.norm(v[edge]-v[i],axis=1);change=np.linalg.norm(vn[edge]-d,axis=1);curvature=float(np.min(np.divide(le,change,out=np.full_like(le,np.inf),where=change>1e-8)))
    normal_hit=ray(v[i],d,v,tr[exterior_ids],[i]);posterior_hit=ray(v[i],np.array([0.,0.,1.]),v,tr[exterior_ids],[i]);globe_hit=ray(v[i],d,v,tr[globe_ids],[])
    for hit,indices in ((normal_hit,exterior_ids),(posterior_hit,exterior_ids),(globe_hit,globe_ids)):
     if hit:hit['triangle']=int(indices[hit['triangle']])
    gt=v[tr[globe_ids]];gd=point_triangle(np.broadcast_to(v[i],(len(gt),3)),gt);j=int(gd.argmin());globe_distance=dict(metres=float(gd[j]),triangle=int(globe_ids[j]))
    constraints=[curvature*.25,globe_distance['metres']*.5]
    if normal_hit:constraints.append(normal_hit['metres']*.5)
-   rows.append(dict(vertex=int(i),side=side,upper_lower='upper' if v[i,1]<-.026 else 'lower',zone='canthus' if abs(v[i,0]-cx)>.008 else 'central',band=int(index//(len(outer)//4)),position=v[i].tolist(),inward_normal=d.tolist(),normal_hit=normal_hit,posterior_hit=posterior_hit,globe_ray_hit=globe_hit,exterior_sample_globe_distance=globe_distance,normal_consistency_length_m=curvature,conservative_sample_depth_m=float(min(constraints))))
+   rows.append(dict(vertex=int(i),side=side,upper_lower='upper' if v[i,1]<-.026 else 'lower',zone='canthus' if abs(v[i,0]-cx)>.008 else 'central',band=int(index//(len(outer)//4)),position=v[i].tolist(),inward_normal=d.tolist(),incident_normal_dot_min=float(dots[worst]),limiting_incident_triangle=int(incident[worst]),direction_feasible=bool(dots.min()>0),normal_hit=normal_hit,posterior_hit=posterior_hit,globe_ray_hit=globe_hit,exterior_sample_globe_distance=globe_distance,normal_consistency_length_m=curvature,conservative_sample_depth_m=float(min(constraints))))
  return base,rows
 
 def run(out):
- out=Path(out);out.mkdir(parents=True,exist_ok=True);base,rows=fields();depth=np.array([r['conservative_sample_depth_m'] for r in rows]);summary=dict(samples=len(rows),depth_quantiles_m=np.quantile(depth,[0,.05,.5,1]).tolist(),minimum_witness=rows[int(depth.argmin())],scope='Vertex rays and discrete normal-consistency bound; no global impossibility or continuous collision-free proof',exterior_sha256=hashlib.sha256(base['vertices'].tobytes()).hexdigest())
+ out=Path(out);out.mkdir(parents=True,exist_ok=True);base,rows=fields();depth=np.array([r['conservative_sample_depth_m'] for r in rows]);summary=dict(samples=len(rows),depth_quantiles_m=np.quantile(depth,[0,.05,.5,1]).tolist(),minimum_witness=rows[int(depth.argmin())],direction_failures=sum(not r['direction_feasible'] for r in rows),feasibility_admitted=all(r['direction_feasible'] for r in rows),scope='Vertex rays and discrete normal-consistency bound; no global impossibility or continuous collision-free proof',exterior_sha256=hashlib.sha256(base['vertices'].tobytes()).hexdigest())
  (out/'fields.json').write_text(json.dumps(rows,indent=2));(out/'feasibility.json').write_text(json.dumps(summary,indent=2));print(summary)
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('out');run(p.parse_args().out)

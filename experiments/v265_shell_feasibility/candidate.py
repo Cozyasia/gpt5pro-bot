@@ -9,7 +9,12 @@ from experiments.v265_retained.admission import validate
 from experiments.v265_mouth.validate import clearance
 
 def run(out):
- out=Path(out);out.mkdir(parents=True,exist_ok=True);contract=json.loads(Path(__file__).with_name('contract.json').read_text());base,rows=fields();normals={r['vertex']:np.array(r['inward_normal']) for r in rows};t=construct(contract['construction_depth_m']);v=t['vertices'];tr=t['triangles'];n=base['vertices'];bt=base['triangles']
+ out=Path(out);out.mkdir(parents=True,exist_ok=True);contract=json.loads(Path(__file__).with_name('contract.json').read_text());base,rows=fields()
+ rejected=[r for r in rows if not r['direction_feasible']]
+ if rejected:
+  result=dict(candidate='G',construction='NOT_RUN_AFTER_DIRECTION_GATE',direction_failures=len(rejected),witnesses=rejected,neutral_admitted=False,blink='NOT_RUN',seam='NOT_RUN',training='FORBIDDEN')
+  (out/'candidate-g.json').write_text(json.dumps(result,indent=2));print({'direction_failures':len(rejected),'construction':'NOT_RUN'});return
+ normals={r['vertex']:np.array(r['inward_normal']) for r in rows};t=construct(contract['construction_depth_m']);v=t['vertices'];tr=t['triangles'];n=base['vertices'];bt=base['triangles']
  for d in t['domains']:
   v[d['inner_vertices']]=n[d['outer_vertices']]+contract['construction_depth_m']*np.array([normals[i] for i in d['outer_vertices']])
  r=validate(t);distances=[];lookup={tuple(f):i for i,f in enumerate(tr)}
