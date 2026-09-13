@@ -1,0 +1,135 @@
+{
+  "identity": "mean",
+  "opening": 1.0,
+  "expression": "compression",
+  "first_detected_coefficient": 0.5895414501428604,
+  "last_clear_coefficient": 0.5895414426922798,
+  "bracket_assumption": "refinement of first crossing in sampled .5-.75 interval; no continuous collision proof",
+  "pairs": [
+    [
+      319,
+      449
+    ],
+    [
+      446,
+      449
+    ]
+  ],
+  "pair_labels": [
+    [
+      "vermilion",
+      "inner_lip"
+    ],
+    [
+      "inner_lip",
+      "inner_lip"
+    ]
+  ],
+  "samples": [
+    {
+      "coefficient": 0.5,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.51,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.52,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.53,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.54,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.55,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.56,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.5700000000000001,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.5800000000000001,
+      "intersections": 0
+    },
+    {
+      "coefficient": 0.5900000000000001,
+      "intersections": 2
+    },
+    {
+      "coefficient": 0.6000000000000001,
+      "intersections": 2
+    },
+    {
+      "coefficient": 0.6100000000000001,
+      "intersections": 4
+    },
+    {
+      "coefficient": 0.6200000000000001,
+      "intersections": 4
+    },
+    {
+      "coefficient": 0.6300000000000001,
+      "intersections": 5
+    },
+    {
+      "coefficient": 0.6400000000000001,
+      "intersections": 5
+    },
+    {
+      "coefficient": 0.6500000000000001,
+      "intersections": 7
+    },
+    {
+      "coefficient": 0.6600000000000001,
+      "intersections": 9
+    },
+    {
+      "coefficient": 0.6700000000000002,
+      "intersections": 9
+    },
+    {
+      "coefficient": 0.6800000000000002,
+      "intersections": 11
+    },
+    {
+      "coefficient": 0.6900000000000002,
+      "intersections": 11
+    },
+    {
+      "coefficient": 0.7000000000000002,
+      "intersections": 13
+    },
+    {
+      "coefficient": 0.7100000000000002,
+      "intersections": 13
+    },
+    {
+      "coefficient": 0.7200000000000002,
+      "intersections": 14
+    },
+    {
+      "coefficient": 0.7300000000000002,
+      "intersections": 14
+    },
+    {
+      "coefficient": 0.7400000000000002,
+      "intersections": 14
+    },
+    {
+      "coefficient": 0.7500000000000002,
+      "intersections": 16
+    }
+  ],
+  "classification": "CONTACT"
+}
