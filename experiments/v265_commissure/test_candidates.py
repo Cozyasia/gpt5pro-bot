@@ -22,4 +22,15 @@ class Tests(unittest.TestCase):
   t=build(width=.018);v,n,tr=deform_c(t,1);self.assertGreater(metrics(v,n,tr)['edge_max'],15)
  def test_d_resolves_short_edge(self):
   t=build(width=.018);m=metrics(deform_d(t,1),t['vertices'],t['triangles']);self.assertLess(m['edge_max'],2)
+ def test_compression_does_not_scale_jaw_gap(self):
+  from .expressions import articulated_expression
+  from experiments.v265_mouth.component import expression
+  from experiments.v265_mouth.validate import validate
+  t=build();n=t['vertices'].copy()
+  old=deform_d(t,1)+expression(t,1,compression=.75)-jaw_only(t,1)
+  self.assertFalse(validate(t,old)['pass'])
+  new=articulated_expression(t,1,compression=1)
+  self.assertTrue(validate(t,new)['pass'])
+  np.testing.assert_array_equal(t['vertices'],n)
+  for ids in t['teeth'].values():np.testing.assert_array_equal(new[ids],deform_d(t,1)[ids])
 if __name__=='__main__':unittest.main()
