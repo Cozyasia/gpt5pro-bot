@@ -1,0 +1,28 @@
+name: V265 neutral shell feasibility
+on:
+  push:
+    branches: [v265-self-hosted-l2]
+    paths: ['experiments/v265_shell_feasibility/**', '.github/workflows/v265-shell-feasibility.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  neutral:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==2.3.5
+        working-directory: /tmp
+      - run: OPENBLAS_NUM_THREADS=1 python -m unittest experiments.v265_shell_feasibility.test_contract experiments.v265_retained.test_contract
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_shell_feasibility.analyze /tmp/shell
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_shell_feasibility.root_map /tmp/shell/root-map.json
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_shell_feasibility.candidate /tmp/shell
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shell-feasibility-NOT-ADMITTED
+          path: /tmp/shell
