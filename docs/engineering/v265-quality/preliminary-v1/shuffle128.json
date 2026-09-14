@@ -1,0 +1,148 @@
+{
+  "identities": 24,
+  "records": 192,
+  "geometry_rmse_mm": 1.5536685148254037,
+  "mean_prior_rmse_mm": 3.079115253058262,
+  "relative_to_mean": 0.5045827736659929,
+  "regional_rmse_mm": {
+    "jaw": 1.5761911965285738,
+    "chin": 2.197548779658973,
+    "nose": 2.1081288745626807,
+    "mouth": 1.5801119757816195,
+    "eyes": 1.4519712232674162,
+    "cheeks": 1.3514736626918118,
+    "brows": 0.9745464461545149
+  },
+  "combined_pose_expression_light_accessory_drift_mm": 0.7173769342140682,
+  "coefficient_mse": 0.3959656977870812,
+  "albedo_mse": 0.004280840800144385,
+  "parsing_iou": [
+    0.9852315427303485,
+    0.9081431802137054,
+    0.03273203375036369,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0006217358865953743,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "parsing_present_classes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    10,
+    11,
+    12
+  ],
+  "orientation_failures": 0,
+  "area_ratio": [
+    0.48502641916275024,
+    1.725907802581787
+  ],
+  "edge_stretch": [
+    0.48752114176750183,
+    1.6307601928710938
+  ],
+  "source_inference_only": true,
+  "expression_annotation_independent": true,
+  "case06_full_surface_acceptance": false,
+  "case08_intrinsic_acceptance": false,
+  "backbone": "shufflenet_v2_x0_5",
+  "latent": 128,
+  "representation": "parametric",
+  "uv_size": 64,
+  "epochs": 12,
+  "training_seconds": 77.21632213499993,
+  "peak_rss_kib": 1013776,
+  "latency_ms": 4.515038699999725,
+  "model_bytes": 2303576,
+  "deterministic": true,
+  "onnx_max_abs_error": 4.291534423828125e-06,
+  "onnx_sha256": "b3ee754090fd0220b34c3559136d20fa0f526b45b94c3d0b2524c14a6b4a23f7",
+  "dataset_manifest_sha256": "51f8714b9b09e94a2f8539c1d6145155944f9ba471288db3aae2f19b119c98ea",
+  "generator": "original-relief-anatomy-1",
+  "history": [
+    {
+      "epoch": 0,
+      "loss": 9.432430768013,
+      "validation_mse": 9.445152590418596e-06
+    },
+    {
+      "epoch": 1,
+      "loss": 8.416131854057312,
+      "validation_mse": 4.56361798454689e-06
+    },
+    {
+      "epoch": 2,
+      "loss": 3.6870479583740234,
+      "validation_mse": 3.3242378507658543e-06
+    },
+    {
+      "epoch": 3,
+      "loss": 2.5648780316114426,
+      "validation_mse": 1.8625453866623805e-06
+    },
+    {
+      "epoch": 4,
+      "loss": 2.0243363946676256,
+      "validation_mse": 1.3797706729749375e-06
+    },
+    {
+      "epoch": 5,
+      "loss": 1.7254141986370086,
+      "validation_mse": 1.4269889925995944e-06
+    },
+    {
+      "epoch": 6,
+      "loss": 1.4200156390666963,
+      "validation_mse": 9.870938924757173e-07
+    },
+    {
+      "epoch": 7,
+      "loss": 1.4013908520340919,
+      "validation_mse": 1.2049879300294701e-06
+    },
+    {
+      "epoch": 8,
+      "loss": 1.1431253269314765,
+      "validation_mse": 8.265303170773564e-07
+    },
+    {
+      "epoch": 9,
+      "loss": 1.0710794940590858,
+      "validation_mse": 1.0553192676769167e-06
+    },
+    {
+      "epoch": 10,
+      "loss": 0.9982558235526084,
+      "validation_mse": 7.413495895688035e-07
+    },
+    {
+      "epoch": 11,
+      "loss": 0.9375818416476249,
+      "validation_mse": 8.579269124749563e-07
+    }
+  ],
+  "v0": false,
+  "real_human_quality_proven": false,
+  "weights_sha256": "aa2550c317fe91e4b6d4a47b24529be755e704768cf966a07332c4a116c0438f",
+  "loss_weights": {
+    "geometry": 1,
+    "coefficients": 0.2,
+    "crossview": 0.2,
+    "appearance": 0.2,
+    "parsing": 0.02,
+    "orientation": 1
+  }
+}

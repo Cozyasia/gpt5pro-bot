@@ -1,0 +1,26 @@
+name: V265 lid material neutral admission
+on:
+  push:
+    branches: [v265-self-hosted-l2]
+    paths: ['experiments/v265_lid_material/**', '.github/workflows/v265-lid-material.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  neutral:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==2.3.5
+        working-directory: /tmp
+      - run: OPENBLAS_NUM_THREADS=1 python -m unittest experiments.v265_lid_material.test_neutral experiments.v265_retained.test_contract
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_lid_material.admission /tmp/lid-material
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lid-material-neutral-NOT-ADMITTED
+          path: /tmp/lid-material

@@ -1,0 +1,55 @@
+[
+  {
+    "blink": 0,
+    "squint": 0,
+    "vertices": 5300,
+    "triangles": 10208,
+    "intersections": 8,
+    "categories": {
+      "skin / skin": 1,
+      "nostril / skin": 1,
+      "nostril / nostril": 6
+    },
+    "pairs": [
+      [
+        10041,
+        10044
+      ],
+      [
+        10041,
+        10071
+      ],
+      [
+        10082,
+        10108
+      ],
+      [
+        10083,
+        10108
+      ],
+      [
+        10096,
+        10115
+      ],
+      [
+        10097,
+        10115
+      ],
+      [
+        10176,
+        10200
+      ],
+      [
+        10177,
+        10200
+      ]
+    ],
+    "unresolved_coplanar": 0,
+    "nonmanifold": 0,
+    "winding": 0,
+    "degenerate": 0,
+    "duplicate_faces": 0,
+    "structural_pass": false,
+    "full_admission": false
+  }
+]

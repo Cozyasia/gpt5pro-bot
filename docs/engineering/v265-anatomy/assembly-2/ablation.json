@@ -1,0 +1,167 @@
+{
+  "discontinuous_failures": 25,
+  "continuous_failures": 298,
+  "selected": false,
+  "cases": [
+    {
+      "identity": 416,
+      "discontinuous": 0,
+      "continuous": 2
+    },
+    {
+      "identity": 417,
+      "discontinuous": 1,
+      "continuous": 11
+    },
+    {
+      "identity": 418,
+      "discontinuous": 0,
+      "continuous": 7
+    },
+    {
+      "identity": 419,
+      "discontinuous": 0,
+      "continuous": 0
+    },
+    {
+      "identity": 420,
+      "discontinuous": 1,
+      "continuous": 10
+    },
+    {
+      "identity": 421,
+      "discontinuous": 1,
+      "continuous": 9
+    },
+    {
+      "identity": 422,
+      "discontinuous": 0,
+      "continuous": 7
+    },
+    {
+      "identity": 423,
+      "discontinuous": 0,
+      "continuous": 2
+    },
+    {
+      "identity": 424,
+      "discontinuous": 0,
+      "continuous": 4
+    },
+    {
+      "identity": 425,
+      "discontinuous": 0,
+      "continuous": 0
+    },
+    {
+      "identity": 426,
+      "discontinuous": 1,
+      "continuous": 17
+    },
+    {
+      "identity": 427,
+      "discontinuous": 1,
+      "continuous": 8
+    },
+    {
+      "identity": 428,
+      "discontinuous": 3,
+      "continuous": 13
+    },
+    {
+      "identity": 429,
+      "discontinuous": 1,
+      "continuous": 9
+    },
+    {
+      "identity": 430,
+      "discontinuous": 1,
+      "continuous": 9
+    },
+    {
+      "identity": 431,
+      "discontinuous": 0,
+      "continuous": 0
+    },
+    {
+      "identity": 432,
+      "discontinuous": 1,
+      "continuous": 14
+    },
+    {
+      "identity": 433,
+      "discontinuous": 2,
+      "continuous": 14
+    },
+    {
+      "identity": 434,
+      "discontinuous": 1,
+      "continuous": 8
+    },
+    {
+      "identity": 435,
+      "discontinuous": 1,
+      "continuous": 13
+    },
+    {
+      "identity": 436,
+      "discontinuous": 0,
+      "continuous": 1
+    },
+    {
+      "identity": 437,
+      "discontinuous": 1,
+      "continuous": 10
+    },
+    {
+      "identity": 438,
+      "discontinuous": 1,
+      "continuous": 10
+    },
+    {
+      "identity": 439,
+      "discontinuous": 0,
+      "continuous": 7
+    },
+    {
+      "identity": 440,
+      "discontinuous": 1,
+      "continuous": 9
+    },
+    {
+      "identity": 441,
+      "discontinuous": 1,
+      "continuous": 10
+    },
+    {
+      "identity": 442,
+      "discontinuous": 1,
+      "continuous": 10
+    },
+    {
+      "identity": 443,
+      "discontinuous": 3,
+      "continuous": 44
+    },
+    {
+      "identity": 444,
+      "discontinuous": 0,
+      "continuous": 7
+    },
+    {
+      "identity": 445,
+      "discontinuous": 1,
+      "continuous": 12
+    },
+    {
+      "identity": 446,
+      "discontinuous": 1,
+      "continuous": 12
+    },
+    {
+      "identity": 447,
+      "discontinuous": 0,
+      "continuous": 9
+    }
+  ]
+}

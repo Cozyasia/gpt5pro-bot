@@ -1,0 +1,7 @@
+{
+  "admitted": false,
+  "retained_dynamic": false,
+  "seam": "NOT_RUN",
+  "training": "FORBIDDEN",
+  "reason": "Closure contacts and finite eyelid wall must both be demonstrated; no missing metric may silently PASS"
+}

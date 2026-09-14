@@ -1,0 +1,13 @@
+{
+  "level": 1,
+  "vertices": 5265,
+  "single_update_batch": 16,
+  "single_update_ms": 272.5543460001063,
+  "process_peak_rss_kib": 400688,
+  "model_bytes": 4393560,
+  "buffers_bytes": 2891820,
+  "onnx_bytes": 6755819,
+  "onnx_sha256": "e7557518c7777e348499c666aa53c0f0da4d61c2d2aa2d24657642c3811106bb",
+  "quality_evidence": false,
+  "full_training_run": false
+}

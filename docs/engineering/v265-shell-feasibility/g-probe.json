@@ -1,0 +1,499 @@
+{
+  "vertices": 5528,
+  "triangles": 10664,
+  "intersections": 90,
+  "categories": {
+    "inner_eyelid / skin": 13,
+    "eyelid / inner_eyelid": 77
+  },
+  "pairs": [
+    [
+      7706,
+      10130
+    ],
+    [
+      7707,
+      10130
+    ],
+    [
+      7708,
+      10131
+    ],
+    [
+      7708,
+      10132
+    ],
+    [
+      7718,
+      10141
+    ],
+    [
+      7718,
+      10142
+    ],
+    [
+      7766,
+      10188
+    ],
+    [
+      7766,
+      10189
+    ],
+    [
+      7767,
+      10188
+    ],
+    [
+      7767,
+      10189
+    ],
+    [
+      7778,
+      10131
+    ],
+    [
+      7778,
+      10202
+    ],
+    [
+      7778,
+      10203
+    ],
+    [
+      7779,
+      10131
+    ],
+    [
+      7779,
+      10132
+    ],
+    [
+      7779,
+      10133
+    ],
+    [
+      7779,
+      10203
+    ],
+    [
+      7779,
+      10204
+    ],
+    [
+      7780,
+      10203
+    ],
+    [
+      7780,
+      10204
+    ],
+    [
+      7789,
+      10141
+    ],
+    [
+      7789,
+      10142
+    ],
+    [
+      7789,
+      10143
+    ],
+    [
+      7789,
+      10212
+    ],
+    [
+      7789,
+      10213
+    ],
+    [
+      7789,
+      10214
+    ],
+    [
+      7790,
+      10213
+    ],
+    [
+      7790,
+      10214
+    ],
+    [
+      7790,
+      10215
+    ],
+    [
+      7849,
+      10203
+    ],
+    [
+      7850,
+      10203
+    ],
+    [
+      7850,
+      10274
+    ],
+    [
+      7851,
+      10204
+    ],
+    [
+      7851,
+      10205
+    ],
+    [
+      7851,
+      10274
+    ],
+    [
+      7851,
+      10275
+    ],
+    [
+      7851,
+      10276
+    ],
+    [
+      7852,
+      10275
+    ],
+    [
+      7852,
+      10276
+    ],
+    [
+      7861,
+      10213
+    ],
+    [
+      7861,
+      10215
+    ],
+    [
+      7861,
+      10284
+    ],
+    [
+      7861,
+      10285
+    ],
+    [
+      7861,
+      10286
+    ],
+    [
+      7862,
+      10285
+    ],
+    [
+      7862,
+      10286
+    ],
+    [
+      8882,
+      10418
+    ],
+    [
+      8883,
+      10418
+    ],
+    [
+      8884,
+      10419
+    ],
+    [
+      8884,
+      10420
+    ],
+    [
+      8884,
+      10421
+    ],
+    [
+      8892,
+      10427
+    ],
+    [
+      8892,
+      10428
+    ],
+    [
+      8953,
+      10419
+    ],
+    [
+      8953,
+      10421
+    ],
+    [
+      8953,
+      10488
+    ],
+    [
+      8953,
+      10489
+    ],
+    [
+      8953,
+      10490
+    ],
+    [
+      8954,
+      10489
+    ],
+    [
+      8954,
+      10490
+    ],
+    [
+      8961,
+      10427
+    ],
+    [
+      8961,
+      10428
+    ],
+    [
+      8961,
+      10429
+    ],
+    [
+      8961,
+      10496
+    ],
+    [
+      8961,
+      10497
+    ],
+    [
+      8961,
+      10498
+    ],
+    [
+      8962,
+      10497
+    ],
+    [
+      8962,
+      10498
+    ],
+    [
+      8962,
+      10499
+    ],
+    [
+      8978,
+      10512
+    ],
+    [
+      8978,
+      10513
+    ],
+    [
+      8979,
+      10512
+    ],
+    [
+      8979,
+      10513
+    ],
+    [
+      9022,
+      10489
+    ],
+    [
+      9022,
+      10558
+    ],
+    [
+      9023,
+      10489
+    ],
+    [
+      9023,
+      10490
+    ],
+    [
+      9023,
+      10491
+    ],
+    [
+      9023,
+      10558
+    ],
+    [
+      9023,
+      10559
+    ],
+    [
+      9023,
+      10560
+    ],
+    [
+      9024,
+      10559
+    ],
+    [
+      9024,
+      10560
+    ],
+    [
+      9031,
+      10497
+    ],
+    [
+      9031,
+      10499
+    ],
+    [
+      9031,
+      10566
+    ],
+    [
+      9031,
+      10567
+    ],
+    [
+      9031,
+      10568
+    ],
+    [
+      9032,
+      10567
+    ],
+    [
+      9032,
+      10568
+    ]
+  ],
+  "coplanar_aabb_candidates": 20,
+  "unresolved_coplanar": 0,
+  "coplanar_overlap_pairs": [],
+  "nonmanifold": 0,
+  "winding": 0,
+  "degenerate": 0,
+  "duplicate_faces": 0,
+  "structural_pass": false,
+  "full_admission": false,
+  "candidate": "G",
+  "contract": {
+    "version": "shell-contract-1",
+    "status": "frozen before G evaluation",
+    "fields_sha256": "9605f5148849ca9ec7ee8894a07bd792189a1d25c689638f27b77875450b7b5f",
+    "thickness_min_m": 4.089281433496944e-05,
+    "construction_depth_m": 8.178562866993888e-05,
+    "inner_globe_min_m": 0.00016452387096439956,
+    "exterior_deviation_m": 0,
+    "exterior_clearance_policy": "unchanged exterior and globe; compare exterior-only triangles separately",
+    "proper_crossings_max": 0,
+    "coplanar_overlap_max": 0,
+    "derivation": "Engineering fractions of frozen exterior sampled bounds, not candidate metrics or physiological validation. No continuous feasibility guarantee."
+  },
+  "distances": [
+    {
+      "side": "right",
+      "outer_to_inner": {
+        "metres": 9.80260187503768e-08,
+        "triangle_pair": [
+          7719,
+          10140
+        ]
+      },
+      "exterior_to_globe": {
+        "metres": 0.0005270950359424393,
+        "triangle_pair": [
+          8395,
+          7837
+        ]
+      },
+      "inner_to_globe": {
+        "metres": 0.00047766194890664563,
+        "triangle_pair": [
+          8395,
+          10261
+        ]
+      },
+      "frozen_exterior_to_globe": {
+        "metres": 0.0005270950359424393,
+        "triangle_pair": [
+          8395,
+          7837
+        ]
+      },
+      "regions": {
+        "upper": {
+          "metres": 1.5584716741203544e-06,
+          "triangle_pair": [
+            7766,
+            10189
+          ]
+        },
+        "lower": {
+          "metres": 9.80260187503768e-08,
+          "triangle_pair": [
+            7719,
+            10140
+          ]
+        }
+      }
+    },
+    {
+      "side": "left",
+      "outer_to_inner": {
+        "metres": 1.2027817729834886e-06,
+        "triangle_pair": [
+          8953,
+          10489
+        ]
+      },
+      "exterior_to_globe": {
+        "metres": 0.0005880089136299707,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "inner_to_globe": {
+        "metres": 0.0005294049997793679,
+        "triangle_pair": [
+          9480,
+          10582
+        ]
+      },
+      "frozen_exterior_to_globe": {
+        "metres": 0.0005880089136299707,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "regions": {
+        "upper": {
+          "metres": 2.6102954996372606e-05,
+          "triangle_pair": [
+            9006,
+            10541
+          ]
+        },
+        "lower": {
+          "metres": 1.2027817729834886e-06,
+          "triangle_pair": [
+            8953,
+            10489
+          ]
+        }
+      }
+    }
+  ],
+  "exterior_deviation_m": 0.0,
+  "exterior_preserved": true,
+  "wall_threshold_pass": false,
+  "inner_globe_pass": true,
+  "neutral_admitted": false,
+  "blink": "NOT_RUN",
+  "seam": "NOT_RUN",
+  "training": "FORBIDDEN",
+  "thickness_note": "Unsigned wall distances are invalid as thickness if crossings exist."
+}

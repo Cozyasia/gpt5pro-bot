@@ -1,0 +1,161 @@
+{
+  "identities": 24,
+  "records": 192,
+  "geometry_rmse_mm": 1.369768079680701,
+  "mean_prior_rmse_mm": 3.0547754771153754,
+  "relative_to_mean": 0.44840221153476495,
+  "regional_rmse_mm": {
+    "jaw": 1.3494401963738103,
+    "chin": 1.8224277263507247,
+    "nose": 1.8550418363884091,
+    "mouth": 1.4083288985614975,
+    "eyes": 1.201441826298833,
+    "cheeks": 1.2321595332274835,
+    "brows": 0.8515427907307943
+  },
+  "combined_pose_expression_light_accessory_drift_mm": 0.5350414873343349,
+  "coefficient_mse": 0.33976041129790246,
+  "albedo_mse": 0.004483517359100612,
+  "parsing_iou": [
+    0.98369141675466,
+    0.9192334410583225,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.08192686357243319,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "parsing_present_classes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    10,
+    11,
+    12
+  ],
+  "orientation_failures": 0,
+  "area_ratio": [
+    0.8073275089263916,
+    1.313880205154419
+  ],
+  "edge_stretch": [
+    0.8317313194274902,
+    1.1964166164398193
+  ],
+  "source_inference_only": true,
+  "expression_annotation_independent": true,
+  "case06_full_surface_acceptance": false,
+  "case08_intrinsic_acceptance": false,
+  "training_device": "cpu",
+  "cuda_peak_bytes": null,
+  "code_commit": "54c9bde087f248c9a031ab4c289561b64fa358e0",
+  "source_hashes": {
+    "__init__.py": "c7e940fd5aec5de78cf28f432393d49740bea194852f03c16d8b14ea24b650de",
+    "geometry_audit.py": "4da9f3c279cb1568c67e0ec144c0c4c5e60e0d1d5b8f7832e125da64d76d091c",
+    "gate.py": "95cbc25cd06a68be189417a5042b0459084d602a6943acb4ca77b27550bc6df5",
+    "factory.py": "f9d829b4879212105e1ab6dd7fb6f15684443fc93b88bee9c57a5e0226b3244a",
+    "train.py": "2ce5dd817947c338c335c671006b705af6eb98edc7dead831566d35367339c53",
+    "run_suite.py": "4c585e6caf700d5d1158935f77d36b1f015ac436f7437f2f9d3445194eebce5a",
+    "controlled.py": "d9ca8991817c75c525d686164ab47790e5816f4315e96319d7b0e1f52d8b084b",
+    "test_quality.py": "a0aee5d10d18425158b546909299d3c6a1acde89923100cab7eaef6a137e1d9f"
+  },
+  "backbone": "mobilenet_v3_small",
+  "latent": 128,
+  "representation": "parametric",
+  "uv_size": 64,
+  "epochs": 12,
+  "training_seconds": 73.10952081599999,
+  "peak_rss_kib": 1013992,
+  "latency_ms": 3.6592867999994874,
+  "model_bytes": 4393560,
+  "deterministic": true,
+  "onnx_max_abs_error": 2.86102294921875e-06,
+  "onnx_sha256": "28e65a663640b7416cc9e648c2799bbb507409dfafda1a7ca166ae16984e1f97",
+  "dataset_manifest_sha256": "9e7d0017c72cd5783f320a54da2005a0fe8fe7c1ef71e716a3f3b78470a8a39f",
+  "generator": "original-relief-anatomy-3",
+  "history": [
+    {
+      "epoch": 0,
+      "loss": 3.223154494166374,
+      "validation_mse": 4.269755486951965e-06
+    },
+    {
+      "epoch": 1,
+      "loss": 1.4988820120692252,
+      "validation_mse": 4.234158139955942e-06
+    },
+    {
+      "epoch": 2,
+      "loss": 1.1170048713684082,
+      "validation_mse": 4.227435634736783e-06
+    },
+    {
+      "epoch": 3,
+      "loss": 1.0638309091329574,
+      "validation_mse": 4.247384516098407e-06
+    },
+    {
+      "epoch": 4,
+      "loss": 1.0886433616280555,
+      "validation_mse": 4.226155607097344e-06
+    },
+    {
+      "epoch": 5,
+      "loss": 0.878455376625061,
+      "validation_mse": 3.5030358874384624e-06
+    },
+    {
+      "epoch": 6,
+      "loss": 0.7897405713796616,
+      "validation_mse": 1.720938678377119e-06
+    },
+    {
+      "epoch": 7,
+      "loss": 0.7062535718083381,
+      "validation_mse": 7.379013025055059e-07
+    },
+    {
+      "epoch": 8,
+      "loss": 0.6736516498029232,
+      "validation_mse": 5.612564543492719e-07
+    },
+    {
+      "epoch": 9,
+      "loss": 0.6984175920486451,
+      "validation_mse": 5.962338336384931e-07
+    },
+    {
+      "epoch": 10,
+      "loss": 0.6397808492183685,
+      "validation_mse": 5.855276830798081e-07
+    },
+    {
+      "epoch": 11,
+      "loss": 0.6081232957541942,
+      "validation_mse": 5.967696563580205e-07
+    }
+  ],
+  "v0": false,
+  "real_human_quality_proven": false,
+  "weights_sha256": "d093bab58d7b41f5f367a1d485324b27c875a7d961120bb3f718af88729107b3",
+  "loss_weights": {
+    "geometry": 1,
+    "coefficients": 0.2,
+    "crossview": 0.2,
+    "appearance": 0.2,
+    "parsing": 0.02,
+    "orientation": 1
+  }
+}

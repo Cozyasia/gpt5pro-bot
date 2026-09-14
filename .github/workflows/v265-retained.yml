@@ -1,0 +1,27 @@
+name: V265 retained anatomy admission
+on:
+  push:
+    branches: [v265-self-hosted-l2]
+    paths: ['experiments/v265_retained/**', '.github/workflows/v265-retained.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  retained:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==2.3.5
+        working-directory: /tmp
+      - run: OPENBLAS_NUM_THREADS=1 python -m unittest experiments.v265_retained.test_contract experiments.v265_commissure.test_candidates
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_retained.admission /tmp/retained
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_retained.onset /tmp/retained/onset.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retained-anatomy-NOT-ADMITTED
+          path: /tmp/retained

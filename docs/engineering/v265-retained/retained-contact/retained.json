@@ -1,0 +1,204 @@
+[
+  {
+    "blink": 0,
+    "squint": 0,
+    "vertices": 5244,
+    "triangles": 10096,
+    "intersections": 0,
+    "categories": {},
+    "pairs": [],
+    "coplanar_aabb_candidates": 20,
+    "unresolved_coplanar": 0,
+    "coplanar_overlap_pairs": [],
+    "nonmanifold": 0,
+    "winding": 0,
+    "degenerate": 0,
+    "duplicate_faces": 0,
+    "structural_pass": true,
+    "full_admission": false,
+    "eye_clearance": {
+      "-1": {
+        "metres": 0.0005880089136299707,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005270950359424393,
+        "triangle_pair": [
+          8395,
+          7837
+        ]
+      }
+    },
+    "eye_contact_pass": true
+  },
+  {
+    "blink": 0.25,
+    "squint": 0,
+    "vertices": 5244,
+    "triangles": 10096,
+    "intersections": 0,
+    "categories": {},
+    "pairs": [],
+    "coplanar_aabb_candidates": 20,
+    "unresolved_coplanar": 0,
+    "coplanar_overlap_pairs": [],
+    "nonmanifold": 0,
+    "winding": 0,
+    "degenerate": 0,
+    "duplicate_faces": 0,
+    "structural_pass": true,
+    "full_admission": false,
+    "eye_clearance": {
+      "-1": {
+        "metres": 0.0005776776830443003,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005194437893756228,
+        "triangle_pair": [
+          8394,
+          7837
+        ]
+      }
+    },
+    "eye_contact_pass": true
+  },
+  {
+    "blink": 0.5,
+    "squint": 0,
+    "vertices": 5244,
+    "triangles": 10096,
+    "intersections": 0,
+    "categories": {},
+    "pairs": [],
+    "coplanar_aabb_candidates": 20,
+    "unresolved_coplanar": 0,
+    "coplanar_overlap_pairs": [],
+    "nonmanifold": 0,
+    "winding": 0,
+    "degenerate": 0,
+    "duplicate_faces": 0,
+    "structural_pass": true,
+    "full_admission": false,
+    "eye_clearance": {
+      "-1": {
+        "metres": 0.000564675422080031,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005111790543864676,
+        "triangle_pair": [
+          8394,
+          7837
+        ]
+      }
+    },
+    "eye_contact_pass": true
+  },
+  {
+    "blink": 0.75,
+    "squint": 0,
+    "vertices": 5244,
+    "triangles": 10096,
+    "intersections": 0,
+    "categories": {},
+    "pairs": [],
+    "coplanar_aabb_candidates": 20,
+    "unresolved_coplanar": 0,
+    "coplanar_overlap_pairs": [],
+    "nonmanifold": 0,
+    "winding": 0,
+    "degenerate": 0,
+    "duplicate_faces": 0,
+    "structural_pass": true,
+    "full_admission": false,
+    "eye_clearance": {
+      "-1": {
+        "metres": 0.0005490941747298416,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005023077172075892,
+        "triangle_pair": [
+          8395,
+          7837
+        ]
+      }
+    },
+    "eye_contact_pass": true
+  },
+  {
+    "blink": 1,
+    "squint": 0,
+    "vertices": 5244,
+    "triangles": 10096,
+    "intersections": 6,
+    "categories": {
+      "eyelid / eyelid": 6
+    },
+    "pairs": [
+      [
+        9022,
+        9025
+      ],
+      [
+        9022,
+        9026
+      ],
+      [
+        9030,
+        9033
+      ],
+      [
+        9034,
+        9038
+      ],
+      [
+        9035,
+        9038
+      ],
+      [
+        9041,
+        9044
+      ]
+    ],
+    "coplanar_aabb_candidates": 20,
+    "unresolved_coplanar": 0,
+    "coplanar_overlap_pairs": [],
+    "nonmanifold": 0,
+    "winding": 0,
+    "degenerate": 0,
+    "duplicate_faces": 0,
+    "structural_pass": false,
+    "full_admission": false,
+    "eye_clearance": {
+      "-1": {
+        "metres": 0.0005309986837372967,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0004928351184912866,
+        "triangle_pair": [
+          8394,
+          7837
+        ]
+      }
+    },
+    "eye_contact_pass": true
+  }
+]

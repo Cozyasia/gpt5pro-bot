@@ -1,0 +1,34 @@
+[
+  {
+    "level": 0,
+    "vertices": 2009,
+    "triangles": 3840,
+    "geometry_arrays_bytes": 1163084,
+    "orientation_failures": 0,
+    "area_ratio": [
+      0.32348390559822937,
+      1.6565204383966168
+    ],
+    "edge_stretch_max": 1.6162787796813713,
+    "raster_ms": 253.10052575002828,
+    "interpolation_rmse_mm": 0.07578718181587138,
+    "case06_pass": false,
+    "reason": "No calibrated benign envelope or full anatomical silhouette; patch stress only."
+  },
+  {
+    "level": 1,
+    "vertices": 5265,
+    "triangles": 10240,
+    "geometry_arrays_bytes": 3050220,
+    "orientation_failures": 0,
+    "area_ratio": [
+      0.21028170531280696,
+      1.8692644891240118
+    ],
+    "edge_stretch_max": 1.7205188482840619,
+    "raster_ms": 670.9854500001029,
+    "interpolation_rmse_mm": 0,
+    "case06_pass": false,
+    "reason": "No calibrated benign envelope or full anatomical silhouette; patch stress only."
+  }
+]
