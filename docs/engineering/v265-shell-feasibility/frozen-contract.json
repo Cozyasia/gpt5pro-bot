@@ -1,0 +1,13 @@
+{
+  "version": "shell-contract-1",
+  "status": "frozen before G evaluation",
+  "fields_sha256": "9605f5148849ca9ec7ee8894a07bd792189a1d25c689638f27b77875450b7b5f",
+  "thickness_min_m": 4.089281433496944e-05,
+  "construction_depth_m": 8.178562866993888e-05,
+  "inner_globe_min_m": 0.00016452387096439956,
+  "exterior_deviation_m": 0,
+  "exterior_clearance_policy": "unchanged exterior and globe; compare exterior-only triangles separately",
+  "proper_crossings_max": 0,
+  "coplanar_overlap_max": 0,
+  "derivation": "Engineering fractions of frozen exterior sampled bounds, not candidate metrics or physiological validation. No continuous feasibility guarantee."
+}
