@@ -1,0 +1,1 @@
+{"counts":{"FEASIBLE_CONE":284},"vertices":284,"tolerance":1e-09,"definition":"EMPTY excludes zero: closed oriented cone contains only zero; DEGENERATE has nonzero directions but no strictly positive facet margin","scope":"Incident facet cone only; not nonincident collision or continuous-field certification"}

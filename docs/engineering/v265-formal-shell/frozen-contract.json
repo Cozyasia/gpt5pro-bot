@@ -1,0 +1,21 @@
+{
+  "version": "formal-shell-neutral-1",
+  "parent_contract": "experiments/v265_shell_feasibility/contract.json",
+  "selected_candidate": "G2",
+  "selection": "284 strict cones; C0 P1 cone field; positive full-interval local prism Jacobians; zero prospective boundary contacts at the one frozen depth",
+  "thickness_min_m": 4.089281433496944e-05,
+  "construction_depth_m": 8.178562866993888e-05,
+  "inner_globe_min_m": 0.00016452387096439956,
+  "exterior_deviation_m": 0,
+  "proper_crossings_max": 0,
+  "coplanar_overlap_max": 0,
+  "material_map": "Per exterior triangle barycentric (u,v), O=sum b_i p_i, I=sum b_i (p_i+h*d_i), T=I-O; continuous shared-vertex P1 correspondence",
+  "jacobian": "det(dF/du,dF/dv,dF/ds)>0 for every triangle x [0,h]; analytic quadratic minimum at triangle corners and depth extrema; no epsilon relaxation",
+  "material_thickness": "Minimum norm(T) on each complete barycentric triangle > inherited thickness floor; nearest distance is diagnostic only",
+  "segments": "No interior intersections of material thickness segments with unrelated exterior/inner/globe faces; vertex/edge-midpoint/centroid tests are rejection tests, never a continuum proof",
+  "global_injectivity": "A PASS requires global injectivity certification in addition to sampled segment clearance. If certification is absent, neutral admission remains UNQUALIFIED even if measured checks pass",
+  "canthus": "Distinct exterior canthus neighborhoods retained bit-exact; both corresponding inner canthus edges and wall segments have strictly positive length; same positive material Jacobian and thickness floor apply",
+  "exterior_clearance": "Frozen exterior and globe vertex/triangle arrays bit-exact; separate exterior-only regression",
+  "forbidden": ["blink", "seam", "training", "real_matrix", "merge", "deploy", "G3", "H2"],
+  "notes": "No empty cones found; no claim of G-family impossibility. H is not constructed in this cycle. Global certification cannot be replaced by more samples."
+}
