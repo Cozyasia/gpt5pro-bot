@@ -1,0 +1,7776 @@
+[
+  {
+    "vertex": 1395,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.022510862722754568,
+      -0.036,
+      -0.008186868035311608
+    ],
+    "inward_normal": [
+      -0.37635127600718304,
+      -0.3747865213490976,
+      0.8472867167982793
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008083266717630615,
+      "triangle": 8571
+    },
+    "normal_consistency_length_m": 0.005034301981347563,
+    "conservative_sample_depth_m": 0.0012585754953368907
+  },
+  {
+    "vertex": 1396,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.025012069691949523,
+      -0.036,
+      -0.007952060721812822
+    ],
+    "inward_normal": [
+      -0.07877427777277542,
+      -0.504596384084438,
+      0.8597540941049876
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0074125012102811815,
+      "triangle": 8574
+    },
+    "normal_consistency_length_m": 0.005671758099552209,
+    "conservative_sample_depth_m": 0.0014179395248880523
+  },
+  {
+    "vertex": 1397,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.027513276661144483,
+      -0.036,
+      -0.007713489039876709
+    ],
+    "inward_normal": [
+      -0.0822289136857042,
+      -0.4982298442295448,
+      0.8631369694741805
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006995857959143339,
+      "triangle": 8576
+    },
+    "normal_consistency_length_m": 0.005756696085870016,
+    "conservative_sample_depth_m": 0.001439174021467504
+  },
+  {
+    "vertex": 1398,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.030014483630339425,
+      -0.036,
+      -0.007461855372275803
+    ],
+    "inward_normal": [
+      -0.08791834045412888,
+      -0.4911681218497041,
+      0.8666165481286555
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006806234084099025,
+      "triangle": 8578
+    },
+    "normal_consistency_length_m": 0.005842120582839163,
+    "conservative_sample_depth_m": 0.0014605301457097908
+  },
+  {
+    "vertex": 1399,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.03251569059953438,
+      -0.036,
+      -0.0071923398906400034
+    ],
+    "inward_normal": [
+      -0.09474830000294748,
+      -0.48362614615773086,
+      0.8701313179050463
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006828146760031264,
+      "triangle": 8580
+    },
+    "normal_consistency_length_m": 0.005930568239260585,
+    "conservative_sample_depth_m": 0.0014826420598151463
+  },
+  {
+    "vertex": 1400,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.03501689756872934,
+      -0.036,
+      -0.006902754151512784
+    ],
+    "inward_normal": [
+      -0.1021133036205422,
+      -0.4756742509301714,
+      0.8736743559391676
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007077179114107283,
+      "triangle": 8582
+    },
+    "normal_consistency_length_m": 0.0060239655616328635,
+    "conservative_sample_depth_m": 0.0015059913904082159
+  },
+  {
+    "vertex": 1401,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.037518104537924285,
+      -0.036,
+      -0.006592219058121366
+    ],
+    "inward_normal": [
+      0.06707736403219684,
+      -0.294917478850469,
+      0.9531654147643919
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00759620265255411,
+      "triangle": 8584
+    },
+    "normal_consistency_length_m": 0.006847724745311959,
+    "conservative_sample_depth_m": 0.0017119311863279898
+  },
+  {
+    "vertex": 1445,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.01760483293551169,
+      -0.033,
+      -0.008802084068391015
+    ],
+    "inward_normal": [
+      -0.42598823355487153,
+      -0.3654577624179547,
+      0.827631952477224
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008373673162861577,
+      "triangle": 8440
+    },
+    "normal_consistency_length_m": 0.004907970520110193,
+    "conservative_sample_depth_m": 0.0012269926300275482
+  },
+  {
+    "vertex": 1446,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.020119809069156204,
+      -0.033,
+      -0.008477749602991377
+    ],
+    "inward_normal": [
+      -0.33097596708936833,
+      -0.5732431033363152,
+      0.7495647094725097
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007185817056735821,
+      "triangle": 8506
+    },
+    "normal_consistency_length_m": 0.004424029885064573,
+    "conservative_sample_depth_m": 0.0011060074712661433
+  },
+  {
+    "vertex": 1447,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.0377246420046679,
+      -0.033,
+      -0.006592244152085429
+    ],
+    "inward_normal": [
+      0.4007390775230665,
+      -0.25185254888166125,
+      0.8808964101231042
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0056853596320930976,
+      "triangle": 8520
+    },
+    "normal_consistency_length_m": 0.0043685962896682536,
+    "conservative_sample_depth_m": 0.0010921490724170634
+  },
+  {
+    "vertex": 1448,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.04023961813831243,
+      -0.033,
+      -0.006260426069331581
+    ],
+    "inward_normal": [
+      -0.1212182487674886,
+      -0.5049567212085475,
+      0.8545904550555528
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006546037908513859,
+      "triangle": 8522
+    },
+    "normal_consistency_length_m": 0.0043685962896682536,
+    "conservative_sample_depth_m": 0.0010921490724170634
+  },
+  {
+    "vertex": 1449,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.042754594271956964,
+      -0.033,
+      -0.005907257974883071
+    ],
+    "inward_normal": [
+      0.046630548925165584,
+      -0.28834554993147077,
+      0.9563903155833687
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00760694134524989,
+      "triangle": 8458
+    },
+    "normal_consistency_length_m": 0.006812395225043132,
+    "conservative_sample_depth_m": 0.001703098806260783
+  },
+  {
+    "vertex": 1488,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.015164894816589516,
+      -0.03,
+      -0.009414813483509553
+    ],
+    "inward_normal": [
+      -0.6241427023387813,
+      -0.051582267672441076,
+      0.7796057701037187
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008937983460607904,
+      "triangle": 8376
+    },
+    "normal_consistency_length_m": 0.006040149203474643,
+    "conservative_sample_depth_m": 0.0015100373008686608
+  },
+  {
+    "vertex": 1489,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.042967201980336975,
+      -0.03,
+      -0.005907259573952621
+    ],
+    "inward_normal": [
+      0.4010459851432197,
+      -0.028286704654031335,
+      0.9156210898293682
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006415626445037224,
+      "triangle": 8458
+    },
+    "normal_consistency_length_m": 0.004579821470230255,
+    "conservative_sample_depth_m": 0.0011449553675575638
+  },
+  {
+    "vertex": 1527,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.015232467836535205,
+      -0.026999999999999996,
+      -0.009659091382523445
+    ],
+    "inward_normal": [
+      -0.697748116733612,
+      0.07582211326176397,
+      0.7123191508974176
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008587341492722757,
+      "triangle": 8312
+    },
+    "normal_consistency_length_m": 0.006244015767372773,
+    "conservative_sample_depth_m": 0.0015610039418431933
+  },
+  {
+    "vertex": 1528,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.043158658870183095,
+      -0.026999999999999996,
+      -0.005907261498707087
+    ],
+    "inward_normal": [
+      0.36811671101699744,
+      -0.2625677663702348,
+      0.8919351182307904
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0058814086015681446,
+      "triangle": 8394
+    },
+    "normal_consistency_length_m": 0.006428726438681826,
+    "conservative_sample_depth_m": 0.0016071816096704565
+  },
+  {
+    "vertex": 1529,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.04569740350960561,
+      -0.026999999999999996,
+      -0.005532700786919039
+    ],
+    "inward_normal": [
+      0.026157171265281325,
+      -0.12891517343868725,
+      0.9913105872776059
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00748612955792217,
+      "triangle": 8332
+    },
+    "normal_consistency_length_m": 0.004535087656668283,
+    "conservative_sample_depth_m": 0.0011337719141670708
+  },
+  {
+    "vertex": 1566,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.015292674817683934,
+      -0.024000000000000007,
+      -0.009942803208282785
+    ],
+    "inward_normal": [
+      -0.7284061071990636,
+      0.09081859087264324,
+      0.6790997913024373
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008906801125622487,
+      "triangle": 8312
+    },
+    "normal_consistency_length_m": 0.006838859019117922,
+    "conservative_sample_depth_m": 0.0017097147547794804
+  },
+  {
+    "vertex": 1567,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.04332924531677116,
+      -0.024000000000000007,
+      -0.005907263734175813
+    ],
+    "inward_normal": [
+      0.45469077293668775,
+      0.2961498389627888,
+      0.8399711744390705
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006143674632228158,
+      "triangle": 8331
+    },
+    "normal_consistency_length_m": 0.0037581511146591,
+    "conservative_sample_depth_m": 0.000939537778664775
+  },
+  {
+    "vertex": 1607,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.015345602460094485,
+      -0.021000000000000005,
+      -0.010260043879453326
+    ],
+    "inward_normal": [
+      -0.5003761218484069,
+      0.3805493882559201,
+      0.7776926769502162
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.009821893852822379,
+      "triangle": 8248
+    },
+    "normal_consistency_length_m": 0.007905502055186591,
+    "conservative_sample_depth_m": 0.001976375513796648
+  },
+  {
+    "vertex": 1608,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.017903202870110237,
+      -0.021000000000000005,
+      -0.009375141185138745
+    ],
+    "inward_normal": [
+      -0.675988633345992,
+      0.20910149542540019,
+      0.7066229066467341
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00788468573135765,
+      "triangle": 8249
+    },
+    "normal_consistency_length_m": 0.010592009390947699,
+    "conservative_sample_depth_m": 0.0026480023477369248
+  },
+  {
+    "vertex": 1609,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.04092160656025197,
+      -0.021000000000000005,
+      -0.0062604643165423005
+    ],
+    "inward_normal": [
+      0.2676996968833862,
+      0.5651228852380773,
+      0.780367219242796
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.005850796804932699,
+      "triangle": 8202
+    },
+    "normal_consistency_length_m": 0.00516491600200784,
+    "conservative_sample_depth_m": 0.00129122900050196
+  },
+  {
+    "vertex": 1610,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.04347920697026772,
+      -0.021000000000000005,
+      -0.005907266233830515
+    ],
+    "inward_normal": [
+      0.13998563741667708,
+      0.1259469904809706,
+      0.9821106744689384
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007156748836765705,
+      "triangle": 8267
+    },
+    "normal_consistency_length_m": 0.00516491600200784,
+    "conservative_sample_depth_m": 0.00129122900050196
+  },
+  {
+    "vertex": 1657,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.017956546837192562,
+      -0.018000000000000006,
+      -0.009561280054881712
+    ],
+    "inward_normal": [
+      -0.46250844095293964,
+      0.3481644929738319,
+      0.8153940322810534
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.009337264064603926,
+      "triangle": 8184
+    },
+    "normal_consistency_length_m": 0.007632196605554302,
+    "conservative_sample_depth_m": 0.0019080491513885755
+  },
+  {
+    "vertex": 1658,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.020521767813934343,
+      -0.018000000000000006,
+      -0.008855995589076265
+    ],
+    "inward_normal": [
+      -0.1770475231593568,
+      0.5482000368803966,
+      0.8173927416532818
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007855574519266205,
+      "triangle": 8186
+    },
+    "normal_consistency_length_m": 0.004579266648155325,
+    "conservative_sample_depth_m": 0.0011448166620388312
+  },
+  {
+    "vertex": 1659,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.023086988790676142,
+      -0.018000000000000006,
+      -0.008378752567754949
+    ],
+    "inward_normal": [
+      -0.639197217366303,
+      0.22516742762725592,
+      0.7353411091778426
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006785444683847044,
+      "triangle": 8124
+    },
+    "normal_consistency_length_m": 0.004579266648155325,
+    "conservative_sample_depth_m": 0.0011448166620388312
+  },
+  {
+    "vertex": 1660,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.025652209767417944,
+      -0.018000000000000006,
+      -0.008031451947330275
+    ],
+    "inward_normal": [
+      -0.6244347611357736,
+      0.2935551371968357,
+      0.7238139336256636
+    ],
+    "normal_hit": {
+      "metres": 0.001461263344207905,
+      "triangle": 7720
+    },
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006090690101115884,
+      "triangle": 8126
+    },
+    "normal_consistency_length_m": 0.0032564155234799603,
+    "conservative_sample_depth_m": 0.0007306316721039525
+  },
+  {
+    "vertex": 1661,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.035913093674385124,
+      -0.018000000000000006,
+      -0.006903673040872827
+    ],
+    "inward_normal": [
+      -0.5290567834433139,
+      0.5166538113730973,
+      0.6731773607945133
+    ],
+    "normal_hit": null,
+    "posterior_hit": {
+      "metres": 0.0025649664880155374,
+      "triangle": 7706
+    },
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.005938083781626128,
+      "triangle": 8134
+    },
+    "normal_consistency_length_m": 0.0044849217818754596,
+    "conservative_sample_depth_m": 0.0011212304454688649
+  },
+  {
+    "vertex": 1662,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.03847831465112691,
+      -0.018000000000000006,
+      -0.00659245799107045
+    ],
+    "inward_normal": [
+      0.12195758623131615,
+      0.5370092184383596,
+      0.8347139908213193
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006543255226199934,
+      "triangle": 8136
+    },
+    "normal_consistency_length_m": 0.004935567771802343,
+    "conservative_sample_depth_m": 0.0012338919429505857
+  },
+  {
+    "vertex": 1663,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      0.04104353562786871,
+      -0.018000000000000006,
+      -0.0062604767398983085
+    ],
+    "inward_normal": [
+      0.15461814838564955,
+      0.129970483379321,
+      0.9793880240435549
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007495314738255608,
+      "triangle": 8202
+    },
+    "normal_consistency_length_m": 0.005970697809562782,
+    "conservative_sample_depth_m": 0.0014926744523906955
+  },
+  {
+    "vertex": 1715,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.02314486359571236,
+      -0.015000000000000005,
+      -0.008421928148585521
+    ],
+    "inward_normal": [
+      -0.029077188306603455,
+      0.2877413248209839,
+      0.957266654130628
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00877819700295181,
+      "triangle": 8060
+    },
+    "normal_consistency_length_m": 0.0046008882767669245,
+    "conservative_sample_depth_m": 0.0011502220691917311
+  },
+  {
+    "vertex": 1716,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.025716515106347072,
+      -0.015000000000000005,
+      -0.00804931561894007
+    ],
+    "inward_normal": [
+      -0.3088309973657257,
+      0.3175349367936716,
+      0.8965461387912672
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008108861573039366,
+      "triangle": 8062
+    },
+    "normal_consistency_length_m": 0.008192546114717597,
+    "conservative_sample_depth_m": 0.002048136528679399
+  },
+  {
+    "vertex": 1717,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.028288166616981785,
+      -0.015000000000000005,
+      -0.007750158124870601
+    ],
+    "inward_normal": [
+      -0.09507677997573322,
+      0.4844764346312045,
+      0.8696223261833164
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0077430601840379545,
+      "triangle": 8064
+    },
+    "normal_consistency_length_m": 0.006046826162774602,
+    "conservative_sample_depth_m": 0.0015117065406936505
+  },
+  {
+    "vertex": 1718,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.03085981812761648,
+      -0.015000000000000005,
+      -0.007474454623161805
+    ],
+    "inward_normal": [
+      -0.09133695549645507,
+      0.4766505860128156,
+      0.874335049860337
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007610085777571308,
+      "triangle": 8066
+    },
+    "normal_consistency_length_m": 0.006136548412933021,
+    "conservative_sample_depth_m": 0.0015341371032332551
+  },
+  {
+    "vertex": 1719,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.03343146963825119,
+      -0.015000000000000005,
+      -0.007196284876324044
+    ],
+    "inward_normal": [
+      0.1817607345068823,
+      0.38130470251206494,
+      0.9064048539332213
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007706045850803229,
+      "triangle": 8068
+    },
+    "normal_consistency_length_m": 0.005135653386929489,
+    "conservative_sample_depth_m": 0.0012839133467323722
+  },
+  {
+    "vertex": 1720,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      0.03600312114888591,
+      -0.015000000000000005,
+      -0.006903879798454242
+    ],
+    "inward_normal": [
+      0.013722100560658316,
+      0.2571736892257339,
+      0.9662677669912356
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008048156096952383,
+      "triangle": 8070
+    },
+    "normal_consistency_length_m": 0.0044849217818754596,
+    "conservative_sample_depth_m": 0.0011212304454688649
+  },
+  {
+    "vertex": 4040,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.025571921554488643,
+      -0.033772727272727274,
+      -0.004748839469178334
+    ],
+    "inward_normal": [
+      -0.027790788657327106,
+      -0.6596294386877931,
+      0.7510770104870942
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0035624717817331437,
+      "triangle": 8637
+    },
+    "normal_consistency_length_m": 0.0034548098488011753,
+    "conservative_sample_depth_m": 0.0008637024622002938
+  },
+  {
+    "vertex": 4041,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.02772199265316129,
+      -0.033772727272727274,
+      -0.004593767875919861
+    ],
+    "inward_normal": [
+      -0.045957595869926,
+      -0.6156171786246178,
+      0.7867041303845569
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0032695582027808356,
+      "triangle": 8639
+    },
+    "normal_consistency_length_m": 0.0032576574330421522,
+    "conservative_sample_depth_m": 0.0008144143582605381
+  },
+  {
+    "vertex": 4042,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.02987206375183392,
+      -0.033772727272727274,
+      -0.004430205991979272
+    ],
+    "inward_normal": [
+      -0.06265439687046827,
+      -0.5913419126960593,
+      0.8039833137831679
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0031510784815891343,
+      "triangle": 8641
+    },
+    "normal_consistency_length_m": 0.0033071339677130974,
+    "conservative_sample_depth_m": 0.0008267834919282744
+  },
+  {
+    "vertex": 4043,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.03202213485050656,
+      -0.033772727272727274,
+      -0.004255020928916002
+    ],
+    "inward_normal": [
+      -0.07896575601142222,
+      -0.5887347949857373,
+      0.8044599123328934
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0032141469393653184,
+      "triangle": 8644
+    },
+    "normal_consistency_length_m": 0.003608792847510927,
+    "conservative_sample_depth_m": 0.0009021982118777317
+  },
+  {
+    "vertex": 4044,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.034172205949179205,
+      -0.033772727272727274,
+      -0.0040667901984833095
+    ],
+    "inward_normal": [
+      -0.09573297733302329,
+      -0.6110222948407064,
+      0.7858033801521547
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0034570473559889744,
+      "triangle": 8646
+    },
+    "normal_consistency_length_m": 0.0034352903840572705,
+    "conservative_sample_depth_m": 0.0008588225960143176
+  },
+  {
+    "vertex": 4045,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.036322277047851834,
+      -0.033772727272727274,
+      -0.0038649423877788877
+    ],
+    "inward_normal": [
+      0.4824821494309111,
+      -0.36458846431853864,
+      0.7964208856919672
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003912874143767006,
+      "triangle": 8584
+    },
+    "normal_consistency_length_m": 0.0034352903840572705,
+    "conservative_sample_depth_m": 0.0008588225960143176
+  },
+  {
+    "vertex": 4046,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.036499819427793886,
+      -0.03144090909090909,
+      -0.004042324431708206
+    ],
+    "inward_normal": [
+      0.38686798117676247,
+      -0.46643647822686013,
+      0.795468526668114
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0024764367006900284,
+      "triangle": 8583
+    },
+    "normal_consistency_length_m": 0.0025978557160764733,
+    "conservative_sample_depth_m": 0.0006494639290191183
+  },
+  {
+    "vertex": 4047,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.03866172668512933,
+      -0.03144090909090909,
+      -0.0036492769450655275
+    ],
+    "inward_normal": [
+      -0.12897616795688135,
+      -0.7258174547318695,
+      0.6756879239010484
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003154467956687073,
+      "triangle": 8522
+    },
+    "normal_consistency_length_m": 0.0034876718825740624,
+    "conservative_sample_depth_m": 0.0008719179706435156
+  },
+  {
+    "vertex": 4048,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.04082363394246478,
+      -0.03144090909090909,
+      -0.003419717683673996
+    ],
+    "inward_normal": [
+      0.42979100415549787,
+      -0.46709726721350003,
+      0.772722353571248
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004183730446693199,
+      "triangle": 8523
+    },
+    "normal_consistency_length_m": 0.0034876718825740624,
+    "conservative_sample_depth_m": 0.0008719179706435156
+  },
+  {
+    "vertex": 4049,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.04100639438363291,
+      -0.029109090909090907,
+      -0.003419718723069204
+    ],
+    "inward_normal": [
+      0.6784878729498257,
+      0.0363373650951408,
+      0.7337123429232764
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003190259847240881,
+      "triangle": 8459
+    },
+    "normal_consistency_length_m": 0.0029376612886825013,
+    "conservative_sample_depth_m": 0.0007344153221706253
+  },
+  {
+    "vertex": 4050,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.041170973297161365,
+      -0.026777272727272726,
+      -0.003419719974159607
+    ],
+    "inward_normal": [
+      0.31118269414425076,
+      -0.6343889622916385,
+      0.7076128711291675
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0027335954207705466,
+      "triangle": 8395
+    },
+    "normal_consistency_length_m": 0.0023952645100155643,
+    "conservative_sample_depth_m": 0.0005988161275038911
+  },
+  {
+    "vertex": 4051,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.043353312281243644,
+      -0.026777272727272726,
+      -0.003176255511497376
+    ],
+    "inward_normal": [
+      0.6909028735822483,
+      0.03020243969532435,
+      0.722316434751586
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004181370286743993,
+      "triangle": 8396
+    },
+    "normal_consistency_length_m": 0.002868320631831253,
+    "conservative_sample_depth_m": 0.0007170801579578132
+  },
+  {
+    "vertex": 4052,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.041317611697402314,
+      -0.02444545454545455,
+      -0.0034197214272142784
+    ],
+    "inward_normal": [
+      0.5773147961295668,
+      0.3740067916028541,
+      0.7258281793956582
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.002948783869155782,
+      "triangle": 8331
+    },
+    "normal_consistency_length_m": 0.0029164489365593816,
+    "conservative_sample_depth_m": 0.0007291122341398454
+  },
+  {
+    "vertex": 4053,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.04144652074853769,
+      -0.02211363636363637,
+      -0.0034197230519898347
+    ],
+    "inward_normal": [
+      0.3062675349697818,
+      0.5310345408548232,
+      0.7900648792615962
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003796720140985228,
+      "triangle": 8267
+    },
+    "normal_consistency_length_m": 0.004130026940799393,
+    "conservative_sample_depth_m": 0.0010325067351998481
+  },
+  {
+    "vertex": 4054,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.03924797309084502,
+      -0.02211363636363637,
+      -0.003649301805752495
+    ],
+    "inward_normal": [
+      0.45724007663877403,
+      0.4178647777985631,
+      0.7850608510113884
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0025736152143107523,
+      "triangle": 8202
+    },
+    "normal_consistency_length_m": 0.002532850197881647,
+    "conservative_sample_depth_m": 0.0006332125494704117
+  },
+  {
+    "vertex": 4055,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.039352784954716974,
+      -0.019781818181818185,
+      -0.0036493098809339004
+    ],
+    "inward_normal": [
+      0.31851091703311557,
+      0.49473146574319393,
+      0.8085737891709789
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0039358399674254575,
+      "triangle": 8139
+    },
+    "normal_consistency_length_m": 0.0043823500094491655,
+    "conservative_sample_depth_m": 0.0010955875023622914
+  },
+  {
+    "vertex": 4056,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.0371476865555323,
+      -0.019781818181818185,
+      -0.0038650976941957925
+    ],
+    "inward_normal": [
+      0.24331946778022465,
+      0.581766464934001,
+      0.7761078642027435
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0031076072039814746,
+      "triangle": 8136
+    },
+    "normal_consistency_length_m": 0.0034476990662453207,
+    "conservative_sample_depth_m": 0.0008619247665613302
+  },
+  {
+    "vertex": 4057,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.03501997698238027,
+      -0.017450000000000004,
+      -0.004067521868995257
+    ],
+    "inward_normal": [
+      -0.3985425693079602,
+      0.5123225430393865,
+      0.7607163941595223
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004281660870966657,
+      "triangle": 8072
+    },
+    "normal_consistency_length_m": 0.004898095964528393,
+    "conservative_sample_depth_m": 0.0012245239911320982
+  },
+  {
+    "vertex": 4058,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.03494258815634764,
+      -0.019781818181818185,
+      -0.004067387476567337
+    ],
+    "inward_normal": [
+      -0.001031206768446032,
+      0.7302354072703143,
+      0.6831948379352399
+    ],
+    "normal_hit": {
+      "metres": 0.0007995664492828112,
+      "triangle": 7778
+    },
+    "posterior_hit": {
+      "metres": 0.0007032673734998429,
+      "triangle": 7778
+    },
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.002533513384880893,
+      "triangle": 8135
+    },
+    "normal_consistency_length_m": 0.002314498348846033,
+    "conservative_sample_depth_m": 0.0003997832246414056
+  },
+  {
+    "vertex": 4059,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.032809350809907545,
+      -0.017450000000000004,
+      -0.004257585169610629
+    ],
+    "inward_normal": [
+      0.1819766545969087,
+      0.5432399842003933,
+      0.8196187020485037
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003939887074386673,
+      "triangle": 8069
+    },
+    "normal_consistency_length_m": 0.004622757419385849,
+    "conservative_sample_depth_m": 0.0011556893548464622
+  },
+  {
+    "vertex": 4060,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.03059872463743482,
+      -0.017450000000000004,
+      -0.004438395505055173
+    ],
+    "inward_normal": [
+      -0.08127970072607392,
+      0.6322070366804465,
+      0.7705244142930244
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003784025936045685,
+      "triangle": 8066
+    },
+    "normal_consistency_length_m": 0.0038518725441656697,
+    "conservative_sample_depth_m": 0.0009629681360414174
+  },
+  {
+    "vertex": 4061,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.02838809846496212,
+      -0.017450000000000004,
+      -0.004617602781165891
+    ],
+    "inward_normal": [
+      -0.0689051843682724,
+      0.6311586293463107,
+      0.7725871214101752
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003860848004517491,
+      "triangle": 8064
+    },
+    "normal_consistency_length_m": 0.003053914813105103,
+    "conservative_sample_depth_m": 0.0007634787032762757
+  },
+  {
+    "vertex": 4062,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.0261774722924894,
+      -0.017450000000000004,
+      -0.004812055152311046
+    ],
+    "inward_normal": [
+      -0.7114940668266172,
+      0.32718141133049183,
+      0.6218750010655747
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00414194862830558,
+      "triangle": 8062
+    },
+    "normal_consistency_length_m": 0.002621168776347853,
+    "conservative_sample_depth_m": 0.0006552921940869632
+  },
+  {
+    "vertex": 4063,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.026122194559608954,
+      -0.019781818181818185,
+      -0.005759987425699994
+    ],
+    "inward_normal": [
+      0.1614792680109219,
+      0.725032829774495,
+      0.6695161250872492
+    ],
+    "normal_hit": {
+      "metres": 0.0019757682309679116,
+      "triangle": 7788
+    },
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0031693000484569003,
+      "triangle": 8126
+    },
+    "normal_consistency_length_m": 0.001861690725263155,
+    "conservative_sample_depth_m": 0.00046542268131578873
+  },
+  {
+    "vertex": 4064,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.02396684612001668,
+      -0.017450000000000004,
+      -0.005054253296580589
+    ],
+    "inward_normal": [
+      -0.14232205636435732,
+      0.6471300569759204,
+      0.7489773839246165
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004623236000311951,
+      "triangle": 8060
+    },
+    "normal_consistency_length_m": 0.0049310687955542495,
+    "conservative_sample_depth_m": 0.0012327671988885624
+  },
+  {
+    "vertex": 4065,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.023917096160424277,
+      -0.019781818181818185,
+      -0.005460926413920826
+    ],
+    "inward_normal": [
+      -0.5859700400162149,
+      0.50294143877048,
+      0.6353652661035816
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003315083896094797,
+      "triangle": 8124
+    },
+    "normal_consistency_length_m": 0.002843931410812729,
+    "conservative_sample_depth_m": 0.0007109828527031822
+  },
+  {
+    "vertex": 4066,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.021711997761239603,
+      -0.019781818181818185,
+      -0.005336397132899572
+    ],
+    "inward_normal": [
+      -0.04958878019572807,
+      0.7558352515154404,
+      0.6528813256980864
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003802462696825314,
+      "triangle": 8122
+    },
+    "normal_consistency_length_m": 0.0029880149392283568,
+    "conservative_sample_depth_m": 0.0007470037348070892
+  },
+  {
+    "vertex": 4067,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.01950689936205495,
+      -0.019781818181818185,
+      -0.005794832035673113
+    ],
+    "inward_normal": [
+      -0.6780501078593213,
+      0.33967379147919824,
+      0.6518203484197996
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004964104463483973,
+      "triangle": 8184
+    },
+    "normal_consistency_length_m": 0.0029880149392283568,
+    "conservative_sample_depth_m": 0.0007470037348070892
+  },
+  {
+    "vertex": 4068,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.019461044171610965,
+      -0.02211363636363637,
+      -0.0062733266499607095
+    ],
+    "inward_normal": [
+      -0.5874021171145682,
+      0.5259713949139528,
+      0.6150714141801696
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004241411046658447,
+      "triangle": 8249
+    },
+    "normal_consistency_length_m": 0.0053801902033366635,
+    "conservative_sample_depth_m": 0.0013450475508341659
+  },
+  {
+    "vertex": 4069,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.01726249651391829,
+      -0.02211363636363637,
+      -0.006249028521644662
+    ],
+    "inward_normal": [
+      -0.6441755439547778,
+      0.496219226573434,
+      0.5820690231831867
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.005335738841131216,
+      "triangle": 8248
+    },
+    "normal_consistency_length_m": 0.004567833101522429,
+    "conservative_sample_depth_m": 0.0011419582753806072
+  },
+  {
+    "vertex": 4070,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.01721699920175286,
+      -0.02444545454545455,
+      -0.00604282208538381
+    ],
+    "inward_normal": [
+      -0.8162626959377793,
+      0.01341576740968968,
+      0.5775250889833252
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004591142526421581,
+      "triangle": 8311
+    },
+    "normal_consistency_length_m": 0.004080415699517024,
+    "conservative_sample_depth_m": 0.001020103924879256
+  },
+  {
+    "vertex": 4071,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.017165244472256053,
+      -0.026777272727272726,
+      -0.006158686573495304
+    ],
+    "inward_normal": [
+      -0.8004987137419568,
+      0.05955185390212031,
+      0.5963684984925788
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004617472383329249,
+      "triangle": 8375
+    },
+    "normal_consistency_length_m": 0.007223958667688916,
+    "conservative_sample_depth_m": 0.001805989666922229
+  },
+  {
+    "vertex": 4072,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.017107157796893074,
+      -0.029109090909090907,
+      -0.0056996287642812095
+    ],
+    "inward_normal": [
+      -0.7370450211255137,
+      -0.25446855778504973,
+      0.626107331000754
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004721069044290163,
+      "triangle": 8439
+    },
+    "normal_consistency_length_m": 0.005789610528897939,
+    "conservative_sample_depth_m": 0.0014474026322244848
+  },
+  {
+    "vertex": 4073,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      0.019204561369110355,
+      -0.03144090909090909,
+      -0.00530135464445416
+    ],
+    "inward_normal": [
+      -0.36064489143668854,
+      -0.6474875421021055,
+      0.6713383238749246
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004330158228525661,
+      "triangle": 8504
+    },
+    "normal_consistency_length_m": 0.005058840399612966,
+    "conservative_sample_depth_m": 0.0012647100999032415
+  },
+  {
+    "vertex": 4074,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.021366468626445784,
+      -0.03144090909090909,
+      -0.005090537241944395
+    ],
+    "inward_normal": [
+      -0.43997894735888954,
+      -0.5792981589070644,
+      0.6861721132251362
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0033104498445356355,
+      "triangle": 8506
+    },
+    "normal_consistency_length_m": 0.0035482234776116547,
+    "conservative_sample_depth_m": 0.0008870558694029137
+  },
+  {
+    "vertex": 4075,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      0.023421850455816004,
+      -0.033772727272727274,
+      -0.004901464222952545
+    ],
+    "inward_normal": [
+      -0.3175441706192536,
+      -0.561736610185827,
+      0.7639487420518909
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004059173923700457,
+      "triangle": 8572
+    },
+    "normal_consistency_length_m": 0.004744013203094911,
+    "conservative_sample_depth_m": 0.0011860033007737277
+  },
+  {
+    "vertex": 4076,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.026131773417027764,
+      -0.03154545454545454,
+      -0.004296944384261621
+    ],
+    "inward_normal": [
+      0.10190662223270368,
+      -0.04061768260974412,
+      0.9939644079163675
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002510914019975414,
+      "triangle": 8637
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0016323093208169203,
+      "triangle": 8574
+    },
+    "normal_consistency_length_m": 0.0034548098488011753,
+    "conservative_sample_depth_m": 0.0008161546604084602
+  },
+  {
+    "vertex": 4077,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.027930708645178094,
+      -0.03154545454545454,
+      -0.004432229296150395
+    ],
+    "inward_normal": [
+      0.009979242704932246,
+      0.03684041399432344,
+      0.9992713338286869
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002172596559920964,
+      "triangle": 8639
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0015698284800523903,
+      "triangle": 8576
+    },
+    "normal_consistency_length_m": 0.0032576574330421522,
+    "conservative_sample_depth_m": 0.0007849142400261952
+  },
+  {
+    "vertex": 4078,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.02972964387332841,
+      -0.03154545454545454,
+      -0.004373908792878363
+    ],
+    "inward_normal": [
+      -0.07257144627680116,
+      0.05582210038293121,
+      0.9957998183842631
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0020524120991029233,
+      "triangle": 8641
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0015097209417052717,
+      "triangle": 8578
+    },
+    "normal_consistency_length_m": 0.0033071339677130974,
+    "conservative_sample_depth_m": 0.0007548604708526358
+  },
+  {
+    "vertex": 4079,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.03152857910147874,
+      -0.03154545454545454,
+      -0.004124020709501325
+    ],
+    "inward_normal": [
+      -0.16056648397122303,
+      0.01207385039904042,
+      0.9869511772938216
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002113951974133069,
+      "triangle": 8644
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014566468942759777,
+      "triangle": 8579
+    },
+    "normal_consistency_length_m": 0.003608792847510927,
+    "conservative_sample_depth_m": 0.0007283234471379889
+  },
+  {
+    "vertex": 4080,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.03332751432962907,
+      -0.03154545454545454,
+      -0.003643077692808084
+    ],
+    "inward_normal": [
+      -0.27566895506697153,
+      -0.11911875051089754,
+      0.9538434622562585
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0025671433991386948,
+      "triangle": 8710
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014008644308491744,
+      "triangle": 8582
+    },
+    "normal_consistency_length_m": 0.004398408502925834,
+    "conservative_sample_depth_m": 0.0007004322154245872
+  },
+  {
+    "vertex": 4081,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.03512644955777939,
+      -0.03154545454545454,
+      -0.002775749075395889
+    ],
+    "inward_normal": [
+      0.0787633949577977,
+      0.15656231659632316,
+      0.9845225079380943
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0020396691900198675,
+      "triangle": 8649
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0012835016183115942,
+      "triangle": 8584
+    },
+    "normal_consistency_length_m": 0.0025978557160764733,
+    "conservative_sample_depth_m": 0.0006417508091557971
+  },
+  {
+    "vertex": 4082,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.03527499685091987,
+      -0.029881818181818183,
+      -0.004309596468233512
+    ],
+    "inward_normal": [
+      0.013597645364871,
+      0.1509779684837125,
+      0.9884436033851716
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.001672055307162881,
+      "triangle": 8520
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.001401537992141703,
+      "triangle": 8518
+    },
+    "normal_consistency_length_m": 0.002338826509118589,
+    "conservative_sample_depth_m": 0.0005847066272796472
+  },
+  {
+    "vertex": 4083,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.03708383523194623,
+      -0.029881818181818183,
+      -0.003431972462088647
+    ],
+    "inward_normal": [
+      -0.42476363960044106,
+      -0.5404423190959422,
+      0.72629054117728
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0013831892608840873,
+      "triangle": 8520
+    },
+    "normal_consistency_length_m": 0.002338826509118589,
+    "conservative_sample_depth_m": 0.0005847066272796472
+  },
+  {
+    "vertex": 4084,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.03889267361297259,
+      -0.029881818181818183,
+      -0.0014878759410268184
+    ],
+    "inward_normal": [
+      -0.04973035504846394,
+      -0.09808878775935069,
+      0.9939343446639999
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0010684066755669876,
+      "triangle": 8523
+    },
+    "normal_consistency_length_m": 0.0037787185344133434,
+    "conservative_sample_depth_m": 0.0005342033377834938
+  },
+  {
+    "vertex": 4085,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.03904558678692885,
+      -0.028218181818181816,
+      -0.003116911524258674
+    ],
+    "inward_normal": [
+      0.05653524687708807,
+      0.39335391107581213,
+      0.9176472451339396
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0019244505810933961,
+      "triangle": 8459
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014384607389900472,
+      "triangle": 8457
+    },
+    "normal_consistency_length_m": 0.0013522344137518133,
+    "conservative_sample_depth_m": 0.00033805860343795333
+  },
+  {
+    "vertex": 4086,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.039183287724139634,
+      -0.02655454545454545,
+      -0.003495162788280468
+    ],
+    "inward_normal": [
+      -0.11999224541500392,
+      -0.8114542172184972,
+      0.5719649590653098
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014863948327960268,
+      "triangle": 8393
+    },
+    "normal_consistency_length_m": 0.0013522344137518133,
+    "conservative_sample_depth_m": 0.00033805860343795333
+  },
+  {
+    "vertex": 4087,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.041009221052881684,
+      -0.02655454545454545,
+      -0.000819810236075712
+    ],
+    "inward_normal": [
+      0.0539397995316498,
+      -0.12157879326796324,
+      0.9911150765950396
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0009584916266176412,
+      "triangle": 8397
+    },
+    "normal_consistency_length_m": 0.003279315079260908,
+    "conservative_sample_depth_m": 0.0004792458133088206
+  },
+  {
+    "vertex": 4088,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.03930597807803347,
+      -0.024890909090909095,
+      -0.003319161782754135
+    ],
+    "inward_normal": [
+      -0.07061897625519553,
+      0.23050157210943822,
+      0.970506046064498
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002120279328963457,
+      "triangle": 8268
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.001483877181196144,
+      "triangle": 8330
+    },
+    "normal_consistency_length_m": 0.0029164489365593816,
+    "conservative_sample_depth_m": 0.0007291122341398454
+  },
+  {
+    "vertex": 4089,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.03941383452680766,
+      -0.023227272727272732,
+      -0.002402105900463884
+    ],
+    "inward_normal": [
+      -0.09567015115921275,
+      0.11325105391725766,
+      0.9889496554242809
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0025156415924552623,
+      "triangle": 8206
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0013481002938405655,
+      "triangle": 8267
+    },
+    "normal_consistency_length_m": 0.002532850197881647,
+    "conservative_sample_depth_m": 0.0006332125494704117
+  },
+  {
+    "vertex": 4090,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.037574339621438066,
+      -0.023227272727272732,
+      -0.003863833853224808
+    ],
+    "inward_normal": [
+      0.09385984195145665,
+      -0.060653243700262344,
+      0.9937361390718787
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0019437235042920672,
+      "triangle": 8265
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014287910633098665,
+      "triangle": 8264
+    },
+    "normal_consistency_length_m": 0.0017367732715638786,
+    "conservative_sample_depth_m": 0.00043419331789096966
+  },
+  {
+    "vertex": 4091,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.03766203428156524,
+      -0.021563636363636365,
+      -0.002400421239549633
+    ],
+    "inward_normal": [
+      0.02903890241106382,
+      -0.02993277834918443,
+      0.9991300070196368
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0025730005154401443,
+      "triangle": 8141
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0012690911108956058,
+      "triangle": 8201
+    },
+    "normal_consistency_length_m": 0.0034476990662453207,
+    "conservative_sample_depth_m": 0.0006345455554478029
+  },
+  {
+    "vertex": 4092,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.03581705845993769,
+      -0.021563636363636365,
+      -0.003710196107646305
+    ],
+    "inward_normal": [
+      0.05157882043616288,
+      0.06011903798809459,
+      0.9968577263350071
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0024128046570698605,
+      "triangle": 8137
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014233232428065867,
+      "triangle": 8199
+    },
+    "normal_consistency_length_m": 0.0028306837685189877,
+    "conservative_sample_depth_m": 0.0007076709421297469
+  },
+  {
+    "vertex": 4093,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.03403683281587462,
+      -0.0199,
+      -0.0024749715668727487
+    ],
+    "inward_normal": [
+      -0.2606576839128174,
+      0.03566308114770325,
+      0.964772365099798
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0026548298849067733,
+      "triangle": 8010
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0012068478568359727,
+      "triangle": 8072
+    },
+    "normal_consistency_length_m": 0.002314498348846033,
+    "conservative_sample_depth_m": 0.0005786245872115083
+  },
+  {
+    "vertex": 4094,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.033972082638310155,
+      -0.021563636363636365,
+      -0.004431753043033039
+    ],
+    "inward_normal": [
+      -0.07921899388003342,
+      0.24070467306278515,
+      0.9673601249660713
+    ],
+    "normal_hit": {
+      "metres": 0.0010950708356691834,
+      "triangle": 7850
+    },
+    "posterior_hit": {
+      "metres": 0.0009234058984116547,
+      "triangle": 7850
+    },
+    "globe_ray_hit": {
+      "metres": 0.0026036941793721206,
+      "triangle": 8072
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014431856768871028,
+      "triangle": 8197
+    },
+    "normal_consistency_length_m": 0.001007206836354179,
+    "conservative_sample_depth_m": 0.00025180170908854473
+  },
+  {
+    "vertex": 4095,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.032187231981563896,
+      -0.0199,
+      -0.003339608089795526
+    ],
+    "inward_normal": [
+      0.10413080356092141,
+      -0.006096879353041726,
+      0.9945449229732719
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002639620359969362,
+      "triangle": 8007
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0013631422487206163,
+      "triangle": 8068
+    },
+    "normal_consistency_length_m": 0.0044478243154063984,
+    "conservative_sample_depth_m": 0.0006815711243603081
+  },
+  {
+    "vertex": 4096,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.030337631147253165,
+      -0.0199,
+      -0.0037430128344067117
+    ],
+    "inward_normal": [
+      -0.12706947255415257,
+      0.007177840956090673,
+      0.9918678479233101
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002489682057449606,
+      "triangle": 8002
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014401971289490435,
+      "triangle": 8066
+    },
+    "normal_consistency_length_m": 0.0038518725441656697,
+    "conservative_sample_depth_m": 0.0007200985644745218
+  },
+  {
+    "vertex": 4097,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.028488030312942458,
+      -0.0199,
+      -0.003879498586326015
+    ],
+    "inward_normal": [
+      -0.02721143560849913,
+      0.051438246329886174,
+      0.9983053864357492
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002824214258086253,
+      "triangle": 7999
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014966804867815378,
+      "triangle": 8064
+    },
+    "normal_consistency_length_m": 0.003273973552610648,
+    "conservative_sample_depth_m": 0.0007483402433907689
+  },
+  {
+    "vertex": 4098,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.02663842947863173,
+      -0.0199,
+      -0.0037764327469225626
+    ],
+    "inward_normal": [
+      -0.5444768317062337,
+      -0.10644215086942584,
+      0.8319946203272183
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0031680671524417867,
+      "triangle": 8057
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0015445079325229754,
+      "triangle": 8062
+    },
+    "normal_consistency_length_m": 0.001861690725263155,
+    "conservative_sample_depth_m": 0.00046542268131578873
+  },
+  {
+    "vertex": 4099,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.026592179351799968,
+      -0.021563636363636365,
+      -0.00522996597509453
+    ],
+    "inward_normal": [
+      0.48843289366521814,
+      0.4265243865404265,
+      0.7612557100423841
+    ],
+    "normal_hit": {
+      "metres": 0.001437550468138463,
+      "triangle": 7860
+    },
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0016475607349618249,
+      "triangle": 8190
+    },
+    "normal_consistency_length_m": 0.0008108596236150923,
+    "conservative_sample_depth_m": 0.00020271490590377308
+  },
+  {
+    "vertex": 4100,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.024788828644321,
+      -0.0199,
+      -0.0033659258704807423
+    ],
+    "inward_normal": [
+      0.055982090753460514,
+      0.17774430827299345,
+      0.982483061630798
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0015533608019515292,
+      "triangle": 8060
+    },
+    "normal_consistency_length_m": 0.002843931410812729,
+    "conservative_sample_depth_m": 0.0007109828527031822
+  },
+  {
+    "vertex": 4101,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.024747203530172415,
+      -0.021563636363636365,
+      -0.005042678521319144
+    ],
+    "inward_normal": [
+      -0.3852363424539783,
+      0.020800343221154646,
+      0.922583495503016
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.003021328034191462,
+      "triangle": 8122
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0017687376414416208,
+      "triangle": 8188
+    },
+    "normal_consistency_length_m": 0.002715029002536533,
+    "conservative_sample_depth_m": 0.0006787572506341332
+  },
+  {
+    "vertex": 4102,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.022902227708544866,
+      -0.021563636363636365,
+      -0.00467449567004072
+    ],
+    "inward_normal": [
+      0.15472803652192796,
+      0.45280167629984774,
+      0.8780830693357644
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0019343895747282683,
+      "triangle": 8187
+    },
+    "normal_consistency_length_m": 0.002715029002536533,
+    "conservative_sample_depth_m": 0.0006787572506341332
+  },
+  {
+    "vertex": 4103,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.021057251886917334,
+      -0.021563636363636365,
+      -0.00398981964951727
+    ],
+    "inward_normal": [
+      -0.3751819374294851,
+      0.14715924063966024,
+      0.9151954281578425
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00205060197316459,
+      "triangle": 8185
+    },
+    "normal_consistency_length_m": 0.0032110387763437543,
+    "conservative_sample_depth_m": 0.0008027596940859386
+  },
+  {
+    "vertex": 4104,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.021018885473111693,
+      -0.023227272727272732,
+      -0.005074490705679264
+    ],
+    "inward_normal": [
+      -0.3102466822276486,
+      0.43761422879630024,
+      0.8439435898931609
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0022170638311083957,
+      "triangle": 8250
+    },
+    "normal_consistency_length_m": 0.00300283081058422,
+    "conservative_sample_depth_m": 0.000750707702646055
+  },
+  {
+    "vertex": 4105,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.01917939056774209,
+      -0.023227272727272732,
+      -0.004278138839294783
+    ],
+    "inward_normal": [
+      -0.315065652955286,
+      0.4483969335999834,
+      0.8364650765369653
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0023999119367929013,
+      "triangle": 8248
+    },
+    "normal_consistency_length_m": 0.002941062468980768,
+    "conservative_sample_depth_m": 0.000735265617245192
+  },
+  {
+    "vertex": 4106,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.019141323585821785,
+      -0.024890909090909095,
+      -0.00482641939104456
+    ],
+    "inward_normal": [
+      -0.5416195721149739,
+      -0.10256498751089611,
+      0.834343252168364
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0024456671569723625,
+      "triangle": 8312
+    },
+    "normal_consistency_length_m": 0.002941062468980768,
+    "conservative_sample_depth_m": 0.000735265617245192
+  },
+  {
+    "vertex": 4107,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.0190980211079769,
+      -0.02655454545454545,
+      -0.004798343204764713
+    ],
+    "inward_normal": [
+      -0.566992247687035,
+      0.1466889289543676,
+      0.8105566909137352
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.002378564252649105,
+      "triangle": 8376
+    },
+    "normal_consistency_length_m": 0.006446235972683323,
+    "conservative_sample_depth_m": 0.0011892821263245524
+  },
+  {
+    "vertex": 4108,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.01904942077719663,
+      -0.028218181818181816,
+      -0.0042405079251088135
+    ],
+    "inward_normal": [
+      -0.46063973463399555,
+      -0.09339507772763442,
+      0.882659840670556
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0022409839533840555,
+      "triangle": 8439
+    },
+    "normal_consistency_length_m": 0.004970044033008291,
+    "conservative_sample_depth_m": 0.0011204919766920278
+  },
+  {
+    "vertex": 4109,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      0.020804289802709017,
+      -0.029881818181818183,
+      -0.004130178845680184
+    ],
+    "inward_normal": [
+      -0.053112191197185105,
+      -0.3552573927016234,
+      0.9332584208444509
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.001958529330891697,
+      "triangle": 8505
+    },
+    "normal_consistency_length_m": 0.0037500130923822927,
+    "conservative_sample_depth_m": 0.0009375032730955732
+  },
+  {
+    "vertex": 4110,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.022613128183735363,
+      -0.029881818181818183,
+      -0.004837795735625115
+    ],
+    "inward_normal": [
+      -0.14824697922986413,
+      -0.18544010835284458,
+      0.9714086675356081
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.003567549234340997,
+      "triangle": 8568
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0018673458758332489,
+      "triangle": 8507
+    },
+    "normal_consistency_length_m": 0.0035482234776116547,
+    "conservative_sample_depth_m": 0.0008870558694029137
+  },
+  {
+    "vertex": 4111,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      0.024332838188877437,
+      -0.03154545454545454,
+      -0.00392031192496483
+    ],
+    "inward_normal": [
+      -0.1604156780022815,
+      -0.08504762649292998,
+      0.9833787223033592
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.003760159035804172,
+      "triangle": 8695
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0016748939637243822,
+      "triangle": 8571
+    },
+    "normal_consistency_length_m": 0.00422852621170876,
+    "conservative_sample_depth_m": 0.0008374469818621911
+  },
+  {
+    "vertex": 4112,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.026611646442061297,
+      -0.029636363636363638,
+      -0.004616857903629732
+    ],
+    "inward_normal": [
+      0.11462234817688902,
+      0.1416141053608582,
+      0.9832635264573073
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007818381586572054,
+      "triangle": 8510
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007308842716047046,
+      "triangle": 8510
+    },
+    "normal_consistency_length_m": 0.010898551627079948,
+    "conservative_sample_depth_m": 0.0003654421358023523
+  },
+  {
+    "vertex": 4113,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.028109608066906787,
+      -0.029636363636363638,
+      -0.004758782428683455
+    ],
+    "inward_normal": [
+      0.01963322842224094,
+      0.17816710139649278,
+      0.9838043607962368
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007911929295555818,
+      "triangle": 8512
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007527406837131481,
+      "triangle": 8512
+    },
+    "normal_consistency_length_m": 0.013649763415541607,
+    "conservative_sample_depth_m": 0.00037637034185657403
+  },
+  {
+    "vertex": 4114,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.029607569691752263,
+      -0.029636363636363638,
+      -0.004770866691584286
+    ],
+    "inward_normal": [
+      -0.07205406910576993,
+      0.21533256237649653,
+      0.973878893243751
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007780085531373556,
+      "triangle": 8513
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007490723521526736,
+      "triangle": 8513
+    },
+    "normal_consistency_length_m": 0.012134248659409286,
+    "conservative_sample_depth_m": 0.0003745361760763368
+  },
+  {
+    "vertex": 4115,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03110553131659775,
+      -0.029636363636363638,
+      -0.004653914837087371
+    ],
+    "inward_normal": [
+      -0.16919517647714452,
+      0.2542112313810572,
+      0.9522340269579713
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007465292071747161,
+      "triangle": 8514
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.000722052692991756,
+      "triangle": 8514
+    },
+    "normal_consistency_length_m": 0.00798252171840078,
+    "conservative_sample_depth_m": 0.000361026346495878
+  },
+  {
+    "vertex": 4116,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03260349294144324,
+      -0.029636363636363638,
+      -0.004399848002043415
+    ],
+    "inward_normal": [
+      -0.2899618588866327,
+      0.3050480984645439,
+      0.9071205972825083
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007483774955115442,
+      "triangle": 8516
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007291668599677223,
+      "triangle": 8516
+    },
+    "normal_consistency_length_m": 0.0035554470493867883,
+    "conservative_sample_depth_m": 0.00036458342998386115
+  },
+  {
+    "vertex": 4117,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03410145456628872,
+      -0.029636363636363638,
+      -0.003988562925032771
+    ],
+    "inward_normal": [
+      0.08504597266446673,
+      0.5215539322986851,
+      0.8489691856818676
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000755508781120661,
+      "triangle": 8518
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.000710696606280572,
+      "triangle": 8517
+    },
+    "normal_consistency_length_m": 0.0021110189394593186,
+    "conservative_sample_depth_m": 0.000355348303140286
+  },
+  {
+    "vertex": 4118,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.034225148927885,
+      -0.028545454545454547,
+      -0.004564575922776383
+    ],
+    "inward_normal": [
+      -0.2410666107425788,
+      0.04815756453045633,
+      0.9693130238285158
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.00080154363595748,
+      "triangle": 8454
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007716985068520113,
+      "triangle": 8454
+    },
+    "normal_consistency_length_m": 0.0021110189394593186,
+    "conservative_sample_depth_m": 0.00038584925342600567
+  },
+  {
+    "vertex": 4119,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03573135684350357,
+      -0.028545454545454547,
+      -0.0040059848864318825
+    ],
+    "inward_normal": [
+      -0.5647022929507579,
+      -0.027129410402149952,
+      0.8248486621359026
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007841675823830634,
+      "triangle": 8455
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007235512163151044,
+      "triangle": 8455
+    },
+    "normal_consistency_length_m": 0.0024876260071248135,
+    "conservative_sample_depth_m": 0.0003617756081575522
+  },
+  {
+    "vertex": 4120,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.03723756475912215,
+      -0.028545454545454547,
+      -0.003207978106147534
+    ],
+    "inward_normal": [
+      -0.2269400000357492,
+      0.5680910303821043,
+      0.7910567726675332
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0006989368447127396,
+      "triangle": 8457
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006580954838575982,
+      "triangle": 8456
+    },
+    "normal_consistency_length_m": 0.0024876260071248135,
+    "conservative_sample_depth_m": 0.0003290477419287991
+  },
+  {
+    "vertex": 4121,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.03736489456118251,
+      -0.027454545454545454,
+      -0.003603599094118178
+    ],
+    "inward_normal": [
+      -0.14164797373503002,
+      0.24163378893381465,
+      0.9599734181644036
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000737563218107862,
+      "triangle": 8392
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006996303207641178,
+      "triangle": 8455
+    },
+    "normal_consistency_length_m": 0.0010253147942551105,
+    "conservative_sample_depth_m": 0.00025632869856377763
+  },
+  {
+    "vertex": 4122,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.03747955723297815,
+      -0.02636363636363636,
+      -0.003739717874018791
+    ],
+    "inward_normal": [
+      -0.22713736063156817,
+      -0.7697176995420383,
+      0.5966098242713053
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0014060111559750196,
+      "triangle": 8455
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007467782785620236,
+      "triangle": 8392
+    },
+    "normal_consistency_length_m": 0.0010253147942551105,
+    "conservative_sample_depth_m": 0.00025632869856377763
+  },
+  {
+    "vertex": 4123,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.039,
+      -0.02636363636363636,
+      -0.002652270864991656
+    ],
+    "inward_normal": [
+      -0.4555095479358528,
+      0.48742898384725974,
+      0.7449322368141299
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000730199305117917,
+      "triangle": 8393
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006755470487938547,
+      "triangle": 8393
+    },
+    "normal_consistency_length_m": 0.0014532374182879457,
+    "conservative_sample_depth_m": 0.00033777352439692734
+  },
+  {
+    "vertex": 4124,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.037581720690003026,
+      -0.025272727272727273,
+      -0.0036384916014157074
+    ],
+    "inward_normal": [
+      -0.21023158101051279,
+      -0.11508965476728525,
+      0.9708537756590161
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000764155432510117,
+      "triangle": 8329
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007412143839562984,
+      "triangle": 8328
+    },
+    "normal_consistency_length_m": 0.0026638646883766345,
+    "conservative_sample_depth_m": 0.0003706071919781492
+  },
+  {
+    "vertex": 4125,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.03767153205103906,
+      -0.024181818181818183,
+      -0.003284068251917524
+    ],
+    "inward_normal": [
+      -0.478836539928965,
+      0.2024034701224794,
+      0.8542531260178304
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008131337200866094,
+      "triangle": 8265
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006786499268136996,
+      "triangle": 8265
+    },
+    "normal_consistency_length_m": 0.0017367732715638786,
+    "conservative_sample_depth_m": 0.0003393249634068498
+  },
+  {
+    "vertex": 4126,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03613979664766068,
+      -0.024181818181818183,
+      -0.004124281921993865
+    ],
+    "inward_normal": [
+      -0.05178555663783515,
+      -0.3525440253625949,
+      0.9343612611323564
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008025911625080015,
+      "triangle": 8264
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.000748907524445858,
+      "triangle": 8264
+    },
+    "normal_consistency_length_m": 0.0024787499237578824,
+    "conservative_sample_depth_m": 0.000374453762222929
+  },
+  {
+    "vertex": 4127,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03621281941886375,
+      -0.02309090909090909,
+      -0.0035785268660762973
+    ],
+    "inward_normal": [
+      -0.45799805622545453,
+      -0.13756429798125902,
+      0.8782447519994804
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007248052276009433,
+      "triangle": 8200
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006768231007680676,
+      "triangle": 8200
+    },
+    "normal_consistency_length_m": 0.002639260370139764,
+    "conservative_sample_depth_m": 0.0003384115503840338
+  },
+  {
+    "vertex": 4128,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03467652009228517,
+      -0.02309090909090909,
+      -0.0042380566345694955
+    ],
+    "inward_normal": [
+      -0.09559868070598992,
+      -0.40291628630451976,
+      0.9102303875820936
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007320312708272643,
+      "triangle": 8261
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007161127369738812,
+      "triangle": 8198
+    },
+    "normal_consistency_length_m": 0.0019720946270720624,
+    "conservative_sample_depth_m": 0.0003580563684869406
+  },
+  {
+    "vertex": 4129,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.033194137816012645,
+      -0.022,
+      -0.003997522908288423
+    ],
+    "inward_normal": [
+      -0.871748952282658,
+      -0.08606693935376025,
+      0.4823341643968051
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0011006735833808984,
+      "triangle": 8132
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006655169819607316,
+      "triangle": 8197
+    },
+    "normal_consistency_length_m": 0.001007206836354179,
+    "conservative_sample_depth_m": 0.00025180170908854473
+  },
+  {
+    "vertex": 4130,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03314022076570659,
+      -0.02309090909090909,
+      -0.004691039217207947
+    ],
+    "inward_normal": [
+      0.017755004422411517,
+      -0.33379619193660603,
+      0.9424780432808928
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007377639599176427,
+      "triangle": 8259
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007249206705645561,
+      "triangle": 8259
+    },
+    "normal_consistency_length_m": 0.001254110578766218,
+    "conservative_sample_depth_m": 0.0003135276446915545
+  },
+  {
+    "vertex": 4131,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.03165398727155505,
+      -0.022,
+      -0.004332016175158353
+    ],
+    "inward_normal": [
+      -0.13099248452410575,
+      -0.37525173719363486,
+      0.9176203478189447
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007051162153493205,
+      "triangle": 8195
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007000463139586833,
+      "triangle": 8195
+    },
+    "normal_consistency_length_m": 0.005362751857040641,
+    "conservative_sample_depth_m": 0.00035002315697934167
+  },
+  {
+    "vertex": 4132,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.030113836727097464,
+      -0.022,
+      -0.0045077000984069466
+    ],
+    "inward_normal": [
+      -0.06581250167034057,
+      -0.3229200720289163,
+      0.9441352348603091
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000723540044804955,
+      "triangle": 8193
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007140942030776595,
+      "triangle": 8193
+    },
+    "normal_consistency_length_m": 0.006623430162526475,
+    "conservative_sample_depth_m": 0.00035704710153882974
+  },
+  {
+    "vertex": 4133,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.028573686182639887,
+      -0.022,
+      -0.004539177357043954
+    ],
+    "inward_normal": [
+      0.03523784481847764,
+      -0.29439227957190156,
+      0.9550348056594631
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000720304568767352,
+      "triangle": 8191
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007070274256336813,
+      "triangle": 8192
+    },
+    "normal_consistency_length_m": 0.0027073151013872706,
+    "conservative_sample_depth_m": 0.00035351371281684067
+  },
+  {
+    "vertex": 4134,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.027033535638182296,
+      -0.022,
+      -0.004428867730633548
+    ],
+    "inward_normal": [
+      -0.5119363438041936,
+      -0.32178278170991104,
+      0.7964778849958273
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008879784993030211,
+      "triangle": 8189
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006878060341381188,
+      "triangle": 8191
+    },
+    "normal_consistency_length_m": 0.0008108596236150923,
+    "conservative_sample_depth_m": 0.00020271490590377308
+  },
+  {
+    "vertex": 4135,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.026995023459392264,
+      -0.02309090909090909,
+      -0.005058537921872233
+    ],
+    "inward_normal": [
+      0.5138330268059997,
+      0.04070264865933287,
+      0.8569241010471697
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0009595066770409947,
+      "triangle": 8192
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007420547095810203,
+      "triangle": 8192
+    },
+    "normal_consistency_length_m": 0.0011565399541558316,
+    "conservative_sample_depth_m": 0.0002891349885389579
+  },
+  {
+    "vertex": 4136,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.02549338509372471,
+      -0.022,
+      -0.004168037443371613
+    ],
+    "inward_normal": [
+      -0.43680070607378874,
+      -0.40417139390753,
+      0.8036483232859283
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008384132202717429,
+      "triangle": 8189
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006887271598161782,
+      "triangle": 8189
+    },
+    "normal_consistency_length_m": 0.0017475987920088445,
+    "conservative_sample_depth_m": 0.0003443635799080891
+  },
+  {
+    "vertex": 4137,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.025458724132813675,
+      -0.02309090909090909,
+      -0.0048224488999103554
+    ],
+    "inward_normal": [
+      -0.014352705240967972,
+      0.1599147912401486,
+      0.9870264735025527
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000950752335760361,
+      "triangle": 8189
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007487019392107023,
+      "triangle": 8190
+    },
+    "normal_consistency_length_m": 0.0017475987920088445,
+    "conservative_sample_depth_m": 0.00037435096960535116
+  },
+  {
+    "vertex": 4138,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.02392242480623509,
+      -0.02309090909090909,
+      -0.004435976111684157
+    ],
+    "inward_normal": [
+      0.298047484016061,
+      0.3386955318133066,
+      0.892442174037846
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.001101472287856131,
+      "triangle": 8188
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007262175784800995,
+      "triangle": 8188
+    },
+    "normal_consistency_length_m": 0.0020118914260278693,
+    "conservative_sample_depth_m": 0.00036310878924004973
+  },
+  {
+    "vertex": 4139,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.02238612547965652,
+      -0.02309090909090909,
+      -0.0038648104463880908
+    ],
+    "inward_normal": [
+      -0.3407851062919861,
+      -0.1657862496125428,
+      0.9254082508649721
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000985497053688103,
+      "triangle": 8186
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006764423922244285,
+      "triangle": 8249
+    },
+    "normal_consistency_length_m": 0.0012929338334998833,
+    "conservative_sample_depth_m": 0.0003232334583749708
+  },
+  {
+    "vertex": 4140,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.022354178017255172,
+      -0.024181818181818183,
+      -0.004337615311477079
+    ],
+    "inward_normal": [
+      0.03510609961160747,
+      0.6561119217031333,
+      0.7538466077187596
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.00188321340268514,
+      "triangle": 8186
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007418014339366237,
+      "triangle": 8251
+    },
+    "normal_consistency_length_m": 0.0012929338334998833,
+    "conservative_sample_depth_m": 0.0003232334583749708
+  },
+  {
+    "vertex": 4141,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.02082244261387678,
+      -0.024181818181818183,
+      -0.003589468442717412
+    ],
+    "inward_normal": [
+      -0.32661009232749,
+      0.15498877482197268,
+      0.9323649110026677
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.001352591947326513,
+      "triangle": 8248
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007165736886591711,
+      "triangle": 8250
+    },
+    "normal_consistency_length_m": 0.0026499103132286016,
+    "conservative_sample_depth_m": 0.00035828684432958555
+  },
+  {
+    "vertex": 4142,
+    "side": "right",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.020790744486452295,
+      -0.025272727272727273,
+      -0.0038536241000991646
+    ],
+    "inward_normal": [
+      -0.5092861219506426,
+      -0.042479839487748375,
+      0.8595482006412266
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0016267082314195594,
+      "triangle": 8312
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007742120617403302,
+      "triangle": 8313
+    },
+    "normal_consistency_length_m": 0.0040291839169670305,
+    "conservative_sample_depth_m": 0.0003871060308701651
+  },
+  {
+    "vertex": 4143,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.02075468679573763,
+      -0.02636363636363636,
+      -0.003872861054249013
+    ],
+    "inward_normal": [
+      -0.4718060490378177,
+      0.18585328419665242,
+      0.8618918776996582
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.001456513025662689,
+      "triangle": 8375
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.000765600282404958,
+      "triangle": 8377
+    },
+    "normal_consistency_length_m": 0.002516368210796357,
+    "conservative_sample_depth_m": 0.000382800141202479
+  },
+  {
+    "vertex": 4144,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      0.020714217617456822,
+      -0.027454545454545454,
+      -0.0036500311769637416
+    ],
+    "inward_normal": [
+      -0.17179376638234978,
+      -0.11837860343902272,
+      0.9779945848929805
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0010153047289125988,
+      "triangle": 8440
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007072881542636469,
+      "triangle": 8378
+    },
+    "normal_consistency_length_m": 0.002516368210796357,
+    "conservative_sample_depth_m": 0.00035364407713182346
+  },
+  {
+    "vertex": 4145,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.022175485602936442,
+      -0.028545454545454547,
+      -0.003964548870787874
+    ],
+    "inward_normal": [
+      0.2250842775885333,
+      -0.34758263824046437,
+      0.9102325953162997
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0010451747573149905,
+      "triangle": 8505
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007262405839251311,
+      "triangle": 8442
+    },
+    "normal_consistency_length_m": 0.0032919591009277173,
+    "conservative_sample_depth_m": 0.00036312029196256554
+  },
+  {
+    "vertex": 4146,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.023681693518555005,
+      -0.028545454545454547,
+      -0.004535513393005143
+    ],
+    "inward_normal": [
+      -0.09221433126677549,
+      0.01498584148901386,
+      0.9956264066726472
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008748843106303619,
+      "triangle": 8444
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007716838282461847,
+      "triangle": 8444
+    },
+    "normal_consistency_length_m": 0.0032919591009277173,
+    "conservative_sample_depth_m": 0.0003858419141230924
+  },
+  {
+    "vertex": 4147,
+    "side": "right",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      0.02511368481721581,
+      -0.029636363636363638,
+      -0.004335114503293465
+    ],
+    "inward_normal": [
+      0.13153000387290759,
+      0.15331608128455446,
+      0.9793845196350311
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007624722555794818,
+      "triangle": 8509
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007164802695567111,
+      "triangle": 8509
+    },
+    "normal_consistency_length_m": 0.0055818936193196885,
+    "conservative_sample_depth_m": 0.00035824013477835553
+  },
+  {
+    "vertex": 1371,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.03751810453792429,
+      -0.036,
+      -0.006592219058121365
+    ],
+    "inward_normal": [
+      -0.1507457574991277,
+      -0.36909490856980615,
+      0.917084873424407
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007596202652554113,
+      "triangle": 9739
+    },
+    "normal_consistency_length_m": 0.005244192291864389,
+    "conservative_sample_depth_m": 0.0013110480729660973
+  },
+  {
+    "vertex": 1372,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.03501689756872933,
+      -0.036,
+      -0.0069027541515127855
+    ],
+    "inward_normal": [
+      0.1017189437462105,
+      -0.470634144080732,
+      0.8764455253514346
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007077179114107284,
+      "triangle": 9742
+    },
+    "normal_consistency_length_m": 0.006091876418740636,
+    "conservative_sample_depth_m": 0.001522969104685159
+  },
+  {
+    "vertex": 1373,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.03251569059953438,
+      -0.036,
+      -0.0071923398906400034
+    ],
+    "inward_normal": [
+      0.09433902447647163,
+      -0.47880444810732975,
+      0.872838157354193
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006828146760031264,
+      "triangle": 9744
+    },
+    "normal_consistency_length_m": 0.0059938715918691245,
+    "conservative_sample_depth_m": 0.0014984678979672811
+  },
+  {
+    "vertex": 1374,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.030014483630339435,
+      -0.036,
+      -0.007461855372275802
+    ],
+    "inward_normal": [
+      0.08751914331505581,
+      -0.486505684364698,
+      0.8692828185546034
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006806234084099025,
+      "triangle": 9746
+    },
+    "normal_consistency_length_m": 0.005902004751736272,
+    "conservative_sample_depth_m": 0.001475501187934068
+  },
+  {
+    "vertex": 1375,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.027513276661144476,
+      -0.036,
+      -0.007713489039876709
+    ],
+    "inward_normal": [
+      0.08188983943345515,
+      -0.4936006534492016,
+      0.8658247219339974
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006995857959143338,
+      "triangle": 9748
+    },
+    "normal_consistency_length_m": 0.005815243638210293,
+    "conservative_sample_depth_m": 0.0014538109095525733
+  },
+  {
+    "vertex": 1376,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.025012069691949523,
+      -0.036,
+      -0.007952060721812822
+    ],
+    "inward_normal": [
+      0.07858165831229885,
+      -0.499764305938373,
+      0.8625894512958209
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007412501210281182,
+      "triangle": 9750
+    },
+    "normal_consistency_length_m": 0.0057324843392431,
+    "conservative_sample_depth_m": 0.001433121084810775
+  },
+  {
+    "vertex": 1377,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.022510862722754568,
+      -0.036,
+      -0.008186868035311608
+    ],
+    "inward_normal": [
+      0.0792739532630798,
+      -0.504366845604381,
+      0.8598428492399813
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008083266717630615,
+      "triangle": 9752
+    },
+    "normal_consistency_length_m": 0.005652568189685325,
+    "conservative_sample_depth_m": 0.0014131420474213312
+  },
+  {
+    "vertex": 1378,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.02000965575355962,
+      -0.036,
+      -0.008433362508744767
+    ],
+    "inward_normal": [
+      0.2957419858644851,
+      -0.2903263155921398,
+      0.9100809350116197
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00894639659988508,
+      "triangle": 9690
+    },
+    "normal_consistency_length_m": 0.006717151732727401,
+    "conservative_sample_depth_m": 0.0016792879331818502
+  },
+  {
+    "vertex": 1429,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.04023961813831243,
+      -0.033,
+      -0.006260426069331581
+    ],
+    "inward_normal": [
+      -0.31190631628134313,
+      -0.39032667209387506,
+      0.8662329588026094
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006546037908513858,
+      "triangle": 9673
+    },
+    "normal_consistency_length_m": 0.004103016807785833,
+    "conservative_sample_depth_m": 0.0010257542019464583
+  },
+  {
+    "vertex": 1430,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.020119809069156214,
+      -0.033,
+      -0.008477749602991377
+    ],
+    "inward_normal": [
+      0.6142201366581078,
+      -0.2077736955183006,
+      0.7612908216801012
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007185817056735816,
+      "triangle": 9689
+    },
+    "normal_consistency_length_m": 0.006703279594834199,
+    "conservative_sample_depth_m": 0.0016758198987085497
+  },
+  {
+    "vertex": 1431,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.01760483293551169,
+      -0.033,
+      -0.008802084068391015
+    ],
+    "inward_normal": [
+      0.3388262912520634,
+      -0.28802849287166316,
+      0.8956764659465213
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008373673162861577,
+      "triangle": 9626
+    },
+    "normal_consistency_length_m": 0.006416965368946281,
+    "conservative_sample_depth_m": 0.0016042413422365702
+  },
+  {
+    "vertex": 1474,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.042967201980336975,
+      -0.03,
+      -0.005907259573952621
+    ],
+    "inward_normal": [
+      -0.3029165701530555,
+      -0.15298332616282773,
+      0.9406580959322398
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006415626445037224,
+      "triangle": 9608
+    },
+    "normal_consistency_length_m": 0.0052723738802786186,
+    "conservative_sample_depth_m": 0.0013180934700696546
+  },
+  {
+    "vertex": 1475,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.01769237728602111,
+      -0.03,
+      -0.00891303745462484
+    ],
+    "inward_normal": [
+      0.6257465153106329,
+      -0.0765345470989932,
+      0.7762626885771027
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007246309920201393,
+      "triangle": 9626
+    },
+    "normal_consistency_length_m": 0.006490374191238891,
+    "conservative_sample_depth_m": 0.0016225935478097228
+  },
+  {
+    "vertex": 1476,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.015164894816589516,
+      -0.03,
+      -0.009414813483509553
+    ],
+    "inward_normal": [
+      0.39808030813763523,
+      -0.2541202203077207,
+      0.8814504988391584
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008937983460607904,
+      "triangle": 9564
+    },
+    "normal_consistency_length_m": 0.006306595222549739,
+    "conservative_sample_depth_m": 0.0015766488056374347
+  },
+  {
+    "vertex": 1514,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.043158658870183095,
+      -0.026999999999999996,
+      -0.005907261498707087
+    ],
+    "inward_normal": [
+      -0.45689195131678983,
+      -0.34994217622846213,
+      0.8177959513952268
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.005881408601568147,
+      "triangle": 9544
+    },
+    "normal_consistency_length_m": 0.0035356598329442115,
+    "conservative_sample_depth_m": 0.0008839149582360529
+  },
+  {
+    "vertex": 1515,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.015232467836535205,
+      -0.026999999999999996,
+      -0.009659091382523445
+    ],
+    "inward_normal": [
+      0.6819093305680229,
+      0.09642152083323129,
+      0.725053484375103
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008587341492722757,
+      "triangle": 9500
+    },
+    "normal_consistency_length_m": 0.006306595222549739,
+    "conservative_sample_depth_m": 0.0015766488056374347
+  },
+  {
+    "vertex": 1552,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.045878024453051815,
+      -0.024000000000000007,
+      -0.005532701226814608
+    ],
+    "inward_normal": [
+      -0.02460667372540287,
+      0.1253871106160899,
+      0.9918026941380629
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007764525660958131,
+      "triangle": 9478
+    },
+    "normal_consistency_length_m": 0.004578306341541612,
+    "conservative_sample_depth_m": 0.001144576585385403
+  },
+  {
+    "vertex": 1553,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.04332924531677116,
+      -0.024000000000000007,
+      -0.005907263734175813
+    ],
+    "inward_normal": [
+      -0.36169110859683007,
+      0.21765404664553306,
+      0.9065353042991874
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006143674632228159,
+      "triangle": 9480
+    },
+    "normal_consistency_length_m": 0.007161246287450736,
+    "conservative_sample_depth_m": 0.001790311571862684
+  },
+  {
+    "vertex": 1554,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.015292674817683934,
+      -0.024000000000000007,
+      -0.009942803208282785
+    ],
+    "inward_normal": [
+      0.7081090014167586,
+      0.07796389694485964,
+      0.7017857742115697
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00890680112562249,
+      "triangle": 9499
+    },
+    "normal_consistency_length_m": 0.0072090700109995005,
+    "conservative_sample_depth_m": 0.0018022675027498751
+  },
+  {
+    "vertex": 1592,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.04347920697026772,
+      -0.021000000000000005,
+      -0.005907266233830515
+    ],
+    "inward_normal": [
+      -0.05406872819975353,
+      0.2957973986864884,
+      0.9537192834168594
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007156748836765703,
+      "triangle": 9416
+    },
+    "normal_consistency_length_m": 0.007291857367155142,
+    "conservative_sample_depth_m": 0.0018229643417887855
+  },
+  {
+    "vertex": 1593,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.04092160656025197,
+      -0.021000000000000005,
+      -0.0062604643165423005
+    ],
+    "inward_normal": [
+      -0.37923463956857767,
+      0.22523501726390846,
+      0.8974688156974692
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.005850796804932696,
+      "triangle": 9354
+    },
+    "normal_consistency_length_m": 0.007071170750786196,
+    "conservative_sample_depth_m": 0.001767792687696549
+  },
+  {
+    "vertex": 1594,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.017903202870110237,
+      -0.021000000000000005,
+      -0.009375141185138745
+    ],
+    "inward_normal": [
+      0.38818679317169485,
+      0.5908554503050946,
+      0.7072487896432484
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007884685731357652,
+      "triangle": 9434
+    },
+    "normal_consistency_length_m": 0.005189960904832135,
+    "conservative_sample_depth_m": 0.0012974902262080337
+  },
+  {
+    "vertex": 1595,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.015345602460094485,
+      -0.021000000000000005,
+      -0.010260043879453326
+    ],
+    "inward_normal": [
+      0.5749320830581675,
+      0.22217403342171413,
+      0.7874590775040462
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.009821893852822382,
+      "triangle": 9435
+    },
+    "normal_consistency_length_m": 0.006428539730325174,
+    "conservative_sample_depth_m": 0.0016071349325812935
+  },
+  {
+    "vertex": 1636,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.04104353562786871,
+      -0.018000000000000006,
+      -0.0062604767398983085
+    ],
+    "inward_normal": [
+      -0.05795399146636706,
+      0.28932688215233,
+      0.9554743796340789
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007495314738255609,
+      "triangle": 9352
+    },
+    "normal_consistency_length_m": 0.007441780458752698,
+    "conservative_sample_depth_m": 0.0018604451146881746
+  },
+  {
+    "vertex": 1637,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.038478314651126916,
+      -0.018000000000000006,
+      -0.006592457991070449
+    ],
+    "inward_normal": [
+      0.10489149927279831,
+      0.5063587450091173,
+      0.8559197361511747
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006543255226199937,
+      "triangle": 9290
+    },
+    "normal_consistency_length_m": 0.004286359296010543,
+    "conservative_sample_depth_m": 0.0010715898240026358
+  },
+  {
+    "vertex": 1638,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.03591309367438512,
+      -0.018000000000000006,
+      -0.0069036730408728285
+    ],
+    "inward_normal": [
+      -0.4398585144569782,
+      0.2482425179443988,
+      0.8630759755342082
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.005938083781626125,
+      "triangle": 9293
+    },
+    "normal_consistency_length_m": 0.004286359296010543,
+    "conservative_sample_depth_m": 0.0010715898240026358
+  },
+  {
+    "vertex": 1639,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.033347872697643326,
+      -0.018000000000000006,
+      -0.007195560265730165
+    ],
+    "inward_normal": [
+      -0.4598410643898821,
+      0.3010438050688039,
+      0.8354153595251145
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.005594263456179627,
+      "triangle": 9294
+    },
+    "normal_consistency_length_m": 0.0034343698424182064,
+    "conservative_sample_depth_m": 0.0008585924606045516
+  },
+  {
+    "vertex": 1640,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.025652209767417944,
+      -0.018000000000000006,
+      -0.008031451947330275
+    ],
+    "inward_normal": [
+      -0.5565202835395606,
+      0.39728884795025776,
+      0.7296894855371043
+    ],
+    "normal_hit": null,
+    "posterior_hit": {
+      "metres": 0.0030636335553426318,
+      "triangle": 8882
+    },
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006090690101115885,
+      "triangle": 9302
+    },
+    "normal_consistency_length_m": 0.003326699503259246,
+    "conservative_sample_depth_m": 0.0008316748758148115
+  },
+  {
+    "vertex": 1641,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.023086988790676142,
+      -0.018000000000000006,
+      -0.008378752567754949
+    ],
+    "inward_normal": [
+      0.30878817178537876,
+      0.5591742109472927,
+      0.7693985097314108
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.006785444683847045,
+      "triangle": 9304
+    },
+    "normal_consistency_length_m": 0.005016138654785323,
+    "conservative_sample_depth_m": 0.0012540346636963308
+  },
+  {
+    "vertex": 1642,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 0,
+    "position": [
+      -0.020521767813934354,
+      -0.018000000000000006,
+      -0.008855995589076264
+    ],
+    "inward_normal": [
+      0.45041436412362,
+      0.38283229846181327,
+      0.8065769224603194
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007855574519266204,
+      "triangle": 9369
+    },
+    "normal_consistency_length_m": 0.006938582310710974,
+    "conservative_sample_depth_m": 0.0017346455776777435
+  },
+  {
+    "vertex": 1692,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.0360031211488859,
+      -0.015000000000000005,
+      -0.006903879798454244
+    ],
+    "inward_normal": [
+      0.2367707697049932,
+      0.2588681054729583,
+      0.9364437551621274
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008048156096952381,
+      "triangle": 9228
+    },
+    "normal_consistency_length_m": 0.004409352568993632,
+    "conservative_sample_depth_m": 0.001102338142248408
+  },
+  {
+    "vertex": 1693,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.03343146963825119,
+      -0.015000000000000005,
+      -0.007196284876324044
+    ],
+    "inward_normal": [
+      -0.09037286129462875,
+      0.3065303312875567,
+      0.9475610280832377
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007706045850803228,
+      "triangle": 9230
+    },
+    "normal_consistency_length_m": 0.006544668111843141,
+    "conservative_sample_depth_m": 0.0016361670279607852
+  },
+  {
+    "vertex": 1694,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.03085981812761649,
+      -0.015000000000000005,
+      -0.0074744546231618044
+    ],
+    "inward_normal": [
+      0.0910100094950531,
+      0.48119209816691827,
+      0.8718780550245713
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007610085777571308,
+      "triangle": 9233
+    },
+    "normal_consistency_length_m": 0.006074373144520231,
+    "conservative_sample_depth_m": 0.0015185932861300577
+  },
+  {
+    "vertex": 1695,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.028288166616981778,
+      -0.015000000000000005,
+      -0.007750158124870602
+    ],
+    "inward_normal": [
+      0.3744308839128381,
+      0.36472971040883984,
+      0.8525102647577533
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.007743060184037955,
+      "triangle": 9236
+    },
+    "normal_consistency_length_m": 0.0042608533387069126,
+    "conservative_sample_depth_m": 0.0010652133346767281
+  },
+  {
+    "vertex": 1696,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 0,
+    "position": [
+      -0.025716515106347072,
+      -0.015000000000000005,
+      -0.00804931561894007
+    ],
+    "inward_normal": [
+      0.2519250280436122,
+      0.265502074741259,
+      0.930614006209509
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.008108861573039366,
+      "triangle": 9238
+    },
+    "normal_consistency_length_m": 0.003557914485373248,
+    "conservative_sample_depth_m": 0.000889478621343312
+  },
+  {
+    "vertex": 4630,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.03415870891913232,
+      -0.033772727272727274,
+      -0.00406679019848331
+    ],
+    "inward_normal": [
+      0.11174014930381748,
+      -0.6539649614296362,
+      0.7482272169975476
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003454612719362883,
+      "triangle": 9805
+    },
+    "normal_consistency_length_m": 0.0033991470530005674,
+    "conservative_sample_depth_m": 0.0008497867632501419
+  },
+  {
+    "vertex": 4631,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.03201424849693058,
+      -0.033772727272727274,
+      -0.004255020928916002
+    ],
+    "inward_normal": [
+      0.08991900321389895,
+      -0.6114105875370094,
+      0.786188060395646
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0032132875933797763,
+      "triangle": 9807
+    },
+    "normal_consistency_length_m": 0.0032109155996505132,
+    "conservative_sample_depth_m": 0.0008027288999126283
+  },
+  {
+    "vertex": 4632,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.02986978807472885,
+      -0.033772727272727274,
+      -0.004430205991979271
+    ],
+    "inward_normal": [
+      0.07303443019813559,
+      -0.5975367606524853,
+      0.7985084794005436
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003150995592750014,
+      "triangle": 9809
+    },
+    "normal_consistency_length_m": 0.00321213625607268,
+    "conservative_sample_depth_m": 0.00080303406401817
+  },
+  {
+    "vertex": 4633,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.027725327652527106,
+      -0.033772727272727274,
+      -0.004593767875919861
+    ],
+    "inward_normal": [
+      0.05758369458973204,
+      -0.606554473650034,
+      0.7929538376302411
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0032694367293849475,
+      "triangle": 9812
+    },
+    "normal_consistency_length_m": 0.003423962850749497,
+    "conservative_sample_depth_m": 0.0008559907126873742
+  },
+  {
+    "vertex": 4634,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.025580867230325367,
+      -0.033772727272727274,
+      -0.004748839469178334
+    ],
+    "inward_normal": [
+      0.042991408236922525,
+      -0.635583931684239,
+      0.7708338372195468
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0035614970054256693,
+      "triangle": 9813
+    },
+    "normal_consistency_length_m": 0.004003182011593427,
+    "conservative_sample_depth_m": 0.0010007955028983567
+  },
+  {
+    "vertex": 4635,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.023436406808123627,
+      -0.033772727272727274,
+      -0.004901464222952545
+    ],
+    "inward_normal": [
+      0.02849410883430945,
+      -0.6828647906078663,
+      0.7299888790316011
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00405606155293621,
+      "triangle": 9752
+    },
+    "normal_consistency_length_m": 0.003111908589235063,
+    "conservative_sample_depth_m": 0.0007779771473087658
+  },
+  {
+    "vertex": 4636,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.02129194638592189,
+      -0.033772727272727274,
+      -0.0050616856306840985
+    ],
+    "inward_normal": [
+      0.6413438085842694,
+      -0.3687334227328749,
+      0.6728400866107211
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004807063823526428,
+      "triangle": 9754
+    },
+    "normal_consistency_length_m": 0.003111908589235063,
+    "conservative_sample_depth_m": 0.0007779771473087658
+  },
+  {
+    "vertex": 4637,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.02138638856067212,
+      -0.03144090909090909,
+      -0.005090537241944395
+    ],
+    "inward_normal": [
+      0.6020845756003181,
+      -0.45858189849475967,
+      0.6536029423106408
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0033031417027362658,
+      "triangle": 9690
+    },
+    "normal_consistency_length_m": 0.0033028434782481275,
+    "conservative_sample_depth_m": 0.0008257108695620319
+  },
+  {
+    "vertex": 4638,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.019230122866626606,
+      -0.03144090909090909,
+      -0.00530135464445416
+    ],
+    "inward_normal": [
+      0.6884920083344904,
+      -0.2103806401064813,
+      0.6940596089154931
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004317931782415392,
+      "triangle": 9691
+    },
+    "normal_consistency_length_m": 0.0056713603561599915,
+    "conservative_sample_depth_m": 0.0014178400890399979
+  },
+  {
+    "vertex": 4639,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.01930518078752918,
+      -0.029109090909090907,
+      -0.0063224203852341974
+    ],
+    "inward_normal": [
+      0.5382000804672531,
+      -0.5406659232779132,
+      0.6465454607303991
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004088414774497069,
+      "triangle": 9626
+    },
+    "normal_consistency_length_m": 0.004610598208232879,
+    "conservative_sample_depth_m": 0.0011526495520582198
+  },
+  {
+    "vertex": 4640,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.017138192533354718,
+      -0.029109090909090907,
+      -0.0056996287642812095
+    ],
+    "inward_normal": [
+      0.6534988877941165,
+      -0.429432082382138,
+      0.6233195731507182
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004704305789534588,
+      "triangle": 9627
+    },
+    "normal_consistency_length_m": 0.0044710969771271985,
+    "conservative_sample_depth_m": 0.0011177742442817996
+  },
+  {
+    "vertex": 4641,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.017196127629756926,
+      -0.026777272727272726,
+      -0.00620568047501393
+    ],
+    "inward_normal": [
+      0.8014057677840829,
+      0.08256466149128612,
+      0.5923950303937683
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00463772388071122,
+      "triangle": 9563
+    },
+    "normal_consistency_length_m": 0.0044710969771271985,
+    "conservative_sample_depth_m": 0.0011177742442817996
+  },
+  {
+    "vertex": 4642,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.017247747303699882,
+      -0.02444545454545455,
+      -0.00604282208538381
+    ],
+    "inward_normal": [
+      0.8069813043725785,
+      0.034482372572543704,
+      0.5895694533936608
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004573468153780528,
+      "triangle": 9499
+    },
+    "normal_consistency_length_m": 0.0036279320089888135,
+    "conservative_sample_depth_m": 0.0009069830022472034
+  },
+  {
+    "vertex": 4643,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.017293125889233894,
+      -0.02211363636363637,
+      -0.006249028521644662
+    ],
+    "inward_normal": [
+      0.5040645264330482,
+      0.6036516277037851,
+      0.6176760199023416
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00531919454013307,
+      "triangle": 9436
+    },
+    "normal_consistency_length_m": 0.0036279320089888135,
+    "conservative_sample_depth_m": 0.0009069830022472034
+  },
+  {
+    "vertex": 4644,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.019485936369388213,
+      -0.02211363636363637,
+      -0.006289594698442958
+    ],
+    "inward_normal": [
+      0.48752829256030805,
+      0.6396653390147035,
+      0.5942595544174575
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004245112948612496,
+      "triangle": 9434
+    },
+    "normal_consistency_length_m": 0.005208533927419605,
+    "conservative_sample_depth_m": 0.0013021334818549013
+  },
+  {
+    "vertex": 4645,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.021731016026591922,
+      -0.019781818181818185,
+      -0.005336397132899571
+    ],
+    "inward_normal": [
+      0.37208761366054294,
+      0.5880329647662478,
+      0.718169924257915
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003795974931027298,
+      "triangle": 9306
+    },
+    "normal_consistency_length_m": 0.004324117769109596,
+    "conservative_sample_depth_m": 0.001081029442277399
+  },
+  {
+    "vertex": 4646,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.02393036015387741,
+      -0.019781818181818185,
+      -0.005467335153605329
+    ],
+    "inward_normal": [
+      0.44652089646646076,
+      0.5476759352174055,
+      0.7075804964825757
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0033167096466762357,
+      "triangle": 9304
+    },
+    "normal_consistency_length_m": 0.004008856101613952,
+    "conservative_sample_depth_m": 0.001002214025403488
+  },
+  {
+    "vertex": 4647,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.02618483776510413,
+      -0.017450000000000004,
+      -0.004812055152311046
+    ],
+    "inward_normal": [
+      -0.29953577236614815,
+      0.525615384477728,
+      0.7962454324348398
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0041411460407393364,
+      "triangle": 9238
+    },
+    "normal_consistency_length_m": 0.0041434529332306964,
+    "conservative_sample_depth_m": 0.0010358632333076741
+  },
+  {
+    "vertex": 4648,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.02612970428116291,
+      -0.019781818181818185,
+      -0.005760924580101064
+    ],
+    "inward_normal": [
+      0.262549585429303,
+      0.708515391334643,
+      0.6550371404987803
+    ],
+    "normal_hit": {
+      "metres": 0.0013887612492817164,
+      "triangle": 8952
+    },
+    "posterior_hit": {
+      "metres": 0.0014828701006116163,
+      "triangle": 8952
+    },
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0031690047655917233,
+      "triangle": 9302
+    },
+    "normal_consistency_length_m": 0.0024270872567468036,
+    "conservative_sample_depth_m": 0.0006067718141867009
+  },
+  {
+    "vertex": 4649,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.028389695240783747,
+      -0.017450000000000004,
+      -0.004617602781165891
+    ],
+    "inward_normal": [
+      0.42565113250848796,
+      0.5518863538426039,
+      0.7171070811507565
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0038607898438523004,
+      "triangle": 9235
+    },
+    "normal_consistency_length_m": 0.00461495755148939,
+    "conservative_sample_depth_m": 0.0011537393878723475
+  },
+  {
+    "vertex": 4650,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.03059455271646336,
+      -0.017450000000000004,
+      -0.0044383955050551725
+    ],
+    "inward_normal": [
+      0.06699867318545255,
+      0.6201808443846252,
+      0.7815925396584605
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0037837908487940906,
+      "triangle": 9232
+    },
+    "normal_consistency_length_m": 0.002878880939306782,
+    "conservative_sample_depth_m": 0.0007197202348266955
+  },
+  {
+    "vertex": 4651,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.03279941019214297,
+      -0.017450000000000004,
+      -0.004257585169610629
+    ],
+    "inward_normal": [
+      -0.6327807018722442,
+      0.3110511721111422,
+      0.7091091253582587
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003938093954566123,
+      "triangle": 9230
+    },
+    "normal_consistency_length_m": 0.0025692476400999155,
+    "conservative_sample_depth_m": 0.0006423119100249789
+  },
+  {
+    "vertex": 4652,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.03272773666301938,
+      -0.019781818181818185,
+      -0.00508578733653637
+    ],
+    "inward_normal": [
+      0.2575994677064149,
+      0.6787083329913162,
+      0.6877481464646199
+    ],
+    "normal_hit": {
+      "metres": 0.001751484763365748,
+      "triangle": 8960
+    },
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0027744391529047124,
+      "triangle": 9295
+    },
+    "normal_consistency_length_m": 0.0016433863632656798,
+    "conservative_sample_depth_m": 0.00041084659081641996
+  },
+  {
+    "vertex": 4653,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.03500426766782259,
+      -0.017450000000000004,
+      -0.004067521868995258
+    ],
+    "inward_normal": [
+      0.05160887496177256,
+      0.6410208479241882,
+      0.7657863909418441
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.004277745882512022,
+      "triangle": 9228
+    },
+    "normal_consistency_length_m": 0.004090240774265851,
+    "conservative_sample_depth_m": 0.0010225601935664628
+  },
+  {
+    "vertex": 4654,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.034927080790304876,
+      -0.019781818181818185,
+      -0.004067387476567338
+    ],
+    "inward_normal": [
+      -0.48609035166542275,
+      0.4514557733703995,
+      0.7482672348221056
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0025286659554099016,
+      "triangle": 9292
+    },
+    "normal_consistency_length_m": 0.00201437800721031,
+    "conservative_sample_depth_m": 0.0005035945018025775
+  },
+  {
+    "vertex": 4655,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.03712642491759037,
+      -0.019781818181818185,
+      -0.0038650976941957916
+    ],
+    "inward_normal": [
+      0.1055793442615652,
+      0.6626345092442257,
+      0.7414637612344667
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0030994996234625627,
+      "triangle": 9290
+    },
+    "normal_consistency_length_m": 0.0033785284421915312,
+    "conservative_sample_depth_m": 0.0008446321105478828
+  },
+  {
+    "vertex": 4656,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.039325769044875857,
+      -0.019781818181818185,
+      -0.0036493098809339004
+    ],
+    "inward_normal": [
+      -0.46707746555183965,
+      0.354108841703351,
+      0.8102132863642642
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.003921790370488579,
+      "triangle": 9288
+    },
+    "normal_consistency_length_m": 0.0033785284421915312,
+    "conservative_sample_depth_m": 0.0008446321105478828
+  },
+  {
+    "vertex": 4657,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.03922123069077707,
+      -0.02211363636363637,
+      -0.003649301805752495
+    ],
+    "inward_normal": [
+      -0.402600903047643,
+      0.4505807672742507,
+      0.7967995262472048
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0025599436877575864,
+      "triangle": 9354
+    },
+    "normal_consistency_length_m": 0.0030028777611813013,
+    "conservative_sample_depth_m": 0.0007507194402953253
+  },
+  {
+    "vertex": 4658,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.04141404117093139,
+      -0.02211363636363637,
+      -0.0034197230519898347
+    ],
+    "inward_normal": [
+      -0.4820256085612713,
+      0.3466609612585368,
+      0.8046598602083015
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0037747421409907358,
+      "triangle": 9415
+    },
+    "normal_consistency_length_m": 0.004020808861406249,
+    "conservative_sample_depth_m": 0.0010052022153515623
+  },
+  {
+    "vertex": 4659,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.04128546851191837,
+      -0.02444545454545455,
+      -0.0034197214272142784
+    ],
+    "inward_normal": [
+      -0.38577473068616974,
+      0.5330837931256948,
+      0.7529937095824472
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0029253155300950594,
+      "triangle": 9479
+    },
+    "normal_consistency_length_m": 0.0030986666200099387,
+    "conservative_sample_depth_m": 0.0007746666550024847
+  },
+  {
+    "vertex": 4660,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.043470715894483675,
+      -0.02444545454545455,
+      -0.003176255797429495
+    ],
+    "inward_normal": [
+      -0.6757930293925588,
+      -0.11405345275466493,
+      0.7282139735951016
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.00438848144456977,
+      "triangle": 9478
+    },
+    "normal_consistency_length_m": 0.0030986666200099387,
+    "conservative_sample_depth_m": 0.0007746666550024847
+  },
+  {
+    "vertex": 4661,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.04113921276907999,
+      -0.026777272727272726,
+      -0.003419719974159607
+    ],
+    "inward_normal": [
+      -0.5625743312249492,
+      -0.44203638507511694,
+      0.6986515269549792
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.002710406467014436,
+      "triangle": 9544
+    },
+    "normal_consistency_length_m": 0.002724922567238258,
+    "conservative_sample_depth_m": 0.0006812306418095645
+  },
+  {
+    "vertex": 4662,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.04097506332927374,
+      -0.029109090909090907,
+      -0.003419718723069204
+    ],
+    "inward_normal": [
+      -0.4536270686866569,
+      -0.3410049215121677,
+      0.8233699812716222
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0031690590200355476,
+      "triangle": 9608
+    },
+    "normal_consistency_length_m": 0.003515992667846484,
+    "conservative_sample_depth_m": 0.000878998166961621
+  },
+  {
+    "vertex": 4663,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 1,
+    "position": [
+      -0.03863651411303625,
+      -0.03144090909090909,
+      -0.0036492769450655275
+    ],
+    "inward_normal": [
+      -0.35913538245384896,
+      -0.43640763162197044,
+      0.8249667606224086
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0031424084068191016,
+      "triangle": 9674
+    },
+    "normal_consistency_length_m": 0.003908717138896552,
+    "conservative_sample_depth_m": 0.000977179284724138
+  },
+  {
+    "vertex": 4664,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 1,
+    "position": [
+      -0.03630316934133407,
+      -0.033772727272727274,
+      -0.0038649423877788877
+    ],
+    "inward_normal": [
+      -0.16963754573978018,
+      -0.5478597831625204,
+      0.8191903082120174
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0039064584735893065,
+      "triangle": 9738
+    },
+    "normal_consistency_length_m": 0.004396704488355966,
+    "conservative_sample_depth_m": 0.0010991761220889916
+  },
+  {
+    "vertex": 4665,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.0333005202695353,
+      -0.03154545454545454,
+      -0.003651113590655923
+    ],
+    "inward_normal": [
+      0.28563877594278886,
+      0.0045633281852474694,
+      0.9583264922320467
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0021123147733561184,
+      "triangle": 9805
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.00140059207151861,
+      "triangle": 9742
+    },
+    "normal_consistency_length_m": 0.0033991470530005674,
+    "conservative_sample_depth_m": 0.000700296035759305
+  },
+  {
+    "vertex": 4666,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.031512806394326784,
+      -0.03154545454545454,
+      -0.004126381927881584
+    ],
+    "inward_normal": [
+      0.16924501346258716,
+      0.06832876504304317,
+      0.9832025759149237
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0019807859524045065,
+      "triangle": 9807
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014563228980144299,
+      "triangle": 9744
+    },
+    "normal_consistency_length_m": 0.0032109155996505132,
+    "conservative_sample_depth_m": 0.0007281614490072149
+  },
+  {
+    "vertex": 4667,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.029725092519118264,
+      -0.03154545454545454,
+      -0.0043740943051715515
+    ],
+    "inward_normal": [
+      0.08210868398292802,
+      0.0693574463044463,
+      0.9942070753403023
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0020230778697355686,
+      "triangle": 9810
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0015096622676683152,
+      "triangle": 9746
+    },
+    "normal_consistency_length_m": 0.00321213625607268,
+    "conservative_sample_depth_m": 0.0007548311338341576
+  },
+  {
+    "vertex": 4668,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.027937378643909737,
+      -0.03154545454545454,
+      -0.004432630015628092
+    ],
+    "inward_normal": [
+      0.0007369645314093314,
+      0.012418223969194791,
+      0.9999226193044792
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.00223623465097,
+      "triangle": 9812
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0015698419989819583,
+      "triangle": 9748
+    },
+    "normal_consistency_length_m": 0.003423962850749497,
+    "conservative_sample_depth_m": 0.0007849209994909792
+  },
+  {
+    "vertex": 4669,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.02614966476870121,
+      -0.03154545454545454,
+      -0.004300042824268374
+    ],
+    "inward_normal": [
+      -0.08858750735837652,
+      -0.10933092051944018,
+      0.9900500004335142
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002821491057977443,
+      "triangle": 9879
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0016322584561008985,
+      "triangle": 9750
+    },
+    "normal_consistency_length_m": 0.004003182011593427,
+    "conservative_sample_depth_m": 0.0008161292280504493
+  },
+  {
+    "vertex": 4670,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.024361950893492686,
+      -0.03154545454545454,
+      -0.0039300923529206905
+    ],
+    "inward_normal": [
+      -0.20809198145490626,
+      -0.31506039908963973,
+      0.9259776844933402
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0016753968695348942,
+      "triangle": 9751
+    },
+    "normal_consistency_length_m": 0.0031300017860330987,
+    "conservative_sample_depth_m": 0.0007825004465082747
+  },
+  {
+    "vertex": 4671,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.022574237018284166,
+      -0.03154545454545454,
+      -0.003124192107757092
+    ],
+    "inward_normal": [
+      0.31317887921920623,
+      0.03171060389539939,
+      0.9491645943731735
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0016045813800737803,
+      "triangle": 9754
+    },
+    "normal_consistency_length_m": 0.0031300017860330987,
+    "conservative_sample_depth_m": 0.0007825004465082747
+  },
+  {
+    "vertex": 4672,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.022652968052188024,
+      -0.029881818181818183,
+      -0.004851260015441396
+    ],
+    "inward_normal": [
+      0.3256050825722021,
+      0.0034662595897847035,
+      0.9454995056834274
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.003105133364467256,
+      "triangle": 9692
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0018682081743297003,
+      "triangle": 9688
+    },
+    "normal_consistency_length_m": 0.0029007791451375014,
+    "conservative_sample_depth_m": 0.0007251947862843754
+  },
+  {
+    "vertex": 4673,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.02085541279774152,
+      -0.029881818181818183,
+      -0.004159884764193738
+    ],
+    "inward_normal": [
+      0.3513203955621751,
+      -0.047731841730654576,
+      0.9350377804918026
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.001962538771436002,
+      "triangle": 9689
+    },
+    "normal_consistency_length_m": 0.004139259591258381,
+    "conservative_sample_depth_m": 0.000981269385718001
+  },
+  {
+    "vertex": 4674,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.020917984289037253,
+      -0.028218181818181816,
+      -0.005106220153806248
+    ],
+    "inward_normal": [
+      0.26303659545688385,
+      -0.48983537121539683,
+      0.8311877396573688
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0021009094348511453,
+      "triangle": 9625
+    },
+    "normal_consistency_length_m": 0.00269372708212974,
+    "conservative_sample_depth_m": 0.000673431770532435
+  },
+  {
+    "vertex": 4675,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.019111490250119923,
+      -0.028218181818181816,
+      -0.0042855618989539115
+    ],
+    "inward_normal": [
+      0.33788569162131066,
+      -0.32716183610316574,
+      0.8824955480880308
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0022416947670144244,
+      "triangle": 9627
+    },
+    "normal_consistency_length_m": 0.003663137179786599,
+    "conservative_sample_depth_m": 0.0009157842949466498
+  },
+  {
+    "vertex": 4676,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.019159787422978646,
+      -0.02655454545454545,
+      -0.00483518908422188
+    ],
+    "inward_normal": [
+      0.5237068586309999,
+      0.11212212915828795,
+      0.8444878651442317
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0023728571411797067,
+      "triangle": 9563
+    },
+    "normal_consistency_length_m": 0.003663137179786599,
+    "conservative_sample_depth_m": 0.0009157842949466498
+  },
+  {
+    "vertex": 4677,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.01920281978971583,
+      -0.024890909090909095,
+      -0.004863711635336715
+    ],
+    "inward_normal": [
+      0.5665098050534721,
+      -0.05247715914716528,
+      0.8223823858437874
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.002440476279372205,
+      "triangle": 9499
+    },
+    "normal_consistency_length_m": 0.002964298918570356,
+    "conservative_sample_depth_m": 0.000741074729642589
+  },
+  {
+    "vertex": 4678,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.019240649318373302,
+      -0.023227272727272732,
+      -0.004326578073539616
+    ],
+    "inward_normal": [
+      0.29217850163467307,
+      0.4696305103651452,
+      0.8331139819476628
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0024036331780586044,
+      "triangle": 9435
+    },
+    "normal_consistency_length_m": 0.002964298918570356,
+    "conservative_sample_depth_m": 0.000741074729642589
+  },
+  {
+    "vertex": 4679,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.02106866986866619,
+      -0.023227272727272732,
+      -0.0050957090956842855
+    ],
+    "inward_normal": [
+      0.20759991772877565,
+      0.4484678725067799,
+      0.8693554172421359
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0022148392835615043,
+      "triangle": 9433
+    },
+    "normal_consistency_length_m": 0.005009646703863117,
+    "conservative_sample_depth_m": 0.0011074196417807521
+  },
+  {
+    "vertex": 4680,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.02294026423924949,
+      -0.021563636363636365,
+      -0.004687954504984233
+    ],
+    "inward_normal": [
+      0.08926660853510304,
+      0.2307721442537292,
+      0.9689043761059069
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0019357125506927627,
+      "triangle": 9368
+    },
+    "normal_consistency_length_m": 0.004008856101613952,
+    "conservative_sample_depth_m": 0.0009678562753463813
+  },
+  {
+    "vertex": 4681,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.02477373151707868,
+      -0.021563636363636365,
+      -0.0050482399428346085
+    ],
+    "inward_normal": [
+      0.29716596251585686,
+      0.14704179589962157,
+      0.9434357958974412
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0033394720511965535,
+      "triangle": 9305
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0017688150570604557,
+      "triangle": 9366
+    },
+    "normal_consistency_length_m": 0.004127310706223851,
+    "conservative_sample_depth_m": 0.0008844075285302279
+  },
+  {
+    "vertex": 4682,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.02665316042386119,
+      -0.0199,
+      -0.0037790575687944856
+    ],
+    "inward_normal": [
+      -0.2700349103751433,
+      0.1236173330762907,
+      0.9548821404455073
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.003713748897669147,
+      "triangle": 9110
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.001544519858669344,
+      "triangle": 9238
+    },
+    "normal_consistency_length_m": 0.0024270872567468036,
+    "conservative_sample_depth_m": 0.0006067718141867009
+  },
+  {
+    "vertex": 4683,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.026607198794907874,
+      -0.021563636363636365,
+      -0.005231607734840489
+    ],
+    "inward_normal": [
+      0.29063501227821076,
+      0.26029256801291906,
+      0.9207491887996885
+    ],
+    "normal_hit": {
+      "metres": 0.001088945443279229,
+      "triangle": 9022
+    },
+    "posterior_hit": {
+      "metres": 0.0009234786107685566,
+      "triangle": 9022
+    },
+    "globe_ray_hit": {
+      "metres": 0.0035710318552247215,
+      "triangle": 9239
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.001646683176027733,
+      "triangle": 9365
+    },
+    "normal_consistency_length_m": 0.0008806442886889122,
+    "conservative_sample_depth_m": 0.00022016107217222804
+  },
+  {
+    "vertex": 4684,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.02849122386458571,
+      -0.0199,
+      -0.003879612080861985
+    ],
+    "inward_normal": [
+      0.30984610388302863,
+      0.06118041880584025,
+      0.9488162879415853
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.003186571880883953,
+      "triangle": 9173
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.001496635784199985,
+      "triangle": 9236
+    },
+    "normal_consistency_length_m": 0.00461495755148939,
+    "conservative_sample_depth_m": 0.0007483178920999925
+  },
+  {
+    "vertex": 4685,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.030329287305310232,
+      -0.0199,
+      -0.0037438052638135927
+    ],
+    "inward_normal": [
+      0.11522991633373468,
+      0.044069895855265634,
+      0.9923607764623844
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002678019863601479,
+      "triangle": 9169
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.001440395592714569,
+      "triangle": 9234
+    },
+    "normal_consistency_length_m": 0.0032276255061856173,
+    "conservative_sample_depth_m": 0.0007201977963572845
+  },
+  {
+    "vertex": 4686,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.03216735074603475,
+      -0.0199,
+      -0.0033448136125547156
+    ],
+    "inward_normal": [
+      -0.4079128130079514,
+      -0.19244329437613328,
+      0.8925092242848816
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002295186727588458,
+      "triangle": 9228
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0013641813979916873,
+      "triangle": 9232
+    },
+    "normal_consistency_length_m": 0.0016433863632656798,
+    "conservative_sample_depth_m": 0.00041084659081641996
+  },
+  {
+    "vertex": 4687,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.03210760062839544,
+      -0.021563636363636365,
+      -0.004890215524580931
+    ],
+    "inward_normal": [
+      0.6117708921425281,
+      0.38397425740612884,
+      0.691592470445238
+    ],
+    "normal_hit": {
+      "metres": 0.0013572509743440195,
+      "triangle": 9030
+    },
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.001461053185007327,
+      "triangle": 9359
+    },
+    "normal_consistency_length_m": 0.000654285029359511,
+    "conservative_sample_depth_m": 0.00016357125733987776
+  },
+  {
+    "vertex": 4688,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.03400541418675927,
+      -0.0199,
+      -0.0024959425486873648
+    ],
+    "inward_normal": [
+      0.32799826897730605,
+      0.10190705085610526,
+      0.9391656342380199
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0031891762990812708,
+      "triangle": 9160
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0012099348472275962,
+      "triangle": 9228
+    },
+    "normal_consistency_length_m": 0.00201437800721031,
+    "conservative_sample_depth_m": 0.0005035945018025775
+  },
+  {
+    "vertex": 4689,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.03394106790622463,
+      -0.021563636363636365,
+      -0.00443975136282033
+    ],
+    "inward_normal": [
+      -0.17298163401512814,
+      -0.23278063563976456,
+      0.9570216977501624
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0017158937556765112,
+      "triangle": 9293
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014418023876874146,
+      "triangle": 9357
+    },
+    "normal_consistency_length_m": 0.0022084477978709,
+    "conservative_sample_depth_m": 0.000552111949467725
+  },
+  {
+    "vertex": 4690,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.03577453518405382,
+      -0.021563636363636365,
+      -0.0037288588662504315
+    ],
+    "inward_normal": [
+      0.3642268966941637,
+      0.3107409006761522,
+      0.8779401234546196
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.003312255750028434,
+      "triangle": 9226
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014220247495763743,
+      "triangle": 9355
+    },
+    "normal_consistency_length_m": 0.0025595452092540593,
+    "conservative_sample_depth_m": 0.0006398863023135148
+  },
+  {
+    "vertex": 4691,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.037608002461883006,
+      -0.021563636363636365,
+      -0.002456377368412507
+    ],
+    "inward_normal": [
+      0.05523456038106158,
+      -0.028854524021607725,
+      0.9980563910836888
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002266069390044791,
+      "triangle": 9287
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0012809014829837414,
+      "triangle": 9353
+    },
+    "normal_consistency_length_m": 0.0030028777611813013,
+    "conservative_sample_depth_m": 0.0006404507414918707
+  },
+  {
+    "vertex": 4692,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.03752085482130217,
+      -0.023227272727272732,
+      -0.0038906823840241756
+    ],
+    "inward_normal": [
+      0.11634737198587321,
+      0.06801121958761729,
+      0.9908772694144243
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0018502529666300036,
+      "triangle": 9354
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014297791115163458,
+      "triangle": 9419
+    },
+    "normal_consistency_length_m": 0.002412898636113552,
+    "conservative_sample_depth_m": 0.000603224659028388
+  },
+  {
+    "vertex": 4693,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.039348875371595066,
+      -0.023227272727272732,
+      -0.002476707050904098
+    ],
+    "inward_normal": [
+      0.09805604781303656,
+      0.17764969612830928,
+      0.9791964036661934
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002823810327436162,
+      "triangle": 9349
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0013503997837384166,
+      "triangle": 9416
+    },
+    "normal_consistency_length_m": 0.0030709040348257995,
+    "conservative_sample_depth_m": 0.0006751998918692083
+  },
+  {
+    "vertex": 4694,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.039241691707065575,
+      -0.024890909090909095,
+      -0.0033648594972052357
+    ],
+    "inward_normal": [
+      0.16474616013409932,
+      0.7122299489309225,
+      0.6823395068196806
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014838799028231537,
+      "triangle": 9481
+    },
+    "normal_consistency_length_m": 0.0017471758328729621,
+    "conservative_sample_depth_m": 0.00043679395821824053
+  },
+  {
+    "vertex": 4695,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.04106340733591554,
+      -0.024890909090909095,
+      -0.0008198103680443825
+    ],
+    "inward_normal": [
+      -0.027048189720871193,
+      0.027447284582775948,
+      0.9992572451585507
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.0010913536157841361,
+      "triangle": 9478
+    },
+    "normal_consistency_length_m": 0.0035804526576171426,
+    "conservative_sample_depth_m": 0.0005456768078920681
+  },
+  {
+    "vertex": 4696,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.03911976666797688,
+      -0.02655454545454545,
+      -0.0035367750640286416
+    ],
+    "inward_normal": [
+      0.14475797429422554,
+      -0.3571245970703824,
+      0.922771451143537
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0019058249093037336,
+      "triangle": 9544
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014835336127095437,
+      "triangle": 9545
+    },
+    "normal_consistency_length_m": 0.002724922567238258,
+    "conservative_sample_depth_m": 0.0006812306418095645
+  },
+  {
+    "vertex": 4697,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.0389829246782105,
+      -0.028218181818181816,
+      -0.0031642889235802933
+    ],
+    "inward_normal": [
+      0.033066133213120436,
+      0.009210188920885955,
+      0.9994107280064456
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002027091410156315,
+      "triangle": 9608
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0014406170561251284,
+      "triangle": 9609
+    },
+    "normal_consistency_length_m": 0.003515992667846484,
+    "conservative_sample_depth_m": 0.0007203085280625642
+  },
+  {
+    "vertex": 4698,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 2,
+    "position": [
+      -0.03703341008776007,
+      -0.029881818181818183,
+      -0.003460110687856655
+    ],
+    "inward_normal": [
+      -0.029143610651799462,
+      -0.0002055686570468367,
+      0.999575213628121
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.002078087358943445,
+      "triangle": 9674
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0013854763695287913,
+      "triangle": 9675
+    },
+    "normal_consistency_length_m": 0.003908717138896552,
+    "conservative_sample_depth_m": 0.0006927381847643957
+  },
+  {
+    "vertex": 4699,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.03508823414474384,
+      -0.03154545454545454,
+      -0.0027993358714293835
+    ],
+    "inward_normal": [
+      0.07451591322319936,
+      0.00024041266042356012,
+      0.9972197956710774
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0023801954783726305,
+      "triangle": 9801
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0012869570305778586,
+      "triangle": 9740
+    },
+    "normal_consistency_length_m": 0.003888895288227051,
+    "conservative_sample_depth_m": 0.0006434785152889293
+  },
+  {
+    "vertex": 4700,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.03256492999845215,
+      -0.029636363636363638,
+      -0.0044082405885073495
+    ],
+    "inward_normal": [
+      0.2225155723259855,
+      0.25995742182696013,
+      0.9396323530559806
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007527631124433687,
+      "triangle": 9679
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007305219308905721,
+      "triangle": 9679
+    },
+    "normal_consistency_length_m": 0.008271340033220064,
+    "conservative_sample_depth_m": 0.00036526096544528606
+  },
+  {
+    "vertex": 4701,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.03108299887780924,
+      -0.029636363636363638,
+      -0.004656657202534723
+    ],
+    "inward_normal": [
+      0.1242321677669009,
+      0.22325404700848445,
+      0.96681125303043
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000750962429028574,
+      "triangle": 9681
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007231408109469612,
+      "triangle": 9681
+    },
+    "normal_consistency_length_m": 0.012502584150751957,
+    "conservative_sample_depth_m": 0.0003615704054734806
+  },
+  {
+    "vertex": 4702,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.02960106775716633,
+      -0.029636363636363638,
+      -0.004771090613559367
+    ],
+    "inward_normal": [
+      0.033275304651624184,
+      0.19020548565544423,
+      0.9811802216345975
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007838646452397912,
+      "triangle": 9682
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007489405542868505,
+      "triangle": 9682
+    },
+    "normal_consistency_length_m": 0.014059851918717609,
+    "conservative_sample_depth_m": 0.00037447027714342525
+  },
+  {
+    "vertex": 4703,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.028119136636523417,
+      -0.029636363636363638,
+      -0.0047592643069917645
+    ],
+    "inward_normal": [
+      -0.05876796375228166,
+      0.15744212775366556,
+      0.9857780190513526
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007961855016564669,
+      "triangle": 9684
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007526829305447677,
+      "triangle": 9683
+    },
+    "normal_consistency_length_m": 0.010359007087360478,
+    "conservative_sample_depth_m": 0.00037634146527238386
+  },
+  {
+    "vertex": 4704,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.026637205515880506,
+      -0.029636363636363638,
+      -0.004620408704184753
+    ],
+    "inward_normal": [
+      -0.16148232044663163,
+      0.12897482477882072,
+      0.978411444514241
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007835362441670438,
+      "triangle": 9685
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007300447441219309,
+      "triangle": 9685
+    },
+    "normal_consistency_length_m": 0.006783005743504783,
+    "conservative_sample_depth_m": 0.0003650223720609654
+  },
+  {
+    "vertex": 4705,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.025155274395237594,
+      -0.029636363636363638,
+      -0.004344988938206061
+    ],
+    "inward_normal": [
+      -0.301498672744436,
+      0.12377760423603157,
+      0.9453981462975967
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007793481135813072,
+      "triangle": 9686
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007186527071058846,
+      "triangle": 9686
+    },
+    "normal_consistency_length_m": 0.0020828750115424177,
+    "conservative_sample_depth_m": 0.0003593263535529423
+  },
+  {
+    "vertex": 4706,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.023673343274594687,
+      -0.029636363636363638,
+      -0.0039109750149868535
+    ],
+    "inward_normal": [
+      0.34028840916566827,
+      0.4708471656347401,
+      0.8139451733386166
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008586744992622995,
+      "triangle": 9688
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007045990335399274,
+      "triangle": 9688
+    },
+    "normal_consistency_length_m": 0.001454503653444431,
+    "conservative_sample_depth_m": 0.0003522995167699637
+  },
+  {
+    "vertex": 4707,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.023738607616344515,
+      -0.028545454545454547,
+      -0.0045533474348555935
+    ],
+    "inward_normal": [
+      -0.08435311536874016,
+      -0.2766378990801843,
+      0.957264866544307
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.00099876348344938,
+      "triangle": 9687
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007717639836121672,
+      "triangle": 9624
+    },
+    "normal_consistency_length_m": 0.001454503653444431,
+    "conservative_sample_depth_m": 0.00036362591336110774
+  },
+  {
+    "vertex": 4708,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.022248518452982875,
+      -0.028545454545454547,
+      -0.003997109610496147
+    ],
+    "inward_normal": [
+      0.3072424798673063,
+      0.15411454419869855,
+      0.9390690953446478
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0009989344549401092,
+      "triangle": 9626
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007241969307863666,
+      "triangle": 9625
+    },
+    "normal_consistency_length_m": 0.0012546303874718871,
+    "conservative_sample_depth_m": 0.0003136575968679718
+  },
+  {
+    "vertex": 4709,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.022300387290329887,
+      -0.027454545454545454,
+      -0.004422365512975903
+    ],
+    "inward_normal": [
+      -0.01926607199474071,
+      -0.6933462442499225,
+      0.7203470025303224
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0018273195431318778,
+      "triangle": 9689
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007348367777022411,
+      "triangle": 9560
+    },
+    "normal_consistency_length_m": 0.0012546303874718871,
+    "conservative_sample_depth_m": 0.0003136575968679718
+  },
+  {
+    "vertex": 4710,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.02080288829306153,
+      -0.027454545454545454,
+      -0.003701034093341543
+    ],
+    "inward_normal": [
+      0.30864076319008876,
+      -0.11988145023209669,
+      0.9435938306218884
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0011987497768765822,
+      "triangle": 9627
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007149427560249112,
+      "triangle": 9625
+    },
+    "normal_consistency_length_m": 0.0023837368944702652,
+    "conservative_sample_depth_m": 0.0003574713780124556
+  },
+  {
+    "vertex": 4711,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.020842924388597264,
+      -0.02636363636363636,
+      -0.003921172306185959
+    ],
+    "inward_normal": [
+      0.48784662583971994,
+      0.06682293794494107,
+      0.8703679478365497
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0014876778885022492,
+      "triangle": 9563
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007710391798030042,
+      "triangle": 9561
+    },
+    "normal_consistency_length_m": 0.004140581429863842,
+    "conservative_sample_depth_m": 0.0003855195899015021
+  },
+  {
+    "vertex": 4712,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.02087859620630093,
+      -0.025272727272727273,
+      -0.003901696294227259
+    ],
+    "inward_normal": [
+      0.5038991452390766,
+      -0.1667268346429627,
+      0.8475186216463128
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0015640809178991682,
+      "triangle": 9499
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.000779602273318847,
+      "triangle": 9498
+    },
+    "normal_consistency_length_m": 0.0011330670711879236,
+    "conservative_sample_depth_m": 0.0002832667677969809
+  },
+  {
+    "vertex": 4713,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.020909955114778507,
+      -0.024181818181818183,
+      -0.0036397762059061276
+    ],
+    "inward_normal": [
+      -0.06507066711543394,
+      0.6399590844642388,
+      0.765648861092894
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0019010976581790514,
+      "triangle": 9371
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007237308793820686,
+      "triangle": 9434
+    },
+    "normal_consistency_length_m": 0.0011330670711879236,
+    "conservative_sample_depth_m": 0.0002832667677969809
+  },
+  {
+    "vertex": 4714,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.022425298582333025,
+      -0.024181818181818183,
+      -0.0043664288274456765
+    ],
+    "inward_normal": [
+      0.10714826386528727,
+      0.3478160212553831,
+      0.9314200260402015
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0011446153315903943,
+      "triangle": 9433
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007478252911617591,
+      "triangle": 9432
+    },
+    "normal_consistency_length_m": 0.0044521214045845185,
+    "conservative_sample_depth_m": 0.00037391264558087956
+  },
+  {
+    "vertex": 4715,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.023976762707241694,
+      -0.02309090909090909,
+      -0.004452520725693178
+    ],
+    "inward_normal": [
+      -0.11280067441793203,
+      0.20998729755452678,
+      0.9711752379033386
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.000977555732043842,
+      "triangle": 9368
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007258573840760664,
+      "triangle": 9368
+    },
+    "normal_consistency_length_m": 0.003649079912457877,
+    "conservative_sample_depth_m": 0.0003629286920380332
+  },
+  {
+    "vertex": 4716,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.02549662125696548,
+      -0.02309090909090909,
+      -0.004829986355049899
+    ],
+    "inward_normal": [
+      0.1791666410415761,
+      -0.10446639294357514,
+      0.9782566572649724
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008483980042884201,
+      "triangle": 9366
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007494810374145649,
+      "triangle": 9366
+    },
+    "normal_consistency_length_m": 0.0019185407175700392,
+    "conservative_sample_depth_m": 0.00037474051870728246
+  },
+  {
+    "vertex": 4717,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.027054579845652953,
+      -0.022,
+      -0.004431355471777073
+    ],
+    "inward_normal": [
+      -0.7718894980682208,
+      -0.08063437960163414,
+      0.6306224699439831
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0010982213121373055,
+      "triangle": 9300
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006889322857893183,
+      "triangle": 9364
+    },
+    "normal_consistency_length_m": 0.0008806442886889122,
+    "conservative_sample_depth_m": 0.00022016107217222804
+  },
+  {
+    "vertex": 4718,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.02701647980668927,
+      -0.02309090909090909,
+      -0.005060863950407926
+    ],
+    "inward_normal": [
+      0.23526294000125375,
+      -0.15757708983812774,
+      0.9590728907753118
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008101755934910687,
+      "triangle": 9365
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007430923769106362,
+      "triangle": 9364
+    },
+    "normal_consistency_length_m": 0.0011863570541439674,
+    "conservative_sample_depth_m": 0.00029658926353599185
+  },
+  {
+    "vertex": 4719,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.028578248399273108,
+      -0.022,
+      -0.004539292054784944
+    ],
+    "inward_normal": [
+      0.06585993226459684,
+      -0.3139093565344964,
+      0.9471659755302664
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007222755278918139,
+      "triangle": 9363
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007068975822433633,
+      "triangle": 9363
+    },
+    "normal_consistency_length_m": 0.004923065259667924,
+    "conservative_sample_depth_m": 0.00035344879112168164
+  },
+  {
+    "vertex": 4720,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.030101916952893267,
+      -0.022,
+      -0.004508487329076934
+    ],
+    "inward_normal": [
+      0.1143946737292685,
+      -0.3522899562762183,
+      0.9288733203883479
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007215528930873255,
+      "triangle": 9361
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007141843961841291,
+      "triangle": 9361
+    },
+    "normal_consistency_length_m": 0.002941872149061118,
+    "conservative_sample_depth_m": 0.00035709219809206455
+  },
+  {
+    "vertex": 4721,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.03162558550651342,
+      -0.022,
+      -0.0043366259886194755
+    ],
+    "inward_normal": [
+      -0.3810988175089668,
+      -0.45559735649215904,
+      0.8044841453071798
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008179716248322935,
+      "triangle": 9359
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006996870357164873,
+      "triangle": 9359
+    },
+    "normal_consistency_length_m": 0.000654285029359511,
+    "conservative_sample_depth_m": 0.00016357125733987776
+  },
+  {
+    "vertex": 4722,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.03157605545586063,
+      -0.02309090909090909,
+      -0.004987009435114965
+    ],
+    "inward_normal": [
+      0.5191999033570213,
+      -0.1375026650620107,
+      0.8435191031950043
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008353714144507683,
+      "triangle": 9360
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007428601925498618,
+      "triangle": 9360
+    },
+    "normal_consistency_length_m": 0.0013300387340228663,
+    "conservative_sample_depth_m": 0.0003325096835057166
+  },
+  {
+    "vertex": 4723,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.033149254060133575,
+      -0.022,
+      -0.004009767033658184
+    ],
+    "inward_normal": [
+      -0.3155902843708827,
+      -0.6009755199540757,
+      0.7343236322130957
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008039582096304486,
+      "triangle": 9358
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006640687230345758,
+      "triangle": 9358
+    },
+    "normal_consistency_length_m": 0.0017967244501234999,
+    "conservative_sample_depth_m": 0.0003320343615172879
+  },
+  {
+    "vertex": 4724,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.03309591400558442,
+      -0.02309090909090909,
+      -0.004701568945336603
+    ],
+    "inward_normal": [
+      0.16257733744293582,
+      -0.1222021633073626,
+      0.9790991985661955
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007703622153577381,
+      "triangle": 9360
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007274323513472477,
+      "triangle": 9360
+    },
+    "normal_consistency_length_m": 0.0017967244501234999,
+    "conservative_sample_depth_m": 0.00036371617567362385
+  },
+  {
+    "vertex": 4725,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.034615772555308205,
+      -0.02309090909090909,
+      -0.00425947647294626
+    ],
+    "inward_normal": [
+      0.43410866599741443,
+      -0.07394204695721086,
+      0.8978208283381062
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007901973724901026,
+      "triangle": 9358
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007183539177563024,
+      "triangle": 9358
+    },
+    "normal_consistency_length_m": 0.002922415727486777,
+    "conservative_sample_depth_m": 0.0003591769588781512
+  },
+  {
+    "vertex": 4726,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.03613563110503199,
+      -0.02309090909090909,
+      -0.003617799059371263
+    ],
+    "inward_normal": [
+      0.06959969414710747,
+      -0.5034496153455227,
+      0.861216794647593
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007312166624604947,
+      "triangle": 9419
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006787910743644348,
+      "triangle": 9356
+    },
+    "normal_consistency_length_m": 0.0016322400492521966,
+    "conservative_sample_depth_m": 0.0003393955371822174
+  },
+  {
+    "vertex": 4727,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.03606338979032369,
+      -0.024181818181818183,
+      -0.004158848245721202
+    ],
+    "inward_normal": [
+      0.3683915784434429,
+      0.1796743598459695,
+      0.912142954446226
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0008624834195307475,
+      "triangle": 9420
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007471959532982342,
+      "triangle": 9420
+    },
+    "normal_consistency_length_m": 0.0016322400492521966,
+    "conservative_sample_depth_m": 0.0003735979766491171
+  },
+  {
+    "vertex": 4728,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.03757873325787821,
+      -0.024181818181818183,
+      -0.003344401616096894
+    ],
+    "inward_normal": [
+      0.24008186177981658,
+      -0.29056863306287195,
+      0.9262454151704672
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007184699132016484,
+      "triangle": 9418
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0006754192916807361,
+      "triangle": 9418
+    },
+    "normal_consistency_length_m": 0.0012053531862493527,
+    "conservative_sample_depth_m": 0.00030133829656233817
+  },
+  {
+    "vertex": 4729,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.03748988301719175,
+      -0.025272727272727273,
+      -0.0036933111532403196
+    ],
+    "inward_normal": [
+      0.3555234391909168,
+      0.6264500867644577,
+      0.6936594070425814
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.001081422908563173,
+      "triangle": 9420
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007509411067198925,
+      "triangle": 9483
+    },
+    "normal_consistency_length_m": 0.0012053531862493527,
+    "conservative_sample_depth_m": 0.00030133829656233817
+  },
+  {
+    "vertex": 4730,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.039,
+      -0.025272727272727273,
+      -0.0026004337387181913
+    ],
+    "inward_normal": [
+      0.3811115196245914,
+      -0.5660586774265094,
+      0.7309798788746414
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007708460996738786,
+      "triangle": 9481
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.000679062123818425,
+      "triangle": 9481
+    },
+    "normal_consistency_length_m": 0.001562043198484015,
+    "conservative_sample_depth_m": 0.0003395310619092125
+  },
+  {
+    "vertex": 4731,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.03738881286703136,
+      -0.02636363636363636,
+      -0.003792161768087381
+    ],
+    "inward_normal": [
+      0.1794788712873668,
+      -0.09491365773520338,
+      0.9791724732327485
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007998987574794142,
+      "triangle": 9547
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007548451396270372,
+      "triangle": 9547
+    },
+    "normal_consistency_length_m": 0.004007124187306533,
+    "conservative_sample_depth_m": 0.0003774225698135186
+  },
+  {
+    "vertex": 4732,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "canthus",
+    "band": 3,
+    "position": [
+      -0.037275377263013436,
+      -0.027454545454545454,
+      -0.003656072422436404
+    ],
+    "inward_normal": [
+      0.25299232881450057,
+      0.11128613544447018,
+      0.961046449251466
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007229089682242306,
+      "triangle": 9611
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007082366766266115,
+      "triangle": 9611
+    },
+    "normal_consistency_length_m": 0.0050313871550877924,
+    "conservative_sample_depth_m": 0.00035411833831330576
+  },
+  {
+    "vertex": 4733,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.035659320923237633,
+      -0.028545454545454547,
+      -0.004037414812245898
+    ],
+    "inward_normal": [
+      0.18032137338020723,
+      0.3218979267731992,
+      0.9294438805228596
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007424103467559109,
+      "triangle": 9612
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007209515626087689,
+      "triangle": 9612
+    },
+    "normal_consistency_length_m": 0.0051253763055709506,
+    "conservative_sample_depth_m": 0.00036047578130438444
+  },
+  {
+    "vertex": 4734,
+    "side": "left",
+    "upper_lower": "upper",
+    "zone": "central",
+    "band": 3,
+    "position": [
+      -0.034046861119095065,
+      -0.029636363636363638,
+      -0.00400669855542598
+    ],
+    "inward_normal": [
+      0.3093683003210733,
+      0.345435474659221,
+      0.8859828370817399
+    ],
+    "normal_hit": null,
+    "posterior_hit": null,
+    "globe_ray_hit": {
+      "metres": 0.0007223328065324027,
+      "triangle": 9678
+    },
+    "exterior_sample_globe_distance": {
+      "metres": 0.0007116178195953853,
+      "triangle": 9678
+    },
+    "normal_consistency_length_m": 0.00575670690192688,
+    "conservative_sample_depth_m": 0.00035580890979769263
+  }
+]

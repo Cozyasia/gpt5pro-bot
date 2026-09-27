@@ -1,0 +1,22 @@
+{
+  "files": {
+    "experiments/v265_mouth/component.py": "5d0b3caf3606c9598bdaaa5931663ea24e71669f505c3dc4e782fc30edb1c718",
+    "experiments/v265_commissure/candidates.py": "826bb1aa481705e05ac32cda755ecd94729b2205206fe0056c35ab3ca7e5492e",
+    "experiments/v265_commissure/expressions.py": "cd5bd743838a199832d861f3ab0986e3120896742393ce6ec3209bfe9b7ff7c6",
+    "experiments/v265_commissure/neutral-fixture.json": "44839ce9bf2d9f99bf82cc2f2c5f25030d08e161b550f03467f6846f9cf6d581",
+    "docs/engineering/v265-commissure/d2/envelope.json": "21185a84240081d954e2ca87a655b8f85c240d1436b9d81ce73a10237ec1d32b"
+  },
+  "weights": {
+    "mean": "efbeb16155a244185c700db2db8f9c100fadf60c6b78133e55ecdcdc4ea24b73",
+    "narrow": "309ad35971c69f40485582a8ab23fb728d0399abbb431fcaabde31b3149b28a6",
+    "wide": "cb803c870cae76738645613e979cdf0e8e5780a807a945a8bfc1b17c65c6a28e",
+    "thin": "efbeb16155a244185c700db2db8f9c100fadf60c6b78133e55ecdcdc4ea24b73",
+    "thick": "efbeb16155a244185c700db2db8f9c100fadf60c6b78133e55ecdcdc4ea24b73",
+    "short_philtrum": "efbeb16155a244185c700db2db8f9c100fadf60c6b78133e55ecdcdc4ea24b73",
+    "long_philtrum": "efbeb16155a244185c700db2db8f9c100fadf60c6b78133e55ecdcdc4ea24b73",
+    "narrow_jaw": "efbeb16155a244185c700db2db8f9c100fadf60c6b78133e55ecdcdc4ea24b73",
+    "wide_jaw": "efbeb16155a244185c700db2db8f9c100fadf60c6b78133e55ecdcdc4ea24b73",
+    "asymmetric": "f6a1d618917ba3b39d65a1c6009a93902779ad2a6481b695f35b9b7c6fb6083f"
+  },
+  "scope": "D2 mouth and corotated expressions positive fixture; unchanged original negative evidence"
+}

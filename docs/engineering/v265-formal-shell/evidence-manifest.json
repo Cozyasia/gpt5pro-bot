@@ -1,0 +1,37 @@
+{
+  "tested_code_sha": "ecd38ce01a50092bac9aff439ac50eba9afb5fbb",
+  "files": [
+    {
+      "file": "candidate-g2.json",
+      "sha256": "cac8179f063951e82a8ae937c7b620fca18b1be08a4a8814bbe51388fcf24e7d"
+    },
+    {
+      "file": "cone-summary.json",
+      "sha256": "271ebd1266f702cdc71578a5561e72688c5aa85c5c3d757e2f7b347ab7cb4bda"
+    },
+    {
+      "file": "cones.json",
+      "sha256": "5846bccf99d9272ba97f4ebc28188103de7677e9b1071311bffc026bfde8cc70"
+    },
+    {
+      "file": "field.json",
+      "sha256": "f433868dc2e5ade08c5f6062c610e6c9a16d70621526284c5f37f684f4e88bef"
+    },
+    {
+      "file": "frozen-contract.json",
+      "sha256": "0a49cc6d770f46aa22ea9c9feb5b602a73d9cb265dedec4bc6038942f8065dc3"
+    },
+    {
+      "file": "global-field.json",
+      "sha256": "c36bd217f2e0df3d5f479c873dcc8a6b71f2b09a2f2a375b0c5ed14cee7d465b"
+    },
+    {
+      "file": "inverse-witnesses.json",
+      "sha256": "e3995bed4c55bff3e447b9cc5eb7b92aa5f5e64b556041041325c93b6702e937"
+    },
+    {
+      "file": "preflight.json",
+      "sha256": "ddf2969a48ab758880e6e47ee7fb7ce8e6ae57a74e744ef91efe0794c7f64890"
+    }
+  ]
+}

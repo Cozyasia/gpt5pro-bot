@@ -1,0 +1,13 @@
+{
+  "admitted": false,
+  "reason": "initial gate incorrectly conflated jaw contact and complete jaw admission; stopped once high strain detected",
+  "code_sha": "c0310529f87d57690163a6b16fa6e13530406b69",
+  "cases": 218,
+  "last_case": {
+    "identity": "long_philtrum",
+    "opening": 1.0,
+    "mode": "protrusion",
+    "coefficient": 0.5
+  },
+  "contact_failures": 0
+}

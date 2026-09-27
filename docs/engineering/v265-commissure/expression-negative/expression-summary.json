@@ -1,0 +1,160 @@
+{
+  "passed": false,
+  "first_failure": {
+    "strain_pass": true,
+    "identity": "mean",
+    "opening": 1.0,
+    "mode": "compression",
+    "coefficient": 0.75,
+    "contact": {
+      "vertices": 545,
+      "triangles": 976,
+      "connected_components": 13,
+      "boundary_edges": 64,
+      "nonmanifold_edges": 0,
+      "inconsistent_winding": 0,
+      "degenerate_triangles": 0,
+      "duplicate_faces": 0,
+      "min_area_m2": 1.3667008774973077e-07,
+      "intersections": 16,
+      "intersection_categories": {
+        "lip_lip": 16,
+        "lip_teeth": 0,
+        "cavity_teeth": 0,
+        "other": 0
+      },
+      "unresolved_coplanar": 0,
+      "min_signed_lip_separation_m": 0.0014704284867446717,
+      "teeth_oral_clearance": {
+        "metres": 0.002196387136489285,
+        "triangle_pair": [
+          906,
+          793
+        ]
+      },
+      "upper_lower_teeth_clearance": {
+        "metres": 0.023379478328266652,
+        "triangle_pair": [
+          834,
+          904
+        ]
+      },
+      "contact_pairs": [
+        [
+          257,
+          508
+        ],
+        [
+          257,
+          509
+        ],
+        [
+          258,
+          383
+        ],
+        [
+          258,
+          508
+        ],
+        [
+          258,
+          509
+        ],
+        [
+          258,
+          510
+        ],
+        [
+          317,
+          321
+        ],
+        [
+          317,
+          448
+        ],
+        [
+          317,
+          449
+        ],
+        [
+          317,
+          450
+        ],
+        [
+          318,
+          321
+        ],
+        [
+          384,
+          509
+        ],
+        [
+          444,
+          450
+        ],
+        [
+          445,
+          450
+        ],
+        [
+          446,
+          449
+        ],
+        [
+          446,
+          450
+        ]
+      ],
+      "pass": false
+    },
+    "geometry": {
+      "edge_min": 0.7576212733741362,
+      "edge_max": 1.4557454627206292,
+      "worst_edge": [
+        400,
+        448
+      ],
+      "area_min": 0.7279117439424644,
+      "area_max": 1.558180341060505,
+      "local_concentration": 1.169865965949164
+    },
+    "wall": {
+      "left": {
+        "metres": 0.0022331238478571673,
+        "triangle_pair": [
+          184,
+          450
+        ]
+      },
+      "right": {
+        "metres": 0.0022529064699147814,
+        "triangle_pair": [
+          135,
+          506
+        ]
+      },
+      "upper": {
+        "metres": 0.0034119566669970646,
+        "triangle_pair": [
+          209,
+          464
+        ]
+      },
+      "lower": {
+        "metres": 0.0034410032266387353,
+        "triangle_pair": [
+          175,
+          432
+        ]
+      },
+      "global": {
+        "metres": 0.0022331238478571673,
+        "triangle_pair": [
+          184,
+          450
+        ]
+      }
+    }
+  },
+  "classification": "CONTACT/SEPARATION"
+}

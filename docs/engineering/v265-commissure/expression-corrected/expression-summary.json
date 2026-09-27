@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "cases": 320,
+  "scope": "standalone engineering; uses frozen jaw envelope conservatively",
+  "full_admission": false
+}

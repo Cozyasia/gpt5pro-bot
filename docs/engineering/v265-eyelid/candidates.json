@@ -1,0 +1,737 @@
+[
+  {
+    "candidate": "E",
+    "blink": 0.0,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 0,
+      "categories": {},
+      "pairs": [],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": true,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 0.0005880089136299707,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005270950359424393,
+        "triangle_pair": [
+          8395,
+          7837
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 1.0,
+      "edge_max": 1.0,
+      "worst_edge": [
+        0,
+        1
+      ],
+      "area_min": 1.0,
+      "area_max": 1.0,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  },
+  {
+    "candidate": "E",
+    "blink": 0.5,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 0,
+      "categories": {},
+      "pairs": [],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": true,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 0.0003109306819089692,
+        "triangle_pair": [
+          9554,
+          8994
+        ]
+      },
+      "1": {
+        "metres": 0.0002792126333554822,
+        "triangle_pair": [
+          8394,
+          7838
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 0.5080052497254122,
+      "edge_max": 1.413408138826671,
+      "worst_edge": [
+        1594,
+        4643
+      ],
+      "area_min": 0.4503418510502421,
+      "area_max": 2.313332921157957,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  },
+  {
+    "candidate": "E",
+    "blink": 0.9,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 1,
+      "categories": {
+        "eyelid / eyelid": 1
+      },
+      "pairs": [
+        [
+          7850,
+          7853
+        ]
+      ],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": false,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 0.00014426299259700696,
+        "triangle_pair": [
+          9478,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 6.06770464882618e-05,
+        "triangle_pair": [
+          8396,
+          7838
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 0.11928420946700971,
+      "edge_max": 1.7509521077154477,
+      "worst_edge": [
+        1594,
+        4643
+      ],
+      "area_min": 0.10545727748106994,
+      "area_max": 3.535723365640789,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  },
+  {
+    "candidate": "E",
+    "blink": 1.0,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 44,
+      "categories": {
+        "eyelid / eyelid": 40,
+        "eyeball / eyelid": 4
+      },
+      "pairs": [
+        [
+          7817,
+          7864
+        ],
+        [
+          7818,
+          7863
+        ],
+        [
+          7818,
+          7864
+        ],
+        [
+          7820,
+          7860
+        ],
+        [
+          7822,
+          7858
+        ],
+        [
+          7826,
+          7852
+        ],
+        [
+          7826,
+          7853
+        ],
+        [
+          7826,
+          7854
+        ],
+        [
+          7828,
+          7850
+        ],
+        [
+          7829,
+          7850
+        ],
+        [
+          7830,
+          7850
+        ],
+        [
+          7837,
+          7840
+        ],
+        [
+          7837,
+          7841
+        ],
+        [
+          7837,
+          7842
+        ],
+        [
+          7837,
+          8396
+        ],
+        [
+          7837,
+          8397
+        ],
+        [
+          7838,
+          8396
+        ],
+        [
+          7838,
+          8397
+        ],
+        [
+          7850,
+          7853
+        ],
+        [
+          7870,
+          7886
+        ],
+        [
+          7874,
+          7884
+        ],
+        [
+          8990,
+          9033
+        ],
+        [
+          8990,
+          9034
+        ],
+        [
+          8994,
+          9026
+        ],
+        [
+          8995,
+          9026
+        ],
+        [
+          8996,
+          9025
+        ],
+        [
+          8996,
+          9026
+        ],
+        [
+          9008,
+          9011
+        ],
+        [
+          9008,
+          9012
+        ],
+        [
+          9008,
+          9013
+        ],
+        [
+          9008,
+          9014
+        ],
+        [
+          9008,
+          9015
+        ],
+        [
+          9008,
+          9016
+        ],
+        [
+          9022,
+          9025
+        ],
+        [
+          9036,
+          9058
+        ],
+        [
+          9037,
+          9058
+        ],
+        [
+          9038,
+          9056
+        ],
+        [
+          9038,
+          9057
+        ],
+        [
+          9038,
+          9058
+        ],
+        [
+          9046,
+          9050
+        ],
+        [
+          9046,
+          9051
+        ],
+        [
+          9047,
+          9050
+        ],
+        [
+          9047,
+          9051
+        ],
+        [
+          9048,
+          9051
+        ]
+      ],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": false,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 7.845637207360197e-05,
+        "triangle_pair": [
+          9479,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 4.056857486862451e-06,
+        "triangle_pair": [
+          8396,
+          7837
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 0.04287842112496368,
+      "edge_max": 1.8358517397430414,
+      "worst_edge": [
+        1594,
+        4643
+      ],
+      "area_min": 0.015443274670132588,
+      "area_max": 3.8520456338101075,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  },
+  {
+    "candidate": "F",
+    "blink": 0.0,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 0,
+      "categories": {},
+      "pairs": [],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": true,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 0.0005880089136299707,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005270950359424393,
+        "triangle_pair": [
+          8395,
+          7837
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 1.0,
+      "edge_max": 1.0,
+      "worst_edge": [
+        0,
+        1
+      ],
+      "area_min": 1.0,
+      "area_max": 1.0,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  },
+  {
+    "candidate": "F",
+    "blink": 0.5,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 3,
+      "categories": {
+        "eyelid / skin": 2,
+        "eyelid / eyelid": 1
+      },
+      "pairs": [
+        [
+          7709,
+          7778
+        ],
+        [
+          7710,
+          7778
+        ],
+        [
+          7778,
+          7781
+        ]
+      ],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": false,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 0.0005955404042490926,
+        "triangle_pair": [
+          9480,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005234480752991597,
+        "triangle_pair": [
+          8394,
+          7838
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 0.5002316787422739,
+      "edge_max": 1.3469134525576225,
+      "worst_edge": [
+        4042,
+        4078
+      ],
+      "area_min": 0.3701631016075621,
+      "area_max": 1.3518098520073514,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  },
+  {
+    "candidate": "F",
+    "blink": 0.9,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 4,
+      "categories": {
+        "skin / skin": 1,
+        "eyelid / eyelid": 3
+      },
+      "pairs": [
+        [
+          7706,
+          7709
+        ],
+        [
+          7778,
+          7781
+        ],
+        [
+          7837,
+          7840
+        ],
+        [
+          9047,
+          9050
+        ]
+      ],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": false,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 0.00059925774832157,
+        "triangle_pair": [
+          9480,
+          9048
+        ]
+      },
+      "1": {
+        "metres": 0.0005197359156030131,
+        "triangle_pair": [
+          8395,
+          7838
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 0.123889558761262,
+      "edge_max": 1.633322582736264,
+      "worst_edge": [
+        4042,
+        4078
+      ],
+      "area_min": 0.12772751311754874,
+      "area_max": 1.644475080110825,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  },
+  {
+    "candidate": "F",
+    "blink": 1.0,
+    "geometry": {
+      "vertices": 5244,
+      "triangles": 10096,
+      "intersections": 27,
+      "categories": {
+        "skin / skin": 1,
+        "eyelid / eyelid": 26
+      },
+      "pairs": [
+        [
+          7706,
+          7709
+        ],
+        [
+          7778,
+          7781
+        ],
+        [
+          7817,
+          7864
+        ],
+        [
+          7818,
+          7862
+        ],
+        [
+          7818,
+          7863
+        ],
+        [
+          7818,
+          7864
+        ],
+        [
+          7826,
+          7854
+        ],
+        [
+          7830,
+          7848
+        ],
+        [
+          7830,
+          7849
+        ],
+        [
+          7830,
+          7850
+        ],
+        [
+          7837,
+          7840
+        ],
+        [
+          7837,
+          7841
+        ],
+        [
+          7837,
+          7842
+        ],
+        [
+          8994,
+          9026
+        ],
+        [
+          8995,
+          9026
+        ],
+        [
+          8996,
+          9026
+        ],
+        [
+          9006,
+          9016
+        ],
+        [
+          9007,
+          9016
+        ],
+        [
+          9008,
+          9011
+        ],
+        [
+          9008,
+          9012
+        ],
+        [
+          9008,
+          9013
+        ],
+        [
+          9008,
+          9014
+        ],
+        [
+          9008,
+          9016
+        ],
+        [
+          9038,
+          9057
+        ],
+        [
+          9038,
+          9058
+        ],
+        [
+          9046,
+          9050
+        ],
+        [
+          9047,
+          9050
+        ]
+      ],
+      "coplanar_aabb_candidates": 20,
+      "unresolved_coplanar": 0,
+      "coplanar_overlap_pairs": [],
+      "nonmanifold": 0,
+      "winding": 0,
+      "degenerate": 0,
+      "duplicate_faces": 0,
+      "structural_pass": false,
+      "full_admission": false
+    },
+    "clearance": {
+      "-1": {
+        "metres": 0.0005998686446247525,
+        "triangle_pair": [
+          9481,
+          9047
+        ]
+      },
+      "1": {
+        "metres": 0.0005186976777889801,
+        "triangle_pair": [
+          8394,
+          7838
+        ]
+      }
+    },
+    "metrics": {
+      "edge_min": 0.04004353157883985,
+      "edge_max": 1.7077679133411565,
+      "worst_edge": [
+        4042,
+        4078
+      ],
+      "area_min": 0.03778762490401421,
+      "area_max": 1.7205541895025378,
+      "local_concentration": 1.0
+    },
+    "wall_thickness_m": null,
+    "wall_thickness_reason": "No separate inner/outer lid wall exists in frozen single-sheet topology",
+    "full_blink_admitted": false
+  }
+]

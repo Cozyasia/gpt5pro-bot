@@ -1,0 +1,8 @@
+{
+  "cold_session_ms": 28.977140000279178,
+  "warm_inference_ms": 5.5234857499999634,
+  "peak_rss_kib": 74620,
+  "deterministic": true,
+  "onnx_sha256": "828e4a785db5406216f6092353f938e7918ac7987188a4be770195e6b6c85d94",
+  "isolated_memory_limit": false
+}

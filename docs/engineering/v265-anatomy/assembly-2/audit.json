@@ -1,0 +1,1777 @@
+{
+  "generator": "anatomy-v4-assembly-2",
+  "topology": {
+    "vertices": 5644,
+    "triangles": 10990,
+    "degenerate_triangles": [],
+    "nonmanifold_edges": 0,
+    "inconsistent_winding": 0,
+    "boundary_edges": 256,
+    "expected_outer_edges": 256
+  },
+  "legacy_polar_topology": {
+    "vertices": 5644,
+    "triangles": 10990,
+    "degenerate_triangles": [
+      8171,
+      8172
+    ],
+    "nonmanifold_edges": 0,
+    "inconsistent_winding": 0,
+    "boundary_edges": 256,
+    "expected_outer_edges": 256
+  },
+  "effective_rank": 319,
+  "rank_relative_tolerance": 1e-05,
+  "energy_rank_99": 23,
+  "energy_rank_999": 52,
+  "rank_fit": "TRAIN roots only",
+  "identity_count": 512,
+  "renders": 0,
+  "lineage": {
+    "roots": 128,
+    "descendants_per_root": 4,
+    "train_roots": 80,
+    "val_roots": 24,
+    "test_roots": 24,
+    "train": 320,
+    "val": 96,
+    "test": 96
+  },
+  "stress": [
+    {
+      "identity": 416,
+      "root": 104,
+      "expression": [
+        0.025486155911415898,
+        0.17880203264921457,
+        -0.6619877421897689,
+        0.9861147172648814,
+        -0.5997136794215439,
+        -0.4186901995729295,
+        -0.7048907265620101,
+        -0.13951454619677683
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.6616895878775135,
+          "p01": 0.8870781196797728,
+          "median": 1.0,
+          "p99": 1.2075466504480448,
+          "max": 4.190703479871092
+        },
+        "edge_stretch": {
+          "min": 0.8503229295940535,
+          "p01": 0.9078945654990592,
+          "median": 1.0000000000000773,
+          "p99": 1.1744929435388054,
+          "max": 3.3378483584906187
+        },
+        "aspect_distortion": {
+          "min": 0.24354751015483295,
+          "p01": 0.8845794263076995,
+          "median": 1.0,
+          "p99": 1.1253519097634532,
+          "max": 1.4890402645410146
+        }
+      }
+    },
+    {
+      "identity": 417,
+      "root": 104,
+      "expression": [
+        -0.16221040018364263,
+        0.7764245197490325,
+        -0.007222271502264288,
+        0.5526023873676977,
+        0.6967126918180853,
+        -0.9787353906706584,
+        -0.16415806702679192,
+        0.4123464485804764
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.15162895719915973,
+          "p01": 0.7319421107987221,
+          "median": 0.9999999978143084,
+          "p99": 1.548637724053872,
+          "max": 16.087812710636744
+        },
+        "edge_stretch": {
+          "min": 0.5663785058041642,
+          "p01": 0.8077035436991313,
+          "median": 1.000000000000014,
+          "p99": 1.4407057891205208,
+          "max": 12.638840625105042
+        },
+        "aspect_distortion": {
+          "min": 0.08453365297329782,
+          "p01": 0.7650599280871693,
+          "median": 1.0,
+          "p99": 1.3496470259451423,
+          "max": 5.6168376871637795
+        }
+      }
+    },
+    {
+      "identity": 418,
+      "root": 104,
+      "expression": [
+        -0.0005752389967057514,
+        0.3669115310789959,
+        -0.43860775971163823,
+        0.39944349170597504,
+        0.1837871218809799,
+        -0.7919785151413448,
+        0.8055073824362544,
+        -0.11703784816548701
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.23343792007599204,
+          "p01": 0.7185076431370363,
+          "median": 1.0,
+          "p99": 1.3071145415064882,
+          "max": 7.974569592634816
+        },
+        "edge_stretch": {
+          "min": 0.6481265139041795,
+          "p01": 0.8385038306274324,
+          "median": 1.0000000000096185,
+          "p99": 1.2415999679582428,
+          "max": 6.254366266797873
+        },
+        "aspect_distortion": {
+          "min": 0.15110611583703418,
+          "p01": 0.8445982186066893,
+          "median": 1.0000000000005516,
+          "p99": 1.2134578408989716,
+          "max": 2.91579140236507
+        }
+      }
+    },
+    {
+      "identity": 419,
+      "root": 104,
+      "expression": [
+        0.5857744354501535,
+        0.06197137250496243,
+        0.15027576866826076,
+        0.2990146873598116,
+        -0.6776260152505336,
+        -0.7158294512620569,
+        0.654060790909093,
+        -0.25154275573145646
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.32754285308841946,
+          "p01": 0.7701117351952707,
+          "median": 1.0000000003437783,
+          "p99": 1.1318100480042195,
+          "max": 1.8981586280144371
+        },
+        "edge_stretch": {
+          "min": 0.7100284127146806,
+          "p01": 0.8668643659535653,
+          "median": 1.0000000016388035,
+          "p99": 1.0973205320873403,
+          "max": 1.626471297392659
+        },
+        "aspect_distortion": {
+          "min": 0.5304821036376252,
+          "p01": 0.9361719911076873,
+          "median": 1.0000000001457003,
+          "p99": 1.116054670570291,
+          "max": 2.229384313030292
+        }
+      }
+    },
+    {
+      "identity": 420,
+      "root": 105,
+      "expression": [
+        -0.0788672476790433,
+        0.69584243745479,
+        -0.30715832205480686,
+        0.7093287253083167,
+        0.6243747790519796,
+        -0.5235799682615896,
+        0.08007729938035246,
+        -0.17613639999289687
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.32591141954657393,
+          "p01": 0.7422298409510613,
+          "median": 1.0,
+          "p99": 1.5313937367126063,
+          "max": 14.43420008612759
+        },
+        "edge_stretch": {
+          "min": 0.6321539066875707,
+          "p01": 0.8210517823958818,
+          "median": 1.0000000000001408,
+          "p99": 1.4236247352114393,
+          "max": 11.543335203859343
+        },
+        "aspect_distortion": {
+          "min": 0.09151982774632446,
+          "p01": 0.7788844795092222,
+          "median": 1.000000000000283,
+          "p99": 1.3292169061752062,
+          "max": 2.631316252013069
+        }
+      }
+    },
+    {
+      "identity": 421,
+      "root": 105,
+      "expression": [
+        -0.6192956469369091,
+        0.45314884257326105,
+        0.4192767189075113,
+        0.784171193373574,
+        0.36386968095575645,
+        -0.7165795673010591,
+        0.9682476053138436,
+        -0.2887927400759074
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.26725996645352357,
+          "p01": 0.6734191459624996,
+          "median": 1.0,
+          "p99": 1.2780554397302182,
+          "max": 9.549981994645243
+        },
+        "edge_stretch": {
+          "min": 0.5860212488056764,
+          "p01": 0.8028835026531276,
+          "median": 1.0000000008561565,
+          "p99": 1.2212869269083961,
+          "max": 7.667560997729922
+        },
+        "aspect_distortion": {
+          "min": 0.13077200156430774,
+          "p01": 0.845552911374952,
+          "median": 1.0000000000111664,
+          "p99": 1.2273473014304437,
+          "max": 2.3639672797438416
+        }
+      }
+    },
+    {
+      "identity": 422,
+      "root": 105,
+      "expression": [
+        -0.2722618805289565,
+        0.3329485499606204,
+        0.6557358443005616,
+        -0.982051322987493,
+        0.8090675517110248,
+        0.27389949378772616,
+        0.30237308331411494,
+        0.283988388349492
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.42851415378155533,
+          "p01": 0.8683482371401102,
+          "median": 0.999999999999539,
+          "p99": 1.1682226584481887,
+          "max": 7.445364746186662
+        },
+        "edge_stretch": {
+          "min": 0.7756283146991172,
+          "p01": 0.9054555859359942,
+          "median": 1.0,
+          "p99": 1.1289462065537261,
+          "max": 5.743874613700298
+        },
+        "aspect_distortion": {
+          "min": 0.16206612555734048,
+          "p01": 0.8990995676051107,
+          "median": 0.9999999999999967,
+          "p99": 1.1031375750008918,
+          "max": 2.0839011065100457
+        }
+      }
+    },
+    {
+      "identity": 423,
+      "root": 105,
+      "expression": [
+        -0.4683200544085999,
+        0.14708654524914677,
+        0.5118258027862803,
+        -0.8170592039706692,
+        -0.09219935544840996,
+        -0.570909531986802,
+        -0.3473092638185298,
+        0.33911305626782084
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.6632221008110353,
+          "p01": 0.9058847556206769,
+          "median": 1.0,
+          "p99": 1.0835220305082953,
+          "max": 3.613373991597138
+        },
+        "edge_stretch": {
+          "min": 0.8747859221455148,
+          "p01": 0.9295164200272332,
+          "median": 1.0,
+          "p99": 1.0613319451636518,
+          "max": 2.8578456618900847
+        },
+        "aspect_distortion": {
+          "min": 0.2955785429119451,
+          "p01": 0.9359124436762196,
+          "median": 1.0,
+          "p99": 1.0495295669093694,
+          "max": 1.4113357429761406
+        }
+      }
+    },
+    {
+      "identity": 424,
+      "root": 106,
+      "expression": [
+        -0.821331925400264,
+        0.32471289745819076,
+        -0.7988564744156061,
+        0.6273793429210568,
+        -0.7497063847883065,
+        -0.8266608602406997,
+        -0.7269700923747675,
+        -0.6714169157868017
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.5154912239025111,
+          "p01": 0.817924635543265,
+          "median": 1.0,
+          "p99": 1.319761859749717,
+          "max": 6.9148195859028325
+        },
+        "edge_stretch": {
+          "min": 0.6923778029176955,
+          "p01": 0.8610767637906549,
+          "median": 1.0000000000110412,
+          "p99": 1.2619768706359533,
+          "max": 5.620246316850927
+        },
+        "aspect_distortion": {
+          "min": 0.16477669908847847,
+          "p01": 0.8390269242931094,
+          "median": 1.000000000000003,
+          "p99": 1.19251460430658,
+          "max": 1.8388718163350182
+        }
+      }
+    },
+    {
+      "identity": 425,
+      "root": 106,
+      "expression": [
+        -0.3285586206351596,
+        0.03874522527432056,
+        0.4387331263438443,
+        0.9495955947668424,
+        -0.24890293436766364,
+        0.7219864255236468,
+        -0.6297570911612824,
+        0.3950159699324465
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.8248396812172067,
+          "p01": 0.8746660053598319,
+          "median": 0.9999999995610416,
+          "p99": 1.226801183269334,
+          "max": 1.639004240813641
+        },
+        "edge_stretch": {
+          "min": 0.8267376927261306,
+          "p01": 0.9114521858773876,
+          "median": 1.0,
+          "p99": 1.1355558112958934,
+          "max": 1.3395156036396394
+        },
+        "aspect_distortion": {
+          "min": 0.6562444433565883,
+          "p01": 0.9135109257928787,
+          "median": 0.9999999991282401,
+          "p99": 1.0697175875306881,
+          "max": 1.3125004691608886
+        }
+      }
+    },
+    {
+      "identity": 426,
+      "root": 106,
+      "expression": [
+        -0.14987602795345367,
+        0.9305352555189725,
+        0.7618264651079043,
+        0.4634298108116075,
+        0.05271668292585008,
+        0.2957791274417283,
+        -0.46475634610216265,
+        0.48802950091120567
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.23549331407292662,
+          "p01": 0.726881846784752,
+          "median": 0.9999999984784125,
+          "p99": 1.5796046855116552,
+          "max": 18.913471433421968
+        },
+        "edge_stretch": {
+          "min": 0.4834606787460559,
+          "p01": 0.7780080369411972,
+          "median": 1.0,
+          "p99": 1.4717789706741515,
+          "max": 15.112228157900391
+        },
+        "aspect_distortion": {
+          "min": 0.07392490903304187,
+          "p01": 0.7497723969500183,
+          "median": 0.9999999998197435,
+          "p99": 1.3625347777736632,
+          "max": 3.4164344343435937
+        }
+      }
+    },
+    {
+      "identity": 427,
+      "root": 106,
+      "expression": [
+        0.9400215895089792,
+        0.6155428475181972,
+        -0.4011473615364749,
+        0.4591402380886418,
+        0.6939183813152661,
+        0.9192963501496376,
+        -0.30044843121819853,
+        -0.9658023344636357
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.5147381671955213,
+          "p01": 0.7443172582406745,
+          "median": 1.0,
+          "p99": 1.481123641853693,
+          "max": 12.618606839853141
+        },
+        "edge_stretch": {
+          "min": 0.6068286582992588,
+          "p01": 0.8174354236356394,
+          "median": 1.000000000009027,
+          "p99": 1.3929626381381779,
+          "max": 10.16287621611455
+        },
+        "aspect_distortion": {
+          "min": 0.10614327145664965,
+          "p01": 0.7916865524408521,
+          "median": 0.9999999999999958,
+          "p99": 1.2941175633828452,
+          "max": 2.0004011006249085
+        }
+      }
+    },
+    {
+      "identity": 428,
+      "root": 107,
+      "expression": [
+        0.7911428935378593,
+        0.9298029418540339,
+        0.4242010904949196,
+        -0.9663393435848093,
+        -0.24498621715522906,
+        0.7072140667730809,
+        -0.3030180104265494,
+        -0.2341999870090592
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 3,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 3,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 3,
+        "local_area_ratio": {
+          "min": 0.004474031813161477,
+          "p01": 0.6849178859480833,
+          "median": 0.9999999999999956,
+          "p99": 1.617334388481595,
+          "max": 19.512069543459965
+        },
+        "edge_stretch": {
+          "min": 0.4512634072053428,
+          "p01": 0.7778956468110906,
+          "median": 1.0,
+          "p99": 1.4969566025442829,
+          "max": 15.015627364651476
+        },
+        "aspect_distortion": {
+          "min": 0.07519318706134881,
+          "p01": 0.7464821816580379,
+          "median": 0.9999999999999776,
+          "p99": 1.3894678157932614,
+          "max": 191.84920610282163
+        }
+      }
+    },
+    {
+      "identity": 429,
+      "root": 107,
+      "expression": [
+        0.8936795292326636,
+        0.5333404794329804,
+        0.586262696748411,
+        0.971804773677007,
+        -0.9146098636167237,
+        -0.8432794771156156,
+        0.1397599356036634,
+        0.8856485072940483
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.4705762243013207,
+          "p01": 0.7765570225764911,
+          "median": 1.0000000000248388,
+          "p99": 1.319056834346375,
+          "max": 10.82969614261966
+        },
+        "edge_stretch": {
+          "min": 0.6656673812664932,
+          "p01": 0.8473217644968739,
+          "median": 1.000000000512055,
+          "p99": 1.2575651558534273,
+          "max": 8.77693874380678
+        },
+        "aspect_distortion": {
+          "min": 0.11854592416118895,
+          "p01": 0.8454153226890576,
+          "median": 1.0000000000003941,
+          "p99": 1.189830824650858,
+          "max": 1.7582045506801667
+        }
+      }
+    },
+    {
+      "identity": 430,
+      "root": 107,
+      "expression": [
+        0.002602615071183312,
+        0.630896383205592,
+        -0.08741827918792766,
+        -0.5239095324148049,
+        -0.14477908154799057,
+        -0.1487370624622022,
+        0.9804115298459439,
+        0.4659661337013885
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.20547851708793166,
+          "p01": 0.7044557843849446,
+          "median": 1.0,
+          "p99": 1.4622177107360141,
+          "max": 13.399199781576748
+        },
+        "edge_stretch": {
+          "min": 0.612814082420245,
+          "p01": 0.7927269681372412,
+          "median": 1.0,
+          "p99": 1.3656634459539736,
+          "max": 10.36591117719322
+        },
+        "aspect_distortion": {
+          "min": 0.10207122772299267,
+          "p01": 0.7875509870711527,
+          "median": 1.000000000000444,
+          "p99": 1.3008511528529734,
+          "max": 3.178031792917697
+        }
+      }
+    },
+    {
+      "identity": 431,
+      "root": 107,
+      "expression": [
+        -0.9217553884819312,
+        0.10101187208470486,
+        0.22875904646179368,
+        0.06647048352913676,
+        -0.41201682323693034,
+        -0.9361445669302566,
+        -0.9881211278861564,
+        0.6950474818865089
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.5847183520264753,
+          "p01": 0.8375125018251514,
+          "median": 1.0,
+          "p99": 1.2517155436440062,
+          "max": 2.6799245971398835
+        },
+        "edge_stretch": {
+          "min": 0.7902991797307417,
+          "p01": 0.8795281927550763,
+          "median": 1.0000000000065916,
+          "p99": 1.1466500524883676,
+          "max": 2.153538092313666
+        },
+        "aspect_distortion": {
+          "min": 0.37795479755064937,
+          "p01": 0.908958616769979,
+          "median": 1.0,
+          "p99": 1.0947375027802069,
+          "max": 1.770399043031153
+        }
+      }
+    },
+    {
+      "identity": 432,
+      "root": 108,
+      "expression": [
+        0.3823382789904135,
+        0.8079124360358774,
+        -0.8731840207800381,
+        0.7621450114885941,
+        -0.3160006562034474,
+        -0.3899447757860235,
+        0.8072144597058972,
+        0.6019950567819612
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.20397146439153274,
+          "p01": 0.6702471323782931,
+          "median": 1.0000000000007812,
+          "p99": 1.6737562603535532,
+          "max": 16.597586043393317
+        },
+        "edge_stretch": {
+          "min": 0.5972386213316853,
+          "p01": 0.7505377103438419,
+          "median": 1.0000000000939913,
+          "p99": 1.5431138481611566,
+          "max": 13.295862823297995
+        },
+        "aspect_distortion": {
+          "min": 0.08189948456551349,
+          "p01": 0.736357326909639,
+          "median": 1.0000000000001825,
+          "p99": 1.4397497433405553,
+          "max": 3.412657382129452
+        }
+      }
+    },
+    {
+      "identity": 433,
+      "root": 108,
+      "expression": [
+        0.10165515691071181,
+        0.7370240740023795,
+        0.8301343670745411,
+        0.24381309599096368,
+        0.8301370392687029,
+        0.1643725537399734,
+        0.21175567224550496,
+        0.22109359696141984
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 2,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 1,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 2,
+        "local_area_ratio": {
+          "min": 0.3842155880047775,
+          "p01": 0.7802985544332851,
+          "median": 0.9999999999997539,
+          "p99": 1.4316204291821193,
+          "max": 15.496553256469003
+        },
+        "edge_stretch": {
+          "min": 0.5318528804118509,
+          "p01": 0.825301565309915,
+          "median": 1.0,
+          "p99": 1.3428336250493091,
+          "max": 12.094117655849889
+        },
+        "aspect_distortion": {
+          "min": 0.08707272589699702,
+          "p01": 0.796588056425386,
+          "median": 0.9999999999999949,
+          "p99": 1.2683048502520233,
+          "max": 2.4132747363309828
+        }
+      }
+    },
+    {
+      "identity": 434,
+      "root": 108,
+      "expression": [
+        0.9777222001771184,
+        0.5028511074390847,
+        -0.24194623672903393,
+        0.22950396831658182,
+        0.41948455364213566,
+        0.7331860932807943,
+        0.4408082885851028,
+        0.22144570733917046
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.6002424559355591,
+          "p01": 0.7659585591117557,
+          "median": 1.000000000000016,
+          "p99": 1.3863332199330365,
+          "max": 10.536724464757196
+        },
+        "edge_stretch": {
+          "min": 0.6530647095907433,
+          "p01": 0.8439406169937061,
+          "median": 1.0000000013075931,
+          "p99": 1.312788655317273,
+          "max": 8.443013461983368
+        },
+        "aspect_distortion": {
+          "min": 0.12361301767529813,
+          "p01": 0.8183414021674269,
+          "median": 1.0,
+          "p99": 1.235307044968969,
+          "max": 1.8227006072498524
+        }
+      }
+    },
+    {
+      "identity": 435,
+      "root": 108,
+      "expression": [
+        -0.17930012148397,
+        0.7807831925816939,
+        -0.6517038839416023,
+        -0.02434979142632776,
+        0.5125692762509064,
+        -0.5842628799188765,
+        0.6435598647557799,
+        0.3955483775112796
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.3185214085793233,
+          "p01": 0.7054642872980489,
+          "median": 1.0,
+          "p99": 1.6246338010874437,
+          "max": 16.20949411042372
+        },
+        "edge_stretch": {
+          "min": 0.6023059662792813,
+          "p01": 0.776657123841174,
+          "median": 1.0000000000000027,
+          "p99": 1.5109909992880153,
+          "max": 12.85408190272999
+        },
+        "aspect_distortion": {
+          "min": 0.08421167987358309,
+          "p01": 0.7474234461172374,
+          "median": 1.0000000000022737,
+          "p99": 1.4056783052725113,
+          "max": 2.358674670122932
+        }
+      }
+    },
+    {
+      "identity": 436,
+      "root": 109,
+      "expression": [
+        0.2585064960857819,
+        0.2042116988571041,
+        0.29614664795420853,
+        -0.2714072687102671,
+        0.5980168285100045,
+        0.5498903916976463,
+        0.3192199045773805,
+        -0.6586358775916485
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.578495584014261,
+          "p01": 0.9054195697027795,
+          "median": 1.0,
+          "p99": 1.1143912826036788,
+          "max": 4.615889629166963
+        },
+        "edge_stretch": {
+          "min": 0.8538008890170601,
+          "p01": 0.9290512651762417,
+          "median": 1.0,
+          "p99": 1.0922638287140825,
+          "max": 3.7323180488803156
+        },
+        "aspect_distortion": {
+          "min": 0.2381441658490305,
+          "p01": 0.9339259471200244,
+          "median": 1.0,
+          "p99": 1.0748687657266731,
+          "max": 1.6051542072378764
+        }
+      }
+    },
+    {
+      "identity": 437,
+      "root": 109,
+      "expression": [
+        0.45925615119454544,
+        0.5619817033260031,
+        0.5572866892681863,
+        0.28200715482231486,
+        -0.8040573367319332,
+        0.44181072644744335,
+        0.7743894072005175,
+        0.9868490791274684
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.35670374663345716,
+          "p01": 0.7589804839418745,
+          "median": 1.0,
+          "p99": 1.3419600625564259,
+          "max": 11.761427195816838
+        },
+        "edge_stretch": {
+          "min": 0.654263925124197,
+          "p01": 0.829565517832187,
+          "median": 1.0000000000033462,
+          "p99": 1.2714006248769127,
+          "max": 9.366295359421274
+        },
+        "aspect_distortion": {
+          "min": 0.11164273971621592,
+          "p01": 0.8337522593860864,
+          "median": 0.9999999999999987,
+          "p99": 1.2247635302210353,
+          "max": 2.077797952215653
+        }
+      }
+    },
+    {
+      "identity": 438,
+      "root": 109,
+      "expression": [
+        -0.8114646394151057,
+        0.7432401615227446,
+        -0.6992346803163607,
+        -0.24447855367339688,
+        0.5182713538797623,
+        -0.510477916695214,
+        0.8332899762855723,
+        0.4928354493733824
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.26252097286636294,
+          "p01": 0.6693269359676767,
+          "median": 1.0,
+          "p99": 1.608735198679912,
+          "max": 15.677694905837956
+        },
+        "edge_stretch": {
+          "min": 0.5789455903377554,
+          "p01": 0.7556936670634131,
+          "median": 1.000000000000053,
+          "p99": 1.4949575342862091,
+          "max": 12.287275252576475
+        },
+        "aspect_distortion": {
+          "min": 0.08813450283266237,
+          "p01": 0.7460818759146357,
+          "median": 1.000000000004348,
+          "p99": 1.402333124742406,
+          "max": 3.405307737513319
+        }
+      }
+    },
+    {
+      "identity": 439,
+      "root": 109,
+      "expression": [
+        -0.7060457313552668,
+        0.28153696924620375,
+        0.06934670030256074,
+        -0.20250377588474078,
+        -0.20812564640995945,
+        0.4771336777267694,
+        0.29199089497469055,
+        0.962328557975711
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.4822760346041273,
+          "p01": 0.8563712681365974,
+          "median": 0.999999999999951,
+          "p99": 1.1952789154280843,
+          "max": 6.316245055119724
+        },
+        "edge_stretch": {
+          "min": 0.7861878478460944,
+          "p01": 0.8969323644295382,
+          "median": 1.0,
+          "p99": 1.158369450464043,
+          "max": 4.934077280863369
+        },
+        "aspect_distortion": {
+          "min": 0.17921689247065,
+          "p01": 0.8992050740037231,
+          "median": 0.9999999999999736,
+          "p99": 1.1207756173403496,
+          "max": 1.9169221405069607
+        }
+      }
+    },
+    {
+      "identity": 440,
+      "root": 110,
+      "expression": [
+        -0.7025249810185255,
+        0.5778695247585941,
+        -0.29719346068947883,
+        0.7278723768895117,
+        0.05717028074979469,
+        -0.7519921447716011,
+        -0.36651872496727855,
+        -0.06160021115234526
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.5384504574368247,
+          "p01": 0.7705545220941412,
+          "median": 0.9999999999999952,
+          "p99": 1.4469229626818225,
+          "max": 11.733167678490753
+        },
+        "edge_stretch": {
+          "min": 0.6956107310233041,
+          "p01": 0.8345215059601242,
+          "median": 1.0000000000008655,
+          "p99": 1.3608564433672803,
+          "max": 9.632995103289732
+        },
+        "aspect_distortion": {
+          "min": 0.10876248721607469,
+          "p01": 0.8008520002392651,
+          "median": 1.0,
+          "p99": 1.269624304819313,
+          "max": 1.8008668977059523
+        }
+      }
+    },
+    {
+      "identity": 441,
+      "root": 110,
+      "expression": [
+        0.18739210758141178,
+        0.7972615912055103,
+        -0.5194939017862936,
+        -0.7512821233791087,
+        0.7339823114712245,
+        0.13522926360323217,
+        0.0552344999765213,
+        -0.0890204026942274
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.3827789631402228,
+          "p01": 0.717015538103476,
+          "median": 0.9999999999997768,
+          "p99": 1.6323545938268937,
+          "max": 16.61848028346573
+        },
+        "edge_stretch": {
+          "min": 0.5880069606634188,
+          "p01": 0.806873061858833,
+          "median": 0.9999999999999999,
+          "p99": 1.5069359377967864,
+          "max": 13.144947210913498
+        },
+        "aspect_distortion": {
+          "min": 0.08471843630287418,
+          "p01": 0.7399501421689979,
+          "median": 1.0,
+          "p99": 1.3910944584090197,
+          "max": 2.553205596901335
+        }
+      }
+    },
+    {
+      "identity": 442,
+      "root": 110,
+      "expression": [
+        -0.6362727680426012,
+        0.8774012111073475,
+        -0.5445327364775792,
+        -0.8082273031062457,
+        -0.31327922640066563,
+        -0.6265257354251983,
+        -0.9319998987305715,
+        0.1498457236594397
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.35235906461613387,
+          "p01": 0.6690559087821946,
+          "median": 0.9999999999887391,
+          "p99": 1.6880073582149333,
+          "max": 18.37384844308815
+        },
+        "edge_stretch": {
+          "min": 0.5447684087949712,
+          "p01": 0.779427300319564,
+          "median": 1.0,
+          "p99": 1.5624600200063035,
+          "max": 14.405305797119262
+        },
+        "aspect_distortion": {
+          "min": 0.07754279829879968,
+          "p01": 0.7234883978932971,
+          "median": 1.0,
+          "p99": 1.43377035130659,
+          "max": 2.6997427552222897
+        }
+      }
+    },
+    {
+      "identity": 443,
+      "root": 110,
+      "expression": [
+        0.904365953507722,
+        0.968589506685003,
+        0.9857603349285284,
+        0.9212346359995547,
+        -0.008609805810327664,
+        -0.638422967638034,
+        0.33778863075608045,
+        0.844110278811834
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 3,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 3,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 3,
+        "local_area_ratio": {
+          "min": 0.18198155790727708,
+          "p01": 0.6609611981722513,
+          "median": 1.0000000000212874,
+          "p99": 1.5938375352905558,
+          "max": 19.336143145433386
+        },
+        "edge_stretch": {
+          "min": 0.41358563826192796,
+          "p01": 0.7555190477441948,
+          "median": 1.0000000000976657,
+          "p99": 1.4787059254771107,
+          "max": 15.825239155151525
+        },
+        "aspect_distortion": {
+          "min": 0.07180145426438148,
+          "p01": 0.7511493367894647,
+          "median": 1.0000000000015237,
+          "p99": 1.36646328199445,
+          "max": 4.3765219963037785
+        }
+      }
+    },
+    {
+      "identity": 444,
+      "root": 111,
+      "expression": [
+        0.49322088244208007,
+        0.3187292507403434,
+        0.646307270911856,
+        -0.024538717421539902,
+        0.38266786846298806,
+        -0.829434730577735,
+        0.24045069270234132,
+        0.7581110013723131
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.45414664179607145,
+          "p01": 0.8555156161150005,
+          "median": 1.0000000000113194,
+          "p99": 1.156236720645919,
+          "max": 7.057481033713419
+        },
+        "edge_stretch": {
+          "min": 0.7795529189840231,
+          "p01": 0.8854058263270499,
+          "median": 1.0000000000070424,
+          "p99": 1.131909698165029,
+          "max": 5.545085413132205
+        },
+        "aspect_distortion": {
+          "min": 0.16776719763226208,
+          "p01": 0.8962843956759381,
+          "median": 1.0000000000052895,
+          "p99": 1.1109555364322574,
+          "max": 1.996055621076525
+        }
+      }
+    },
+    {
+      "identity": 445,
+      "root": 111,
+      "expression": [
+        0.116289323802383,
+        0.714825715927697,
+        -0.40764171317226117,
+        0.5817710422204194,
+        -0.9313340300677548,
+        0.7921215198696321,
+        -0.010920130432873432,
+        -0.956524115812438
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.3899980390187856,
+          "p01": 0.7367973708276114,
+          "median": 0.9999999999997815,
+          "p99": 1.5459714501385347,
+          "max": 15.275993330602654
+        },
+        "edge_stretch": {
+          "min": 0.6205545840505045,
+          "p01": 0.8169831308404429,
+          "median": 1.0,
+          "p99": 1.4352765384873842,
+          "max": 11.891758878108616
+        },
+        "aspect_distortion": {
+          "min": 0.08873967303256117,
+          "p01": 0.7698453043254992,
+          "median": 0.9999999999993618,
+          "p99": 1.338684511037689,
+          "max": 2.479520623289717
+        }
+      }
+    },
+    {
+      "identity": 446,
+      "root": 111,
+      "expression": [
+        -0.4456611869281184,
+        0.5654088491956131,
+        -0.3099029557401849,
+        -0.5887882931692445,
+        0.3896110024822874,
+        -0.49644579615834683,
+        -0.6920835801525478,
+        -0.27293088690339706
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 1,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 1,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 1,
+        "local_area_ratio": {
+          "min": 0.48213217693973626,
+          "p01": 0.7763373875116653,
+          "median": 0.9999999999995828,
+          "p99": 1.432442079811522,
+          "max": 12.450864867126908
+        },
+        "edge_stretch": {
+          "min": 0.7025012424126815,
+          "p01": 0.8531231241554225,
+          "median": 1.0,
+          "p99": 1.3463487993478254,
+          "max": 9.484038876417038
+        },
+        "aspect_distortion": {
+          "min": 0.10889688935122589,
+          "p01": 0.8104969325553344,
+          "median": 1.0,
+          "p99": 1.2732566935317076,
+          "max": 2.014220842772655
+        }
+      }
+    },
+    {
+      "identity": 447,
+      "root": 111,
+      "expression": [
+        -0.2903852940762184,
+        0.37266395337718405,
+        -0.7126387694472174,
+        0.09611825014866726,
+        0.3782798683489448,
+        0.09094018065909548,
+        0.6206239390794004,
+        0.036586648145712664
+      ],
+      "bad_reference": 0,
+      "orientation_failures": 0,
+      "regions": {
+        "skin": 0,
+        "eyelid": 0,
+        "eyeball": 0,
+        "upper_lip": 0,
+        "lower_lip": 0,
+        "mouth_cavity": 0,
+        "teeth": 0,
+        "nostril_rim": 0,
+        "nostril_cavity": 0,
+        "glasses_frame": 0,
+        "transparent_lens": 0,
+        "opaque_lens": 0
+      },
+      "metrics": {
+        "orientation_failures": 0,
+        "local_area_ratio": {
+          "min": 0.44422161130511983,
+          "p01": 0.8040220124040367,
+          "median": 0.9999999999999771,
+          "p99": 1.335236387882379,
+          "max": 8.310847300641182
+        },
+        "edge_stretch": {
+          "min": 0.7600181560036449,
+          "p01": 0.8537206690334358,
+          "median": 1.000000000000031,
+          "p99": 1.2692768482037617,
+          "max": 6.42164140065385
+        },
+        "aspect_distortion": {
+          "min": 0.1454279500962907,
+          "p01": 0.8563082284014598,
+          "median": 0.9999999999999998,
+          "p99": 1.2242919531264356,
+          "max": 2.1242137784795827
+        }
+      }
+    }
+  ],
+  "orientation_failures": 25,
+  "stage_a_admitted": false,
+  "full_anatomy_qualified": false,
+  "v0": false,
+  "peak_rss_kib": 168576,
+  "seconds": 1.9644391799999994
+}

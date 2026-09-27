@@ -1,0 +1,26 @@
+name: V265 commissure admission
+on:
+  push:
+    branches: [v265-self-hosted-l2]
+    paths: ['experiments/v265_commissure/**', '.github/workflows/v265-commissure.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  commissure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==2.3.5
+        working-directory: /tmp
+      - run: python -m unittest experiments.v265_commissure.test_candidates -v
+      - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_commissure.pipeline /tmp/commissure
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: commissure-admission
+          path: /tmp/commissure

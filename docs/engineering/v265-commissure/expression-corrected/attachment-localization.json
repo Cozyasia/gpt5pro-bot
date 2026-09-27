@@ -1,0 +1,346 @@
+{
+  "pair_categories": {
+    "retained_face / retained_face": 782,
+    "retained_face / seam": 7,
+    "seam / seam": 14
+  },
+  "retained_triangles": 9065,
+  "seam_triangles": 177,
+  "examples": [
+    {
+      "triangles": [
+        1348,
+        8393
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1378,
+          1379,
+          1430
+        ],
+        [
+          5032,
+          5033,
+          5056
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1348,
+        8394
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1378,
+          1379,
+          1430
+        ],
+        [
+          5033,
+          5057,
+          5056
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1364,
+        8942
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1394,
+          1395,
+          1446
+        ],
+        [
+          5309,
+          5333,
+          5332
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1364,
+        8943
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1394,
+          1395,
+          1446
+        ],
+        [
+          5309,
+          5310,
+          5333
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1365,
+        8876
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1401,
+          1402,
+          1447
+        ],
+        [
+          5276,
+          5300,
+          5299
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1392,
+        8298
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1431,
+          1432,
+          1475
+        ],
+        [
+          4985,
+          5009,
+          5008
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1392,
+        8345
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1431,
+          1432,
+          1475
+        ],
+        [
+          5008,
+          5009,
+          5032
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1466,
+        8201
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1515,
+          1516,
+          1554
+        ],
+        [
+          4936,
+          4937,
+          4960
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1466,
+        8202
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1515,
+          1516,
+          1554
+        ],
+        [
+          4937,
+          4961,
+          4960
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1466,
+        8249
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1515,
+          1516,
+          1554
+        ],
+        [
+          4960,
+          4961,
+          4984
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1538,
+        8105
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1594,
+          1595,
+          1643
+        ],
+        [
+          4888,
+          4889,
+          4912
+        ]
+      ]
+    },
+    {
+      "triangles": [
+        1538,
+        8106
+      ],
+      "regions": [
+        "retained_face",
+        "retained_face"
+      ],
+      "vertices": [
+        [
+          1594,
+          1595,
+          1643
+        ],
+        [
+          4889,
+          4913,
+          4912
+        ]
+      ]
+    }
+  ],
+  "retained_contact_semantics": {
+    "eyeball | skin": 45,
+    "nostril_cavity/nostril_rim | skin": 6,
+    "nostril_rim | skin": 2,
+    "eyeball | eyelid/skin": 160,
+    "eyelid | eyelid/skin": 9,
+    "eyeball | eyelid": 524,
+    "eyelid | eyelid": 3,
+    "nostril_rim | nostril_rim/skin": 9,
+    "nostril_cavity/nostril_rim | nostril_rim/skin": 8,
+    "nostril_rim | nostril_rim": 9,
+    "nostril_cavity/nostril_rim | nostril_rim": 1,
+    "nostril_cavity | nostril_cavity": 6
+  },
+  "nonmanifold_edges": [
+    [
+      2349,
+      4779
+    ],
+    [
+      2351,
+      2352
+    ],
+    [
+      2600,
+      2601
+    ],
+    [
+      3231,
+      3232
+    ],
+    [
+      3310,
+      3311
+    ],
+    [
+      3363,
+      3364
+    ]
+  ],
+  "winding_edges": [
+    [
+      2350,
+      2408
+    ],
+    [
+      2351,
+      2409
+    ],
+    [
+      2601,
+      2659
+    ],
+    [
+      3173,
+      3231
+    ],
+    [
+      3252,
+      3311
+    ],
+    [
+      3305,
+      3364
+    ],
+    [
+      3306,
+      3365
+    ]
+  ],
+  "new_mouth_contact_pairs": 0
+}

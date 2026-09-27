@@ -1,0 +1,2142 @@
+[
+  {
+    "candidate": "E",
+    "pairs": [
+      {
+        "triangles": [
+          7817,
+          7864
+        ],
+        "vertices": [
+          [
+            4076,
+            4077,
+            4112
+          ],
+          [
+            4100,
+            4136,
+            4135
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7818,
+          7863
+        ],
+        "vertices": [
+          [
+            4077,
+            4113,
+            4112
+          ],
+          [
+            4099,
+            4100,
+            4135
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7818,
+          7864
+        ],
+        "vertices": [
+          [
+            4077,
+            4113,
+            4112
+          ],
+          [
+            4100,
+            4136,
+            4135
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7820,
+          7860
+        ],
+        "vertices": [
+          [
+            4078,
+            4114,
+            4113
+          ],
+          [
+            4098,
+            4134,
+            4133
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7822,
+          7858
+        ],
+        "vertices": [
+          [
+            4079,
+            4115,
+            4114
+          ],
+          [
+            4097,
+            4133,
+            4132
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7826,
+          7852
+        ],
+        "vertices": [
+          [
+            4081,
+            4117,
+            4116
+          ],
+          [
+            4094,
+            4130,
+            4129
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7826,
+          7853
+        ],
+        "vertices": [
+          [
+            4081,
+            4117,
+            4116
+          ],
+          [
+            4094,
+            4095,
+            4130
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7826,
+          7854
+        ],
+        "vertices": [
+          [
+            4081,
+            4117,
+            4116
+          ],
+          [
+            4095,
+            4131,
+            4130
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7828,
+          7850
+        ],
+        "vertices": [
+          [
+            4082,
+            4118,
+            4117
+          ],
+          [
+            4093,
+            4129,
+            4128
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7829,
+          7850
+        ],
+        "vertices": [
+          [
+            4082,
+            4083,
+            4118
+          ],
+          [
+            4093,
+            4129,
+            4128
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7830,
+          7850
+        ],
+        "vertices": [
+          [
+            4083,
+            4119,
+            4118
+          ],
+          [
+            4093,
+            4129,
+            4128
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          7840
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4088,
+            4124,
+            4123
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          7841
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4088,
+            4089,
+            4124
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          7842
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4089,
+            4125,
+            4124
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          8396
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4402,
+            4434,
+            4433
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyeball",
+            "eyeball",
+            "eyeball"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          8397
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4402,
+            4403,
+            4434
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyeball",
+            "eyeball",
+            "eyeball"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7838,
+          8396
+        ],
+        "vertices": [
+          [
+            4087,
+            4123,
+            4122
+          ],
+          [
+            4402,
+            4434,
+            4433
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyeball",
+            "eyeball",
+            "eyeball"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7838,
+          8397
+        ],
+        "vertices": [
+          [
+            4087,
+            4123,
+            4122
+          ],
+          [
+            4402,
+            4403,
+            4434
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyeball",
+            "eyeball",
+            "eyeball"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7850,
+          7853
+        ],
+        "vertices": [
+          [
+            4093,
+            4129,
+            4128
+          ],
+          [
+            4094,
+            4095,
+            4130
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7870,
+          7886
+        ],
+        "vertices": [
+          [
+            4103,
+            4139,
+            4138
+          ],
+          [
+            4111,
+            4147,
+            4146
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7874,
+          7884
+        ],
+        "vertices": [
+          [
+            4105,
+            4141,
+            4140
+          ],
+          [
+            4110,
+            4146,
+            4145
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8990,
+          9033
+        ],
+        "vertices": [
+          [
+            4666,
+            4701,
+            4700
+          ],
+          [
+            4687,
+            4688,
+            4722
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8990,
+          9034
+        ],
+        "vertices": [
+          [
+            4666,
+            4701,
+            4700
+          ],
+          [
+            4688,
+            4723,
+            4722
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8994,
+          9026
+        ],
+        "vertices": [
+          [
+            4668,
+            4703,
+            4702
+          ],
+          [
+            4684,
+            4719,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8995,
+          9026
+        ],
+        "vertices": [
+          [
+            4668,
+            4669,
+            4703
+          ],
+          [
+            4684,
+            4719,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8996,
+          9025
+        ],
+        "vertices": [
+          [
+            4669,
+            4704,
+            4703
+          ],
+          [
+            4683,
+            4684,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8996,
+          9026
+        ],
+        "vertices": [
+          [
+            4669,
+            4704,
+            4703
+          ],
+          [
+            4684,
+            4719,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9011
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4676,
+            4677,
+            4711
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9012
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4677,
+            4712,
+            4711
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9013
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4677,
+            4678,
+            4712
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9014
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4678,
+            4713,
+            4712
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9015
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4678,
+            4679,
+            4713
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9016
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4679,
+            4714,
+            4713
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9022,
+          9025
+        ],
+        "vertices": [
+          [
+            4682,
+            4717,
+            4716
+          ],
+          [
+            4683,
+            4684,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9036,
+          9058
+        ],
+        "vertices": [
+          [
+            4689,
+            4724,
+            4723
+          ],
+          [
+            4665,
+            4700,
+            4734
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9037,
+          9058
+        ],
+        "vertices": [
+          [
+            4689,
+            4690,
+            4724
+          ],
+          [
+            4665,
+            4700,
+            4734
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9038,
+          9056
+        ],
+        "vertices": [
+          [
+            4690,
+            4725,
+            4724
+          ],
+          [
+            4699,
+            4734,
+            4733
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9038,
+          9057
+        ],
+        "vertices": [
+          [
+            4690,
+            4725,
+            4724
+          ],
+          [
+            4699,
+            4665,
+            4734
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9038,
+          9058
+        ],
+        "vertices": [
+          [
+            4690,
+            4725,
+            4724
+          ],
+          [
+            4665,
+            4700,
+            4734
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9046,
+          9050
+        ],
+        "vertices": [
+          [
+            4694,
+            4729,
+            4728
+          ],
+          [
+            4696,
+            4731,
+            4730
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9046,
+          9051
+        ],
+        "vertices": [
+          [
+            4694,
+            4729,
+            4728
+          ],
+          [
+            4696,
+            4697,
+            4731
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9047,
+          9050
+        ],
+        "vertices": [
+          [
+            4694,
+            4695,
+            4729
+          ],
+          [
+            4696,
+            4731,
+            4730
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9047,
+          9051
+        ],
+        "vertices": [
+          [
+            4694,
+            4695,
+            4729
+          ],
+          [
+            4696,
+            4697,
+            4731
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9048,
+          9051
+        ],
+        "vertices": [
+          [
+            4695,
+            4730,
+            4729
+          ],
+          [
+            4696,
+            4697,
+            4731
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "candidate": "F",
+    "pairs": [
+      {
+        "triangles": [
+          7706,
+          7709
+        ],
+        "vertices": [
+          [
+            1720,
+            4057,
+            4056
+          ],
+          [
+            1661,
+            1719,
+            4058
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "skin",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "skin",
+            "skin",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7778,
+          7781
+        ],
+        "vertices": [
+          [
+            4057,
+            4093,
+            4092
+          ],
+          [
+            4058,
+            4059,
+            4094
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7817,
+          7864
+        ],
+        "vertices": [
+          [
+            4076,
+            4077,
+            4112
+          ],
+          [
+            4100,
+            4136,
+            4135
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7818,
+          7862
+        ],
+        "vertices": [
+          [
+            4077,
+            4113,
+            4112
+          ],
+          [
+            4099,
+            4135,
+            4134
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7818,
+          7863
+        ],
+        "vertices": [
+          [
+            4077,
+            4113,
+            4112
+          ],
+          [
+            4099,
+            4100,
+            4135
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7818,
+          7864
+        ],
+        "vertices": [
+          [
+            4077,
+            4113,
+            4112
+          ],
+          [
+            4100,
+            4136,
+            4135
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7826,
+          7854
+        ],
+        "vertices": [
+          [
+            4081,
+            4117,
+            4116
+          ],
+          [
+            4095,
+            4131,
+            4130
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7830,
+          7848
+        ],
+        "vertices": [
+          [
+            4083,
+            4119,
+            4118
+          ],
+          [
+            4092,
+            4128,
+            4127
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7830,
+          7849
+        ],
+        "vertices": [
+          [
+            4083,
+            4119,
+            4118
+          ],
+          [
+            4092,
+            4093,
+            4128
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7830,
+          7850
+        ],
+        "vertices": [
+          [
+            4083,
+            4119,
+            4118
+          ],
+          [
+            4093,
+            4129,
+            4128
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          7840
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4088,
+            4124,
+            4123
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          7841
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4088,
+            4089,
+            4124
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          7837,
+          7842
+        ],
+        "vertices": [
+          [
+            4086,
+            4087,
+            4122
+          ],
+          [
+            4089,
+            4125,
+            4124
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8994,
+          9026
+        ],
+        "vertices": [
+          [
+            4668,
+            4703,
+            4702
+          ],
+          [
+            4684,
+            4719,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8995,
+          9026
+        ],
+        "vertices": [
+          [
+            4668,
+            4669,
+            4703
+          ],
+          [
+            4684,
+            4719,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          8996,
+          9026
+        ],
+        "vertices": [
+          [
+            4669,
+            4704,
+            4703
+          ],
+          [
+            4684,
+            4719,
+            4718
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9006,
+          9016
+        ],
+        "vertices": [
+          [
+            4674,
+            4709,
+            4708
+          ],
+          [
+            4679,
+            4714,
+            4713
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9007,
+          9016
+        ],
+        "vertices": [
+          [
+            4674,
+            4675,
+            4709
+          ],
+          [
+            4679,
+            4714,
+            4713
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9011
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4676,
+            4677,
+            4711
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9012
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4677,
+            4712,
+            4711
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9013
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4677,
+            4678,
+            4712
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9014
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4678,
+            4713,
+            4712
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9008,
+          9016
+        ],
+        "vertices": [
+          [
+            4675,
+            4710,
+            4709
+          ],
+          [
+            4679,
+            4714,
+            4713
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9038,
+          9057
+        ],
+        "vertices": [
+          [
+            4690,
+            4725,
+            4724
+          ],
+          [
+            4699,
+            4665,
+            4734
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9038,
+          9058
+        ],
+        "vertices": [
+          [
+            4690,
+            4725,
+            4724
+          ],
+          [
+            4665,
+            4700,
+            4734
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9046,
+          9050
+        ],
+        "vertices": [
+          [
+            4694,
+            4729,
+            4728
+          ],
+          [
+            4696,
+            4731,
+            4730
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      },
+      {
+        "triangles": [
+          9047,
+          9050
+        ],
+        "vertices": [
+          [
+            4694,
+            4695,
+            4729
+          ],
+          [
+            4696,
+            4731,
+            4730
+          ]
+        ],
+        "vertex_semantics": [
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ],
+          [
+            "eyelid",
+            "eyelid",
+            "eyelid"
+          ]
+        ]
+      }
+    ]
+  }
+]

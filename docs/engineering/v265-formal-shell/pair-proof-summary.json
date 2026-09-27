@@ -1,0 +1,1026 @@
+{
+  "input_pairs": 89,
+  "counts": {
+    "CERTIFIED_SEPARATE": 0,
+    "ALLOWED_SHARED_INTERFACE": 89,
+    "CERTIFIED_FORBIDDEN_INTERSECTION": 0,
+    "UNRESOLVED_NUMERICAL": 0
+  },
+  "geometry_changed": false,
+  "geometry_sha256": "22e2098059e9ac990f5093651f603825e3a37fff96326fd3a0f5ae8436382df3",
+  "geometry_hash_scope": "Authoritative cones.json material positions, rounded inner endpoints and complete integer topology; excludes regenerated floating nonmaterial positions.",
+  "maximum_subdivision_depth": 1,
+  "visited_nodes": 368,
+  "minimum_interior_separation_m": 0,
+  "numerical_tolerance": 0,
+  "scope": "Exact certificates for all 89 pairs, both frozen rounded mesh endpoints and exact p+w*h*d field. Both source-bound and replayed.",
+  "global_injectivity": "UNQUALIFIED",
+  "neutral_shell_admission": "NOT_RUN",
+  "blink": "NOT_RUN",
+  "remaining_global_obligations": [
+    "Existing 449 separators and all other cell-pair exclusions are floating numerical evidence, not replayed exact certificates.",
+    "Complete volume versus unrelated exterior/globe exclusion and allowed boundary contact classification.",
+    "Global assembly of pair and single-cell injectivity coverage."
+  ],
+  "source_hashes": {
+    "cones.json": "5846bccf99d9272ba97f4ebc28188103de7677e9b1071311bffc026bfde8cc70",
+    "frozen-contract.json": "0a49cc6d770f46aa22ea9c9feb5b602a73d9cb265dedec4bc6038942f8065dc3",
+    "global-field.json": "c36bd217f2e0df3d5f479c873dcc8a6b71f2b09a2f2a375b0c5ed14cee7d465b"
+  },
+  "execution_checkout_sha": "1ae6a2877970215950ff37f33bc5134743ef84bf",
+  "code_hashes": {
+    "experiments/v265_formal_shell/global_field.py": "30d1162d2dc08bf43e51370164f9899af62ee3e85f9dcb503ab7bda25d61b47d",
+    "experiments/v265_formal_shell/witness.py": "e42b0d7d15bf5dd0d9e45408f1575bf805db9a4665fc979b2f31d7fc2d1cca4b",
+    "experiments/v265_formal_shell/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "experiments/v265_formal_shell/test_geometry.py": "204718cfe491eefab705440106735ca07fd57610b8f4ce8541114a050528f3fd",
+    "experiments/v265_formal_shell/material.py": "99e0f7dfad5fdfe98f362682e801471e9347d4d95dff8967f521bb61e9018a5e",
+    "experiments/v265_formal_shell/prove_unresolved.py": "55d05653917cc9cf2e0c00f277a5a551cd44a026b386c1b5b6c0136cb6092b86",
+    "experiments/v265_formal_shell/preflight.py": "219c533f54dafeede1826c2e6d781a2df56d907316db36ae774b5c6e6b7851c4",
+    "experiments/v265_formal_shell/cones.py": "2a74bb637affb2a49f84807a95d901797e4b5086346def0ff039a4b28a3c848f",
+    "experiments/v265_formal_shell/field.py": "f6e4708bd1f11a4f6f65e525098f955d26fc8d0099275f7d1e0f4ce362bef128",
+    "experiments/v265_formal_shell/test_pair_proof.py": "6ecd22f54c16dfa81b45009d9ad340028f84a63849886cadb6d48da32f587265",
+    "experiments/v265_formal_shell/admission.py": "5ee8cc0e47bc152a20674717c3a3184e238fb379decbf20560950eb4fcd05d3b",
+    "experiments/v265_formal_shell/pair_proof.py": "37e45cadd50f8b80d0d227be0bc929bd16610c9e472850e01b3bd1f5fb4cbb1e"
+  },
+  "pairs": [
+    {
+      "triangles": [
+        7676,
+        7747
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7676-7747.json",
+      "sha256": "ad9c0efce9d9b166ab881d593bc55378f714b851bb8b7fc0275cc4c17b00dda5"
+    },
+    {
+      "triangles": [
+        7677,
+        7678
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7677-7678.json",
+      "sha256": "64036b35461ed224c30854ab11934896c0a22785c7cf8581e62e2507d65cdf44"
+    },
+    {
+      "triangles": [
+        7684,
+        7755
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7684-7755.json",
+      "sha256": "a978cf3c66773a61359c558a4dcfbba908a23d6d3aecc9d821aef830073952ac"
+    },
+    {
+      "triangles": [
+        7686,
+        7757
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7686-7757.json",
+      "sha256": "552bd31f0454294104262eb6f8b619c5b2d544a56dbc448f77273fba020cad41"
+    },
+    {
+      "triangles": [
+        7690,
+        7761
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7690-7761.json",
+      "sha256": "702142e4bcea05e58bb749cf09ae706deab6377aaa3289bff775821c007a30c4"
+    },
+    {
+      "triangles": [
+        7692,
+        7693
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7692-7693.json",
+      "sha256": "55eaeaff9618ebddbe2618842c8a2a6cdc00b11fd3af79db38401c9aa7b6508e"
+    },
+    {
+      "triangles": [
+        7696,
+        7767
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7696-7767.json",
+      "sha256": "b4122f47b06c1bdbf73984d755a9d9b0c24c86c1392f5d51bc55afb5b4cea182"
+    },
+    {
+      "triangles": [
+        7700,
+        7771
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7700-7771.json",
+      "sha256": "254857fa2f69834db3c218272dea30760221172c153ca5c73749d6ecdd254029"
+    },
+    {
+      "triangles": [
+        7704,
+        7775
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7704-7775.json",
+      "sha256": "ee02642159ebfebdcabed31cd0bf46e96c261de07a51c9f1e0bddff17b4c4161"
+    },
+    {
+      "triangles": [
+        7706,
+        7777
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7706-7777.json",
+      "sha256": "b3c7f5c048e394db02ad56b2da376d571c160da9239e4157c1cde6c7fa95f7d0"
+    },
+    {
+      "triangles": [
+        7718,
+        7789
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7718-7789.json",
+      "sha256": "6c8c2ee50078ad84912b6b065f4a4fdd5d15b73e891ab0b89ffee5ea4f3624f5"
+    },
+    {
+      "triangles": [
+        7722,
+        7793
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7722-7793.json",
+      "sha256": "ab46ab6e4c0893149d2a2a8b4fc29c9fea33689a7f6567adc53d87456161005e"
+    },
+    {
+      "triangles": [
+        7726,
+        7797
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7726-7797.json",
+      "sha256": "f7c731350f95116bb73386b2dd37b10a2225cd4ecb4d3ff5d0c3588627a2b1d2"
+    },
+    {
+      "triangles": [
+        7728,
+        7799
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7728-7799.json",
+      "sha256": "160bb3dc905b23a7e3d3407cf2f1a93fd8d440939bd59c2936420d67e92ead12"
+    },
+    {
+      "triangles": [
+        7732,
+        7803
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7732-7803.json",
+      "sha256": "8c76713ae3c970d8de18d15dfd43d6f550ac6d1e470cb6f00786781e06f29298"
+    },
+    {
+      "triangles": [
+        7740,
+        7811
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7740-7811.json",
+      "sha256": "a01d8d84ca726a9305b6e26d4f7c00141872801ee7d28284801243b756a9456b"
+    },
+    {
+      "triangles": [
+        7744,
+        7815
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7744-7815.json",
+      "sha256": "4f4f9fef4f8cf116888e9d00cbf694af91f8adaf865fd789580eefd536fb0418"
+    },
+    {
+      "triangles": [
+        7748,
+        7749
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7748-7749.json",
+      "sha256": "9dee8fdf5bcfdc41be4e73d290019a41a50f97a8ad28179be47a4ec296906d0a"
+    },
+    {
+      "triangles": [
+        7748,
+        7819
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7748-7819.json",
+      "sha256": "fb44d693184e7b51795fae5e112aa0fdce239a7afd5d4a674593dcc03877415c"
+    },
+    {
+      "triangles": [
+        7754,
+        7825
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7754-7825.json",
+      "sha256": "08c3b62a0181ac926b29cfd24a53620f538836152e5506ecec7f7d83208aebf1"
+    },
+    {
+      "triangles": [
+        7760,
+        7831
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7760-7831.json",
+      "sha256": "f91cbddbd3c62bb35f75b433a6585ff1173d3e5abc29470ee3dfb08286ed9be7"
+    },
+    {
+      "triangles": [
+        7761,
+        7762
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7761-7762.json",
+      "sha256": "465d74997751827d58d1183f7c51e9cf5706bc174c81db0b2dd0109c19570767"
+    },
+    {
+      "triangles": [
+        7762,
+        7833
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7762-7833.json",
+      "sha256": "7ef7f15e6ee95f7f1b091be2457471f2970e24fa0af4344b22ef4d5ec9b37f7a"
+    },
+    {
+      "triangles": [
+        7765,
+        7766
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7765-7766.json",
+      "sha256": "020a23d9b95fabc2a116d7ba838c9b6f0279d059e905f2d44cf3ae40396ad43f"
+    },
+    {
+      "triangles": [
+        7766,
+        7837
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7766-7837.json",
+      "sha256": "b6a2991764f1ea1c4c5bbdb589f7d86e5a9eea69fd759051ed95aec3479553ef"
+    },
+    {
+      "triangles": [
+        7767,
+        7768
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7767-7768.json",
+      "sha256": "9ac369b8c5d0e127fefb20e806c6547ea3563ca570829146ecb5f3ef3a09c793"
+    },
+    {
+      "triangles": [
+        7775,
+        7776
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7775-7776.json",
+      "sha256": "0257dfb4bb33d5006ad86e4d8d1f014d03dd6a2ccdfc90921edbd5150258b8db"
+    },
+    {
+      "triangles": [
+        7776,
+        7847
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7776-7847.json",
+      "sha256": "159360c76dcfff69cd6c2d27b10550038869249034f17d6495a6704a026916c1"
+    },
+    {
+      "triangles": [
+        7782,
+        7853
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7782-7853.json",
+      "sha256": "0763d0d86ac5ed8c568204cdb1be2a68b51ff935c25d08151f4455b7e21549cd"
+    },
+    {
+      "triangles": [
+        7784,
+        7855
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7784-7855.json",
+      "sha256": "0399f4c86b23db3278b816a557c8be75ef8148c43b98fd5867726f5aa93badd3"
+    },
+    {
+      "triangles": [
+        7786,
+        7857
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7786-7857.json",
+      "sha256": "e6a8da11f4027f2333dd4c92da7f5793d0512d47e20438e74fbc76e1d4011fe9"
+    },
+    {
+      "triangles": [
+        7788,
+        7859
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7788-7859.json",
+      "sha256": "b2c0cc4e6d98999ff149b0c84dbbd0d61e4374c17bb62099862fbfd37ed76bfd"
+    },
+    {
+      "triangles": [
+        7790,
+        7861
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7790-7861.json",
+      "sha256": "9b75f866b20702813159f9370de81483ae2c9b95b3fea27a0aba414c8fa9b5ca"
+    },
+    {
+      "triangles": [
+        7794,
+        7865
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7794-7865.json",
+      "sha256": "4a0586ce8ca0f20f75336ce45b14376d76c82a2dcbd6dad5bba13f4fdd4fb16f"
+    },
+    {
+      "triangles": [
+        7796,
+        7867
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7796-7867.json",
+      "sha256": "e430f730e71b1abedba8a8f338b14f69031d0fa9faab8219f759ba0a82ca7950"
+    },
+    {
+      "triangles": [
+        7798,
+        7869
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7798-7869.json",
+      "sha256": "bdc35b4285f595f9c3ae0eca5a328b865809956511ca7d771431a4b3b3c26e74"
+    },
+    {
+      "triangles": [
+        7804,
+        7875
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7804-7875.json",
+      "sha256": "4fd74682384a84179597baaf801c3f87f8fca319e01a412bceb25889ca7b19bd"
+    },
+    {
+      "triangles": [
+        7806,
+        7877
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7806-7877.json",
+      "sha256": "f601212c91e960b5aa4f217ca0bc72f4068f1eb81d9e9bf43818bd5b7a54b5c9"
+    },
+    {
+      "triangles": [
+        7810,
+        7881
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7810-7881.json",
+      "sha256": "50c67bed305cc813054c184d629e454fc6aa9ed4b0c6e56d531e655aeff10289"
+    },
+    {
+      "triangles": [
+        7818,
+        7819
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7818-7819.json",
+      "sha256": "d15bb81a74a8c05ce39bd134c6b8228cadf2c5e6568f2e501d453766c75622df"
+    },
+    {
+      "triangles": [
+        7825,
+        7826
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7825-7826.json",
+      "sha256": "7523606e3d7c0b6fe21bdb77bc3e3ec996852f0f23403ce931da26bbbd3840f2"
+    },
+    {
+      "triangles": [
+        7828,
+        7829
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7828-7829.json",
+      "sha256": "2c49fb5acc3cac6e79b45ec51d7e5aa6f19c5594e6ed6ef5e34334a9bcffc015"
+    },
+    {
+      "triangles": [
+        7832,
+        7833
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7832-7833.json",
+      "sha256": "d831beaf41abcbea6e115820a1412a0b829b1f0f6476e6ad239b315d60a10d81"
+    },
+    {
+      "triangles": [
+        7842,
+        7843
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7842-7843.json",
+      "sha256": "f888544de11af50d3524f767b9e25a4aaa35ed4ca872da8493599c75d5b3726e"
+    },
+    {
+      "triangles": [
+        7846,
+        7847
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7846-7847.json",
+      "sha256": "326fc0565f175dbf343658baedc232605957eb173843d3bf60aa9a8b230528ac"
+    },
+    {
+      "triangles": [
+        7849,
+        7850
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7849-7850.json",
+      "sha256": "0bd26254f1727e1d3e8d144156e75f846b3d1905b998833f39ae05327f3cc23b"
+    },
+    {
+      "triangles": [
+        7859,
+        7860
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7859-7860.json",
+      "sha256": "51174a5690441ab177066d0bae0d520f9f383c0f64dc44a33121389bb72e1ba8"
+    },
+    {
+      "triangles": [
+        7864,
+        7865
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7864-7865.json",
+      "sha256": "b211e947a43d2b7513ba3160fe07a5015a7dd99e33b2e7d3b9715b5102503bd3"
+    },
+    {
+      "triangles": [
+        7884,
+        7885
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-7884-7885.json",
+      "sha256": "eb8e48755ec8ececb537484baa0fdc24927fd17658d214305afd9a4214970e37"
+    },
+    {
+      "triangles": [
+        8860,
+        8929
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8860-8929.json",
+      "sha256": "93de31f32dec8f7d8cc18ea5fe6d8919ee336bc77877832b1e5bac05ca358a2f"
+    },
+    {
+      "triangles": [
+        8862,
+        8931
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8862-8931.json",
+      "sha256": "d193ebc2ceb29f0dd06c97140b91ca5abdbb319fb9f612b771362d3cefe331a1"
+    },
+    {
+      "triangles": [
+        8870,
+        8939
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8870-8939.json",
+      "sha256": "f7b1b5b84d7546e47285d7487c824345e91d1c9746409f0f18d339a1a34d6f70"
+    },
+    {
+      "triangles": [
+        8874,
+        8943
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8874-8943.json",
+      "sha256": "c15d2e2f24e3d46ace011e3993645cf4f9d0bc82008085ea54d52682b48696ed"
+    },
+    {
+      "triangles": [
+        8876,
+        8945
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8876-8945.json",
+      "sha256": "243a8fd2085cf57a7d65b6b06f5c9012ab3a60612e64c78b1093a563e1c3a28d"
+    },
+    {
+      "triangles": [
+        8882,
+        8951
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8882-8951.json",
+      "sha256": "29e94eea3462efdc721a326823f66743a4578300a077611b5c275ba7c94ae87f"
+    },
+    {
+      "triangles": [
+        8886,
+        8955
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8886-8955.json",
+      "sha256": "87f3da51f2c744c4bf5d05fc2cb7fa9e33c1ab4c7554f899edc347bc76c9d08f"
+    },
+    {
+      "triangles": [
+        8890,
+        8959
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8890-8959.json",
+      "sha256": "262dce379829380dcc992b3e23ac50de3c7109de8ef05eed8b1ff464442a83d9"
+    },
+    {
+      "triangles": [
+        8896,
+        8965
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 1,
+      "visited_nodes": 8,
+      "file": "pair-8896-8965.json",
+      "sha256": "645d576bf4eac47569af99103c4cf5bddc95586ad38a235317effd12b33ab813"
+    },
+    {
+      "triangles": [
+        8898,
+        8967
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8898-8967.json",
+      "sha256": "192f8eca8805bc7feff87a5b56cf424c215f395a2251cd59ec92c986fd0f11a4"
+    },
+    {
+      "triangles": [
+        8910,
+        8979
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8910-8979.json",
+      "sha256": "371e7ed3bf23cf176ec581c7e2c4a84a7001426dc66bab33e7b87e57f8800846"
+    },
+    {
+      "triangles": [
+        8912,
+        8981
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8912-8981.json",
+      "sha256": "cbd8a0b4add6353afb9cb0aee10c31a7f7b1c981ecc7bbafe82537dd2e24fcd4"
+    },
+    {
+      "triangles": [
+        8918,
+        8987
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8918-8987.json",
+      "sha256": "b5ff6efa2f6c7e9c692b7ea32af6f851343253f32e4b410f803ad35c5cdb442f"
+    },
+    {
+      "triangles": [
+        8922,
+        8923
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8922-8923.json",
+      "sha256": "0b08125601f4eab16f8a80133aa4e994f0cd320df28c33d93339d45a29af4a4d"
+    },
+    {
+      "triangles": [
+        8924,
+        8993
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8924-8993.json",
+      "sha256": "aaaf800e3c3cc99404d7aaa065a6bcab236b2b827721f875a276e00613b5736b"
+    },
+    {
+      "triangles": [
+        8930,
+        8999
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8930-8999.json",
+      "sha256": "4a33da875372d316e4407e8eda70242a86eaf1138e3175c9d845c640c513c98c"
+    },
+    {
+      "triangles": [
+        8940,
+        9009
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8940-9009.json",
+      "sha256": "b1daa0f179142e999b371223c6f185eeda9fc8e4e998ae668264b4b5facc7b5f"
+    },
+    {
+      "triangles": [
+        8942,
+        9011
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8942-9011.json",
+      "sha256": "fd817ddfe0e67f59927e95a99dff738e92d0539b9f77fbfecb5ecc878e10a60b"
+    },
+    {
+      "triangles": [
+        8944,
+        9013
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8944-9013.json",
+      "sha256": "807ff5da33f489d751ac2c184708a03e13505f7d54d7e1f5c297e4238867bf2f"
+    },
+    {
+      "triangles": [
+        8952,
+        9021
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8952-9021.json",
+      "sha256": "cbe314f2313bb8a64add7bac7d4d4cf6489b64b47149d5cafa7b6cf9b52f4560"
+    },
+    {
+      "triangles": [
+        8956,
+        9025
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8956-9025.json",
+      "sha256": "d97e3efb37539540a4a54ced85392d38f67508bd5bb5d60a3153349054b331e5"
+    },
+    {
+      "triangles": [
+        8960,
+        8961
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 1,
+      "visited_nodes": 8,
+      "file": "pair-8960-8961.json",
+      "sha256": "468e5f45033f51b5b7b6c5119c874308ee47515250730314cfe4a9c4f741f054"
+    },
+    {
+      "triangles": [
+        8960,
+        9029
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8960-9029.json",
+      "sha256": "7605407112317949e53f7584e7c1ed889c108111767ceb9b553cbc7647c37b92"
+    },
+    {
+      "triangles": [
+        8962,
+        9031
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8962-9031.json",
+      "sha256": "e48f2e3473eaf28f3a2a630a34baf94f3a93ea7ed7524285da6b059b0908dd60"
+    },
+    {
+      "triangles": [
+        8964,
+        8965
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 1,
+      "visited_nodes": 8,
+      "file": "pair-8964-8965.json",
+      "sha256": "790cee5a9a9963ebd29439444068a56389113793edee979b55b3193f688ff117"
+    },
+    {
+      "triangles": [
+        8965,
+        8966
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8965-8966.json",
+      "sha256": "9c1893cf0c803eecb1991bf9204991dadbc96eb7a830b1d101f6dcc320ba44d2"
+    },
+    {
+      "triangles": [
+        8968,
+        9037
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8968-9037.json",
+      "sha256": "1ed0824ab4677ec2a0cb3aa1b854edfaca98a7c527a0f47f5296d27ff27e1ce6"
+    },
+    {
+      "triangles": [
+        8970,
+        8971
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8970-8971.json",
+      "sha256": "db8c7a0afd2d02ab4b811efedea5aa63408f4df1238141f14cd76f243f8ba97e"
+    },
+    {
+      "triangles": [
+        8974,
+        8975
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8974-8975.json",
+      "sha256": "ba20946fa5f08e92bcaefbd9e9c0eb2ec37ba56ca6995f23811a689778767baa"
+    },
+    {
+      "triangles": [
+        8977,
+        8978
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8977-8978.json",
+      "sha256": "2536bd7136a6da1145ae34b13df9308721df3a37a45799255ce34b71274d58fd"
+    },
+    {
+      "triangles": [
+        8978,
+        9047
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8978-9047.json",
+      "sha256": "d202bddcd5fe31da206f22fd809c1aeb12b55abc297b881dbe621451b14f4157"
+    },
+    {
+      "triangles": [
+        8979,
+        8980
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8979-8980.json",
+      "sha256": "2cda6f0e37b38d79061b14035c8e6d35af49a63dcaecbfae160de46a3ad785b1"
+    },
+    {
+      "triangles": [
+        8982,
+        9051
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8982-9051.json",
+      "sha256": "5c2eb8020c53b0e8355fd24e47bc1e206ee409e1782cce9f4e88bd9fd35597f0"
+    },
+    {
+      "triangles": [
+        8984,
+        8985
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8984-8985.json",
+      "sha256": "dc4efa1c8959b4e419263036570a1168b98192a29f60a4616e173f9708a0edeb"
+    },
+    {
+      "triangles": [
+        8999,
+        9000
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-8999-9000.json",
+      "sha256": "92d3bfe967df5403780862c569c56871acfa526bf60df098d78caf9bb309d8b6"
+    },
+    {
+      "triangles": [
+        9000,
+        9001
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-9000-9001.json",
+      "sha256": "b36d23301d1d1010e7ca2f16d1160bc15954145c3b07ec7a77d8fd135f97db8f"
+    },
+    {
+      "triangles": [
+        9030,
+        9031
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-9030-9031.json",
+      "sha256": "8486b0dca359b4ffc0e7bd6437bfd33ea9906252626689ccc743a4eaec35a8e4"
+    },
+    {
+      "triangles": [
+        9042,
+        9043
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-9042-9043.json",
+      "sha256": "a2317543eea3a239af69591e0d94c4a0c53f4c8e6a5df545d734290745d3b7c9"
+    },
+    {
+      "triangles": [
+        9052,
+        9053
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-9052-9053.json",
+      "sha256": "9fae7d035a14a0a0de97bd3aad38553918d5751fc73b8675638617b24fef6774"
+    },
+    {
+      "triangles": [
+        9054,
+        9055
+      ],
+      "classification": "ALLOWED_SHARED_INTERFACE",
+      "maximum_subdivision_depth": 0,
+      "visited_nodes": 4,
+      "file": "pair-9054-9055.json",
+      "sha256": "589089e6ea80f86228e759f77928a3bb0f1406e2141aead6d16ebf9b33ae2b4a"
+    }
+  ]
+}

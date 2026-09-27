@@ -1,0 +1,420 @@
+[
+  {
+    "vertex": 1720,
+    "position": [
+      0.03600312114888591,
+      -0.015000000000000005,
+      -0.006903879798454242
+    ],
+    "side": "right",
+    "incident_triangle": 7707,
+    "normal_dot": -0.30069611160364884,
+    "direction": [
+      0.013722100560658316,
+      0.2571736892257339,
+      0.9662677669912356
+    ],
+    "face_normal": [
+      -0.9518370482210095,
+      0.028542789367123147,
+      -0.3052728989102372
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4051,
+    "position": [
+      0.043353312281243644,
+      -0.026777272727272726,
+      -0.003176255511497376
+    ],
+    "side": "right",
+    "incident_triangle": 7766,
+    "normal_dot": -0.0412599040876047,
+    "direction": [
+      0.6909028735822483,
+      0.03020243969532435,
+      0.722316434751586
+    ],
+    "face_normal": [
+      -0.05622214171992911,
+      -0.9976806512049373,
+      0.03837172125037394
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4057,
+    "position": [
+      0.03501997698238027,
+      -0.017450000000000004,
+      -0.004067521868995257
+    ],
+    "side": "right",
+    "incident_triangle": 7779,
+    "normal_dot": -0.01329861847993877,
+    "direction": [
+      -0.3985425693079602,
+      0.5123225430393865,
+      0.7607163941595223
+    ],
+    "face_normal": [
+      -0.8697849624461498,
+      0.02883819915051266,
+      -0.4925875327008441
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4058,
+    "position": [
+      0.03494258815634764,
+      -0.019781818181818185,
+      -0.004067387476567337
+    ],
+    "side": "right",
+    "incident_triangle": 7779,
+    "normal_dot": -0.3145776573304888,
+    "direction": [
+      -0.001031206768446032,
+      0.7302354072703143,
+      0.6831948379352399
+    ],
+    "face_normal": [
+      -0.8697849624461498,
+      0.02883819915051266,
+      -0.4925875327008441
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4063,
+    "position": [
+      0.026122194559608954,
+      -0.019781818181818185,
+      -0.005759987425699994
+    ],
+    "side": "right",
+    "incident_triangle": 7790,
+    "normal_dot": -0.12630590397190852,
+    "direction": [
+      0.1614792680109219,
+      0.725032829774495,
+      0.6695161250872492
+    ],
+    "face_normal": [
+      -0.95434396354616,
+      -0.18105126385354878,
+      0.23758796076408942
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4093,
+    "position": [
+      0.03403683281587462,
+      -0.0199,
+      -0.0024749715668727487
+    ],
+    "side": "right",
+    "incident_triangle": 7851,
+    "normal_dot": -0.2964225685721693,
+    "direction": [
+      -0.2606576839128174,
+      0.03566308114770325,
+      0.964772365099798
+    ],
+    "face_normal": [
+      -0.6186931909707771,
+      0.6085332735978705,
+      -0.4968963577755998
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4094,
+    "position": [
+      0.033972082638310155,
+      -0.021563636363636365,
+      -0.004431753043033039
+    ],
+    "side": "right",
+    "incident_triangle": 7852,
+    "normal_dot": -0.4752314073142435,
+    "direction": [
+      -0.07921899388003342,
+      0.24070467306278515,
+      0.9673601249660713
+    ],
+    "face_normal": [
+      -0.6136600358433975,
+      0.4449746100468572,
+      -0.652241486584783
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4099,
+    "position": [
+      0.026592179351799968,
+      -0.021563636363636365,
+      -0.00522996597509453
+    ],
+    "side": "right",
+    "incident_triangle": 7790,
+    "normal_dot": -0.36249057114529926,
+    "direction": [
+      0.48843289366521814,
+      0.4265243865404265,
+      0.7612557100423841
+    ],
+    "face_normal": [
+      -0.95434396354616,
+      -0.18105126385354878,
+      0.23758796076408942
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4122,
+    "position": [
+      0.03747955723297815,
+      -0.02636363636363636,
+      -0.003739717874018791
+    ],
+    "side": "right",
+    "incident_triangle": 7838,
+    "normal_dot": -0.3467668502068296,
+    "direction": [
+      -0.22713736063156817,
+      -0.7697176995420383,
+      0.5966098242713053
+    ],
+    "face_normal": [
+      -0.2969307467603093,
+      0.8599261616253627,
+      0.4151615687664689
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4130,
+    "position": [
+      0.03314022076570659,
+      -0.02309090909090909,
+      -0.004691039217207947
+    ],
+    "side": "right",
+    "incident_triangle": 7852,
+    "normal_dot": -0.7741496470154209,
+    "direction": [
+      0.017755004422411517,
+      -0.33379619193660603,
+      0.9424780432808928
+    ],
+    "face_normal": [
+      -0.6136600358433975,
+      0.4449746100468572,
+      -0.652241486584783
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4135,
+    "position": [
+      0.026995023459392264,
+      -0.02309090909090909,
+      -0.005058537921872233
+    ],
+    "side": "right",
+    "incident_triangle": 7862,
+    "normal_dot": -0.13578736048917214,
+    "direction": [
+      0.5138330268059997,
+      0.04070264865933287,
+      0.8569241010471697
+    ],
+    "face_normal": [
+      -0.9000511240017708,
+      -0.19358025241648677,
+      0.3904288156085795
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 1696,
+    "position": [
+      -0.025716515106347072,
+      -0.015000000000000005,
+      -0.00804931561894007
+    ],
+    "side": "left",
+    "incident_triangle": 8883,
+    "normal_dot": -0.4029463543213667,
+    "direction": [
+      0.2519250280436122,
+      0.265502074741259,
+      0.930614006209509
+    ],
+    "face_normal": [
+      -0.9869491489474833,
+      -0.022105164844366632,
+      -0.1595078025647699
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4648,
+    "position": [
+      -0.02612970428116291,
+      -0.019781818181818185,
+      -0.005760924580101064
+    ],
+    "side": "left",
+    "incident_triangle": 8953,
+    "normal_dot": -0.3612609401289274,
+    "direction": [
+      0.262549585429303,
+      0.708515391334643,
+      0.6550371404987803
+    ],
+    "face_normal": [
+      -0.9649770351272458,
+      0.07898090860591535,
+      -0.2501626226133997
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4652,
+    "position": [
+      -0.03272773666301938,
+      -0.019781818181818185,
+      -0.00508578733653637
+    ],
+    "side": "left",
+    "incident_triangle": 8962,
+    "normal_dot": -0.24275463951768342,
+    "direction": [
+      0.2575994677064149,
+      0.6787083329913162,
+      0.6877481464646199
+    ],
+    "face_normal": [
+      -0.9168698122357528,
+      -0.2888629426425884,
+      0.275513970205941
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4660,
+    "position": [
+      -0.043470715894483675,
+      -0.02444545454545455,
+      -0.003176255797429495
+    ],
+    "side": "left",
+    "incident_triangle": 8978,
+    "normal_dot": -0.12971295118239398,
+    "direction": [
+      -0.6757930293925588,
+      -0.11405345275466493,
+      0.7282139735951016
+    ],
+    "face_normal": [
+      0.1078448794551745,
+      0.9911662612423116,
+      0.07719407069352302
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4682,
+    "position": [
+      -0.02665316042386119,
+      -0.0199,
+      -0.0037790575687944856
+    ],
+    "side": "left",
+    "incident_triangle": 9023,
+    "normal_dot": -0.05619622155045417,
+    "direction": [
+      -0.2700349103751433,
+      0.1236173330762907,
+      0.9548821404455073
+    ],
+    "face_normal": [
+      -0.8949295386059928,
+      0.27918606762038684,
+      -0.348075078937188
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4683,
+    "position": [
+      -0.026607198794907874,
+      -0.021563636363636365,
+      -0.005231607734840489
+    ],
+    "side": "left",
+    "incident_triangle": 9024,
+    "normal_dot": -0.5731551301231316,
+    "direction": [
+      0.29063501227821076,
+      0.26029256801291906,
+      0.9207491887996885
+    ],
+    "face_normal": [
+      -0.8975757555251811,
+      0.19640865901205706,
+      -0.39469152734570545
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4687,
+    "position": [
+      -0.03210760062839544,
+      -0.021563636363636365,
+      -0.004890215524580931
+    ],
+    "side": "left",
+    "incident_triangle": 8962,
+    "normal_dot": -0.48128680960645337,
+    "direction": [
+      0.6117708921425281,
+      0.38397425740612884,
+      0.691592470445238
+    ],
+    "face_normal": [
+      -0.9168698122357528,
+      -0.2888629426425884,
+      0.275513970205941
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  },
+  {
+    "vertex": 4718,
+    "position": [
+      -0.02701647980668927,
+      -0.02309090909090909,
+      -0.005060863950407926
+    ],
+    "side": "left",
+    "incident_triangle": 9024,
+    "normal_dot": -0.6206537601207985,
+    "direction": [
+      0.23526294000125375,
+      -0.15757708983812774,
+      0.9590728907753118
+    ],
+    "face_normal": [
+      -0.8975757555251811,
+      0.19640865901205706,
+      -0.39469152734570545
+    ],
+    "interpretation": "Chosen averaged direction is not inward to every incident oriented facet; does not prove all possible directions infeasible."
+  }
+]

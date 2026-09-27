@@ -1,0 +1,18 @@
+[
+  {
+    "blink": 0,
+    "squint": 0,
+    "vertices": 5244,
+    "triangles": 10096,
+    "intersections": 0,
+    "categories": {},
+    "pairs": [],
+    "unresolved_coplanar": 20,
+    "nonmanifold": 0,
+    "winding": 0,
+    "degenerate": 0,
+    "duplicate_faces": 0,
+    "structural_pass": false,
+    "full_admission": false
+  }
+]

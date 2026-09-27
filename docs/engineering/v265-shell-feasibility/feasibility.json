@@ -1,0 +1,40 @@
+{
+  "samples": 284,
+  "depth_quantiles_m": [
+    0.00016357125733987776,
+    0.00030133829656233817,
+    0.0007527752870647415,
+    0.0026480023477369248
+  ],
+  "minimum_witness": {
+    "vertex": 4687,
+    "side": "left",
+    "upper_lower": "lower",
+    "zone": "central",
+    "band": 2,
+    "position": [
+      -0.03210760062839544,
+      -0.021563636363636365,
+      -0.004890215524580931
+    ],
+    "inward_normal": [
+      0.6117708921425281,
+      0.38397425740612884,
+      0.691592470445238
+    ],
+    "normal_hit": {
+      "metres": 0.0013572509743440195,
+      "triangle": 9030
+    },
+    "posterior_hit": null,
+    "globe_ray_hit": null,
+    "exterior_sample_globe_distance": {
+      "metres": 0.001461053185007327,
+      "triangle": 9359
+    },
+    "normal_consistency_length_m": 0.000654285029359511,
+    "conservative_sample_depth_m": 0.00016357125733987776
+  },
+  "scope": "Vertex rays and discrete normal-consistency bound; no global impossibility or continuous collision-free proof",
+  "exterior_sha256": "6182941804e3510562aa20affb29154a436af47b33e1ab41eabda3fa34842233"
+}

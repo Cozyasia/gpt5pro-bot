@@ -1,0 +1,368 @@
+[
+  {
+    "level": 0,
+    "calibration_samples": 256,
+    "stress_samples": 32,
+    "calibration_orientation_failures": 0,
+    "benign_observed_envelope": {
+      "area": [
+        0.2589147641729258,
+        2.139896265832887
+      ],
+      "edge": [
+        0.25884445756122626,
+        1.6639165765256474
+      ]
+    },
+    "stress_orientation_failures": 0,
+    "stress_hole_pixels": 0,
+    "stress_outside_envelope": 0,
+    "patch_numerical_pass": true,
+    "full_anatomical_surface_qualified": false,
+    "rows": [
+      {
+        "case": 0,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 1,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 2,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 3,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 4,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 5,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 6,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 7,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 8,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 9,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 10,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 11,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 12,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 13,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 14,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 15,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 16,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 17,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 18,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 19,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 20,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 21,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 22,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 23,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 24,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 25,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 26,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 27,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 28,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 29,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 30,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 31,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      }
+    ]
+  },
+  {
+    "level": 1,
+    "calibration_samples": 256,
+    "stress_samples": 32,
+    "calibration_orientation_failures": 0,
+    "benign_observed_envelope": {
+      "area": [
+        0.12902213730996565,
+        2.449481732842998
+      ],
+      "edge": [
+        0.13814311287470027,
+        1.9587647560936026
+      ]
+    },
+    "stress_orientation_failures": 0,
+    "stress_hole_pixels": 0,
+    "stress_outside_envelope": 0,
+    "patch_numerical_pass": true,
+    "full_anatomical_surface_qualified": false,
+    "rows": [
+      {
+        "case": 0,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 1,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 2,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 3,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 4,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 5,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 6,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 7,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 8,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 9,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 10,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 11,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 12,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 13,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 14,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 15,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 16,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 17,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 18,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 19,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 20,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 21,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 22,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 23,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 24,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 25,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 26,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 27,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 28,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 29,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 30,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      },
+      {
+        "case": 31,
+        "outside_envelope": false,
+        "hole_pixels": 0
+      }
+    ]
+  }
+]

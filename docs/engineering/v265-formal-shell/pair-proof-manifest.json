@@ -1,0 +1,28 @@
+{
+  "tested_code_sha": "1ae6a2877970215950ff37f33bc5134743ef84bf",
+  "code_tree_sha": "ff484f68be45ce2e20e0a53cb5ce81838ad3780f",
+  "ci_runs": {
+    "formal": 36303598873,
+    "quality_contracts": 36303601384,
+    "selfhost_contracts": 36303601295
+  },
+  "ci_status": "success",
+  "ci_artifact": {
+    "id": 10926536911,
+    "sha256": "b65f8424015f0de051f2439985cc59e2fffef1854b1d19fcb5777fe7eeea4e50"
+  },
+  "files": [
+    {
+      "file": "pair-proof-summary.json",
+      "sha256": "59cfeb2c826ba5cb3cfae822b772dda738787ef70c36d2c60a4221b5a0067b6a"
+    },
+    {
+      "file": "pair-7676-7747.json",
+      "sha256": "ad9c0efce9d9b166ab881d593bc55378f714b851bb8b7fc0275cc4c17b00dda5"
+    },
+    {
+      "file": "pair-proof-certificates.tar.xz",
+      "sha256": "de0d271184b48250d066b41eef7c5e6087a83cf68242ccc75dd33c9f490c6e13"
+    }
+  ]
+}
