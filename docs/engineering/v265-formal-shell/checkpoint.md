@@ -1,5 +1,10 @@
 # Formal local shell feasibility — G2 neutral candidate
 
+Historical construction checkpoint. Update 2026-09-27: the89 previously unresolved
+neighboring pairs are now exactly certified ALLOWED_SHARED_INTERFACE; see
+[pair-proof-checkpoint.md](pair-proof-checkpoint.md). Complete-shell global
+injectivity remains UNQUALIFIED pending coverage-complete assembly. Geometry unchanged.
+
 Production frozen. PR120 only. Frozen mouth D2/corotated expression, nose V2, retained exterior and old uniform/E/F/G negative files unchanged. No blink/seam/training/real matrix/merge/deploy. This is nominal neutral geometry evidence, not dynamic or identity-diverse admission.
 
 ## A. Formal cone map
