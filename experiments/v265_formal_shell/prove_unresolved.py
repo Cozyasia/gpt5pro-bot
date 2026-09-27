@@ -15,10 +15,24 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def frozen_vertices(rows,mapping,depth):
+    """Authoritative serialized G2 coordinates, never regenerated trig positions."""
+    v={}
+    for r in rows:
+        i=r['vertex'];v[i]=list(r['position_m'])
+        v[mapping[i]]=[float(p)+float(depth)*float(d) for p,d in zip(r['position_m'],r['direction'])]
+    return v
+
+
+def geometry_digest(v,tr):
+    data=json.dumps({'material_vertices':sorted(v.items()),'triangles':tr.tolist()},separators=(',',':'))
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
 def pair_maps(vertices,mapping,ids,rows,depth):
     a,b,c,d=ids;aa=[a,b,c];bb=[a,b,d]
-    mesh=[vertices[aa].tolist(),vertices[[mapping[x] for x in aa]].tolist(),
-          vertices[bb].tolist(),vertices[[mapping[x] for x in bb]].tolist()]
+    mesh=[[vertices[x] for x in aa],[vertices[mapping[x]] for x in aa],
+          [vertices[x] for x in bb],[vertices[mapping[x]] for x in bb]]
     directions={r['vertex']:r['direction'] for r in rows}
     field=[]
     for face in (aa,bb):
@@ -49,9 +63,10 @@ def run(out):
     assert len({tuple(x['triangles']) for x in pairs})==89
     # Representative first; no pair-specific proof logic.
     pairs.sort(key=lambda x:(x['triangles']!=[7676,7747],x['triangles']))
-    t=geometry(rows,contract['construction_depth_m']);v=t['vertices'];tr=t['triangles']
+    t=geometry(rows,contract['construction_depth_m']);tr=t['triangles']
     mapping={a:b for domain in t['domains'] for a,b in zip(domain['outer_vertices'],domain['inner_vertices'])}
-    snapshot=hashlib.sha256(v.tobytes()+tr.tobytes()).hexdigest()
+    v=frozen_vertices(rows,mapping,contract['construction_depth_m'])
+    snapshot=geometry_digest(v,tr)
     result=[]
     for pair in pairs:
         a,b,c,d=pair['vertices'];aa=[a,b,c];bb=[a,b,d]
@@ -73,11 +88,12 @@ def run(out):
                            maximum_subdivision_depth=max(r['maximum_subdivision_depth'],r['formal_field_proof']['maximum_subdivision_depth']),
                            visited_nodes=r['visited_nodes']+r['formal_field_proof']['visited_nodes'],file=name,sha256=digest(out/name)))
         print(pair['triangles'],r['classification'],'depth',r['maximum_subdivision_depth'],flush=True)
-    assert snapshot==hashlib.sha256(v.tobytes()+tr.tobytes()).hexdigest()
+    assert snapshot==geometry_digest(v,tr)
     counts=Counter(x['classification'] for x in result)
     summary=dict(input_pairs=89,counts={k:counts[k] for k in [
         'CERTIFIED_SEPARATE','ALLOWED_SHARED_INTERFACE','CERTIFIED_FORBIDDEN_INTERSECTION','UNRESOLVED_NUMERICAL']},
         geometry_changed=False,geometry_sha256=snapshot,
+        geometry_hash_scope='Authoritative cones.json material positions, rounded inner endpoints and complete integer topology; excludes regenerated floating nonmaterial positions.',
         maximum_subdivision_depth=max(x['maximum_subdivision_depth'] for x in result),
         visited_nodes=sum(x['visited_nodes'] for x in result),
         minimum_interior_separation_m=0,numerical_tolerance=0,
@@ -103,9 +119,10 @@ def replay_batch(out):
     rows=json.loads((source/'cones.json').read_text())
     contract=json.loads((source/'frozen-contract.json').read_text())
     pairs={tuple(x['triangles']):x for x in json.loads((source/'global-field.json').read_text())['ruled_separations'] if not x['separated']}
-    t=geometry(rows,contract['construction_depth_m']);v=t['vertices'];tr=t['triangles']
-    assert hashlib.sha256(v.tobytes()+tr.tobytes()).hexdigest()==summary['geometry_sha256']
+    t=geometry(rows,contract['construction_depth_m']);tr=t['triangles']
     mapping={a:b for d in t['domains'] for a,b in zip(d['outer_vertices'],d['inner_vertices'])}
+    v=frozen_vertices(rows,mapping,contract['construction_depth_m'])
+    assert geometry_digest(v,tr)==summary['geometry_sha256']
     seen=set();counts=Counter()
     for entry in summary['pairs']:
         key=tuple(entry['triangles']);assert key in pairs and key not in seen;seen.add(key)

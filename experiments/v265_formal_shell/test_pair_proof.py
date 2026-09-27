@@ -69,3 +69,11 @@ class PairProof(unittest.TestCase):
     def test_zero_volume_never_passes(self):
         p=self.api();a,ai,b,bi=self.fixture()
         self.assertEqual(p.prove_pair(a,a,b,b)['classification'],'UNRESOLVED_NUMERICAL')
+
+    def test_frozen_coordinates_do_not_depend_on_regeneration(self):
+        from . import prove_unresolved as batch
+        self.assertTrue(hasattr(batch,'frozen_vertices'))
+        rows=[{'vertex':0,'position_m':[.1,.2,.3],'direction':[0.,0.,1.]}]
+        v=batch.frozen_vertices(rows,{0:7},.01)
+        self.assertEqual(v[0],[.1,.2,.3])
+        self.assertEqual(v[7],[.1,.2,.3+.01])
