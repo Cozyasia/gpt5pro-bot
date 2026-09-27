@@ -17,13 +17,17 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install numpy==2.3.5 scipy==1.17.0
         working-directory: /tmp
-      - run: OPENBLAS_NUM_THREADS=1 python -m unittest experiments.v265_formal_shell.test_geometry experiments.v265_retained.test_contract
+      - run: OPENBLAS_NUM_THREADS=1 python -m unittest experiments.v265_formal_shell.test_geometry experiments.v265_formal_shell.test_pair_proof experiments.v265_retained.test_contract
       - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.cones /tmp/formal-shell
       - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.field /tmp/formal-shell
       - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.preflight /tmp/formal-shell
       - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.global_field /tmp/formal-shell
       - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.witness /tmp/formal-shell
       - run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.admission /tmp/formal-shell
+      - name: Exact unchanged-G2 neighboring-cell proofs (no downstream admission)
+        run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.prove_unresolved /tmp/formal-shell/pair-proof
+      - name: Replay certificates and bind both maps to source
+        run: OPENBLAS_NUM_THREADS=1 python -m experiments.v265_formal_shell.prove_unresolved /tmp/formal-shell/pair-proof --replay
       - uses: actions/upload-artifact@v4
         if: always()
         with:
