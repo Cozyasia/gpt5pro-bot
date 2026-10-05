@@ -4147,7 +4147,9 @@ async def on_mode_cb(update, context):
         context.user_data["awaiting_work_logo_brief"] = True
         await q.message.reply_text(
             "🎨 Опишите логотип: название бренда, ниша, стиль, цвета, слоган, где будет использоваться. Я сгенерирую визуал.",
-            reply_markup=_mode_kb("work"),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад в Работа/Бизнес", callback_data="mode:work")],
+            ]),
         )
         return
 
@@ -4371,7 +4373,7 @@ async def on_mode_cb(update, context):
         await q.message.reply_text(
             _fun_revive_help_text(),
             parse_mode="Markdown",
-            reply_markup=_mode_kb("fun"),
+            reply_markup=photo_revival_wait_kb(),
         )
         return
 
@@ -7184,6 +7186,23 @@ async def cmd_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _run_suno_music(update, context, brief)
 
 # ───────── Photo quick actions ─────────
+def photo_revival_actions_kb():
+    """Only actions that belong to the selected 'Оживить фото' flow."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Оживить через Runway", callback_data="pedit:revive_runway")],
+        [InlineKeyboardButton("✨ Оживить через Kling", callback_data="pedit:revive_kling")],
+        [InlineKeyboardButton("✨ Sora 2 без людей", callback_data="pedit:revive_sora")],
+        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun")],
+    ])
+
+
+def photo_revival_wait_kb():
+    """Navigation only while waiting for the source photo."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun")],
+    ])
+
+
 def photo_quick_actions_kb():
     # Длинные подписи — отдельными строками, чтобы не обрезались в Telegram.
     return InlineKeyboardMarkup([
@@ -14280,8 +14299,8 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if _is_waiting_photo_revival(context):
             _clear_photo_revival_wait(context)
             await update.effective_message.reply_text(
-                "Фото получено. Выберите доступный движок для оживления:",
-                reply_markup=photo_quick_actions_kb(),
+                "Фото получено. Выберите движок для оживления:",
+                reply_markup=photo_revival_actions_kb(),
             )
             return
 
