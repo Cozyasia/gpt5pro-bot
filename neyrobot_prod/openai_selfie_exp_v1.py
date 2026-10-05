@@ -83,7 +83,7 @@ def _set_active(context: Any, value: bool = True) -> None:
 
 def _clear(context: Any, keep_photo: bool = True) -> None:
     for key in ("openai_selfie_wait_photo", "openai_selfie_wait_scene", "openai_selfie_country",
-                "openai_selfie_hero", "openai_selfie_scene"):
+                "openai_selfie_hero", "openai_selfie_scene", "openai_selfie_wait_scene_photo", "openai_selfie_scene_photo"):
         context.user_data.pop(key, None)
     if not keep_photo:
         context.user_data.pop("openai_selfie_photo", None)
@@ -110,23 +110,34 @@ def _hero_refs(slug: str) -> list[Path]:
     return list(base._reference_paths(mod, slug)) if mod is not None else []
 
 
-def _prompt(hero_name: str, scene: str) -> str:
+def _prompt(hero_name: str, scene: str, custom_scene: bool = False) -> str:
+    if custom_scene:
+        return (
+            "IMAGE 1 is the authoritative SCENE photograph. Preserve its recognizable environment, architecture, "
+            "furniture, camera viewpoint and perspective. IMAGE 2 is the authoritative USER identity reference. "
+            "Create a realistic photograph placing the user from IMAGE 2 and one second person matching the HERO "
+            f"REFERENCE images consistently ({hero_name}) into IMAGE 1. Preserve the user's facial identity with "
+            "maximum fidelity: facial geometry, apparent age, eyes, nose, mouth, hairline, skin texture and distinctive "
+            "features. Do not preserve the user's original clothing or original background. Choose natural photorealistic "
+            "clothing for the user that fits the supplied scene, occasion, weather and social context. Adapt body pose "
+            "as needed while keeping identity unmistakable. Match both people to IMAGE 1 lighting, lens perspective, "
+            "scale, occlusion and shadows. Keep identities separate; no face merging, averaging or swapping. Exactly "
+            "two principal people. No text, watermark or interface elements. The output is an AI-generated fictional fan image."
+        )
     return (
-        "Edit IMAGE 1 rather than recreating it. IMAGE 1 is the authoritative original user photograph. "
-        "Preserve the user already present in IMAGE 1 with maximum fidelity: face, identity, apparent age, "
-        "expression, hair, skin texture, body, clothing, pose, hands, camera angle, lens perspective, crop, "
-        "background, furniture and lighting. Do not beautify, redraw, replace, move or restyle that person. "
-        f"Add one second person matching the HERO REFERENCE images consistently ({hero_name}). "
-        "Place the added person naturally in available space beside the user, with physically plausible scale, "
-        "occlusion, perspective, shadows and scene lighting. Keep the two identities separate; no face merging, "
-        "averaging or swapping. Exactly two principal people. "
-        f"Scene instruction: {scene or 'keep the original location and naturally seat/position the hero beside the user'}. "
-        "If the scene instruction conflicts with preservation of IMAGE 1, preservation of IMAGE 1 wins. "
+        "Use IMAGE 1 as the authoritative USER identity reference. Preserve the user's facial identity with maximum "
+        "fidelity: facial geometry, apparent age, eyes, nose, mouth, hairline, skin texture and distinctive features. "
+        "The user's original clothing is NOT locked. Choose natural photorealistic clothing appropriate to the requested "
+        "scene, occasion, weather and social context. You may adapt pose, framing and background to the requested scene "
+        "while keeping the user's identity unmistakable. "
+        f"Add one second person matching the HERO REFERENCE images consistently ({hero_name}). Keep the identities "
+        "separate; no face merging, averaging or swapping. Exactly two principal people. "
+        f"Scene instruction: {scene or 'keep the original location and naturally position the hero beside the user'}. "
+        "Use physically plausible scale, perspective, occlusion, shadows and coherent scene lighting. "
         "No text, watermark or interface elements. The output is an AI-generated fictional fan image."
     )
 
-
-async def _openai_edit(user_photo: bytes, slug: str, scene: str) -> bytes:
+async def _openai_edit(user_photo: bytes, slug: str, scene: str, scene_photo: bytes = b"") -> bytes:
     from neyrobot_prod import celebrity_selfie as base
     key = str(os.environ.get("OPENAI_API_KEY") or "").strip()
     if not key:
@@ -139,9 +150,15 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str) -> bytes:
     model = str(os.environ.get("OPENAI_SELFIE_IMAGE_MODEL") or "gpt-image-2.5-sunburst").strip()
     quality = str(os.environ.get("OPENAI_SELFIE_QUALITY") or "high").strip()
     moderation = str(os.environ.get("OPENAI_SELFIE_MODERATION") or "auto").strip()
-    prompt = _prompt(str(meta.get("name") or slug), scene)
+    custom_scene = len(scene_photo) >= 1024
+    prompt = _prompt(str(meta.get("name") or slug), scene, custom_scene=custom_scene)
 
-    files = [("image[]", ("user.jpg", bytes(user_photo), "image/jpeg"))]
+    files = []
+    if custom_scene:
+        files.append(("image[]", ("scene.jpg", bytes(scene_photo), "image/jpeg")))
+        files.append(("image[]", ("user.jpg", bytes(user_photo), "image/jpeg")))
+    else:
+        files.append(("image[]", ("user.jpg", bytes(user_photo), "image/jpeg")))
     for i, path in enumerate(refs, 1):
         files.append(("image[]", (f"hero_{i}.jpg", path.read_bytes(), "image/jpeg")))
     data = {"model": model, "prompt": prompt, "quality": quality, "size": "auto", "moderation": moderation, "output_format": "png"}
@@ -173,7 +190,7 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str) -> bytes:
     raise RuntimeError("OpenAI image edit response contained no usable bytes")
 
 
-async def _generate(update: Any, context: Any, scene: str) -> bool:
+async def _generate(update: Any, context: Any, scene: str, scene_photo: bytes = b"") -> bool:
     from neyrobot_prod import celebrity_selfie as base
     mod = _runtime(); msg = getattr(update, "effective_message", None); user = getattr(update, "effective_user", None)
     if mod is None or msg is None or user is None:
@@ -192,7 +209,7 @@ async def _generate(update: Any, context: Any, scene: str) -> bool:
     async def action() -> bool:
         try:
             await msg.reply_text("⏳ OpenAI: редактирую исходное фото и добавляю выбранного героя…")
-            out = await _openai_edit(photo, slug, scene)
+            out = await _openai_edit(photo, slug, scene, scene_photo=scene_photo)
             bio = io.BytesIO(out); bio.name = "openai_selfie.png"
             await msg.reply_document(document=bio,
                 caption=f"⭐ Селфи со звездой OpenAI · «{meta['name']}»\nЭкспериментальный отдельный маршрут. Исходный режим V265 не использовался.")
@@ -255,8 +272,9 @@ async def callback(update: Any, context: Any) -> None:
     elif cmd.startswith("scene:"):
         key = cmd.split(":",1)[1]
         if key == "custom":
-            context.user_data["openai_selfie_wait_scene"] = True
-            await q.message.reply_text("📝 Опишите, как добавить героя к вашему исходному фото.")
+            context.user_data.pop("openai_selfie_wait_scene", None)
+            context.user_data["openai_selfie_wait_scene_photo"] = True
+            await q.message.reply_text("🖼 Пришлите фотографию своей сцены. Я сохраню эту локацию и размещу на ней вас и выбранного героя; одежду подберу под сцену автоматически.")
         else:
             preset = base.SCENES.get(key)
             if not preset:
@@ -269,7 +287,11 @@ async def callback(update: Any, context: Any) -> None:
 
 async def media(update: Any, context: Any) -> None:
     from telegram.ext import ApplicationHandlerStop
-    if not _enabled() or not context.user_data.get("openai_selfie_active") or not context.user_data.get("openai_selfie_wait_photo"):
+    if not _enabled() or not context.user_data.get("openai_selfie_active"):
+        return
+    waiting_user = bool(context.user_data.get("openai_selfie_wait_photo"))
+    waiting_scene = bool(context.user_data.get("openai_selfie_wait_scene_photo"))
+    if not (waiting_user or waiting_scene):
         return
     mod = _runtime(); msg = getattr(update, "effective_message", None)
     if mod is None or msg is None:
@@ -278,9 +300,15 @@ async def media(update: Any, context: Any) -> None:
     if len(raw) < 1024:
         await msg.reply_text("Не удалось прочитать изображение. Пришлите JPEG/PNG как фото или документ.")
     else:
-        context.user_data["openai_selfie_photo"] = raw
-        context.user_data.pop("openai_selfie_wait_photo", None)
-        await msg.reply_text("✅ Исходное фото принято. Теперь выберите героя:", reply_markup=_country_kb(mod))
+        if waiting_scene:
+            context.user_data["openai_selfie_scene_photo"] = raw
+            context.user_data.pop("openai_selfie_wait_scene_photo", None)
+            await msg.reply_text("✅ Фото сцены принято. Размещаю на ней вас и выбранного героя; одежду адаптирую под обстановку…")
+            await _generate(update, context, "Use the supplied custom scene photograph.", scene_photo=raw)
+        else:
+            context.user_data["openai_selfie_photo"] = raw
+            context.user_data.pop("openai_selfie_wait_photo", None)
+            await msg.reply_text("✅ Исходное фото принято. Теперь выберите героя:", reply_markup=_country_kb(mod))
     raise ApplicationHandlerStop
 
 
