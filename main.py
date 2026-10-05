@@ -4881,7 +4881,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with contextlib.suppress(Exception):
         _chat_ensure_active(update.effective_user.id, update.effective_chat.id)
 
-    # Animated production welcome. Keep the previous image URL as a safe fallback.
+    # Keep the welcome animation, text and keyboard in one Telegram message.
+    # Telegram captions are limited, so use a compact start caption here.
+    start_caption = (
+        "👋 Привет! Я Neyro-Bot GPT 5 Studio — мультимодельная AI-студия в Telegram "
+        "для текста, документов, фото, видео, музыки, речи и live-поиска.\n\n"
+        "🚀 Что умею:\n"
+        "🎓 Учёба и работа с PDF/DOCX\n"
+        "🖼 Генерация и обработка изображений\n"
+        "🎬 Видео, Reels/Shorts и оживление фото\n"
+        "🎙 Распознавание и озвучка речи\n"
+        "🎵 Генерация музыки\n"
+        "🔎 Поиск и анализ информации\n\n"
+        "Выберите режим в меню ниже или просто напишите задачу."
+    )
+
     welcome_video = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         "assets",
@@ -4893,6 +4907,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with open(welcome_video, "rb") as video_file:
                 await update.effective_message.reply_video(
                     video=video_file,
+                    caption=start_caption,
+                    reply_markup=main_kb,
                     supports_streaming=True,
                 )
             welcome_sent = True
@@ -4902,14 +4918,22 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not welcome_sent:
         welcome_url = kv_get("welcome_url", BANNER_URL)
         if welcome_url:
-            with contextlib.suppress(Exception):
-                await update.effective_message.reply_photo(welcome_url)
+            try:
+                await update.effective_message.reply_photo(
+                    welcome_url,
+                    caption=start_caption,
+                    reply_markup=main_kb,
+                )
+                welcome_sent = True
+            except Exception as e:
+                log.warning("Welcome image fallback failed: %s", e)
 
-    await update.effective_message.reply_text(
-        START_TEXT,
-        reply_markup=main_kb,
-        disable_web_page_preview=True,
-    )
+    if not welcome_sent:
+        await update.effective_message.reply_text(
+            start_caption,
+            reply_markup=main_kb,
+            disable_web_page_preview=True,
+        )
 
 async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("🧠 Выберите нейросеть или провайдера:", reply_markup=engines_kb())
