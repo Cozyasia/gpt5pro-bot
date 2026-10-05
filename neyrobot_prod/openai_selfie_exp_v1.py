@@ -35,7 +35,7 @@ def _runtime() -> Any | None:
 
 
 def _enabled() -> bool:
-    return str(os.environ.get("OPENAI_SELFIE_EXPERIMENT_ENABLED", "1")).strip().lower() not in {"0","false","no","off"}
+    return str(os.environ.get("OPENAI_SELFIE_EXPERIMENT_ENABLED", "0")).strip().lower() not in {"0","false","no","off"}
 
 
 def _kb(mod: Any, rows):
