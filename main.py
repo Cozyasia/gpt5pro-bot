@@ -12961,20 +12961,22 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
         return bool(sora_ok)
 
     if engine == "kling":
-        # Kling через Comet ждёт чистый base64 без data:image/...;base64,
-        # и duration строкой.
+        # Kling/Comet currently validates "image" as a URL. Sending raw base64 can be
+        # accepted by the create endpoint but then fails asynchronously with
+        # InvalidParameterValue.UrlIllegal. Prefer the public Telegram file URL.
         d = str(_duration_for_engine("kling", duration_s))
         safe_prompt = (prompt or "").strip()
         if I2V_KLING_SAFE_PROMPT_SUFFIX and I2V_KLING_SAFE_PROMPT_SUFFIX.lower() not in safe_prompt.lower():
             safe_prompt = (safe_prompt + "; " + I2V_KLING_SAFE_PROMPT_SUFFIX).strip("; ")
 
+        kling_image_ref = tg_url if (tg_url and tg_url.startswith("https://")) else data_url
         payloads = [
             (
                 KLING_CREATE_PATH,
                 {
                     "model": KLING_MODEL,
                     "prompt": safe_prompt,
-                    "image": raw_b64,
+                    "image": kling_image_ref,
                     "duration": d,
                     "aspect_ratio": aspect,
                 },
@@ -12984,7 +12986,7 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
                 {
                     "model": KLING_MODEL,
                     "prompt": safe_prompt,
-                    "image": raw_b64,
+                    "image": kling_image_ref,
                     "duration": d,
                     "aspect_ratio": aspect,
                 },
