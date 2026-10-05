@@ -208,15 +208,15 @@ async def _generate(update: Any, context: Any, scene: str, scene_photo: bytes = 
 
     async def action() -> bool:
         try:
-            await msg.reply_text("⏳ OpenAI: редактирую исходное фото и добавляю выбранного героя…")
+            await msg.reply_text("⏳ Бот: создаю селфи с выбранным героем…")
             out = await _openai_edit(photo, slug, scene, scene_photo=scene_photo)
-            bio = io.BytesIO(out); bio.name = "openai_selfie.png"
+            bio = io.BytesIO(out); bio.name = "selfie.png"
             await msg.reply_document(document=bio,
-                caption=f"⭐ Селфи со звездой OpenAI · «{meta['name']}»\nЭкспериментальный отдельный маршрут. Исходный режим V265 не использовался.")
+                caption=f"⭐ Селфи со звездой · «{meta['name']}»")
             await msg.reply_text("✅ Можно повторить с тем же фото или выбрать другого героя.", reply_markup=_main_kb(mod))
             return True
         except Exception as exc:
-            await msg.reply_text(f"❌ OpenAI-режим не создал изображение. Старый режим не затронут.\n{type(exc).__name__}: {str(exc)[:800]}")
+            await msg.reply_text("❌ Не удалось создать изображение. Попробуйте ещё раз.")
             return False
 
     runner = getattr(mod, "_try_pay_then_do", None)
@@ -244,9 +244,8 @@ async def callback(update: Any, context: Any) -> None:
     if cmd == "open":
         _clear(context, keep_photo=True)
         await q.message.reply_text(
-            "⭐ Селфи со звездой OpenAI — эксперимент\n\n"
-            "1) одно исходное фото пользователя; 2) герой; 3) сцена. "
-            "OpenAI редактирует исходную фотографию напрямую. Текущий V265 остаётся отдельным режимом.",
+            "⭐ Селфи со звездой\n\n"
+            "1) загрузите своё фото; 2) выберите героя; 3) выберите сцену.",
             reply_markup=_main_kb(mod))
     elif cmd == "photo":
         _clear(context, keep_photo=False); context.user_data["openai_selfie_wait_photo"] = True
@@ -332,7 +331,7 @@ async def command(update: Any, context: Any) -> None:
         return
     _set_active(context, True); _clear(context, keep_photo=True)
     await update.effective_message.reply_text(
-        "⭐ Селфи со звездой OpenAI — эксперимент\n\n"
+        "⭐ Селфи со звездой\n\n"
         "Отдельный direct-edit маршрут. Одно фото пользователя + референсы выбранного героя.",
         reply_markup=_main_kb(mod))
 
