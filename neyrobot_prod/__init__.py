@@ -56,6 +56,17 @@ if _production_hardening_enabled():
             flush=True,
         )
 
+# October 2026 OpenAI selfie experiment. This is an isolated opt-in lane:
+# separate callback prefix/state/provider; V265 remains the production owner.
+try:
+    from neyrobot_prod.openai_selfie_exp_v1 import install as _install_openai_selfie_exp
+    _install_openai_selfie_exp()
+except Exception as _openai_selfie_exp_exc:
+    print(
+        f"[neyrobot-prod] OpenAI selfie experiment warning: {type(_openai_selfie_exp_exc).__name__}: {_openai_selfie_exp_exc}",
+        flush=True,
+    )
+
 # Retouch is a separate UX feature, not an AI-selfie generation owner.
 try:
     from neyrobot_prod import retouch_v261_batch as _retouch_v261_module
