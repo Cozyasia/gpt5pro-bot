@@ -4880,11 +4880,36 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     with contextlib.suppress(Exception):
         _chat_ensure_active(update.effective_user.id, update.effective_chat.id)
-    welcome_url = kv_get("welcome_url", BANNER_URL)
-    if welcome_url:
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_photo(welcome_url)
-    await update.effective_message.reply_text(START_TEXT, reply_markup=main_kb, disable_web_page_preview=True)
+
+    # Animated production welcome. Keep the previous image URL as a safe fallback.
+    welcome_video = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "assets",
+        "NeyroBot_start_Live_Centered_FullHD-2.mp4",
+    )
+    welcome_sent = False
+    if os.path.isfile(welcome_video):
+        try:
+            with open(welcome_video, "rb") as video_file:
+                await update.effective_message.reply_video(
+                    video=video_file,
+                    supports_streaming=True,
+                )
+            welcome_sent = True
+        except Exception as e:
+            log.warning("Animated welcome failed, using image fallback: %s", e)
+
+    if not welcome_sent:
+        welcome_url = kv_get("welcome_url", BANNER_URL)
+        if welcome_url:
+            with contextlib.suppress(Exception):
+                await update.effective_message.reply_photo(welcome_url)
+
+    await update.effective_message.reply_text(
+        START_TEXT,
+        reply_markup=main_kb,
+        disable_web_page_preview=True,
+    )
 
 async def cmd_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("🧠 Выберите нейросеть или провайдера:", reply_markup=engines_kb())
