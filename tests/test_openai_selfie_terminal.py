@@ -228,6 +228,36 @@ class SelfieTerminalTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.edits[0][3], b"s" * 1600)
         self.assertEqual(len(self.msg.documents), 1)
 
+    async def test_photo_download_timeout_stays_in_selfie_flow(self):
+        self.context.user_data["openai_selfie_wait_photo"] = True
+        with patch.object(self.lane, "_download_photo", side_effect=TimedOut("Timed out")):
+            with self.assertRaises(ApplicationHandlerStop):
+                await self.lane.media(self.update, self.context)
+        self.assertTrue(self.context.user_data["openai_selfie_wait_photo"])
+        self.assertEqual(len(self.msg.texts), 1)
+        self.assertIn("Пришлите", self.msg.texts[0])
+        self.assertNotIn("TimedOut", self.msg.texts[0])
+
+    async def test_photo_receipt_timeout_does_not_offer_generic_photo_menu(self):
+        self.context.user_data["openai_selfie_wait_photo"] = True
+        self.msg.timeout_text = "Исходное фото принято"
+        with patch.object(self.lane, "_download_photo", return_value=b"p" * 1600):
+            with self.assertRaises(ApplicationHandlerStop):
+                await self.lane.media(self.update, self.context)
+        self.assertEqual(self.context.user_data["openai_selfie_photo"], b"p" * 1600)
+        self.assertNotIn("openai_selfie_wait_photo", self.context.user_data)
+        self.assertFalse(any("Фото получено. Что сделать?" in s for s in self.msg.texts))
+
+    async def test_scene_receipt_timeout_still_starts_one_image_job(self):
+        self.context.user_data["openai_selfie_wait_scene_photo"] = True
+        self.msg.timeout_text = "Фото сцены принято"
+        with patch.object(self.lane, "_download_photo", return_value=b"s" * 1600):
+            with self.assertRaises(ApplicationHandlerStop):
+                await self.lane.media(self.update, self.context)
+        self.assertEqual(len(self.edits), 1)
+        self.assertEqual(len(self.msg.documents), 1)
+        self.assertFalse(any("Фото получено. Что сделать?" in s for s in self.msg.texts))
+
     async def test_photo_outside_selfie_mode_remains_for_existing_handler(self):
         self.context.user_data["openai_selfie_active"] = False
         await self.lane.media(self.update, self.context)
