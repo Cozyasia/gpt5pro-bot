@@ -250,7 +250,7 @@ async def callback(update: Any, context: Any) -> None:
             reply_markup=_main_kb(mod))
     elif cmd == "photo":
         _clear(context, keep_photo=False); context.user_data["openai_selfie_wait_photo"] = True
-        await q.message.reply_text("📸 Пришлите одно исходное фото. Желательно оставить свободное место рядом с собой.")
+        await q.message.reply_text("📸 Пришли свою фотографию — селфи или прямой кадр анфас.")
     elif cmd == "countries":
         if len(bytes(context.user_data.get("openai_selfie_photo") or b"")) < 1024:
             context.user_data["openai_selfie_wait_photo"] = True
@@ -344,7 +344,7 @@ def bind_application(app: Any) -> bool:
     # More negative than legacy selfie handlers: this lane owns only its own prefix/state.
     app.add_handler(CommandHandler("selfie_openai", command), group=-7000)
     app.add_handler(CallbackQueryHandler(callback, pattern=r"^oaiselfie:"), group=-7000)
-    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, media), group=-6999)
+    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, media, block=True), group=-6999)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler), group=-6998)
     setattr(app, _HANDLER_FLAG, True)
     return True
