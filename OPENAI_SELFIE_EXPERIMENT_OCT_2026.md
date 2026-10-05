@@ -17,7 +17,7 @@ Required:
 - OPENAI_API_KEY
 
 Optional:
-- OPENAI_SELFIE_EXPERIMENT_ENABLED=1
+- OPENAI_SELFIE_EXPERIMENT_ENABLED=1 (required to enable; disabled by default)
 - OPENAI_SELFIE_IMAGE_MODEL=gpt-image-2.5-sunburst
 - OPENAI_SELFIE_QUALITY=high
 - OPENAI_SELFIE_MODERATION=auto
