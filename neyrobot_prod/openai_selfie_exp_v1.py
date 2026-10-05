@@ -12,8 +12,11 @@ import asyncio
 import base64
 import contextlib
 import io
+import logging
 import os
 import sys
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +27,13 @@ PREFIX = "oaiselfie:"
 _HANDLER_FLAG = "_openai_selfie_exp_v1_bound"
 _BUILDER_FLAG = "_openai_selfie_exp_v1_builder"
 _INSTALLED = False
+_LOG = logging.getLogger("gpt-bot")
+
+
+def _job_log(job_id: str, event: str, **fields: Any) -> None:
+    # IDs, stages and exception classes only. Never record user photos, prompts or keys.
+    details = " ".join(f"{key}={value}" for key, value in fields.items())
+    _LOG.info("SELFIE_JOB job=%s event=%s %s", job_id, event, details)
 
 
 def _runtime() -> Any | None:
@@ -46,6 +56,15 @@ def _main_kb(mod: Any):
     return _kb(mod, [
         [("📸 Загрузить фото", PREFIX + "photo")],
         [("⭐ Выбрать героя", PREFIX + "countries")],
+        [("⬅️ Назад в Развлечения", "mode:fun")],
+    ])
+
+
+def _result_kb(mod: Any):
+    return _kb(mod, [
+        [("🔁 Повторить с тем же фото", PREFIX + "repeat")],
+        [("⭐ Выбрать другого героя", PREFIX + "countries")],
+        [("📸 Загрузить другое фото", PREFIX + "photo")],
         [("⬅️ Назад в Развлечения", "mode:fun")],
     ])
 
@@ -83,7 +102,8 @@ def _set_active(context: Any, value: bool = True) -> None:
 
 def _clear(context: Any, keep_photo: bool = True) -> None:
     for key in ("openai_selfie_wait_photo", "openai_selfie_wait_scene", "openai_selfie_country",
-                "openai_selfie_hero", "openai_selfie_scene", "openai_selfie_wait_scene_photo", "openai_selfie_scene_photo"):
+                "openai_selfie_hero", "openai_selfie_scene", "openai_selfie_wait_scene_photo",
+                "openai_selfie_scene_photo", "openai_selfie_scene_ready"):
         context.user_data.pop(key, None)
     if not keep_photo:
         context.user_data.pop("openai_selfie_photo", None)
@@ -192,8 +212,11 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str, scene_photo: by
 
 async def _generate(update: Any, context: Any, scene: str, scene_photo: bytes = b"") -> bool:
     from neyrobot_prod import celebrity_selfie as base
+    from telegram.error import NetworkError, TimedOut
     mod = _runtime(); msg = getattr(update, "effective_message", None); user = getattr(update, "effective_user", None)
     if mod is None or msg is None or user is None:
+        return False
+    if context.user_data.get("openai_selfie_job_busy"):
         return False
     photo = bytes(context.user_data.get("openai_selfie_photo") or b"")
     slug = str(context.user_data.get("openai_selfie_hero") or "")
@@ -206,26 +229,85 @@ async def _generate(update: Any, context: Any, scene: str, scene_photo: bytes = 
     if len(_hero_refs(slug)) != int(meta.get("required_refs") or 3):
         await msg.reply_text(f"⚠️ Для «{meta['name']}» не хватает сохранённых референсов героя."); return False
 
+    job_id = uuid.uuid4().hex[:16]
+    context.user_data["openai_selfie_job_busy"] = job_id
+    started = time.monotonic()
+    _job_log(job_id, "accepted", scene_mode="custom" if scene_photo else "preset")
+
+    async def fail(stage: str, exc: Exception) -> None:
+        _job_log(job_id, stage, error_type=type(exc).__name__)
+        try:
+            await msg.reply_text("❌ Не удалось создать изображение. Попробуйте ещё раз.",
+                                 reply_markup=_result_kb(mod))
+            _job_log(job_id, "terminal", state="FAILURE", delivery="confirmed")
+        except Exception as send_exc:
+            _job_log(job_id, "terminal", state="FAILURE", delivery="unknown",
+                     error_type=type(send_exc).__name__)
+
     async def action() -> bool:
         try:
-            await msg.reply_text("⏳ Бот: создаю селфи с выбранным героем…")
-            out = await _openai_edit(photo, slug, scene, scene_photo=scene_photo)
-            bio = io.BytesIO(out); bio.name = "selfie.png"
-            await msg.reply_document(document=bio,
-                caption=f"⭐ Селфи со звездой · «{meta['name']}»")
-            await msg.reply_text("✅ Можно повторить с тем же фото или выбрать другого героя.", reply_markup=_main_kb(mod))
-            return True
+            await msg.reply_text("⌛ Бот: создаю селфи с выбранным героем…")
         except Exception as exc:
-            await msg.reply_text("❌ Не удалось создать изображение. Попробуйте ещё раз.")
+            _job_log(job_id, "progress_send_failed", error_type=type(exc).__name__)
+        _job_log(job_id, "image_request_start", attempt=1)
+        try:
+            out = await _openai_edit(photo, slug, scene, scene_photo=scene_photo)
+        except Exception as exc:
+            await fail("image_request_timeout" if isinstance(exc, TimeoutError) or "Timeout" in type(exc).__name__
+                       else "image_request_failed", exc)
+            return False
+        _job_log(job_id, "image_request_complete", output_bytes=len(out),
+                 elapsed_ms=round((time.monotonic() - started) * 1000))
+
+        bio = io.BytesIO(out); bio.name = "selfie.png"
+        _job_log(job_id, "telegram_delivery_start", attempt=1)
+        try:
+            delivered = await msg.reply_document(
+                document=bio, caption=f"⭐ Селфи со звездой · «{meta['name']}»",
+                # PTB's default media upload/response timeouts are short for a PNG.
+                write_timeout=180, read_timeout=180, connect_timeout=30, pool_timeout=30,
+            )
+        except (TimedOut, NetworkError) as exc:
+            # Telegram may have accepted the file. A retry or definite failure here
+            # can create a second result or a false failure before the first arrives.
+            _job_log(job_id, "telegram_delivery_unconfirmed", error_type=type(exc).__name__, retry="none")
+            try:
+                await msg.reply_text(
+                    "⚠️ Изображение создано, но Telegram не подтвердил доставку. "
+                    "Проверьте чат через минуту; если файла нет, повторите запрос.",
+                    reply_markup=_result_kb(mod),
+                )
+            except Exception as send_exc:
+                _job_log(job_id, "delivery_notice_failed", error_type=type(send_exc).__name__)
+            _job_log(job_id, "terminal", state="DELIVERY_UNKNOWN")
+            return False
+        except Exception as exc:
+            await fail("telegram_delivery_failed", exc)
             return False
 
+        _job_log(job_id, "telegram_delivery_confirmed",
+                 message_id=getattr(delivered, "message_id", None))
+        _job_log(job_id, "terminal", state="SUCCESS",
+                 elapsed_ms=round((time.monotonic() - started) * 1000))
+        try:
+            await msg.reply_text("✅ Можно повторить с тем же фото или выбрать другого героя.",
+                                 reply_markup=_result_kb(mod))
+        except Exception as exc:
+            _job_log(job_id, "controls_send_failed", error_type=type(exc).__name__)
+        return True
+
     runner = getattr(mod, "_try_pay_then_do", None)
-    if callable(runner):
-        return bool(await runner(update, context, int(user.id), "img",
-            max(0.0, float(getattr(mod, "AI_SELFIE_UNIT_COST_USD", 0.20) or 0.20)), action,
-            remember_kind="openai_selfie_exp_v1",
-            remember_payload={"character": slug, "scene": scene, "provider": "openai", "user_refs": 1, "hero_refs": 3}))
-    return await action()
+    try:
+        if callable(runner):
+            return bool(await runner(update, context, int(user.id), "img",
+                max(0.0, float(getattr(mod, "AI_SELFIE_UNIT_COST_USD", 0.20) or 0.20)), action,
+                remember_kind="openai_selfie_exp_v1",
+                remember_payload={"character": slug, "scene": scene, "provider": "openai", "user_refs": 1, "hero_refs": 3},
+                silent_failure=True))
+        return await action()
+    finally:
+        if context.user_data.get("openai_selfie_job_busy") == job_id:
+            context.user_data.pop("openai_selfie_job_busy", None)
 
 
 async def callback(update: Any, context: Any) -> None:
@@ -249,8 +331,17 @@ async def callback(update: Any, context: Any) -> None:
             reply_markup=_main_kb(mod))
     elif cmd == "photo":
         _clear(context, keep_photo=False); context.user_data["openai_selfie_wait_photo"] = True
-        await q.message.reply_text("📸 Пришли свою фотографию — селфи или прямой кадр анфас.")
+        await q.message.reply_text("📸 Пришлите свою фотографию: селфи или прямой кадр анфас.")
+    elif cmd == "repeat":
+        if (len(bytes(context.user_data.get("openai_selfie_photo") or b"")) >= 1024
+                and context.user_data.get("openai_selfie_hero")):
+            context.user_data["openai_selfie_scene_ready"] = True
+            await q.message.reply_text("Выберите сцену:", reply_markup=_scene_kb(mod))
+        else:
+            await q.message.reply_text("Сначала пришлите фотографию и выберите героя.",
+                                       reply_markup=_main_kb(mod))
     elif cmd == "countries":
+        context.user_data.pop("openai_selfie_scene_ready", None)
         if len(bytes(context.user_data.get("openai_selfie_photo") or b"")) < 1024:
             context.user_data["openai_selfie_wait_photo"] = True
             await q.message.reply_text("Сначала пришлите одно исходное фото.", reply_markup=_main_kb(mod))
@@ -267,8 +358,11 @@ async def callback(update: Any, context: Any) -> None:
             await q.message.reply_text(f"⚠️ «{meta['name']}» пока не готов: нужны сохранённые референсы.")
         else:
             context.user_data["openai_selfie_hero"] = slug
+            context.user_data["openai_selfie_scene_ready"] = True
             await q.message.reply_text(f"✅ Герой: {meta['name']}. Выберите сцену:", reply_markup=_scene_kb(mod))
     elif cmd.startswith("scene:"):
+        if not context.user_data.pop("openai_selfie_scene_ready", False):
+            raise ApplicationHandlerStop
         key = cmd.split(":",1)[1]
         if key == "custom":
             context.user_data.pop("openai_selfie_wait_scene", None)
@@ -277,6 +371,7 @@ async def callback(update: Any, context: Any) -> None:
         else:
             preset = base.SCENES.get(key)
             if not preset:
+                context.user_data["openai_selfie_scene_ready"] = True
                 await q.message.reply_text("Выберите сцену:", reply_markup=_scene_kb(mod))
             else:
                 context.user_data["openai_selfie_scene"] = str(preset[1])
@@ -332,7 +427,7 @@ async def command(update: Any, context: Any) -> None:
     _set_active(context, True); _clear(context, keep_photo=True)
     await update.effective_message.reply_text(
         "⭐ Селфи со звездой\n\n"
-        "Отдельный direct-edit маршрут. Одно фото пользователя + референсы выбранного героя.",
+        "Пришлите своё фото, выберите героя и сцену.",
         reply_markup=_main_kb(mod))
 
 
@@ -361,19 +456,19 @@ def _promote_openai_selfie(mod: Any, markup: Any, legacy_callbacks: tuple[str, .
             cb = getattr(btn, "callback_data", None)
             if cb in legacy_callbacks:
                 if not found:
-                    new_row.append(mod.InlineKeyboardButton("🤳 Селфи со звездой", callback_data=PREFIX + "open"))
+                    new_row.append(mod.InlineKeyboardButton("⭐ Селфи со звездой", callback_data=PREFIX + "open"))
                     found = True
                 continue
             if cb == PREFIX + "open":
                 if not found:
-                    new_row.append(mod.InlineKeyboardButton("🤳 Селфи со звездой", callback_data=PREFIX + "open"))
+                    new_row.append(mod.InlineKeyboardButton("⭐ Селфи со звездой", callback_data=PREFIX + "open"))
                     found = True
                 continue
             new_row.append(btn)
         if new_row:
             rows.append(new_row)
     if not found:
-        rows.append([mod.InlineKeyboardButton("🤳 Селфи со звездой", callback_data=PREFIX + "open")])
+        rows.append([mod.InlineKeyboardButton("⭐ Селфи со звездой", callback_data=PREFIX + "open")])
     return mod.InlineKeyboardMarkup(rows)
 
 def _patch_fun_menus() -> bool:

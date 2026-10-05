@@ -1,24 +1,32 @@
 # -*- coding: utf-8 -*-
+"""Static isolation checks; behavioral tests live in test_openai_selfie_terminal."""
 import ast
+import unittest
 from pathlib import Path
 
-def test_openai_selfie_experiment_is_isolated():
-    src = Path("neyrobot_prod/openai_selfie_exp_v1.py").read_text(encoding="utf-8")
-    ast.parse(src)
-    assert 'PREFIX = "oaiselfie:"' in src
-    assert "openai_selfie_" in src
-    assert "dense68_engine_v265" not in src
-    assert "selfie_v265_single_owner" not in src
-    assert "cs201:" not in src
 
-def test_openai_lane_uses_direct_image_edit():
-    src = Path("neyrobot_prod/openai_selfie_exp_v1.py").read_text(encoding="utf-8")
-    assert "https://api.openai.com/v1/images/edits" in src
-    assert '"image[]"' in src
-    assert "OPENAI_API_KEY" in src
+ROOT = Path(__file__).resolve().parents[1]
 
-def test_production_v265_not_modified_by_experiment():
-    init = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
-    assert 'PRODUCTION_SELFIE_RUNTIME = "v265"' in init
-    assert "openai_selfie_exp_v1" in init
-\n\ndef test_openai_lane_has_separate_menu_entry():\n    src = Path("neyrobot_prod/openai_selfie_exp_v1.py").read_text(encoding="utf-8")\n    assert "⭐ Селфи со звездой OpenAI" in src\n    assert 'callback_data=PREFIX + "open"' in src\n    assert "fun:aiselfie" in src  # only used to position the new button after legacy entry\n
+
+class SelfieLaneIsolationTest(unittest.TestCase):
+    def test_lane_remains_separate_from_frozen_v265(self):
+        source = (ROOT / "neyrobot_prod/openai_selfie_exp_v1.py").read_text(encoding="utf-8")
+        ast.parse(source)
+        self.assertIn('PREFIX = "oaiselfie:"', source)
+        self.assertNotIn("dense68_engine_v265", source)
+        self.assertNotIn("selfie_v265_single_owner", source)
+        self.assertNotIn("cs201:", source)
+
+    def test_existing_direct_edit_route_is_retained(self):
+        source = (ROOT / "neyrobot_prod/openai_selfie_exp_v1.py").read_text(encoding="utf-8")
+        self.assertIn("https://api.openai.com/v1/images/edits", source)
+        self.assertIn('"image[]"', source)
+        self.assertIn("OPENAI_API_KEY", source)
+
+    def test_v265_reference_stays_installed_but_out_of_entertainment_menu(self):
+        init = (ROOT / "neyrobot_prod/__init__.py").read_text(encoding="utf-8")
+        lane = (ROOT / "neyrobot_prod/openai_selfie_exp_v1.py").read_text(encoding="utf-8")
+        self.assertIn('PRODUCTION_SELFIE_RUNTIME = "v265"', init)
+        self.assertIn("openai_selfie_exp_v1", init)
+        self.assertIn('callback_data=PREFIX + "open"', lane)
+        self.assertIn('("fun:aiselfie",)', lane)
