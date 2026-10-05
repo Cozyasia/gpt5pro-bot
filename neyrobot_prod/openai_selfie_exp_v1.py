@@ -136,7 +136,7 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str) -> bytes:
     required = int(meta.get("required_refs") or 3)
     if len(refs) != required:
         raise RuntimeError(f"hero references={len(refs)}/{required}")
-    model = str(os.environ.get("OPENAI_SELFIE_IMAGE_MODEL") or "gpt-image-1.5").strip()
+    model = str(os.environ.get("OPENAI_SELFIE_IMAGE_MODEL") or "gpt-image-2.5-sunburst").strip()
     quality = str(os.environ.get("OPENAI_SELFIE_QUALITY") or "high").strip()
     moderation = str(os.environ.get("OPENAI_SELFIE_MODERATION") or "auto").strip()
     prompt = _prompt(str(meta.get("name") or slug), scene)
@@ -144,7 +144,7 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str) -> bytes:
     files = [("image[]", ("user.jpg", bytes(user_photo), "image/jpeg"))]
     for i, path in enumerate(refs, 1):
         files.append(("image[]", (f"hero_{i}.jpg", path.read_bytes(), "image/jpeg")))
-    data = {"model": model, "prompt": prompt, "quality": quality, "size": "auto", "moderation": moderation}
+    data = {"model": model, "prompt": prompt, "quality": quality, "size": "auto", "moderation": moderation, "output_format": "png"}
     timeout_s = max(60.0, float(os.environ.get("OPENAI_SELFIE_TIMEOUT_S", "300") or 300))
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_s, connect=30.0, write=120.0, read=timeout_s)) as client:
         res = await client.post("https://api.openai.com/v1/images/edits",
