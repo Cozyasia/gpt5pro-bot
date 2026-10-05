@@ -322,6 +322,43 @@ def bind_application(app: Any) -> bool:
     return True
 
 
+
+_MENU_PATCH_FLAG = "_openai_selfie_menu_patch_v1"
+
+def _inject_openai_button(mod: Any, markup: Any, legacy_callbacks: tuple[str, ...]) -> Any:
+    rows = [list(row) for row in getattr(markup, "inline_keyboard", ()) or ()]
+    if any(getattr(btn, "callback_data", None) == PREFIX + "open" for row in rows for btn in row):
+        return markup
+    insert_at = len(rows)
+    for i, row in enumerate(rows):
+        if any(getattr(btn, "callback_data", None) in legacy_callbacks for btn in row):
+            insert_at = i + 1
+            break
+    rows.insert(insert_at, [mod.InlineKeyboardButton("⭐ Селфи со звездой OpenAI", callback_data=PREFIX + "open")])
+    return mod.InlineKeyboardMarkup(rows)
+
+def _patch_fun_menus() -> bool:
+    mod = _runtime()
+    if mod is None or getattr(mod, _MENU_PATCH_FLAG, False):
+        return bool(mod is not None)
+    original_quick = getattr(mod, "_fun_quick_kb", None)
+    if callable(original_quick):
+        def openai_fun_quick_kb():
+            return _inject_openai_button(mod, original_quick(), ("fun:aiselfie",))
+        mod._fun_quick_kb = openai_fun_quick_kb
+    original_mode = getattr(mod, "_mode_kb", None)
+    if callable(original_mode):
+        def openai_mode_kb(key: str):
+            markup = original_mode(key)
+            if key == "fun":
+                return _inject_openai_button(mod, markup, ("act:fun:aiselfie",))
+            return markup
+        mod._mode_kb = openai_mode_kb
+    setattr(mod, _MENU_PATCH_FLAG, True)
+    print("[neyrobot-prod] OpenAI selfie experiment menu wiring installed", flush=True)
+    return True
+
+
 def _install_builder_hook() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -331,6 +368,7 @@ def _install_builder_hook() -> None:
         previous = ApplicationBuilder.build
         def build(self: Any, *args: Any, **kwargs: Any):
             app = previous(self, *args, **kwargs)
+            _patch_fun_menus()
             bind_application(app)
             return app
         ApplicationBuilder.build = build
