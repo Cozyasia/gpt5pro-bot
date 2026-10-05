@@ -21,3 +21,4 @@ def test_production_v265_not_modified_by_experiment():
     init = Path("neyrobot_prod/__init__.py").read_text(encoding="utf-8")
     assert 'PRODUCTION_SELFIE_RUNTIME = "v265"' in init
     assert "openai_selfie_exp_v1" in init
+\n\ndef test_openai_lane_has_separate_menu_entry():\n    src = Path("neyrobot_prod/openai_selfie_exp_v1.py").read_text(encoding="utf-8")\n    assert "⭐ Селфи со звездой OpenAI" in src\n    assert 'callback_data=PREFIX + "open"' in src\n    assert "fun:aiselfie" in src  # only used to position the new button after legacy entry\n
