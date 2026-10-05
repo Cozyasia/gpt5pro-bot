@@ -109,18 +109,24 @@ def _clear(context: Any, keep_photo: bool = True) -> None:
         context.user_data.pop("openai_selfie_photo", None)
 
 
-async def _download_photo(message: Any) -> bytes:
+async def _download_photo(message: Any, trace_id: str = "") -> bytes:
     photos = list(getattr(message, "photo", None) or [])
     doc = getattr(message, "document", None)
     tgfile = None
+    if trace_id:
+        _job_log(trace_id, "media_get_file_start")
     if photos:
         tgfile = await photos[-1].get_file()
     elif doc is not None and str(getattr(doc, "mime_type", "") or "").startswith("image/"):
         tgfile = await doc.get_file()
     if tgfile is None:
         return b""
+    if trace_id:
+        _job_log(trace_id, "media_download_start")
     bio = io.BytesIO()
     await tgfile.download_to_memory(out=bio)
+    if trace_id:
+        _job_log(trace_id, "media_download_done")
     return bio.getvalue()
 
 
@@ -387,23 +393,49 @@ async def media(update: Any, context: Any) -> None:
     waiting_scene = bool(context.user_data.get("openai_selfie_wait_scene_photo"))
     if not (waiting_user or waiting_scene):
         return
+    trace_id = "media-" + str(getattr(update, "update_id", None) or uuid.uuid4().hex[:12])
     mod = _runtime(); msg = getattr(update, "effective_message", None)
-    if mod is None or msg is None:
-        return
-    raw = await _download_photo(msg)
-    if len(raw) < 1024:
-        await msg.reply_text("Не удалось прочитать изображение. Пришлите JPEG/PNG как фото или документ.")
-    else:
-        if waiting_scene:
+    stage = "download"
+    _job_log(trace_id, "media_received", kind="scene" if waiting_scene else "source")
+    try:
+        if mod is None or msg is None:
+            raise RuntimeError("selfie runtime or message unavailable")
+        raw = await _download_photo(msg, trace_id=trace_id)
+        if len(raw) < 1024:
+            _job_log(trace_id, "media_invalid")
+            await _media_reply(msg, trace_id, "invalid_photo",
+                               "Не удалось прочитать изображение. Пришлите JPEG/PNG как фото или документ.")
+        elif waiting_scene:
             context.user_data["openai_selfie_scene_photo"] = raw
             context.user_data.pop("openai_selfie_wait_scene_photo", None)
-            await msg.reply_text("✅ Фото сцены принято. Размещаю на ней вас и выбранного героя; одежду адаптирую под обстановку…")
+            _job_log(trace_id, "media_stored", kind="scene")
+            await _media_reply(msg, trace_id, "scene_receipt",
+                               "✅ Фото сцены принято. Размещаю на ней вас и выбранного героя; одежду адаптирую под обстановку…")
+            stage = "generate"
             await _generate(update, context, "Use the supplied custom scene photograph.", scene_photo=raw)
         else:
+            stage = "prepare_menu"
+            markup = _country_kb(mod)
             context.user_data["openai_selfie_photo"] = raw
             context.user_data.pop("openai_selfie_wait_photo", None)
-            await msg.reply_text("✅ Исходное фото принято. Теперь выберите героя:", reply_markup=_country_kb(mod))
+            _job_log(trace_id, "media_stored", kind="source")
+            await _media_reply(msg, trace_id, "source_receipt",
+                               "✅ Исходное фото принято. Теперь выберите героя:", reply_markup=markup)
+    except Exception as exc:
+        _job_log(trace_id, "media_error", stage=stage, error=type(exc).__name__)
+        if msg is not None and stage != "generate":
+            await _media_reply(msg, trace_id, "media_retry_notice",
+                               "Не удалось получить фото. Пришлите его ещё раз.")
     raise ApplicationHandlerStop
+
+
+async def _media_reply(msg: Any, trace_id: str, event: str, message: str, **kwargs: Any) -> None:
+    try:
+        await msg.reply_text(message, **kwargs)
+        _job_log(trace_id, event, status="sent")
+    except Exception as exc:
+        # Telegram may have delivered the notice despite a missing response.
+        _job_log(trace_id, event, status="unknown", error=type(exc).__name__)
 
 
 async def text_handler(update: Any, context: Any) -> None:
