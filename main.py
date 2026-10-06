@@ -15743,6 +15743,50 @@ async def on_btn_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _set_medical_waiting(update, context, "")
     await update.effective_message.reply_text(_medical_menu_text(), reply_markup=medicine_kb())
 
+# ───────── Приоритетный роутер AI-видеоклипа ─────────
+def _music_video_text_state(context: ContextTypes.DEFAULT_TYPE, user_id: int | None = None) -> str:
+    """Активный этап PHOTO -> SONG -> VIDEO. Он всегда выше generic media/capability intents."""
+    if context.user_data.get("awaiting_music_video_video_brief"):
+        return "video"
+    if context.user_data.get("awaiting_photo_clip_prompt") or context.user_data.get("awaiting_vocal_clip_prompt"):
+        return "music"
+    if context.user_data.get("music_video_draft_edit"):
+        return "draft_edit"
+    if user_id:
+        with contextlib.suppress(Exception):
+            track = (_mode_track_get(user_id) or "").strip().lower()
+            if track == "musicvideo:video":
+                return "video"
+            if track == "musicvideo:music":
+                return "music"
+    return ""
+
+
+async def on_music_video_text_priority(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Единственный владелец текста, пока активен мастер AI-видеоклипа."""
+    uid = update.effective_user.id if update.effective_user else 0
+    stage = _music_video_text_state(context, uid)
+    if not stage:
+        return
+
+    if stage == "video" and not context.user_data.get("music_video_music_brief") and uid:
+        with contextlib.suppress(Exception):
+            saved = (kv_get(f"music_video_music_brief:{uid}", "") or "").strip()
+            if saved:
+                context.user_data["music_video_music_brief"] = saved
+                context.user_data["awaiting_music_video_video_brief"] = True
+
+    if uid and not _get_cached_photo(uid):
+        await update.effective_message.reply_text(
+            "⚠️ Режим AI-видеоклипа активен, но после перезапуска сервиса исходное фото нужно загрузить повторно. "
+            "Пришлите то же фото — я продолжу именно AI-видеоклип."
+        )
+        raise ApplicationHandlerStop
+
+    await on_text(update, context)
+    raise ApplicationHandlerStop
+
+
 # ───────── Позитивный авто-ответ про возможности (текст/голос) ─────────
 _CAPS_PATTERN = re.compile(
     r"(умеешь|можешь|делаешь|анализируешь|работаешь|поддерживаешь|умеет\s+ли|может\s+ли|можно\s+ли)"
@@ -16157,6 +16201,12 @@ def build_application() -> "Application":
     # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
     # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
     app.add_handler(CallbackQueryHandler(on_cb), group=0)
+
+    # Active AI-videoclip state owns text before presentation/capability/generic media routing.
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, on_music_video_text_priority),
+        group=-2,
+    )
 
     # Presentation Studio owns active presentation/catalog chats before every other text handler.
     app.add_handler(
