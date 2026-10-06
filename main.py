@@ -3928,8 +3928,7 @@ async def _handle_avatar_upload_choice(update: Update, context: ContextTypes.DEF
     _set_mode_clean(q.from_user.id, "Развлечения", "avatar")
     context.user_data["awaiting_avatar_photo"] = True
     await q.message.reply_text(
-        "🗣 Шаг 1/3: пришлите портрет человека. После загрузки я предложу выбрать голос, затем попрошу текст. Если нужен реальный голос — выберите voice/audio режим.",
-        reply_markup=_avatar_action_kb(prefix),
+        "🗣 Шаг 1/3: пришлите портрет человека. После загрузки я предложу выбрать голос, затем попрошу текст. Если нужен реальный голос, его можно будет прислать после портрета."
     )
 
 
@@ -14269,13 +14268,14 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if context.user_data.get("awaiting_avatar_photo"):
             context.user_data.pop("awaiting_avatar_photo", None)
-            # Если пользователь заранее выбрал голос — сразу ждём текст. Иначе сначала просим выбрать голос.
-            if context.user_data.get("avatar_tts_voice"):
-                _set_avatar_wait(context)
-                await update.effective_message.reply_text(f"Портрет получен. Голос выбран: {_avatar_tts_voice_label(_avatar_tts_voice_get(context))}. Теперь пришлите текст или voice/audio для говорящего аватара.")
-            else:
-                _set_avatar_voice_choice_wait(context)
-                await update.effective_message.reply_text("Портрет получен. Теперь выберите голос для текстовой озвучки или пришлите свой voice/audio.", reply_markup=_avatar_voice_choice_kb("act"))
+            # Upload flow is deterministic: a newly uploaded portrait always advances to step 2.
+            # Do not silently skip voice selection because a stale voice remained from an earlier avatar session.
+            context.user_data.pop("avatar_tts_voice", None)
+            _set_avatar_voice_choice_wait(context)
+            await update.effective_message.reply_text(
+                "✅ Портрет получен. Шаг 2/3: выберите голос для текстовой озвучки или пришлите свой voice/audio.",
+                reply_markup=_avatar_voice_choice_kb("act"),
+            )
             return
 
         if context.user_data.get("awaiting_photo_clip_photo"):
@@ -14542,8 +14542,12 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if context.user_data.get("awaiting_avatar_photo"):
                 context.user_data.pop("awaiting_avatar_photo", None)
+                context.user_data.pop("avatar_tts_voice", None)
                 _set_avatar_voice_choice_wait(context)
-                await update.effective_message.reply_text("Портрет получен. Теперь выберите голос для текстовой озвучки или пришлите свой voice/audio.", reply_markup=_avatar_voice_choice_kb("act"))
+                await update.effective_message.reply_text(
+                    "✅ Портрет получен. Шаг 2/3: выберите голос для текстовой озвучки или пришлите свой voice/audio.",
+                    reply_markup=_avatar_voice_choice_kb("act"),
+                )
                 return
 
             if context.user_data.get("awaiting_photo_clip_photo"):
