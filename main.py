@@ -657,6 +657,7 @@ RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip(
 VIDEO_POLL_DELAY_S  = float((os.environ.get("VIDEO_POLL_DELAY_S") or "6.0").strip() or 6.0)
 VIDEO_RESULT_SEND_AS_DOCUMENT = os.getenv("VIDEO_RESULT_SEND_AS_DOCUMENT", "1") == "1"
 VIDEO_SEND_WRITE_TIMEOUT_S = max(120, int(os.environ.get("VIDEO_SEND_WRITE_TIMEOUT_S", "180") or 180))
+VOCAL_CLIP_ARTIFACT_DIR = os.path.abspath(os.environ.get("VOCAL_CLIP_ARTIFACT_DIR", "/data/vocal_clip_artifacts"))
 TELEGRAM_RESULT_MAX_MB = int(os.environ.get("TELEGRAM_RESULT_MAX_MB", "48") or 48)
 TELEGRAM_VIDEO_COMPRESS_ON_FAIL = os.getenv("TELEGRAM_VIDEO_COMPRESS_ON_FAIL", "1") == "1"
 VIDEO_RESULT_DEDUPE_TTL_S = int((os.getenv("VIDEO_RESULT_DEDUPE_TTL_S") or "900").strip() or 900)
@@ -3752,8 +3753,9 @@ def _music_video_review_text(prompt: str) -> str:
     plan = "\n".join(f"{i + 1}. {shot_plan[min(i, len(shot_plan) - 1)]}" for i in range(scenes))
     note = (
         f"\n\n⚠️ Вокальный клип на {duration} секунд пока недоступен: сначала проверяем одну lip-sync сцену "
-        f"до {scene_s} секунд. Сценарий сохранён; можно нажать «Дополнить» и изменить длительность. "
-        "Оплата не списана."
+        f"до {scene_s} секунд. Генерация не начнётся после утверждения такого сценария. "
+        f"Для короткого теста нажмите «Дополнить», укажите «{scene_s} секунд», затем утвердите обновлённый сценарий. "
+        "Ждать не нужно; оплата не списана."
         if vocal and scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
     )
     return (
@@ -3802,8 +3804,15 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
     context.user_data["music_video_draft"] = {
         "prompt": prompt, "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
     }
+    source_token = context.user_data.get("vocal_source_token")
+    source_note = (
+        "\n\n🎵 Для этого клипа выбрана сохранённая полная песня Suno; новую песню не создаю."
+        if _clip_wants_vocals(prompt) and source_token
+        and _load_vocal_artifact(update.effective_user.id, source_token, "audio") else ""
+    )
     await update.effective_message.reply_text(
-        _music_video_review_text(prompt), reply_markup=_music_video_approval_kb(token)
+        (_music_video_review_text(prompt) + source_note)[:4096],
+        reply_markup=_music_video_approval_kb(token)
     )
     return True
 
@@ -3839,8 +3848,10 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     if _clip_wants_vocals(prompt) and _photo_clip_target_duration(prompt) > scene_s:
         await q.answer("Пока доступно до 10 секунд")
         await q.message.reply_text(
-            f"⚠️ Длинный вокальный клип пока не запущен: сначала проверяем один фрагмент до {scene_s} секунд. "
-            "Сценарий сохранён. Нажмите «Дополнить» и укажите короткую длительность. Кредиты не списаны."
+            f"⚠️ Генерация не запущена: длинный вокальный клип пока проверяется. "
+            f"Ждать или повторно нажимать «Утверждаю» не нужно. "
+            f"Сценарий сохранён. Для теста нажмите «Дополнить», напишите «{scene_s} секунд», "
+            "затем утвердите обновлённый сценарий. Кредиты не списаны."
         )
         return
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
@@ -8263,6 +8274,124 @@ def _vocal_clip_provider_cost_usd(scene_count: int) -> float:
     )
 
 
+def _vocal_artifact_path(user_id: int, token: str, kind: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or kind not in ("audio", "video"):
+        raise ValueError("invalid vocal artifact reference")
+    suffix = "mp3" if kind == "audio" else "mp4"
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{kind}.{suffix}")
+
+
+def _prune_vocal_artifacts(user_dir: str) -> None:
+    """Keep a few recent tracks and failed deliveries on Render's persistent disk."""
+    if not os.path.isdir(user_dir):
+        return
+    now = time.time()
+    groups: dict[str, list[tuple[float, str]]] = {"audio": [], "video": []}
+    for entry in os.scandir(user_dir):
+        match = re.fullmatch(r"[0-9a-f]{12}_(audio|video)\.(?:mp3|mp4)", entry.name)
+        if not match or not entry.is_file(follow_symlinks=False):
+            continue
+        try:
+            modified = entry.stat().st_mtime
+            if now - modified > 7 * 86400:
+                os.unlink(entry.path)
+            else:
+                groups[match.group(1)].append((modified, entry.path))
+        except OSError:
+            log.exception("vocal artifact cleanup failed")
+    for kind, files in groups.items():
+        files.sort(reverse=True)
+        for _, path in files[5 if kind == "audio" else 2:]:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+
+
+def _save_vocal_artifact(user_id: int, token: str, kind: str, data: bytes) -> None:
+    path = _vocal_artifact_path(user_id, token, kind)
+    if not data or len(data) > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(temporary, "wb") as file:
+            file.write(data)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+
+
+def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
+    try:
+        path = _vocal_artifact_path(user_id, token, kind)
+        st = os.stat(path)
+        if st.st_size < 512 or st.st_size > 50 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400:
+            return None
+        with open(path, "rb") as file:
+            return file.read()
+    except (OSError, ValueError):
+        return None
+
+
+def _vocal_song_kb(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")],
+        [InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")],
+    ])
+
+
+async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
+    song = BytesIO(data)
+    song.name = "suno_full_track.mp3"
+    await message.reply_document(
+        document=InputFile(song), caption="🎵 Полная исходная песня Suno. Сохраните её: клип использует фрагмент этой записи.",
+        reply_markup=_vocal_song_kb(token),
+        write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+    )
+
+
+async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    parts = (q.data or "").split(":")
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video"):
+        await q.answer("Неизвестное действие")
+        return
+    kind, token, user_id = parts[1], parts[2], q.from_user.id
+    data = _load_vocal_artifact(user_id, token, "video" if kind == "video" else "audio")
+    if not data:
+        await q.answer("Файл больше недоступен")
+        await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
+        return
+    if kind == "use":
+        context.user_data["vocal_source_token"] = token
+        await q.answer("Песня выбрана")
+        await q.message.reply_text(
+            "🎵 Для следующего вокального клипа выбрана именно эта песня. "
+            "Откройте режим AI-видеоклипа, пришлите фото и описание, затем утвердите сценарий. "
+            "Suno не будет создавать новую запись."
+        )
+    elif kind == "audio":
+        await q.answer("Отправляю полную песню")
+        try:
+            await _send_vocal_song_file(q.message, data, token)
+        except Exception:
+            log.exception("vocal source audio resend failed")
+            await q.message.reply_text("Не удалось отправить аудио через Telegram. Нажмите кнопку ещё раз позднее.")
+    else:
+        await q.answer("Повторно отправляю готовый клип")
+        try:
+            await _reply_video_bytes(update, data, "Готовый AI-видеоклип с вокалом ✅")
+            with contextlib.suppress(OSError):
+                os.unlink(_vocal_artifact_path(user_id, token, "video"))
+        except Exception:
+            log.exception("saved vocal video resend failed")
+            await q.message.reply_text(
+                "Telegram снова прервал отправку. Готовый клип сохранён; повторите отправку этой кнопкой позднее."
+            )
+
+
 async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
     """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
     prompt = (user_prompt or "").strip()
@@ -8280,12 +8409,22 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if scene_count > 1:
         await update.effective_message.reply_text(
             f"⚠️ Вокальный клип на {target_duration} секунд пока недоступен: "
-            f"проверяется сборка lip-sync сцен. Сейчас можно заказать один фрагмент до {scene_s} секунд. "
-            f"Укажите в описании длительность, например «{scene_s} секунд». Оплата не списана."
+            f"проверяется сборка lip-sync сцен. Генерация не запущена, ждать не нужно. "
+            f"Сейчас можно заказать один фрагмент до {scene_s} секунд: "
+            f"укажите в сценарии «{scene_s} секунд» и утвердите его. Оплата не списана."
         )
         return
     role_plan = _vocal_clip_role_plan(prompt, performer_count)
     user_id = update.effective_user.id
+    source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
+    saved_source = _load_vocal_artifact(user_id, source_token, "audio") if source_token else None
+    if source_token and not saved_source:
+        context.user_data.pop("vocal_source_token", None)
+        await update.effective_message.reply_text(
+            "Выбранная песня больше не доступна. Сценарий не запущен и кредиты не списаны. "
+            "Выберите сохранённый трек снова или утвердите сценарий для новой песни Suno."
+        )
+        return
     img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
     job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}:{target_duration}"
     if job_key in _vocal_clip_background_jobs:
@@ -8294,20 +8433,36 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     async def _job():
         _vocal_clip_background_jobs.add(job_key)
+        song_token = source_token or uuid.uuid4().hex[:12]
+        video_token = uuid.uuid4().hex[:12]
+        final_saved = False
         try:
-            if not (SUNO_ENABLED and SUNO_API_KEY):
+            if not saved_source and not (SUNO_ENABLED and SUNO_API_KEY):
                 raise RuntimeError("Для вокального AI-видеоклипа нужен SUNO_ENABLED=1 и SUNO_API_KEY/COMET_API_KEY.")
             role_note = "Роли вокала беру только из вашего описания."
             if role_plan.get("mode") == "mixed_duet":
                 role_note = "Женские и мужские партии распределяю между указанными героями; совместные партии — как дуэт."
             await update.effective_message.reply_text(
                 f"🎤 AI-видеоклип принят: ~{target_duration} сек, {scene_count} сцен, героев: {performer_count}. "
-                f"{role_note} Сначала Suno создаёт единый трек, затем Kling делает lip-sync по сценам."
+                f"{role_note} {'Использую выбранную песню Suno' if saved_source else 'Сначала Suno создаёт единый трек'}, "
+                "затем Kling делает lip-sync по сценам."
             )
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-            audio_bytes = await _run_suno_music_result_bytes(update, prompt)
+            audio_bytes = saved_source or await _run_suno_music_result_bytes(update, prompt)
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
+            if not saved_source:
+                await asyncio.to_thread(_save_vocal_artifact, user_id, song_token, "audio", audio_bytes)
+                try:
+                    await _send_vocal_song_file(update.effective_message, audio_bytes, song_token)
+                except Exception:
+                    log.exception("full Suno song Telegram delivery failed; saved for retry")
+                    with contextlib.suppress(Exception):
+                        await update.effective_message.reply_text(
+                            "🎵 Полная песня Suno сохранена, но Telegram не принял аудиофайл. "
+                            "Нажмите «Скачать полную песню» позднее.",
+                            reply_markup=_vocal_song_kb(song_token),
+                        )
             # Avatar gets short scene slices; the source track must cover the entire clip.
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
             await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
@@ -8350,15 +8505,39 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             )
             if not final_bytes:
                 raise RuntimeError("Не удалось собрать финальный MP4 с вокалом.")
-            await _reply_video_bytes(
-                update, final_bytes,
-                f"AI-видеоклип с вокалом ✅ Один MP4 · ~{target_duration} сек · {scene_count} сцен"
-            )
+            await asyncio.to_thread(_save_vocal_artifact, user_id, video_token, "video", final_bytes)
+            final_saved = True
+            try:
+                await _reply_video_bytes(
+                    update, final_bytes,
+                    f"AI-видеоклип с вокалом ✅ Один MP4 · ~{target_duration} сек · {scene_count} сцен"
+                )
+            except Exception:
+                log.exception("completed vocal MP4 delivery failed; saved for retry")
+                await update.effective_message.reply_text(
+                    "⚠️ Клип уже готов и сохранён, но Telegram прервал отправку файла. "
+                    "Нажмите «Повторить отправку»: Suno и Kling повторно не запускаются. Кредиты не списаны.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📥 Повторить отправку клипа", callback_data=f"mvfile:video:{video_token}")],
+                        [InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{song_token}")],
+                    ]),
+                )
+                return False
+            with contextlib.suppress(OSError):
+                os.unlink(_vocal_artifact_path(user_id, video_token, "video"))
+            if source_token:
+                context.user_data.pop("vocal_source_token", None)
             return True
         except Exception as e:
             log.exception("vocal clip failed: %s", e)
             with contextlib.suppress(Exception):
-                await update.effective_message.reply_text("❌ AI-видеоклип с вокалом не получился. Попробуйте позже. Кредиты не списаны.")
+                await update.effective_message.reply_text(
+                    "❌ AI-видеоклип с вокалом не получился. Кредиты не списаны. "
+                    + ("Готовый MP4 сохранён: повторите отправку кнопкой выше." if final_saved
+                       else "Полная песня сохранена, если Suno успел её создать. Попробуйте позже."),
+                    reply_markup=_vocal_song_kb(song_token)
+                    if _load_vocal_artifact(user_id, song_token, "audio") else None,
+                )
             return False
         finally:
             _vocal_clip_background_jobs.discard(job_key)
@@ -8368,6 +8547,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         "runway", _vocal_clip_provider_cost_usd(scene_count), _job,
         remember_kind="vocal_lipsync_clip_multiscene",
         remember_payload={"prompt": prompt[:500], "duration": target_duration, "scenes": scene_count, "performers": performer_count},
+        silent_failure=True,
     )
 
 
@@ -15869,6 +16049,7 @@ def build_application() -> "Application":
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite):[0-9a-f]{12}$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video):[0-9a-f]{12}$"), group=0)
 
     # 2b) Старые school:/work: callbacks, если такие кнопки ещё где-то используются
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)

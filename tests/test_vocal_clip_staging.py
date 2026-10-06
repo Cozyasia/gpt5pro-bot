@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import unittest
 from types import SimpleNamespace
+import uuid
 
 
 MAIN = Path(__file__).resolve().parents[1] / "main.py"
@@ -21,13 +22,14 @@ def load_entry_points():
     module = ast.Module(body=selected, type_ignores=[])
     code = compile(ast.fix_missing_locations(module), str(MAIN), "exec")
     env = {
-        "asyncio": asyncio, "hashlib": hashlib, "re": re,
+        "asyncio": asyncio, "hashlib": hashlib, "re": re, "uuid": uuid,
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
         "PHOTO_CLIP_DEFAULT_DURATION_S": 15, "PHOTO_CLIP_MAX_DURATION_S": 90,
         "PHOTO_CLIP_SCENE_SECONDS": 10, "PHOTO_CLIP_MAX_SCENES": 9,
         "FACESWAP_FACE_DETECTION_ENABLED": False,
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
         "_vocal_clip_background_jobs": set(),
+        "_load_vocal_artifact": lambda *_: None,
         "VOCAL_CLIP_UNIT_COST_USD": 1.50,
         "AVATAR_UNIT_COST_USD": 0.65,
         "contextlib": contextlib,
@@ -52,7 +54,7 @@ class VocalClipStagingTests(unittest.TestCase):
         messages = []
         billed = []
 
-        async def reply_text(message):
+        async def reply_text(message, **_kwargs):
             messages.append(message)
 
         async def try_pay(*args, **kwargs):
@@ -100,7 +102,7 @@ class VocalClipStagingTests(unittest.TestCase):
         messages = []
         logged = []
 
-        async def reply_text(message):
+        async def reply_text(message, **_kwargs):
             messages.append(message)
 
         async def send_chat_action(*_args):
