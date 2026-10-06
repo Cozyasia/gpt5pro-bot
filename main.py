@@ -3725,10 +3725,136 @@ def _photoclip_menu_text() -> str:
 def _clip_wants_vocals(prompt: str) -> bool:
     t = (prompt or "").lower().replace("ё", "е")
     no_vocals = re.search(r"(без\s+(?:вокал|голос|пени)|инструментал|instrumental|минусов)", t, re.I)
-    explicit_singer = re.search(r"(поет|поют|петь|sings?|singer|дуэт|duet|женск\w*\s+вокал|мужск\w*\s+вокал|с\s+вокалом|with\s+vocals?)", t, re.I)
+    explicit_singer = re.search(r"(поет|поют|пою|поем|поешь|петь|sings?|singer|дуэт|duet|женск\w*\s+вокал|мужск\w*\s+вокал|с\s+вокалом|with\s+vocals?)", t, re.I)
     if no_vocals and not explicit_singer:
         return False
-    return bool(re.search(r"(вокал|поет|поют|петь|песня|песню|припев|куплет|lip[ -]?sync|sing|singer|duet|дуэт|мужск(?:ой|им) голос|женск(?:ий|им) голос)", t, re.I))
+    return bool(re.search(r"(вокал|поет|поют|пою|поем|поешь|петь|песня|песню|припев|куплет|lip[ -]?sync|sing|singer|duet|дуэт|мужск(?:ой|им) голос|женск(?:ий|им) голос)", t, re.I))
+
+
+def _music_video_aspect(prompt: str) -> str:
+    match = re.search(r"(?<!\d)(9|16|1|4|3)\s*[:/]\s*(16|9|1|5|4|3)(?!\d)", prompt or "")
+    aspect = f"{match.group(1)}:{match.group(2)}" if match else "9:16"
+    return aspect if aspect in {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"} else "9:16"
+
+
+def _music_video_review_text(prompt: str) -> str:
+    duration = _photo_clip_target_duration(prompt)
+    scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
+    scenes = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_s - 1) // scene_s))
+    vocal = _clip_wants_vocals(prompt)
+    shot_plan = (
+        "Общий план и атмосфера", "Исполнение и движение под музыку",
+        "Эмоции и крупный план", "Движение камеры и взаимодействие",
+        "Новый ракурс выступления", "Энергия припева",
+        "Крупный план исполнителя", "Общий план героев", "Финал клипа",
+    )
+    plan = "\n".join(f"{i + 1}. {shot_plan[min(i, len(shot_plan) - 1)]}" for i in range(scenes))
+    note = (
+        f"\n\n⚠️ Вокальный клип на {duration} секунд пока недоступен: сначала проверяем одну lip-sync сцену "
+        f"до {scene_s} секунд. Сценарий сохранён; можно нажать «Дополнить» и изменить длительность. "
+        "Оплата не списана."
+        if vocal and scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
+    )
+    return (
+        "🎬 Сценарий AI-видеоклипа на утверждение\n\n"
+        f"Музыка: {'песня с вокалом и lip-sync' if vocal else 'инструментальная музыка'} · "
+        f"{duration} секунд · {scenes} сцен · формат {_music_video_aspect(prompt)}.\n\n"
+        "Ваше описание для Suno и Kling (роли певцов беру только из текста):\n"
+        f"{prompt[:2300]}\n\nПлан кадров:\n{plan}"
+        f"{note}"
+    )[:4000]
+
+
+def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
+        [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
+        [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
+    ])
+
+
+def _merge_music_video_prompt(original: str, addition: str) -> str:
+    """Replace earlier duration/aspect when the user amends either setting."""
+    original, addition = (original or "").strip(), (addition or "").strip()
+    duration_pattern = r"\b\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|s|seconds?|мин\w*|minutes?|min)\b"
+    aspect_pattern = r"(?<!\d)(?:9|16|1|4|3)\s*[:/]\s*(?:16|9|1|5|4|3)(?!\d)"
+    if re.search(duration_pattern, addition, re.I):
+        original = re.sub(duration_pattern, "", original, flags=re.I)
+    if re.search(aspect_pattern, addition):
+        original = re.sub(aspect_pattern, "", original)
+    return f"{original.strip(' ,;')}\nДополнение: {addition}".strip()
+
+
+async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str) -> bool:
+    prompt = (prompt or "").strip()
+    if not prompt:
+        await update.effective_message.reply_text("Опишите сюжет, музыку, вокал, длительность и формат клипа.")
+        return False
+    img = _get_cached_photo(update.effective_user.id)
+    if not img:
+        await update.effective_message.reply_text("Сначала загрузите фото для AI-видеоклипа.")
+        return False
+    token = uuid.uuid4().hex[:12]
+    context.user_data.pop("awaiting_photo_clip_prompt", None)
+    context.user_data.pop("awaiting_vocal_clip_prompt", None)
+    context.user_data.pop("music_video_draft_edit", None)
+    context.user_data["music_video_draft"] = {
+        "prompt": prompt, "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
+    }
+    await update.effective_message.reply_text(
+        _music_video_review_text(prompt), reply_markup=_music_video_approval_kb(token)
+    )
+    return True
+
+
+async def _on_music_video_draft_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    parts = (q.data or "").split(":")
+    draft = context.user_data.get("music_video_draft")
+    if len(parts) != 3 or not draft or parts[2] != draft.get("token"):
+        await q.answer("Сценарий устарел")
+        return
+    action = parts[1]
+    if action in ("augment", "rewrite"):
+        context.user_data["music_video_draft_edit"] = action
+        await q.answer("Жду текст")
+        await q.message.reply_text(
+            "➕ Напишите, что добавить или изменить в сценарии." if action == "augment"
+            else "✍️ Напишите сценарий заново. Текущее фото сохранится."
+        )
+        return
+    if action != "approve":
+        await q.answer("Неизвестное действие")
+        return
+    img = _get_cached_photo(q.from_user.id)
+    if not img or hashlib.sha256(img).hexdigest() != draft.get("photo_digest"):
+        context.user_data.pop("music_video_draft", None)
+        context.user_data.pop("music_video_draft_edit", None)
+        await q.answer("Фото изменилось")
+        await q.message.reply_text("Фото для сценария изменилось. Пришлите описание клипа ещё раз, чтобы утвердить его с новым фото.")
+        return
+    prompt = draft["prompt"]
+    scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
+    if _clip_wants_vocals(prompt) and _photo_clip_target_duration(prompt) > scene_s:
+        await q.answer("Пока доступно до 10 секунд")
+        await q.message.reply_text(
+            f"⚠️ Длинный вокальный клип пока не запущен: сначала проверяем один фрагмент до {scene_s} секунд. "
+            "Сценарий сохранён. Нажмите «Дополнить» и укажите короткую длительность. Кредиты не списаны."
+        )
+        return
+    # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
+    context.user_data.pop("music_video_draft", None)
+    context.user_data.pop("music_video_draft_edit", None)
+    await q.answer("Запускаю клип")
+    await q.message.reply_text("✅ Сценарий утверждён. Передаю его в режим AI-видеоклипа.")
+    try:
+        if _clip_wants_vocals(prompt):
+            await _start_vocal_clip(update, context, img, prompt)
+        else:
+            await _start_photo_music_clip(update, context, img, prompt)
+    except Exception:
+        log.exception("music video draft approval failed")
+        await q.message.reply_text("❌ Не удалось запустить клип. Кредиты за незавершённую генерацию не списаны. Попробуйте снова.")
 
 
 def _photoclip_preset_prompt(kind: str) -> str:
@@ -3997,14 +4123,13 @@ async def _handle_photoclip_preset_choice(update: Update, context: ContextTypes.
     _set_mode_clean(q.from_user.id, "Развлечения", "photoclip")
     img = _get_cached_photo(q.from_user.id)
     if img:
-        await q.answer("Запускаю клип")
-        await q.message.reply_text("🎬 Использую последнее загруженное фото и запускаю выбранный пресет видеоклипа.")
-        await _start_photo_music_clip(update, context, img, prompt)
+        await q.answer("Сценарий готов")
+        await _stage_music_video_draft(update, context, prompt)
     else:
         context.user_data["awaiting_photo_clip_photo"] = True
         context.user_data["photo_clip_preset_prompt"] = prompt
         await q.message.reply_text(
-            "🎬 Пресет выбран. Теперь пришлите фото — после загрузки клип запустится автоматически."
+            "🎬 Пресет выбран. Теперь пришлите фото — затем я покажу сценарий для утверждения."
         )
 
 # Показать выбранный режим (используется и для callback, и для текста)
@@ -4027,6 +4152,7 @@ async def on_mode_cb(update, context):
 
     # Навигация
     if data == "mode:root":
+        _clear_transient_flows(context)
         await q.message.reply_text(_modes_root_text(), reply_markup=modes_root_kb())
         await q.answer(); return
 
@@ -4047,6 +4173,7 @@ async def on_mode_cb(update, context):
     # Свободный ввод из подменю
     if data == "act:free":
         await q.answer()
+        _clear_transient_flows(context)
         await q.message.reply_text(
             "📝 Напишите свободный запрос ниже текстом или голосом — я подстроюсь.",
             reply_markup=modes_root_kb(),
@@ -4669,6 +4796,8 @@ def _clear_transient_flows(context):
         "awaiting_vocal_clip_photo",
         "awaiting_vocal_clip_prompt",
         "vocal_clip_preset_prompt",
+        "music_video_draft",
+        "music_video_draft_edit",
         "awaiting_text_video_prompt",
         "text_video_engine",
         "presentation_studio_active",
@@ -7622,7 +7751,7 @@ def _photo_clip_target_duration(user_prompt: str) -> int:
 def _music_video_scene_prompts(user_prompt: str, target_duration: int) -> list[str]:
     """Create deterministic short-scene directions for a longer coherent music video."""
     scene_s = int(PHOTO_CLIP_SCENE_SECONDS or 10)
-    count = max(1, min(PHOTO_CLIP_MAX_SCENES, int(math.ceil(target_duration / float(scene_s)))))
+    count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
     phases = [
         "opening shot, subtle movement, establish performers and location",
         "medium performance shot, rhythmic body movement, sing/perform to camera",
@@ -8146,7 +8275,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     performer_count = max(1, len(faces))
     target_duration = _photo_clip_target_duration(prompt)
     scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
-    scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, int(math.ceil(target_duration / float(scene_s)))))
+    scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
     if scene_count > 1:
         await update.effective_message.reply_text(
             f"⚠️ Вокальный клип на {target_duration} секунд пока недоступен: "
@@ -14021,6 +14150,20 @@ async def on_text(
         )
         return
 
+    # Keep music-video revisions in the same mode; never send a draft to generic chat.
+    draft = context.user_data.get("music_video_draft")
+    if draft:
+        edit = context.user_data.get("music_video_draft_edit")
+        if edit in ("augment", "rewrite"):
+            prompt = _merge_music_video_prompt(draft["prompt"], text) if edit == "augment" else text
+            await _stage_music_video_draft(update, context, prompt)
+        else:
+            await update.effective_message.reply_text(
+                "Сценарий ожидает решения. Нажмите «Утверждаю», «Дополнить» или «Написать заново».",
+                reply_markup=_music_video_approval_kb(draft["token"]),
+            )
+        return
+
     # Вопросы о FaceSwap должны отвечать описанием функции, а не сразу запускать режим.
     if re.search(r"(мож(ешь|ете|но)|уме(ешь|ете)|способен|поддерживаешь|делаешь|может\s+ли)", text or "", re.I) and re.search(r"(лиц|лица|лицо|face|faceswap)", text or "", re.I):
         cap_early = capability_answer(text)
@@ -14152,10 +14295,7 @@ async def on_text(
             _clear_vocal_clip_wait(context)
             await update.effective_message.reply_text("Сначала загрузите портрет одного человека, затем нажмите 🎤 Клип с вокалом.", reply_markup=main_kb)
             return
-        _clear_vocal_clip_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        await _start_vocal_clip(update, context, img, text)
+        await _stage_music_video_draft(update, context, text)
         return
 
     # Оживление фото по пользовательскому сценарию: фото уже загружено,
@@ -14186,11 +14326,7 @@ async def on_text(
             _clear_photo_clip_wait(context)
             await update.effective_message.reply_text("Сначала загрузите фото человека, затем нажмите 🎵 Фото → видеоклип.", reply_markup=main_kb)
             return
-        _clear_photo_clip_wait(context)
-        if _clip_wants_vocals(text):
-            await _start_vocal_clip(update, context, img, text)
-        else:
-            await _start_photo_music_clip(update, context, img, text)
+        await _stage_music_video_draft(update, context, text)
         return
 
     # Текстовый/голосовой запрос на ретушь до загрузки фото.
@@ -14256,7 +14392,7 @@ async def on_text(
         img = _get_cached_photo(update.effective_user.id)
         prompt = _clean_photo_clip_prompt(text)
         if img and prompt:
-            await _start_photo_music_clip(update, context, img, prompt)
+            await _stage_music_video_draft(update, context, prompt)
             return
         _set_photo_clip_wait(context)
         await update.effective_message.reply_text(
@@ -14492,6 +14628,14 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if await _presentation_studio_get().handle_photo(update, context, img, mime="image/jpeg", caption=caption):
             return
 
+        if context.user_data.pop("music_video_draft", None):
+            context.user_data.pop("music_video_draft_edit", None)
+            _set_photo_clip_wait(context)
+            await update.effective_message.reply_text(
+                "📸 Фото для клипа обновлено. Опишите сценарий ещё раз, чтобы утвердить его для этого фото."
+            )
+            return
+
         # 0) Замена лица: двухшаговый режим должен срабатывать раньше остальных фото-веток.
         if context.user_data.get("faceswap_flow") == "await_target":
             await _maybe_choose_target_face(update, context, user_id, img)
@@ -14520,7 +14664,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prompt = _clean_photo_clip_prompt(caption)
             _clear_medicine_wait(context)
             if prompt:
-                await _start_photo_music_clip(update, context, img, prompt)
+                await _stage_music_video_draft(update, context, prompt)
             else:
                 _set_photo_clip_wait(context)
                 await update.effective_message.reply_text("Фото получено. Теперь опишите клип: жанр/музыку, нужен ли вокал, кто поёт и каким голосом, движения героев, длительность и формат.")
@@ -14558,12 +14702,19 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        if context.user_data.get("awaiting_vocal_clip_photo"):
+            context.user_data.pop("awaiting_vocal_clip_photo", None)
+            _set_vocal_clip_wait(context)
+            await update.effective_message.reply_text(
+                "🎤 Портрет получен. Опишите песню, вокал, движение, длительность и формат — покажу сценарий для утверждения."
+            )
+            return
+
         if context.user_data.get("awaiting_photo_clip_photo"):
             context.user_data.pop("awaiting_photo_clip_photo", None)
             preset_prompt = (context.user_data.pop("photo_clip_preset_prompt", "") or "").strip()
             if preset_prompt:
-                await update.effective_message.reply_text("Фото получено. Запускаю выбранный пресет видеоклипа.")
-                await _start_photo_music_clip(update, context, img, preset_prompt)
+                await _stage_music_video_draft(update, context, preset_prompt)
             else:
                 _set_photo_clip_wait(context)
                 await update.effective_message.reply_text("Фото получено. Теперь опишите клип: жанр/музыку, нужен ли вокал, кто поёт и каким голосом, движения героев, длительность и формат.")
@@ -14742,6 +14893,14 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if mt.startswith("image/"):
             _cache_photo(update.effective_user.id, raw, getattr(tg_file, "file_path", "") or "")
 
+            if context.user_data.pop("music_video_draft", None):
+                context.user_data.pop("music_video_draft_edit", None)
+                _set_photo_clip_wait(context)
+                await update.effective_message.reply_text(
+                    "📸 Фото для клипа обновлено. Опишите сценарий ещё раз, чтобы утвердить его для этого фото."
+                )
+                return
+
             # v70: если пользователь уже выбрал режим «Клип с вокалом»,
             # следующая фотография должна продолжать этот сценарий, а не открывать
             # общее меню «Фото получено. Что сделать?». Это страхует случаи,
@@ -14786,7 +14945,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 prompt = _clean_photo_clip_prompt(caption)
                 _clear_medicine_wait(context)
                 if prompt:
-                    await _start_photo_music_clip(update, context, raw, prompt)
+                    await _stage_music_video_draft(update, context, prompt)
                 else:
                     _set_photo_clip_wait(context)
                     await update.effective_message.reply_text("Фото получено. Теперь опишите стиль видеоклипа, музыку, движение, длительность и формат.")
@@ -14834,8 +14993,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data.pop("awaiting_photo_clip_photo", None)
                 preset_prompt = (context.user_data.pop("photo_clip_preset_prompt", "") or "").strip()
                 if preset_prompt:
-                    await update.effective_message.reply_text("Фото получено. Запускаю выбранный пресет видеоклипа.")
-                    await _start_photo_music_clip(update, context, raw, preset_prompt)
+                    await _stage_music_video_draft(update, context, preset_prompt)
                 else:
                     _set_photo_clip_wait(context)
                     await update.effective_message.reply_text("Фото получено. Теперь опишите стиль видеоклипа, музыку, движение, длительность и формат.")
@@ -15058,8 +15216,7 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("🪄 Оживить фото", callback_data="fun:revive")],
         [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="fun:avatar")],
-        [InlineKeyboardButton("🎵 Фото → видеоклип", callback_data="fun:photoclip")],
-        [InlineKeyboardButton("🎤 Клип с вокалом (1 человек)", callback_data="fun:vocalclip")],
+        [InlineKeyboardButton("🎤 AI-видеоклип / песня", callback_data="fun:photoclip")],
         [InlineKeyboardButton("🎬 Видео по тексту/голосу", callback_data="fun:textvideo")],
         [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="fun:aiselfie")],
         [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="fun:faceswap")],
@@ -15273,6 +15430,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if action in {"ideas", "quiz", "speech", "free", "back"}:
+        _clear_transient_flows(context)
         await q.answer()
         await q.message.reply_text(
             "Готов! Напиши задачу или выбери кнопку выше.",
@@ -15694,6 +15852,9 @@ def build_application() -> "Application":
 
     # 2) Новые режимы/подменю: mode:* и act:* (Учёба/Работа/Развлечения/Медицина)
     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
+
+    # Music-video draft approval: consumed once before the generic callback router.
+    app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite):[0-9a-f]{12}$"), group=0)
 
     # 2b) Старые school:/work: callbacks, если такие кнопки ещё где-то используются
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)

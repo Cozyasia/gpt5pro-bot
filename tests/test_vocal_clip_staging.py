@@ -2,7 +2,6 @@ import ast
 import asyncio
 import contextlib
 import hashlib
-import math
 from pathlib import Path
 import re
 import unittest
@@ -22,7 +21,7 @@ def load_entry_points():
     module = ast.Module(body=selected, type_ignores=[])
     code = compile(ast.fix_missing_locations(module), str(MAIN), "exec")
     env = {
-        "asyncio": asyncio, "hashlib": hashlib, "math": math, "re": re,
+        "asyncio": asyncio, "hashlib": hashlib, "re": re,
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
         "PHOTO_CLIP_DEFAULT_DURATION_S": 15, "PHOTO_CLIP_MAX_DURATION_S": 90,
         "PHOTO_CLIP_SCENE_SECONDS": 10, "PHOTO_CLIP_MAX_SCENES": 9,
