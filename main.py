@@ -15759,6 +15759,17 @@ _CAPS_PATTERN = re.compile(
 
 async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     incoming_text = (getattr(update.effective_message, "text", "") or "").strip()
+    # Stateful music-video prompts have priority over the generic capability matcher.
+    # In particular, words such as "фотореализм" + "движение" inside VIDEO_BRIEF
+    # must never reset the flow to ordinary photo revival.
+    if any(context.user_data.get(key) for key in (
+        "awaiting_photo_clip_prompt",
+        "awaiting_vocal_clip_prompt",
+        "awaiting_music_video_video_brief",
+        "music_video_draft",
+        "music_video_draft_edit",
+    )):
+        return
     # Never interpret a presentation brief as a generic capability/live-data question.
     studio = _presentation_studio_get()
     if update.effective_user and update.effective_chat and studio._active_project(update.effective_user.id, update.effective_chat.id):
