@@ -3578,7 +3578,7 @@ def _mode_desc(key: str) -> str:
             "🔥 *Развлечения*\n"
             "Гибрид: GPT-5 (идеи, сценарии, раскадровка), Vision (фото/референсы), "
             "Sora 2 без людей, Kling и Runway (видео по тексту), Runway/Kling (оживление фото с людьми), Sora 2 — только сцены без людей, STT/TTS (голос и озвучка).\n\n"
-            "Главные быстрые действия: оживить фото, говорящий аватар, фото→видеоклип с музыкой, клип с вокалом для 1 человека, видео по тексту/голосу через Kling/Runway, сделать Reels/Shorts, создать мини-фильм, заменить лицо, удалить или заменить фон на фото.\n"
+            "Главные быстрые действия: оживить фото, говорящий аватар, AI-видеоклип/песня с музыкой или вокалом, видео по тексту/голосу через Kling/Runway, сделать Reels/Shorts, создать мини-фильм, заменить лицо, удалить или заменить фон на фото.\n"
             "Можно написать свободный запрос, например: «сделай рилс 20 секунд про виллу на Самуи, стиль luxury, 9:16»."
         )
     if key == "medicine":
@@ -3618,8 +3618,7 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("🪄 Оживить фото", callback_data="act:fun:revive")],
             [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="act:fun:avatar")],
-            [InlineKeyboardButton("🎵 Фото → видеоклип", callback_data="act:fun:photoclip")],
-            [InlineKeyboardButton("🎤 Клип с вокалом (1 человек)", callback_data="act:fun:vocalclip")],
+            [InlineKeyboardButton("🎤 AI-видеоклип / песня", callback_data="act:fun:photoclip")],
             [InlineKeyboardButton("🎬 Видео по тексту/голосу", callback_data="act:fun:textvideo")],
             [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="act:fun:aiselfie")],
             [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="act:fun:faceswap")],
@@ -3692,28 +3691,37 @@ def _avatar_menu_text() -> str:
 
 
 def _photoclip_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
-    """Подменю фото→видеоклип с пресетами/вариациями."""
+    """Unified AI music-video mode: instrumental or vocal, one or more people."""
     base = "act:fun" if prefix == "act" else "fun"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📸 Загрузить фото", callback_data=f"{base}:photoclip_upload")],
         [InlineKeyboardButton("✅ Использовать последнее фото", callback_data=f"{base}:photoclip_last")],
+        [InlineKeyboardButton("🎤 Клип с вокалом / lip-sync", callback_data=f"{base}:vocalclip_prompt")],
         [InlineKeyboardButton("🎬 Кинематографичный клип", callback_data=f"{base}:pc_preset_cinematic")],
         [InlineKeyboardButton("📱 Reels / Shorts 9:16", callback_data=f"{base}:pc_preset_reels")],
         [InlineKeyboardButton("🏝 Travel / luxury клип", callback_data=f"{base}:pc_preset_luxury")],
         [InlineKeyboardButton("💃 Музыкальный клип", callback_data=f"{base}:pc_preset_music")],
         [InlineKeyboardButton("📣 Рекламный клип", callback_data=f"{base}:pc_preset_ads")],
-        [InlineKeyboardButton("📝 Свой промпт", callback_data=f"{base}:photoclip_custom")],
+        [InlineKeyboardButton("📝 Свой сценарий", callback_data=f"{base}:photoclip_custom")],
         [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun" if prefix == "act" else "fun:back")],
     ])
 
 
 def _photoclip_menu_text() -> str:
     return (
-        "🎵 *Фото → видеоклип*\n"
-        "Фото человека или объекта → короткий клип через Kling image→video.\n\n"
-        "Выберите вариант ниже: можно сразу запустить готовый пресет или выбрать «Свой промпт» и описать движение, музыку, настроение, длительность и формат.\n\n"
-        "По умолчанию: 9:16, динамичный видеоклип, звук Kling — если канал Comet поддерживает sound:on."
+        "🎤 *AI-видеоклип / песня*\n"
+        "Фото одного или нескольких людей → музыкальный клип через Kling + Suno.\n\n"
+        "Можно сделать инструментальный клип или клип с вокалом/lip-sync. "
+        "В описании укажите, кто поёт: например «женщина — женский вокал, мужчина — мужской вокал; припев поют вместе». "
+        "Также можно задать движения, взаимодействие героев, стиль, язык, длительность и формат.\n\n"
+        "Для длинного клипа бот сохраняет исходные лица и собирает результат из коротких сцен. "
+        "Рекомендуемый формат — 9:16."
     )
+
+
+def _clip_wants_vocals(prompt: str) -> bool:
+    t = (prompt or "").lower().replace("ё", "е")
+    return bool(re.search(r"(вокал|поет|поют|петь|песня|песню|припев|куплет|lip[ -]?sync|sing|singer|duet|дуэт|мужск(?:ой|им) голос|женск(?:ий|им) голос)", t, re.I))
 
 
 def _photoclip_preset_prompt(kind: str) -> str:
@@ -3957,7 +3965,7 @@ async def _handle_photoclip_upload_choice(update: Update, context: ContextTypes.
     _set_mode_clean(q.from_user.id, "Развлечения", "photoclip")
     context.user_data["awaiting_photo_clip_photo"] = True
     await q.message.reply_text(
-        "🎵 Пришлите фото человека/объекта. Я жду именно фотографию. После загрузки предложу следующий шаг внутри режима «Фото → видеоклип»."
+        "🎤 Пришлите фото одного или нескольких героев. После загрузки я попрошу описать клип: кто поёт, тип вокала, движения, стиль, длительность и формат."
     )
 
 
@@ -3967,7 +3975,7 @@ async def _handle_photoclip_prompt_choice(update: Update, context: ContextTypes.
     img = _get_cached_photo(q.from_user.id)
     if img:
         _set_photo_clip_wait(context)
-        await q.message.reply_text("🎵 Использую последнее загруженное фото. Опишите стиль видеоклипа: музыка, движение, настроение, длительность и формат 9:16/16:9.")
+        await q.message.reply_text("🎤 Использую последнее фото. Опишите клип: музыка/жанр, нужен ли вокал, кто именно поёт (например: женщина — женский вокал, мужчина — мужской), движения, длительность и формат 9:16/16:9.")
         await q.answer("Готово")
     else:
         context.user_data["awaiting_photo_clip_photo"] = True
@@ -4247,7 +4255,7 @@ async def on_mode_cb(update, context):
         return
 
     if data == "act:fun:photoclip":
-        await q.answer("Фото → видеоклип")
+        await q.answer("AI-видеоклип / песня")
         _clear_transient_flows(context)
         _set_mode_clean(uid, "Развлечения", "photoclip")
         await q.message.reply_text(_photoclip_menu_text(), parse_mode="Markdown", reply_markup=_photoclip_action_kb("act"))
@@ -7955,7 +7963,7 @@ async def _trim_audio_for_vocal_clip(audio_bytes: bytes, max_seconds: int = 65) 
     return await asyncio.to_thread(_trim_audio_for_vocal_clip_sync, audio_bytes, max_seconds)
 
 async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
-    """Premium one-person vocal/lip-sync clip: Suno audio -> Kling Avatar."""
+    """Unified vocal/lip-sync clip. Supports one performer and experimental multi-performer direction."""
     prompt = (user_prompt or "").strip()
     if not prompt:
         await update.effective_message.reply_text("Опишите песню/клип: стиль, язык, настроение, припев, длительность.")
@@ -7964,12 +7972,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         faces = _detect_faces_for_choice(img_bytes) if FACESWAP_FACE_DETECTION_ENABLED else []
     except Exception:
         faces = []
-    if len(faces) > 1:
-        await update.effective_message.reply_text(
-            "❌ Для режима «Клип с вокалом / lip-sync» нужен портрет одного человека. На фото найдено несколько лиц.\n"
-            "Сделайте отдельный кадр одного героя крупнее и запустите режим снова."
-        )
-        return
+    performer_count = max(1, len(faces))
     user_id = update.effective_user.id
     img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
     job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}"
@@ -7983,8 +7986,8 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             if not (SUNO_ENABLED and SUNO_API_KEY):
                 raise RuntimeError("Для вокального клипа нужен SUNO_ENABLED=1 и SUNO_API_KEY/COMET_API_KEY.")
             await update.effective_message.reply_text(
-                "🎤 Клип с вокалом принят. Режим рассчитан на *одного человека*: сначала генерирую вокал Suno, затем делаю lip-sync через Kling Avatar.",
-                parse_mode="Markdown",
+                f"🎤 AI-видеоклип принят. Герои в кадре: {performer_count}. Сначала создаю песню/вокал через Suno, затем синхронизирую исполнение через Kling. "
+                "Если в описании распределены мужской/женский вокал, сохраняю эти роли в музыкальном и визуальном сценарии.",
             )
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
             audio_bytes = await _run_suno_music_result_bytes(update, prompt)
@@ -8003,10 +8006,13 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             if not audio_url:
                 raise RuntimeError("Не удалось подготовить публичный URL аудио для lip-sync.")
             avatar_prompt = (
-                "A single person performs as a music video singer. Accurate lip sync to the provided vocal audio, "
-                "natural mouth shapes, expressive singing to camera, subtle rhythmic head and shoulder motion, "
-                "premium music-video lighting, stable identity, no extra people, no subtitles, no text overlays. "
-                f"Music direction: {prompt[:500]}"
+                f"Music video performance with {performer_count} visible performer(s). Preserve every person's identity and face. "
+                "Accurate lip sync to the provided vocal audio. Follow the user's singer-role assignment exactly: "
+                "female vocal lines are performed by the woman, male vocal lines by the man, and shared/duet lines may be performed together. "
+                "Natural mouth shapes, rhythmic body movement, looking to camera when singing, subtle turns and gestures; performers may interact, "
+                "hug, clap, high-five or move together when requested. Keep faces stable and recognizable; avoid face morphing or identity swaps. "
+                "Premium music-video lighting, no subtitles, no text overlays. "
+                f"Music and role direction: {prompt[:700]}"
             )
             ok = await _run_kling_avatar(
                 update, context, img_bytes,
@@ -13962,7 +13968,10 @@ async def on_text(
             await update.effective_message.reply_text("Сначала загрузите фото человека, затем нажмите 🎵 Фото → видеоклип.", reply_markup=main_kb)
             return
         _clear_photo_clip_wait(context)
-        await _start_photo_music_clip(update, context, img, text)
+        if _clip_wants_vocals(text):
+            await _start_vocal_clip(update, context, img, text)
+        else:
+            await _start_photo_music_clip(update, context, img, text)
         return
 
     # Текстовый/голосовой запрос на ретушь до загрузки фото.
@@ -14295,7 +14304,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _start_photo_music_clip(update, context, img, prompt)
             else:
                 _set_photo_clip_wait(context)
-                await update.effective_message.reply_text("Фото получено. Теперь опишите стиль видеоклипа, музыку, движение, длительность и формат.")
+                await update.effective_message.reply_text("Фото получено. Теперь опишите клип: жанр/музыку, нужен ли вокал, кто поёт и каким голосом, движения героев, длительность и формат.")
             return
 
         if caption and _is_ai_selfie_intent(caption):
@@ -14338,7 +14347,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _start_photo_music_clip(update, context, img, preset_prompt)
             else:
                 _set_photo_clip_wait(context)
-                await update.effective_message.reply_text("Фото получено. Теперь опишите стиль видеоклипа, музыку, движение, длительность и формат.")
+                await update.effective_message.reply_text("Фото получено. Теперь опишите клип: жанр/музыку, нужен ли вокал, кто поёт и каким голосом, движения героев, длительность и формат.")
             return
 
         # 0) Фото пришло после входа из меню «Развлечения → Заменить фон».
