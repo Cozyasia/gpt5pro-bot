@@ -539,7 +539,11 @@ if SORA_MODEL.lower() in ("", "sora", "sora-1", "sora1"):
 SORA_CREATE_PATH = os.environ.get("SORA_CREATE_PATH", "/v1/videos").strip() or "/v1/videos"
 SORA_STATUS_PATH = os.environ.get("SORA_STATUS_PATH", "/v1/videos/{id}").strip() or "/v1/videos/{id}"
 KLING_API_KEY  = (os.environ.get("KLING_API_KEY") or COMET_API_KEY).strip()
-KLING_MODEL    = os.environ.get("KLING_MODEL", "kling-v1-6").strip()
+KLING_MODEL    = os.environ.get("KLING_MODEL", "kling-v2-6").strip()
+# Old v1.6 is increasingly unreliable on the current Comet Kling channel.
+# Keep an explicit ENV override, but migrate the stale default automatically.
+if KLING_MODEL.lower() in ("", "kling-v1-6", "kling-v1.6"):
+    KLING_MODEL = "kling-v2-6"
 KLING_CREATE_PATH = os.environ.get("KLING_CREATE_PATH", "/kling/v1/videos/image2video").strip() or "/kling/v1/videos/image2video"
 KLING_STATUS_PATH = os.environ.get("KLING_STATUS_PATH", "/kling/v1/videos/image2video/{id}").strip() or "/kling/v1/videos/image2video/{id}"
 # Text→Video через CometAPI: Sora 2 (только без людей), Kling и Runway. Luma временно скрыта.
@@ -12983,17 +12987,8 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
                 {
                     "model_name": KLING_MODEL,
                     "prompt": safe_prompt,
-                    "image": kling_image_ref,
-                    "duration": d,
-                    "aspect_ratio": aspect,
-                    "mode": "std",
-                },
-            ),
-            (
-                "/kling/v1/videos/image2video",
-                {
-                    "model_name": KLING_MODEL,
-                    "prompt": safe_prompt,
+                    "negative_prompt": "blurry, low quality, distorted faces, extra limbs, watermark, text overlay",
+                    "cfg_scale": 0.5,
                     "image": kling_image_ref,
                     "duration": d,
                     "aspect_ratio": aspect,
