@@ -35,7 +35,10 @@ def test_vocal_action_path_uses_synthesized_keyframe_and_not_avatar():
     assert "_run_comet_music_video_identity_keyframe(" in block
     assert "img_bytes = keyframe" in block
     assert "if high_fidelity:" in block
-    assert "_run_kling_photo_clip_result(img_bytes" in block
+    assert "_run_kling_photo_clip_result(" in block
+    assert "keyframe_url = await _upload_bytes_to_telegram_file_url(" in block
+    assert 'if not keyframe_url.startswith("https://")' in block
+    assert "img_bytes, scene_prompt, dur_s, aspect, keyframe_url" in block
     assert "Compatibility only for isolated legacy unit-test harnesses" in block
     assert "vocal_start is not reliably detected yet" in block
 
