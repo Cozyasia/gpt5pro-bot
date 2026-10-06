@@ -3957,8 +3957,7 @@ async def _handle_photoclip_upload_choice(update: Update, context: ContextTypes.
     _set_mode_clean(q.from_user.id, "Развлечения", "photoclip")
     context.user_data["awaiting_photo_clip_photo"] = True
     await q.message.reply_text(
-        "🎵 Пришлите фото человека/объекта. После загрузки я попрошу описание клипа или запущу выбранный пресет.",
-        reply_markup=_photoclip_action_kb(prefix),
+        "🎵 Пришлите фото человека/объекта. Я жду именно фотографию. После загрузки предложу следующий шаг внутри режима «Фото → видеоклип»."
     )
 
 
@@ -3973,8 +3972,7 @@ async def _handle_photoclip_prompt_choice(update: Update, context: ContextTypes.
     else:
         context.user_data["awaiting_photo_clip_photo"] = True
         await q.message.reply_text(
-            "Сначала пришлите фото. После загрузки опишете стиль видеоклипа.",
-            reply_markup=_photoclip_action_kb(prefix),
+            "🎵 Сначала пришлите фото человека/объекта. Я жду фотографию; после загрузки сразу попрошу описание клипа."
         )
 
 
@@ -3991,8 +3989,7 @@ async def _handle_photoclip_preset_choice(update: Update, context: ContextTypes.
         context.user_data["awaiting_photo_clip_photo"] = True
         context.user_data["photo_clip_preset_prompt"] = prompt
         await q.message.reply_text(
-            "🎬 Пресет выбран. Теперь пришлите фото — после загрузки клип запустится автоматически.",
-            reply_markup=_photoclip_action_kb(prefix),
+            "🎬 Пресет выбран. Теперь пришлите фото — после загрузки клип запустится автоматически."
         )
 
 # Показать выбранный режим (используется и для callback, и для текста)
