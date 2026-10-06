@@ -7545,7 +7545,7 @@ async def _run_kling_avatar_result_bytes(
         "mode": KLING_AVATAR_MODE,
         "sound_file": sound_file,
     }
-    return await _create_and_poll_i2v_bytes(
+    scene_bytes = await _create_and_poll_i2v_bytes(
         COMET_BASE_URL,
         KLING_API_KEY or COMET_API_KEY,
         [(KLING_AVATAR_CREATE_PATH, payload), ("/kling/v1/videos/avatar/image2video", payload)],
@@ -7553,6 +7553,10 @@ async def _run_kling_avatar_result_bytes(
         "Kling Avatar scene",
         max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S),
     )
+    if not scene_bytes or len(scene_bytes) < 512 or scene_bytes[4:8] != b"ftyp":
+        raise RuntimeError("Kling Avatar scene: provider result is not an MP4 video")
+    log.info("Kling Avatar scene downloaded: %d bytes", len(scene_bytes))
+    return scene_bytes
 
 
 async def _start_talking_avatar(
@@ -8164,6 +8168,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, min(target_duration, VOCAL_CLIP_MAX_AUDIO_S))
+            await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
             segments: list[bytes] = []
             for idx in range(1, scene_count + 1):
                 start_s = (idx - 1) * scene_s
@@ -8192,10 +8197,11 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
                 segments.append(scene_video)
 
-            await update.effective_message.reply_text("🎬 Все lip-sync сцены готовы. Собираю единый MP4 и возвращаю исходный трек Suno…")
+            await update.effective_message.reply_text("🎬 Собираю итоговый клип из lip-sync сцен…")
             joined = await asyncio.to_thread(_concat_video_segments_sync, segments, target_duration)
             if not joined:
                 raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
+            await update.effective_message.reply_text("📦 Подготавливаю и сжимаю видео для Telegram, добавляю исходный трек Suno…")
             final_bytes = await asyncio.wait_for(
                 asyncio.to_thread(_mux_video_audio_sync, joined, safe_audio, target_duration),
                 timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
@@ -8210,7 +8216,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         except Exception as e:
             log.exception("vocal clip failed: %s", e)
             with contextlib.suppress(Exception):
-                await update.effective_message.reply_text(f"❌ AI-видеоклип с вокалом не получился. Причина: {str(e)[:900]}")
+                await update.effective_message.reply_text("❌ AI-видеоклип с вокалом не получился. Попробуйте позже. Кредиты не списаны.")
             return False
         finally:
             _vocal_clip_background_jobs.discard(job_key)
