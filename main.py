@@ -4166,7 +4166,7 @@ async def _handle_photoclip_upload_choice(update: Update, context: ContextTypes.
     _set_mode_clean(q.from_user.id, "Развлечения", "photoclip")
     context.user_data["awaiting_photo_clip_photo"] = True
     await q.message.reply_text(
-        "🎤 Пришлите фото одного или нескольких героев. После загрузки я попрошу описать клип: кто поёт, тип вокала, движения, стиль, длительность и формат."
+        "🎤 Пришлите фото одного или нескольких героев. После загрузки я сначала отдельно попрошу описать 🎵 ПЕСНЮ, а затем отдельным сообщением — 🎬 ВИДЕО."
     )
 
 
@@ -4176,12 +4176,12 @@ async def _handle_photoclip_prompt_choice(update: Update, context: ContextTypes.
     img = _get_cached_photo(q.from_user.id)
     if img:
         _set_photo_clip_wait(context)
-        await q.message.reply_text("🎤 Использую последнее фото. Опишите клип: музыка/жанр, нужен ли вокал, кто именно поёт (например: женщина — женский вокал, мужчина — мужской), движения, длительность и формат 9:16/16:9.")
+        await q.message.reply_text("🎵 Использую последнее фото. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, нужен ли вокал и каким голосом. После этого я отдельно спрошу, что должно происходить в клипе.")
         await q.answer("Готово")
     else:
         context.user_data["awaiting_photo_clip_photo"] = True
         await q.message.reply_text(
-            "🎵 Сначала пришлите фото человека/объекта. Я жду фотографию; после загрузки сразу попрошу описание клипа."
+            "🎵 Сначала пришлите фото человека/объекта. После загрузки я отдельно спрошу сначала ПЕСНЮ, затем ВИДЕО."
         )
 
 
@@ -5081,7 +5081,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await q.message.reply_text("Загрузи портрет человека, затем нажми 🗣 Говорящий аватар. После этого пришли текст, voice или аудио для речи.")
     if data == "fun:photoclip":
         context.user_data["awaiting_photo_clip_photo"] = True
-        return await q.message.reply_text("Загрузи фото человека, затем нажми 🎵 Фото → видеоклип и опиши стиль: музыка, движение, настроение, 5/10 сек, 9:16 или 16:9.")
+        return await q.message.reply_text("Загрузи фото человека, затем нажми 🎵 Фото → видеоклип. После фото я отдельно спрошу сначала ПЕСНЮ, затем ВИДЕО.")
     if data == "fun:aiselfie":
         context.user_data["awaiting_ai_selfie_photo"] = True
         return await q.message.reply_text("🤳 Загрузи своё селфи, затем напиши, с кем/где сделать AI-фото: знаменитость, персонаж, премьера, реклама, travel/luxury.")
@@ -14937,7 +14937,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _stage_music_video_draft(update, context, prompt)
             else:
                 _set_photo_clip_wait(context)
-                await update.effective_message.reply_text("Фото получено. Теперь опишите клип: жанр/музыку, нужен ли вокал, кто поёт и каким голосом, движения героев, длительность и формат.")
+                await update.effective_message.reply_text("🎵 Фото получено. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, нужен ли вокал и каким голосом. После этого я отдельно спрошу ВИДЕО.")
             return
 
         if caption and _is_ai_selfie_intent(caption):
@@ -14987,7 +14987,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _stage_music_video_draft(update, context, preset_prompt)
             else:
                 _set_photo_clip_wait(context)
-                await update.effective_message.reply_text("Фото получено. Теперь опишите клип: жанр/музыку, нужен ли вокал, кто поёт и каким голосом, движения героев, длительность и формат.")
+                await update.effective_message.reply_text("🎵 Фото получено. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, нужен ли вокал и каким голосом. После этого я отдельно спрошу ВИДЕО.")
             return
 
         # 0) Фото пришло после входа из меню «Развлечения → Заменить фон».
@@ -15218,7 +15218,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await _stage_music_video_draft(update, context, prompt)
                 else:
                     _set_photo_clip_wait(context)
-                    await update.effective_message.reply_text("Фото получено. Теперь опишите стиль видеоклипа, музыку, движение, длительность и формат.")
+                    await update.effective_message.reply_text("🎵 Фото получено. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, нужен ли вокал и каким голосом. После этого я отдельно спрошу ВИДЕО.")
                 return
 
             if caption and _is_ai_selfie_intent(caption):
@@ -15266,7 +15266,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await _stage_music_video_draft(update, context, preset_prompt)
                 else:
                     _set_photo_clip_wait(context)
-                    await update.effective_message.reply_text("Фото получено. Теперь опишите стиль видеоклипа, музыку, движение, длительность и формат.")
+                    await update.effective_message.reply_text("🎵 Фото получено. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, нужен ли вокал и каким голосом. После этого я отдельно спрошу ВИДЕО.")
                 return
 
             if context.user_data.get("photo_flow") == "replacebg_menu":
