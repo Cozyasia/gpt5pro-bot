@@ -5205,7 +5205,7 @@ def _is_photo_revival_question(text: str) -> bool:
     tl = (text or "").strip().lower()
     if not tl:
         return False
-    has_photo = bool(re.search(r"(фото|фотограф|картинк|изображен|image|picture|photo)", tl, re.I))
+    has_photo = bool(re.search(r"(?:\\bфото\\b|фотограф\\w*|картинк\\w*|изображен\\w*|\\bimage\\b|\\bpicture\\b|\\bphoto\\b)", tl, re.I))
     has_revival = bool(re.search(r"(ожив|анимир|движен|image\s*to\s*video|i2v|revive|animate)", tl, re.I))
     has_ability = bool(re.search(r"(мож(ешь|ете|но)|уме(ешь|ете)|способен|поддерживаешь|делаешь|получится|может\s+ли)", tl, re.I))
     # Ловим и прямой вопрос «можешь оживить фото?», и фразы вида «оживление фото возможно?»
@@ -5216,7 +5216,7 @@ def _is_photo_revival_intent(text: str) -> bool:
     tl = (text or "").strip().lower().replace("ё", "е")
     if not tl:
         return False
-    has_photo = bool(re.search(r"(фото|фотограф|картинк|изображен|image|picture|photo)", tl, re.I))
+    has_photo = bool(re.search(r"(?:\\bфото\\b|фотограф\\w*|картинк\\w*|изображен\\w*|\\bimage\\b|\\bpicture\\b|\\bphoto\\b)", tl, re.I))
     has_revival = bool(re.search(r"(ожив|анимир|движен|image\s*to\s*video|i2v|revive|animate|сделай\s+видео)", tl, re.I))
     return has_photo and has_revival
 
@@ -5417,21 +5417,6 @@ async def _medical_analyze_image(update: Update, context: ContextTypes.DEFAULT_T
     if len(ans) > 3900:
         await update.effective_message.reply_text(ans[3900:7800])
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
-
-async def on_photo_revival_capability(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This handler is registered in PTB group 0. Active music-video state must win
-    # before the generic "оживить фото" capability route, otherwise VIDEO_BRIEF
-    # containing words like "фото/движение/оживить" resets the workflow.
-    if any(context.user_data.get(key) for key in (
-        "awaiting_photo_clip_prompt",
-        "awaiting_vocal_clip_prompt",
-        "awaiting_music_video_video_brief",
-        "music_video_draft_edit",
-    )):
-        await on_text(update, context)
-        raise ApplicationHandlerStop
-    _set_waiting_photo_revival(update, context)
-    await update.effective_message.reply_text(_photo_revival_capability_text(), reply_markup=main_kb)
 
 def capability_answer(text: str) -> str | None:
     """
@@ -15758,6 +15743,50 @@ async def on_btn_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _set_medical_waiting(update, context, "")
     await update.effective_message.reply_text(_medical_menu_text(), reply_markup=medicine_kb())
 
+# ───────── Приоритетный роутер AI-видеоклипа ─────────
+def _music_video_text_state(context: ContextTypes.DEFAULT_TYPE, user_id: int | None = None) -> str:
+    """Активный этап PHOTO -> SONG -> VIDEO. Он всегда выше generic media/capability intents."""
+    if context.user_data.get("awaiting_music_video_video_brief"):
+        return "video"
+    if context.user_data.get("awaiting_photo_clip_prompt") or context.user_data.get("awaiting_vocal_clip_prompt"):
+        return "music"
+    if context.user_data.get("music_video_draft_edit"):
+        return "draft_edit"
+    if user_id:
+        with contextlib.suppress(Exception):
+            track = (_mode_track_get(user_id) or "").strip().lower()
+            if track == "musicvideo:video":
+                return "video"
+            if track == "musicvideo:music":
+                return "music"
+    return ""
+
+
+async def on_music_video_text_priority(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Единственный владелец текста, пока активен мастер AI-видеоклипа."""
+    uid = update.effective_user.id if update.effective_user else 0
+    stage = _music_video_text_state(context, uid)
+    if not stage:
+        return
+
+    if stage == "video" and not context.user_data.get("music_video_music_brief") and uid:
+        with contextlib.suppress(Exception):
+            saved = (kv_get(f"music_video_music_brief:{uid}", "") or "").strip()
+            if saved:
+                context.user_data["music_video_music_brief"] = saved
+                context.user_data["awaiting_music_video_video_brief"] = True
+
+    if uid and not _get_cached_photo(uid):
+        await update.effective_message.reply_text(
+            "⚠️ Режим AI-видеоклипа активен, но после перезапуска сервиса исходное фото нужно загрузить повторно. "
+            "Пришлите то же фото — я продолжу именно AI-видеоклип."
+        )
+        raise ApplicationHandlerStop
+
+    await on_text(update, context)
+    raise ApplicationHandlerStop
+
+
 # ───────── Позитивный авто-ответ про возможности (текст/голос) ─────────
 _CAPS_PATTERN = re.compile(
     r"(умеешь|можешь|делаешь|анализируешь|работаешь|поддерживаешь|умеет\s+ли|может\s+ли|можно\s+ли)"
@@ -16173,6 +16202,12 @@ def build_application() -> "Application":
     # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
     app.add_handler(CallbackQueryHandler(on_cb), group=0)
 
+    # Active AI-videoclip state owns text before presentation/capability/generic media routing.
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, on_music_video_text_priority),
+        group=-2,
+    )
+
     # Presentation Studio owns active presentation/catalog chats before every other text handler.
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, on_presentation_text_priority),
@@ -16209,23 +16244,7 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(BTN_CHATS),   cmd_chats), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_NEWCHAT), cmd_newchat), group=0)
 
-    # Жёсткий перехват «можешь оживить фото?» — до любого GPT-ответа.
-    # ВАЖНО: здесь намеренно нет inline-флагов вида (?is), чтобы Render/Python 3.12 не падал.
-    photo_revive_capability_re = re.compile(
-        r"(мож(ешь|ете|но)|уме(ешь|ете)|может\s+ли|способен|поддерживаешь|получится|делаешь)"
-        r".{0,160}(ожив|анимир|revive|animate)"
-        r".{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)"
-        r"|"
-        r"(ожив|анимир|revive|animate)"
-        r".{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)"
-        r".{0,80}\?",
-        re.I | re.S,
-    )
-    app.add_handler(
-        MessageHandler(filters.Regex(photo_revive_capability_re), on_photo_revival_capability),
-        group=0,
-    )
-    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
+    # Generic photo-revival regex interceptor removed: explicit revival commands are routed only by on_text.\n    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
 
     # Медиа (фото/доки/видео/гиф) — тоже перед общим текстом
