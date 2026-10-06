@@ -12617,6 +12617,10 @@ async def _poll_video_task_generic(
     """
     started = time.time()
     task_not_exist_seen_at: float | None = None
+    is_talking_avatar = "kling talking avatar" in (caption or "").lower()
+    avatar_notice_after_s = 150
+    avatar_notice_every_s = 180
+    next_avatar_notice_s = avatar_notice_after_s
 
     while True:
         last_body = ""
@@ -12717,7 +12721,17 @@ async def _poll_video_task_generic(
                 await update.effective_message.reply_text(f"❌ {caption}: ошибка рендера.")
                 return True
 
-        if time.time() - started > max_wait_s:
+        elapsed_s = time.time() - started
+        if is_talking_avatar and elapsed_s >= next_avatar_notice_s:
+            elapsed_min = max(1, int(elapsed_s // 60))
+            await update.effective_message.reply_text(
+                f"⏳ Аватар всё ещё создаётся — бот не завис, Kling продолжает обработку. "
+                f"Прошло около {elapsed_min} мин. Обычно создание занимает до 10 минут, "
+                "иногда немного дольше. Пожалуйста, ожидайте — результат придёт сюда автоматически."
+            )
+            next_avatar_notice_s += avatar_notice_every_s
+
+        if elapsed_s > max_wait_s:
             # Для Runway/Comet timeout должен дать шанс верхнему fallback-уровню.
             if task_not_exist_seen_at is not None and silent_soft_fail:
                 log.warning("%s: timeout with task_not_exist for task_id=%s; soft fallback", caption, task_id)
@@ -12847,7 +12861,13 @@ async def _create_and_poll_i2v(
                     all_errors.append(last_err)
                     continue
 
-                await update.effective_message.reply_text(f"⏳ {caption}: задача принята, ожидаю результат…")
+                if "kling talking avatar" in (caption or "").lower():
+                    await update.effective_message.reply_text(
+                        "⏳ Kling talking avatar: задача принята. Создание обычно занимает до 10 минут, "
+                        "иногда немного дольше. Бот продолжит работу и пришлёт видео автоматически."
+                    )
+                else:
+                    await update.effective_message.reply_text(f"⏳ {caption}: задача принята, ожидаю результат…")
                 log.info("%s accepted: path=%s task_id=%s response=%s", caption, path, task_id, json.dumps(js, ensure_ascii=False)[:1200])
 
                 return await _poll_video_task_generic(
