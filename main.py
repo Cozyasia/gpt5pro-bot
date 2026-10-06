@@ -8126,7 +8126,15 @@ async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | No
     if not (SUNO_AUTO_FOR_PHOTO_CLIP and SUNO_ENABLED and SUNO_API_KEY):
         return None
     headers = {"Authorization": f"Bearer {SUNO_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
-    instrumental = bool(re.search(r"инструментал|instrumental|без вокала|без голоса|минусов|background music|фонова", brief, re.I))
+    # Only explicit WHOLE-TRACK instrumental requests may disable vocals.
+    # Phrases such as "инструментальное вступление без вокала" describe an intro and
+    # must not set make_instrumental=True for the entire Suno song.
+    intro_only = bool(re.search(r"(?:вступлен|интро|intro).{0,80}(?:инструментал|без вокала|без голоса)|(?:инструментал|без вокала|без голоса).{0,80}(?:вступлен|интро|intro)", brief, re.I | re.S))
+    instrumental = (not intro_only) and bool(re.search(
+        r"(?:только|полностью|целиком|вся\\s+песня|whole\\s+(?:song|track)|entire\\s+(?:song|track)).{0,50}(?:инструментал|instrumental|без вокала|без голоса)|"
+        r"(?:инструментал|instrumental|без вокала|без голоса).{0,50}(?:только|полностью|целиком|whole|entire)",
+        brief, re.I | re.S
+    ))
     # Suno must receive a production-oriented song contract, not a loose video description.
     # The user's requested genre/language/vocal are repeated explicitly because provider
     # auto-prompting can otherwise drift into instrumental/electronic material.
@@ -8521,14 +8529,33 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         context.user_data["vocal_source_token"] = token
         with contextlib.suppress(BadRequest):
             await q.answer("Аудио подтверждено")
-        await q.message.reply_text("✅ Это аудио подтверждено для клипа. Теперь можно запускать видеогенерацию с этим треком.")
+        prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
+        keyframe = context.user_data.get("music_video_pending_keyframe")
+        if not prompt or not keyframe:
+            await q.message.reply_text("✅ Аудио подтверждено. Состояние клипа устарело — утвердите сценарий ещё раз.")
+            return
+        await q.message.reply_text("✅ Аудио подтверждено. Продолжаю этот же клип — запускаю видеогенерацию.")
+        await _start_vocal_clip(update, context, keyframe, prompt)
         return
     if kind == "regenaudio":
-        context.user_data.pop("vocal_source_token", None)
-        context.user_data["music_video_regenerate_audio"] = True
         with contextlib.suppress(BadRequest):
-            await q.answer("Сгенерируем другое")
-        await q.message.reply_text("🔄 Это аудио отклонено. Пришлите новое музыкальное задание — Suno создаст другой вариант. Видео пока не запускаю.")
+            await q.answer("Генерирую другой вариант")
+        brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        if not brief:
+            await q.message.reply_text("Состояние музыкального задания устарело. Утвердите сценарий ещё раз.")
+            return
+        await q.message.reply_text("🔄 Генерирую другой вариант по тому же музыкальному заданию. Видео пока не запускаю.")
+        fresh = await _run_suno_music_result_bytes(update, brief)
+        if not fresh:
+            await q.message.reply_text("❌ Suno не вернул новый вариант. Старое аудио остаётся доступным.")
+            return
+        new_token = uuid.uuid4().hex[:12]
+        await asyncio.to_thread(_save_vocal_artifact, user_id, new_token, "audio", fresh)
+        await _send_vocal_song_file(q.message, fresh, new_token)
+        await q.message.reply_text(
+            "🎧 Проверьте новый вариант.",
+            reply_markup=_vocal_song_kb(new_token, pending=True),
+        )
         return
     if kind == "use":
         context.user_data["vocal_source_token"] = token
@@ -8620,7 +8647,15 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             pack_fn = globals().get("_music_video_identity_pack")
             synth_fn = globals().get("_run_comet_music_video_identity_keyframe")
             high_fidelity = callable(pack_fn) and callable(synth_fn)
-            if high_fidelity:
+            pending_keyframe = context.user_data.get("music_video_pending_keyframe") if saved_source else None
+            pending_keyframe_url = context.user_data.get("music_video_pending_keyframe_url") if saved_source else None
+            if high_fidelity and pending_keyframe:
+                img_bytes = pending_keyframe
+                keyframe_url = pending_keyframe_url or await _upload_bytes_to_telegram_file_url(
+                    update, context, img_bytes, "music_video_identity_keyframe.png",
+                    "🧬 Использую уже проверенный стартовый keyframe.",
+                )
+            elif high_fidelity:
                 refs = pack_fn(user_id)
                 if not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
                     raise RuntimeError("Character Identity Pack incomplete")
@@ -8659,14 +8694,19 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                             reply_markup=_vocal_song_kb(song_token),
                         )
             if not saved_source:
-                # Deliberate human gate: do not spend a Kling generation until the user has heard
-                # and explicitly approved the Suno result. Rejected audio can be regenerated.
+                # Human review gate. Persist enough state to regenerate Suno or resume the SAME
+                # clip after approval without asking the user to re-enter the brief.
+                context.user_data["music_video_pending_prompt"] = prompt
+                context.user_data["music_video_pending_music_brief"] = music_brief
+                context.user_data["music_video_pending_keyframe"] = img_bytes
+                context.user_data["music_video_pending_keyframe_url"] = locals().get("keyframe_url", "")
                 await update.effective_message.reply_text(
                     "🎧 Сначала проверьте получившуюся песню. Видео ещё НЕ запускаю. "
                     "Выберите: подтвердить это аудио или сгенерировать другое.",
                     reply_markup=_vocal_song_kb(song_token, pending=True),
                 )
-                return True
+                # Review is not a completed clip: do not charge the full video operation yet.
+                return False
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
             segments: list[bytes] = []
             if high_fidelity:
@@ -16454,7 +16494,7 @@ def build_application() -> "Application":
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite):[0-9a-f]{12}$"), group=0)
-    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video):[0-9a-f]{12}$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio):[0-9a-f]{12}$"), group=0)
 
     # 2b) Старые school:/work: callbacks, если такие кнопки ещё где-то используются
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)
