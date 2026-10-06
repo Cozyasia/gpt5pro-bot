@@ -61,3 +61,16 @@ def test_song_video_hard_route_preserved():
     assert 'return "music"' in TEXT
     assert "awaiting_music_video_video_brief" in TEXT
     assert "VIDEO_BRIEF consumes here and never re-enters generic on_text intent routing." in TEXT
+
+
+def test_music_video_audio_approval_and_fidelity_contracts():
+    source = MAIN.read_text(encoding="utf-8")
+    assert "FOLLOW THESE SONG REQUIREMENTS STRICTLY" in source
+    assert '"make_instrumental": instrumental' in source
+    assert "ABSOLUTE authority for the person's CURRENT FACE" in source
+    assert "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT" in source
+    assert "Подтвердить это аудио" in source
+    assert "Сгенерировать другое аудио" in source
+    assert "_vocal_song_kb(song_token, pending=True)" in source
+    assert "Видео ещё НЕ запускаю" in source
+    assert "with contextlib.suppress(BadRequest):" in source

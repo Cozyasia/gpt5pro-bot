@@ -19,7 +19,7 @@ def load_recovery(root):
     names = {
         "_vocal_artifact_path", "_prune_vocal_artifacts", "_save_vocal_artifact",
         "_load_vocal_artifact", "_photo_clip_target_duration", "_vocal_clip_provider_cost_usd",
-        "_music_video_split_briefs", "_start_vocal_clip", "_on_vocal_artifact_callback",
+        "_music_video_split_briefs", "_vocal_song_kb", "_start_vocal_clip", "_on_vocal_artifact_callback",
     }
     nodes = [
         node for node in ast.parse(MAIN.read_text(encoding="utf-8")).body
@@ -37,7 +37,10 @@ def load_recovery(root):
         "FFMPEG_MUX_TIMEOUT_S": 180,
         "VOCAL_CLIP_UNIT_COST_USD": 1.50, "AVATAR_UNIT_COST_USD": 0.65,
         "ChatAction": SimpleNamespace(RECORD_VIDEO="record_video"),
+        "InlineKeyboardButton": lambda text, callback_data: SimpleNamespace(text=text, callback_data=callback_data),
+        "InlineKeyboardMarkup": lambda rows: SimpleNamespace(rows=rows),
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
+        "BadRequest": type("BadRequest", (Exception,), {}),
         "_vocal_clip_background_jobs": set(),
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
         "log": SimpleNamespace(exception=lambda *args: None),
@@ -206,15 +209,18 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 bot=SimpleNamespace(send_chat_action=lambda *_: asyncio.sleep(0)),
             )
             asyncio.run(env["_start_vocal_clip"](update, context, b"photo", "Я пою, 10 секунд"))
-            self.assertEqual([False], billed, "no charge on failed delivery")
-            self.assertEqual(["suno", "full-song", "kling", "video-upload"], events)
+            self.assertEqual([True], billed, "audio-review operation completed successfully")
+            self.assertEqual(["suno", "full-song"], events)
             audio_files = list((Path(root) / "42").glob("*_audio.mp3"))
             video_files = list((Path(root) / "42").glob("*_video.mp4"))
             self.assertEqual(1, len(audio_files))
             self.assertEqual(full_song, audio_files[0].read_bytes())
-            self.assertEqual(1, len(video_files))
-            retry_buttons = [b.callback_data for row in messages[-1][1]["reply_markup"].rows for b in row]
-            self.assertTrue(any(data.startswith("mvfile:video:") for data in retry_buttons))
+            self.assertEqual(0, len(video_files))
+            approval_message = next(kwargs for _msg, kwargs in reversed(messages) if "reply_markup" in kwargs)
+            approval_buttons = [b.callback_data for row in approval_message["reply_markup"].rows for b in row]
+            self.assertTrue(any(data.startswith("mvfile:approveaudio:") for data in approval_buttons))
+            self.assertTrue(any(data.startswith("mvfile:regenaudio:") for data in approval_buttons))
+            self.assertFalse(any(data.startswith("mvfile:video:") for data in approval_buttons))
 
 
 if __name__ == "__main__":
