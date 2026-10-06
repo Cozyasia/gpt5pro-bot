@@ -578,7 +578,9 @@ SUNO_AUTO_FOR_PHOTO_CLIP = os.environ.get("SUNO_AUTO_FOR_PHOTO_CLIP", "1").strip
 PHOTO_CLIP_PIPELINE = os.environ.get("PHOTO_CLIP_PIPELINE", "1").strip().lower() not in ("0", "false", "no", "off")
 PHOTO_CLIP_VIDEO_ENGINE = os.environ.get("PHOTO_CLIP_VIDEO_ENGINE", "kling").strip().lower() or "kling"
 PHOTO_CLIP_DEFAULT_DURATION_S = int(os.environ.get("PHOTO_CLIP_DEFAULT_DURATION_S", "15") or 15)
-PHOTO_CLIP_MAX_DURATION_S = int(os.environ.get("PHOTO_CLIP_MAX_DURATION_S", "30") or 30)
+PHOTO_CLIP_MAX_DURATION_S = int(os.environ.get("PHOTO_CLIP_MAX_DURATION_S", "90") or 90)
+PHOTO_CLIP_SCENE_SECONDS = max(5, min(10, int(os.environ.get("PHOTO_CLIP_SCENE_SECONDS", "10") or 10)))
+PHOTO_CLIP_MAX_SCENES = max(1, min(12, int(os.environ.get("PHOTO_CLIP_MAX_SCENES", "9") or 9)))
 PHOTO_CLIP_MUX_AUDIO = os.environ.get("PHOTO_CLIP_MUX_AUDIO", "1").strip().lower() not in ("0", "false", "no", "off")
 PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS = os.environ.get("PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS", "0").strip().lower() not in ("0", "false", "no", "off")
 PHOTO_CLIP_BACKGROUND_TASK = os.environ.get("PHOTO_CLIP_BACKGROUND_TASK", "1").strip().lower() not in ("0", "false", "no", "off")
@@ -7561,15 +7563,82 @@ def _photo_clip_prompt(user_prompt: str, base_seconds: int = 10) -> str:
 
 def _photo_clip_target_duration(user_prompt: str) -> int:
     txt = (user_prompt or "").lower()
-    m = re.search(r"(\d{1,2})\s*(?:сек|секунд|second|seconds|s)\b", txt, re.I)
-    if m:
+    m = re.search(r"(\d{1,3})\s*(?:сек|секунд|second|seconds|s)\b", txt, re.I)
+    mm = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мин|минут|minute|minutes|min)\b", txt, re.I)
+    if mm:
+        try:
+            val = int(round(float(mm.group(1).replace(",", ".")) * 60))
+        except Exception:
+            val = PHOTO_CLIP_DEFAULT_DURATION_S
+    elif m:
         try:
             val = int(m.group(1))
         except Exception:
             val = PHOTO_CLIP_DEFAULT_DURATION_S
     else:
         val = PHOTO_CLIP_DEFAULT_DURATION_S
-    return max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 30), val))
+    return max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), val))
+
+
+def _music_video_scene_prompts(user_prompt: str, target_duration: int) -> list[str]:
+    """Create deterministic short-scene directions for a longer coherent music video."""
+    scene_s = int(PHOTO_CLIP_SCENE_SECONDS or 10)
+    count = max(1, min(PHOTO_CLIP_MAX_SCENES, int(math.ceil(target_duration / float(scene_s)))))
+    phases = [
+        "opening shot, subtle movement, establish performers and location",
+        "medium performance shot, rhythmic body movement, sing/perform to camera",
+        "closer emotional performance shot, expressive face and natural gestures",
+        "dynamic camera move, performers interact naturally while keeping identity stable",
+        "side angle and gentle orbit camera, movement synchronized to the beat",
+        "chorus energy, stronger performance and coordinated gestures",
+        "cinematic close-up, stable facial identity and realistic mouth/body motion",
+        "wide performance shot, natural interaction and premium music-video staging",
+        "finale shot, confident ending pose and smooth camera pull-back",
+    ]
+    out = []
+    for idx in range(count):
+        phase = phases[min(idx, len(phases) - 1)]
+        out.append(
+            f"Scene {idx + 1}/{count}: {phase}. Preserve the exact same people, clothing and identities from the reference photo. "
+            f"Continue one coherent music video. User direction: {(user_prompt or '')[:650]}"
+        )
+    return out
+
+
+def _concat_video_segments_sync(segments: list[bytes], target_duration: int) -> bytes | None:
+    if not segments:
+        return None
+    if len(segments) == 1:
+        return segments[0]
+    ffmpeg = _ffmpeg_exe()
+    try:
+        with tempfile.TemporaryDirectory(prefix="neyro_clip_scenes_") as td:
+            paths = []
+            for i, data in enumerate(segments):
+                p = os.path.join(td, f"scene_{i:02d}.mp4")
+                with open(p, "wb") as fh:
+                    fh.write(data)
+                paths.append(p)
+            manifest = os.path.join(td, "concat.txt")
+            with open(manifest, "w", encoding="utf-8") as fh:
+                for p in paths:
+                    fh.write("file '" + p.replace("'", "'\\''") + "'\n")
+            out = os.path.join(td, "joined.mp4")
+            cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
+                   "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", out]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(120, FFMPEG_MUX_TIMEOUT_S))
+            if res.returncode != 0 or not os.path.exists(out) or os.path.getsize(out) < 4096:
+                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
+                       "-t", str(target_duration), "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+                       "-crf", str(FFMPEG_MUX_CRF), "-an", "-movflags", "+faststart", out]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(180, FFMPEG_MUX_TIMEOUT_S + 60))
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 4096:
+                with open(out, "rb") as fh:
+                    return fh.read()
+            log.warning("scene concat failed rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-800:])
+    except Exception as e:
+        log.warning("scene concat exception: %s", e)
+    return None
 
 
 def _ffmpeg_exe() -> str:
@@ -8116,8 +8185,9 @@ async def _start_photo_music_clip(update: Update, context: ContextTypes.DEFAULT_
                 raise RuntimeError("Для полного клипа с музыкой включите SUNO_ENABLED=1, SUNO_AUTO_FOR_PHOTO_CLIP=1 и задайте SUNO_API_KEY (или COMET_API_KEY).")
 
             await update.effective_message.reply_text(
-                f"🎬 Фото→видеоклип принят. Делаю ОДИН итоговый MP4 с музыкой. "
-                f"Видео: Kling; музыка: Suno; длина: ~{target_duration} сек. Обычно ожидание 5–15 минут."
+                f"🎬 AI-видеоклип принят. Делаю ОДИН итоговый MP4. "
+                f"Видео: Kling; музыка/песня: Suno; длина: ~{target_duration} сек; "
+                f"сцен: {len(_music_video_scene_prompts(user_prompt, target_duration))}. Для длинного клипа ожидание может быть больше 15 минут."
             )
             await update.effective_message.reply_text("🎵 Генерирую музыку/песню через Suno…")
             await update.effective_message.reply_text("🎞️ Генерирую видеоряд через Kling…")
@@ -8127,7 +8197,28 @@ async def _start_photo_music_clip(update: Update, context: ContextTypes.DEFAULT_
             kling_image_url = ""
             with contextlib.suppress(Exception):
                 kling_image_url = _get_cached_photo_url(user_id) or ""
-            video_task = asyncio.create_task(_run_kling_photo_clip_result(img_bytes, user_prompt, base_duration, aspect, kling_image_url))
+            scene_prompts = _music_video_scene_prompts(user_prompt, target_duration)
+            async def _render_video_scenes():
+                segments = []
+                for scene_idx, scene_prompt in enumerate(scene_prompts, start=1):
+                    if len(scene_prompts) > 1:
+                        await update.effective_message.reply_text(
+                            f"🎞️ Сцена {scene_idx}/{len(scene_prompts)}: рендер через Kling…"
+                        )
+                    seg = await _run_kling_photo_clip_result(
+                        img_bytes, scene_prompt, min(PHOTO_CLIP_SCENE_SECONDS, target_duration), aspect, kling_image_url
+                    )
+                    if not seg:
+                        raise RuntimeError(f"Kling не вернул сцену {scene_idx}/{len(scene_prompts)}")
+                    segments.append(seg)
+                if len(segments) == 1:
+                    return segments[0]
+                joined = await asyncio.to_thread(_concat_video_segments_sync, segments, target_duration)
+                if not joined:
+                    raise RuntimeError("Не удалось собрать сцены Kling в единый видеоряд")
+                return joined
+
+            video_task = asyncio.create_task(_render_video_scenes())
             audio_task = asyncio.create_task(_run_suno_music_result_bytes(update, user_prompt))
 
             # Long provider renders need visible progress. Do not leave the user with
