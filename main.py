@@ -7631,8 +7631,15 @@ async def _poll_video_task_for_bytes(
                         return content
                     last_body = f"ready_url download failed: {ready_url[:200]}"
                 if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
-                    raise RuntimeError(f"{caption}: render failed {json.dumps(js, ensure_ascii=False)[:900]}")
+                    # Terminal provider state must escape immediately. Previously this
+                    # RuntimeError was swallowed by the broad polling exception handler,
+                    # so a failed Kling task looked "processing" until the 20-minute timeout.
+                    failure = json.dumps(js, ensure_ascii=False)[:1500]
+                    log.warning("%s terminal task failure task_id=%s: %s", caption, task_id, failure)
+                    raise RuntimeError(f"{caption}: render failed {failure}")
                 last_body = json.dumps(js, ensure_ascii=False)[:700]
+            except RuntimeError:
+                raise
             except Exception as e:
                 last_body = str(e)
                 continue
@@ -7695,13 +7702,18 @@ async def _create_and_poll_i2v_bytes(
     raise RuntimeError(last_err or f"{caption}: no result")
 
 
-async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s: int, aspect: str) -> bytes | None:
+async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s: int, aspect: str, image_url: str = "") -> bytes | None:
     if not (KLING_API_KEY or COMET_API_KEY):
         raise RuntimeError("Kling photo→clip: COMET_API_KEY/KLING_API_KEY не задан")
-    raw_b64 = base64.b64encode(img_bytes).decode("ascii")
+    # Keep the photo→clip route consistent with the working explicit Kling I2V route:
+    # Comet/Kling validates image as a URL. Raw base64 can be accepted at creation
+    # but fail asynchronously. Prefer the cached Telegram HTTPS file URL.
+    image_ref = (image_url or "").strip()
+    if not image_ref.startswith("https://"):
+        image_ref = f"data:{sniff_image_mime(img_bytes)};base64,{base64.b64encode(img_bytes).decode('ascii')}"
     base_duration = str(_duration_for_engine("kling", min(10, duration_s)))
     payload = {
-        "image": raw_b64,
+        "image": image_ref,
         "prompt": _photo_clip_prompt(prompt, int(base_duration)),
         "model_name": KLING_MODEL,
         "model": KLING_MODEL,
@@ -8109,14 +8121,37 @@ async def _start_photo_music_clip(update: Update, context: ContextTypes.DEFAULT_
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
 
             started_at = time.time()
-            video_task = asyncio.create_task(_run_kling_photo_clip_result(img_bytes, user_prompt, base_duration, aspect))
+            kling_image_url = ""
+            with contextlib.suppress(Exception):
+                kling_image_url = _get_cached_photo_url(user_id) or ""
+            video_task = asyncio.create_task(_run_kling_photo_clip_result(img_bytes, user_prompt, base_duration, aspect, kling_image_url))
             audio_task = asyncio.create_task(_run_suno_music_result_bytes(update, user_prompt))
 
+            # Long provider renders need visible progress. Do not leave the user with
+            # a silent chat for 10–20 minutes.
+            progress_marks = (150, 330, 510, 690, 870, 1050)
+            video_bytes = None
             try:
-                video_bytes = await asyncio.wait_for(video_task, timeout=max(300, PHOTO_CLIP_TOTAL_USER_WAIT_S))
+                for mark in progress_marks:
+                    remaining = mark - int(time.time() - started_at)
+                    if remaining > 0:
+                        try:
+                            video_bytes = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
+                            break
+                        except asyncio.TimeoutError:
+                            pass
+                    elapsed_min = max(1, int((time.time() - started_at) // 60))
+                    await update.effective_message.reply_text(
+                        f"⏳ Клип всё ещё создаётся — прошло около {elapsed_min} мин. "
+                        "Бот не завис: Kling продолжает рендер, Suno готовит музыку. Пожалуйста, ожидайте."
+                    )
+                if video_bytes is None:
+                    remaining = max(1, PHOTO_CLIP_TOTAL_USER_WAIT_S - int(time.time() - started_at))
+                    video_bytes = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
             except asyncio.TimeoutError:
+                video_task.cancel()
                 audio_task.cancel()
-                raise RuntimeError(f"Kling не вернул видео за {PHOTO_CLIP_TOTAL_USER_WAIT_S} сек. Попробуйте более короткий prompt или длительность 10–15 сек.")
+                raise RuntimeError(f"Kling не вернул видео за {PHOTO_CLIP_TOTAL_USER_WAIT_S} сек. Генерация остановлена по тайм-ауту; попробуйте повторить позже.")
             if not video_bytes:
                 audio_task.cancel()
                 raise RuntimeError("Kling не вернул видео")
