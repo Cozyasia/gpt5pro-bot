@@ -214,7 +214,8 @@ class VocalSongRecoveryTests(unittest.TestCase):
             self.assertEqual(1, len(audio_files))
             self.assertEqual(full_song, audio_files[0].read_bytes())
             self.assertEqual(0, len(video_files))
-            approval_buttons = [b.callback_data for row in messages[-1][1]["reply_markup"].rows for b in row]
+            approval_message = next(kwargs for _msg, kwargs in reversed(messages) if "reply_markup" in kwargs)
+            approval_buttons = [b.callback_data for row in approval_message["reply_markup"].rows for b in row]
             self.assertTrue(any(data.startswith("mvfile:approveaudio:") for data in approval_buttons))
             self.assertTrue(any(data.startswith("mvfile:regenaudio:") for data in approval_buttons))
             self.assertFalse(any(data.startswith("mvfile:video:") for data in approval_buttons))
