@@ -17,7 +17,7 @@ def load_entry_points():
     selected = [
         node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name in {"_photo_clip_target_duration", "_start_vocal_clip"}
+        and node.name in {"_photo_clip_target_duration", "_start_vocal_clip", "_vocal_clip_provider_cost_usd"}
     ]
     module = ast.Module(body=selected, type_ignores=[])
     code = compile(ast.fix_missing_locations(module), str(MAIN), "exec")
@@ -30,6 +30,7 @@ def load_entry_points():
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
         "_vocal_clip_background_jobs": set(),
         "VOCAL_CLIP_UNIT_COST_USD": 1.50,
+        "AVATAR_UNIT_COST_USD": 0.65,
         "contextlib": contextlib,
         "SUNO_ENABLED": True, "SUNO_API_KEY": "test-key",
         "ChatAction": SimpleNamespace(RECORD_VIDEO="record_video"),
@@ -40,6 +41,13 @@ def load_entry_points():
 
 
 class VocalClipStagingTests(unittest.TestCase):
+    def test_price_estimate_counts_every_additional_avatar_scene(self):
+        env = load_entry_points()
+        estimate = env["_vocal_clip_provider_cost_usd"]
+        self.assertEqual(1.50, estimate(1))
+        self.assertEqual(4.75, estimate(6))
+        self.assertEqual(6.70, estimate(9))
+
     def test_long_vocal_request_is_rejected_before_billing_or_provider_call(self):
         env = load_entry_points()
         messages = []

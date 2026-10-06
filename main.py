@@ -3716,13 +3716,18 @@ def _photoclip_menu_text() -> str:
         "Можно сделать инструментальный клип или клип с вокалом/lip-sync. "
         "В описании укажите, кто поёт: например «женщина — женский вокал, мужчина — мужской вокал; припев поют вместе». "
         "Также можно задать движения, взаимодействие героев, стиль, язык, длительность и формат.\n\n"
-        "Для длинного клипа бот сохраняет исходные лица и собирает результат из коротких сцен. "
+        "Длинный инструментальный клип собирается из коротких сцен. "
+        "Вокальный lip-sync пока доступен для одного фрагмента до 10 секунд: сборка длинных вокальных клипов проходит проверку. "
         "Рекомендуемый формат — 9:16."
     )
 
 
 def _clip_wants_vocals(prompt: str) -> bool:
     t = (prompt or "").lower().replace("ё", "е")
+    no_vocals = re.search(r"(без\s+(?:вокал|голос|пени)|инструментал|instrumental|минусов)", t, re.I)
+    explicit_singer = re.search(r"(поет|поют|петь|sings?|singer|дуэт|duet|женск\w*\s+вокал|мужск\w*\s+вокал|с\s+вокалом|with\s+vocals?)", t, re.I)
+    if no_vocals and not explicit_singer:
+        return False
     return bool(re.search(r"(вокал|поет|поют|петь|песня|песню|припев|куплет|lip[ -]?sync|sing|singer|duet|дуэт|мужск(?:ой|им) голос|женск(?:ий|им) голос)", t, re.I))
 
 
@@ -5435,7 +5440,7 @@ def _pricing_catalog_text() -> str:
         f"• Suno музыка — {_retail_credits(SUNO_COST_USD)} кр.",
         f"• Говорящий аватар — {_retail_credits(AVATAR_UNIT_COST_USD)} кр.",
         f"• Фото → видеоклип с музыкой — {_retail_credits(PHOTO_CLIP_UNIT_COST_USD)} кр.",
-        f"• Клип с вокалом / lip-sync — {_retail_credits(VOCAL_CLIP_UNIT_COST_USD)} кр.",
+        f"• Клип с вокалом / lip-sync, до 10 сек (1 сцена) — {_retail_credits(VOCAL_CLIP_UNIT_COST_USD)} кр.",
         "",
         "🎭 Бизнес и фото",
         f"• FaceSwap быстро — {_retail_credits(FACESWAP_FAST_COST_USD)} кр.; премиум — {_retail_credits(FACESWAP_PREMIUM_COST_USD)} кр.",
@@ -7230,8 +7235,7 @@ def photo_quick_actions_kb():
         [InlineKeyboardButton("✨ Оживить через Kling", callback_data="pedit:revive_kling")],
         [InlineKeyboardButton("✨ Sora 2 без людей", callback_data="pedit:revive_sora")],
         [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="pedit:avatar")],
-        [InlineKeyboardButton("🎵 Фото → видеоклип", callback_data="pedit:photoclip")],
-        [InlineKeyboardButton("🎤 Клип с вокалом (1 человек)", callback_data="pedit:vocalclip")],
+        [InlineKeyboardButton("🎤 AI-видеоклип / песня", callback_data="pedit:photoclip")],
         [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="pedit:aiselfie")],
         [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="pedit:faceswap")],
         [InlineKeyboardButton("🧼 Удалить фон на фото", callback_data="pedit:removebg")],
@@ -8122,6 +8126,13 @@ async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: int, duratio
     return await asyncio.to_thread(_cut)
 
 
+def _vocal_clip_provider_cost_usd(scene_count: int) -> float:
+    """Conservative estimate: the base clip plus one Avatar task per extra scene."""
+    return round(
+        float(VOCAL_CLIP_UNIT_COST_USD) + max(0, int(scene_count) - 1) * float(AVATAR_UNIT_COST_USD), 4
+    )
+
+
 async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
     """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
     prompt = (user_prompt or "").strip()
@@ -8167,7 +8178,8 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             audio_bytes = await _run_suno_music_result_bytes(update, prompt)
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
-            safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, min(target_duration, VOCAL_CLIP_MAX_AUDIO_S))
+            # Avatar gets short scene slices; the source track must cover the entire clip.
+            safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
             await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
             segments: list[bytes] = []
             for idx in range(1, scene_count + 1):
@@ -8223,7 +8235,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     await _try_pay_then_do(
         update, context, update.effective_user.id,
-        "runway", VOCAL_CLIP_UNIT_COST_USD, _job,
+        "runway", _vocal_clip_provider_cost_usd(scene_count), _job,
         remember_kind="vocal_lipsync_clip_multiscene",
         remember_payload={"prompt": prompt[:500], "duration": target_duration, "scenes": scene_count, "performers": performer_count},
     )
