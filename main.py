@@ -656,6 +656,7 @@ LUMA_TEMP_DISABLED = True  # временная заглушка: скрывае
 RUNWAY_MAX_WAIT_S   = int((os.environ.get("RUNWAY_MAX_WAIT_S") or "1200").strip() or 1200)
 VIDEO_POLL_DELAY_S  = float((os.environ.get("VIDEO_POLL_DELAY_S") or "6.0").strip() or 6.0)
 VIDEO_RESULT_SEND_AS_DOCUMENT = os.getenv("VIDEO_RESULT_SEND_AS_DOCUMENT", "1") == "1"
+VIDEO_SEND_WRITE_TIMEOUT_S = max(120, int(os.environ.get("VIDEO_SEND_WRITE_TIMEOUT_S", "180") or 180))
 TELEGRAM_RESULT_MAX_MB = int(os.environ.get("TELEGRAM_RESULT_MAX_MB", "48") or 48)
 TELEGRAM_VIDEO_COMPRESS_ON_FAIL = os.getenv("TELEGRAM_VIDEO_COMPRESS_ON_FAIL", "1") == "1"
 VIDEO_RESULT_DEDUPE_TTL_S = int((os.getenv("VIDEO_RESULT_DEDUPE_TTL_S") or "900").strip() or 900)
@@ -12812,12 +12813,25 @@ async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_
     if _mark_video_sent_once(dedupe_key):
         log.info("reply_video_bytes: duplicate suppressed task_id=%s", task_id)
         return
-    bio = BytesIO(content)
-    bio.name = "result.mp4"
-    if VIDEO_RESULT_SEND_AS_DOCUMENT:
-        await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-        return
-    await update.effective_message.reply_video(video=InputFile(bio), caption=caption, supports_streaming=True)
+    sent_ok = False
+    try:
+        bio = BytesIO(content)
+        bio.name = "result.mp4"
+        if VIDEO_RESULT_SEND_AS_DOCUMENT:
+            await update.effective_message.reply_document(
+                document=InputFile(bio), caption=caption,
+                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+            )
+        else:
+            await update.effective_message.reply_video(
+                video=InputFile(bio), caption=caption, supports_streaming=True,
+                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+            )
+        sent_ok = True
+    finally:
+        if not sent_ok:
+            # A transport failure must not turn a retry into a suppressed duplicate.
+            _SENT_VIDEO_KEYS.pop(dedupe_key, None)
 
 def _ratio_for_aspect(aspect: str) -> str:
     """
