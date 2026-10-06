@@ -12656,7 +12656,14 @@ async def _poll_video_task_generic(
                 if "runway" in (caption or "").lower() and RUNWAY_HIDE_TECH_ERRORS:
                     _provider_mark_failure("runway_i2v", json.dumps(js, ensure_ascii=False)[:700])
                     return False
-                await update.effective_message.reply_text(f"❌ {caption}: ошибка рендера.\n{json.dumps(js, ensure_ascii=False)[:900]}")
+                raw_failure = json.dumps(js, ensure_ascii=False)
+                log.warning("%s terminal render failure task_id=%s: %s", caption, task_id, raw_failure[:1500])
+                if "kling" in (caption or "").lower():
+                    await update.effective_message.reply_text(
+                        "❌ Kling не смог обработать это фото. Движок не переключался. Попробуйте ещё раз."
+                    )
+                    return True
+                await update.effective_message.reply_text(f"❌ {caption}: ошибка рендера.")
                 return True
 
         if time.time() - started > max_wait_s:
