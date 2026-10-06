@@ -13000,6 +13000,7 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
             ),
         ]
 
+        # Explicit Kling action must remain Kling: no Runway/Sora fallback.
         return bool(await _create_and_poll_i2v(
             update,
             COMET_BASE_URL,
