@@ -5205,7 +5205,7 @@ def _is_photo_revival_question(text: str) -> bool:
     tl = (text or "").strip().lower()
     if not tl:
         return False
-    has_photo = bool(re.search(r"(фото|фотограф|картинк|изображен|image|picture|photo)", tl, re.I))
+    has_photo = bool(re.search(r"(?:\\bфото\\b|фотограф\\w*|картинк\\w*|изображен\\w*|\\bimage\\b|\\bpicture\\b|\\bphoto\\b)", tl, re.I))
     has_revival = bool(re.search(r"(ожив|анимир|движен|image\s*to\s*video|i2v|revive|animate)", tl, re.I))
     has_ability = bool(re.search(r"(мож(ешь|ете|но)|уме(ешь|ете)|способен|поддерживаешь|делаешь|получится|может\s+ли)", tl, re.I))
     # Ловим и прямой вопрос «можешь оживить фото?», и фразы вида «оживление фото возможно?»
@@ -5216,7 +5216,7 @@ def _is_photo_revival_intent(text: str) -> bool:
     tl = (text or "").strip().lower().replace("ё", "е")
     if not tl:
         return False
-    has_photo = bool(re.search(r"(фото|фотограф|картинк|изображен|image|picture|photo)", tl, re.I))
+    has_photo = bool(re.search(r"(?:\\bфото\\b|фотограф\\w*|картинк\\w*|изображен\\w*|\\bimage\\b|\\bpicture\\b|\\bphoto\\b)", tl, re.I))
     has_revival = bool(re.search(r"(ожив|анимир|движен|image\s*to\s*video|i2v|revive|animate|сделай\s+видео)", tl, re.I))
     return has_photo and has_revival
 
@@ -5417,21 +5417,6 @@ async def _medical_analyze_image(update: Update, context: ContextTypes.DEFAULT_T
     if len(ans) > 3900:
         await update.effective_message.reply_text(ans[3900:7800])
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
-
-async def on_photo_revival_capability(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This handler is registered in PTB group 0. Active music-video state must win
-    # before the generic "оживить фото" capability route, otherwise VIDEO_BRIEF
-    # containing words like "фото/движение/оживить" resets the workflow.
-    if any(context.user_data.get(key) for key in (
-        "awaiting_photo_clip_prompt",
-        "awaiting_vocal_clip_prompt",
-        "awaiting_music_video_video_brief",
-        "music_video_draft_edit",
-    )):
-        await on_text(update, context)
-        raise ApplicationHandlerStop
-    _set_waiting_photo_revival(update, context)
-    await update.effective_message.reply_text(_photo_revival_capability_text(), reply_markup=main_kb)
 
 def capability_answer(text: str) -> str | None:
     """
@@ -16209,23 +16194,7 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(BTN_CHATS),   cmd_chats), group=0)
     app.add_handler(MessageHandler(filters.Regex(BTN_NEWCHAT), cmd_newchat), group=0)
 
-    # Жёсткий перехват «можешь оживить фото?» — до любого GPT-ответа.
-    # ВАЖНО: здесь намеренно нет inline-флагов вида (?is), чтобы Render/Python 3.12 не падал.
-    photo_revive_capability_re = re.compile(
-        r"(мож(ешь|ете|но)|уме(ешь|ете)|может\s+ли|способен|поддерживаешь|получится|делаешь)"
-        r".{0,160}(ожив|анимир|revive|animate)"
-        r".{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)"
-        r"|"
-        r"(ожив|анимир|revive|animate)"
-        r".{0,160}(фото|фотограф|картинк|изображен|photo|image|picture)"
-        r".{0,80}\?",
-        re.I | re.S,
-    )
-    app.add_handler(
-        MessageHandler(filters.Regex(photo_revive_capability_re), on_photo_revival_capability),
-        group=0,
-    )
-    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
+    # Generic photo-revival regex interceptor removed: explicit revival commands are routed only by on_text.\n    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
 
     # Медиа (фото/доки/видео/гиф) — тоже перед общим текстом
