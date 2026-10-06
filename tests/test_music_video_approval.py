@@ -112,7 +112,8 @@ class MusicVideoApprovalTests(unittest.TestCase):
         asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, prompt))
 
         self.assertEqual([], started)
-        self.assertEqual(prompt, ctx.user_data["music_video_draft"]["prompt"])
+        self.assertEqual(prompt, ctx.user_data["music_video_draft"]["music_brief"])
+        self.assertEqual(prompt, ctx.user_data["music_video_draft"]["video_brief"])
         self.assertNotIn("awaiting_photo_clip_prompt", ctx.user_data)
         self.assertIn("60 секунд", messages[0][0])
         self.assertIn("6 сцен", messages[0][0])
@@ -175,7 +176,8 @@ class MusicVideoApprovalTests(unittest.TestCase):
         self.assertEqual("rewrite", ctx.user_data["music_video_draft_edit"])
         asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, "Инструментал, 10 секунд"))
         self.assertNotEqual(old_token, ctx.user_data["music_video_draft"]["token"])
-        self.assertEqual("Инструментал, 10 секунд", ctx.user_data["music_video_draft"]["prompt"])
+        self.assertEqual("Инструментал, 10 секунд", ctx.user_data["music_video_draft"]["music_brief"])
+        self.assertEqual("Инструментал, 10 секунд", ctx.user_data["music_video_draft"]["video_brief"])
         self.assertNotIn("music_video_draft_edit", ctx.user_data)
 
 
