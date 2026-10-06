@@ -15766,10 +15766,13 @@ async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "awaiting_photo_clip_prompt",
         "awaiting_vocal_clip_prompt",
         "awaiting_music_video_video_brief",
-        "music_video_draft",
         "music_video_draft_edit",
     )):
-        return
+        # This handler runs in an earlier PTB group than the general text handler.
+        # Dispatch the active stateful flow here and stop propagation so a matching
+        # capability phrase can never answer instead of consuming SONG/VIDEO input.
+        await on_text(update, context)
+        raise ApplicationHandlerStop
     # Never interpret a presentation brief as a generic capability/live-data question.
     studio = _presentation_studio_get()
     if update.effective_user and update.effective_chat and studio._active_project(update.effective_user.id, update.effective_chat.id):
