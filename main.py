@@ -8132,6 +8132,13 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     target_duration = _photo_clip_target_duration(prompt)
     scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
     scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, int(math.ceil(target_duration / float(scene_s)))))
+    if scene_count > 1:
+        await update.effective_message.reply_text(
+            f"⚠️ Вокальный клип на {target_duration} секунд пока недоступен: "
+            f"проверяется сборка lip-sync сцен. Сейчас можно заказать один фрагмент до {scene_s} секунд. "
+            f"Укажите в описании длительность, например «{scene_s} секунд». Оплата не списана."
+        )
+        return
     role_plan = _vocal_clip_role_plan(prompt, performer_count)
     user_id = update.effective_user.id
     img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
