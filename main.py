@@ -3739,35 +3739,6 @@ def _music_video_aspect(prompt: str) -> str:
     return aspect if aspect in {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"} else "9:16"
 
 
-def _music_video_review_text(prompt: str) -> str:
-    duration = _photo_clip_target_duration(prompt)
-    scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
-    scenes = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_s - 1) // scene_s))
-    vocal = _clip_wants_vocals(prompt)
-    shot_plan = (
-        "Общий план и атмосфера", "Исполнение и движение под музыку",
-        "Эмоции и крупный план", "Движение камеры и взаимодействие",
-        "Новый ракурс выступления", "Энергия припева",
-        "Крупный план исполнителя", "Общий план героев", "Финал клипа",
-    )
-    plan = "\n".join(f"{i + 1}. {shot_plan[min(i, len(shot_plan) - 1)]}" for i in range(scenes))
-    note = (
-        f"\n\n⚠️ Вокальный клип на {duration} секунд пока недоступен: сначала проверяем одну lip-sync сцену "
-        f"до {scene_s} секунд. Генерация не начнётся после утверждения такого сценария. "
-        f"Для короткого теста нажмите «Дополнить», укажите «{scene_s} секунд», затем утвердите обновлённый сценарий. "
-        "Ждать не нужно; оплата не списана."
-        if vocal and scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
-    )
-    return (
-        "🎬 Сценарий AI-видеоклипа на утверждение\n\n"
-        f"Музыка: {'песня с вокалом и lip-sync' if vocal else 'инструментальная музыка'} · "
-        f"{duration} секунд · {scenes} сцен · формат {_music_video_aspect(prompt)}.\n\n"
-        "Ваше описание для Suno и Kling (роли певцов беру только из текста):\n"
-        f"{prompt[:2300]}\n\nПлан кадров:\n{plan}"
-        f"{note}"
-    )[:4000]
-
-
 def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
@@ -3788,34 +3759,116 @@ def _merge_music_video_prompt(original: str, addition: str) -> str:
     return f"{original.strip(' ,;')}\nДополнение: {addition}".strip()
 
 
-async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str) -> bool:
-    prompt = (prompt or "").strip()
-    if not prompt:
-        await update.effective_message.reply_text("Опишите сюжет, музыку, вокал, длительность и формат клипа.")
+def _music_video_split_briefs(prompt: str) -> tuple[str, str]:
+    """Return (music_brief, video_brief) from the structured music-video prompt."""
+    raw = (prompt or "").strip()
+    marker_music = "[MUSIC_BRIEF]"
+    marker_video = "[VIDEO_BRIEF]"
+    if marker_music in raw and marker_video in raw:
+        music = raw.split(marker_music, 1)[1].split(marker_video, 1)[0].strip()
+        video = raw.split(marker_video, 1)[1].strip()
+        return music, video
+    return raw, raw
+
+
+def _music_video_join_briefs(music_brief: str, video_brief: str) -> str:
+    return f"[MUSIC_BRIEF]\n{(music_brief or '').strip()}\n\n[VIDEO_BRIEF]\n{(video_brief or '').strip()}".strip()
+
+
+def _music_video_director_plan(video_brief: str, duration: int, scenes: int) -> str:
+    """Preserve the user's video direction instead of replacing it with generic shot names."""
+    brief = (video_brief or "").strip()
+    if not brief:
+        return "Сценарий видео ещё не задан."
+    if scenes <= 1:
+        # One short scene: show an explicit timing skeleton while preserving the brief verbatim.
+        if duration <= 10:
+            cuts = [(0, min(2, duration)), (min(2, duration), min(4, duration)),
+                    (min(4, duration), min(6, duration)), (min(6, duration), duration)]
+            labels = [
+                "начало действия из описания пользователя",
+                "продолжение действия; камера следует логике описания",
+                "переход/движение камеры без самовольной смены места",
+                "завершение сцены согласно описанию пользователя",
+            ]
+            lines = []
+            for (a, b), label in zip(cuts, labels):
+                if b > a:
+                    lines.append(f"{a:02d}:00–{b:02d}:00 — {label}.")
+            return "\n".join(lines) + f"\n\nТочное задание режиссёру: {brief}"
+        return f"0:00–0:{duration:02d} — {brief}"
+    scene_s = max(1, (duration + scenes - 1) // scenes)
+    lines = []
+    for i in range(scenes):
+        a, b = i * scene_s, min(duration, (i + 1) * scene_s)
+        if a >= duration:
+            break
+        lines.append(f"{a//60}:{a%60:02d}–{b//60}:{b%60:02d} — продолжение единого действия: {brief}")
+    return "\n".join(lines)
+
+
+def _music_video_review_text(prompt: str) -> str:
+    music_brief, video_brief = _music_video_split_briefs(prompt)
+    duration = _photo_clip_target_duration(prompt)
+    scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
+    scenes = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_s - 1) // scene_s))
+    vocal = _clip_wants_vocals(music_brief)
+    plan = _music_video_director_plan(video_brief, duration, scenes)
+    note = (
+        f"\n\n⚠️ Вокальный клип на {duration} секунд пока недоступен: сначала проверяем одну сцену "
+        f"до {scene_s} секунд. Для теста задайте длительность {scene_s} секунд. Кредиты не списываются до запуска."
+        if vocal and scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
+    )
+    return (
+        "🎬 Сценарий AI-видеоклипа на утверждение\n\n"
+        f"🎵 ПЕСНЯ\n{music_brief[:1400]}\n\n"
+        f"🎥 КЛИП\n{video_brief[:1400]}\n\n"
+        f"Параметры: {duration} секунд · {scenes} сцен · формат {_music_video_aspect(prompt)}.\n\n"
+        f"🎞 РЕЖИССЁРСКАЯ РАЗБИВКА\n{plan}{note}"
+    )[:4000]
+
+async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = "", *, music_brief: str | None = None, video_brief: str | None = None) -> bool:
+    """Stage a structured draft. Music and video instructions are deliberately isolated."""
+    if music_brief is None or video_brief is None:
+        parsed_music, parsed_video = _music_video_split_briefs(prompt)
+        music_brief = parsed_music if music_brief is None else music_brief
+        video_brief = parsed_video if video_brief is None else video_brief
+    music_brief, video_brief = (music_brief or "").strip(), (video_brief or "").strip()
+    if not music_brief:
+        await update.effective_message.reply_text("Сначала опишите песню: жанр, настроение, язык, тему и вокал.")
         return False
+    if not video_brief:
+        context.user_data["music_video_music_brief"] = music_brief
+        context.user_data["awaiting_music_video_video_brief"] = True
+        await update.effective_message.reply_text(
+            "🎥 Теперь отдельно опишите, что должно происходить В КЛИПЕ: действия героя, место, движение камеры, свет, автомобиль/предметы, финальный кадр.\n\n"
+            "Эта часть не будет отправляться в Suno."
+        )
+        return False
+    combined = _music_video_join_briefs(music_brief, video_brief)
     img = _get_cached_photo(update.effective_user.id)
     if not img:
         await update.effective_message.reply_text("Сначала загрузите фото для AI-видеоклипа.")
         return False
     token = uuid.uuid4().hex[:12]
-    context.user_data.pop("awaiting_photo_clip_prompt", None)
-    context.user_data.pop("awaiting_vocal_clip_prompt", None)
-    context.user_data.pop("music_video_draft_edit", None)
+    for key in ("awaiting_photo_clip_prompt", "awaiting_vocal_clip_prompt", "awaiting_music_video_video_brief",
+                "music_video_music_brief", "music_video_draft_edit"):
+        context.user_data.pop(key, None)
     context.user_data["music_video_draft"] = {
-        "prompt": prompt, "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
+        "prompt": combined, "music_brief": music_brief, "video_brief": video_brief,
+        "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
     }
     source_token = context.user_data.get("vocal_source_token")
     source_note = (
         "\n\n🎵 Для этого клипа выбрана сохранённая полная песня Suno; новую песню не создаю."
-        if _clip_wants_vocals(prompt) and source_token
+        if _clip_wants_vocals(music_brief) and source_token
         and _load_vocal_artifact(update.effective_user.id, source_token, "audio") else ""
     )
     await update.effective_message.reply_text(
-        (_music_video_review_text(prompt) + source_note)[:4096],
+        (_music_video_review_text(combined) + source_note)[:4096],
         reply_markup=_music_video_approval_kb(token)
     )
     return True
-
 
 async def _on_music_video_draft_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -3999,7 +4052,10 @@ def _clear_vocal_clip_wait(context: ContextTypes.DEFAULT_TYPE):
 
 
 def _set_vocal_clip_wait(context: ContextTypes.DEFAULT_TYPE):
+    # First question is only about the song. Video direction is collected separately.
     context.user_data["awaiting_vocal_clip_prompt"] = True
+    context.user_data.pop("awaiting_music_video_video_brief", None)
+    context.user_data.pop("music_video_music_brief", None)
 
 
 def _clear_text_video_wait(context: ContextTypes.DEFAULT_TYPE):
@@ -4031,13 +4087,13 @@ async def _handle_vocalclip_prompt_choice(update: Update, context: ContextTypes.
         _set_vocal_clip_wait(context)
         await q.answer("Готово")
         await q.message.reply_text(
-            "🎤 Использую последнее фото. Теперь опишите песню/клип: стиль, язык, настроение, припев, длительность.\n\n"
-            "Важно: режим рассчитан на одного человека в кадре."
+            "🎵 Использую последнее фото. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, нужен ли вокал и каким голосом.\n\n"
+            "После этого я отдельно спрошу, что должно происходить в клипе."
         )
     else:
         context.user_data["awaiting_vocal_clip_photo"] = True
         await q.message.reply_text(
-            "Сначала пришлите портрет одного человека. После загрузки я попрошу описание песни/клипа.",
+            "Сначала пришлите портрет одного человека. После загрузки я сначала попрошу описание песни, затем отдельно сценарий видео.",
             reply_markup=_vocal_clip_action_kb(prefix),
         )
 
@@ -4807,6 +4863,8 @@ def _clear_transient_flows(context):
         "ai_selfie_preset_prompt",
         "awaiting_vocal_clip_photo",
         "awaiting_vocal_clip_prompt",
+        "awaiting_music_video_video_brief",
+        "music_video_music_brief",
         "vocal_clip_preset_prompt",
         "music_video_draft",
         "music_video_draft_edit",
@@ -8448,7 +8506,8 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 "затем Kling делает lip-sync по сценам."
             )
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-            audio_bytes = saved_source or await _run_suno_music_result_bytes(update, prompt)
+            music_brief, video_brief = _music_video_split_briefs(prompt)
+            audio_bytes = saved_source or await _run_suno_music_result_bytes(update, music_brief)
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
             if not saved_source:
@@ -8481,7 +8540,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 )
                 if not audio_url:
                     raise RuntimeError(f"Не удалось подготовить URL аудио сцены {idx}.")
-                scene_prompt = _vocal_scene_role_prompt(prompt, role_plan, idx, scene_count)
+                scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
                 scene_video = await _run_kling_avatar_result_bytes(
                     img_bytes,
                     audio_file_url=audio_url,
@@ -14482,14 +14541,31 @@ async def on_text(
         await _start_talking_avatar(update, context, img, script_text=text)
         return
 
-    # Вокальный клип: портрет уже загружен, ждём описание песни/клипа.
+    # AI-видеоклип: два независимых вопроса — сначала песня, затем режиссура видео.
     if context.user_data.get("awaiting_vocal_clip_prompt"):
         img = _get_cached_photo(update.effective_user.id)
         if not img:
             _clear_vocal_clip_wait(context)
             await update.effective_message.reply_text("Сначала загрузите портрет одного человека, затем нажмите 🎤 Клип с вокалом.", reply_markup=main_kb)
             return
-        await _stage_music_video_draft(update, context, text)
+        context.user_data.pop("awaiting_vocal_clip_prompt", None)
+        context.user_data["music_video_music_brief"] = text.strip()
+        context.user_data["awaiting_music_video_video_brief"] = True
+        await update.effective_message.reply_text(
+            "🎥 Теперь отдельно опишите ВИДЕО: что происходит в кадре, действия героя, куда он идёт, как движется камера, окружение, свет и финальный кадр.\n\n"
+            "Например: двери лифта открываются → я выхожу → камера обходит меня и переходит за спину → следует сзади → я выхожу на солнечную улицу к оранжевому Lamborghini Urus."
+        )
+        return
+
+    if context.user_data.get("awaiting_music_video_video_brief"):
+        img = _get_cached_photo(update.effective_user.id)
+        music_brief = (context.user_data.get("music_video_music_brief") or "").strip()
+        if not img or not music_brief:
+            context.user_data.pop("awaiting_music_video_video_brief", None)
+            context.user_data.pop("music_video_music_brief", None)
+            await update.effective_message.reply_text("Черновик клипа потерял исходные данные. Начните режим AI-видеоклипа ещё раз.")
+            return
+        await _stage_music_video_draft(update, context, music_brief=music_brief, video_brief=text)
         return
 
     # Оживление фото по пользовательскому сценарию: фото уже загружено,
@@ -15108,8 +15184,8 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _set_mode_clean(update.effective_user.id, "Развлечения", "vocalclip")
                 _set_vocal_clip_wait(context)
                 await update.effective_message.reply_text(
-                    "🎤 Портрет получен для клипа с вокалом. Теперь опишите песню/клип: стиль, язык, настроение, припев, длительность.\n\n"
-                    "Важно: режим рассчитан на одного человека в кадре."
+                    "🎵 Портрет получен. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, вокал и желаемую длительность.\n\n"
+                    "Следующим сообщением я отдельно спрошу сценарий видео."
                 )
                 return
 

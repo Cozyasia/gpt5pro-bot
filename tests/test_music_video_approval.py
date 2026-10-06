@@ -26,7 +26,7 @@ def load_flow():
     tokens = itertools.count(1)
     tree = ast.parse(MAIN.read_text(encoding="utf-8"))
     names = {
-        "_music_video_aspect", "_music_video_review_text", "_music_video_approval_kb",
+        "_music_video_aspect", "_music_video_split_briefs", "_music_video_join_briefs", "_music_video_director_plan", "_music_video_review_text", "_music_video_approval_kb",
         "_merge_music_video_prompt", "_stage_music_video_draft", "_on_music_video_draft_callback",
         "_photo_clip_target_duration", "_clip_wants_vocals",
         "on_text",
@@ -112,7 +112,8 @@ class MusicVideoApprovalTests(unittest.TestCase):
         asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, prompt))
 
         self.assertEqual([], started)
-        self.assertEqual(prompt, ctx.user_data["music_video_draft"]["prompt"])
+        self.assertEqual(prompt, ctx.user_data["music_video_draft"]["music_brief"])
+        self.assertEqual(prompt, ctx.user_data["music_video_draft"]["video_brief"])
         self.assertNotIn("awaiting_photo_clip_prompt", ctx.user_data)
         self.assertIn("60 секунд", messages[0][0])
         self.assertIn("6 сцен", messages[0][0])
@@ -175,7 +176,8 @@ class MusicVideoApprovalTests(unittest.TestCase):
         self.assertEqual("rewrite", ctx.user_data["music_video_draft_edit"])
         asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, "Инструментал, 10 секунд"))
         self.assertNotEqual(old_token, ctx.user_data["music_video_draft"]["token"])
-        self.assertEqual("Инструментал, 10 секунд", ctx.user_data["music_video_draft"]["prompt"])
+        self.assertEqual("Инструментал, 10 секунд", ctx.user_data["music_video_draft"]["music_brief"])
+        self.assertEqual("Инструментал, 10 секунд", ctx.user_data["music_video_draft"]["video_brief"])
         self.assertNotIn("music_video_draft_edit", ctx.user_data)
 
 

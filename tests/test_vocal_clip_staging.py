@@ -17,7 +17,7 @@ def load_entry_points():
     selected = [
         node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name in {"_photo_clip_target_duration", "_start_vocal_clip", "_vocal_clip_provider_cost_usd"}
+        and node.name in {"_music_video_split_briefs", "_photo_clip_target_duration", "_start_vocal_clip", "_vocal_clip_provider_cost_usd"}
     ]
     module = ast.Module(body=selected, type_ignores=[])
     code = compile(ast.fix_missing_locations(module), str(MAIN), "exec")
