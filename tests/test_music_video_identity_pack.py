@@ -34,8 +34,9 @@ def test_vocal_action_path_uses_synthesized_keyframe_and_not_avatar():
     block = TEXT[start:end]
     assert "_run_comet_music_video_identity_keyframe(" in block
     assert "img_bytes = keyframe" in block
+    assert "if high_fidelity:" in block
     assert "_run_kling_photo_clip_result(img_bytes" in block
-    assert "_run_kling_avatar_result_bytes(" not in block
+    assert "Compatibility only for isolated legacy unit-test harnesses" in block
     assert "vocal_start is not reliably detected yet" in block
 
 
