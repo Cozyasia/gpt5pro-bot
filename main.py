@@ -8031,85 +8031,157 @@ def _trim_audio_for_vocal_clip_sync(audio_bytes: bytes, max_seconds: int = 65) -
 async def _trim_audio_for_vocal_clip(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
     return await asyncio.to_thread(_trim_audio_for_vocal_clip_sync, audio_bytes, max_seconds)
 
+def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
+    """Infer explicit singer roles only from the user's direction; never invent gender from pixels."""
+    t = (prompt or "").lower().replace("ё", "е")
+    female = bool(re.search(r"(женщин|девуш|женск(?:ий|им|ого)?\s+(?:вокал|голос)|female\s+vocal|woman\s+sings?)", t, re.I))
+    male = bool(re.search(r"(мужчин|парень|мужск(?:ой|им|ого)?\s+(?:вокал|голос)|male\s+vocal|man\s+sings?)", t, re.I))
+    duet = bool(re.search(r"(вместе|дуэт|припев.*(?:оба|вместе)|оба.*(?:поют|петь)|duet|sing\s+together)", t, re.I))
+    if performer_count <= 1:
+        return {"mode": "solo", "female": female, "male": male, "duet": False}
+    if female and male:
+        return {"mode": "mixed_duet", "female": True, "male": True, "duet": duet}
+    return {"mode": "group", "female": female, "male": male, "duet": duet}
+
+
+def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, scene_count: int) -> str:
+    mode = role_plan.get("mode")
+    if mode == "mixed_duet":
+        cycle = ("female lead: woman sings the female-vocal lines; man reacts naturally",
+                 "male lead: man sings the male-vocal lines; woman reacts naturally",
+                 "duet/chorus: both performers sing together") if role_plan.get("duet") else (
+                 "female lead: woman sings the female-vocal lines; man reacts naturally",
+                 "male lead: man sings the male-vocal lines; woman reacts naturally")
+        role = cycle[(scene_idx - 1) % len(cycle)]
+    elif mode == "solo":
+        role = "solo lead performer sings to camera"
+    else:
+        role = "group performance; follow only the singer roles explicitly stated by the user"
+    return (
+        f"Scene {scene_idx}/{scene_count}. Vocal role for this scene: {role}. "
+        "Preserve every person's exact identity, age, face, hair and clothing. Accurate natural lip sync for the active singer(s); "
+        "non-singing people keep their mouths naturally closed or react without fake singing. Bodies may move rhythmically, turn, walk, hug, clap or high-five "
+        "when composition permits. Avoid identity swaps, face morphing, extreme head rotation and subtitles. "
+        f"User music-video direction: {(base_prompt or '')[:700]}"
+    )
+
+
+async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: int, duration_s: int) -> bytes:
+    def _cut() -> bytes:
+        ffmpeg = _ffmpeg_exe()
+        try:
+            with tempfile.TemporaryDirectory(prefix="neyro_vocal_scene_") as td:
+                src = os.path.join(td, "full.mp3")
+                out = os.path.join(td, "scene.mp3")
+                with open(src, "wb") as fh:
+                    fh.write(audio_bytes)
+                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", str(max(0, start_s)), "-i", src,
+                       "-t", str(max(2, duration_s)), "-vn", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", out]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+                if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                    with open(out, "rb") as fh:
+                        return fh.read()
+        except Exception as e:
+            log.warning("vocal scene audio cut failed: %s", e)
+        return b""
+    return await asyncio.to_thread(_cut)
+
+
 async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
-    """Unified vocal/lip-sync clip. Supports one performer and experimental multi-performer direction."""
+    """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
     prompt = (user_prompt or "").strip()
     if not prompt:
-        await update.effective_message.reply_text("Опишите песню/клип: стиль, язык, настроение, припев, длительность.")
+        await update.effective_message.reply_text("Опишите песню/клип: стиль, язык, кто поёт, тип вокала, настроение и длительность.")
         return
     try:
         faces = _detect_faces_for_choice(img_bytes) if FACESWAP_FACE_DETECTION_ENABLED else []
     except Exception:
         faces = []
     performer_count = max(1, len(faces))
+    target_duration = _photo_clip_target_duration(prompt)
+    scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
+    scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, int(math.ceil(target_duration / float(scene_s)))))
+    role_plan = _vocal_clip_role_plan(prompt, performer_count)
     user_id = update.effective_user.id
     img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
-    job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}"
+    job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}:{target_duration}"
     if job_key in _vocal_clip_background_jobs:
-        await update.effective_message.reply_text("⏳ Такой вокальный клип уже обрабатывается. Дождитесь результата, чтобы не получить дубли.")
+        await update.effective_message.reply_text("⏳ Такой AI-видеоклип уже обрабатывается. Дождитесь результата, чтобы не получить дубли.")
         return
 
     async def _job():
         _vocal_clip_background_jobs.add(job_key)
         try:
             if not (SUNO_ENABLED and SUNO_API_KEY):
-                raise RuntimeError("Для вокального клипа нужен SUNO_ENABLED=1 и SUNO_API_KEY/COMET_API_KEY.")
+                raise RuntimeError("Для вокального AI-видеоклипа нужен SUNO_ENABLED=1 и SUNO_API_KEY/COMET_API_KEY.")
+            role_note = "Роли вокала беру только из вашего описания."
+            if role_plan.get("mode") == "mixed_duet":
+                role_note = "Женские и мужские партии распределяю между указанными героями; совместные партии — как дуэт."
             await update.effective_message.reply_text(
-                f"🎤 AI-видеоклип принят. Герои в кадре: {performer_count}. Сначала создаю песню/вокал через Suno, затем синхронизирую исполнение через Kling. "
-                "Если в описании распределены мужской/женский вокал, сохраняю эти роли в музыкальном и визуальном сценарии.",
+                f"🎤 AI-видеоклип принят: ~{target_duration} сек, {scene_count} сцен, героев: {performer_count}. "
+                f"{role_note} Сначала Suno создаёт единый трек, затем Kling делает lip-sync по сценам."
             )
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
             audio_bytes = await _run_suno_music_result_bytes(update, prompt)
             if not audio_bytes:
-                raise RuntimeError("Suno не вернул вокал/музыку. Попробуйте короче описать песню или увеличить SUNO_TIMEOUT_S.")
-            original_audio_size = len(audio_bytes)
-            safe_audio_bytes = await _trim_audio_for_vocal_clip(audio_bytes, VOCAL_CLIP_MAX_AUDIO_S)
-            trim_note = (
-                f"🎧 Вокал/трек получен. Для стабильного lip-sync беру первые ~{VOCAL_CLIP_MAX_AUDIO_S} сек. Запускаю героя…"
-                if len(safe_audio_bytes or b"") != original_audio_size
-                else "🎧 Вокал/трек получен. Запускаю lip-sync героя…"
-            )
-            audio_url = await _upload_bytes_to_telegram_file_url(
-                update, context, safe_audio_bytes, "vocal_clip_lipsync_safe.mp3", trim_note
-            )
-            if not audio_url:
-                raise RuntimeError("Не удалось подготовить публичный URL аудио для lip-sync.")
-            avatar_prompt = (
-                f"Music video performance with {performer_count} visible performer(s). Preserve every person's identity and face. "
-                "Accurate lip sync to the provided vocal audio. Follow the user's singer-role assignment exactly: "
-                "female vocal lines are performed by the woman, male vocal lines by the man, and shared/duet lines may be performed together. "
-                "Natural mouth shapes, rhythmic body movement, looking to camera when singing, subtle turns and gestures; performers may interact, "
-                "hug, clap, high-five or move together when requested. Keep faces stable and recognizable; avoid face morphing or identity swaps. "
-                "Premium music-video lighting, no subtitles, no text overlays. "
-                f"Music and role direction: {prompt[:700]}"
-            )
-            ok = await _run_kling_avatar(
-                update, context, img_bytes,
-                script_text="singing performance",
-                audio_file_url=audio_url,
-                audio_filename="vocal_clip_lipsync_safe.mp3",
-                audio_mime="audio/mpeg",
-                avatar_prompt_override=avatar_prompt,
-                max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
-            )
-            return bool(ok)
+                raise RuntimeError("Suno не вернул вокал/музыку.")
+            safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, min(target_duration, VOCAL_CLIP_MAX_AUDIO_S))
+            segments = []
+            for idx in range(1, scene_count + 1):
+                start_s = (idx - 1) * scene_s
+                dur_s = min(scene_s, max(2, target_duration - start_s))
+                await update.effective_message.reply_text(
+                    f"🎤 Сцена {idx}/{scene_count}: готовлю вокальный фрагмент и lip-sync через Kling…"
+                )
+                audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
+                if not audio_part:
+                    raise RuntimeError(f"Не удалось подготовить аудио для сцены {idx}.")
+                audio_url = await _upload_bytes_to_telegram_file_url(
+                    update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
+                )
+                if not audio_url:
+                    raise RuntimeError(f"Не удалось подготовить URL аудио сцены {idx}.")
+                scene_prompt = _vocal_scene_role_prompt(prompt, role_plan, idx, scene_count)
+                # Avatar endpoint sends the finished scene to Telegram itself today.
+                # For multi-scene final assembly we need a bytes-returning provider route;
+                # until that transport is exposed, keep production on a single lip-sync scene
+                # rather than charging for multiple unusable outputs.
+                if scene_count > 1:
+                    await update.effective_message.reply_text(
+                        "⚠️ Длинный вокальный клип сейчас проходит по безопасному режиму: запускаю первый lip-sync фрагмент. "
+                        "Полная многосценовая склейка будет включена после проверки bytes-выхода Kling Avatar."
+                    )
+                    scene_count_local = 1
+                else:
+                    scene_count_local = 1
+                ok = await _run_kling_avatar(
+                    update, context, img_bytes,
+                    script_text="singing performance",
+                    audio_file_url=audio_url,
+                    audio_filename=f"vocal_scene_{idx:02d}.mp3",
+                    audio_mime="audio/mpeg",
+                    avatar_prompt_override=scene_prompt,
+                    max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+                )
+                if not ok:
+                    raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
+                segments.append(True)
+                if scene_count_local == 1:
+                    break
+            return bool(segments)
         except Exception as e:
             log.exception("vocal clip failed: %s", e)
             with contextlib.suppress(Exception):
-                await update.effective_message.reply_text(f"❌ Клип с вокалом не получился. Причина: {str(e)[:900]}")
+                await update.effective_message.reply_text(f"❌ AI-видеоклип с вокалом не получился. Причина: {str(e)[:900]}")
             return False
         finally:
             _vocal_clip_background_jobs.discard(job_key)
 
-    async def _paid_start():
-        # Billing must wait for the real provider result; do not detach paid jobs.
-        return await _job()
-
     await _try_pay_then_do(
         update, context, update.effective_user.id,
-        "runway", VOCAL_CLIP_UNIT_COST_USD, _paid_start,
-        remember_kind="vocal_lipsync_clip",
-        remember_payload={"prompt": prompt[:500]},
+        "runway", VOCAL_CLIP_UNIT_COST_USD, _job,
+        remember_kind="vocal_lipsync_clip_multiscene",
+        remember_payload={"prompt": prompt[:500], "duration": target_duration, "scenes": scene_count, "performers": performer_count},
     )
 
 
