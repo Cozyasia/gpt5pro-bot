@@ -91,7 +91,15 @@ class MusicVideoApprovalTests(unittest.TestCase):
         update.effective_chat = SimpleNamespace(id=42)
         asyncio.run(env["on_text"](update, ctx))
         self.assertEqual([], started)
+        self.assertNotIn("music_video_draft", ctx.user_data)
+        self.assertTrue(ctx.user_data.get("awaiting_music_video_video_brief"))
+        self.assertIn("Русский рэп", ctx.user_data["music_video_music_brief"])
+        self.assertIn("ВИДЕО", messages[-1][0])
+
+        update.message.text = "Я выхожу из лифта, камера обходит меня и идёт за спиной, длительность 60 секунд"
+        asyncio.run(env["on_text"](update, ctx))
         self.assertIn("music_video_draft", ctx.user_data)
+        self.assertIn("Я выхожу из лифта", ctx.user_data["music_video_draft"]["video_brief"])
         self.assertIn("✅ Утверждаю", [b.text for row in messages[-1][1].rows for b in row])
 
         token = ctx.user_data["music_video_draft"]["token"]
