@@ -26,7 +26,7 @@ def load_flow():
     tokens = itertools.count(1)
     tree = ast.parse(MAIN.read_text(encoding="utf-8"))
     names = {
-        "_music_video_aspect", "_music_video_review_text", "_music_video_approval_kb",
+        "_music_video_aspect", "_music_video_split_briefs", "_music_video_join_briefs", "_music_video_director_plan", "_music_video_review_text", "_music_video_approval_kb",
         "_merge_music_video_prompt", "_stage_music_video_draft", "_on_music_video_draft_callback",
         "_photo_clip_target_duration", "_clip_wants_vocals",
         "on_text",
