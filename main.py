@@ -5419,6 +5419,17 @@ async def _medical_analyze_image(update: Update, context: ContextTypes.DEFAULT_T
     await maybe_tts_reply(update, context, ans[:TTS_MAX_CHARS])
 
 async def on_photo_revival_capability(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # This handler is registered in PTB group 0. Active music-video state must win
+    # before the generic "оживить фото" capability route, otherwise VIDEO_BRIEF
+    # containing words like "фото/движение/оживить" resets the workflow.
+    if any(context.user_data.get(key) for key in (
+        "awaiting_photo_clip_prompt",
+        "awaiting_vocal_clip_prompt",
+        "awaiting_music_video_video_brief",
+        "music_video_draft_edit",
+    )):
+        await on_text(update, context)
+        raise ApplicationHandlerStop
     _set_waiting_photo_revival(update, context)
     await update.effective_message.reply_text(_photo_revival_capability_text(), reply_markup=main_kb)
 
