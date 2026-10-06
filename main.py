@@ -7193,7 +7193,8 @@ async def cmd_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def photo_revival_actions_kb():
     """Choose motion scenario first; engine selection is the next step."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Автоматический сценарий", callback_data="pedit:revive_auto")],
+        [InlineKeyboardButton("✨ Естественное оживление", callback_data="pedit:revive_auto")],
+        [InlineKeyboardButton("🛡 Максимально сохранить лица", callback_data="pedit:revive_identity")],
         [InlineKeyboardButton("✍️ Свой сценарий / промпт", callback_data="pedit:revive_custom")],
         [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun")],
     ])
@@ -11308,13 +11309,32 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _pedit_storyboard(update, context, img); return
             if data == "pedit:revive_menu":
                 context.user_data.pop("revival_custom_prompt", None)
+                context.user_data.pop("revival_identity_mode", None)
                 context.user_data.pop("awaiting_revival_custom_prompt", None)
                 await q.message.reply_text("Выберите, как оживить фото:", reply_markup=photo_revival_actions_kb())
                 return
             if data == "pedit:revive_auto":
                 context.user_data["revival_custom_prompt"] = ""
+                context.user_data["revival_identity_mode"] = False
                 context.user_data.pop("awaiting_revival_custom_prompt", None)
-                await q.message.reply_text("✨ Автоматический сценарий выбран. Теперь выберите движок:", reply_markup=photo_revival_engines_kb())
+                await q.message.reply_text("✨ Естественное оживление выбрано. Теперь выберите движок:", reply_markup=photo_revival_engines_kb())
+                return
+            if data == "pedit:revive_identity":
+                context.user_data["revival_identity_mode"] = True
+                context.user_data["revival_custom_prompt"] = (
+                    "Preserve every person's exact identity, facial geometry, age, hairstyle, skin texture and recognizable facial features from the source photo. "
+                    "Faces remain stable and recognizable throughout. Keep head rotations small and controlled; natural blinking, subtle smiles and eye movement are allowed. "
+                    "The bodies may move more freely and naturally: people may turn their bodies, stand up, walk while looking toward the camera, hug each other, clap their hands, "
+                    "or give each other a high-five when composition permits. Maintain correct anatomy, hands, clothing and person count. "
+                    "Do not replace, morph, beautify, rejuvenate or redesign faces. Avoid profile views, extreme head turns, face occlusion and identity drift. "
+                    "Natural realistic motion, documentary family-video feeling, smooth camera motion."
+                )
+                context.user_data.pop("awaiting_revival_custom_prompt", None)
+                await q.message.reply_text(
+                    "🛡 Режим сохранения лиц выбран. Лица и небольшие движения головы будут максимально стабильными, "
+                    "но телам разрешены естественные действия — поворот, вставание, шаги, объятия, хлопки и взаимодействие. Теперь выберите движок:",
+                    reply_markup=photo_revival_engines_kb(),
+                )
                 return
             if data == "pedit:revive_custom":
                 context.user_data["awaiting_revival_custom_prompt"] = True
@@ -11340,6 +11360,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await q.message.reply_text(f"🟢 Запускаю оживление: {shown_engine}.{suffix}")
                 try:
                     revival_prompt = (context.user_data.pop("revival_custom_prompt", "") or "").strip()
+                    context.user_data.pop("revival_identity_mode", None)
                     await _start_photo_revival(update, context, engine=engine, img_bytes=img, prompt=revival_prompt)
                 except Exception as e:
                     log.exception("pedit revive failed: %s", e)
