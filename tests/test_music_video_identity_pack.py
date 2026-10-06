@@ -74,3 +74,13 @@ def test_music_video_audio_approval_and_fidelity_contracts():
     assert "_vocal_song_kb(song_token, pending=True)" in source
     assert "Видео ещё НЕ запускаю" in source
     assert "with contextlib.suppress(BadRequest):" in source
+
+
+def test_suno_intro_does_not_force_whole_track_instrumental_and_review_callbacks_route():
+    source = MAIN.read_text(encoding="utf-8")
+    assert "intro_only = bool(re.search" in source
+    assert "instrumental = (not intro_only)" in source
+    assert 'pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio):[0-9a-f]{12}$"' in source
+    assert 'context.user_data["music_video_pending_music_brief"] = music_brief' in source
+    assert "fresh = await _run_suno_music_result_bytes(update, brief)" in source
+    assert "return False" in source
