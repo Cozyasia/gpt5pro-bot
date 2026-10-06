@@ -8597,6 +8597,18 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 if not keyframe:
                     raise RuntimeError("Не удалось синтезировать identity-preserving keyframe")
                 img_bytes = keyframe
+                # Kling I2V validates the image asynchronously and rejects data: URLs.
+                # Publish the synthesized keyframe through Telegram so Kling receives the
+                # same kind of HTTPS file URL that the proven photo->clip path uses.
+                keyframe_url = await _upload_bytes_to_telegram_file_url(
+                    update,
+                    context,
+                    keyframe,
+                    "music_video_identity_keyframe.png",
+                    "🧬 Identity-preserving стартовый keyframe подготовлен.",
+                )
+                if not keyframe_url.startswith("https://"):
+                    raise RuntimeError("Не удалось получить публичный HTTPS URL identity keyframe для Kling.")
             audio_bytes = saved_source or await _run_suno_music_result_bytes(update, music_brief)
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
@@ -8634,7 +8646,9 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                             "the phone never appears again. "
                         )
                     scene_prompt += " Keep mouth neutral unless naturally speaking; do not force singing lip motion."
-                    scene_video = await _run_kling_photo_clip_result(img_bytes, scene_prompt, dur_s, aspect, "")
+                    scene_video = await _run_kling_photo_clip_result(
+                        img_bytes, scene_prompt, dur_s, aspect, keyframe_url
+                    )
                     if not scene_video:
                         raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
                     segments.append(scene_video)
