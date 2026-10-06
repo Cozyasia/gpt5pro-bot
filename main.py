@@ -12981,21 +12981,23 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
             (
                 KLING_CREATE_PATH,
                 {
-                    "model": KLING_MODEL,
+                    "model_name": KLING_MODEL,
                     "prompt": safe_prompt,
                     "image": kling_image_ref,
                     "duration": d,
                     "aspect_ratio": aspect,
+                    "mode": "std",
                 },
             ),
             (
                 "/kling/v1/videos/image2video",
                 {
-                    "model": KLING_MODEL,
+                    "model_name": KLING_MODEL,
                     "prompt": safe_prompt,
                     "image": kling_image_ref,
                     "duration": d,
                     "aspect_ratio": aspect,
+                    "mode": "std",
                 },
             ),
         ]
