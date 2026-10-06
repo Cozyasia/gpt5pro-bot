@@ -7524,6 +7524,37 @@ async def _run_kling_avatar(
     )
 
 
+async def _run_kling_avatar_result_bytes(
+    img_bytes: bytes,
+    audio_file_url: str,
+    audio_filename: str,
+    audio_mime: str,
+    avatar_prompt: str,
+    max_wait_s: int | None = None,
+) -> bytes | None:
+    """Kling Avatar transport for pipelines that must assemble the final MP4 themselves."""
+    if not (KLING_API_KEY or COMET_API_KEY):
+        raise RuntimeError("Kling Avatar: API key missing")
+    sound_file = _telegram_file_public_url(audio_file_url or "")
+    if not sound_file:
+        raise RuntimeError("Kling Avatar: public audio URL missing")
+    raw_b64 = base64.b64encode(img_bytes).decode("ascii")
+    payload = {
+        "image": raw_b64,
+        "prompt": (avatar_prompt or "").strip() or KLING_AVATAR_PROMPT,
+        "mode": KLING_AVATAR_MODE,
+        "sound_file": sound_file,
+    }
+    return await _create_and_poll_i2v_bytes(
+        COMET_BASE_URL,
+        KLING_API_KEY or COMET_API_KEY,
+        [(KLING_AVATAR_CREATE_PATH, payload), ("/kling/v1/videos/avatar/image2video", payload)],
+        [KLING_AVATAR_STATUS_PATH, "/kling/v1/videos/avatar/image2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
+        "Kling Avatar scene",
+        max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S),
+    )
+
+
 async def _start_talking_avatar(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -8126,7 +8157,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, min(target_duration, VOCAL_CLIP_MAX_AUDIO_S))
-            segments = []
+            segments: list[bytes] = []
             for idx in range(1, scene_count + 1):
                 start_s = (idx - 1) * scene_s
                 dur_s = min(scene_s, max(2, target_duration - start_s))
@@ -8142,33 +8173,33 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 if not audio_url:
                     raise RuntimeError(f"Не удалось подготовить URL аудио сцены {idx}.")
                 scene_prompt = _vocal_scene_role_prompt(prompt, role_plan, idx, scene_count)
-                # Avatar endpoint sends the finished scene to Telegram itself today.
-                # For multi-scene final assembly we need a bytes-returning provider route;
-                # until that transport is exposed, keep production on a single lip-sync scene
-                # rather than charging for multiple unusable outputs.
-                if scene_count > 1:
-                    await update.effective_message.reply_text(
-                        "⚠️ Длинный вокальный клип сейчас проходит по безопасному режиму: запускаю первый lip-sync фрагмент. "
-                        "Полная многосценовая склейка будет включена после проверки bytes-выхода Kling Avatar."
-                    )
-                    scene_count_local = 1
-                else:
-                    scene_count_local = 1
-                ok = await _run_kling_avatar(
-                    update, context, img_bytes,
-                    script_text="singing performance",
+                scene_video = await _run_kling_avatar_result_bytes(
+                    img_bytes,
                     audio_file_url=audio_url,
                     audio_filename=f"vocal_scene_{idx:02d}.mp3",
                     audio_mime="audio/mpeg",
-                    avatar_prompt_override=scene_prompt,
+                    avatar_prompt=scene_prompt,
                     max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
                 )
-                if not ok:
+                if not scene_video:
                     raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
-                segments.append(True)
-                if scene_count_local == 1:
-                    break
-            return bool(segments)
+                segments.append(scene_video)
+
+            await update.effective_message.reply_text("🎬 Все lip-sync сцены готовы. Собираю единый MP4 и возвращаю исходный трек Suno…")
+            joined = await asyncio.to_thread(_concat_video_segments_sync, segments, target_duration)
+            if not joined:
+                raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
+            final_bytes = await asyncio.wait_for(
+                asyncio.to_thread(_mux_video_audio_sync, joined, safe_audio, target_duration),
+                timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
+            )
+            if not final_bytes:
+                raise RuntimeError("Не удалось собрать финальный MP4 с вокалом.")
+            await _reply_video_bytes(
+                update, final_bytes,
+                f"AI-видеоклип с вокалом ✅ Один MP4 · ~{target_duration} сек · {scene_count} сцен"
+            )
+            return True
         except Exception as e:
             log.exception("vocal clip failed: %s", e)
             with contextlib.suppress(Exception):
