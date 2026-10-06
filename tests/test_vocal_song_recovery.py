@@ -19,7 +19,7 @@ def load_recovery(root):
     names = {
         "_vocal_artifact_path", "_prune_vocal_artifacts", "_save_vocal_artifact",
         "_load_vocal_artifact", "_photo_clip_target_duration", "_vocal_clip_provider_cost_usd",
-        "_start_vocal_clip", "_on_vocal_artifact_callback",
+        "_music_video_split_briefs", "_start_vocal_clip", "_on_vocal_artifact_callback",
     }
     nodes = [
         node for node in ast.parse(MAIN.read_text(encoding="utf-8")).body
