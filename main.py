@@ -14348,7 +14348,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if _is_waiting_photo_revival(context):
             _clear_photo_revival_wait(context)
             await update.effective_message.reply_text(
-                "Фото получено. Выберите движок для оживления:",
+                "Фото получено. Выберите сценарий оживления:",
                 reply_markup=photo_revival_actions_kb(),
             )
             return
