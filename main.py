@@ -3794,7 +3794,7 @@ def _music_video_director_plan(video_brief: str, duration: int, scenes: int) -> 
             lines = []
             for (a, b), label in zip(cuts, labels):
                 if b > a:
-                    lines.append(f"{a:02d}:00–{b:02d}:00 — {label}.")
+                    lines.append(f"0:{a:02d}–0:{b:02d} — {label}.")
             return "\n".join(lines) + f"\n\nТочное задание режиссёру: {brief}"
         return f"0:00–0:{duration:02d} — {brief}"
     scene_s = max(1, (duration + scenes - 1) // scenes)
@@ -3846,10 +3846,23 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         )
         return False
     combined = _music_video_join_briefs(music_brief, video_brief)
-    img = _get_cached_photo(update.effective_user.id)
-    if not img:
-        await update.effective_message.reply_text("Сначала загрузите фото для AI-видеоклипа.")
-        return False
+    pack_fn = globals().get("_music_video_identity_pack")
+    complete_fn = globals().get("_music_video_identity_complete")
+    if callable(pack_fn) and callable(complete_fn):
+        refs = pack_fn(update.effective_user.id)
+        img = refs.get("scene_reference") or _get_cached_photo(update.effective_user.id)
+        if not complete_fn(update.effective_user.id):
+            await update.effective_message.reply_text(
+                "Для high-fidelity AI-видеоклипа сначала соберите Character Identity Pack: "
+                "FACE_FRONT + FACE_3Q + BODY_FULL + SCENE_REFERENCE."
+            )
+            return False
+    else:  # isolated legacy unit-test harness only; production always defines the helpers above.
+        refs = {}
+        img = _get_cached_photo(update.effective_user.id)
+        if not img:
+            await update.effective_message.reply_text("Сначала загрузите фото для AI-видеоклипа.")
+            return False
     token = uuid.uuid4().hex[:12]
     for key in ("awaiting_photo_clip_prompt", "awaiting_vocal_clip_prompt", "awaiting_music_video_video_brief",
                 "music_video_music_brief", "music_video_draft_edit"):
@@ -3857,6 +3870,7 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
     context.user_data["music_video_draft"] = {
         "prompt": combined, "music_brief": music_brief, "video_brief": video_brief,
         "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
+        "identity_digests": {k: hashlib.sha256(v).hexdigest() for k, v in refs.items()} if refs else {},
     }
     with contextlib.suppress(Exception):
         _mode_track_set(update.effective_user.id, "")
@@ -3892,8 +3906,20 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     if action != "approve":
         await q.answer("Неизвестное действие")
         return
-    img = _get_cached_photo(q.from_user.id)
-    if not img or hashlib.sha256(img).hexdigest() != draft.get("photo_digest"):
+    pack_fn = globals().get("_music_video_identity_pack")
+    complete_fn = globals().get("_music_video_identity_complete")
+    if callable(pack_fn) and callable(complete_fn):
+        refs = pack_fn(q.from_user.id)
+        img = refs.get("scene_reference")
+        invalid_photo = (
+            not complete_fn(q.from_user.id) or not img
+            or hashlib.sha256(img).hexdigest() != draft.get("photo_digest")
+            or {k: hashlib.sha256(v).hexdigest() for k, v in refs.items()} != draft.get("identity_digests")
+        )
+    else:  # isolated legacy unit-test harness
+        img = _get_cached_photo(q.from_user.id)
+        invalid_photo = not img or hashlib.sha256(img).hexdigest() != draft.get("photo_digest")
+    if invalid_photo:
         context.user_data.pop("music_video_draft", None)
         context.user_data.pop("music_video_draft_edit", None)
         await q.answer("Фото изменилось")
@@ -4167,9 +4193,13 @@ async def _handle_avatar_script_choice(update: Update, context: ContextTypes.DEF
 async def _handle_photoclip_upload_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "photoclip")
-    context.user_data["awaiting_photo_clip_photo"] = True
+    _music_video_identity_clear(q.from_user.id)
+    _set_music_video_identity_wait(context, "face_front")
     await q.message.reply_text(
-        "🎤 Пришлите фото одного или нескольких героев. После загрузки я сначала отдельно попрошу описать 🎵 ПЕСНЮ, а затем отдельным сообщением — 🎬 ВИДЕО."
+        "🎵 Фото → видеоклип · Character Identity Pack\n\n"
+        "Для максимального сохранения внешности загрузите 3 отдельные фотографии личности, "
+        "а затем отдельный стартовый кадр сцены.\n\n"
+        "1/3 — загрузите лицо АНФАС. Хороший свет, лицо открыто, без телефона перед лицом."
     )
 
 
@@ -7445,8 +7475,33 @@ def photo_quick_actions_kb():
         [InlineKeyboardButton("👁 Анализ фото", callback_data="pedit:vision")],
     ])
 
-_photo_cache = {}      # user_id -> bytes
+_photo_cache = {}      # user_id -> bytes (legacy/fast-mode last photo)
 _photo_url_cache = {}  # user_id -> Telegram file URL when available
+
+# High-fidelity music-video references are intentionally isolated from _photo_cache.
+# Keys: face_front, face_3q, body_full, scene_reference.
+_music_video_identity_cache: dict[int, dict[str, bytes]] = {}
+
+def _music_video_identity_put(user_id: int, slot: str, data: bytes) -> None:
+    if slot not in {"face_front", "face_3q", "body_full", "scene_reference"}:
+        raise ValueError(f"unknown identity slot: {slot}")
+    if not data:
+        raise ValueError("empty identity reference")
+    _music_video_identity_cache.setdefault(int(user_id), {})[slot] = bytes(data)
+
+def _music_video_identity_get(user_id: int, slot: str) -> bytes | None:
+    return _music_video_identity_cache.get(int(user_id), {}).get(slot)
+
+def _music_video_identity_pack(user_id: int) -> dict[str, bytes]:
+    refs = _music_video_identity_cache.get(int(user_id), {})
+    return {k: refs[k] for k in ("face_front", "face_3q", "body_full", "scene_reference") if refs.get(k)}
+
+def _music_video_identity_clear(user_id: int) -> None:
+    _music_video_identity_cache.pop(int(user_id), None)
+
+def _music_video_identity_complete(user_id: int) -> bool:
+    refs = _music_video_identity_cache.get(int(user_id), {})
+    return all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference"))
 
 def _cache_photo(user_id: int, data: bytes, file_url: str | None = None):
     try:
@@ -7501,6 +7556,28 @@ def _set_avatar_voice_choice_wait(context: ContextTypes.DEFAULT_TYPE):
 def _set_photo_clip_wait(context: ContextTypes.DEFAULT_TYPE):
     context.user_data["awaiting_photo_clip_prompt"] = True
     context.user_data.pop("awaiting_avatar_script", None)
+
+def _set_music_video_identity_wait(context: ContextTypes.DEFAULT_TYPE, slot: str) -> None:
+    for key in ("music_video_identity_front", "music_video_identity_3q", "music_video_identity_body", "music_video_scene_reference"):
+        context.user_data.pop(key, None)
+    key = {
+        "face_front": "music_video_identity_front",
+        "face_3q": "music_video_identity_3q",
+        "body_full": "music_video_identity_body",
+        "scene_reference": "music_video_scene_reference",
+    }[slot]
+    context.user_data[key] = True
+
+def _music_video_identity_wait_slot(context: ContextTypes.DEFAULT_TYPE) -> str:
+    for key, slot in (
+        ("music_video_identity_front", "face_front"),
+        ("music_video_identity_3q", "face_3q"),
+        ("music_video_identity_body", "body_full"),
+        ("music_video_scene_reference", "scene_reference"),
+    ):
+        if context.user_data.get(key):
+            return slot
+    return ""
 
 
 def _clear_avatar_wait(context: ContextTypes.DEFAULT_TYPE):
@@ -8502,10 +8579,24 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             await update.effective_message.reply_text(
                 f"🎤 AI-видеоклип принят: ~{target_duration} сек, {scene_count} сцен, героев: {performer_count}. "
                 f"{role_note} {'Использую выбранную песню Suno' if saved_source else 'Сначала Suno создаёт единый трек'}, "
-                "затем Kling делает lip-sync по сценам."
+                "затем Kling делает cinematic I2V; полный Avatar/lip-sync не применяется без надёжного определения вокального face-visible сегмента."
             )
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
             music_brief, video_brief = _music_video_split_briefs(prompt)
+            pack_fn = globals().get("_music_video_identity_pack")
+            synth_fn = globals().get("_run_comet_music_video_identity_keyframe")
+            high_fidelity = callable(pack_fn) and callable(synth_fn)
+            if high_fidelity:
+                refs = pack_fn(user_id)
+                if not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
+                    raise RuntimeError("Character Identity Pack incomplete")
+                await update.effective_message.reply_text("🧬 Собираю identity-preserving стартовый keyframe из 4 reference через Gemini/Comet…")
+                keyframe = await synth_fn(
+                    refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"], video_brief
+                )
+                if not keyframe:
+                    raise RuntimeError("Не удалось синтезировать identity-preserving keyframe")
+                img_bytes = keyframe
             audio_bytes = saved_source or await _run_suno_music_result_bytes(update, music_brief)
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
@@ -8521,38 +8612,55 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                             "Нажмите «Скачать полную песню» позднее.",
                             reply_markup=_vocal_song_kb(song_token),
                         )
-            # Avatar gets short scene slices; the source track must cover the entire clip.
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
-            await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
             segments: list[bytes] = []
-            for idx in range(1, scene_count + 1):
-                start_s = (idx - 1) * scene_s
-                dur_s = min(scene_s, max(2, target_duration - start_s))
+            if high_fidelity:
+                # Fail-safe: vocal_start is not reliably detected yet. Never apply Avatar to an entire
+                # action/orbit/rear-follow scene. Selective lip-sync requires a real face-visible +
+                # vocal-active detector; until then production uses cinematic I2V + untouched Suno master.
                 await update.effective_message.reply_text(
-                    f"🎤 Сцена {idx}/{scene_count}: готовлю вокальный фрагмент и lip-sync через Kling…"
+                    "🎵 Песня готова. Вокальный старт автоматически не угадываю: action-сцену рендерю cinematic, "
+                    "без принудительного lip-sync на весь ролик."
                 )
-                audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
-                if not audio_part:
-                    raise RuntimeError(f"Не удалось подготовить аудио для сцены {idx}.")
-                audio_url = await _upload_bytes_to_telegram_file_url(
-                    update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
-                )
-                if not audio_url:
-                    raise RuntimeError(f"Не удалось подготовить URL аудио сцены {idx}.")
-                scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
-                scene_video = await _run_kling_avatar_result_bytes(
-                    img_bytes,
-                    audio_file_url=audio_url,
-                    audio_filename=f"vocal_scene_{idx:02d}.mp3",
-                    audio_mime="audio/mpeg",
-                    avatar_prompt=scene_prompt,
-                    max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
-                )
-                if not scene_video:
-                    raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
-                segments.append(scene_video)
+                aspect = _music_video_aspect(prompt)
+                for idx in range(1, scene_count + 1):
+                    dur_s = min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
+                    await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
+                    scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
+                    if idx == 1:
+                        scene_prompt += (
+                            " If a phone is present because the scene starts as a mirror/selfie shot, "
+                            "the character lowers the phone, puts it into a pocket, then both hands remain free; "
+                            "the phone never appears again. "
+                        )
+                    scene_prompt += " Keep mouth neutral unless naturally speaking; do not force singing lip motion."
+                    scene_video = await _run_kling_photo_clip_result(img_bytes, scene_prompt, dur_s, aspect, "")
+                    if not scene_video:
+                        raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
+                    segments.append(scene_video)
+            else:
+                # Compatibility only for isolated legacy unit-test harnesses that intentionally execute
+                # _start_vocal_clip without the new identity helpers.
+                await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
+                for idx in range(1, scene_count + 1):
+                    start_s = (idx - 1) * scene_s
+                    dur_s = min(scene_s, max(2, target_duration - start_s))
+                    audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
+                    if not audio_part:
+                        raise RuntimeError(f"Не удалось подготовить аудио для сцены {idx}.")
+                    audio_url = await _upload_bytes_to_telegram_file_url(
+                        update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
+                    )
+                    scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
+                    scene_video = await _run_kling_avatar_result_bytes(
+                        img_bytes, audio_file_url=audio_url, audio_filename=f"vocal_scene_{idx:02d}.mp3",
+                        audio_mime="audio/mpeg", avatar_prompt=scene_prompt, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+                    )
+                    if not scene_video:
+                        raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
+                    segments.append(scene_video)
 
-            await update.effective_message.reply_text("🎬 Собираю итоговый клип из lip-sync сцен…")
+            await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")
             joined = await asyncio.to_thread(_concat_video_segments_sync, segments, target_duration)
             if not joined:
                 raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
@@ -8603,7 +8711,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     await _try_pay_then_do(
         update, context, update.effective_user.id,
         "runway", _vocal_clip_provider_cost_usd(scene_count), _job,
-        remember_kind="vocal_lipsync_clip_multiscene",
+        remember_kind="vocal_cinematic_clip_identity_pack",
         remember_payload={"prompt": prompt[:500], "duration": target_duration, "scenes": scene_count, "performers": performer_count},
         silent_failure=True,
     )
@@ -8868,6 +8976,49 @@ def _extract_image_b64_from_gemini(obj) -> str:
             if found:
                 return found
     return ""
+
+
+async def _run_comet_music_video_identity_keyframe(
+    face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes, video_brief: str
+) -> bytes | None:
+    """Synthesize one scene keyframe from four real image parts; no fake multi-reference UX."""
+    if not COMET_API_KEY:
+        return None
+    refs = [
+        ("FACE_FRONT", face_front),
+        ("FACE_3Q", face_3q),
+        ("BODY_FULL", body_full),
+        ("SCENE_REFERENCE", scene_reference),
+    ]
+    parts = [{"text": (
+        "Create ONE photorealistic starting scene keyframe. The first three images are the SAME PERSON. "
+        "FACE_FRONT is the PRIMARY facial identity reference. FACE_3Q is secondary facial geometry. "
+        "BODY_FULL defines body proportions, hands, legs, tattoos and clothing. "
+        "SCENE_REFERENCE defines ONLY environment, composition and starting pose; never replace identity with its face. "
+        "Preserve age, face shape, eyes, nose, lips, chin, hairline, hairstyle, build, tattoos and scene-required clothing. "
+        "No beautification, no face redesign, no identity blending, no text, no watermark. "
+        "If the scene begins as a mirror/selfie shot with a phone, keep the phone physically present in the starting keyframe; "
+        "the video action will lower it and put it in a pocket. "
+        f"Director brief: {(video_brief or '')[:1200]}"
+    )}]
+    for label, raw in refs:
+        b64, mime = _prepare_reference_image_for_gemini(raw, AI_SELFIE_MAX_SIDE)
+        parts.append({"text": label})
+        parts.append({"inlineData": {"mimeType": mime or "image/jpeg", "data": b64}})
+    model = (COMET_IMAGE_EDIT_FALLBACK_MODELS or [COMET_IMAGE_EDIT_MODEL])[0]
+    path = (COMET_IMAGE_EDIT_PATH or "/v1beta/models/{model}:generateContent").replace("{model}", model)
+    payload = {"contents": [{"role": "user", "parts": parts}],
+               "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}}
+    headers = {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(COMET_IMAGE_EDIT_TIMEOUT_S, connect=40.0, read=COMET_IMAGE_EDIT_TIMEOUT_S, write=120.0), follow_redirects=True) as client:
+        r = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, json=payload)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Identity keyframe synthesis failed HTTP {r.status_code}: {_api_error_preview(r)}")
+        out = await _image_bytes_from_response(r, client)
+        if not out:
+            raise RuntimeError("Identity keyframe synthesis returned no image")
+        log.info("Music-video identity keyframe synthesized refs=4 bytes=%d", len(out))
+        return out
 
 
 async def _run_comet_ai_selfie_bytes(img_bytes: bytes, user_prompt: str, preset_prompt: str = "") -> bytes | None:
@@ -14910,6 +15061,40 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user_id = update.effective_user.id
         caption = (update.message.caption or "").strip()
+
+        # High-fidelity music-video pack owns these four uploads before every generic photo flow.
+        identity_slot = _music_video_identity_wait_slot(context)
+        if identity_slot:
+            _music_video_identity_put(user_id, identity_slot, img)
+            if identity_slot == "face_front":
+                _set_music_video_identity_wait(context, "face_3q")
+                await update.effective_message.reply_text(
+                    "✅ 1/3 — лицо анфас сохранено отдельно.\n\n"
+                    "2/3 — загрузите лицо с поворотом примерно 30–45°."
+                )
+            elif identity_slot == "face_3q":
+                _set_music_video_identity_wait(context, "body_full")
+                await update.effective_message.reply_text(
+                    "✅ 2/3 — ракурс 30–45° сохранён отдельно.\n\n"
+                    "3/3 — загрузите фото В ПОЛНЫЙ РОСТ, от головы до ног."
+                )
+            elif identity_slot == "body_full":
+                _set_music_video_identity_wait(context, "scene_reference")
+                await update.effective_message.reply_text(
+                    "✅ Character Identity Pack собран: FACE_FRONT + FACE_3Q + BODY_FULL.\n\n"
+                    "Теперь загрузите SCENE_REFERENCE — стартовый кадр окружения/позы. "
+                    "Он задаёт сцену и композицию, но НЕ заменяет фотографии личности."
+                )
+            else:
+                _set_music_video_identity_wait(context, "scene_reference")
+                context.user_data.pop("music_video_scene_reference", None)
+                _set_photo_clip_wait(context)
+                await update.effective_message.reply_text(
+                    "✅ SCENE_REFERENCE сохранён отдельно. Все 4 reference готовы.\n\n"
+                    "🎵 Теперь отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, "
+                    "нужен ли вокал и каким голосом. После этого я отдельно спрошу ВИДЕО."
+                )
+            return
 
         # Presentation Studio: logo/product photo bulk upload.
         if await _presentation_studio_get().handle_photo(update, context, img, mime="image/jpeg", caption=caption):
