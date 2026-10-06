@@ -15782,23 +15782,33 @@ async def on_music_video_text_priority(update: Update, context: ContextTypes.DEF
     if not stage:
         return
 
-    if stage == "video" and not context.user_data.get("music_video_music_brief") and uid:
-        with contextlib.suppress(Exception):
-            saved = (kv_get(f"music_video_music_brief:{uid}", "") or "").strip()
-            if saved:
-                context.user_data["music_video_music_brief"] = saved
-                context.user_data["awaiting_music_video_video_brief"] = True
-
     if uid and not _get_cached_photo(uid):
         await update.effective_message.reply_text(
-            "⚠️ Режим AI-видеоклипа активен, но после перезапуска сервиса исходное фото нужно загрузить повторно. "
-            "Пришлите то же фото — я продолжу именно AI-видеоклип."
+            "⚠️ Режим AI-видеоклипа активен, но исходное фото потеряно. Пришлите то же фото и начните клип снова."
+        )
+        raise ApplicationHandlerStop
+
+    # VIDEO_BRIEF consumes here and never re-enters generic on_text intent routing.
+    if stage == "video":
+        music_brief = (context.user_data.get("music_video_music_brief") or "").strip()
+        if not music_brief and uid:
+            with contextlib.suppress(Exception):
+                music_brief = (kv_get(f"music_video_music_brief:{uid}", "") or "").strip()
+        if not music_brief:
+            await update.effective_message.reply_text(
+                "Черновик клипа потерял описание песни. Начните режим AI-видеоклипа ещё раз."
+            )
+            raise ApplicationHandlerStop
+        context.user_data["music_video_music_brief"] = music_brief
+        context.user_data["awaiting_music_video_video_brief"] = True
+        video_brief = (getattr(update.effective_message, "text", "") or "").strip()
+        await _stage_music_video_draft(
+            update, context, music_brief=music_brief, video_brief=video_brief
         )
         raise ApplicationHandlerStop
 
     await on_text(update, context)
     raise ApplicationHandlerStop
-
 
 # ───────── Позитивный авто-ответ про возможности (текст/голос) ─────────
 _CAPS_PATTERN = re.compile(
