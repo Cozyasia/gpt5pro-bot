@@ -8127,9 +8127,20 @@ async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | No
         return None
     headers = {"Authorization": f"Bearer {SUNO_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
     instrumental = bool(re.search(r"инструментал|instrumental|без вокала|без голоса|минусов|background music|фонова", brief, re.I))
-    base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": brief}
+    # Suno must receive a production-oriented song contract, not a loose video description.
+    # The user's requested genre/language/vocal are repeated explicitly because provider
+    # auto-prompting can otherwise drift into instrumental/electronic material.
+    strict_brief = (
+        "FOLLOW THESE SONG REQUIREMENTS STRICTLY. Create a complete SONG, not background music. "
+        "Obey the requested genre, language, vocal gender/type, subject and mood. "
+        "If vocals are requested, vocals and intelligible lyrics in the requested language are mandatory; "
+        "do not return an instrumental track. Do not silently replace rap/hip-hop with house, EDM or electronic instrumental. "
+        "A request for a short instrumental intro means only the intro is instrumental; vocals must enter afterward. "
+        f"USER SONG BRIEF: {brief}"
+    )
+    base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": strict_brief, "make_instrumental": instrumental}
     if instrumental:
-        base_payload.update({"prompt": "", "make_instrumental": True})
+        base_payload.update({"prompt": ""})
     status_paths = [SUNO_STATUS_PATH, "/suno/fetch/{id}", "/suno/v1/music/{id}", "/api/v1/task/{id}", "/v1/tasks/{id}"]
     async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
         last_err = ""
@@ -8373,10 +8384,13 @@ def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, 
         role = "group performance; follow only the singer roles explicitly stated by the user"
     return (
         f"Scene {scene_idx}/{scene_count}. Vocal role for this scene: {role}. "
-        "Preserve every person's exact identity, age, face, hair and clothing. Accurate natural lip sync for the active singer(s); "
-        "non-singing people keep their mouths naturally closed or react without fake singing. Bodies may move rhythmically, turn, walk, hug, clap or high-five "
-        "when composition permits. Avoid identity swaps, face morphing, extreme head rotation and subtitles. "
-        f"User music-video direction: {(base_prompt or '')[:700]}"
+        "Preserve every person's exact identity, age, face, hair and clothing. "
+        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT. Follow the user's actions chronologically and literally. "
+        "Do not dance, sway in place, pose, bounce, loop gestures, clap, high-five, or substitute rhythmic movement for requested locomotion. "
+        "If the brief says doors open and the person exits, the doors must open first and the person must physically cross the elevator threshold and continue walking. "
+        "Camera movement must follow the requested order; do not keep the subject trapped in the starting location. "
+        "Keep the mouth neutral when not explicitly lip-syncing. Avoid identity swaps, face morphing, extreme head rotation and subtitles. "
+        f"MANDATORY USER VIDEO DIRECTION: {(base_prompt or '')[:1200]}"
     )
 
 
@@ -8469,11 +8483,16 @@ def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
         return None
 
 
-def _vocal_song_kb(token: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")],
-        [InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")],
-    ])
+def _vocal_song_kb(token: str, *, pending: bool = False) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")]]
+    if pending:
+        rows.extend([
+            [InlineKeyboardButton("✅ Подтвердить это аудио", callback_data=f"mvfile:approveaudio:{token}")],
+            [InlineKeyboardButton("🔄 Сгенерировать другое аудио", callback_data=f"mvfile:regenaudio:{token}")],
+        ])
+    else:
+        rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
@@ -8489,7 +8508,7 @@ async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
 async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     parts = (q.data or "").split(":")
-    if len(parts) != 3 or parts[1] not in ("audio", "use", "video"):
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio"):
         await q.answer("Неизвестное действие")
         return
     kind, token, user_id = parts[1], parts[2], q.from_user.id
@@ -8497,6 +8516,19 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
     if not data:
         await q.answer("Файл больше недоступен")
         await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
+        return
+    if kind == "approveaudio":
+        context.user_data["vocal_source_token"] = token
+        with contextlib.suppress(BadRequest):
+            await q.answer("Аудио подтверждено")
+        await q.message.reply_text("✅ Это аудио подтверждено для клипа. Теперь можно запускать видеогенерацию с этим треком.")
+        return
+    if kind == "regenaudio":
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data["music_video_regenerate_audio"] = True
+        with contextlib.suppress(BadRequest):
+            await q.answer("Сгенерируем другое")
+        await q.message.reply_text("🔄 Это аудио отклонено. Пришлите новое музыкальное задание — Suno создаст другой вариант. Видео пока не запускаю.")
         return
     if kind == "use":
         context.user_data["vocal_source_token"] = token
@@ -8507,14 +8539,16 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
             "Suno не будет создавать новую запись."
         )
     elif kind == "audio":
-        await q.answer("Отправляю полную песню")
+        with contextlib.suppress(BadRequest):
+            await q.answer("Отправляю полную песню")
         try:
             await _send_vocal_song_file(q.message, data, token)
         except Exception:
             log.exception("vocal source audio resend failed")
             await q.message.reply_text("Не удалось отправить аудио через Telegram. Нажмите кнопку ещё раз позднее.")
     else:
-        await q.answer("Повторно отправляю готовый клип")
+        with contextlib.suppress(BadRequest):
+            await q.answer("Повторно отправляю готовый клип")
         try:
             await _reply_video_bytes(update, data, "Готовый AI-видеоклип с вокалом ✅")
             with contextlib.suppress(OSError):
@@ -8624,6 +8658,15 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                             "Нажмите «Скачать полную песню» позднее.",
                             reply_markup=_vocal_song_kb(song_token),
                         )
+            if not saved_source:
+                # Deliberate human gate: do not spend a Kling generation until the user has heard
+                # and explicitly approved the Suno result. Rejected audio can be regenerated.
+                await update.effective_message.reply_text(
+                    "🎧 Сначала проверьте получившуюся песню. Видео ещё НЕ запускаю. "
+                    "Выберите: подтвердить это аудио или сгенерировать другое.",
+                    reply_markup=_vocal_song_kb(song_token, pending=True),
+                )
+                return True
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
             segments: list[bytes] = []
             if high_fidelity:
@@ -9005,11 +9048,13 @@ async def _run_comet_music_video_identity_keyframe(
         ("SCENE_REFERENCE", scene_reference),
     ]
     parts = [{"text": (
-        "Create ONE photorealistic starting scene keyframe. The first three images are the SAME PERSON. "
-        "FACE_FRONT is the PRIMARY facial identity reference. FACE_3Q is secondary facial geometry. "
-        "BODY_FULL defines body proportions, hands, legs, tattoos and clothing. "
-        "SCENE_REFERENCE defines ONLY environment, composition and starting pose; never replace identity with its face. "
-        "Preserve age, face shape, eyes, nose, lips, chin, hairline, hairstyle, build, tattoos and scene-required clothing. "
+        "Create ONE photorealistic starting scene keyframe. The first three identity images and the scene image show the SAME PERSON at different times. "
+        "FACE_FRONT and FACE_3Q are CURRENT photos and are the ABSOLUTE authority for the person's CURRENT FACE and hair. "
+        "Never average, blend, interpolate or revert the current face toward the older face visible in SCENE_REFERENCE. "
+        "BODY_FULL defines current body proportions when visible. SCENE_REFERENCE is an OLDER photo and defines ONLY environment, "
+        "composition, pose, clothing/accessories and visible tattoos; its older face/body shape is NOT an identity reference. "
+        "Render the body slightly fuller when needed to be consistent with the current portrait references, while preserving scene clothing and tattoos. "
+        "Preserve current age, face shape, eyes, nose, lips, chin, hairline and hairstyle exactly from FACE_FRONT/FACE_3Q. "
         "No beautification, no face redesign, no identity blending, no text, no watermark. "
         "If the scene begins as a mirror/selfie shot with a phone, keep the phone physically present in the starting keyframe; "
         "the video action will lower it and put it in a pocket. "
