@@ -7191,12 +7191,21 @@ async def cmd_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ───────── Photo quick actions ─────────
 def photo_revival_actions_kb():
-    """Only actions that belong to the selected 'Оживить фото' flow."""
+    """Choose motion scenario first; engine selection is the next step."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Автоматический сценарий", callback_data="pedit:revive_auto")],
+        [InlineKeyboardButton("✍️ Свой сценарий / промпт", callback_data="pedit:revive_custom")],
+        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun")],
+    ])
+
+
+def photo_revival_engines_kb():
+    """Engine selection after automatic/custom motion scenario is known."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Оживить через Runway", callback_data="pedit:revive_runway")],
         [InlineKeyboardButton("✨ Оживить через Kling", callback_data="pedit:revive_kling")],
         [InlineKeyboardButton("✨ Sora 2 без людей", callback_data="pedit:revive_sora")],
-        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun")],
+        [InlineKeyboardButton("⬅️ Назад к сценарию", callback_data="pedit:revive_menu")],
     ])
 
 
@@ -11297,6 +11306,22 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _pedit_outpaint(update, context, img); return
             if data == "pedit:story":
                 await _pedit_storyboard(update, context, img); return
+            if data == "pedit:revive_menu":
+                context.user_data.pop("revival_custom_prompt", None)
+                context.user_data.pop("awaiting_revival_custom_prompt", None)
+                await q.message.reply_text("Выберите, как оживить фото:", reply_markup=photo_revival_actions_kb())
+                return
+            if data == "pedit:revive_auto":
+                context.user_data["revival_custom_prompt"] = ""
+                context.user_data.pop("awaiting_revival_custom_prompt", None)
+                await q.message.reply_text("✨ Автоматический сценарий выбран. Теперь выберите движок:", reply_markup=photo_revival_engines_kb())
+                return
+            if data == "pedit:revive_custom":
+                context.user_data["awaiting_revival_custom_prompt"] = True
+                await q.message.reply_text(
+                    "✍️ Опишите, что должно произойти в кадре. Например: «левый человек встаёт и поворачивается к камере, правый улыбается, остальные слегка двигаются естественно». После этого я предложу выбрать движок."
+                )
+                return
             if data in ("pedit:revive", "pedit:revive_runway", "pedit:revive_luma", "pedit:revive_sora", "pedit:revive_kling"):
                 engine = {
                     "pedit:revive": "runway",
@@ -11311,9 +11336,11 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Видимый ACK сразу после клика. Тяжёлая генерация идёт после быстрого ответа Telegram.
                 with contextlib.suppress(Exception):
                     shown_engine = "Runway с авто-резервом Kling" if engine == "runway" else engine.upper()
-                    await q.message.reply_text(f"🟢 Запускаю оживление: {shown_engine}. Если основной движок недоступен, переключусь на резервный.")
+                    suffix = " Если основной движок недоступен, переключусь на резервный." if engine == "runway" else " Движок не переключаю."
+                    await q.message.reply_text(f"🟢 Запускаю оживление: {shown_engine}.{suffix}")
                 try:
-                    await _start_photo_revival(update, context, engine=engine, img_bytes=img, prompt="")
+                    revival_prompt = (context.user_data.pop("revival_custom_prompt", "") or "").strip()
+                    await _start_photo_revival(update, context, engine=engine, img_bytes=img, prompt=revival_prompt)
                 except Exception as e:
                     log.exception("pedit revive failed: %s", e)
                     await update.effective_message.reply_text("⚠️ Не удалось запустить основной движок. Откройте меню и попробуйте Kling или повторите позже.")
@@ -13832,6 +13859,21 @@ async def on_text(
         with contextlib.suppress(Exception):
             _mode_track_set(update.effective_user.id, "")
         await _start_vocal_clip(update, context, img, text)
+        return
+
+    # Оживление фото по пользовательскому сценарию: фото уже загружено,
+    # ждём короткий motion prompt, затем предлагаем выбрать движок.
+    if context.user_data.pop("awaiting_revival_custom_prompt", None):
+        img = _get_cached_photo(update.effective_user.id)
+        if not img:
+            context.user_data.pop("revival_custom_prompt", None)
+            await update.effective_message.reply_text("Сначала загрузите фото и снова откройте «Оживить фото».")
+            return
+        context.user_data["revival_custom_prompt"] = text.strip()
+        await update.effective_message.reply_text(
+            "✅ Сценарий сохранён. Теперь выберите движок:",
+            reply_markup=photo_revival_engines_kb(),
+        )
         return
 
     # Видео по тексту/голосу: ждём prompt после выбора движка.
