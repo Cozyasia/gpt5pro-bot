@@ -3739,6 +3739,26 @@ def _music_video_aspect(prompt: str) -> str:
     return aspect if aspect in {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"} else "9:16"
 
 
+def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
+        [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
+        [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
+    ])
+
+
+def _merge_music_video_prompt(original: str, addition: str) -> str:
+    """Replace earlier duration/aspect when the user amends either setting."""
+    original, addition = (original or "").strip(), (addition or "").strip()
+    duration_pattern = r"\b\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|s|seconds?|мин\w*|minutes?|min)\b"
+    aspect_pattern = r"(?<!\d)(?:9|16|1|4|3)\s*[:/]\s*(?:16|9|1|5|4|3)(?!\d)"
+    if re.search(duration_pattern, addition, re.I):
+        original = re.sub(duration_pattern, "", original, flags=re.I)
+    if re.search(aspect_pattern, addition):
+        original = re.sub(aspect_pattern, "", original)
+    return f"{original.strip(' ,;')}\nДополнение: {addition}".strip()
+
+
 def _music_video_split_briefs(prompt: str) -> tuple[str, str]:
     """Return (music_brief, video_brief) from the structured music-video prompt."""
     raw = (prompt or "").strip()
@@ -3806,26 +3826,6 @@ def _music_video_review_text(prompt: str) -> str:
         f"Параметры: {duration} секунд · {scenes} сцен · формат {_music_video_aspect(prompt)}.\n\n"
         f"🎞 РЕЖИССЁРСКАЯ РАЗБИВКА\n{plan}{note}"
     )[:4000]
-
-def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
-        [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
-        [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
-    ])
-
-
-def _merge_music_video_prompt(original: str, addition: str) -> str:
-    """Replace earlier duration/aspect when the user amends either setting."""
-    original, addition = (original or "").strip(), (addition or "").strip()
-    duration_pattern = r"\b\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|s|seconds?|мин\w*|minutes?|min)\b"
-    aspect_pattern = r"(?<!\d)(?:9|16|1|4|3)\s*[:/]\s*(?:16|9|1|5|4|3)(?!\d)"
-    if re.search(duration_pattern, addition, re.I):
-        original = re.sub(duration_pattern, "", original, flags=re.I)
-    if re.search(aspect_pattern, addition):
-        original = re.sub(aspect_pattern, "", original)
-    return f"{original.strip(' ,;')}\nДополнение: {addition}".strip()
-
 
 async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = "", *, music_brief: str | None = None, video_brief: str | None = None) -> bool:
     """Stage a structured draft. Music and video instructions are deliberately isolated."""
