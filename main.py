@@ -14589,14 +14589,22 @@ async def on_text(
         await _start_text_video(update, context, text)
         return
 
-    # Фото→видеоклип: фото уже загружено, ждём описание клипа.
+    # Фото→видеоклип: первый текст после фото — только музыкальный бриф.
+    # Не передаём его как legacy combined prompt, иначе он дублируется в VIDEO_BRIEF.
     if context.user_data.get("awaiting_photo_clip_prompt"):
         img = _get_cached_photo(update.effective_user.id)
         if not img:
             _clear_photo_clip_wait(context)
             await update.effective_message.reply_text("Сначала загрузите фото человека, затем нажмите 🎵 Фото → видеоклип.", reply_markup=main_kb)
             return
-        await _stage_music_video_draft(update, context, text)
+        context.user_data.pop("awaiting_photo_clip_prompt", None)
+        context.user_data["music_video_music_brief"] = text.strip()
+        context.user_data["awaiting_music_video_video_brief"] = True
+        await update.effective_message.reply_text(
+            "🎬 Теперь отдельно опишите ВИДЕО: что происходит в кадре, действия героя, куда он идёт, как движется камера, окружение, свет и финальный кадр.\n\n"
+            "Например: двери лифта открываются → я выхожу → камера плавно обходит меня и переходит за спину → следует сзади по коридору → я выхожу на солнечную улицу к оранжевому Lamborghini Urus.\n\n"
+            "Эта часть не будет отправляться в Suno."
+        )
         return
 
     # Текстовый/голосовой запрос на ретушь до загрузки фото.
