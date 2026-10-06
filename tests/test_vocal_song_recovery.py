@@ -38,6 +38,7 @@ def load_recovery(root):
         "VOCAL_CLIP_UNIT_COST_USD": 1.50, "AVATAR_UNIT_COST_USD": 0.65,
         "ChatAction": SimpleNamespace(RECORD_VIDEO="record_video"),
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
+        "BadRequest": type("BadRequest", (Exception,), {}),
         "_vocal_clip_background_jobs": set(),
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
         "log": SimpleNamespace(exception=lambda *args: None),
@@ -206,15 +207,17 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 bot=SimpleNamespace(send_chat_action=lambda *_: asyncio.sleep(0)),
             )
             asyncio.run(env["_start_vocal_clip"](update, context, b"photo", "Я пою, 10 секунд"))
-            self.assertEqual([False], billed, "no charge on failed delivery")
-            self.assertEqual(["suno", "full-song", "kling", "video-upload"], events)
+            self.assertEqual([True], billed, "audio generation succeeds; video is intentionally gated")
+            self.assertEqual(["suno", "full-song"], events)
             audio_files = list((Path(root) / "42").glob("*_audio.mp3"))
             video_files = list((Path(root) / "42").glob("*_video.mp4"))
             self.assertEqual(1, len(audio_files))
             self.assertEqual(full_song, audio_files[0].read_bytes())
-            self.assertEqual(1, len(video_files))
-            retry_buttons = [b.callback_data for row in messages[-1][1]["reply_markup"].rows for b in row]
-            self.assertTrue(any(data.startswith("mvfile:video:") for data in retry_buttons))
+            self.assertEqual(0, len(video_files))
+            approval_buttons = [b.callback_data for row in messages[-1][1]["reply_markup"].rows for b in row]
+            self.assertTrue(any(data.startswith("mvfile:approveaudio:") for data in approval_buttons))
+            self.assertTrue(any(data.startswith("mvfile:regenaudio:") for data in approval_buttons))
+            self.assertFalse(any(data.startswith("mvfile:video:") for data in approval_buttons))
 
 
 if __name__ == "__main__":
