@@ -3858,6 +3858,9 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         "prompt": combined, "music_brief": music_brief, "video_brief": video_brief,
         "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
     }
+    with contextlib.suppress(Exception):
+        _mode_track_set(update.effective_user.id, "")
+        kv_set(f"music_video_music_brief:{update.effective_user.id}", "")
     source_token = context.user_data.get("vocal_source_token")
     source_note = (
         "\n\n🎵 Для этого клипа выбрана сохранённая полная песня Suno; новую песню не создаю."
@@ -14547,6 +14550,11 @@ async def on_text(
         context.user_data.pop("awaiting_vocal_clip_prompt", None)
         context.user_data["music_video_music_brief"] = text.strip()
         context.user_data["awaiting_music_video_video_brief"] = True
+        # Persist the VIDEO stage as well as the song brief. Telegram updates can
+        # land on a fresh worker/process, so user_data alone is not authoritative.
+        with contextlib.suppress(Exception):
+            kv_set(f"music_video_music_brief:{update.effective_user.id}", text.strip())
+            _mode_track_set(update.effective_user.id, "musicvideo:video")
         await update.effective_message.reply_text(
             "🎥 Теперь отдельно опишите ВИДЕО: что происходит в кадре, действия героя, куда он идёт, как движется камера, окружение, свет и финальный кадр.\n\n"
             "Например: двери лифта открываются → я выхожу → камера обходит меня и переходит за спину → следует сзади → я выхожу на солнечную улицу к оранжевому Lamborghini Urus."
@@ -14596,6 +14604,11 @@ async def on_text(
         context.user_data.pop("awaiting_photo_clip_prompt", None)
         context.user_data["music_video_music_brief"] = text.strip()
         context.user_data["awaiting_music_video_video_brief"] = True
+        # Persist the VIDEO stage as well as the song brief. This prevents the
+        # next message from falling through to generic GPT/Suno capability text.
+        with contextlib.suppress(Exception):
+            kv_set(f"music_video_music_brief:{update.effective_user.id}", text.strip())
+            _mode_track_set(update.effective_user.id, "musicvideo:video")
         await update.effective_message.reply_text(
             "🎬 Теперь отдельно опишите ВИДЕО: что происходит в кадре, действия героя, куда он идёт, как движется камера, окружение, свет и финальный кадр.\n\n"
             "Например: двери лифта открываются → я выхожу → камера плавно обходит меня и переходит за спину → следует сзади по коридору → я выхожу на солнечную улицу к оранжевому Lamborghini Urus.\n\n"
