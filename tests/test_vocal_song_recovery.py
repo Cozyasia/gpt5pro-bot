@@ -37,6 +37,8 @@ def load_recovery(root):
         "FFMPEG_MUX_TIMEOUT_S": 180,
         "VOCAL_CLIP_UNIT_COST_USD": 1.50, "AVATAR_UNIT_COST_USD": 0.65,
         "ChatAction": SimpleNamespace(RECORD_VIDEO="record_video"),
+        "InlineKeyboardButton": lambda text, callback_data: SimpleNamespace(text=text, callback_data=callback_data),
+        "InlineKeyboardMarkup": lambda rows: SimpleNamespace(rows=rows),
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
         "BadRequest": type("BadRequest", (Exception,), {}),
         "_vocal_clip_background_jobs": set(),
