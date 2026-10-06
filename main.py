@@ -3892,7 +3892,8 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     if action != "approve":
         await q.answer("Неизвестное действие")
         return
-    img = _get_cached_photo(q.from_user.id)
+    pack = _music_video_character_pack(q.from_user.id)
+    img = pack.get("keyframe") or _get_cached_photo(q.from_user.id)
     if not img or hashlib.sha256(img).hexdigest() != draft.get("photo_digest"):
         context.user_data.pop("music_video_draft", None)
         context.user_data.pop("music_video_draft_edit", None)
@@ -4074,10 +4075,11 @@ def _set_text_video_wait(context: ContextTypes.DEFAULT_TYPE, engine: str | None 
 async def _handle_vocalclip_upload_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "vocalclip")
-    context.user_data["awaiting_vocal_clip_photo"] = True
+    _music_video_character_begin(context, q.from_user.id)
     await q.message.reply_text(
-        "🎤 Пришлите фронтальный портрет *одного человека*. Если в кадре два человека, lip-sync будет нестабильным.",
-        parse_mode="Markdown",
+        "🧬 Для клипа с устойчивой внешностью соберём Character Identity Pack.\n\n"
+        "1/4 Пришлите ФОТО ЛИЦА АНФАС: крупно, хороший свет, без очков и без телефона перед лицом.\n"
+        "Затем: лицо ¾ → полный рост → отдельное стартовое фото сцены.",
         reply_markup=_vocal_clip_action_kb(prefix),
     )
 
@@ -7463,6 +7465,113 @@ def _get_cached_photo_url(user_id: int) -> str:
     return _photo_url_cache.get(user_id, "") or ""
 
 
+# Music-video Character Identity Pack. Kept separate from the generic last-photo cache:
+# front face + 3/4 face + full body define identity; scene photo defines composition.
+_music_video_character_cache: dict[int, dict[str, bytes]] = {}
+
+def _music_video_character_pack(user_id: int) -> dict[str, bytes]:
+    return _music_video_character_cache.setdefault(user_id, {})
+
+def _music_video_character_reset(user_id: int):
+    _music_video_character_cache[user_id] = {}
+
+def _music_video_character_begin(context: ContextTypes.DEFAULT_TYPE, user_id: int):
+    _music_video_character_reset(user_id)
+    context.user_data["music_video_character_stage"] = "front"
+    for k in ("awaiting_photo_clip_photo", "awaiting_vocal_clip_photo", "awaiting_photo_clip_prompt",
+              "awaiting_vocal_clip_prompt", "awaiting_music_video_video_brief", "music_video_music_brief"):
+        context.user_data.pop(k, None)
+
+def _music_video_character_ready(user_id: int) -> bool:
+    p = _music_video_character_pack(user_id)
+    return all(p.get(k) for k in ("front", "three_quarter", "full_body", "scene"))
+
+def _music_video_character_scene(user_id: int) -> bytes | None:
+    return _music_video_character_pack(user_id).get("scene") or _get_cached_photo(user_id)
+
+def _music_video_character_prompt() -> str:
+    return (
+        "Use the four supplied images as references of ONE AND THE SAME real person. "
+        "Reference 1 is the authoritative frontal face identity. Reference 2 is the authoritative 3/4 face geometry. "
+        "Reference 3 is the authoritative full-body proportions, build, visible tattoos and clothing/body details. "
+        "Reference 4 is the authoritative starting scene/composition. Reconstruct the person in reference 4 using the exact identity "
+        "from references 1-3. Do not beautify, age-shift, change ethnicity, face width, nose, eyes, jaw, hairline, body build or tattoos. "
+        "Preserve the scene, pose and clothing of reference 4 unless identity correction requires a minimal change. "
+        "If reference 4 contains a phone in the hand, keep it only in the starting keyframe; later video direction may put it in a pocket. "
+        "Photorealistic natural skin, no text, no watermark. Return one image only."
+    )
+
+async def _run_comet_multi_reference_identity_keyframe(refs: list[bytes]) -> bytes | None:
+    refs = [x for x in refs if x]
+    if len(refs) < 4 or not COMET_API_KEY:
+        return None
+    model = next((m for m in COMET_IMAGE_EDIT_FALLBACK_MODELS if (m or "").strip()), COMET_IMAGE_EDIT_MODEL)
+    path = (COMET_IMAGE_EDIT_PATH or "/v1beta/models/{model}:generateContent").replace("{model}", model)
+    url = f"{COMET_BASE_URL}{path}"
+    parts: list[dict] = [{"text": _music_video_character_prompt()}]
+    for raw in refs[:4]:
+        b64, mime = _prepare_reference_image_for_gemini(raw, AI_SELFIE_MAX_SIDE)
+        parts.append({"inlineData": {"mimeType": mime or "image/jpeg", "data": b64}})
+    payload = {"contents": [{"role": "user", "parts": parts}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}}
+    headers = {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(COMET_IMAGE_EDIT_TIMEOUT_S, connect=40.0, read=COMET_IMAGE_EDIT_TIMEOUT_S, write=120.0), follow_redirects=True) as client:
+        r = await client.post(url, headers=headers, json=payload)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Character Identity Pack synthesis failed: {r.status_code}: {_api_error_preview(r)}")
+        out = await _image_bytes_from_response(r, client)
+        if not out:
+            raise RuntimeError("Character Identity Pack synthesis returned no image")
+        return out
+
+async def _music_video_character_accept_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img: bytes) -> bool:
+    stage = (context.user_data.get("music_video_character_stage") or "").strip()
+    if not stage:
+        return False
+    uid = update.effective_user.id
+    pack = _music_video_character_pack(uid)
+    if stage == "front":
+        pack["front"] = img
+        context.user_data["music_video_character_stage"] = "three_quarter"
+        await update.effective_message.reply_text("✅ 1/4 Анфас сохранён. Теперь пришлите фото лица в ¾ — поворот примерно 30–45°, лицо хорошо освещено.")
+        return True
+    if stage == "three_quarter":
+        pack["three_quarter"] = img
+        context.user_data["music_video_character_stage"] = "full_body"
+        await update.effective_message.reply_text("✅ 2/4 Ракурс ¾ сохранён. Теперь пришлите фото В ПОЛНЫЙ РОСТ — от головы до пят. Нужны телосложение, пропорции и видимые татуировки.")
+        return True
+    if stage == "full_body":
+        pack["full_body"] = img
+        context.user_data["music_video_character_stage"] = "scene"
+        await update.effective_message.reply_text("✅ 3/4 Полный рост сохранён. Теперь пришлите СТАРТОВОЕ ФОТО СЦЕНЫ — например исходный кадр в лифте. Оно задаёт окружение и начальную композицию, но не заменяет референсы личности.")
+        return True
+    if stage == "scene":
+        pack["scene"] = img
+        context.user_data.pop("music_video_character_stage", None)
+        await update.effective_message.reply_text("🧬 4/4 Character Identity Pack собран. Фиксирую личность по трём референсам и стартовой сцене…")
+        try:
+            keyframe = await _run_comet_multi_reference_identity_keyframe(
+                [pack["front"], pack["three_quarter"], pack["full_body"], pack["scene"]]
+            )
+        except Exception:
+            log.exception("music video identity keyframe synthesis failed")
+            keyframe = None
+        if keyframe:
+            pack["keyframe"] = keyframe
+            _cache_photo(uid, keyframe)
+            await update.effective_message.reply_text("✅ Identity keyframe готов. Он будет главным кадром для генерации, а исходные 3 фото останутся референсами личности.")
+        else:
+            # Fail closed to scene reference rather than pretending multi-reference identity succeeded.
+            _cache_photo(uid, pack["scene"])
+            await update.effective_message.reply_text("⚠️ Не удалось собрать identity keyframe. Генерацию пока не запускаю по ложному multi-reference режиму. Попробуйте загрузить пакет заново.")
+            return True
+        _set_photo_clip_wait(context)
+        with contextlib.suppress(Exception):
+            _mode_track_set(uid, "musicvideo:music")
+        await update.effective_message.reply_text("🎵 Теперь отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, нужен ли вокал и каким голосом. После этого отдельно спрошу ВИДЕО.")
+        return True
+    return False
+
+
 # ───────── Kling Avatar / Photo→music clip ─────────
 def _is_avatar_intent(text: str) -> bool:
     t = (text or "").lower()
@@ -7741,9 +7850,15 @@ async def _run_kling_avatar_result_bytes(
     if not sound_file:
         raise RuntimeError("Kling Avatar: public audio URL missing")
     raw_b64 = base64.b64encode(img_bytes).decode("ascii")
+    identity_guard = (
+        "IDENTITY LOCK: preserve exactly the same person's facial geometry, age, hairline, skin features, "
+        "body build and visible tattoos from the supplied identity keyframe. Do not morph into another person. "
+        "When the head turns, keep identity consistent. If a phone is present at the start and the action does not require it, "
+        "the person naturally lowers it and puts it into a pocket; it must not remain glued to the hand. "
+    )
     payload = {
         "image": raw_b64,
-        "prompt": (avatar_prompt or "").strip() or KLING_AVATAR_PROMPT,
+        "prompt": identity_guard + ((avatar_prompt or "").strip() or KLING_AVATAR_PROMPT),
         "mode": KLING_AVATAR_MODE,
         "sound_file": sound_file,
     }
@@ -11884,8 +11999,12 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             if data == "pedit:photoclip":
                 _clear_medicine_wait(context)
-                _set_photo_clip_wait(context)
-                await q.message.reply_text("🎵 Фото выбрано. Опишите стиль видеоклипа: музыка, движение, настроение, длительность и формат 9:16/16:9.")
+                _music_video_character_begin(context, q.from_user.id)
+                await q.message.reply_text(
+                    "🧬 Для максимального сходства сначала соберём Character Identity Pack из 4 изображений.\n\n"
+                    "1/4 Пришлите ФОТО ЛИЦА АНФАС: крупно, хороший свет, без очков и без телефона перед лицом.\n"
+                    "Далее я попрошу ¾, полный рост и отдельное стартовое фото сцены."
+                )
                 return
             if data == "pedit:vocalclip":
                 _clear_medicine_wait(context)
@@ -14910,6 +15029,10 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user_id = update.effective_user.id
         caption = (update.message.caption or "").strip()
+
+        # Character Identity Pack owns sequential photo uploads before any generic photo/edit flow.
+        if await _music_video_character_accept_photo(update, context, img):
+            return
 
         # Presentation Studio: logo/product photo bulk upload.
         if await _presentation_studio_get().handle_photo(update, context, img, mime="image/jpeg", caption=caption):
