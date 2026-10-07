@@ -84,3 +84,27 @@ def test_suno_intro_does_not_force_whole_track_instrumental_and_review_callbacks
     assert 'context.user_data["music_video_pending_music_brief"] = music_brief' in source
     assert "fresh = await _run_suno_music_result_bytes(update, brief)" in source
     assert "return False" in source
+
+
+def test_music_video_suno_matches_proven_freeform_inspiration_payload():
+    source = MAIN.read_text(encoding="utf-8")
+    fn = source[source.index("async def _run_suno_music_result_bytes"):source.index("async def _send_vocal_song_file")]
+    assert 'base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": brief}' in fn
+    assert '"gpt_description_prompt": strict_brief' not in fn
+    assert 'base_payload.update({"prompt": "", "make_instrumental": True})' in fn
+    assert '"make_instrumental": instrumental' not in fn
+
+def test_kling_receives_literal_action_before_generic_constraints():
+    source = MAIN.read_text(encoding="utf-8")
+    photo = source[source.index("def _photo_clip_prompt"):source.index("def _photo_clip_target_duration")]
+    assert "USER ACTION/DIRECTOR DIRECTION" in photo
+    assert "user_prompt[:2200]" in photo
+    scene = source[source.index("def _vocal_scene_role_prompt"):source.index("async def _extract_audio_segment_bytes")]
+    assert scene.index("MANDATORY USER VIDEO DIRECTION") < scene.index("THIS IS A NARRATIVE ACTION SHOT")
+
+def test_audio_review_rejects_stale_tokens_and_regenerate_replaces_pending_token():
+    source = MAIN.read_text(encoding="utf-8")
+    assert 'pending_token = context.user_data.get("music_video_pending_audio_token")' in source
+    assert 'if pending_token != token:' in source
+    assert 'context.user_data["music_video_pending_audio_token"] = new_token' in source
+    assert 'context.user_data.pop("vocal_source_token", None)' in source
