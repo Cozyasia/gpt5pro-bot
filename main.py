@@ -3903,6 +3903,16 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         await q.answer("Сценарий устарел")
         return
     action = parts[1]
+    if action in ("dur10", "dur30", "dur60", "dur90"):
+        seconds = int(action[3:])
+        music_brief, video_brief = _music_video_split_briefs(draft["prompt"])
+        video_brief = re.sub(r"\\b\\d{1,3}(?:[.,]\\d+)?\\s*(?:сек\\w*|s|seconds?|мин\\w*|minutes?|min)\\b", "", video_brief, flags=re.I).strip()
+        video_brief = f"Длительность клипа: {seconds} секунд.\\n{video_brief}".strip()
+        draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+        context.user_data["music_video_draft"] = draft
+        await q.answer(f"{seconds} секунд")
+        await q.message.reply_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+        return
     if action in ("augment", "rewrite"):
         context.user_data["music_video_draft_edit"] = action
         await q.answer("Жду текст")
@@ -3934,16 +3944,6 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         await q.message.reply_text("Фото для сценария изменилось. Пришлите описание клипа ещё раз, чтобы утвердить его с новым фото.")
         return
     prompt = draft["prompt"]
-    scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
-    if _clip_wants_vocals(prompt) and _photo_clip_target_duration(prompt) > scene_s:
-        await q.answer("Пока доступно до 10 секунд")
-        await q.message.reply_text(
-            f"⚠️ Генерация не запущена: длинный вокальный клип пока проверяется. "
-            f"Ждать или повторно нажимать «Утверждаю» не нужно. "
-            f"Сценарий сохранён. Для теста нажмите «Дополнить», напишите «{scene_s} секунд», "
-            "затем утвердите обновлённый сценарий. Кредиты не списаны."
-        )
-        return
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
     context.user_data.pop("music_video_draft", None)
     context.user_data.pop("music_video_draft_edit", None)
