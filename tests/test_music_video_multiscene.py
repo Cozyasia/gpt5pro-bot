@@ -65,6 +65,9 @@ class TestMemorySafeFinalize(unittest.TestCase):
         self.assertIn("def _concat_video_segment_files_sync", src)
         self.assertIn("segments.clear()", src)
         self.assertIn("subprocess.DEVNULL", src)
+        self.assertIn('tempfile.TemporaryFile(mode="w+b")', src)
+        self.assertIn("del scene_video", src)
+        self.assertIn("del data", src)
         self.assertIn("source_size <= max_bytes", src)
         block = src[src.index('await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")'):]
         self.assertIn("_mux_video_audio_files_sync", block)
