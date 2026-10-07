@@ -8882,6 +8882,12 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             high_fidelity = callable(pack_fn) and callable(synth_fn)
             pending_keyframe = context.user_data.get("music_video_pending_keyframe") if saved_source else None
             pending_keyframe_url = context.user_data.get("music_video_pending_keyframe_url") if saved_source else None
+            # The approved-audio resume path reuses the already synthesized start keyframe,
+            # but later scene re-anchors still need the original Character Identity Pack.
+            # Load it before either branch so refs is always defined for multi-scene runs.
+            refs = pack_fn(user_id) if high_fidelity else {}
+            if high_fidelity and not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
+                raise RuntimeError("Character Identity Pack incomplete")
             if high_fidelity and pending_keyframe:
                 img_bytes = pending_keyframe
                 keyframe_url = pending_keyframe_url or await _upload_bytes_to_telegram_file_url(
@@ -8889,9 +8895,6 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     "🧬 Использую уже проверенный стартовый keyframe.",
                 )
             elif high_fidelity:
-                refs = pack_fn(user_id)
-                if not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
-                    raise RuntimeError("Character Identity Pack incomplete")
                 await update.effective_message.reply_text("🧬 Собираю identity-preserving стартовый keyframe из 4 reference через Gemini/Comet…")
                 keyframe = await synth_fn(
                     refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"], video_brief
