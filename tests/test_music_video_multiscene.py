@@ -72,3 +72,30 @@ class TestMemorySafeFinalize(unittest.TestCase):
         block = src[src.index('await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")'):]
         self.assertIn("_mux_video_audio_files_sync", block)
         self.assertNotIn("_mux_video_audio_sync, joined, safe_audio", block[:5000])
+
+
+def test_story_beats_split_real_whitespace_and_do_not_repeat_whole_brief():
+    fn = TEXT[TEXT.index("def _music_video_story_beats"):TEXT.index("def _vocal_scene_role_prompt")]
+    assert 're.sub(r"\\s+", " ", ' in fn
+    assert 're.split(r"(?<=[.!?])\\s+", text)' in fn
+    assert 're.sub(r"\\\\s+"' not in fn
+    assert 're.split(r"(?<=[.!?])\\\\s+"' not in fn
+
+
+def test_identity_reanchor_forbids_collage_geometry_corruption():
+    start = TEXT.index("async def _run_comet_music_video_identity_keyframe")
+    block = TEXT[start:TEXT.index("\nasync def ", start + 40)]
+    assert "immutable geometric base" in block
+    assert "Never collage references" in block
+    assert "floating head/body" in block
+    assert "detach limbs" in block
+
+
+def test_final_delivery_keeps_4k_dimensions_instead_of_720p():
+    start = TEXT.index("def _mux_video_audio_files_sync")
+    block = TEXT[start:TEXT.index("\ndef ", start + 40)]
+    assert "delivery-4k" in block
+    assert "3840" in block
+    assert "target_video_k" in block
+    assert "compact-720p" not in block
+    assert "small-540p" not in block
