@@ -3741,6 +3741,10 @@ def _music_video_aspect(prompt: str) -> str:
 
 def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⏱ 10 сек", callback_data=f"mv:dur10:{token}"),
+         InlineKeyboardButton("30 сек", callback_data=f"mv:dur30:{token}"),
+         InlineKeyboardButton("60 сек", callback_data=f"mv:dur60:{token}"),
+         InlineKeyboardButton("90 сек", callback_data=f"mv:dur90:{token}")],
         [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
         [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
         [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
@@ -3815,9 +3819,9 @@ def _music_video_review_text(prompt: str) -> str:
     vocal = _clip_wants_vocals(music_brief)
     plan = _music_video_director_plan(video_brief, duration, scenes)
     note = (
-        f"\n\n⚠️ Вокальный клип на {duration} секунд пока недоступен: сначала проверяем одну сцену "
-        f"до {scene_s} секунд. Для теста задайте длительность {scene_s} секунд. Кредиты не списываются до запуска."
-        if vocal and scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
+        f"\n\n🎞 Длинный клип будет собран из {scenes} последовательных cinematic-сцен по ~{scene_s} секунд "
+        "с единым Character Identity Pack и continuity между сценами."
+        if scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
     )
     return (
         "🎬 Сценарий AI-видеоклипа на утверждение\n\n"
@@ -8628,14 +8632,6 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     target_duration = _photo_clip_target_duration(prompt)
     scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
     scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
-    if scene_count > 1:
-        await update.effective_message.reply_text(
-            f"⚠️ Вокальный клип на {target_duration} секунд пока недоступен: "
-            f"проверяется сборка lip-sync сцен. Генерация не запущена, ждать не нужно. "
-            f"Сейчас можно заказать один фрагмент до {scene_s} секунд: "
-            f"укажите в сценарии «{scene_s} секунд» и утвердите его. Оплата не списана."
-        )
-        return
     role_plan = _vocal_clip_role_plan(prompt, performer_count)
     user_id = update.effective_user.id
     source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
@@ -8750,13 +8746,13 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     dur_s = min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
                     await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
                     scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
-                    if idx == 1:
-                        scene_prompt += (
-                            " If a phone is present because the scene starts as a mirror/selfie shot, "
-                            "the character lowers the phone, puts it into a pocket, then both hands remain free; "
-                            "the phone never appears again. "
-                        )
-                    scene_prompt += " Keep mouth neutral unless naturally speaking; do not force singing lip motion."
+                    scene_prompt += (
+                        " IDENTITY LOCK: the performer must remain the exact same person defined by the Character Identity Pack; "
+                        "preserve facial geometry, head shape, eyes, nose, lips, jaw, hairline, age and body proportions across camera angles. "
+                        " CONTINUITY: this scene is part of one continuous film. Preserve wardrobe, environment state, props and action progress "
+                        "from the preceding scene; do not reset to the original reference pose. "
+                        "Keep mouth neutral unless naturally speaking; do not force singing lip motion."
+                    )
                     scene_video = await _run_kling_photo_clip_result(
                         img_bytes, scene_prompt, dur_s, aspect, keyframe_url
                     )
