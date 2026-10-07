@@ -118,3 +118,19 @@ def test_keyframe_action_priming_is_scenario_agnostic():
     assert "Do not invent scenario-specific actions or props" in fn
     assert "phone already being lowered" not in fn
     assert "elevator doors already opening" not in fn
+
+
+def test_kling_prompt_is_guarded_below_provider_2500_character_limit():
+    source = MAIN.read_text(encoding="utf-8")
+    fn = source[source.index("async def _run_kling_photo_clip_result"):source.index("async def _run_suno_music_result_bytes")]
+    assert "if len(kling_prompt) > 2480:" in fn
+    assert 'kling_prompt = kling_prompt[:2476].rstrip() + "..."' in fn
+    assert '"prompt": kling_prompt' in fn
+
+def test_audio_review_can_edit_prompt_without_starting_video():
+    source = MAIN.read_text(encoding="utf-8")
+    assert "✏️ Изменить промпт аудио" in source
+    assert "mvfile:editaudio:" in source
+    assert '"awaiting_music_video_audio_prompt_edit"' in source
+    assert 'context.user_data["music_video_pending_music_brief"] = new_brief' in source
+    assert '_music_video_join_briefs(new_brief, pending_video)' in source
