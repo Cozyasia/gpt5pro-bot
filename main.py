@@ -9102,10 +9102,11 @@ async def _run_comet_music_video_identity_keyframe(
         "Render the body slightly fuller when needed to be consistent with the current portrait references, while preserving scene clothing and tattoos. "
         "Preserve current age, face shape, eyes, nose, lips, chin, hairline and hairstyle exactly from FACE_FRONT/FACE_3Q. "
         "No beautification, no face redesign, no identity blending, no text, no watermark. "
-        "CRITICAL ACTION PRIMING: SCENE_REFERENCE is not a pose lock. Build the keyframe at the first actionable instant of the director brief. "
-        "If the reference is a mirror/selfie with a phone but the brief says to lower/put away the phone and exit, show the elevator doors already opening, "
-        "the phone already being lowered away from the mirror/selfie position, and the body beginning to orient toward the exit. "
-        "Do NOT preserve a static selfie pose when it conflicts with the requested first action. "
+        "CRITICAL ACTION PRIMING: SCENE_REFERENCE is not a pose lock. Infer the FIRST ACTIONABLE STATE from the user's director brief "
+        "and build the keyframe at the beginning of that state. Preserve reference appearance/environment only where it does not conflict with the requested action. "
+        "Any pose, held object, gaze direction, body orientation, door/object state, or composition from SCENE_REFERENCE that conflicts with the first requested action "
+        "must transition toward the user's requested state rather than being frozen merely because it appears in the reference. "
+        "Do not invent scenario-specific actions or props that the user did not request. "
         f"Director brief — execute literally: {(video_brief or '')[:1800]}"
     )}]
     for label, raw in refs:
