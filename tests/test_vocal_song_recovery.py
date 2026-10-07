@@ -42,6 +42,8 @@ def load_recovery(root):
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
         "BadRequest": type("BadRequest", (Exception,), {}),
         "_vocal_clip_background_jobs": set(),
+        "_music_video_progress_event": asyncio.Event,
+        "_music_video_progress_task": asyncio.create_task,
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
         "log": SimpleNamespace(exception=lambda *args: None),
     }
