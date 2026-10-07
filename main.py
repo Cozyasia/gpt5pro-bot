@@ -8303,12 +8303,16 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
     attempts = []
     if FFMPEG_MUX_COPY_FIRST and source_size <= max_bytes:
         attempts.append(("copy-first", [], "copy"))
-    # Keep 4K delivery dimensions; meet Telegram upload ceiling with bitrate, not 720p downscaling.
+    # Never upscale the joined provider video inside the 512 MiB web worker.
+    # 4K x264 encoding exceeded the Render memory limit during a real 30s job.
+    # Preserve provider-native pixels and only transcode when Telegram's file ceiling
+    # requires it. A true 4K master must be produced out-of-process/provider-side.
     audio_bps = 128000
     target_video_bps = max(1800000, int((max_bytes * 8 * 0.90) / max(5, target_duration_s) - audio_bps))
     target_video_k = max(1800, target_video_bps // 1000)
-    scale_4k = r"scale=if(gt(a\,1)\,3840\,-2):if(gt(a\,1)\,-2\,3840),fps=24"
-    attempts.extend([("delivery-4k", [scale_4k], "4k")])
+    safe_height = max(540, min(1080, int(FFMPEG_MUX_SCALE_HEIGHT or 720)))
+    scale_safe = rf"scale=if(gt(a\,1)\,-2\,{safe_height}):if(gt(a\,1)\,{safe_height}\,-2),fps={int(FFMPEG_MUX_FPS or 24)}"
+    attempts.extend([("delivery-safe", [scale_safe], "safe")])
     for name, vf, mode in attempts:
         tmp_out = output_path + "." + name + ".mp4"
         cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
@@ -8316,7 +8320,7 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
                "-map", "0:v:0", "-map", "1:a:0"]
         if mode == "copy":
             cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
-        elif mode == "4k":
+        elif mode == "safe":
             cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
                     "-b:v", f"{target_video_k}k", "-maxrate", f"{target_video_k}k", "-bufsize", f"{target_video_k * 2}k",
                     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
