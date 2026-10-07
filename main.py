@@ -8273,9 +8273,21 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
         log.info("ffmpeg file mux attempt=%s video=%s duration=%s max_bytes=%s timeout_left=%s",
                  name, source_size, target_duration_s, max_bytes, left)
         try:
-            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=left)
+            # Keep ffmpeg diagnostics off the Python heap. TemporaryFile is disk-backed;
+            # only a small tail is read if the process fails.
+            with tempfile.TemporaryFile(mode="w+b") as err_fh:
+                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=err_fh, timeout=left)
+                stderr_tail = b""
+                if res.returncode != 0:
+                    err_fh.seek(0, os.SEEK_END)
+                    err_size = err_fh.tell()
+                    err_fh.seek(max(0, err_size - 1500))
+                    stderr_tail = err_fh.read(1500)
         except subprocess.TimeoutExpired:
             continue
+        if res.returncode != 0:
+            log.warning("ffmpeg file mux failed attempt=%s rc=%s stderr=%s",
+                        name, res.returncode, stderr_tail.decode("utf-8", "ignore"))
         if res.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 1024:
             size = os.path.getsize(tmp_out)
             log.info("ffmpeg file mux ok attempt=%s output=%s elapsed=%.1fs", name, size, time.time() - started)
@@ -8298,7 +8310,20 @@ def _concat_video_segment_files_sync(segment_paths: list[str], target_duration: 
             fh.write("file '" + p.replace("'", "'\\''") + "'\n")
     cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
            "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", output_path]
-    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=max(120, FFMPEG_MUX_TIMEOUT_S))
+    with tempfile.TemporaryFile(mode="w+b") as err_fh:
+        res = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
+            timeout=max(120, FFMPEG_MUX_TIMEOUT_S),
+        )
+        stderr_tail = b""
+        if res.returncode != 0:
+            err_fh.seek(0, os.SEEK_END)
+            err_size = err_fh.tell()
+            err_fh.seek(max(0, err_size - 1500))
+            stderr_tail = err_fh.read(1500)
+    if res.returncode != 0:
+        log.warning("ffmpeg file concat failed rc=%s stderr=%s",
+                    res.returncode, stderr_tail.decode("utf-8", "ignore"))
     if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 4096:
         return output_path
     return None
@@ -8892,6 +8917,12 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         fh.write(data)
                     segment_paths.append(p)
                 segments.clear()
+                # enumerate() and the generation loop otherwise keep the last large scene
+                # alive even after list.clear(). Drop those references before ffmpeg starts.
+                with contextlib.suppress(UnboundLocalError):
+                    del data
+                with contextlib.suppress(UnboundLocalError):
+                    del scene_video
                 joined_path = os.path.join(finalize_td.name, "joined.mp4")
                 joined_path = await asyncio.to_thread(
                     _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
