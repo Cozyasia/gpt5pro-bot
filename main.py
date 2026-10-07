@@ -8235,6 +8235,75 @@ async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | No
     return None
 
 
+def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duration_s: int, output_path: str) -> str | None:
+    """Memory-safe final mux: ffmpeg reads/writes files; Python never materializes the joined video."""
+    if not video_path or not audio_path or not os.path.exists(video_path) or not os.path.exists(audio_path):
+        return None
+    target_duration_s = max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s or PHOTO_CLIP_DEFAULT_DURATION_S or 15)))
+    timeout_s = max(30, int(FFMPEG_MUX_TIMEOUT_S or 180))
+    max_bytes = max(5, int(FFMPEG_MUX_MAX_MB or 45)) * 1024 * 1024
+    ffmpeg = _ffmpeg_exe()
+    started = time.time()
+    # Avoid copy-first for a source already known to exceed Telegram target. It only creates
+    # another ~80MB file and raises peak memory/disk pressure before the required encode.
+    source_size = os.path.getsize(video_path)
+    attempts = []
+    if FFMPEG_MUX_COPY_FIRST and source_size <= max_bytes:
+        attempts.append(("copy-first", [], "copy"))
+    attempts.extend([
+        ("compact-720p", [f"scale=-2:{int(FFMPEG_MUX_SCALE_HEIGHT or 720)},fps={int(FFMPEG_MUX_FPS or 24)}"], "compact"),
+        ("small-540p", ["scale=-2:540,fps=20"], "small"),
+    ])
+    for name, vf, mode in attempts:
+        tmp_out = output_path + "." + name + ".mp4"
+        cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
+               "-stream_loop", "-1", "-i", audio_path, "-t", str(target_duration_s),
+               "-map", "0:v:0", "-map", "1:a:0"]
+        if mode == "copy":
+            cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+        elif mode == "compact":
+            cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+                    "-crf", str(FFMPEG_MUX_CRF or "32"), "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+        else:
+            cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k"]
+        cmd += ["-shortest", "-movflags", "+faststart", tmp_out]
+        left = max(20, timeout_s - int(time.time() - started))
+        log.info("ffmpeg file mux attempt=%s video=%s duration=%s max_bytes=%s timeout_left=%s",
+                 name, source_size, target_duration_s, max_bytes, left)
+        try:
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=left)
+        except subprocess.TimeoutExpired:
+            continue
+        if res.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 1024:
+            size = os.path.getsize(tmp_out)
+            log.info("ffmpeg file mux ok attempt=%s output=%s elapsed=%.1fs", name, size, time.time() - started)
+            if size <= max_bytes:
+                os.replace(tmp_out, output_path)
+                return output_path
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_out)
+    return None
+
+
+def _concat_video_segment_files_sync(segment_paths: list[str], target_duration: int, output_path: str) -> str | None:
+    """Concat provider MP4 files without loading the joined result into Python memory."""
+    if not segment_paths:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    manifest = output_path + ".concat.txt"
+    with open(manifest, "w", encoding="utf-8") as fh:
+        for p in segment_paths:
+            fh.write("file '" + p.replace("'", "'\\''") + "'\n")
+    cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
+           "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", output_path]
+    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=max(120, FFMPEG_MUX_TIMEOUT_S))
+    if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 4096:
+        return output_path
+    return None
+
+
 def _mux_video_audio_sync(video_bytes: bytes, audio_bytes: bytes | None, target_duration_s: int) -> bytes | None:
     """Build one Telegram-safe MP4 from Kling video + Suno audio.
     v65: copy-first if small, then compressed fallback under FFMPEG_MUX_MAX_MB.
@@ -8812,16 +8881,39 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     segments.append(scene_video)
 
             await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")
-            joined = await asyncio.to_thread(_concat_video_segments_sync, segments, target_duration)
-            if not joined:
-                raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
-            await update.effective_message.reply_text("📦 Подготавливаю и сжимаю видео для Telegram, добавляю исходный трек Suno…")
-            final_bytes = await asyncio.wait_for(
-                asyncio.to_thread(_mux_video_audio_sync, joined, safe_audio, target_duration),
-                timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
-            )
-            if not final_bytes:
-                raise RuntimeError("Не удалось собрать финальный MP4 с вокалом.")
+            # Long clips must not exist simultaneously as scene bytes + joined bytes + mux bytes.
+            # Spill scenes/audio to disk, release scene buffers, and let ffmpeg stream file->file.
+            finalize_td = tempfile.TemporaryDirectory(prefix="neyro_vocal_finalize_")
+            try:
+                segment_paths = []
+                for i, data in enumerate(segments):
+                    p = os.path.join(finalize_td.name, f"scene_{i:02d}.mp4")
+                    with open(p, "wb") as fh:
+                        fh.write(data)
+                    segment_paths.append(p)
+                segments.clear()
+                joined_path = os.path.join(finalize_td.name, "joined.mp4")
+                joined_path = await asyncio.to_thread(
+                    _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
+                )
+                if not joined_path:
+                    raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
+                audio_path = os.path.join(finalize_td.name, "suno.mp3")
+                with open(audio_path, "wb") as fh:
+                    fh.write(safe_audio)
+                await update.effective_message.reply_text("📦 Подготавливаю видео для Telegram и добавляю исходный трек Suno…")
+                final_path = os.path.join(finalize_td.name, "final.mp4")
+                final_path = await asyncio.wait_for(
+                    asyncio.to_thread(_mux_video_audio_files_sync, joined_path, audio_path, target_duration, final_path),
+                    timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
+                )
+                if not final_path:
+                    raise RuntimeError("Не удалось собрать финальный MP4 с вокалом.")
+                # Only the Telegram-sized final artifact is materialized in RAM.
+                with open(final_path, "rb") as fh:
+                    final_bytes = fh.read()
+            finally:
+                finalize_td.cleanup()
             await asyncio.to_thread(_save_vocal_artifact, user_id, video_token, "video", final_bytes)
             final_saved = True
             try:
