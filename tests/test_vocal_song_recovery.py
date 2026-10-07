@@ -42,6 +42,8 @@ def load_recovery(root):
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
         "BadRequest": type("BadRequest", (Exception,), {}),
         "_vocal_clip_background_jobs": set(),
+        "_music_video_progress_event": asyncio.Event,
+        "_music_video_progress_task": asyncio.create_task,
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
         "log": SimpleNamespace(exception=lambda *args: None),
     }
@@ -134,7 +136,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 "_concat_video_segment_files_sync": lambda paths, _duration, out: (Path(out).write_bytes(b"joined") and out),
                 "_mux_video_audio_files_sync": lambda _v, _a, _d, out: (Path(out).write_bytes(b"\x00\x00\x00\x18ftyp" + b"m" * 4096) and out),
                 "_reply_video_bytes": result,
-                "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for),
+                "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for, Event=asyncio.Event, create_task=asyncio.create_task, TimeoutError=asyncio.TimeoutError, CancelledError=asyncio.CancelledError),
             })
             update = SimpleNamespace(
                 effective_message=SimpleNamespace(reply_text=reply_text),
@@ -195,7 +197,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 "_concat_video_segments_sync": lambda segs, *_: segs[0],
                 "_mux_video_audio_sync": lambda *_: b"\x00\x00\x00\x18ftyp" + b"m" * 4096,
                 "_reply_video_bytes": failed_send,
-                "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for),
+                "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for, Event=asyncio.Event, create_task=asyncio.create_task, TimeoutError=asyncio.TimeoutError, CancelledError=asyncio.CancelledError),
                 "InlineKeyboardButton": lambda text, callback_data: SimpleNamespace(text=text, callback_data=callback_data),
                 "InlineKeyboardMarkup": lambda rows: SimpleNamespace(rows=rows),
             })
