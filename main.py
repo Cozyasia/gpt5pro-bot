@@ -8303,10 +8303,12 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
     attempts = []
     if FFMPEG_MUX_COPY_FIRST and source_size <= max_bytes:
         attempts.append(("copy-first", [], "copy"))
-    attempts.extend([
-        ("compact-720p", [f"scale=-2:{int(FFMPEG_MUX_SCALE_HEIGHT or 720)},fps={int(FFMPEG_MUX_FPS or 24)}"], "compact"),
-        ("small-540p", ["scale=-2:540,fps=20"], "small"),
-    ])
+    # Keep 4K delivery dimensions; meet Telegram upload ceiling with bitrate, not 720p downscaling.
+    audio_bps = 128000
+    target_video_bps = max(1800000, int((max_bytes * 8 * 0.90) / max(5, target_duration_s) - audio_bps))
+    target_video_k = max(1800, target_video_bps // 1000)
+    scale_4k = r"scale=if(gt(a\,1)\,3840\,-2):if(gt(a\,1)\,-2\,3840),fps=24"
+    attempts.extend([("delivery-4k", [scale_4k], "4k")])
     for name, vf, mode in attempts:
         tmp_out = output_path + "." + name + ".mp4"
         cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
@@ -8314,13 +8316,12 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
                "-map", "0:v:0", "-map", "1:a:0"]
         if mode == "copy":
             cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
-        elif mode == "compact":
+        elif mode == "4k":
             cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
-                    "-crf", str(FFMPEG_MUX_CRF or "32"), "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+                    "-b:v", f"{target_video_k}k", "-maxrate", f"{target_video_k}k", "-bufsize", f"{target_video_k * 2}k",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
         else:
-            cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35",
-                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k"]
+            raise RuntimeError(f"unknown mux mode: {mode}")
         cmd += ["-shortest", "-movflags", "+faststart", tmp_out]
         left = max(20, timeout_s - int(time.time() - started))
         log.info("ffmpeg file mux attempt=%s video=%s duration=%s max_bytes=%s timeout_left=%s",
@@ -8554,12 +8555,12 @@ def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
 
 def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
     """Split a director brief into scene-local action contracts instead of repeating the whole story."""
-    text = re.sub(r"\\s+", " ", (base_prompt or "").strip())
+    text = re.sub(r"\s+", " ", (base_prompt or "").strip())
     if not text:
         return ["Continue the requested action naturally."] * max(1, scene_count)
     # Sentence-level chronological allocation is deterministic and keeps future actions
     # out of early Kling prompts. Identity/global constraints remain in the master lock.
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\\s+", text) if s.strip()]
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
     action = [s for s in sentences if not re.search(
         r"(identity lock|критически важно|сохранять форму|face_front|face_3q|body_full|не менять лицо|"
         r"максимальн.*фотореал|движения естествен|никаких телепортац|каждая следующая часть|"
@@ -9391,7 +9392,7 @@ async def _run_comet_music_video_identity_keyframe(
         "Any pose, held object, gaze direction, body orientation, door/object state, or composition from SCENE_REFERENCE that conflicts with the first requested action "
         "must transition toward the user's requested state rather than being frozen merely because it appears in the reference. "
         "Do not invent scenario-specific actions or props that the user did not request. "
-        "If CONTINUITY_FRAME is present, preserve its environment, wardrobe, prop positions and completed-action state, but repair identity from FACE_FRONT/FACE_3Q. "
+        "If CONTINUITY_FRAME is present, use it as the immutable geometric base and make only a minimal protagonist identity correction. Never collage references, paste a floating head/body, duplicate the protagonist, detach limbs, or move/replace/recompose the vehicle, architecture, supporting characters or persistent props. Preserve its exact camera viewpoint and completed-action state. If clean identity correction would damage geometry, preserve CONTINUITY_FRAME geometry rather than inventing a composite. "
         "Build the exact START STATE for the next scene contract; supporting characters must remain in their explicitly stated position and role. "
         f"Director brief — execute literally: {(video_brief or '')[:1800]}"
     )}]
