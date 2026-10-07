@@ -55,3 +55,16 @@ def test_identity_lock_survives_each_segment():
     assert "IDENTITY LOCK" in block
     assert "match the Character Identity Pack person, not a lookalike" in block
     assert "continuation frame controls pose/action continuity" in block
+
+
+class TestMemorySafeFinalize(unittest.TestCase):
+    def test_long_finalize_spills_segments_and_muxes_files(self):
+        src = pathlib.Path("main.py").read_text(encoding="utf-8")
+        self.assertIn("def _mux_video_audio_files_sync", src)
+        self.assertIn("def _concat_video_segment_files_sync", src)
+        self.assertIn("segments.clear()", src)
+        self.assertIn("subprocess.DEVNULL", src)
+        self.assertIn("source_size <= max_bytes", src)
+        block = src[src.index('await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")'):]
+        self.assertIn("_mux_video_audio_files_sync", block)
+        self.assertNotIn("_mux_video_audio_sync, joined, safe_audio", block[:5000])
