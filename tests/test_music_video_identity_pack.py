@@ -108,3 +108,13 @@ def test_audio_review_rejects_stale_tokens_and_regenerate_replaces_pending_token
     assert 'if pending_token != token:' in source
     assert 'context.user_data["music_video_pending_audio_token"] = new_token' in source
     assert 'context.user_data.pop("vocal_source_token", None)' in source
+
+
+def test_keyframe_action_priming_is_scenario_agnostic():
+    source = MAIN.read_text(encoding="utf-8")
+    fn = source[source.index("async def _run_comet_music_video_identity_keyframe"):source.index("async def _start_vocal_clip")]
+    assert "FIRST ACTIONABLE STATE" in fn
+    assert "pose, held object, gaze direction, body orientation" in fn
+    assert "Do not invent scenario-specific actions or props" in fn
+    assert "phone already being lowered" not in fn
+    assert "elevator doors already opening" not in fn
