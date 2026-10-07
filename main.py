@@ -8542,26 +8542,49 @@ def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
     return {"mode": "group", "female": female, "male": male, "duet": duet}
 
 
+def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
+    """Split a director brief into scene-local action contracts instead of repeating the whole story."""
+    text = re.sub(r"\\s+", " ", (base_prompt or "").strip())
+    if not text:
+        return ["Continue the requested action naturally."] * max(1, scene_count)
+    # Sentence-level chronological allocation is deterministic and keeps future actions
+    # out of early Kling prompts. Identity/global constraints remain in the master lock.
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\\s+", text) if s.strip()]
+    action = [s for s in sentences if not re.search(
+        r"(identity lock|критически важно|сохранять форму|face_front|face_3q|body_full|не менять лицо|"
+        r"максимальн.*фотореал|движения естествен|никаких телепортац|каждая следующая часть|"
+        r"если .*вокал|губы|subtitles|watermark)", s, re.I)]
+    if not action:
+        action = sentences or [text]
+    n = max(1, int(scene_count))
+    out = []
+    for i in range(n):
+        a = int(round(i * len(action) / n))
+        b = int(round((i + 1) * len(action) / n))
+        chunk = action[a:max(a + 1, b)]
+        out.append(" ".join(chunk)[:1050])
+    return out
+
+
 def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, scene_count: int) -> str:
-    """Build one chronological segment without inventing scene-specific actions."""
+    """Build a stateful scene-local contract: protagonist, start/action/end state and forbidden transitions."""
     mode = role_plan.get("mode")
-    if mode == "mixed_duet":
-        role = "preserve the singer/duet roles explicitly requested by the user"
-    elif mode == "solo":
-        role = "single lead performer"
-    else:
-        role = "preserve only performer roles explicitly requested by the user"
-    start_pct = int(round((scene_idx - 1) * 100 / max(1, scene_count)))
-    end_pct = int(round(scene_idx * 100 / max(1, scene_count)))
+    role = "single lead protagonist" if mode == "solo" else "preserve only performer roles explicitly requested by the user"
+    beats = _music_video_story_beats(base_prompt, scene_count)
+    beat = beats[min(max(0, scene_idx - 1), len(beats) - 1)]
+    previous = beats[scene_idx - 2] if scene_idx > 1 else "the supplied starting keyframe"
     return (
-        f"MASTER USER VIDEO DIRECTION: {(base_prompt or '')[:1500]} "
-        f"SEGMENT {scene_idx}/{scene_count}: execute only the chronological {start_pct}%–{end_pct}% portion "
-        "of that master direction. Continue from the exact action state reached by the preceding segment; "
-        "do not restart the story, return to the initial pose, or invent unrelated performance actions. "
-        f"Performer metadata: {role}. "
-        "Preserve exact identity, apparent age, facial geometry, hair, body proportions, wardrobe and persistent props. "
-        "Preserve spatial direction, environment state, lighting continuity and camera trajectory across the cut. "
-        "Keep mouth neutral unless lip-sync is explicitly active. No subtitles or text overlays."
+        f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist; camera narrative priority stays on this person. "
+        f"START STATE: continue exactly from the physical end state of {previous[:420]}. "
+        f"REQUIRED ACTION CONTRACT FOR THIS SCENE ONLY: {beat} "
+        "END STATE: finish at the last physical state implied by this scene contract, ready for the next scene. "
+        "FORBIDDEN TRANSITIONS: do not execute actions belonging to later scenes; do not make a supporting character become the protagonist; "
+        "do not make a seated/waiting supporting character stand, walk, drive, swap seats or leave their stated position unless THIS scene explicitly requires it; "
+        "do not teleport people or props, duplicate them, reset poses, reverse completed actions, change wardrobe, vehicle geometry, environment or persistent objects. "
+        f"ROLE: {role}. IDENTITY AUTHORITY: FACE_FRONT=current frontal face, FACE_3Q=current turned-face geometry, BODY_FULL=current body. "
+        "The continuation image controls world/pose continuity only and NEVER overrides identity. "
+        "Preserve exact apparent age, facial geometry, hair, body proportions and wardrobe. "
+        "Natural physically plausible motion and premium photorealistic cinematic camera. Keep mouth neutral unless lip-sync is explicitly active. No text overlays."
     )
 
 
@@ -8938,10 +8961,18 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         last_frame = await asyncio.to_thread(_extract_last_video_frame_sync, scene_video)
                         if not last_frame:
                             raise RuntimeError(f"Не удалось получить continuation frame после сцены {idx}.")
-                        continuation_bytes = last_frame
+                        # Re-anchor every scene to the real Character Identity Pack while retaining
+                        # the previous frame only as world/action continuity. This prevents synthetic
+                        # generation loss and stops a supporting character from hijacking the next scene.
+                        next_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx + 1, scene_count)
+                        reanchored = await synth_fn(
+                            refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"],
+                            next_prompt, continuity_frame=last_frame,
+                        )
+                        continuation_bytes = reanchored or last_frame
                         continuation_url = await _upload_bytes_to_telegram_file_url(
-                            update, context, last_frame, f"music_video_continuation_{idx:02d}.jpg",
-                            f"🔗 Continuity frame {idx}/{scene_count - 1} подготовлен.",
+                            update, context, continuation_bytes, f"music_video_continuation_{idx:02d}.jpg",
+                            f"🧬 Identity + continuity re-anchor {idx}/{scene_count - 1} подготовлен.",
                         )
                         if not continuation_url.startswith("https://"):
                             raise RuntimeError(f"Не удалось получить HTTPS continuation frame после сцены {idx}.")
@@ -9319,7 +9350,8 @@ def _extract_image_b64_from_gemini(obj) -> str:
 
 
 async def _run_comet_music_video_identity_keyframe(
-    face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes, video_brief: str
+    face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes, video_brief: str,
+    continuity_frame: bytes | None = None,
 ) -> bytes | None:
     """Synthesize one scene keyframe from four real image parts; no fake multi-reference UX."""
     if not COMET_API_KEY:
@@ -9330,6 +9362,8 @@ async def _run_comet_music_video_identity_keyframe(
         ("BODY_FULL", body_full),
         ("SCENE_REFERENCE", scene_reference),
     ]
+    if continuity_frame:
+        refs.append(("CONTINUITY_FRAME", continuity_frame))
     parts = [{"text": (
         "Create ONE photorealistic starting scene keyframe. The first three identity images and the scene image show the SAME PERSON at different times. "
         "FACE_FRONT and FACE_3Q are CURRENT photos and are the ABSOLUTE authority for the person's CURRENT FACE and hair. "
@@ -9344,6 +9378,8 @@ async def _run_comet_music_video_identity_keyframe(
         "Any pose, held object, gaze direction, body orientation, door/object state, or composition from SCENE_REFERENCE that conflicts with the first requested action "
         "must transition toward the user's requested state rather than being frozen merely because it appears in the reference. "
         "Do not invent scenario-specific actions or props that the user did not request. "
+        "If CONTINUITY_FRAME is present, preserve its environment, wardrobe, prop positions and completed-action state, but repair identity from FACE_FRONT/FACE_3Q. "
+        "Build the exact START STATE for the next scene contract; supporting characters must remain in their explicitly stated position and role. "
         f"Director brief — execute literally: {(video_brief or '')[:1800]}"
     )}]
     for label, raw in refs:
