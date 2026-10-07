@@ -3846,6 +3846,10 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         )
         return False
     combined = _music_video_join_briefs(music_brief, video_brief)
+    # A new draft is a new audio review transaction. Never inherit an approved token
+    # from a previous clip/test; explicit saved-song selection happens through its own action.
+    context.user_data.pop("vocal_source_token", None)
+    context.user_data.pop("music_video_pending_audio_token", None)
     pack_fn = globals().get("_music_video_identity_pack")
     complete_fn = globals().get("_music_video_identity_complete")
     if callable(pack_fn) and callable(complete_fn):
@@ -7866,12 +7870,12 @@ def _photo_clip_prompt(user_prompt: str, base_seconds: int = 10) -> str:
     if not user_prompt:
         user_prompt = "энергичный музыкальный клип, герой в кадре, плавное движение камеры, cinematic, social media, high quality"
     return (
-        "Create ONLY the visual part of a short cinematic music-video style clip from this person photo. "
-        "Keep the same identity and face, avoid deformation, natural body/head motion, dynamic but clean camera, premium lighting. "
-        "Do not create subtitles, do not add text overlays, do not add fake logos. "
-        f"Base visual duration requested from provider: {base_seconds} seconds. "
-        "Music/audio will be added separately in post-production, so focus on visual motion only. "
-        "User direction: " + user_prompt[:600]
+        "USER ACTION/DIRECTOR DIRECTION — execute this literally and chronologically; do not replace it with dancing or posing: "
+        + user_prompt[:2200] +
+        " Create ONLY the visual part of a short cinematic music-video clip. "
+        "Keep the same identity and face, avoid deformation, natural body/head motion and physically plausible locomotion. "
+        "Do not create subtitles, text overlays or fake logos. "
+        f" Provider duration: {base_seconds} seconds. Audio is added separately. "
     )
 
 
@@ -8135,20 +8139,13 @@ async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | No
         r"(?:инструментал|instrumental|без вокала|без голоса).{0,50}(?:только|полностью|целиком|whole|entire)",
         brief, re.I | re.S
     ))
-    # Suno must receive a production-oriented song contract, not a loose video description.
-    # The user's requested genre/language/vocal are repeated explicitly because provider
-    # auto-prompting can otherwise drift into instrumental/electronic material.
-    strict_brief = (
-        "FOLLOW THESE SONG REQUIREMENTS STRICTLY. Create a complete SONG, not background music. "
-        "Obey the requested genre, language, vocal gender/type, subject and mood. "
-        "If vocals are requested, vocals and intelligible lyrics in the requested language are mandatory; "
-        "do not return an instrumental track. Do not silently replace rap/hip-hop with house, EDM or electronic instrumental. "
-        "A request for a short instrumental intro means only the intro is instrumental; vocals must enter afterward. "
-        f"USER SONG BRIEF: {brief}"
-    )
-    base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": strict_brief, "make_instrumental": instrumental}
+    # IMPORTANT: keep music-video Suno submission identical to the proven standalone
+    # "Свободный запрос" Inspiration Mode. Do not wrap/rewrite a good user brief and do
+    # not send make_instrumental=False: Comet/Suno receives only mv + the user's own
+    # gpt_description_prompt unless the WHOLE track was explicitly requested instrumental.
+    base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": brief}
     if instrumental:
-        base_payload.update({"prompt": ""})
+        base_payload.update({"prompt": "", "make_instrumental": True})
     status_paths = [SUNO_STATUS_PATH, "/suno/fetch/{id}", "/suno/v1/music/{id}", "/api/v1/task/{id}", "/v1/tasks/{id}"]
     async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
         last_err = ""
@@ -8391,14 +8388,13 @@ def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, 
     else:
         role = "group performance; follow only the singer roles explicitly stated by the user"
     return (
-        f"Scene {scene_idx}/{scene_count}. Vocal role for this scene: {role}. "
-        "Preserve every person's exact identity, age, face, hair and clothing. "
-        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT. Follow the user's actions chronologically and literally. "
-        "Do not dance, sway in place, pose, bounce, loop gestures, clap, high-five, or substitute rhythmic movement for requested locomotion. "
-        "If the brief says doors open and the person exits, the doors must open first and the person must physically cross the elevator threshold and continue walking. "
-        "Camera movement must follow the requested order; do not keep the subject trapped in the starting location. "
-        "Keep the mouth neutral when not explicitly lip-syncing. Avoid identity swaps, face morphing, extreme head rotation and subtitles. "
-        f"MANDATORY USER VIDEO DIRECTION: {(base_prompt or '')[:1200]}"
+        f"MANDATORY USER VIDEO DIRECTION — execute literally, in order: {(base_prompt or '')[:1600]} "
+        f"Scene {scene_idx}/{scene_count}. Vocal role metadata: {role}. "
+        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT. "
+        "Do not dance, sway in place, pose, bounce or loop gestures instead of the requested locomotion. "
+        "If doors must open and the person must exit, open them immediately and make the person physically cross the threshold early enough to complete the remaining actions. "
+        "Follow the requested camera movement order and destination. Preserve exact identity, age, face, hair and clothing. "
+        "Keep mouth neutral unless lip-sync is explicitly active. No subtitles."
     )
 
 
@@ -8526,6 +8522,12 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
         return
     if kind == "approveaudio":
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        if pending_token != token:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            await q.message.reply_text("⚠️ Этот вариант уже не является текущим. Подтвердите последнее сгенерированное аудио.")
+            return
         context.user_data["vocal_source_token"] = token
         with contextlib.suppress(BadRequest):
             await q.answer("Аудио подтверждено")
@@ -8538,6 +8540,8 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         await _start_vocal_clip(update, context, keyframe, prompt)
         return
     if kind == "regenaudio":
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data.pop("music_video_pending_audio_token", None)
         with contextlib.suppress(BadRequest):
             await q.answer("Генерирую другой вариант")
         brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
@@ -8550,6 +8554,7 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
             await q.message.reply_text("❌ Suno не вернул новый вариант. Старое аудио остаётся доступным.")
             return
         new_token = uuid.uuid4().hex[:12]
+        context.user_data["music_video_pending_audio_token"] = new_token
         await asyncio.to_thread(_save_vocal_artifact, user_id, new_token, "audio", fresh)
         await _send_vocal_song_file(q.message, fresh, new_token)
         await q.message.reply_text(
@@ -8698,6 +8703,7 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 # clip after approval without asking the user to re-enter the brief.
                 context.user_data["music_video_pending_prompt"] = prompt
                 context.user_data["music_video_pending_music_brief"] = music_brief
+                context.user_data["music_video_pending_audio_token"] = song_token
                 context.user_data["music_video_pending_keyframe"] = img_bytes
                 context.user_data["music_video_pending_keyframe_url"] = locals().get("keyframe_url", "")
                 await update.effective_message.reply_text(
@@ -9096,9 +9102,12 @@ async def _run_comet_music_video_identity_keyframe(
         "Render the body slightly fuller when needed to be consistent with the current portrait references, while preserving scene clothing and tattoos. "
         "Preserve current age, face shape, eyes, nose, lips, chin, hairline and hairstyle exactly from FACE_FRONT/FACE_3Q. "
         "No beautification, no face redesign, no identity blending, no text, no watermark. "
-        "If the scene begins as a mirror/selfie shot with a phone, keep the phone physically present in the starting keyframe; "
-        "the video action will lower it and put it in a pocket. "
-        f"Director brief: {(video_brief or '')[:1200]}"
+        "CRITICAL ACTION PRIMING: SCENE_REFERENCE is not a pose lock. Infer the FIRST ACTIONABLE STATE from the user's director brief "
+        "and build the keyframe at the beginning of that state. Preserve reference appearance/environment only where it does not conflict with the requested action. "
+        "Any pose, held object, gaze direction, body orientation, door/object state, or composition from SCENE_REFERENCE that conflicts with the first requested action "
+        "must transition toward the user's requested state rather than being frozen merely because it appears in the reference. "
+        "Do not invent scenario-specific actions or props that the user did not request. "
+        f"Director brief — execute literally: {(video_brief or '')[:1800]}"
     )}]
     for label, raw in refs:
         b64, mime = _prepare_reference_image_for_gemini(raw, AI_SELFIE_MAX_SIDE)
