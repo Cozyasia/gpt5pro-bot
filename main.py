@@ -8104,9 +8104,14 @@ async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s
     if not image_ref.startswith("https://"):
         image_ref = f"data:{sniff_image_mime(img_bytes)};base64,{base64.b64encode(img_bytes).decode('ascii')}"
     base_duration = str(_duration_for_engine("kling", min(10, duration_s)))
+    kling_prompt = _photo_clip_prompt(prompt, int(base_duration))
+    # Provider hard limit is 2500 characters. The literal user direction is deliberately
+    # first, so a safety trim removes generic tail constraints rather than the requested action.
+    if len(kling_prompt) > 2480:
+        kling_prompt = kling_prompt[:2476].rstrip() + "..."
     payload = {
         "image": image_ref,
-        "prompt": _photo_clip_prompt(prompt, int(base_duration)),
+        "prompt": kling_prompt,
         "model_name": KLING_MODEL,
         "model": KLING_MODEL,
         "mode": PHOTO_CLIP_MODE,
@@ -8493,6 +8498,7 @@ def _vocal_song_kb(token: str, *, pending: bool = False) -> InlineKeyboardMarkup
         rows.extend([
             [InlineKeyboardButton("✅ Подтвердить это аудио", callback_data=f"mvfile:approveaudio:{token}")],
             [InlineKeyboardButton("🔄 Сгенерировать другое аудио", callback_data=f"mvfile:regenaudio:{token}")],
+            [InlineKeyboardButton("✏️ Изменить промпт аудио", callback_data=f"mvfile:editaudio:{token}")],
         ])
     else:
         rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
@@ -8512,7 +8518,7 @@ async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
 async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     parts = (q.data or "").split(":")
-    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio"):
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio"):
         await q.answer("Неизвестное действие")
         return
     kind, token, user_id = parts[1], parts[2], q.from_user.id
@@ -8538,6 +8544,22 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
             return
         await q.message.reply_text("✅ Аудио подтверждено. Продолжаю этот же клип — запускаю видеогенерацию.")
         await _start_vocal_clip(update, context, keyframe, prompt)
+        return
+    if kind == "editaudio":
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        if pending_token != token:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            return
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data["awaiting_music_video_audio_prompt_edit"] = True
+        with contextlib.suppress(BadRequest):
+            await q.answer("Жду новый промпт")
+        old_brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        await q.message.reply_text(
+            "✏️ Отправьте новый промпт для песни целиком. Можно дополнить старую идею или полностью переписать её.\n\n"
+            "Текущий промпт:\n" + old_brief[:3000]
+        )
         return
     if kind == "regenaudio":
         context.user_data.pop("vocal_source_token", None)
@@ -14971,6 +14993,31 @@ async def on_text(
         await _generate_business_logo(update, context, text)
         return
 
+    if context.user_data.get("awaiting_music_video_audio_prompt_edit"):
+        context.user_data.pop("awaiting_music_video_audio_prompt_edit", None)
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data.pop("music_video_pending_audio_token", None)
+        new_brief = text.strip()
+        if not new_brief:
+            await update.effective_message.reply_text("Промпт пустой. Нажмите «✏️ Изменить промпт аудио» ещё раз.")
+            return
+        context.user_data["music_video_pending_music_brief"] = new_brief
+        pending_prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
+        if pending_prompt:
+            _, pending_video = _music_video_split_briefs(pending_prompt)
+            context.user_data["music_video_pending_prompt"] = _music_video_join_briefs(new_brief, pending_video)
+        await update.effective_message.reply_text("✏️ Промпт обновлён. Генерирую новый вариант Suno; видео пока не запускаю.")
+        fresh = await _run_suno_music_result_bytes(update, new_brief)
+        if not fresh:
+            await update.effective_message.reply_text("❌ Suno не вернул новый вариант. Попробуйте изменить промпт ещё раз.")
+            return
+        new_token = uuid.uuid4().hex[:12]
+        context.user_data["music_video_pending_audio_token"] = new_token
+        await asyncio.to_thread(_save_vocal_artifact, update.effective_user.id, new_token, "audio", fresh)
+        await _send_vocal_song_file(update.effective_message, fresh, new_token)
+        await update.effective_message.reply_text("🎧 Проверьте новый вариант.", reply_markup=_vocal_song_kb(new_token, pending=True))
+        return
+
     if context.user_data.get("awaiting_suno_brief"):
         context.user_data.pop("awaiting_suno_brief", None)
         _mode_track_set(update.effective_user.id, "suno_music")
@@ -16503,7 +16550,7 @@ def build_application() -> "Application":
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite):[0-9a-f]{12}$"), group=0)
-    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio):[0-9a-f]{12}$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio|editaudio):[0-9a-f]{12}$"), group=0)
 
     # 2b) Старые school:/work: callbacks, если такие кнопки ещё где-то используются
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)
