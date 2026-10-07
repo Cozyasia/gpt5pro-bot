@@ -1,5 +1,6 @@
 from pathlib import Path
 import ast
+import unittest
 
 SRC = Path(__file__).resolve().parents[1] / "main.py"
 TEXT = SRC.read_text(encoding="utf-8")
@@ -59,7 +60,7 @@ def test_identity_lock_survives_each_segment():
 
 class TestMemorySafeFinalize(unittest.TestCase):
     def test_long_finalize_spills_segments_and_muxes_files(self):
-        src = pathlib.Path("main.py").read_text(encoding="utf-8")
+        src = SRC.read_text(encoding="utf-8")
         self.assertIn("def _mux_video_audio_files_sync", src)
         self.assertIn("def _concat_video_segment_files_sync", src)
         self.assertIn("segments.clear()", src)
