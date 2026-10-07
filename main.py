@@ -3833,6 +3833,18 @@ def _music_video_review_text(prompt: str) -> str:
         f"🎞 РЕЖИССЁРСКАЯ РАЗБИВКА\n{plan}{note}"
     )[:4000]
 
+def _music_video_replace_duration_field(video_brief: str, seconds: int) -> str:
+    """Replace only the explicit clip-duration field; preserve scene/action timings."""
+    text = (video_brief or "").strip()
+    text = re.sub(
+        r"(?im)^\\s*(?:длительность\\s+(?:клипа|видео)|(?:clip|video)\\s+duration)\\s*[:—-]?\\s*"
+        r"\\d+(?:[.,]\\d+)?\\s*(?:сек\\w*|seconds?|s|мин\\w*|minutes?|min)\\s*[.!]?\\s*$",
+        "",
+        text,
+    ).strip()
+    return f"Длительность клипа: {int(seconds)} секунд.\\n{text}".strip()
+
+
 async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = "", *, music_brief: str | None = None, video_brief: str | None = None) -> bool:
     """Stage a structured draft. Music and video instructions are deliberately isolated."""
     if music_brief is None or video_brief is None:
@@ -3911,8 +3923,7 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         music_brief, video_brief = _music_video_split_briefs(draft["prompt"])
         # Duration buttons are authoritative. Strip old duration declarations with a
         # real regex (the previous raw string was double-escaped and silently failed).
-        video_brief = re.sub(r"\b(?:длительность\s+(?:клипа|видео)\s*[:—-]?\s*)?\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|seconds?|s)\b", "", video_brief, flags=re.I).strip()
-        video_brief = f"Длительность клипа: {seconds} секунд.\n{video_brief}".strip()
+        video_brief = _music_video_replace_duration_field(video_brief, seconds)
         draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
         draft["duration"] = seconds
         context.user_data["music_video_draft"] = draft
@@ -3978,8 +3989,7 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     prompt = draft["prompt"]
     seconds = int(draft.get("duration") or _photo_clip_target_duration(prompt))
     music_brief, video_brief = _music_video_split_briefs(prompt)
-    video_brief = re.sub(r"\b(?:длительность\s+(?:клипа|видео)\s*[:—-]?\s*)?\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|seconds?|s)\b", "", video_brief, flags=re.I).strip()
-    prompt = _music_video_join_briefs(music_brief, f"Длительность клипа: {seconds} секунд.\n{video_brief}")
+    video_brief = _music_video_replace_duration_field(video_brief, seconds)\n    prompt = _music_video_join_briefs(music_brief, video_brief)
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
     context.user_data.pop("music_video_draft", None)
     context.user_data.pop("music_video_draft_edit", None)
