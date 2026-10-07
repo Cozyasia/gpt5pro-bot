@@ -49,13 +49,12 @@ class VocalClipStagingTests(unittest.TestCase):
         self.assertEqual(4.75, estimate(6))
         self.assertEqual(6.70, estimate(9))
 
-    def test_long_vocal_request_is_rejected_before_billing_or_provider_call(self):
+    def test_long_vocal_request_enters_scaled_billing_path(self):
         env = load_entry_points()
-        messages = []
         billed = []
 
-        async def reply_text(message, **_kwargs):
-            messages.append(message)
+        async def reply_text(_message, **_kwargs):
+            pass
 
         async def try_pay(*args, **kwargs):
             billed.append((args, kwargs))
@@ -69,10 +68,9 @@ class VocalClipStagingTests(unittest.TestCase):
 
         asyncio.run(env["_start_vocal_clip"](update, context, b"photo", "Дуэт, 60 секунд"))
 
-        self.assertEqual([], billed)
-        self.assertEqual(1, len(messages))
-        self.assertIn("60", messages[0])
-        self.assertIn("10", messages[0])
+        self.assertEqual(1, len(billed))
+        self.assertEqual(6, billed[0][1]["remember_payload"]["scenes"])
+        self.assertEqual(4.75, billed[0][0][4])
 
     def test_short_vocal_request_keeps_one_scene_billing_path(self):
         env = load_entry_points()

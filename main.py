@@ -3741,6 +3741,10 @@ def _music_video_aspect(prompt: str) -> str:
 
 def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⏱ 10 сек", callback_data=f"mv:dur10:{token}"),
+         InlineKeyboardButton("30 сек", callback_data=f"mv:dur30:{token}"),
+         InlineKeyboardButton("60 сек", callback_data=f"mv:dur60:{token}"),
+         InlineKeyboardButton("90 сек", callback_data=f"mv:dur90:{token}")],
         [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
         [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
         [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
@@ -3815,9 +3819,9 @@ def _music_video_review_text(prompt: str) -> str:
     vocal = _clip_wants_vocals(music_brief)
     plan = _music_video_director_plan(video_brief, duration, scenes)
     note = (
-        f"\n\n⚠️ Вокальный клип на {duration} секунд пока недоступен: сначала проверяем одну сцену "
-        f"до {scene_s} секунд. Для теста задайте длительность {scene_s} секунд. Кредиты не списываются до запуска."
-        if vocal and scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
+        f"\n\n🎞 Длинный клип будет собран из {scenes} последовательных cinematic-сцен по ~{scene_s} секунд "
+        "с единым Character Identity Pack и continuity между сценами."
+        if scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
     )
     return (
         "🎬 Сценарий AI-видеоклипа на утверждение\n\n"
@@ -3899,6 +3903,16 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         await q.answer("Сценарий устарел")
         return
     action = parts[1]
+    if action in ("dur10", "dur30", "dur60", "dur90"):
+        seconds = int(action[3:])
+        music_brief, video_brief = _music_video_split_briefs(draft["prompt"])
+        video_brief = re.sub(r"\\b\\d{1,3}(?:[.,]\\d+)?\\s*(?:сек\\w*|s|seconds?|мин\\w*|minutes?|min)\\b", "", video_brief, flags=re.I).strip()
+        video_brief = f"Длительность клипа: {seconds} секунд.\\n{video_brief}".strip()
+        draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+        context.user_data["music_video_draft"] = draft
+        await q.answer(f"{seconds} секунд")
+        await q.message.reply_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+        return
     if action in ("augment", "rewrite"):
         context.user_data["music_video_draft_edit"] = action
         await q.answer("Жду текст")
@@ -3930,16 +3944,6 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         await q.message.reply_text("Фото для сценария изменилось. Пришлите описание клипа ещё раз, чтобы утвердить его с новым фото.")
         return
     prompt = draft["prompt"]
-    scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
-    if _clip_wants_vocals(prompt) and _photo_clip_target_duration(prompt) > scene_s:
-        await q.answer("Пока доступно до 10 секунд")
-        await q.message.reply_text(
-            f"⚠️ Генерация не запущена: длинный вокальный клип пока проверяется. "
-            f"Ждать или повторно нажимать «Утверждаю» не нужно. "
-            f"Сценарий сохранён. Для теста нажмите «Дополнить», напишите «{scene_s} секунд», "
-            "затем утвердите обновлённый сценарий. Кредиты не списаны."
-        )
-        return
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
     context.user_data.pop("music_video_draft", None)
     context.user_data.pop("music_video_draft_edit", None)
@@ -7923,6 +7927,28 @@ def _music_video_scene_prompts(user_prompt: str, target_duration: int) -> list[s
     return out
 
 
+def _extract_last_video_frame_sync(video_bytes: bytes) -> bytes | None:
+    """Extract a JPEG continuation frame from a completed Kling segment."""
+    if not video_bytes:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    try:
+        with tempfile.TemporaryDirectory(prefix="neyro_continuity_") as td:
+            src = os.path.join(td, "segment.mp4")
+            out = os.path.join(td, "last.jpg")
+            with open(src, "wb") as fh:
+                fh.write(video_bytes)
+            cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-sseof", "-0.08", "-i", src,
+                   "-frames:v", "1", "-q:v", "2", out]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                with open(out, "rb") as fh:
+                    return fh.read()
+    except Exception as exc:
+        log.warning("continuation frame extraction failed: %s", exc)
+    return None
+
+
 def _concat_video_segments_sync(segments: list[bytes], target_duration: int) -> bytes | None:
     if not segments:
         return None
@@ -8380,26 +8406,25 @@ def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
 
 
 def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, scene_count: int) -> str:
+    """Build one chronological segment without inventing scene-specific actions."""
     mode = role_plan.get("mode")
     if mode == "mixed_duet":
-        cycle = ("female lead: woman sings the female-vocal lines; man reacts naturally",
-                 "male lead: man sings the male-vocal lines; woman reacts naturally",
-                 "duet/chorus: both performers sing together") if role_plan.get("duet") else (
-                 "female lead: woman sings the female-vocal lines; man reacts naturally",
-                 "male lead: man sings the male-vocal lines; woman reacts naturally")
-        role = cycle[(scene_idx - 1) % len(cycle)]
+        role = "preserve the singer/duet roles explicitly requested by the user"
     elif mode == "solo":
-        role = "solo lead performer sings to camera"
+        role = "single lead performer"
     else:
-        role = "group performance; follow only the singer roles explicitly stated by the user"
+        role = "preserve only performer roles explicitly requested by the user"
+    start_pct = int(round((scene_idx - 1) * 100 / max(1, scene_count)))
+    end_pct = int(round(scene_idx * 100 / max(1, scene_count)))
     return (
-        f"MANDATORY USER VIDEO DIRECTION — execute literally, in order: {(base_prompt or '')[:1600]} "
-        f"Scene {scene_idx}/{scene_count}. Vocal role metadata: {role}. "
-        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT. "
-        "Do not dance, sway in place, pose, bounce or loop gestures instead of the requested locomotion. "
-        "If doors must open and the person must exit, open them immediately and make the person physically cross the threshold early enough to complete the remaining actions. "
-        "Follow the requested camera movement order and destination. Preserve exact identity, age, face, hair and clothing. "
-        "Keep mouth neutral unless lip-sync is explicitly active. No subtitles."
+        f"MASTER USER VIDEO DIRECTION: {(base_prompt or '')[:1500]} "
+        f"SEGMENT {scene_idx}/{scene_count}: execute only the chronological {start_pct}%–{end_pct}% portion "
+        "of that master direction. Continue from the exact action state reached by the preceding segment; "
+        "do not restart the story, return to the initial pose, or invent unrelated performance actions. "
+        f"Performer metadata: {role}. "
+        "Preserve exact identity, apparent age, facial geometry, hair, body proportions, wardrobe and persistent props. "
+        "Preserve spatial direction, environment state, lighting continuity and camera trajectory across the cut. "
+        "Keep mouth neutral unless lip-sync is explicitly active. No subtitles or text overlays."
     )
 
 
@@ -8628,14 +8653,6 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     target_duration = _photo_clip_target_duration(prompt)
     scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
     scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
-    if scene_count > 1:
-        await update.effective_message.reply_text(
-            f"⚠️ Вокальный клип на {target_duration} секунд пока недоступен: "
-            f"проверяется сборка lip-sync сцен. Генерация не запущена, ждать не нужно. "
-            f"Сейчас можно заказать один фрагмент до {scene_s} секунд: "
-            f"укажите в сценарии «{scene_s} секунд» и утвердите его. Оплата не списана."
-        )
-        return
     role_plan = _vocal_clip_role_plan(prompt, performer_count)
     user_id = update.effective_user.id
     source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
@@ -8746,23 +8763,32 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                     "без принудительного lip-sync на весь ролик."
                 )
                 aspect = _music_video_aspect(prompt)
+                continuation_bytes, continuation_url = img_bytes, keyframe_url
                 for idx in range(1, scene_count + 1):
                     dur_s = min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
                     await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
                     scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
-                    if idx == 1:
-                        scene_prompt += (
-                            " If a phone is present because the scene starts as a mirror/selfie shot, "
-                            "the character lowers the phone, puts it into a pocket, then both hands remain free; "
-                            "the phone never appears again. "
-                        )
-                    scene_prompt += " Keep mouth neutral unless naturally speaking; do not force singing lip motion."
+                    scene_prompt += (
+                        " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
+                        "The continuation frame controls pose/action continuity but must never redefine identity."
+                    )
                     scene_video = await _run_kling_photo_clip_result(
-                        img_bytes, scene_prompt, dur_s, aspect, keyframe_url
+                        continuation_bytes, scene_prompt, dur_s, aspect, continuation_url
                     )
                     if not scene_video:
                         raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
                     segments.append(scene_video)
+                    if idx < scene_count:
+                        last_frame = await asyncio.to_thread(_extract_last_video_frame_sync, scene_video)
+                        if not last_frame:
+                            raise RuntimeError(f"Не удалось получить continuation frame после сцены {idx}.")
+                        continuation_bytes = last_frame
+                        continuation_url = await _upload_bytes_to_telegram_file_url(
+                            update, context, last_frame, f"music_video_continuation_{idx:02d}.jpg",
+                            f"🔗 Continuity frame {idx}/{scene_count - 1} подготовлен.",
+                        )
+                        if not continuation_url.startswith("https://"):
+                            raise RuntimeError(f"Не удалось получить HTTPS continuation frame после сцены {idx}.")
             else:
                 # Compatibility only for isolated legacy unit-test harnesses that intentionally execute
                 # _start_vocal_clip without the new identity helpers.
