@@ -27,7 +27,7 @@ def load_recovery(root):
     ]
     env = {
         "os": os, "re": re, "uuid": uuid, "time": time, "contextlib": contextlib,
-        "asyncio": asyncio, "hashlib": hashlib,
+        "asyncio": asyncio, "hashlib": hashlib, "tempfile": tempfile,
         "VOCAL_CLIP_ARTIFACT_DIR": str(root),
         "PHOTO_CLIP_DEFAULT_DURATION_S": 15, "PHOTO_CLIP_MAX_DURATION_S": 90,
         "PHOTO_CLIP_SCENE_SECONDS": 10, "PHOTO_CLIP_MAX_SCENES": 9,
@@ -131,8 +131,8 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 "_run_comet_music_video_identity_keyframe": lambda *_: asyncio.sleep(0, result=b"keyframe"),
                 "_music_video_aspect": lambda *_: "9:16",
                 "_run_kling_photo_clip_result": scene,
-                "_concat_video_segments_sync": lambda segs, *_: segs[0],
-                "_mux_video_audio_sync": lambda *_: b"\x00\x00\x00\x18ftyp" + b"m" * 4096,
+                "_concat_video_segment_files_sync": lambda paths, _duration, out: (Path(out).write_bytes(b"joined") and out),
+                "_mux_video_audio_files_sync": lambda _v, _a, _d, out: (Path(out).write_bytes(b"\x00\x00\x00\x18ftyp" + b"m" * 4096) and out),
                 "_reply_video_bytes": result,
                 "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for),
             })
