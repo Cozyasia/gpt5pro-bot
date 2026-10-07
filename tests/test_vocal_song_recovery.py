@@ -27,7 +27,7 @@ def load_recovery(root):
     ]
     env = {
         "os": os, "re": re, "uuid": uuid, "time": time, "contextlib": contextlib,
-        "asyncio": asyncio, "hashlib": hashlib,
+        "asyncio": asyncio, "hashlib": hashlib, "tempfile": tempfile,
         "VOCAL_CLIP_ARTIFACT_DIR": str(root),
         "PHOTO_CLIP_DEFAULT_DURATION_S": 15, "PHOTO_CLIP_MAX_DURATION_S": 90,
         "PHOTO_CLIP_SCENE_SECONDS": 10, "PHOTO_CLIP_MAX_SCENES": 9,
