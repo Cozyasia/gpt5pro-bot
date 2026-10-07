@@ -7646,13 +7646,36 @@ def _avatar_tts_voice_label(voice: str) -> str:
 async def _upload_bytes_to_telegram_file_url(update: Update, context: ContextTypes.DEFAULT_TYPE, raw: bytes, filename: str, caption: str = "") -> str:
     if not raw:
         return ""
-    bio = BytesIO(raw)
-    bio.seek(0)
-    bio.name = filename
-    sent = await update.effective_message.reply_document(
-        document=InputFile(bio),
-        caption=caption or "Файл подготовлен для генерации.",
-    )
+    sent = None
+    last_send_exc = None
+    for attempt in range(3):
+        # A timed-out multipart request may have consumed the stream. Rebuild it for
+        # every attempt so a retry always sends the complete artifact.
+        bio = BytesIO(raw)
+        bio.seek(0)
+        bio.name = filename
+        try:
+            sent = await update.effective_message.reply_document(
+                document=InputFile(bio),
+                caption=caption or "Файл подготовлен для генерации.",
+                read_timeout=60,
+                write_timeout=60,
+                connect_timeout=20,
+                pool_timeout=20,
+            )
+            break
+        except TimedOut as exc:
+            last_send_exc = exc
+            log.warning(
+                "telegram reply_document timeout filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
+            if attempt < 2:
+                await asyncio.sleep(2.0 * (attempt + 1))
+    if sent is None:
+        if last_send_exc:
+            raise last_send_exc
+        return ""
     media = getattr(sent, "document", None) or getattr(sent, "audio", None) or getattr(sent, "voice", None)
     if not media:
         return ""
@@ -8789,6 +8812,25 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         song_token = source_token or uuid.uuid4().hex[:12]
         video_token = uuid.uuid4().hex[:12]
         final_saved = False
+        heartbeat_stop = asyncio.Event()
+
+        async def _progress_heartbeat():
+            # Long provider renders can legitimately be quiet for several minutes.
+            # Keep the user informed without touching provider/billing state.
+            try:
+                while True:
+                    try:
+                        await asyncio.wait_for(heartbeat_stop.wait(), timeout=150)
+                        return
+                    except asyncio.TimeoutError:
+                        with contextlib.suppress(Exception):
+                            await update.effective_message.reply_text(
+                                "⏳ Работа продолжается, бот не завис. Генерация ещё в процессе — пожалуйста, ждите."
+                            )
+            except asyncio.CancelledError:
+                return
+
+        heartbeat_task = asyncio.create_task(_progress_heartbeat())
         try:
             if not saved_source and not (SUNO_ENABLED and SUNO_API_KEY):
                 raise RuntimeError("Для вокального AI-видеоклипа нужен SUNO_ENABLED=1 и SUNO_API_KEY/COMET_API_KEY.")
@@ -9000,6 +9042,10 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 )
             return False
         finally:
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
             _vocal_clip_background_jobs.discard(job_key)
 
     await _try_pay_then_do(
