@@ -3745,6 +3745,8 @@ def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
          InlineKeyboardButton("30 сек", callback_data=f"mv:dur30:{token}"),
          InlineKeyboardButton("60 сек", callback_data=f"mv:dur60:{token}"),
          InlineKeyboardButton("90 сек", callback_data=f"mv:dur90:{token}")],
+        [InlineKeyboardButton("✨ Сделать промпт автоматически", callback_data=f"mv:auto:{token}")],
+        [InlineKeyboardButton("🎙 По голосовому описанию", callback_data=f"mv:voice:{token}")],
         [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
         [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
         [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
@@ -3879,6 +3881,7 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         "prompt": combined, "music_brief": music_brief, "video_brief": video_brief,
         "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
         "identity_digests": {k: hashlib.sha256(v).hexdigest() for k, v in refs.items()} if refs else {},
+        "duration": _photo_clip_target_duration(combined),
     }
     with contextlib.suppress(Exception):
         _mode_track_set(update.effective_user.id, "")
@@ -3906,12 +3909,41 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     if action in ("dur10", "dur30", "dur60", "dur90"):
         seconds = int(action[3:])
         music_brief, video_brief = _music_video_split_briefs(draft["prompt"])
-        video_brief = re.sub(r"\\b\\d{1,3}(?:[.,]\\d+)?\\s*(?:сек\\w*|s|seconds?|мин\\w*|minutes?|min)\\b", "", video_brief, flags=re.I).strip()
-        video_brief = f"Длительность клипа: {seconds} секунд.\\n{video_brief}".strip()
+        # Duration buttons are authoritative. Strip old duration declarations with a
+        # real regex (the previous raw string was double-escaped and silently failed).
+        video_brief = re.sub(r"\b(?:длительность\s+(?:клипа|видео)\s*[:—-]?\s*)?\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|seconds?|s)\b", "", video_brief, flags=re.I).strip()
+        video_brief = f"Длительность клипа: {seconds} секунд.\n{video_brief}".strip()
         draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+        draft["duration"] = seconds
         context.user_data["music_video_draft"] = draft
-        await q.answer(f"{seconds} секунд")
-        await q.message.reply_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+        await q.answer(f"Выбрано: {seconds} секунд")
+        with contextlib.suppress(Exception):
+            await q.message.edit_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+        return
+    if action == "voice":
+        context.user_data["music_video_draft_edit"] = "voice_rewrite"
+        await q.answer("Жду голосовое")
+        await q.message.reply_text("🎙 Отправьте голосовое сообщение с тем, что хотите услышать и увидеть. Я превращу его в структурированный промпт и пришлю на одно утверждение.")
+        return
+    if action == "auto":
+        seconds = int(draft.get("duration") or _photo_clip_target_duration(draft["prompt"]))
+        music_brief, video_brief = _music_video_split_briefs(draft["prompt"])
+        await q.answer("Готовлю промпт")
+        generated = await ask_openai_text(
+            "Перепиши два брифа для генераторов. Сохрани все факты и намерения пользователя, ничего нового сюжетно не добавляй. "
+            f"Видео длится ровно {seconds} секунд: разбей VIDEO_BRIEF на хронологические 10-секундные блоки с явными START/END states и continuity. "
+            "MUSIC_BRIEF сделай компактным и пригодным для Suno. Верни строго [MUSIC_BRIEF] затем [VIDEO_BRIEF].\n\n"
+            + draft["prompt"],
+            user_id=q.from_user.id, chat_id=q.message.chat_id,
+            extra_system="Ты prompt-director для AI music video. Не меняй идентичность, роли, реквизит и последовательность действий пользователя."
+        )
+        if "[MUSIC_BRIEF]" in generated and "[VIDEO_BRIEF]" in generated:
+            draft["prompt"] = generated.strip()
+            draft["duration"] = seconds
+            context.user_data["music_video_draft"] = draft
+            await q.message.edit_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+        else:
+            await q.message.reply_text("Не удалось безопасно структурировать промпт. Исходный черновик сохранён.")
         return
     if action in ("augment", "rewrite"):
         context.user_data["music_video_draft_edit"] = action
@@ -3944,6 +3976,10 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         await q.message.reply_text("Фото для сценария изменилось. Пришлите описание клипа ещё раз, чтобы утвердить его с новым фото.")
         return
     prompt = draft["prompt"]
+    seconds = int(draft.get("duration") or _photo_clip_target_duration(prompt))
+    music_brief, video_brief = _music_video_split_briefs(prompt)
+    video_brief = re.sub(r"\b(?:длительность\s+(?:клипа|видео)\s*[:—-]?\s*)?\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|seconds?|s)\b", "", video_brief, flags=re.I).strip()
+    prompt = _music_video_join_briefs(music_brief, f"Длительность клипа: {seconds} секунд.\n{video_brief}")
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
     context.user_data.pop("music_video_draft", None)
     context.user_data.pop("music_video_draft_edit", None)
@@ -14952,9 +14988,23 @@ async def on_text(
     draft = context.user_data.get("music_video_draft")
     if draft:
         edit = context.user_data.get("music_video_draft_edit")
-        if edit in ("augment", "rewrite"):
-            prompt = _merge_music_video_prompt(draft["prompt"], text) if edit == "augment" else text
-            await _stage_music_video_draft(update, context, prompt)
+        if edit in ("augment", "rewrite", "voice_rewrite"):
+            if edit == "augment":
+                prompt = _merge_music_video_prompt(draft["prompt"], text)
+                await _stage_music_video_draft(update, context, prompt)
+            elif edit == "rewrite":
+                await _stage_music_video_draft(update, context, text)
+            else:
+                seconds = int(draft.get("duration") or _photo_clip_target_duration(draft["prompt"]))
+                generated = await ask_openai_text(
+                    "Преобразуй голосовое описание пользователя в два профессиональных промпта. Сохрани его замысел. "
+                    f"Видео ровно {seconds} секунд; VIDEO_BRIEF разбей по 10 секунд с continuity и START/END states. "
+                    "MUSIC_BRIEF оптимизируй для Suno. Верни строго [MUSIC_BRIEF] затем [VIDEO_BRIEF].\n\nОписание: " + text,
+                    user_id=update.effective_user.id, chat_id=update.effective_chat.id,
+                    extra_system="Ты prompt-director AI music video. Не выдумывай сюжетные факты сверх голосового описания."
+                )
+                await _stage_music_video_draft(update, context, generated)
+        
         else:
             await update.effective_message.reply_text(
                 "Сценарий ожидает решения. Нажмите «Утверждаю», «Дополнить» или «Написать заново».",
@@ -16836,7 +16886,7 @@ def build_application() -> "Application":
     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
 
     # Music-video draft approval: consumed once before the generic callback router.
-    app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite):[0-9a-f]{12}$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
     app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio|editaudio):[0-9a-f]{12}$"), group=0)
 
     # 2b) Старые school:/work: callbacks, если такие кнопки ещё где-то используются
