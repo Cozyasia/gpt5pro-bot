@@ -3989,7 +3989,8 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     prompt = draft["prompt"]
     seconds = int(draft.get("duration") or _photo_clip_target_duration(prompt))
     music_brief, video_brief = _music_video_split_briefs(prompt)
-    video_brief = _music_video_replace_duration_field(video_brief, seconds)\n    prompt = _music_video_join_briefs(music_brief, video_brief)
+    video_brief = _music_video_replace_duration_field(video_brief, seconds)
+    prompt = _music_video_join_briefs(music_brief, video_brief)
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
     context.user_data.pop("music_video_draft", None)
     context.user_data.pop("music_video_draft_edit", None)
