@@ -4509,8 +4509,18 @@ async def on_mode_cb(update, context):
         await _handle_photoclip_upload_choice(update, context, q, prefix="act")
         return
 
-    if data in ("act:fun:photoclip_last", "act:fun:photoclip_custom"):
+    if data == "act:fun:photoclip_last":
         await _handle_photoclip_prompt_choice(update, context, q, prefix="act")
+        return
+
+    if data == "act:fun:photoclip_custom":
+        # "Свой сценарий" must never silently collapse into the generic last-photo path.
+        # If the high-fidelity pack is absent (for example after a deploy/restart), rebuild it.
+        if _music_video_identity_complete(uid):
+            await _handle_photoclip_prompt_choice(update, context, q, prefix="act")
+        else:
+            await q.answer("Сначала соберём Character Identity Pack")
+            await _handle_photoclip_upload_choice(update, context, q, prefix="act")
         return
 
     if data.startswith("act:fun:pc_preset_"):
@@ -15470,6 +15480,20 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # High-fidelity music-video pack owns these four uploads before every generic photo flow.
         identity_slot = _music_video_identity_wait_slot(context)
+        # Defensive recovery: Telegram/user_data is process-local and can be lost on a
+        # deploy/restart. While the user is still in the photoclip track, an incomplete
+        # identity pack means the next unclaimed photo belongs to the first missing slot,
+        # not to the generic photo menu.
+        if not identity_slot:
+            with contextlib.suppress(Exception):
+                if _mode_track_get(user_id) == "photoclip" and not _music_video_identity_complete(user_id):
+                    refs = _music_video_identity_pack(user_id)
+                    identity_slot = next(
+                        (slot for slot in ("face_front", "face_3q", "body_full", "scene_reference") if not refs.get(slot)),
+                        "",
+                    )
+                    if identity_slot:
+                        _set_music_video_identity_wait(context, identity_slot)
         if identity_slot:
             _music_video_identity_put(user_id, identity_slot, img)
             if identity_slot == "face_front":
@@ -16208,8 +16232,16 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_photoclip_upload_choice(update, context, q, prefix="fun")
         return
 
-    if action in {"photoclip_last", "photoclip_custom"}:
+    if action == "photoclip_last":
         await _handle_photoclip_prompt_choice(update, context, q, prefix="fun")
+        return
+
+    if action == "photoclip_custom":
+        if _music_video_identity_complete(q.from_user.id):
+            await _handle_photoclip_prompt_choice(update, context, q, prefix="fun")
+        else:
+            await q.answer("Сначала соберём Character Identity Pack")
+            await _handle_photoclip_upload_choice(update, context, q, prefix="fun")
         return
 
     if action.startswith("pc_preset_"):
