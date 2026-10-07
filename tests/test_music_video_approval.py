@@ -126,13 +126,12 @@ class MusicVideoApprovalTests(unittest.TestCase):
         self.assertIn("60 секунд", messages[0][0])
         self.assertIn("6 сцен", messages[0][0])
         self.assertIn("9:16", messages[0][0])
-        self.assertIn("пока недоступ", messages[0][0])
-        self.assertEqual(
-            ["✅ Утверждаю", "➕ Дополнить", "✍️ Написать заново"],
-            [button.text for row in messages[0][1].rows for button in row],
-        )
+        self.assertNotIn("пока недоступ", messages[0][0])
+        buttons = [button.text for row in messages[0][1].rows for button in row]
+        for label in ("⏱ 10 сек", "30 сек", "60 сек", "90 сек", "✅ Утверждаю", "➕ Дополнить", "✍️ Написать заново"):
+            self.assertIn(label, buttons)
 
-    def test_approval_blocks_long_vocal_and_launches_short_scene_once(self):
+    def test_approval_launches_long_vocal_once_and_consumes_token(self):
         env = load_flow()
         messages, started = [], []
 
@@ -144,20 +143,9 @@ class MusicVideoApprovalTests(unittest.TestCase):
         asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, "Я пою, 60 секунд"))
         token = ctx.user_data["music_video_draft"]["token"]
         asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
-        self.assertEqual([], started)
-        self.assertIn("music_video_draft", ctx.user_data)
-
-        ctx.user_data["music_video_draft_edit"] = "augment"
-        shorter = env["_merge_music_video_prompt"](ctx.user_data["music_video_draft"]["prompt"], "10 секунд")
-        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, shorter))
-        self.assertEqual(10, env["_photo_clip_target_duration"](ctx.user_data["music_video_draft"]["prompt"]))
-        new_token = ctx.user_data["music_video_draft"]["token"]
-        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
-        self.assertEqual([], started)
-        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{new_token}"), ctx))
         self.assertEqual(1, len(started))
         self.assertNotIn("music_video_draft", ctx.user_data)
-        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{new_token}"), ctx))
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
         self.assertEqual(1, len(started))
 
     def test_instrumental_approval_uses_photo_music_pipeline(self):
