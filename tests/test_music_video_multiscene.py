@@ -63,14 +63,15 @@ class TestMemorySafeFinalize(unittest.TestCase):
         src = SRC.read_text(encoding="utf-8")
         self.assertIn("def _mux_video_audio_files_sync", src)
         self.assertIn("def _concat_video_segment_files_sync", src)
-        self.assertIn("segments.clear()", src)
+        self.assertIn("def _write_video_segment_file", src)
         self.assertIn("subprocess.DEVNULL", src)
         self.assertIn('tempfile.TemporaryFile(mode="w+b")', src)
         self.assertIn("del scene_video", src)
-        self.assertIn("del data", src)
+        self.assertNotIn("segments: list[bytes]", src[src.index("async def _start_vocal_clip"):src.index("async def _start_photo_music_clip")])
         self.assertIn("source_size <= max_bytes", src)
         block = src[src.index('await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")'):]
         self.assertIn("_mux_video_audio_files_sync", block)
+        self.assertIn("_reply_video_file", block)
         self.assertNotIn("_mux_video_audio_sync, joined, safe_audio", block[:5000])
 
 
@@ -91,11 +92,12 @@ def test_identity_reanchor_forbids_collage_geometry_corruption():
     assert "detach limbs" in block
 
 
-def test_final_delivery_keeps_4k_dimensions_instead_of_720p():
+def test_final_delivery_preserves_native_dimensions_without_fake_4k_upscale():
     start = TEXT.index("def _mux_video_audio_files_sync")
     block = TEXT[start:TEXT.index("\ndef ", start + 40)]
-    assert "delivery-4k" in block
-    assert "3840" in block
+    assert "native-safe" in block
+    assert "3840" not in block
+    assert "FFMPEG_MUX_MAX_LONG_EDGE" in block
     assert "target_video_k" in block
     assert "compact-720p" not in block
     assert "small-540p" not in block

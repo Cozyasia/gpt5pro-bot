@@ -5,6 +5,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import shutil
 import tempfile
 import time
 from types import SimpleNamespace
@@ -18,7 +19,8 @@ MAIN = Path(__file__).resolve().parents[1] / "main.py"
 def load_recovery(root):
     names = {
         "_vocal_artifact_path", "_prune_vocal_artifacts", "_save_vocal_artifact",
-        "_load_vocal_artifact", "_photo_clip_target_duration", "_vocal_clip_provider_cost_usd",
+        "_save_vocal_artifact_file", "_load_vocal_artifact_path", "_load_vocal_artifact",
+        "_write_video_segment_file", "_photo_clip_target_duration", "_vocal_clip_provider_cost_usd",
         "_music_video_split_briefs", "_vocal_song_kb", "_start_vocal_clip", "_on_vocal_artifact_callback",
     }
     nodes = [
@@ -26,7 +28,7 @@ def load_recovery(root):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names
     ]
     env = {
-        "os": os, "re": re, "uuid": uuid, "time": time, "contextlib": contextlib,
+        "os": os, "re": re, "uuid": uuid, "time": time, "contextlib": contextlib, "shutil": shutil,
         "asyncio": asyncio, "hashlib": hashlib, "tempfile": tempfile,
         "VOCAL_CLIP_ARTIFACT_DIR": str(root),
         "PHOTO_CLIP_DEFAULT_DURATION_S": 15, "PHOTO_CLIP_MAX_DURATION_S": 90,
@@ -42,6 +44,7 @@ def load_recovery(root):
         "Update": object, "ContextTypes": SimpleNamespace(DEFAULT_TYPE=object),
         "BadRequest": type("BadRequest", (Exception,), {}),
         "_vocal_clip_background_jobs": set(),
+        "_music_video_finalize_semaphore": asyncio.Semaphore(1),
         "_music_video_progress_event": asyncio.Event,
         "_music_video_progress_task": asyncio.create_task,
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
@@ -65,10 +68,10 @@ class VocalSongRecoveryTests(unittest.TestCase):
             async def reply_text(message, **_kwargs):
                 messages.append(message)
 
-            async def send_video(_update, data, _caption):
-                sent.append(data)
+            async def send_video(_update, path, _caption):
+                sent.append(Path(path).read_bytes())
 
-            env["_reply_video_bytes"] = send_video
+            env["_reply_video_file"] = send_video
             context = SimpleNamespace(user_data={})
             def update_for(user):
                 return SimpleNamespace(callback_query=SimpleNamespace(
@@ -135,7 +138,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 "_run_kling_photo_clip_result": scene,
                 "_concat_video_segment_files_sync": lambda paths, _duration, out: (Path(out).write_bytes(b"joined") and out),
                 "_mux_video_audio_files_sync": lambda _v, _a, _d, out: (Path(out).write_bytes(b"\x00\x00\x00\x18ftyp" + b"m" * 4096) and out),
-                "_reply_video_bytes": result,
+                "_reply_video_file": result,
                 "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for, Event=asyncio.Event, create_task=asyncio.create_task, TimeoutError=asyncio.TimeoutError, CancelledError=asyncio.CancelledError),
             })
             update = SimpleNamespace(
@@ -196,7 +199,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 "_run_kling_photo_clip_result": scene,
                 "_concat_video_segments_sync": lambda segs, *_: segs[0],
                 "_mux_video_audio_sync": lambda *_: b"\x00\x00\x00\x18ftyp" + b"m" * 4096,
-                "_reply_video_bytes": failed_send,
+                "_reply_video_file": failed_send,
                 "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for, Event=asyncio.Event, create_task=asyncio.create_task, TimeoutError=asyncio.TimeoutError, CancelledError=asyncio.CancelledError),
                 "InlineKeyboardButton": lambda text, callback_data: SimpleNamespace(text=text, callback_data=callback_data),
                 "InlineKeyboardMarkup": lambda rows: SimpleNamespace(rows=rows),
