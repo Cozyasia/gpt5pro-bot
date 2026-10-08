@@ -8682,9 +8682,45 @@ def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
 
 def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
     """Split a director brief into scene-local action contracts instead of repeating the whole story."""
+    source = (base_prompt or "").replace("\r\n", "\n").strip()
+    n = max(1, int(scene_count))
+    # Prefer the user's explicit timeline. Sentence splitting used to merge adjacent
+    # 0–10/10–20/20–30 lines and leak later people, props and actions into early scenes.
+    timeline_re = re.compile(
+        r"(?im)^[ \t]*(\d{1,3})\s*[-–—]\s*(\d{1,3})\s*"
+        r"(?:сек(?:унд\w*)?|s(?:ec(?:ond)?s?)?)?\s*[:：]\s*"
+    )
+    markers = list(timeline_re.finditer(source))
+    if markers:
+        explicit = []
+        for pos, marker in enumerate(markers):
+            end = markers[pos + 1].start() if pos + 1 < len(markers) else len(source)
+            chunk = source[marker.end():end]
+            chunk = re.split(
+                r"(?im)\n\s*(?:обязательные\s+условия|global\s+constraints|continuity\s+rules)\s*:",
+                chunk,
+                maxsplit=1,
+            )[0]
+            chunk = re.sub(r"\s+", " ", chunk).strip(" \n\t;-")
+            if chunk:
+                explicit.append(chunk[:1050])
+        if explicit:
+            if len(explicit) == n:
+                return explicit
+            if len(explicit) > n:
+                grouped = []
+                for i in range(n):
+                    a = int(round(i * len(explicit) / n))
+                    b = int(round((i + 1) * len(explicit) / n))
+                    grouped.append(" ".join(explicit[a:max(a + 1, b)])[:1050])
+                return grouped
+            return explicit + [
+                "Continue only the unfinished physical motion from the preceding block; do not replay it."
+            ] * (n - len(explicit))
+
     text = re.sub(r"\s+", " ", (base_prompt or "").strip())
     if not text:
-        return ["Continue the requested action naturally."] * max(1, scene_count)
+        return ["Continue the requested action naturally."] * n
     # Sentence-level chronological allocation is deterministic and keeps future actions
     # out of early Kling prompts. Identity/global constraints remain in the master lock.
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
@@ -8694,7 +8730,6 @@ def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
         r"если .*вокал|губы|subtitles|watermark)", s, re.I)]
     if not action:
         action = sentences or [text]
-    n = max(1, int(scene_count))
     out = []
     for i in range(n):
         a = int(round(i * len(action) / n))
@@ -8704,25 +8739,46 @@ def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
     return out
 
 
+def _music_video_world_state_ledger(base_prompt: str, scene_idx: int, scene_count: int) -> dict:
+    """Build the authoritative per-scene timeline state without exposing future content."""
+    beats = _music_video_story_beats(base_prompt, scene_count)
+    index = min(max(0, int(scene_idx) - 1), len(beats) - 1)
+    completed = beats[:index]
+    return {
+        "current": beats[index],
+        "completed": " | ".join(completed)[-900:] if completed else "none — begin from the supplied starting keyframe",
+        "future_count": max(0, len(beats) - index - 1),
+        "is_first": index == 0,
+        "is_last": index == len(beats) - 1,
+    }
+
+
 def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, scene_count: int) -> str:
-    """Build a stateful scene-local contract: protagonist, start/action/end state and forbidden transitions."""
+    """Build a strict persistent world-state contract for one chronological scene."""
     mode = role_plan.get("mode")
     role = "single lead protagonist" if mode == "solo" else "preserve only performer roles explicitly requested by the user"
-    beats = _music_video_story_beats(base_prompt, scene_count)
-    beat = beats[min(max(0, scene_idx - 1), len(beats) - 1)]
-    previous = beats[scene_idx - 2] if scene_idx > 1 else "the supplied starting keyframe"
+    ledger = _music_video_world_state_ledger(base_prompt, scene_idx, scene_count)
+    start = (
+        "use the supplied starting keyframe as the physical start"
+        if ledger["is_first"]
+        else "use the continuation frame as the exact physical end state of the preceding scene"
+    )
     return (
         f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist; camera narrative priority stays on this person. "
-        f"START STATE: continue exactly from the physical end state of {previous[:420]}. "
-        f"REQUIRED ACTION CONTRACT FOR THIS SCENE ONLY: {beat} "
-        "END STATE: finish at the last physical state implied by this scene contract, ready for the next scene. "
-        "FORBIDDEN TRANSITIONS: do not execute actions belonging to later scenes; do not make a supporting character become the protagonist; "
-        "do not make a seated/waiting supporting character stand, walk, drive, swap seats or leave their stated position unless THIS scene explicitly requires it; "
-        "do not teleport people or props, duplicate them, reset poses, reverse completed actions, change wardrobe, vehicle geometry, environment or persistent objects. "
-        f"ROLE: {role}. IDENTITY AUTHORITY: FACE_FRONT=current frontal face, FACE_3Q=current turned-face geometry, BODY_FULL=current body. "
-        "The continuation image controls world/pose continuity only and NEVER overrides identity. "
-        "Preserve exact apparent age, facial geometry, hair, body proportions and wardrobe. "
-        "Natural physically plausible motion and premium photorealistic cinematic camera. Keep mouth neutral unless lip-sync is explicitly active. No text overlays."
+        "AUTHORITATIVE PERSISTENT WORLD-STATE LEDGER. "
+        f"CURRENT ACTION — execute only the chronological action in this scene: {ledger['current']} "
+        f"START STATE: {start}; do not restart the story, re-enter a completed location or replay a completed action. "
+        f"COMPLETED ACTIONS (history only; never replay): {ledger['completed']}. "
+        f"UNOPENED FUTURE: {ledger['future_count']} later block(s). Do not introduce any person, prop, vehicle, location, "
+        "seat occupancy or action that first appears in a future block. Future content is intentionally withheld. "
+        "END STATE: perform the current action exactly once, finish at its last physically implied state, and keep that state for the next scene. "
+        "WORLD LOCKS: Preserve spatial direction, handedness, wardrobe, vehicle geometry, door state, seat assignments, prop ownership and prop position. "
+        "Once introduced, a person or object persists; once an action is completed, it cannot reset or repeat. "
+        "FORBIDDEN: no teleportation, jumps, duplicates, body splits, extra limbs, geometry warping, role/seat swaps, disappearing objects, "
+        "or a supporting character becoming protagonist. A seated person stays in the stated seat unless CURRENT ACTION changes it. "
+        f"ROLE: {role}. IDENTITY: FACE_FRONT=frontal face, FACE_3Q=turned-face geometry, BODY_FULL=body. "
+        "Continuation controls world/pose only, never identity. Preserve age, face, hair, body and wardrobe. "
+        "Physically plausible premium photorealistic motion; neutral mouth unless lip-sync is active; no text overlays."
     )
 
 
