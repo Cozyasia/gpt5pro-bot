@@ -3754,15 +3754,24 @@ def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
 
 
 def _merge_music_video_prompt(original: str, addition: str) -> str:
-    """Replace earlier duration/aspect when the user amends either setting."""
+    """Append a revision without deleting scene-local timing instructions."""
     original, addition = (original or "").strip(), (addition or "").strip()
-    duration_pattern = r"\b\d{1,3}(?:[.,]\d+)?\s*(?:—Å–µ–∫\w*|s|seconds?|–º–∏–Ω\w*|minutes?|min)\b"
     aspect_pattern = r"(?<!\d)(?:9|16|1|4|3)\s*[:/]\s*(?:16|9|1|5|4|3)(?!\d)"
-    if re.search(duration_pattern, addition, re.I):
-        original = re.sub(duration_pattern, "", original, flags=re.I)
+    duration_match = re.search(
+        r"(?i)(?:–¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å(?:\s+(?:–∫–ª–∏–ø–∞|–≤–∏–¥–µ–æ))?|(?:clip|video)\s+duration)\s*[:‚Äî-]?\s*"
+        r"(\d+(?:[.,]\d+)?)\s*(—Å–µ–∫\w*|seconds?|s|–º–∏–Ω\w*|minutes?|min)",
+        addition,
+    )
+    music_brief, video_brief = _music_video_split_briefs(original)
+    if duration_match:
+        selected = _photo_clip_target_duration(duration_match.group(0))
+        video_brief = _music_video_replace_duration_field(video_brief, selected)
+        addition = (addition[:duration_match.start()] + addition[duration_match.end():]).strip(" ,;.")
     if re.search(aspect_pattern, addition):
-        original = re.sub(aspect_pattern, "", original)
-    return f"{original.strip(' ,;')}\n–î–æ–ø–æ–ª–Ω–µ–Ω–∏–µ: {addition}".strip()
+        video_brief = re.sub(aspect_pattern, "", video_brief).strip(" ,;")
+    if addition:
+        video_brief = f"{video_brief.strip()}\n–î–æ–ø–æ–ª–Ω–µ–Ω–∏–µ: {addition}".strip()
+    return _music_video_join_briefs(music_brief, video_brief)
 
 
 def _music_video_split_briefs(prompt: str) -> tuple[str, str]:
@@ -3813,9 +3822,12 @@ def _music_video_director_plan(video_brief: str, duration: int, scenes: int) -> 
     return "\n".join(lines)
 
 
-def _music_video_review_text(prompt: str) -> str:
+def _music_video_review_text(prompt: str, duration_s: int | None = None) -> str:
     music_brief, video_brief = _music_video_split_briefs(prompt)
-    duration = _photo_clip_target_duration(prompt)
+    duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(duration_s)))
+        if duration_s is not None else _photo_clip_target_duration(video_brief)
+    )
     scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
     scenes = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_s - 1) // scene_s))
     vocal = _clip_wants_vocals(music_brief)
@@ -3837,15 +3849,23 @@ def _music_video_replace_duration_field(video_brief: str, seconds: int) -> str:
     """Replace only the explicit clip-duration field; preserve scene/action timings."""
     text = (video_brief or "").strip()
     text = re.sub(
-        r"(?im)^\\s*(?:–¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å\\s+(?:–∫–ª–∏–ø–∞|–≤–∏–¥–µ–æ)|(?:clip|video)\\s+duration)\\s*[:‚Äî-]?\\s*"
-        r"\\d+(?:[.,]\\d+)?\\s*(?:—Å–µ–∫\\w*|seconds?|s|–º–∏–Ω\\w*|minutes?|min)\\s*[.!]?\\s*$",
+        r"(?im)^\s*(?:–¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å\s+(?:–∫–ª–∏–ø–∞|–≤–∏–¥–µ–æ)|(?:clip|video)\s+duration)\s*[:‚Äî-]?\s*"
+        r"\d+(?:[.,]\d+)?\s*(?:—Å–µ–∫\w*|seconds?|s|–º–∏–Ω\w*|minutes?|min)\s*[.!]?\s*$",
         "",
         text,
     ).strip()
-    return f"–î–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å –∫–ª–∏–ø–∞: {int(seconds)} —Å–µ–∫—É–Ω–¥.\\n{text}".strip()
+    return f"–î–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å –∫–ª–∏–ø–∞: {int(seconds)} —Å–µ–∫—É–Ω–¥.\n{text}".strip()
 
 
-async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = "", *, music_brief: str | None = None, video_brief: str | None = None) -> bool:
+async def _stage_music_video_draft(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str = "",
+    *,
+    music_brief: str | None = None,
+    video_brief: str | None = None,
+    selected_duration_s: int | None = None,
+) -> bool:
     """Stage a structured draft. Music and video instructions are deliberately isolated."""
     if music_brief is None or video_brief is None:
         parsed_music, parsed_video = _music_video_split_briefs(prompt)
@@ -3863,6 +3883,12 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
             "–≠—Ç–∞ —á–∞—Å—Ç—å –Ω–µ –±—É–¥–µ—Ç –æ—Ç–ø—Ä–∞–≤–ª—è—Ç—å—Å—è –≤ Suno."
         )
         return False
+    duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(selected_duration_s)))
+        if selected_duration_s is not None else _photo_clip_target_duration(video_brief)
+    )
+    if selected_duration_s is not None:
+        video_brief = _music_video_replace_duration_field(video_brief, duration)
     combined = _music_video_join_briefs(music_brief, video_brief)
     # A new draft is a new audio review transaction. Never inherit an approved token
     # from a previous clip/test; explicit saved-song selection happens through its own action.
@@ -3893,7 +3919,8 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         "prompt": combined, "music_brief": music_brief, "video_brief": video_brief,
         "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
         "identity_digests": {k: hashlib.sha256(v).hexdigest() for k, v in refs.items()} if refs else {},
-        "duration": _photo_clip_target_duration(combined),
+        "duration": duration,
+        "duration_locked": selected_duration_s is not None,
     }
     with contextlib.suppress(Exception):
         _mode_track_set(update.effective_user.id, "")
@@ -3905,7 +3932,7 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         and _load_vocal_artifact(update.effective_user.id, source_token, "audio") else ""
     )
     await update.effective_message.reply_text(
-        (_music_video_review_text(combined) + source_note)[:4096],
+        (_music_video_review_text(combined, duration) + source_note)[:4096],
         reply_markup=_music_video_approval_kb(token)
     )
     return True
@@ -3925,11 +3952,14 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         # real regex (the previous raw string was double-escaped and silently failed).
         video_brief = _music_video_replace_duration_field(video_brief, seconds)
         draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+        draft["music_brief"] = music_brief
+        draft["video_brief"] = video_brief
         draft["duration"] = seconds
+        draft["duration_locked"] = True
         context.user_data["music_video_draft"] = draft
         await q.answer(f"–í—ã–±—Ä–∞–Ω–æ: {seconds} —Å–µ–∫—É–Ω–¥")
         with contextlib.suppress(Exception):
-            await q.message.edit_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+            await q.message.edit_text(_music_video_review_text(draft["prompt"], seconds)[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
         return
     if action == "voice":
         context.user_data["music_video_draft_edit"] = "voice_rewrite"
@@ -3949,10 +3979,14 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
             extra_system="–¢—ã prompt-director –¥–ª—è AI music video. –ù–µ –º–µ–Ω—è–π –∏–¥–µ–Ω—Ç–∏—á–Ω–æ—Å—Ç—å, —Ä–æ–ª–∏, —Ä–µ–∫–≤–∏–∑–∏—Ç –∏ –ø–æ—Å–ª–µ–¥–æ–≤–∞—Ç–µ–ª—å–Ω–æ—Å—Ç—å –¥–µ–π—Å—Ç–≤–∏–π –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è."
         )
         if "[MUSIC_BRIEF]" in generated and "[VIDEO_BRIEF]" in generated:
-            draft["prompt"] = generated.strip()
+            music_brief, video_brief = _music_video_split_briefs(generated)
+            video_brief = _music_video_replace_duration_field(video_brief, seconds)
+            draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+            draft["music_brief"] = music_brief
+            draft["video_brief"] = video_brief
             draft["duration"] = seconds
             context.user_data["music_video_draft"] = draft
-            await q.message.edit_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+            await q.message.edit_text(_music_video_review_text(draft["prompt"], seconds)[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
         else:
             await q.message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å –±–µ–∑–æ–ø–∞—Å–Ω–æ —Å—Ç—Ä—É–∫—Ç—É—Ä–∏—Ä–æ–≤–∞—Ç—å –ø—Ä–æ–º–ø—Ç. –ò—Å—Ö–æ–¥–Ω—ã–π —á–µ—Ä–Ω–æ–≤–∏–∫ —Å–æ—Ö—Ä–∞–Ω—ë–Ω.")
         return
@@ -3998,9 +4032,9 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     await q.message.reply_text("‚úÖ –°—Ü–µ–Ω–∞—Ä–∏–π —É—Ç–≤–µ—Ä–∂–¥—ë–Ω. –ü–µ—Ä–µ–¥–∞—é –µ–≥–æ –≤ —Ä–µ–∂–∏–º AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞.")
     try:
         if _clip_wants_vocals(prompt):
-            await _start_vocal_clip(update, context, img, prompt)
+            await _start_vocal_clip(update, context, img, prompt, target_duration_s=seconds)
         else:
-            await _start_photo_music_clip(update, context, img, prompt)
+            await _start_photo_music_clip(update, context, img, prompt, target_duration_s=seconds)
     except Exception:
         log.exception("music video draft approval failed")
         await q.message.reply_text("‚ùå –ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–ø—É—Å—Ç–∏—Ç—å –∫–ª–∏–ø. –ö—Ä–µ–¥–∏—Ç—ã –∑–∞ –Ω–µ–∑–∞–≤–µ—Ä—à—ë–Ω–Ω—É—é –≥–µ–Ω–µ—Ä–∞—Ü–∏—é –Ω–µ —Å–ø–∏—Å–∞–Ω—ã. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ —Å–Ω–æ–≤–∞.")
@@ -6868,10171 +6902,374 @@ async def _presentation_llm_call(update: Update, prompt: str) -> str:
         user_id=update.effective_user.id if update.effective_user else None,
         chat_id=update.effective_chat.id if update.effective_chat else None,
         extra_system=(
-            "–¢—ã —Ä–∞–±–æ—Ç–∞–µ—à—å –≤–Ω—É—Ç—Ä–∏ –º–∞—Å—Ç–µ—Ä–∞ –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏–π. –í–æ–∑–≤—Ä–∞—â–∞–π —Å—Ç—Ä—É–∫—Ç—É—Ä–∏—Ä–æ–≤–∞–Ω–Ω—ã–µ –¥–∞–Ω–Ω—ã–µ —Ç–æ—á–Ω–æ –≤ –∑–∞–ø—Ä–æ—à–µ–Ω–Ω–æ–º —Ñ–æ—Ä–º–∞—Ç–µ. "
-            "–ì–ª–∞–≤–Ω—ã–π –±—Ä–∏—Ñ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è —è–≤–ª—è–µ—Ç—Å—è –µ–¥–∏–Ω—Å—Ç–≤–µ–Ω–Ω—ã–º –∏—Å—Ç–æ—á–Ω–∏–∫–æ–º —Ñ–∞–∫—Ç–æ–≤: —Å–æ—Ö—Ä–∞–Ω—è–π —Ç–æ—á–Ω–æ–µ –Ω–∞–∑–≤–∞–Ω–∏–µ –±—Ä–µ–Ω–¥–∞, –ø—Ä–æ–¥—É–∫—Ç—ã, "
-            "—Ü–µ–Ω—ã, –∫–æ–Ω—Ç–∞–∫—Ç—ã, –æ–≥—Ä–∞–Ω–∏—á–µ–Ω–∏—è –∏ –∫–æ–ª–∏—á–µ—Å—Ç–≤–æ —Å–ª–∞–π–¥–æ–≤. –ù–∏–∫–æ–≥–¥–∞ –Ω–µ –∏—Å–ø–æ–ª—å–∑—É–π —Å–ª—É–∂–µ–±–Ω—ã–µ —Å–ª–æ–≤–∞ ¬´–±—Ä–µ–Ω–¥¬ª, ¬´–±—Ä–µ–Ω–¥–∞¬ª, "
-            "¬´–∫–æ–º–ø–∞–Ω–∏—è¬ª, ¬´—Ç–æ–≤–∞—Ä¬ª –∏–ª–∏ ¬´—É—Å–ª—É–≥–∞¬ª –∫–∞–∫ –Ω–∞–∑–≤–∞–Ω–∏–µ. –ù–µ –¥–æ–±–∞–≤–ª—è–π –≤—ã–º—ã—à–ª–µ–Ω–Ω—ã–µ –æ—Ç–∑—ã–≤—ã, —Å—Ç–∞—Ç–∏—Å—Ç–∏–∫—É, –∫–µ–π—Å—ã, "
-            "—Å–µ—Ä—Ç–∏—Ñ–∏–∫–∞—Ç—ã, —Ç–µ–ª–µ—Ñ–æ–Ω—ã, —Ü–µ–Ω—ã –∏–ª–∏ –Ω–∞–≥—Ä–∞–¥—ã. –ï—Å–ª–∏ –Ω–∞–∑–≤–∞–Ω–∏–µ –Ω–µ –æ–ø—Ä–µ–¥–µ–ª–µ–Ω–æ –æ–¥–Ω–æ–∑–Ω–∞—á–Ω–æ, –Ω–µ —É–≥–∞–¥—ã–≤–∞–π –µ–≥–æ."
-        ),
-    )
-
-
-def _presentation_local_visual(prompt: str, index: int = 0) -> bytes:
-    """Guaranteed local visual fallback so a long presentation workflow never ends with an empty asset."""
-    try:
-        if Image is None or ImageDraw is None:
-            return b""
-        palettes = [
-            ((12, 18, 32), (58, 125, 255), (124, 224, 255)),
-            ((28, 25, 22), (205, 168, 83), (245, 236, 210)),
-            ((233, 239, 235), (74, 122, 101), (199, 184, 145)),
-            ((245, 247, 251), (47, 105, 235), (150, 192, 255)),
-        ]
-        bg, accent, accent2 = palettes[index % len(palettes)]
-        w, h = 1536, 1024
-        im = Image.new("RGB", (w, h), bg)
-        d = ImageDraw.Draw(im)
-        for y in range(h):
-            ratio = y / max(1, h - 1)
-            fill = tuple(int(bg[i] * (1 - ratio * 0.25) + accent[i] * ratio * 0.25) for i in range(3))
-            d.line((0, y, w, y), fill=fill)
-        d.ellipse((850, -220, 1630, 560), fill=accent)
-        d.ellipse((-320, 480, 520, 1320), fill=accent2)
-        d.rounded_rectangle((150, 150, 910, 820), radius=80, outline=(255, 255, 255), width=5)
-        d.line((220, 705, 760, 705), fill=(255, 255, 255), width=8)
-        # Keep the fallback intentionally text-free: the renderer adds approved copy itself.
-        out = BytesIO(); im.save(out, format="JPEG", quality=92, optimize=True)
-        return out.getvalue()
-    except Exception:
-        return b""
-
-
-async def _presentation_paid_runner(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    engine: str,
-    feature: str,
-    provider_cost_usd: float,
-    action,
-):
-    """Run a presentation subtask and return its result.
-
-    Logo concepts are included in the presentation workflow and use a silent provider attempt;
-    deterministic local concepts are supplied by presentation_studio.py when the provider is unavailable.
-    This prevents partial logo cards followed by a misleading global error message.
-    """
-    if feature == "presentation_logo_variants":
-        try:
-            return await action()
-        except Exception as e:
-            log.exception("Presentation logo provider attempt failed silently: %s", e)
-            return None
-
-    box = {"result": None, "error": None}
-
-    async def _go():
-        try:
-            result = await action()
-            box["result"] = result
-            return bool(result)
-        except Exception as exc:
-            box["error"] = exc
-            raise
-
-    await _try_pay_then_do(
-        update,
-        context,
-        update.effective_user.id,
-        engine if engine in ("luma", "runway", "img") else "img",
-        max(0.0, float(provider_cost_usd or 0.0)),
-        _go,
-        remember_kind=feature,
-        remember_payload={"presentation_studio": True, "feature": feature},
-        silent_failure=(feature == "presentation_render"),
-    )
-    if box.get("error") is not None:
-        raise box["error"]
-    return box.get("result")
-
-
-async def _generate_openai_presentation_image_bytes(prompt: str) -> bytes | None:
-    """Landscape-first image generation for slide visuals.
-
-    gpt-image supports landscape sizes on the official API. Some compatible
-    proxies only accept 1024x1024, so the function falls back safely.
-    """
-    sizes = []
-    for value in (PRESENTATION_IMAGE_SIZE, "1536x1024", "1024x1024"):
-        if value and value not in sizes:
-            sizes.append(value)
-    for size in sizes:
-        try:
-            try:
-                resp = oai_img.images.generate(
-                    model=IMAGES_MODEL, prompt=prompt, size=size,
-                    quality=OPENAI_IMAGE_QUALITY, n=1,
-                )
-            except Exception:
-                resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size=size, n=1)
-            item = resp.data[0]
-            b64 = getattr(item, "b64_json", None)
-            if b64:
-                return base64.b64decode(b64)
-            url = getattr(item, "url", None)
-            if url:
-                async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-                    r = await client.get(url)
-                    r.raise_for_status()
-                    if r.content:
-                        return r.content
-        except Exception as e:
-            log.warning("Presentation OpenAI image size=%s failed: %s", size, e)
-    return None
-
-
-async def _presentation_image_batch(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    prompts: list[str],
-    engine: str,
-    feature: str,
-) -> list[bytes] | None:
-    prompts = [re.sub(r"\s+", " ", (p or "").strip())[:1800] for p in prompts if (p or "").strip()]
-    if not prompts:
-        return []
-
-    resolved_engines: list[str] = []
-    text_sensitive_re = re.compile(
-        r"(label|etiket|packag|bottle|box|poster|menu|sign|screen|document|book|magazine|logo|brand|"
-        r"—ç—Ç–∏–∫–µ—Ç|—É–ø–∞–∫–æ–≤|–±—É—Ç—ã–ª|–∫–æ—Ä–æ–±|–ø–ª–∞–∫–∞—Ç|–º–µ–Ω—é|–≤—ã–≤–µ—Å–∫|—ç–∫—Ä–∞–Ω|–¥–æ–∫—É–º–µ–Ω—Ç|–∫–Ω–∏–≥|–∂—É—Ä–Ω–∞–ª|–ª–æ–≥–æ—Ç–∏–ø|–±—Ä–µ–Ω–¥)", re.I
-    )
-    safe_prompts: list[str] = []
-    for prompt in prompts:
-        text_sensitive = bool(text_sensitive_re.search(prompt))
-        safe_prompt = prompt
-        if PRESENTATION_TEXT_SAFE_VISUALS and text_sensitive:
-            safe_prompt += (
-                " STRICT TYPOGRAPHY SAFETY: all labels, packaging, signs and printed areas must be completely blank and unprinted; "
-                "no letters, pseudo-letters, glyphs, numbers or fake brand marks. Exact approved copy will be overlaid later by the renderer."
-            )
-        safe_prompts.append(safe_prompt)
-        if PRESENTATION_FORCE_OPENAI_FOR_TEXT and text_sensitive:
-            # Midjourney is excellent for atmosphere but unreliable for exact lettering.
-            resolved_engines.append("openai")
-        elif engine == "auto":
-            # Production-safe auto route: one clean landscape image per slide.
-            # Midjourney remains available when the user selects it explicitly.
-            resolved_engines.append("openai")
-        else:
-            resolved_engines.append(engine)
-
-    provider_cost = 0.0
-    for e in resolved_engines:
-        provider_cost += MIDJOURNEY_UNIT_COST_USD if e == "midjourney" else IMG_COST_USD
-
-    async def _action():
-        result: list[bytes] = []
-        for idx, (prompt, selected_engine) in enumerate(zip(safe_prompts, resolved_engines)):
-            img = None
-            try:
-                if selected_engine == "midjourney":
-                    img, _task = await _midjourney_generate_image_bytes(prompt)
-                    if not img:
-                        img = await _luma_generate_image_bytes(prompt)
-                else:
-                    img = await _generate_openai_presentation_image_bytes(prompt)
-                    if not img:
-                        img = await _comet_generate_image_bytes(prompt)
-                    # Never switch a failed slide to Midjourney silently: that can return a
-                    # four-image grid and break visual consistency. The user can select
-                    # Midjourney explicitly in the presentation wizard.
-            except Exception as e:
-                log.warning("Presentation image %s/%s failed: %s", idx + 1, len(prompts), e)
-            # Do not insert generic abstract placeholders. A failed visual remains empty and
-            # the renderer switches that slide to a clean text-first layout. Preserve list
-            # positions so a failed middle image cannot be assigned to the wrong slide.
-            result.append(img or b"")
-        return result if any(result) else None
-
-    return await _presentation_paid_runner(update, context, "img", feature, provider_cost, _action)
-
-
-def _presentation_studio_get() -> PresentationStudio:
-    global _PRESENTATION_STUDIO_INSTANCE
-    if _PRESENTATION_STUDIO_INSTANCE is None:
-        _PRESENTATION_STUDIO_INSTANCE = PresentationStudio(
-            StudioConfig(
-                db_path=DB_PATH,
-                data_dir=PRESENTATION_DATA_DIR,
-                max_uploads=max(5, PRESENTATION_MAX_UPLOADS),
-                max_generated_images=max(1, PRESENTATION_MAX_GENERATED_IMAGES),
-                render_cost_usd=max(0.0, PRESENTATION_RENDER_COST_USD),
-            ),
-            llm_call=_presentation_llm_call,
-            image_batch_call=_presentation_image_batch,
-            paid_runner=_presentation_paid_runner,
-        )
-    return _PRESENTATION_STUDIO_INSTANCE
-
-
-async def cmd_presentation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _clear_transient_flows(context)
-    await _presentation_studio_get().start(update, context, "presentation")
-
-
-async def cmd_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _clear_transient_flows(context)
-    await _presentation_studio_get().start(update, context, "catalog")
-
-
-async def cmd_diag_presentation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    studio = _presentation_studio_get()
-    project = studio._active_project(update.effective_user.id, update.effective_chat.id)
-    lines = [
-        f"üß™ Presentation Studio / {PATCH_VERSION}",
-        f"data_dir={studio.data_dir}",
-        f"db_path={DB_PATH}",
-        f"max_uploads={PRESENTATION_MAX_UPLOADS}",
-        f"max_generated_images={PRESENTATION_MAX_GENERATED_IMAGES}",
-        f"render_cost_usd={PRESENTATION_RENDER_COST_USD}",
-        f"text_safe_visuals={PRESENTATION_TEXT_SAFE_VISUALS}",
-        f"force_openai_for_text={PRESENTATION_FORCE_OPENAI_FOR_TEXT}",
-        f"pptx={'on' if shutil.which('python') or True else 'off'}",
-        f"active_project={project.get('id') if project else '-'}",
-        f"state={project.get('state') if project else '-'}",
-        f"last_build_step={project.get('last_build_step') if project else '-'}",
-        f"last_build_errors={project.get('last_build_errors') if project else '-'}",
-        f"build_warnings={project.get('build_warnings') if project else '-'}",
-        f"pdf_path={project.get('pdf_path') if project else '-'}",
-        f"pptx_path={project.get('pptx_path') if project else '-'}",
-    ]
-    await update.effective_message.reply_text("\n".join(lines))
-
-
-async def _reply_audio_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str):
-    try:
-        r = await client.get(url, timeout=240.0, follow_redirects=True)
-        r.raise_for_status()
-        if r.content and len(r.content) > 1024 and "json" not in (r.headers.get("content-type") or "").lower():
-            bio = BytesIO(r.content)
-            bio.name = "suno_track.mp3"
-            try:
-                await update.effective_message.reply_audio(audio=InputFile(bio), caption=caption)
-                return
-            except Exception:
-                bio.seek(0)
-                await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-                return
-    except Exception as e:
-        log.warning("audio download failed: %s", e)
-    await update.effective_message.reply_text(f"{caption}\n–°—Å—ã–ª–∫–∞ –Ω–∞ —Ä–µ–∑—É–ª—å—Ç–∞—Ç: {url}", disable_web_page_preview=False)
-
-async def _poll_suno_task(update: Update, client: httpx.AsyncClient, headers: dict, task_id: str):
-    started = time.time()
-    status_paths = [
-        SUNO_STATUS_PATH,
-        "/suno/fetch/{id}",
-        "/suno/v1/music/{id}",
-        "/api/v1/task/{id}",
-        "/v1/tasks/{id}",
-    ]
-    last = ""
-    while time.time() - started < SUNO_TIMEOUT_S:
-        for path in status_paths:
-            try:
-                rs = await client.get(f"{SUNO_BASE_URL}{path}".format(id=task_id), headers=headers, timeout=60.0)
-                if rs.status_code >= 400:
-                    last = f"{rs.status_code}: {_api_error_preview(rs)}"
-                    continue
-                js = rs.json() or {}
-                data_obj = js.get("data")
-                nested = data_obj if isinstance(data_obj, dict) else {}
-                nested_data = nested.get("data") if isinstance(nested, dict) else None
-                url = (
-                    _extract_first_url(js.get("audio_url"))
-                    or _extract_first_url(js.get("audio"))
-                    or _extract_first_url(js.get("output"))
-                    or _extract_first_url(data_obj)
-                    or _extract_first_url(nested_data)
-                    or _extract_first_url(js)
-                )
-                st = str(js.get("status") or js.get("state") or js.get("task_status") or nested.get("status") or "").lower()
-                if url and (st in ("", "completed", "succeeded", "success", "finished", "done", "ready") or not st):
-                    await _reply_audio_from_url(update, client, url, "üéµ –ú—É–∑—ã–∫–∞ Suno –≥–æ—Ç–æ–≤–∞ ‚úÖ")
-                    return True
-                if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
-                    await update.effective_message.reply_text(f"‚ùå Suno: –æ—à–∏–±–∫–∞ –≥–µ–Ω–µ—Ä–∞—Ü–∏–∏.\n{json.dumps(js, ensure_ascii=False)[:1200]}")
-                    return True
-                last = json.dumps(js, ensure_ascii=False)[:700]
-            except Exception as e:
-                last = str(e)
-        await asyncio.sleep(SUNO_POLL_DELAY_S)
-    await update.effective_message.reply_text(f"‚åõ Suno: –≤—Ä–µ–º—è –æ–∂–∏–¥–∞–Ω–∏—è –≤—ã—à–ª–æ. –ü–æ—Å–ª–µ–¥–Ω–∏–π –æ—Ç–≤–µ—Ç: {last[:700]}")
-    return False
-
-async def _run_suno_music(update: Update, context: ContextTypes.DEFAULT_TYPE, brief: str):
-    brief = (brief or "").strip()
-    if not brief:
-        context.user_data["awaiting_suno_brief"] = True
-        await update.effective_message.reply_text(_suno_submenu_text(), reply_markup=_suno_menu_kb())
-        return
-    if not SUNO_ENABLED:
-        await update.effective_message.reply_text("‚ö†Ô∏è –†–µ–∂–∏–º Suno –æ—Ç–∫–ª—é—á—ë–Ω –≤ ENV: SUNO_ENABLED=0.")
-        return
-    if not SUNO_API_KEY:
-        await update.effective_message.reply_text("‚ùå –î–ª—è –º—É–∑—ã–∫–∏ –Ω—É–∂–µ–Ω SUNO_API_KEY –∏–ª–∏ COMET_API_KEY –≤ Environment.")
-        return
-
-    async def _go():
-        await update.effective_message.reply_text("üéµ –ó–∞–ø—É—Å–∫–∞—é Suno. –û–±—ã—á–Ω–æ —Ç—Ä–µ–∫ –≥–æ—Ç–æ–≤–∏—Ç—Å—è 1‚Äì5 –º–∏–Ω—É—Ç‚Ä¶")
-        headers = {"Authorization": f"Bearer {SUNO_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
-        instrumental = bool(re.search(r"–∏–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞–ª|instrumental|–±–µ–∑ –≤–æ–∫–∞–ª–∞|–±–µ–∑ –≥–æ–ª–æ—Å–∞|–º–∏–Ω—É—Å–æ–≤|background music|—Ñ–æ–Ω–æ–≤–∞", brief, re.I))
-        # Documented CometAPI Suno endpoint: /suno/submit/music.
-        # For free-form user prompts we use Inspiration Mode; for instrumental prompts
-        # we add make_instrumental=True and empty prompt, as Comet expects.
-        base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": brief}
-        if instrumental:
-            base_payload.update({"prompt": "", "make_instrumental": True})
-        payloads = [
-            (SUNO_CREATE_PATH, base_payload),
-            ("/suno/submit/music", base_payload),
-        ]
-        last_err = ""
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            for path, payload in payloads:
-                try:
-                    r = await client.post(f"{SUNO_BASE_URL}{path}", headers=headers, json=payload)
-                    if r.status_code >= 400:
-                        last_err = f"POST {path} ‚Üí {r.status_code}: {_api_error_preview(r)}"
-                        log.warning("Suno create failed: %s", last_err)
-                        continue
-                    js = r.json() or {}
-                    url = _extract_first_url(js.get("audio_url")) or _extract_first_url(js.get("audio")) or _extract_first_url(js.get("output")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
-                    if url:
-                        await _reply_audio_from_url(update, client, url, "üéµ –ú—É–∑—ã–∫–∞ Suno –≥–æ—Ç–æ–≤–∞ ‚úÖ")
-                        return True
-                    task_id = str(js.get("id") or js.get("task_id") or js.get("taskId") or js.get("request_id") or "").strip()
-                    data_obj = js.get("data")
-                    if not task_id and isinstance(data_obj, str):
-                        # Comet returns {"code":"success","data":"<task_id>"} for /suno/submit/music.
-                        if re.fullmatch(r"[A-Za-z0-9_.:-]{8,}", data_obj.strip()):
-                            task_id = data_obj.strip()
-                    if not task_id and isinstance(data_obj, dict):
-                        d = data_obj or {}
-                        task_id = str(d.get("id") or d.get("task_id") or d.get("taskId") or d.get("request_id") or "").strip()
-                    if task_id:
-                        await update.effective_message.reply_text(f"‚è≥ Suno: –∑–∞–¥–∞—á–∞ –ø—Ä–∏–Ω—è—Ç–∞, id={task_id}. –ñ–¥—É —Ä–µ–∑—É–ª—å—Ç–∞—Ç‚Ä¶")
-                        return bool(await _poll_suno_task(update, client, headers, task_id))
-                    last_err = f"POST {path}: –Ω–µ—Ç audio_url/id –≤ –æ—Ç–≤–µ—Ç–µ {json.dumps(js, ensure_ascii=False)[:700]}"
-                except Exception as e:
-                    last_err = f"POST {path}: {e}"
-                    log.warning("Suno create exception: %s", e)
-            await update.effective_message.reply_text(f"‚ùå Suno: –Ω–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å –∑–∞–¥–∞—á—É.\n{last_err[:1500]}")
-            return False
-    await _try_pay_then_do(update, context, update.effective_user.id, SUNO_BILLING_ENGINE, SUNO_COST_USD, _go, remember_kind="suno_music", remember_payload={"prompt": brief})
-
-
-async def cmd_diag_yookassa(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """–ë–µ–∑–æ–ø–∞—Å–Ω–∞—è –¥–∏–∞–≥–Ω–æ—Å—Ç–∏–∫–∞ –ÆKassa: –Ω–µ –ø–æ–∫–∞–∑—ã–≤–∞–µ—Ç —Å–µ–∫—Ä–µ—Ç—ã, —Ç–æ–ª—å–∫–æ –Ω–∞–ª–∏—á–∏–µ –Ω–∞—Å—Ç—Ä–æ–µ–∫."""
-    def mask(v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            return "–Ω–µ—Ç"
-        if len(v) <= 8:
-            return "–µ—Å—Ç—å"
-        return v[:5] + "‚Ä¶" + v[-4:]
-
-    source = []
-    for _p in ("/etc/secrets/yookassa.env", "/etc/secrets/yookassa.txt", "/etc/secrets/yk.env", "/etc/secrets/yk.txt"):
-        try:
-            if os.path.exists(_p):
-                source.append(_p)
-        except Exception:
-            pass
-    provider_ok = bool(YOOKASSA_PROVIDER_TOKEN)
-    provider_hint = "–µ—Å—Ç—å" if provider_ok else "–Ω–µ—Ç"
-    if YOOKASSA_PROVIDER_TOKEN and not (":" in YOOKASSA_PROVIDER_TOKEN and "LIVE" in YOOKASSA_PROVIDER_TOKEN.upper()):
-        provider_hint = "–µ—Å—Ç—å, –Ω–æ —Ñ–æ—Ä–º–∞—Ç –Ω–µ –ø–æ—Ö–æ–∂ –Ω–∞ Telegram provider token"
-
-    lines = [
-        f"üßæ YooKassa diagnostic / {PATCH_VERSION}",
-        f"Direct API enabled: {YOO_DIRECT_ENABLED}",
-        f"ShopID: {mask(YOO_SHOP_ID)}",
-        f"API Secret: {mask(YOO_SECRET_KEY)}",
-        f"Secret files found: {', '.join(source) if source else '–Ω–µ—Ç'}",
-        f"Telegram provider token: {provider_hint}",
-        f"Return URL: {YOO_PAYMENT_RETURN_URL}",
-        "",
-        f"–°–ë–ü/QR: {YOO_SBP_ENABLED}",
-        f"SberPay: {YOO_SBERPAY_ENABLED}",
-        f"T-Pay: {YOO_TPAY_ENABLED}",
-        f"Mir Pay: {YOO_MIRPAY_ENABLED}",
-        f"Telegram card: {YOO_CARD_ENABLED}",
-    ]
-    if _yoo_direct_configured():
-        lines.append("‚úÖ Direct API –ÆKassa –Ω–∞—Å—Ç—Ä–æ–µ–Ω. –ú–æ–∂–Ω–æ —Ç–µ—Å—Ç–∏—Ä–æ–≤–∞—Ç—å –°–ë–ü/QR.")
-    else:
-        lines.append("‚ùå Direct API –ÆKassa –Ω–µ –Ω–∞—Å—Ç—Ä–æ–µ–Ω: –Ω—É–∂–µ–Ω yookassa.env —Å YK_ID –∏ YK_KEY.")
-    await update.effective_message.reply_text("\n".join(lines))
-
-async def cmd_diag_suno(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = [
-        f"üß™ Suno diagnostic / {PATCH_VERSION}",
-        f"SUNO_ENABLED={SUNO_ENABLED}",
-        f"SUNO_API_KEY={'on' if bool(SUNO_API_KEY) else 'off'}",
-        f"SUNO_BASE_URL={SUNO_BASE_URL}",
-        f"SUNO_MODEL/mv={SUNO_MODEL}",
-        f"SUNO_CREATE_PATH={SUNO_CREATE_PATH}",
-        f"SUNO_STATUS_PATH={SUNO_STATUS_PATH}",
-        f"SUNO_TIMEOUT_S={SUNO_TIMEOUT_S} poll={SUNO_POLL_DELAY_S}",
-        "Expected Comet endpoints: POST /suno/submit/music, GET /suno/fetch/{task_id}",
-    ]
-    await update.effective_message.reply_text("\n".join(lines)[:3900])
-
-
-def _suno_submenu_text() -> str:
-    # Plain text intentionally: Telegram Markdown is fragile in callback-edited messages.
-    return (
-        "üéµ –ú—É–∑—ã–∫–∞ / –ø–µ—Å–Ω–∏ ‚Äî Suno\n"
-        "–ú–æ–∂–Ω–æ —Å–æ–∑–¥–∞–≤–∞—Ç—å –≥–æ—Ç–æ–≤—ã–µ –ø–µ—Å–Ω–∏ —Å –≤–æ–∫–∞–ª–æ–º, —Ä–µ–∫–ª–∞–º–Ω—ã–µ –¥–∂–∏–Ω–≥–ª—ã, –∏–Ω—Ç—Ä–æ/–∞—É—Ç—Ä–æ –¥–ª—è Reels, "
-        "—Ñ–æ–Ω–æ–≤—É—é –º—É–∑—ã–∫—É, –º–∏–Ω—É—Å–æ–≤–∫–∏, –¥–µ–º–æ-—Ç—Ä–µ–∫–∏ –∏ –∫–æ—Ä–æ—Ç–∫–∏–µ –±—Ä–µ–Ω–¥-–∞—É–¥–∏–æ.\n\n"
-        "–ö–∞–∫ –∑–∞–ø—É—Å–∫–∞—Ç—å:\n"
-        "1) –Ω–∞–∂–º–∏—Ç–µ –ø—Ä–µ—Å–µ—Ç –Ω–∏–∂–µ;\n"
-        "2) –Ω–∞–ø–∏—à–∏—Ç–µ –¥–µ—Ç–∞–ª–∏: —Ç–µ–º–∞, –±—Ä–µ–Ω–¥/–Ω–∏—à–∞, —Å—Ç–∏–ª—å, —è–∑—ã–∫, –≥–æ–ª–æ—Å, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å;\n"
-        "3) —è —Å–æ–±–µ—Ä—É –ø—Ä–∞–≤–∏–ª—å–Ω—ã–π Suno-–ø—Ä–æ–º–ø—Ç –∏ –æ—Ç–ø—Ä–∞–≤–ª—é –∑–∞–¥–∞—á—É.\n\n"
-        "–ú–æ–∂–Ω–æ –≤—ã–±—Ä–∞—Ç—å ¬´–°–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å¬ª –∏ –Ω–∞–ø–∏—Å–∞—Ç—å –≤—Å—ë –æ–¥–Ω–∏–º —Å–æ–æ–±—â–µ–Ω–∏–µ–º. –û–±—ã—á–Ω–æ –≥–æ—Ç–æ–≤–Ω–æ—Å—Ç—å 1‚Äì5 –º–∏–Ω—É—Ç."
-    )
-
-
-def _suno_menu_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("‚úçÔ∏è –°–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å", callback_data="suno:free")],
-        [InlineKeyboardButton("üè¢ –î–∂–∏–Ω–≥–ª –¥–ª—è –±–∏–∑–Ω–µ—Å–∞", callback_data="suno:preset:jingle")],
-        [InlineKeyboardButton("üì± –ò–Ω—Ç—Ä–æ –¥–ª—è Reels", callback_data="suno:preset:reels_intro")],
-        [InlineKeyboardButton("üé¨ –§–æ–Ω–æ–≤–∞—è –º—É–∑—ã–∫–∞", callback_data="suno:preset:background")],
-        [InlineKeyboardButton("üé§ –ü–µ—Å–Ω—è —Å –≤–æ–∫–∞–ª–æ–º", callback_data="suno:preset:vocal_song")],
-        [InlineKeyboardButton("üéß –ú–∏–Ω—É—Å–æ–≤–∫–∞ / instrumental", callback_data="suno:preset:instrumental")],
-        [InlineKeyboardButton("üèù Luxury tropical", callback_data="suno:preset:tropical_luxury")],
-        [InlineKeyboardButton("‚¨ÖÔ∏è –ù–∞–∑–∞–¥ –∫ —Ä–∞–∑–≤–ª–µ—á–µ–Ω–∏—è–º", callback_data="suno:back_fun")],
-    ])
-
-
-def _suno_preset_instruction(kind: str) -> str:
-    presets = {
-        "jingle": (
-            "üè¢ –î–∂–∏–Ω–≥–ª –¥–ª—è –±–∏–∑–Ω–µ—Å–∞\n"
-            "–ù–∞–ø–∏—à–∏—Ç–µ: –Ω–∏—à–∞/–±—Ä–µ–Ω–¥, –≥–æ—Ä–æ–¥ –∏–ª–∏ –≥–µ–æ–≥—Ä–∞—Ñ–∏—è, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫, –Ω—É–∂–µ–Ω –ª–∏ –≤–æ–∫–∞–ª, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.\n\n"
-            "–ü—Ä–∏–º–µ—Ä: –∞–≥–µ–Ω—Ç—Å—Ç–≤–æ –Ω–µ–¥–≤–∏–∂–∏–º–æ—Å—Ç–∏ –Ω–∞ –°–∞–º—É–∏, 20 —Å–µ–∫—É–Ω–¥, tropical house, luxury, –±–µ–∑ –≤–æ–∫–∞–ª–∞, –∑–∞–ø–æ–º–∏–Ω–∞—é—â–∏–π—Å—è –±—Ä–µ–Ω–¥–æ–≤—ã–π –∑–≤—É–∫."
-        ),
-        "reels_intro": (
-            "üì± –ò–Ω—Ç—Ä–æ / –∞—É—Ç—Ä–æ –¥–ª—è Reels\n"
-            "–ù–∞–ø–∏—à–∏—Ç–µ —Ç–µ–º—É Reels, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å 5‚Äì20 —Å–µ–∫, –Ω—É–∂–µ–Ω –ª–∏ –≥–æ–ª–æ—Å/–≤–æ–∫–∞–ª.\n\n"
-            "–ü—Ä–∏–º–µ—Ä: –∏–Ω—Ç—Ä–æ 12 —Å–µ–∫—É–Ω–¥ –¥–ª—è —Ä–∏–ª—Å–æ–≤ –ø—Ä–æ –≤–∏–ª–ª—ã –Ω–∞ –°–∞–º—É–∏, luxury tropical, —ç–Ω–µ—Ä–≥–∏—á–Ω–æ, –±–µ–∑ –≤–æ–∫–∞–ª–∞, —Å–æ–≤—Ä–µ–º–µ–Ω–Ω—ã–π –±–∏—Ç."
-        ),
-        "background": (
-            "üé¨ –§–æ–Ω–æ–≤–∞—è –º—É–∑—ã–∫–∞\n"
-            "–ù–∞–ø–∏—à–∏—Ç–µ –¥–ª—è —á–µ–≥–æ —Ñ–æ–Ω: –≤–∏–¥–µ–æ, –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏—è, —Å—Ç–æ—Ä–∏—Å, —à–æ—É—Ä—É–º, —Ä–µ—Å—Ç–æ—Ä–∞–Ω, –Ω–µ–¥–≤–∏–∂–∏–º–æ—Å—Ç—å. –£–∫–∞–∂–∏—Ç–µ –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ –∏ –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.\n\n"
-            "–ü—Ä–∏–º–µ—Ä: —Ñ–æ–Ω–æ–≤–∞—è –º—É–∑—ã–∫–∞ 60 —Å–µ–∫—É–Ω–¥ –¥–ª—è –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏–∏ –ø—Ä–µ–º–∏–∞–ª—å–Ω–æ–π –≤–∏–ª–ª—ã, cinematic tropical, —Å–ø–æ–∫–æ–π–Ω–∞—è, –±–µ–∑ –≤–æ–∫–∞–ª–∞."
-        ),
-        "vocal_song": (
-            "üé§ –ü–µ—Å–Ω—è —Å –≤–æ–∫–∞–ª–æ–º\n"
-            "–ù–∞–ø–∏—à–∏—Ç–µ —Ç–µ–º—É –ø–µ—Å–Ω–∏, —è–∑—ã–∫, –º—É–∂—Å–∫–æ–π/–∂–µ–Ω—Å–∫–∏–π –≤–æ–∫–∞–ª, –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, –º–æ–∂–Ω–æ –¥–æ–±–∞–≤–∏—Ç—å —Ç–µ–∫—Å—Ç –ø—Ä–∏–ø–µ–≤–∞ –∏–ª–∏ –∫—É–ø–ª–µ—Ç–∞.\n\n"
-            "–ü—Ä–∏–º–µ—Ä: –ø–µ—Å–Ω—è –Ω–∞ —Ä—É—Å—Å–∫–æ–º –ø—Ä–æ –∂–∏–∑–Ω—å —É –º–æ—Ä—è, –º—É–∂—Å–∫–æ–π –≤–æ–∫–∞–ª, pop house, –ø—Ä–∏–ø–µ–≤ –¥–æ–ª–∂–µ–Ω –±—ã—Ç—å –∑–∞–ø–æ–º–∏–Ω–∞—é—â–∏–º—Å—è."
-        ),
-        "instrumental": (
-            "üéß –ú–∏–Ω—É—Å–æ–≤–∫–∞ / instrumental\n"
-            "–ù–∞–ø–∏—à–∏—Ç–µ –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —Ç–µ–º–ø –∏ –≥–¥–µ –±—É–¥–µ—Ç –∏—Å–ø–æ–ª—å–∑–æ–≤–∞—Ç—å—Å—è —Ç—Ä–µ–∫.\n\n"
-            "–ü—Ä–∏–º–µ—Ä: –∏–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞–ª 90 —Å–µ–∫—É–Ω–¥, deep house, luxury, –∞—Ç–º–æ—Å—Ñ–µ—Ä–Ω–æ, –¥–ª—è –≤–∏–¥–µ–æ —Ç—É—Ä–∞ –ø–æ –≤–∏–ª–ª–µ, –±–µ–∑ –≤–æ–∫–∞–ª–∞."
-        ),
-        "tropical_luxury": (
-            "üèù Luxury tropical\n"
-            "–ü—Ä–µ—Å–µ—Ç –ø–æ–¥ –Ω–µ–¥–≤–∏–∂–∏–º–æ—Å—Ç—å, –≤–∏–ª–ª—ã, –ø—É—Ç–µ—à–µ—Å—Ç–≤–∏—è, –ø–ª—è–∂–Ω—ã–π –ø—Ä–µ–º–∏—É–º-–∫–æ–Ω—Ç–µ–Ω—Ç. –ù–∞–ø–∏—à–∏—Ç–µ –æ–±—ä–µ–∫—Ç/–±—Ä–µ–Ω–¥ –∏ –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.\n\n"
-            "–ü—Ä–∏–º–µ—Ä: 30 —Å–µ–∫—É–Ω–¥ –¥–ª—è –∞–≥–µ–Ω—Ç—Å—Ç–≤–∞ Cozy Asia, –°–∞–º—É–∏, premium tropical house, –¥–æ—Ä–æ–≥–æ–π –º—è–≥–∫–∏–π –∑–≤—É–∫, –±–µ–∑ –≤–æ–∫–∞–ª–∞."
-        ),
-    }
-    return presets.get(kind, _suno_submenu_text())
-
-
-def _suno_preset_prefix(kind: str) -> str:
-    prefixes = {
-        "jingle": "Create a polished business advertising jingle. Duration 15-30 seconds unless user specifies otherwise. Catchy, brand-friendly, high production value.",
-        "reels_intro": "Create a short intro/outro music bed for Reels/Shorts. Duration 5-20 seconds unless user specifies otherwise. Modern, hooky, social-media ready.",
-        "background": "Create background music for video/presentation. Instrumental unless user explicitly asks for vocals. Smooth mix, no harsh lead vocal.",
-        "vocal_song": "Create a full song with vocals. Follow requested language, vocal gender, genre, lyrics/theme and mood.",
-        "instrumental": "Create an instrumental track, no vocals. Follow requested genre, tempo, mood, and use-case.",
-        "tropical_luxury": "Create luxury tropical house / premium island real-estate music. Warm, expensive, elegant, suitable for villa and travel content. Instrumental unless user asks for vocals.",
-    }
-    return prefixes.get(kind, "")
-
-
-def _prepare_suno_brief_from_context(context: ContextTypes.DEFAULT_TYPE, user_text: str) -> str:
-    kind = ""
-    with contextlib.suppress(Exception):
-        kind = context.user_data.pop("suno_preset_kind", "") or ""
-    user_text = (user_text or "").strip()
-    prefix = _suno_preset_prefix(kind)
-    if prefix:
-        return f"{prefix}\nUser details: {user_text}".strip()
-    return user_text
-
-def _suno_help_text() -> str:
-    # Plain text intentionally: Telegram legacy Markdown can crash callback editing
-    # on slash/backtick-heavy help texts on some clients.
-    return (
-        "üéµ –ú—É–∑—ã–∫–∞ / Suno\n"
-        "–ú–æ–∂–Ω–æ —Å–æ–∑–¥–∞–≤–∞—Ç—å: –ø–µ—Å–Ω–∏ —Å –≤–æ–∫–∞–ª–æ–º, –¥–∂–∏–Ω–≥–ª—ã, –∏–Ω—Ç—Ä–æ/–∞—É—Ç—Ä–æ –¥–ª—è Reels, —Ñ–æ–Ω–æ–≤—É—é –º—É–∑—ã–∫—É, –º–∏–Ω—É—Å–æ–≤–∫–∏ –∏ –¥–µ–º–æ-—Ç—Ä–µ–∫–∏.\n\n"
-        "–ß—Ç–æ –Ω–∞–ø–∏—Å–∞—Ç—å:\n"
-        "‚Ä¢ –∂–∞–Ω—Ä: pop, rap, house, cinematic, acoustic;\n"
-        "‚Ä¢ –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ: luxury, —ç–Ω–µ—Ä–≥–∏—á–Ω–æ, –¥—Ä–∞–º–∞—Ç–∏—á–Ω–æ, —Ä–æ–º–∞–Ω—Ç–∏—á–Ω–æ;\n"
-        "‚Ä¢ —è–∑—ã–∫ –∏ –≤–æ–∫–∞–ª: —Ä—É—Å—Å–∫–∏–π –º—É–∂—Å–∫–æ–π –≤–æ–∫–∞–ª / –∞–Ω–≥–ª–∏–π—Å–∫–∏–π –∂–µ–Ω—Å–∫–∏–π –≤–æ–∫–∞–ª / instrumental;\n"
-        "‚Ä¢ —Ç–µ–∫—Å—Ç –∫—É–ø–ª–µ—Ç–∞/–ø—Ä–∏–ø–µ–≤–∞ –∏–ª–∏ —Ç–µ–º—É –ø–µ—Å–Ω–∏;\n"
-        "‚Ä¢ –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å/—Ñ–æ—Ä–º–∞—Ç: intro 15 —Å–µ–∫, jingle, full song.\n\n"
-        "–ü—Ä–∏–º–µ—Ä: —Å–¥–µ–ª–∞–π –¥–∂–∏–Ω–≥–ª 20 —Å–µ–∫ –¥–ª—è –∞–≥–µ–Ω—Ç—Å—Ç–≤–∞ –Ω–µ–¥–≤–∏–∂–∏–º–æ—Å—Ç–∏ –Ω–∞ –°–∞–º—É–∏, tropical house, luxury, –±–µ–∑ –≤–æ–∫–∞–ª–∞.\n\n"
-        "–ü–æ—Å–ª–µ —ç—Ç–æ–≥–æ —è –æ—Ç–ø—Ä–∞–≤–ª—é –∑–∞–¥–∞—á—É –≤ Suno. –û–±—ã—á–Ω–æ –≥–æ—Ç–æ–≤–Ω–æ—Å—Ç—å 1‚Äì5 –º–∏–Ω—É—Ç."
-    )
-
-async def _show_suno_help_from_callback(q, context, reply_markup=None, submenu: bool = False):
-    """Show Suno instructions safely from any callback.
-
-    Callback buttons should never fall into the global error handler only because
-    Telegram refused to edit an old/unchanged message or parse markdown.
-    """
-    context.user_data["awaiting_suno_brief"] = True
-    text = _suno_submenu_text() if submenu else _suno_help_text()
-    kb = reply_markup or (_suno_menu_kb() if submenu else _mode_kb("fun"))
-    try:
-        await q.message.reply_text(text, reply_markup=kb)
-    except Exception as e:
-        log.warning("Suno menu edit failed, fallback to reply: %s", e)
-        with contextlib.suppress(Exception):
-            await q.message.reply_text(text, reply_markup=kb)
-
-
-async def _safe_suno_callback_reply(q, text: str, reply_markup=None, *, edit: bool = True):
-    """–ë–µ–∑–æ–ø–∞—Å–Ω—ã–π –≤—ã–≤–æ–¥ Suno-–º–µ–Ω—é.
-
-    –ù–∞ —á–∞—Å—Ç–∏ –∞–∫–∫–∞—É–Ω—Ç–æ–≤ Telegram –º–æ–∂–µ—Ç –æ—Ç–∫–∞–∑–∞—Ç—å –≤ edit_message_text –¥–ª—è —Å—Ç–∞—Ä–æ–≥–æ/–∫—ç—à–∏—Ä–æ–≤–∞–Ω–Ω–æ–≥–æ
-    —Å–æ–æ–±—â–µ–Ω–∏—è –∏–ª–∏ –ø—Ä–∏ –ø–æ–≤—Ç–æ—Ä–Ω–æ–º –Ω–∞–∂–∞—Ç–∏–∏ inline-–∫–Ω–æ–ø–∫–∏. –†–∞–Ω—å—à–µ —ç—Ç–æ —É—Ö–æ–¥–∏–ª–æ –≤ –æ–±—â–∏–π error-handler
-    –∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å –≤–∏–¥–µ–ª ¬´–£–ø—Å¬ª. –¢–µ–ø–µ—Ä—å Suno-–∫–Ω–æ–ø–∫–∏ –Ω–µ –ø–∞–¥–∞—é—Ç: –µ—Å–ª–∏ edit –Ω–µ –ø—Ä–æ—à—ë–ª, –æ—Ç–ø—Ä–∞–≤–ª—è–µ–º
-    –Ω–æ–≤–æ–µ —Å–æ–æ–±—â–µ–Ω–∏–µ.
-    """
-    try:
-        if edit:
-            await q.message.reply_text(text, reply_markup=reply_markup)
-            return
-    except Exception as e:
-        log.warning("Suno callback edit failed, fallback to reply. data=%s err=%s", getattr(q, "data", ""), e)
-    try:
-        await q.message.reply_text(text, reply_markup=reply_markup)
-    except Exception as e:
-        log.warning("Suno callback reply failed: %s", e)
-
-
-async def on_cb_suno(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    data = (q.data or "").strip()
-    uid = q.from_user.id
-
-    try:
-        if data == "suno:back_fun":
-            context.user_data.pop("awaiting_suno_brief", None)
-            context.user_data.pop("suno_preset_kind", None)
-            _set_mode_clean(uid, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "")
-            with contextlib.suppress(Exception):
-                await q.answer("–ù–∞–∑–∞–¥")
-            await _safe_suno_callback_reply(q, _mode_desc("fun"), reply_markup=_mode_kb("fun"))
-            return
-
-        if data == "suno:free":
-            _clear_transient_flows(context)
-            _set_mode_clean(uid, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "suno_music")
-            context.user_data["awaiting_suno_brief"] = True
-            with contextlib.suppress(Exception):
-                await q.answer("–°–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å")
-            await _safe_suno_callback_reply(
-                q,
-                "‚úçÔ∏è –°–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å –¥–ª—è Suno\n\n"
-                "–ù–∞–ø–∏—à–∏—Ç–µ –æ–¥–Ω–∏–º —Å–æ–æ–±—â–µ–Ω–∏–µ–º, –∫–∞–∫—É—é –º—É–∑—ã–∫—É —Å–¥–µ–ª–∞—Ç—å: –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫/–≤–æ–∫–∞–ª, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å –∏ –Ω–∞–∑–Ω–∞—á–µ–Ω–∏–µ.\n\n"
-                "–ü—Ä–∏–º–µ—Ä: —Å–¥–µ–ª–∞–π –¥–∂–∏–Ω–≥–ª 20 —Å–µ–∫—É–Ω–¥ –¥–ª—è –∞–≥–µ–Ω—Ç—Å—Ç–≤–∞ –Ω–µ–¥–≤–∏–∂–∏–º–æ—Å—Ç–∏ –Ω–∞ –°–∞–º—É–∏, tropical house, luxury, –±–µ–∑ –≤–æ–∫–∞–ª–∞.",
-                reply_markup=_suno_menu_kb(),
-            )
-            return
-
-        if data.startswith("suno:preset:"):
-            kind = data.split(":", 2)[2]
-            _clear_transient_flows(context)
-            _set_mode_clean(uid, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "suno_music")
-            context.user_data["awaiting_suno_brief"] = True
-            context.user_data["suno_preset_kind"] = kind
-            with contextlib.suppress(Exception):
-                await q.answer("–ü—Ä–µ—Å–µ—Ç Suno")
-            # –î–ª—è –ø—Ä–µ—Å–µ—Ç–æ–≤ –ª—É—á—à–µ –æ—Ç–ø—Ä–∞–≤–ª—è—Ç—å –Ω–æ–≤–æ–µ —Å–æ–æ–±—â–µ–Ω–∏–µ, –∞ –Ω–µ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å —Å—Ç–∞—Ä–æ–µ: —Ç–∞–∫ –Ω–µ –ª–æ–≤–∏–º
-            # Telegram BadRequest –Ω–∞ —Å—Ç–æ—Ä–æ–Ω–Ω–∏—Ö –∞–∫–∫–∞—É–Ω—Ç–∞—Ö/—Å—Ç–∞—Ä—ã—Ö inline-—Å–æ–æ–±—â–µ–Ω–∏—è—Ö.
-            await _safe_suno_callback_reply(q, _suno_preset_instruction(kind), reply_markup=_suno_menu_kb(), edit=False)
-            return
-
-        with contextlib.suppress(Exception):
-            await q.answer()
-    except Exception as e:
-        log.exception("Suno callback failed safely. data=%s uid=%s err=%s", data, uid, e)
-        with contextlib.suppress(Exception):
-            await q.answer("–û—à–∏–±–∫–∞ Suno-–º–µ–Ω—é", show_alert=False)
-        with contextlib.suppress(Exception):
-            await q.message.reply_text(
-                "‚ö†Ô∏è –ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–∫—Ä—ã—Ç—å —ç—Ç–æ—Ç –ø—É–Ω–∫—Ç Suno. –ù–∞–∂–º–∏—Ç–µ ¬´üéµ –ú—É–∑—ã–∫–∞ / –ø–µ—Å–Ω—è¬ª –µ—â—ë —Ä–∞–∑ –∏–ª–∏ –æ—Ç–ø—Ä–∞–≤—å—Ç–µ –æ–ø–∏—Å–∞–Ω–∏–µ –ø–µ—Å–Ω–∏ —Ç–µ–∫—Å—Ç–æ–º.",
-                reply_markup=_suno_menu_kb(),
-            )
-
-
-async def cmd_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    brief = " ".join(context.args).strip() if context.args else ""
-    if not brief:
-        _set_mode_clean(update.effective_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "suno_music")
-        context.user_data["awaiting_suno_brief"] = True
-        await update.effective_message.reply_text(_suno_submenu_text(), reply_markup=_suno_menu_kb())
-        return
-    await _run_suno_music(update, context, brief)
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Photo quick actions ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def photo_revival_actions_kb():
-    """Choose motion scenario first; engine selection is the next step."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("‚ú® –ï—Å—Ç–µ—Å—Ç–≤–µ–Ω–Ω–æ–µ –æ–∂–∏–≤–ª–µ–Ω–∏–µ", callback_data="pedit:revive_auto")],
-        [InlineKeyboardButton("üõ° –ú–∞–∫—Å–∏–º–∞–ª—å–Ω–æ —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –ª–∏—Ü–∞", callback_data="pedit:revive_identity")],
-        [InlineKeyboardButton("‚úçÔ∏è –°–≤–æ–π —Å—Ü–µ–Ω–∞—Ä–∏–π / –ø—Ä–æ–º–ø—Ç", callback_data="pedit:revive_custom")],
-        [InlineKeyboardButton("‚¨ÖÔ∏è –ù–∞–∑–∞–¥ –≤ –†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", callback_data="mode:fun")],
-    ])
-
-
-def photo_revival_engines_kb():
-    """Engine selection after automatic/custom motion scenario is known."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("‚ú® –û–∂–∏–≤–∏—Ç—å —á–µ—Ä–µ–∑ Runway", callback_data="pedit:revive_runway")],
-        [InlineKeyboardButton("‚ú® –û–∂–∏–≤–∏—Ç—å —á–µ—Ä–µ–∑ Kling", callback_data="pedit:revive_kling")],
-        [InlineKeyboardButton("‚ú® Sora 2 –±–µ–∑ –ª—é–¥–µ–π", callback_data="pedit:revive_sora")],
-        [InlineKeyboardButton("‚¨ÖÔ∏è –ù–∞–∑–∞–¥ –∫ —Å—Ü–µ–Ω–∞—Ä–∏—é", callback_data="pedit:revive_menu")],
-    ])
-
-
-def photo_revival_wait_kb():
-    """Navigation only while waiting for the source photo."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("‚¨ÖÔ∏è –ù–∞–∑–∞–¥ –≤ –†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", callback_data="mode:fun")],
-    ])
-
-
-def photo_quick_actions_kb():
-    # –î–ª–∏–Ω–Ω—ã–µ –ø–æ–¥–ø–∏—Å–∏ ‚Äî –æ—Ç–¥–µ–ª—å–Ω—ã–º–∏ —Å—Ç—Ä–æ–∫–∞–º–∏, —á—Ç–æ–±—ã –Ω–µ –æ–±—Ä–µ–∑–∞–ª–∏—Å—å –≤ Telegram.
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("‚ú® –û–∂–∏–≤–∏—Ç—å —á–µ—Ä–µ–∑ Runway", callback_data="pedit:revive_runway")],
-        [InlineKeyboardButton("‚ú® –û–∂–∏–≤–∏—Ç—å —á–µ—Ä–µ–∑ Kling", callback_data="pedit:revive_kling")],
-        [InlineKeyboardButton("‚ú® Sora 2 –±–µ–∑ –ª—é–¥–µ–π", callback_data="pedit:revive_sora")],
-        [InlineKeyboardButton("üó£ –ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä", callback_data="pedit:avatar")],
-        [InlineKeyboardButton("üé§ AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø / –ø–µ—Å–Ω—è", callback_data="pedit:photoclip")],
-        [InlineKeyboardButton("ü§≥ AI-—Å–µ–ª—Ñ–∏ —Å–æ –∑–≤–µ–∑–¥–æ–π", callback_data="pedit:aiselfie")],
-        [InlineKeyboardButton("üé≠ –ó–∞–º–µ–Ω–∞ –ª–∏—Ü–∞ –Ω–∞ —Ñ–æ—Ç–æ", callback_data="pedit:faceswap")],
-        [InlineKeyboardButton("üßº –£–¥–∞–ª–∏—Ç—å —Ñ–æ–Ω –Ω–∞ —Ñ–æ—Ç–æ", callback_data="pedit:removebg")],
-        [InlineKeyboardButton("üñº –ó–∞–º–µ–Ω–∏—Ç—å —Ñ–æ–Ω –Ω–∞ —Ñ–æ—Ç–æ", callback_data="pedit:replacebg")],
-        [InlineKeyboardButton("üßΩ –£–¥–∞–ª–∏—Ç—å –≤–æ–¥—è–Ω–æ–π –∑–Ω–∞–∫", callback_data="pedit:retouch")],
-        [InlineKeyboardButton("üß≠ –†–∞—Å—à–∏—Ä–∏—Ç—å –∫–∞–¥—Ä", callback_data="pedit:outpaint")],
-        [InlineKeyboardButton("üìΩ –†–∞—Å–∫–∞–¥—Ä–æ–≤–∫–∞ —Ñ–æ—Ç–æ", callback_data="pedit:story")],
-        [InlineKeyboardButton("üñå –ö–∞—Ä—Ç–∏–Ω–∫–∞ –∏–∑ —Ç–µ–∫—Å—Ç–∞", callback_data="pedit:lumaimg")],
-        [InlineKeyboardButton("üëÅ –ê–Ω–∞–ª–∏–∑ —Ñ–æ—Ç–æ", callback_data="pedit:vision")],
-    ])
-
-_photo_cache = {}      # user_id -> bytes (legacy/fast-mode last photo)
-_photo_url_cache = {}  # user_id -> Telegram file URL when available
-
-# High-fidelity music-video references are intentionally isolated from _photo_cache.
-# Keys: face_front, face_3q, body_full, scene_reference.
-_music_video_identity_cache: dict[int, dict[str, bytes]] = {}
-
-def _music_video_identity_put(user_id: int, slot: str, data: bytes) -> None:
-    if slot not in {"face_front", "face_3q", "body_full", "scene_reference"}:
-        raise ValueError(f"unknown identity slot: {slot}")
-    if not data:
-        raise ValueError("empty identity reference")
-    _music_video_identity_cache.setdefault(int(user_id), {})[slot] = bytes(data)
-
-def _music_video_identity_get(user_id: int, slot: str) -> bytes | None:
-    return _music_video_identity_cache.get(int(user_id), {}).get(slot)
-
-def _music_video_identity_pack(user_id: int) -> dict[str, bytes]:
-    refs = _music_video_identity_cache.get(int(user_id), {})
-    return {k: refs[k] for k in ("face_front", "face_3q", "body_full", "scene_reference") if refs.get(k)}
-
-def _music_video_identity_clear(user_id: int) -> None:
-    _music_video_identity_cache.pop(int(user_id), None)
-
-def _music_video_identity_complete(user_id: int) -> bool:
-    refs = _music_video_identity_cache.get(int(user_id), {})
-    return all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference"))
-
-def _cache_photo(user_id: int, data: bytes, file_url: str | None = None):
-    try:
-        _photo_cache[user_id] = data
-        if file_url:
-            _photo_url_cache[user_id] = str(file_url)
-    except Exception:
-        pass
-
-def _get_cached_photo(user_id: int) -> bytes | None:
-    return _photo_cache.get(user_id)
-
-def _get_cached_photo_url(user_id: int) -> str:
-    return _photo_url_cache.get(user_id, "") or ""
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Kling Avatar / Photo‚Üímusic clip ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _is_avatar_intent(text: str) -> bool:
-    t = (text or "").lower()
-    return bool(re.search(r"(–≥–æ–≤–æ—Ä—è—â\w*\s+–∞–≤–∞—Ç–∞—Ä|–∞–≤–∞—Ç–∞—Ä\w*\s+–≥–æ–≤–æ—Ä|talking\s*avatar|avatar\s*video|lip[-\s]?sync|–ª–∏–ø[-\s]?—Å–∏–Ω–∫|—Å–∏–Ω—Ö—Ä–æ–Ω\w*\s+–≥—É–±)", t, re.I))
-
-
-def _is_photo_clip_intent(text: str) -> bool:
-    t = (text or "").lower()
-    return bool(re.search(r"(—Ñ–æ—Ç–æ\s*(?:–≤|‚Üí|-)\s*–≤–∏–¥–µ–æ–∫–ª–∏–ø|—Ñ–æ—Ç–æ\s*(?:–≤|‚Üí|-)\s*–∫–ª–∏–ø|–≤–∏–¥–µ–æ–∫–ª–∏–ø\s+–∏–∑\s+—Ñ–æ—Ç–æ|–∫–ª–∏–ø\s+–∏–∑\s+—Ñ–æ—Ç–æ|music\s*video|photo\s*clip)", t, re.I))
-
-
-def _clean_avatar_script(text: str) -> str:
-    t = (text or "").strip()
-    t = re.sub(r"^(?:—Å–¥–µ–ª–∞–π|—Å–æ–∑–¥–∞–π|—Å–≥–µ–Ω–µ—Ä–∏—Ä—É–π)?\s*(?:–≥–æ–≤–æ—Ä—è—â\w*\s+–∞–≤–∞—Ç–∞—Ä|–∞–≤–∞—Ç–∞—Ä|talking\s*avatar|lip[-\s]?sync)\s*[:Ôºö,-]?\s*", "", t, flags=re.I)
-    return t.strip()
-
-
-def _clean_photo_clip_prompt(text: str) -> str:
-    t = (text or "").strip()
-    t = re.sub(r"^(?:—Å–¥–µ–ª–∞–π|—Å–æ–∑–¥–∞–π|—Å–≥–µ–Ω–µ—Ä–∏—Ä—É–π)?\s*(?:—Ñ–æ—Ç–æ\s*(?:–≤|‚Üí|-)\s*(?:–≤–∏–¥–µ–æ–∫–ª–∏–ø|–∫–ª–∏–ø)|–≤–∏–¥–µ–æ–∫–ª–∏–ø\s+–∏–∑\s+—Ñ–æ—Ç–æ|–∫–ª–∏–ø\s+–∏–∑\s+—Ñ–æ—Ç–æ|music\s*video|photo\s*clip)\s*[:Ôºö,-]?\s*", "", t, flags=re.I)
-    return t.strip()
-
-
-def _set_avatar_wait(context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["awaiting_avatar_script"] = True
-    context.user_data.pop("awaiting_avatar_voice_choice", None)
-    context.user_data.pop("awaiting_photo_clip_prompt", None)
-
-
-def _set_avatar_voice_choice_wait(context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["awaiting_avatar_voice_choice"] = True
-    context.user_data.pop("awaiting_avatar_script", None)
-    context.user_data.pop("awaiting_photo_clip_prompt", None)
-
-
-def _set_photo_clip_wait(context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["awaiting_photo_clip_prompt"] = True
-    context.user_data.pop("awaiting_avatar_script", None)
-
-def _set_music_video_identity_wait(context: ContextTypes.DEFAULT_TYPE, slot: str) -> None:
-    for key in ("music_video_identity_front", "music_video_identity_3q", "music_video_identity_body", "music_video_scene_reference"):
-        context.user_data.pop(key, None)
-    key = {
-        "face_front": "music_video_identity_front",
-        "face_3q": "music_video_identity_3q",
-        "body_full": "music_video_identity_body",
-        "scene_reference": "music_video_scene_reference",
-    }[slot]
-    context.user_data[key] = True
-
-def _music_video_identity_wait_slot(context: ContextTypes.DEFAULT_TYPE) -> str:
-    for key, slot in (
-        ("music_video_identity_front", "face_front"),
-        ("music_video_identity_3q", "face_3q"),
-        ("music_video_identity_body", "body_full"),
-        ("music_video_scene_reference", "scene_reference"),
-    ):
-        if context.user_data.get(key):
-            return slot
-    return ""
-
-
-def _clear_avatar_wait(context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.pop("awaiting_avatar_script", None)
-    context.user_data.pop("awaiting_avatar_voice_choice", None)
-    context.user_data.pop("awaiting_avatar_photo", None)
-    context.user_data.pop("avatar_pending_script", None)
-
-
-def _clear_photo_clip_wait(context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.pop("awaiting_photo_clip_prompt", None)
-    context.user_data.pop("awaiting_photo_clip_photo", None)
-
-
-def _telegram_file_public_url(file_path: str) -> str:
-    fp = (file_path or "").strip()
-    if not fp:
-        return ""
-    if fp.startswith("http://") or fp.startswith("https://"):
-        return fp
-    return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{fp.lstrip('/')}"
-
-
-def _avatar_audio_supported_filename(filename: str, mime: str = "") -> bool:
-    f = (filename or "").lower()
-    m = (mime or "").lower()
-    return (
-        f.endswith((".mp3", ".wav", ".m4a", ".aac"))
-        or "mpeg" in m or "mp3" in m or "wav" in m or "m4a" in m or "aac" in m
-    )
-
-
-def _avatar_tts_voice_get(context: ContextTypes.DEFAULT_TYPE | None = None) -> str:
-    try:
-        v = ((context.user_data.get("avatar_tts_voice") if context else "") or "").strip()
-    except Exception:
-        v = ""
-    return v or AVATAR_TTS_DEFAULT_VOICE or OPENAI_TTS_VOICE or "alloy"
-
-
-def _avatar_tts_voice_label(voice: str) -> str:
-    labels = {
-        "nova": "Nova ‚Äî –º—è–≥–∫–∏–π –∂–µ–Ω—Å–∫–∏–π",
-        "alloy": "Alloy ‚Äî –Ω–µ–π—Ç—Ä–∞–ª—å–Ω—ã–π",
-        "onyx": "Onyx ‚Äî –Ω–∏–∑–∫–∏–π –º—É–∂—Å–∫–æ–π",
-        "shimmer": "Shimmer ‚Äî —Å–≤–µ—Ç–ª—ã–π –∂–µ–Ω—Å–∫–∏–π",
-        "fable": "Fable ‚Äî —Å—Ç–æ—Ä–∏—Ç–µ–ª–ª–∏–Ω–≥",
-        "echo": "Echo ‚Äî –º—É–∂—Å–∫–æ–π",
-        "sage": "Sage ‚Äî —Å–ø–æ–∫–æ–π–Ω—ã–π",
-        "ash": "Ash ‚Äî –ø–ª–æ—Ç–Ω—ã–π",
-        "coral": "Coral ‚Äî —è—Ä–∫–∏–π",
-        "verse": "Verse ‚Äî –≤—ã—Ä–∞–∑–∏—Ç–µ–ª—å–Ω—ã–π",
-        "ballad": "Ballad ‚Äî –º—è–≥–∫–∏–π",
-    }
-    return labels.get((voice or "").strip().lower(), (voice or "alloy").strip())
-
-
-async def _upload_bytes_to_telegram_file_url(update: Update, context: ContextTypes.DEFAULT_TYPE, raw: bytes, filename: str, caption: str = "") -> str:
-    if not raw:
-        return ""
-    sent = None
-    last_send_exc = None
-    for attempt in range(3):
-        # A timed-out multipart request may have consumed the stream. Rebuild it for
-        # every attempt so a retry always sends the complete artifact.
-        bio = BytesIO(raw)
-        bio.seek(0)
-        bio.name = filename
-        try:
-            sent = await update.effective_message.reply_document(
-                document=InputFile(bio),
-                caption=caption or "–§–∞–π–ª –ø–æ–¥–≥–æ—Ç–æ–≤–ª–µ–Ω –¥–ª—è –≥–µ–Ω–µ—Ä–∞—Ü–∏–∏.",
-                read_timeout=60,
-                write_timeout=60,
-                connect_timeout=20,
-                pool_timeout=20,
-            )
-            break
-        except TimedOut as exc:
-            last_send_exc = exc
-            log.warning(
-                "telegram reply_document timeout filename=%s attempt=%s/3",
-                filename, attempt + 1,
-            )
-            if attempt < 2:
-                await asyncio.sleep(2.0 * (attempt + 1))
-    if sent is None:
-        if last_send_exc:
-            raise last_send_exc
-        return ""
-    media = getattr(sent, "document", None) or getattr(sent, "audio", None) or getattr(sent, "voice", None)
-    if not media:
-        return ""
-    # Telegram getFile can transiently time out even after reply_document succeeded.
-    # Retry this non-billable transport step so a prepared identity keyframe does not
-    # abort the whole music-video pipeline before Suno/Kling are called.
-    tg_file = None
-    last_exc = None
-    for attempt in range(3):
-        try:
-            tg_file = await context.bot.get_file(media.file_id)
-            break
-        except TimedOut as exc:
-            last_exc = exc
-            log.warning(
-                "telegram get_file timeout filename=%s attempt=%s/3",
-                filename, attempt + 1,
-            )
-            if attempt < 2:
-                await asyncio.sleep(1.5 * (attempt + 1))
-    if tg_file is None:
-        if last_exc:
-            raise last_exc
-        return ""
-    return _telegram_file_public_url(getattr(tg_file, "file_path", "") or "")
-
-
-async def _text_to_public_mp3_url(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> str:
-    text = (text or "").strip()
-    if not text or not OPENAI_TTS_KEY:
-        return ""
-    mp3 = await asyncio.to_thread(_tts_bytes_sync, text[:TTS_MAX_CHARS], "mp3", _avatar_tts_voice_get(context))
-    if not mp3:
-        return ""
-    return await _upload_bytes_to_telegram_file_url(
-        update, context, mp3, "avatar_speech.mp3", "üîä –û–∑–≤—É—á–∫–∞ –¥–ª—è –≥–æ–≤–æ—Ä—è—â–µ–≥–æ –∞–≤–∞—Ç–∞—Ä–∞ –ø–æ–¥–≥–æ—Ç–æ–≤–ª–µ–Ω–∞."
-    )
-
-
-def _extract_task_status(js: object) -> str:
-    if not isinstance(js, dict):
-        return ""
-    for k in ("status", "state", "task_status"):
-        v = js.get(k)
-        if v is not None:
-            return str(v).lower().strip()
-    for k in ("data", "result", "response", "payload"):
-        v = js.get(k)
-        if isinstance(v, dict):
-            st = _extract_task_status(v)
-            if st:
-                return st
-    return ""
-
-
-def _extract_task_id_from_response(js: object) -> str:
-    if not isinstance(js, dict):
-        return ""
-    for k in ("id", "task_id", "generation_id", "video_id", "audio_id"):
-        v = js.get(k)
-        if v:
-            return str(v).strip()
-    for k in ("data", "result", "response", "payload"):
-        v = js.get(k)
-        if isinstance(v, dict):
-            tid = _extract_task_id_from_response(v)
-            if tid:
-                return tid
-    return ""
-
-
-async def _create_kling_tts_audio_ref(text: str) -> tuple[str, str, str]:
-    """Returns (audio_id, linked_task_id, sound_url). Prefer OpenAI TTS for RU; this is fallback."""
-    if not (KLING_API_KEY or COMET_API_KEY):
-        return "", "", ""
-    text = (text or "").strip()[:1000]
-    if not text:
-        return "", "", ""
-    headers = {"Authorization": f"Bearer {KLING_API_KEY or COMET_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
-    payload = {
-        "text": text,
-        "voice_id": KLING_TTS_VOICE_ID,
-        "voice_language": KLING_TTS_LANGUAGE,
-        "voice_speed": max(0.8, min(2.0, float(KLING_TTS_SPEED or 1.0))),
-    }
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        r = await client.post(f"{COMET_BASE_URL}{KLING_TTS_CREATE_PATH}", headers=headers, json=payload)
-        if r.status_code >= 400:
-            log.warning("Kling TTS create failed: %s", _api_error_preview(r))
-            return "", "", ""
-        js = r.json() or {}
-        sound_url = _extract_first_url(js) or ""
-        task_id = _extract_task_id_from_response(js)
-        audio_id = str((js.get("data") or {}).get("audio_id") or js.get("audio_id") or task_id or "").strip()
-        if sound_url or audio_id:
-            return audio_id, task_id, sound_url
-        return "", task_id, ""
-
-
-def _avatar_prompt_from_text(script_text: str = "") -> str:
-    base = KLING_AVATAR_PROMPT or "The person talks naturally to camera, realistic facial motion, accurate lip sync."
-    script_text = (script_text or "").strip()
-    if script_text:
-        return (base + " Speech content: " + script_text[:500]).strip()
-    return base
-
-
-async def _run_kling_avatar(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    img_bytes: bytes,
-    script_text: str = "",
-    audio_bytes: bytes | None = None,
-    audio_filename: str = "",
-    audio_file_url: str = "",
-    audio_mime: str = "",
-    avatar_prompt_override: str = "",
-    max_wait_s: int | None = None,
-):
-    if not (KLING_API_KEY or COMET_API_KEY):
-        await update.effective_message.reply_text("‚ùå Kling Avatar: COMET_API_KEY/KLING_API_KEY –Ω–µ –∑–∞–¥–∞–Ω –≤ Render ENV.")
-        return False
-
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    raw_b64 = base64.b64encode(img_bytes).decode("ascii")
-    sound_file = ""
-    audio_id = ""
-    linked_task_id = ""
-    script_text = (script_text or "").strip()
-
-    if audio_file_url and _avatar_audio_supported_filename(audio_filename, audio_mime):
-        sound_file = _telegram_file_public_url(audio_file_url)
-
-    if not sound_file and audio_bytes and not script_text:
-        try:
-            script_text = await _stt_transcribe_bytes(audio_filename or "voice.ogg", audio_bytes)
-        except Exception as e:
-            log.warning("Avatar voice STT failed: %s", e)
-            script_text = ""
-
-    if not sound_file and script_text and AVATAR_TTS_PROVIDER in ("openai", "auto", ""):
-        sound_file = await _text_to_public_mp3_url(update, context, script_text)
-
-    if not sound_file and script_text:
-        audio_id, linked_task_id, tts_url = await _create_kling_tts_audio_ref(script_text)
-        if tts_url:
-            sound_file = tts_url
-
-    if not sound_file and not audio_id:
-        await update.effective_message.reply_text(
-            "‚ùå –ù–µ –ø–æ–ª—É—á–∏–ª–æ—Å—å –ø–æ–¥–≥–æ—Ç–æ–≤–∏—Ç—å –∞—É–¥–∏–æ –¥–ª—è –∞–≤–∞—Ç–∞—Ä–∞. –ü—Ä–∏—à–ª–∏—Ç–µ MP3/WAV/M4A/AAC 2‚Äì60 —Å–µ–∫—É–Ω–¥ –∏–ª–∏ –¥–æ–±–∞–≤—å—Ç–µ OPENAI_TTS_KEY –≤ Render ENV."
-        )
-        return False
-
-    prompt = (avatar_prompt_override or "").strip() or _avatar_prompt_from_text(script_text)
-    payload = {
-        "image": raw_b64,
-        "prompt": prompt,
-        "mode": KLING_AVATAR_MODE,
-    }
-    if sound_file:
-        payload["sound_file"] = sound_file
-    else:
-        payload["audio_id"] = audio_id
-        if linked_task_id:
-            payload["task_id"] = linked_task_id
-
-    return await _create_and_poll_i2v(
-        update,
-        COMET_BASE_URL,
-        KLING_API_KEY or COMET_API_KEY,
-        [(KLING_AVATAR_CREATE_PATH, payload), ("/kling/v1/videos/avatar/image2video", payload)],
-        [KLING_AVATAR_STATUS_PATH, "/kling/v1/videos/avatar/image2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
-        "Kling talking avatar",
-        max_wait_s=max_wait_s,
-    )
-
-
-async def _run_kling_avatar_result_bytes(
-    img_bytes: bytes,
-    audio_file_url: str,
-    audio_filename: str,
-    audio_mime: str,
-    avatar_prompt: str,
-    max_wait_s: int | None = None,
-) -> bytes | None:
-    """Kling Avatar transport for pipelines that must assemble the final MP4 themselves."""
-    if not (KLING_API_KEY or COMET_API_KEY):
-        raise RuntimeError("Kling Avatar: API key missing")
-    sound_file = _telegram_file_public_url(audio_file_url or "")
-    if not sound_file:
-        raise RuntimeError("Kling Avatar: public audio URL missing")
-    raw_b64 = base64.b64encode(img_bytes).decode("ascii")
-    payload = {
-        "image": raw_b64,
-        "prompt": (avatar_prompt or "").strip() or KLING_AVATAR_PROMPT,
-        "mode": KLING_AVATAR_MODE,
-        "sound_file": sound_file,
-    }
-    scene_bytes = await _create_and_poll_i2v_bytes(
-        COMET_BASE_URL,
-        KLING_API_KEY or COMET_API_KEY,
-        [(KLING_AVATAR_CREATE_PATH, payload), ("/kling/v1/videos/avatar/image2video", payload)],
-        [KLING_AVATAR_STATUS_PATH, "/kling/v1/videos/avatar/image2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
-        "Kling Avatar scene",
-        max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S),
-    )
-    if not scene_bytes or len(scene_bytes) < 512 or scene_bytes[4:8] != b"ftyp":
-        raise RuntimeError("Kling Avatar scene: provider result is not an MP4 video")
-    log.info("Kling Avatar scene downloaded: %d bytes", len(scene_bytes))
-    return scene_bytes
-
-
-async def _start_talking_avatar(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    img_bytes: bytes,
-    script_text: str = "",
-    audio_bytes: bytes | None = None,
-    audio_filename: str = "",
-    audio_file_url: str = "",
-    audio_mime: str = "",
-    avatar_prompt_override: str = "",
-):
-    async def _go():
-        ok = await _run_kling_avatar(update, context, img_bytes, script_text, audio_bytes, audio_filename, audio_file_url, audio_mime, avatar_prompt_override)
-        return bool(ok)
-
-    await _try_pay_then_do(
-        update, context, update.effective_user.id,
-        "runway", AVATAR_UNIT_COST_USD, _go,
-        remember_kind="kling_talking_avatar",
-        remember_payload={"script": (script_text or "")[:500], "audio_filename": audio_filename},
-    )
-
-
-def _photo_clip_prompt(user_prompt: str, base_seconds: int = 10) -> str:
-    user_prompt = (user_prompt or "").strip()
-    if not user_prompt:
-        user_prompt = "—ç–Ω–µ—Ä–≥–∏—á–Ω—ã–π –º—É–∑—ã–∫–∞–ª—å–Ω—ã–π –∫–ª–∏–ø, –≥–µ—Ä–æ–π –≤ –∫–∞–¥—Ä–µ, –ø–ª–∞–≤–Ω–æ–µ –¥–≤–∏–∂–µ–Ω–∏–µ –∫–∞–º–µ—Ä—ã, cinematic, social media, high quality"
-    return (
-        "USER ACTION/DIRECTOR DIRECTION ‚Äî execute this literally and chronologically; do not replace it with dancing or posing: "
-        + user_prompt[:2200] +
-        " Create ONLY the visual part of a short cinematic music-video clip. "
-        "Keep the same identity and face, avoid deformation, natural body/head motion and physically plausible locomotion. "
-        "Do not create subtitles, text overlays or fake logos. "
-        f" Provider duration: {base_seconds} seconds. Audio is added separately. "
-    )
-
-
-def _photo_clip_target_duration(user_prompt: str) -> int:
-    txt = (user_prompt or "").lower()
-    m = re.search(r"(\d{1,3})\s*(?:—Å–µ–∫|—Å–µ–∫—É–Ω–¥|second|seconds|s)\b", txt, re.I)
-    mm = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:–º–∏–Ω|–º–∏–Ω—É—Ç|minute|minutes|min)\b", txt, re.I)
-    if mm:
-        try:
-            val = int(round(float(mm.group(1).replace(",", ".")) * 60))
-        except Exception:
-            val = PHOTO_CLIP_DEFAULT_DURATION_S
-    elif m:
-        try:
-            val = int(m.group(1))
-        except Exception:
-            val = PHOTO_CLIP_DEFAULT_DURATION_S
-    else:
-        val = PHOTO_CLIP_DEFAULT_DURATION_S
-    return max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), val))
-
-
-def _music_video_scene_prompts(user_prompt: str, target_duration: int) -> list[str]:
-    """Create deterministic short-scene directions for a longer coherent music video."""
-    scene_s = int(PHOTO_CLIP_SCENE_SECONDS or 10)
-    count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
-    phases = [
-        "opening shot, subtle movement, establish performers and location",
-        "medium performance shot, rhythmic body movement, sing/perform to camera",
-        "closer emotional performance shot, expressive face and natural gestures",
-        "dynamic camera move, performers interact naturally while keeping identity stable",
-        "side angle and gentle orbit camera, movement synchronized to the beat",
-        "chorus energy, stronger performance and coordinated gestures",
-        "cinematic close-up, stable facial identity and realistic mouth/body motion",
-        "wide performance shot, natural interaction and premium music-video staging",
-        "finale shot, confident ending pose and smooth camera pull-back",
-    ]
-    out = []
-    for idx in range(count):
-        phase = phases[min(idx, len(phases) - 1)]
-        out.append(
-            f"Scene {idx + 1}/{count}: {phase}. Preserve the exact same people, clothing and identities from the reference photo. "
-            f"Continue one coherent music video. User direction: {(user_prompt or '')[:650]}"
-        )
-    return out
-
-
-def _extract_last_video_frame_sync(video_bytes: bytes) -> bytes | None:
-    """Extract a JPEG continuation frame from a completed Kling segment."""
-    if not video_bytes:
-        return None
-    ffmpeg = _ffmpeg_exe()
-    try:
-        with tempfile.TemporaryDirectory(prefix="neyro_continuity_") as td:
-            src = os.path.join(td, "segment.mp4")
-            out = os.path.join(td, "last.jpg")
-            with open(src, "wb") as fh:
-                fh.write(video_bytes)
-            cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-sseof", "-0.08", "-i", src,
-                   "-frames:v", "1", "-q:v", "2", out]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
-            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
-                with open(out, "rb") as fh:
-                    return fh.read()
-    except Exception as exc:
-        log.warning("continuation frame extraction failed: %s", exc)
-    return None
-
-
-def _concat_video_segments_sync(segments: list[bytes], target_duration: int) -> bytes | None:
-    if not segments:
-        return None
-    if len(segments) == 1:
-        return segments[0]
-    ffmpeg = _ffmpeg_exe()
-    try:
-        with tempfile.TemporaryDirectory(prefix="neyro_clip_scenes_") as td:
-            paths = []
-            for i, data in enumerate(segments):
-                p = os.path.join(td, f"scene_{i:02d}.mp4")
-                with open(p, "wb") as fh:
-                    fh.write(data)
-                paths.append(p)
-            manifest = os.path.join(td, "concat.txt")
-            with open(manifest, "w", encoding="utf-8") as fh:
-                for p in paths:
-                    fh.write("file '" + p.replace("'", "'\\''") + "'\n")
-            out = os.path.join(td, "joined.mp4")
-            cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
-                   "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", out]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(120, FFMPEG_MUX_TIMEOUT_S))
-            if res.returncode != 0 or not os.path.exists(out) or os.path.getsize(out) < 4096:
-                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
-                       "-t", str(target_duration), "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
-                       "-crf", str(FFMPEG_MUX_CRF), "-an", "-movflags", "+faststart", out]
-                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(180, FFMPEG_MUX_TIMEOUT_S + 60))
-            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 4096:
-                with open(out, "rb") as fh:
-                    return fh.read()
-            log.warning("scene concat failed rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-800:])
-    except Exception as e:
-        log.warning("scene concat exception: %s", e)
-    return None
-
-
-def _ffmpeg_exe() -> str:
-    try:
-        import imageio_ffmpeg  # type: ignore
-        exe = imageio_ffmpeg.get_ffmpeg_exe()
-        if exe:
-            return exe
-    except Exception:
-        pass
-    return shutil.which("ffmpeg") or "ffmpeg"
-
-
-async def _download_binary_from_url(client: httpx.AsyncClient, url: str, accept: str = "*/*", timeout_s: float = 300.0) -> bytes | None:
-    if not url:
-        return None
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; GPT5ProBot/1.0)", "Accept": accept}
-        r = await client.get(url, headers=headers, timeout=timeout_s, follow_redirects=True)
-        if r.status_code >= 400:
-            log.warning("download_binary failed %s: %s", r.status_code, _api_error_preview(r))
-            return None
-        ctype = (r.headers.get("content-type") or "").lower()
-        if not r.content or len(r.content) < 512:
-            log.warning("download_binary empty response url=%s bytes=%s", url[:120], len(r.content or b""))
-            return None
-        if "text/html" in ctype or "application/json" in ctype:
-            log.warning("download_binary non-binary content-type=%s body=%s", ctype, r.text[:300])
-            return None
-        return bytes(r.content)
-    except Exception as e:
-        log.warning("download_binary exception url=%s: %s", url[:120], e)
-        return None
-
-
-async def _poll_video_task_for_bytes(
-    client: httpx.AsyncClient,
-    headers: dict,
-    base_url: str,
-    status_paths: list[str],
-    task_id: str,
-    caption: str,
-    max_wait_s: int = 1200,
-) -> bytes | None:
-    started = time.time()
-    last_body = ""
-    while time.time() - started < max_wait_s:
-        for path in status_paths:
-            try:
-                url = f"{base_url}{path}".format(id=task_id)
-                rs = await client.get(url, headers=headers, timeout=60.0, follow_redirects=True)
-                if rs.status_code >= 400:
-                    last_body = f"{rs.status_code}: {_api_error_preview(rs)}"
-                    continue
-                try:
-                    js = rs.json() or {}
-                except Exception:
-                    js = {}
-                st = str(js.get("status") or js.get("state") or js.get("task_status") or "").lower()
-                ready_url = _extract_first_url(js.get("output")) or _extract_first_url(js.get("outputs")) or _extract_first_url(js.get("assets")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
-                if ready_url and (st in ("", "completed", "succeeded", "success", "finished", "ready", "done", "succeed") or not st):
-                    content = await _download_binary_from_url(client, ready_url, accept="video/mp4,video/*,*/*;q=0.8", timeout_s=300.0)
-                    if content:
-                        return content
-                    last_body = f"ready_url download failed: {ready_url[:200]}"
-                if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
-                    # Terminal provider state must escape immediately. Previously this
-                    # RuntimeError was swallowed by the broad polling exception handler,
-                    # so a failed Kling task looked "processing" until the 20-minute timeout.
-                    failure = json.dumps(js, ensure_ascii=False)[:1500]
-                    log.warning("%s terminal task failure task_id=%s: %s", caption, task_id, failure)
-                    raise RuntimeError(f"{caption}: render failed {failure}")
-                last_body = json.dumps(js, ensure_ascii=False)[:700]
-            except RuntimeError:
-                raise
-            except Exception as e:
-                last_body = str(e)
-                continue
-        await asyncio.sleep(VIDEO_POLL_DELAY_S)
-    raise TimeoutError(f"{caption}: timeout, last={last_body[:700]}")
-
-
-async def _create_and_poll_i2v_bytes(
-    base_url: str,
-    api_key: str,
-    create_payloads: list[tuple[str, dict]],
-    status_paths: list[str],
-    caption: str,
-    max_wait_s: int = 1200,
-) -> bytes | None:
-    if not api_key:
-        raise RuntimeError(f"{caption}: API key missing")
-    auth_headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
-    last_err = ""
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-        # v61: for photo‚Üímusic clip do not try multiple create paths after success and do not send direct links.
-        for path, payload in create_payloads[:1]:
-            try:
-                headers = dict(auth_headers)
-                headers["Content-Type"] = "application/json"
-                if str(path).startswith("/runwayml/"):
-                    headers["X-Runway-Version"] = RUNWAY_API_VERSION or "2024-11-06"
-                r = await client.post(f"{base_url}{path}", headers=headers, json=payload)
-                if r.status_code >= 400:
-                    last_err = f"POST {path} ‚Üí {r.status_code}: {_api_error_preview(r)}"
-                    log.warning("%s create failed: %s", caption, last_err)
-                    continue
-                try:
-                    js = r.json() or {}
-                except Exception:
-                    js = {}
-                ready_url = _extract_first_url(js.get("output")) or _extract_first_url(js.get("outputs")) or _extract_first_url(js.get("assets")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
-                if ready_url:
-                    content = await _download_binary_from_url(client, ready_url, accept="video/mp4,video/*,*/*;q=0.8", timeout_s=300.0)
-                    if content:
-                        return content
-                task_id = str(
-                    js.get("id") or js.get("task_id") or js.get("generation_id") or js.get("video_id") or js.get("taskId") or js.get("taskID") or js.get("request_id") or js.get("uuid") or ""
-                ).strip()
-                if not task_id and isinstance(js.get("data"), dict):
-                    d = js.get("data") or {}
-                    task_id = str(d.get("id") or d.get("task_id") or d.get("generation_id") or d.get("video_id") or d.get("taskId") or d.get("taskID") or d.get("request_id") or d.get("uuid") or "").strip()
-                if not task_id and isinstance(js.get("result"), dict):
-                    d = js.get("result") or {}
-                    task_id = str(d.get("id") or d.get("task_id") or d.get("generation_id") or d.get("video_id") or d.get("taskId") or d.get("taskID") or d.get("request_id") or d.get("uuid") or "").strip()
-                if not task_id:
-                    last_err = f"POST {path}: no task id in {json.dumps(js, ensure_ascii=False)[:700]}"
-                    continue
-                log.info("%s accepted task_id=%s", caption, task_id)
-                return await _poll_video_task_for_bytes(client, headers, base_url, status_paths, task_id, caption, max_wait_s=max_wait_s)
-            except Exception as e:
-                last_err = str(e)
-                log.warning("%s create/poll exception: %s", caption, e)
-                continue
-    raise RuntimeError(last_err or f"{caption}: no result")
-
-
-async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s: int, aspect: str, image_url: str = "") -> bytes | None:
-    if not (KLING_API_KEY or COMET_API_KEY):
-        raise RuntimeError("Kling photo‚Üíclip: COMET_API_KEY/KLING_API_KEY –Ω–µ –∑–∞–¥–∞–Ω")
-    # Keep the photo‚Üíclip route consistent with the working explicit Kling I2V route:
-    # Comet/Kling validates image as a URL. Raw base64 can be accepted at creation
-    # but fail asynchronously. Prefer the cached Telegram HTTPS file URL.
-    image_ref = (image_url or "").strip()
-    if not image_ref.startswith("https://"):
-        image_ref = f"data:{sniff_image_mime(img_bytes)};base64,{base64.b64encode(img_bytes).decode('ascii')}"
-    base_duration = str(_duration_for_engine("kling", min(10, duration_s)))
-    kling_prompt = _photo_clip_prompt(prompt, int(base_duration))
-    # Provider hard limit is 2500 characters. The literal user direction is deliberately
-    # first, so a safety trim removes generic tail constraints rather than the requested action.
-    if len(kling_prompt) > 2480:
-        kling_prompt = kling_prompt[:2476].rstrip() + "..."
-    payload = {
-        "image": image_ref,
-        "prompt": kling_prompt,
-        "model_name": KLING_MODEL,
-        "model": KLING_MODEL,
-        "mode": PHOTO_CLIP_MODE,
-        "duration": base_duration,
-        "aspect_ratio": aspect,
-        # v61: music is added by Suno+ffmpeg. Native provider sound is not reliable here.
-        "sound": "off",
-    }
-    return await _create_and_poll_i2v_bytes(
-        COMET_BASE_URL,
-        KLING_API_KEY or COMET_API_KEY,
-        [(KLING_CREATE_PATH, payload), ("/kling/v1/videos/image2video", payload)],
-        ["/kling/v1/videos/image2video/{id}", KLING_STATUS_PATH, "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
-        "Kling photo‚Üímusic clip",
-        max_wait_s=max(LUMA_MAX_WAIT_S, RUNWAY_MAX_WAIT_S),
-    )
-
-
-async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | None:
-    brief = (brief or "").strip() or "dynamic catchy music video song, cinematic, social media ready"
-    if not (SUNO_AUTO_FOR_PHOTO_CLIP and SUNO_ENABLED and SUNO_API_KEY):
-        return None
-    headers = {"Authorization": f"Bearer {SUNO_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
-    # Only explicit WHOLE-TRACK instrumental requests may disable vocals.
-    # Phrases such as "–∏–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞–ª—å–Ω–æ–µ –≤—Å—Ç—É–ø–ª–µ–Ω–∏–µ –±–µ–∑ –≤–æ–∫–∞–ª–∞" describe an intro and
-    # must not set make_instrumental=True for the entire Suno song.
-    intro_only = bool(re.search(r"(?:–≤—Å—Ç—É–ø–ª–µ–Ω|–∏–Ω—Ç—Ä–æ|intro).{0,80}(?:–∏–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞–ª|–±–µ–∑ –≤–æ–∫–∞–ª–∞|–±–µ–∑ –≥–æ–ª–æ—Å–∞)|(?:–∏–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞–ª|–±–µ–∑ –≤–æ–∫–∞–ª–∞|–±–µ–∑ –≥–æ–ª–æ—Å–∞).{0,80}(?:–≤—Å—Ç—É–ø–ª–µ–Ω|–∏–Ω—Ç—Ä–æ|intro)", brief, re.I | re.S))
-    instrumental = (not intro_only) and bool(re.search(
-        r"(?:—Ç–æ–ª—å–∫–æ|–ø–æ–ª–Ω–æ—Å—Ç—å—é|—Ü–µ–ª–∏–∫–æ–º|–≤—Å—è\\s+–ø–µ—Å–Ω—è|whole\\s+(?:song|track)|entire\\s+(?:song|track)).{0,50}(?:–∏–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞–ª|instrumental|–±–µ–∑ –≤–æ–∫–∞–ª–∞|–±–µ–∑ –≥–æ–ª–æ—Å–∞)|"
-        r"(?:–∏–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞–ª|instrumental|–±–µ–∑ –≤–æ–∫–∞–ª–∞|–±–µ–∑ –≥–æ–ª–æ—Å–∞).{0,50}(?:—Ç–æ–ª—å–∫–æ|–ø–æ–ª–Ω–æ—Å—Ç—å—é|—Ü–µ–ª–∏–∫–æ–º|whole|entire)",
-        brief, re.I | re.S
-    ))
-    # IMPORTANT: keep music-video Suno submission identical to the proven standalone
-    # "–°–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å" Inspiration Mode. Do not wrap/rewrite a good user brief and do
-    # not send make_instrumental=False: Comet/Suno receives only mv + the user's own
-    # gpt_description_prompt unless the WHOLE track was explicitly requested instrumental.
-    base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": brief}
-    if instrumental:
-        base_payload.update({"prompt": "", "make_instrumental": True})
-    status_paths = [SUNO_STATUS_PATH, "/suno/fetch/{id}", "/suno/v1/music/{id}", "/api/v1/task/{id}", "/v1/tasks/{id}"]
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-        last_err = ""
-        for path in (SUNO_CREATE_PATH, "/suno/submit/music"):
-            try:
-                r = await client.post(f"{SUNO_BASE_URL}{path}", headers=headers, json=base_payload)
-                if r.status_code >= 400:
-                    last_err = f"POST {path} ‚Üí {r.status_code}: {_api_error_preview(r)}"
-                    continue
-                try:
-                    js = r.json() or {}
-                except Exception:
-                    js = {}
-                url = _extract_first_url(js.get("audio_url")) or _extract_first_url(js.get("audio")) or _extract_first_url(js.get("output")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
-                if url:
-                    audio = await _download_binary_from_url(client, url, accept="audio/mpeg,audio/*,*/*;q=0.8", timeout_s=300.0)
-                    if audio:
-                        return audio
-                task_id = str(js.get("id") or js.get("task_id") or js.get("taskId") or js.get("request_id") or "").strip()
-                data_obj = js.get("data")
-                if not task_id and isinstance(data_obj, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{8,}", data_obj.strip()):
-                    task_id = data_obj.strip()
-                if not task_id and isinstance(data_obj, dict):
-                    d = data_obj or {}
-                    task_id = str(d.get("id") or d.get("task_id") or d.get("taskId") or d.get("request_id") or "").strip()
-                if task_id:
-                    started = time.time()
-                    while time.time() - started < max(30, min(SUNO_TIMEOUT_S, PHOTO_CLIP_SUNO_FAST_TIMEOUT_S)):
-                        for sp in status_paths:
-                            try:
-                                rs = await client.get(f"{SUNO_BASE_URL}{sp}".format(id=task_id), headers=headers, timeout=60.0)
-                                if rs.status_code >= 400:
-                                    continue
-                                try:
-                                    sj = rs.json() or {}
-                                except Exception:
-                                    sj = {}
-                                data_nested = sj.get("data") if isinstance(sj, dict) else None
-                                nested = data_nested if isinstance(data_nested, dict) else {}
-                                url = _extract_first_url(sj.get("audio_url")) or _extract_first_url(sj.get("audio")) or _extract_first_url(sj.get("output")) or _extract_first_url(data_nested) or _extract_first_url(nested.get("data") if isinstance(nested, dict) else None) or _extract_first_url(sj)
-                                st = str(sj.get("status") or sj.get("state") or sj.get("task_status") or nested.get("status") or "").lower()
-                                if url and (st in ("", "completed", "succeeded", "success", "finished", "done", "ready") or not st):
-                                    audio = await _download_binary_from_url(client, url, accept="audio/mpeg,audio/*,*/*;q=0.8", timeout_s=300.0)
-                                    if audio:
-                                        return audio
-                                if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
-                                    raise RuntimeError(json.dumps(sj, ensure_ascii=False)[:900])
-                            except Exception as e:
-                                last_err = str(e)
-                                continue
-                        await asyncio.sleep(SUNO_POLL_DELAY_S)
-            except Exception as e:
-                last_err = str(e)
-                continue
-        log.warning("Suno result bytes failed: %s", last_err)
-    return None
-
-
-def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duration_s: int, output_path: str) -> str | None:
-    """Memory-safe final mux: ffmpeg reads/writes files; Python never materializes the joined video."""
-    if not video_path or not audio_path or not os.path.exists(video_path) or not os.path.exists(audio_path):
-        return None
-    target_duration_s = max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s or PHOTO_CLIP_DEFAULT_DURATION_S or 15)))
-    timeout_s = max(30, int(FFMPEG_MUX_TIMEOUT_S or 180))
-    max_bytes = max(5, int(FFMPEG_MUX_MAX_MB or 45)) * 1024 * 1024
-    ffmpeg = _ffmpeg_exe()
-    started = time.time()
-    # Avoid copy-first for a source already known to exceed Telegram target. It only creates
-    # another ~80MB file and raises peak memory/disk pressure before the required encode.
-    source_size = os.path.getsize(video_path)
-    attempts = []
-    if FFMPEG_MUX_COPY_FIRST and source_size <= max_bytes:
-        attempts.append(("copy-first", [], "copy"))
-    # Keep 4K delivery dimensions; meet Telegram upload ceiling with bitrate, not 720p downscaling.
-    audio_bps = 128000
-    target_video_bps = max(1800000, int((max_bytes * 8 * 0.90) / max(5, target_duration_s) - audio_bps))
-    target_video_k = max(1800, target_video_bps // 1000)
-    scale_4k = r"scale=if(gt(a\,1)\,3840\,-2):if(gt(a\,1)\,-2\,3840),fps=24"
-    attempts.extend([("delivery-4k", [scale_4k], "4k")])
-    for name, vf, mode in attempts:
-        tmp_out = output_path + "." + name + ".mp4"
-        cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
-               "-stream_loop", "-1", "-i", audio_path, "-t", str(target_duration_s),
-               "-map", "0:v:0", "-map", "1:a:0"]
-        if mode == "copy":
-            cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
-        elif mode == "4k":
-            cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
-                    "-b:v", f"{target_video_k}k", "-maxrate", f"{target_video_k}k", "-bufsize", f"{target_video_k * 2}k",
-                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
-        else:
-            raise RuntimeError(f"unknown mux mode: {mode}")
-        cmd += ["-shortest", "-movflags", "+faststart", tmp_out]
-        left = max(20, timeout_s - int(time.time() - started))
-        log.info("ffmpeg file mux attempt=%s video=%s duration=%s max_bytes=%s timeout_left=%s",
-                 name, source_size, target_duration_s, max_bytes, left)
-        try:
-            # Keep ffmpeg diagnostics off the Python heap. TemporaryFile is disk-backed;
-            # only a small tail is read if the process fails.
-            with tempfile.TemporaryFile(mode="w+b") as err_fh:
-                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=err_fh, timeout=left)
-                stderr_tail = b""
-                if res.returncode != 0:
-                    err_fh.seek(0, os.SEEK_END)
-                    err_size = err_fh.tell()
-                    err_fh.seek(max(0, err_size - 1500))
-                    stderr_tail = err_fh.read(1500)
-        except subprocess.TimeoutExpired:
-            continue
-        if res.returncode != 0:
-            log.warning("ffmpeg file mux failed attempt=%s rc=%s stderr=%s",
-                        name, res.returncode, stderr_tail.decode("utf-8", "ignore"))
-        if res.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 1024:
-            size = os.path.getsize(tmp_out)
-            log.info("ffmpeg file mux ok attempt=%s output=%s elapsed=%.1fs", name, size, time.time() - started)
-            if size <= max_bytes:
-                os.replace(tmp_out, output_path)
-                return output_path
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_out)
-    return None
-
-
-def _concat_video_segment_files_sync(segment_paths: list[str], target_duration: int, output_path: str) -> str | None:
-    """Concat provider MP4 files without loading the joined result into Python memory."""
-    if not segment_paths:
-        return None
-    ffmpeg = _ffmpeg_exe()
-    manifest = output_path + ".concat.txt"
-    with open(manifest, "w", encoding="utf-8") as fh:
-        for p in segment_paths:
-            fh.write("file '" + p.replace("'", "'\\''") + "'\n")
-    cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
-           "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", output_path]
-    with tempfile.TemporaryFile(mode="w+b") as err_fh:
-        res = subprocess.run(
-            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
-            timeout=max(120, FFMPEG_MUX_TIMEOUT_S),
-        )
-        stderr_tail = b""
-        if res.returncode != 0:
-            err_fh.seek(0, os.SEEK_END)
-            err_size = err_fh.tell()
-            err_fh.seek(max(0, err_size - 1500))
-            stderr_tail = err_fh.read(1500)
-    if res.returncode != 0:
-        log.warning("ffmpeg file concat failed rc=%s stderr=%s",
-                    res.returncode, stderr_tail.decode("utf-8", "ignore"))
-    if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 4096:
-        return output_path
-    return None
-
-
-def _mux_video_audio_sync(video_bytes: bytes, audio_bytes: bytes | None, target_duration_s: int) -> bytes | None:
-    """Build one Telegram-safe MP4 from Kling video + Suno audio.
-    v65: copy-first if small, then compressed fallback under FFMPEG_MUX_MAX_MB.
-    """
-    if not video_bytes or not audio_bytes:
-        return None
-    target_duration_s = max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 30), int(target_duration_s or PHOTO_CLIP_DEFAULT_DURATION_S or 15)))
-    timeout_s = max(30, int(FFMPEG_MUX_TIMEOUT_S or 180))
-    max_bytes = max(5, int(FFMPEG_MUX_MAX_MB or 45)) * 1024 * 1024
-    started = time.time()
-    try:
-        ffmpeg = _ffmpeg_exe()
-        with tempfile.TemporaryDirectory() as td:
-            vin = os.path.join(td, "input.mp4")
-            a_in = os.path.join(td, "audio.mp3")
-            out_fast = os.path.join(td, "final_fast.mp4")
-            out_compact = os.path.join(td, "final_compact.mp4")
-            out_small = os.path.join(td, "final_small.mp4")
-            with open(vin, "wb") as f:
-                f.write(video_bytes)
-            with open(a_in, "wb") as f:
-                f.write(audio_bytes)
-
-            attempts: list[tuple[str, list[str], str, bool]] = []
-            if FFMPEG_MUX_COPY_FIRST:
-                attempts.append((
-                    "copy-first",
-                    [
-                        ffmpeg, "-y",
-                        "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
-                        "-stream_loop", "-1", "-i", a_in,
-                        "-t", str(target_duration_s),
-                        "-map", "0:v:0", "-map", "1:a:0",
-                        "-c:v", "copy",
-                        "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE,
-                        "-shortest", "-movflags", "+faststart",
-                        out_fast,
-                    ],
-                    out_fast,
-                    True,
-                ))
-            # Telegram-safe compact encode. This is the primary fallback after copy-first.
-            attempts.append((
-                "compact-720p",
-                [
-                    ffmpeg, "-y",
-                    "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
-                    "-stream_loop", "-1", "-i", a_in,
-                    "-t", str(target_duration_s),
-                    "-map", "0:v:0", "-map", "1:a:0",
-                    "-vf", f"scale=-2:{int(FFMPEG_MUX_SCALE_HEIGHT or 720)},fps={int(FFMPEG_MUX_FPS or 24)}",
-                    "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
-                    "-crf", str(FFMPEG_MUX_CRF or "32"), "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE,
-                    "-shortest", "-movflags", "+faststart",
-                    out_compact,
-                ],
-                out_compact,
-                False,
-            ))
-            # Last-resort smaller encode if the first compact file is still too large.
-            attempts.append((
-                "small-540p",
-                [
-                    ffmpeg, "-y",
-                    "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
-                    "-stream_loop", "-1", "-i", a_in,
-                    "-t", str(target_duration_s),
-                    "-map", "0:v:0", "-map", "1:a:0",
-                    "-vf", "scale=-2:540,fps=20",
-                    "-c:v", "libx264", "-preset", "ultrafast",
-                    "-crf", "35", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "96k",
-                    "-shortest", "-movflags", "+faststart",
-                    out_small,
-                ],
-                out_small,
-                False,
-            ))
-
-            last_err = ""
-            best_too_large: bytes | None = None
-            for name, cmd, out_path, accept_only_if_small in attempts:
-                left = max(20, timeout_s - int(time.time() - started))
-                log.info("ffmpeg mux attempt=%s video=%s audio=%s duration=%s max_bytes=%s timeout_left=%s", name, len(video_bytes), len(audio_bytes), target_duration_s, max_bytes, left)
-                try:
-                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=left)
-                except subprocess.TimeoutExpired:
-                    last_err = f"{name}: timeout after {left}s"
-                    log.warning("ffmpeg mux timeout: %s", last_err)
-                    continue
-                if res.returncode != 0:
-                    last_err = f"{name}: rc={res.returncode} stderr={res.stderr.decode('utf-8', 'ignore')[-1500:]}"
-                    log.warning("ffmpeg mux failed: %s", last_err)
-                    continue
-                if not os.path.exists(out_path):
-                    last_err = f"{name}: output missing"
-                    continue
-                with open(out_path, "rb") as f:
-                    final = f.read()
-                if not final or len(final) <= 1024:
-                    last_err = f"{name}: empty output"
-                    continue
-                log.info("ffmpeg mux ok attempt=%s output=%s elapsed=%.1fs", name, len(final), time.time() - started)
-                if len(final) <= max_bytes:
-                    return final
-                best_too_large = final
-                last_err = f"{name}: output too large {len(final)} > {max_bytes}"
-                log.warning("ffmpeg mux output too large: %s", last_err)
-                if accept_only_if_small:
-                    continue
-            if best_too_large and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
-                return best_too_large
-            log.warning("ffmpeg mux all attempts failed/too-large: %s", last_err[-1500:])
-            return None
-    except Exception as e:
-        log.warning("mux_video_audio exception: %s", e)
-        return None
-
-
-
-
-
-def _trim_audio_for_vocal_clip_sync(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
-    """Telegram/Suno often returns a full 2-4 minute song, while Kling Avatar is much more reliable
-    on short audio. Trim/re-encode to a safe MP3 fragment for lip-sync.
-    """
-    if not audio_bytes:
-        return audio_bytes
-    max_seconds = max(8, min(90, int(max_seconds or 65)))
-    try:
-        ffmpeg = _ffmpeg_exe()
-        with tempfile.TemporaryDirectory() as td:
-            src = os.path.join(td, "suno_full.mp3")
-            out = os.path.join(td, "suno_lipsync_safe.mp3")
-            with open(src, "wb") as f:
-                f.write(audio_bytes)
-            cmd = [
-                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-                "-i", src,
-                "-t", str(max_seconds),
-                "-vn", "-ac", "2", "-ar", "44100",
-                "-c:a", "libmp3lame", "-b:a", "128k",
-                out,
-            ]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
-            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 2048:
-                with open(out, "rb") as f:
-                    return f.read()
-            log.warning("vocal clip audio trim failed: rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-500:])
-    except Exception as e:
-        log.warning("vocal clip audio trim exception: %s", e)
-    return audio_bytes
-
-async def _trim_audio_for_vocal_clip(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
-    return await asyncio.to_thread(_trim_audio_for_vocal_clip_sync, audio_bytes, max_seconds)
-
-def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
-    """Infer explicit singer roles only from the user's direction; never invent gender from pixels."""
-    t = (prompt or "").lower().replace("—ë", "–µ")
-    female = bool(re.search(r"(–∂–µ–Ω—â–∏–Ω|–¥–µ–≤—É—à|–∂–µ–Ω—Å–∫(?:–∏–π|–∏–º|–æ–≥–æ)?\s+(?:–≤–æ–∫–∞–ª|–≥–æ–ª–æ—Å)|female\s+vocal|woman\s+sings?)", t, re.I))
-    male = bool(re.search(r"(–º—É–∂—á–∏–Ω|–ø–∞—Ä–µ–Ω—å|–º—É–∂—Å–∫(?:–æ–π|–∏–º|–æ–≥–æ)?\s+(?:–≤–æ–∫–∞–ª|–≥–æ–ª–æ—Å)|male\s+vocal|man\s+sings?)", t, re.I))
-    duet = bool(re.search(r"(–≤–º–µ—Å—Ç–µ|–¥—É—ç—Ç|–ø—Ä–∏–ø–µ–≤.*(?:–æ–±–∞|–≤–º–µ—Å—Ç–µ)|–æ–±–∞.*(?:–ø–æ—é—Ç|–ø–µ—Ç—å)|duet|sing\s+together)", t, re.I))
-    if performer_count <= 1:
-        return {"mode": "solo", "female": female, "male": male, "duet": False}
-    if female and male:
-        return {"mode": "mixed_duet", "female": True, "male": True, "duet": duet}
-    return {"mode": "group", "female": female, "male": male, "duet": duet}
-
-
-def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
-    """Split a director brief into scene-local action contracts instead of repeating the whole story."""
-    text = re.sub(r"\s+", " ", (base_prompt or "").strip())
-    if not text:
-        return ["Continue the requested action naturally."] * max(1, scene_count)
-    # Sentence-level chronological allocation is deterministic and keeps future actions
-    # out of early Kling prompts. Identity/global constraints remain in the master lock.
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
-    action = [s for s in sentences if not re.search(
-        r"(identity lock|–∫—Ä–∏—Ç–∏—á–µ—Å–∫–∏ –≤–∞–∂–Ω–æ|—Å–æ—Ö—Ä–∞–Ω—è—Ç—å —Ñ–æ—Ä–º—É|face_front|face_3q|body_full|–Ω–µ –º–µ–Ω—è—Ç—å –ª–∏—Ü–æ|"
-        r"–º–∞–∫—Å–∏–º–∞–ª—å–Ω.*—Ñ–æ—Ç–æ—Ä–µ–∞–ª|–¥–≤–∏–∂–µ–Ω–∏—è –µ—Å—Ç–µ—Å—Ç–≤–µ–Ω|–Ω–∏–∫–∞–∫–∏—Ö —Ç–µ–ª–µ–ø–æ—Ä—Ç–∞—Ü|–∫–∞–∂–¥–∞—è —Å–ª–µ–¥—É—é—â–∞—è —á–∞—Å—Ç—å|"
-        r"–µ—Å–ª–∏ .*–≤–æ–∫–∞–ª|–≥—É–±—ã|subtitles|watermark)", s, re.I)]
-    if not action:
-        action = sentences or [text]
-    n = max(1, int(scene_count))
-    out = []
-    for i in range(n):
-        a = int(round(i * len(action) / n))
-        b = int(round((i + 1) * len(action) / n))
-        chunk = action[a:max(a + 1, b)]
-        out.append(" ".join(chunk)[:1050])
-    return out
-
-
-def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, scene_count: int) -> str:
-    """Build a stateful scene-local contract: protagonist, start/action/end state and forbidden transitions."""
-    mode = role_plan.get("mode")
-    role = "single lead protagonist" if mode == "solo" else "preserve only performer roles explicitly requested by the user"
-    beats = _music_video_story_beats(base_prompt, scene_count)
-    beat = beats[min(max(0, scene_idx - 1), len(beats) - 1)]
-    previous = beats[scene_idx - 2] if scene_idx > 1 else "the supplied starting keyframe"
-    return (
-        f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist; camera narrative priority stays on this person. "
-        f"START STATE: continue exactly from the physical end state of {previous[:420]}. "
-        f"REQUIRED ACTION CONTRACT FOR THIS SCENE ONLY: {beat} "
-        "END STATE: finish at the last physical state implied by this scene contract, ready for the next scene. "
-        "FORBIDDEN TRANSITIONS: do not execute actions belonging to later scenes; do not make a supporting character become the protagonist; "
-        "do not make a seated/waiting supporting character stand, walk, drive, swap seats or leave their stated position unless THIS scene explicitly requires it; "
-        "do not teleport people or props, duplicate them, reset poses, reverse completed actions, change wardrobe, vehicle geometry, environment or persistent objects. "
-        f"ROLE: {role}. IDENTITY AUTHORITY: FACE_FRONT=current frontal face, FACE_3Q=current turned-face geometry, BODY_FULL=current body. "
-        "The continuation image controls world/pose continuity only and NEVER overrides identity. "
-        "Preserve exact apparent age, facial geometry, hair, body proportions and wardrobe. "
-        "Natural physically plausible motion and premium photorealistic cinematic camera. Keep mouth neutral unless lip-sync is explicitly active. No text overlays."
-    )
-
-
-async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: int, duration_s: int) -> bytes:
-    def _cut() -> bytes:
-        ffmpeg = _ffmpeg_exe()
-        try:
-            with tempfile.TemporaryDirectory(prefix="neyro_vocal_scene_") as td:
-                src = os.path.join(td, "full.mp3")
-                out = os.path.join(td, "scene.mp3")
-                with open(src, "wb") as fh:
-                    fh.write(audio_bytes)
-                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", str(max(0, start_s)), "-i", src,
-                       "-t", str(max(2, duration_s)), "-vn", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", out]
-                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
-                if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
-                    with open(out, "rb") as fh:
-                        return fh.read()
-        except Exception as e:
-            log.warning("vocal scene audio cut failed: %s", e)
-        return b""
-    return await asyncio.to_thread(_cut)
-
-
-def _vocal_clip_provider_cost_usd(scene_count: int) -> float:
-    """Conservative estimate: the base clip plus one Avatar task per extra scene."""
-    return round(
-        float(VOCAL_CLIP_UNIT_COST_USD) + max(0, int(scene_count) - 1) * float(AVATAR_UNIT_COST_USD), 4
-    )
-
-
-def _vocal_artifact_path(user_id: int, token: str, kind: str) -> str:
-    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or kind not in ("audio", "video"):
-        raise ValueError("invalid vocal artifact reference")
-    suffix = "mp3" if kind == "audio" else "mp4"
-    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{kind}.{suffix}")
-
-
-def _prune_vocal_artifacts(user_dir: str) -> None:
-    """Keep a few recent tracks and failed deliveries on Render's persistent disk."""
-    if not os.path.isdir(user_dir):
-        return
-    now = time.time()
-    groups: dict[str, list[tuple[float, str]]] = {"audio": [], "video": []}
-    for entry in os.scandir(user_dir):
-        match = re.fullmatch(r"[0-9a-f]{12}_(audio|video)\.(?:mp3|mp4)", entry.name)
-        if not match or not entry.is_file(follow_symlinks=False):
-            continue
-        try:
-            modified = entry.stat().st_mtime
-            if now - modified > 7 * 86400:
-                os.unlink(entry.path)
-            else:
-                groups[match.group(1)].append((modified, entry.path))
-        except OSError:
-            log.exception("vocal artifact cleanup failed")
-    for kind, files in groups.items():
-        files.sort(reverse=True)
-        for _, path in files[5 if kind == "audio" else 2:]:
-            with contextlib.suppress(OSError):
-                os.unlink(path)
-
-
-def _save_vocal_artifact(user_id: int, token: str, kind: str, data: bytes) -> None:
-    path = _vocal_artifact_path(user_id, token, kind)
-    if not data or len(data) > 50 * 1024 * 1024:
-        raise RuntimeError("vocal artifact size invalid")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    temporary = path + "." + uuid.uuid4().hex + ".tmp"
-    try:
-        with open(temporary, "wb") as file:
-            file.write(data)
-        os.replace(temporary, path)
-        os.chmod(path, 0o600)
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(temporary)
-    _prune_vocal_artifacts(os.path.dirname(path))
-
-
-def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
-    try:
-        path = _vocal_artifact_path(user_id, token, kind)
-        st = os.stat(path)
-        if st.st_size < 512 or st.st_size > 50 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400:
-            return None
-        with open(path, "rb") as file:
-            return file.read()
-    except (OSError, ValueError):
-        return None
-
-
-def _vocal_song_kb(token: str, *, pending: bool = False) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton("üéµ –°–∫–∞—á–∞—Ç—å –ø–æ–ª–Ω—É—é –ø–µ—Å–Ω—é", callback_data=f"mvfile:audio:{token}")]]
-    if pending:
-        rows.extend([
-            [InlineKeyboardButton("‚úÖ –ü–æ–¥—Ç–≤–µ—Ä–¥–∏—Ç—å —ç—Ç–æ –∞—É–¥–∏–æ", callback_data=f"mvfile:approveaudio:{token}")],
-            [InlineKeyboardButton("üîÑ –°–≥–µ–Ω–µ—Ä–∏—Ä–æ–≤–∞—Ç—å –¥—Ä—É–≥–æ–µ –∞—É–¥–∏–æ", callback_data=f"mvfile:regenaudio:{token}")],
-            [InlineKeyboardButton("‚úèÔ∏è –ò–∑–º–µ–Ω–∏—Ç—å –ø—Ä–æ–º–ø—Ç –∞—É–¥–∏–æ", callback_data=f"mvfile:editaudio:{token}")],
-        ])
-    else:
-        rows.append([InlineKeyboardButton("üîÅ –ò—Å–ø–æ–ª—å–∑–æ–≤–∞—Ç—å —ç—Ç—É –ø–µ—Å–Ω—é –≤ —Å–ª–µ–¥—É—é—â–µ–º –∫–ª–∏–ø–µ", callback_data=f"mvfile:use:{token}")])
-    return InlineKeyboardMarkup(rows)
-
-
-async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
-    song = BytesIO(data)
-    song.name = "suno_full_track.mp3"
-    await message.reply_document(
-        document=InputFile(song), caption="üéµ –ü–æ–ª–Ω–∞—è –∏—Å—Ö–æ–¥–Ω–∞—è –ø–µ—Å–Ω—è Suno. –°–æ—Ö—Ä–∞–Ω–∏—Ç–µ –µ—ë: –∫–ª–∏–ø –∏—Å–ø–æ–ª—å–∑—É–µ—Ç —Ñ—Ä–∞–≥–º–µ–Ω—Ç —ç—Ç–æ–π –∑–∞–ø–∏—Å–∏.",
-        reply_markup=_vocal_song_kb(token),
-        write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
-    )
-
-
-async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    parts = (q.data or "").split(":")
-    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio"):
-        await q.answer("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω–æ–µ –¥–µ–π—Å—Ç–≤–∏–µ")
-        return
-    kind, token, user_id = parts[1], parts[2], q.from_user.id
-    data = _load_vocal_artifact(user_id, token, "video" if kind == "video" else "audio")
-    if not data:
-        await q.answer("–§–∞–π–ª –±–æ–ª—å—à–µ –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω")
-        await q.message.reply_text("–§–∞–π–ª –¥–ª—è —ç—Ç–æ–≥–æ –∫–ª–∏–ø–∞ –Ω–µ –Ω–∞–π–¥–µ–Ω –∏–ª–∏ —Å—Ä–æ–∫ –µ–≥–æ —Ö—Ä–∞–Ω–µ–Ω–∏—è –∏—Å—Ç—ë–∫.")
-        return
-    if kind == "approveaudio":
-        pending_token = context.user_data.get("music_video_pending_audio_token")
-        if pending_token != token:
-            with contextlib.suppress(BadRequest):
-                await q.answer("–≠—Ç–æ –Ω–µ —Ç–µ–∫—É—â–∏–π –≤–∞—Ä–∏–∞–Ω—Ç")
-            await q.message.reply_text("‚ö†Ô∏è –≠—Ç–æ—Ç –≤–∞—Ä–∏–∞–Ω—Ç —É–∂–µ –Ω–µ —è–≤–ª—è–µ—Ç—Å—è —Ç–µ–∫—É—â–∏–º. –ü–æ–¥—Ç–≤–µ—Ä–¥–∏—Ç–µ –ø–æ—Å–ª–µ–¥–Ω–µ–µ —Å–≥–µ–Ω–µ—Ä–∏—Ä–æ–≤–∞–Ω–Ω–æ–µ –∞—É–¥–∏–æ.")
-            return
-        context.user_data["vocal_source_token"] = token
-        with contextlib.suppress(BadRequest):
-            await q.answer("–ê—É–¥–∏–æ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–æ")
-        prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
-        keyframe = context.user_data.get("music_video_pending_keyframe")
-        if not prompt or not keyframe:
-            await q.message.reply_text("‚úÖ –ê—É–¥–∏–æ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–æ. –°–æ—Å—Ç–æ—è–Ω–∏–µ –∫–ª–∏–ø–∞ —É—Å—Ç–∞—Ä–µ–ª–æ ‚Äî —É—Ç–≤–µ—Ä–¥–∏—Ç–µ —Å—Ü–µ–Ω–∞—Ä–∏–π –µ—â—ë —Ä–∞–∑.")
-            return
-        await q.message.reply_text("‚úÖ –ê—É–¥–∏–æ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–æ. –ü—Ä–æ–¥–æ–ª–∂–∞—é —ç—Ç–æ—Ç –∂–µ –∫–ª–∏–ø ‚Äî –∑–∞–ø—É—Å–∫–∞—é –≤–∏–¥–µ–æ–≥–µ–Ω–µ—Ä–∞—Ü–∏—é.")
-        await _start_vocal_clip(update, context, keyframe, prompt)
-        return
-    if kind == "editaudio":
-        pending_token = context.user_data.get("music_video_pending_audio_token")
-        if pending_token != token:
-            with contextlib.suppress(BadRequest):
-                await q.answer("–≠—Ç–æ –Ω–µ —Ç–µ–∫—É—â–∏–π –≤–∞—Ä–∏–∞–Ω—Ç")
-            return
-        context.user_data.pop("vocal_source_token", None)
-        context.user_data["awaiting_music_video_audio_prompt_edit"] = True
-        with contextlib.suppress(BadRequest):
-            await q.answer("–ñ–¥—É –Ω–æ–≤—ã–π –ø—Ä–æ–º–ø—Ç")
-        old_brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
-        await q.message.reply_text(
-            "‚úèÔ∏è –û—Ç–ø—Ä–∞–≤—å—Ç–µ –Ω–æ–≤—ã–π –ø—Ä–æ–º–ø—Ç –¥–ª—è –ø–µ—Å–Ω–∏ —Ü–µ–ª–∏–∫–æ–º. –ú–æ–∂–Ω–æ –¥–æ–ø–æ–ª–Ω–∏—Ç—å —Å—Ç–∞—Ä—É—é –∏–¥–µ—é –∏–ª–∏ –ø–æ–ª–Ω–æ—Å—Ç—å—é –ø–µ—Ä–µ–ø–∏—Å–∞—Ç—å –µ—ë.\n\n"
-            "–¢–µ–∫—É—â–∏–π –ø—Ä–æ–º–ø—Ç:\n" + old_brief[:3000]
-        )
-        return
-    if kind == "regenaudio":
-        context.user_data.pop("vocal_source_token", None)
-        context.user_data.pop("music_video_pending_audio_token", None)
-        with contextlib.suppress(BadRequest):
-            await q.answer("–ì–µ–Ω–µ—Ä–∏—Ä—É—é –¥—Ä—É–≥–æ–π –≤–∞—Ä–∏–∞–Ω—Ç")
-        brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
-        if not brief:
-            await q.message.reply_text("–°–æ—Å—Ç–æ—è–Ω–∏–µ –º—É–∑—ã–∫–∞–ª—å–Ω–æ–≥–æ –∑–∞–¥–∞–Ω–∏—è —É—Å—Ç–∞—Ä–µ–ª–æ. –£—Ç–≤–µ—Ä–¥–∏—Ç–µ —Å—Ü–µ–Ω–∞—Ä–∏–π –µ—â—ë —Ä–∞–∑.")
-            return
-        await q.message.reply_text("üîÑ –ì–µ–Ω–µ—Ä–∏—Ä—É—é –¥—Ä—É–≥–æ–π –≤–∞—Ä–∏–∞–Ω—Ç –ø–æ —Ç–æ–º—É –∂–µ –º—É–∑—ã–∫–∞–ª—å–Ω–æ–º—É –∑–∞–¥–∞–Ω–∏—é. –í–∏–¥–µ–æ –ø–æ–∫–∞ –Ω–µ –∑–∞–ø—É—Å–∫–∞—é.")
-        fresh = await _run_suno_music_result_bytes(update, brief)
-        if not fresh:
-            await q.message.reply_text("‚ùå Suno –Ω–µ –≤–µ—Ä–Ω—É–ª –Ω–æ–≤—ã–π –≤–∞—Ä–∏–∞–Ω—Ç. –°—Ç–∞—Ä–æ–µ –∞—É–¥–∏–æ –æ—Å—Ç–∞—ë—Ç—Å—è –¥–æ—Å—Ç—É–ø–Ω—ã–º.")
-            return
-        new_token = uuid.uuid4().hex[:12]
-        context.user_data["music_video_pending_audio_token"] = new_token
-        await asyncio.to_thread(_save_vocal_artifact, user_id, new_token, "audio", fresh)
-        await _send_vocal_song_file(q.message, fresh, new_token)
-        await q.message.reply_text(
-            "üéß –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –Ω–æ–≤—ã–π –≤–∞—Ä–∏–∞–Ω—Ç.",
-            reply_markup=_vocal_song_kb(new_token, pending=True),
-        )
-        return
-    if kind == "use":
-        context.user_data["vocal_source_token"] = token
-        await q.answer("–ü–µ—Å–Ω—è –≤—ã–±—Ä–∞–Ω–∞")
-        await q.message.reply_text(
-            "üéµ –î–ª—è —Å–ª–µ–¥—É—é—â–µ–≥–æ –≤–æ–∫–∞–ª—å–Ω–æ–≥–æ –∫–ª–∏–ø–∞ –≤—ã–±—Ä–∞–Ω–∞ –∏–º–µ–Ω–Ω–æ —ç—Ç–∞ –ø–µ—Å–Ω—è. "
-            "–û—Ç–∫—Ä–æ–π—Ç–µ —Ä–µ–∂–∏–º AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞, –ø—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ –∏ –æ–ø–∏—Å–∞–Ω–∏–µ, –∑–∞—Ç–µ–º —É—Ç–≤–µ—Ä–¥–∏—Ç–µ —Å—Ü–µ–Ω–∞—Ä–∏–π. "
-            "Suno –Ω–µ –±—É–¥–µ—Ç —Å–æ–∑–¥–∞–≤–∞—Ç—å –Ω–æ–≤—É—é –∑–∞–ø–∏—Å—å."
-        )
-    elif kind == "audio":
-        with contextlib.suppress(BadRequest):
-            await q.answer("–û—Ç–ø—Ä–∞–≤–ª—è—é –ø–æ–ª–Ω—É—é –ø–µ—Å–Ω—é")
-        try:
-            await _send_vocal_song_file(q.message, data, token)
-        except Exception:
-            log.exception("vocal source audio resend failed")
-            await q.message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–ø—Ä–∞–≤–∏—Ç—å –∞—É–¥–∏–æ —á–µ—Ä–µ–∑ Telegram. –ù–∞–∂–º–∏—Ç–µ –∫–Ω–æ–ø–∫—É –µ—â—ë —Ä–∞–∑ –ø–æ–∑–¥–Ω–µ–µ.")
-    else:
-        with contextlib.suppress(BadRequest):
-            await q.answer("–ü–æ–≤—Ç–æ—Ä–Ω–æ –æ—Ç–ø—Ä–∞–≤–ª—è—é –≥–æ—Ç–æ–≤—ã–π –∫–ª–∏–ø")
-        try:
-            await _reply_video_bytes(update, data, "–ì–æ—Ç–æ–≤—ã–π AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø —Å –≤–æ–∫–∞–ª–æ–º ‚úÖ")
-            with contextlib.suppress(OSError):
-                os.unlink(_vocal_artifact_path(user_id, token, "video"))
-        except Exception:
-            log.exception("saved vocal video resend failed")
-            await q.message.reply_text(
-                "Telegram —Å–Ω–æ–≤–∞ –ø—Ä–µ—Ä–≤–∞–ª –æ—Ç–ø—Ä–∞–≤–∫—É. –ì–æ—Ç–æ–≤—ã–π –∫–ª–∏–ø —Å–æ—Ö—Ä–∞–Ω—ë–Ω; –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ –æ—Ç–ø—Ä–∞–≤–∫—É —ç—Ç–æ–π –∫–Ω–æ–ø–∫–æ–π –ø–æ–∑–¥–Ω–µ–µ."
-            )
-
-
-async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
-    """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
-    prompt = (user_prompt or "").strip()
-    if not prompt:
-        await update.effective_message.reply_text("–û–ø–∏—à–∏—Ç–µ –ø–µ—Å–Ω—é/–∫–ª–∏–ø: —Å—Ç–∏–ª—å, —è–∑—ã–∫, –∫—Ç–æ –ø–æ—ë—Ç, —Ç–∏–ø –≤–æ–∫–∞–ª–∞, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ –∏ –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.")
-        return
-    try:
-        faces = _detect_faces_for_choice(img_bytes) if FACESWAP_FACE_DETECTION_ENABLED else []
-    except Exception:
-        faces = []
-    performer_count = max(1, len(faces))
-    target_duration = _photo_clip_target_duration(prompt)
-    scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
-    scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
-    role_plan = _vocal_clip_role_plan(prompt, performer_count)
-    user_id = update.effective_user.id
-    source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
-    saved_source = _load_vocal_artifact(user_id, source_token, "audio") if source_token else None
-    if source_token and not saved_source:
-        context.user_data.pop("vocal_source_token", None)
-        await update.effective_message.reply_text(
-            "–í—ã–±—Ä–∞–Ω–Ω–∞—è –ø–µ—Å–Ω—è –±–æ–ª—å—à–µ –Ω–µ –¥–æ—Å—Ç—É–ø–Ω–∞. –°—Ü–µ–Ω–∞—Ä–∏–π –Ω–µ –∑–∞–ø—É—â–µ–Ω –∏ –∫—Ä–µ–¥–∏—Ç—ã –Ω–µ —Å–ø–∏—Å–∞–Ω—ã. "
-            "–í—ã–±–µ—Ä–∏—Ç–µ —Å–æ—Ö—Ä–∞–Ω—ë–Ω–Ω—ã–π —Ç—Ä–µ–∫ —Å–Ω–æ–≤–∞ –∏–ª–∏ —É—Ç–≤–µ—Ä–¥–∏—Ç–µ —Å—Ü–µ–Ω–∞—Ä–∏–π –¥–ª—è –Ω–æ–≤–æ–π –ø–µ—Å–Ω–∏ Suno."
-        )
-        return
-    img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
-    job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}:{target_duration}"
-    if job_key in _vocal_clip_background_jobs:
-        await update.effective_message.reply_text("‚è≥ –¢–∞–∫–æ–π AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø —É–∂–µ –æ–±—Ä–∞–±–∞—Ç—ã–≤–∞–µ—Ç—Å—è. –î–æ–∂–¥–∏—Ç–µ—Å—å —Ä–µ–∑—É–ª—å—Ç–∞—Ç–∞, —á—Ç–æ–±—ã –Ω–µ –ø–æ–ª—É—á–∏—Ç—å –¥—É–±–ª–∏.")
-        return
-
-    async def _job():
-        _vocal_clip_background_jobs.add(job_key)
-        song_token = source_token or uuid.uuid4().hex[:12]
-        video_token = uuid.uuid4().hex[:12]
-        final_saved = False
-        heartbeat_stop = asyncio.Event()
-
-        async def _progress_heartbeat():
-            # Long provider renders can legitimately be quiet for several minutes.
-            # Keep the user informed without touching provider/billing state.
-            try:
-                while True:
-                    try:
-                        await asyncio.wait_for(heartbeat_stop.wait(), timeout=150)
-                        return
-                    except asyncio.TimeoutError:
-                        with contextlib.suppress(Exception):
-                            await update.effective_message.reply_text(
-                                "‚è≥ –†–∞–±–æ—Ç–∞ –ø—Ä–æ–¥–æ–ª–∂–∞–µ—Ç—Å—è, –±–æ—Ç –Ω–µ –∑–∞–≤–∏—Å. –ì–µ–Ω–µ—Ä–∞—Ü–∏—è –µ—â—ë –≤ –ø—Ä–æ—Ü–µ—Å—Å–µ ‚Äî –ø–æ–∂–∞–ª—É–π—Å—Ç–∞, –∂–¥–∏—Ç–µ."
-                            )
-            except asyncio.CancelledError:
-                return
-
-        heartbeat_task = asyncio.create_task(_progress_heartbeat())
-        try:
-            if not saved_source and not (SUNO_ENABLED and SUNO_API_KEY):
-                raise RuntimeError("–î–ª—è –≤–æ–∫–∞–ª—å–Ω–æ–≥–æ AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞ –Ω—É–∂–µ–Ω SUNO_ENABLED=1 –∏ SUNO_API_KEY/COMET_API_KEY.")
-            role_note = "–†–æ–ª–∏ –≤–æ–∫–∞–ª–∞ –±–µ—Ä—É —Ç–æ–ª—å–∫–æ –∏–∑ –≤–∞—à–µ–≥–æ –æ–ø–∏—Å–∞–Ω–∏—è."
-            if role_plan.get("mode") == "mixed_duet":
-                role_note = "–ñ–µ–Ω—Å–∫–∏–µ –∏ –º—É–∂—Å–∫–∏–µ –ø–∞—Ä—Ç–∏–∏ —Ä–∞—Å–ø—Ä–µ–¥–µ–ª—è—é –º–µ–∂–¥—É —É–∫–∞–∑–∞–Ω–Ω—ã–º–∏ –≥–µ—Ä–æ—è–º–∏; —Å–æ–≤–º–µ—Å—Ç–Ω—ã–µ –ø–∞—Ä—Ç–∏–∏ ‚Äî –∫–∞–∫ –¥—É—ç—Ç."
-            await update.effective_message.reply_text(
-                f"üé§ AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø –ø—Ä–∏–Ω—è—Ç: ~{target_duration} —Å–µ–∫, {scene_count} —Å—Ü–µ–Ω, –≥–µ—Ä–æ–µ–≤: {performer_count}. "
-                f"{role_note} {'–ò—Å–ø–æ–ª—å–∑—É—é –≤—ã–±—Ä–∞–Ω–Ω—É—é –ø–µ—Å–Ω—é Suno' if saved_source else '–°–Ω–∞—á–∞–ª–∞ Suno —Å–æ–∑–¥–∞—ë—Ç –µ–¥–∏–Ω—ã–π —Ç—Ä–µ–∫'}, "
-                "–∑–∞—Ç–µ–º Kling –¥–µ–ª–∞–µ—Ç cinematic I2V; –ø–æ–ª–Ω—ã–π Avatar/lip-sync –Ω–µ –ø—Ä–∏–º–µ–Ω—è–µ—Ç—Å—è –±–µ–∑ –Ω–∞–¥—ë–∂–Ω–æ–≥–æ –æ–ø—Ä–µ–¥–µ–ª–µ–Ω–∏—è –≤–æ–∫–∞–ª—å–Ω–æ–≥–æ face-visible —Å–µ–≥–º–µ–Ω—Ç–∞."
-            )
-            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-            music_brief, video_brief = _music_video_split_briefs(prompt)
-            pack_fn = globals().get("_music_video_identity_pack")
-            synth_fn = globals().get("_run_comet_music_video_identity_keyframe")
-            high_fidelity = callable(pack_fn) and callable(synth_fn)
-            pending_keyframe = context.user_data.get("music_video_pending_keyframe") if saved_source else None
-            pending_keyframe_url = context.user_data.get("music_video_pending_keyframe_url") if saved_source else None
-            # The approved-audio resume path reuses the already synthesized start keyframe,
-            # but later scene re-anchors still need the original Character Identity Pack.
-            # Load it before either branch so refs is always defined for multi-scene runs.
-            refs = pack_fn(user_id) if high_fidelity else {}
-            if high_fidelity and not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
-                raise RuntimeError("Character Identity Pack incomplete")
-            if high_fidelity and pending_keyframe:
-                img_bytes = pending_keyframe
-                keyframe_url = pending_keyframe_url or await _upload_bytes_to_telegram_file_url(
-                    update, context, img_bytes, "music_video_identity_keyframe.png",
-                    "üß¨ –ò—Å–ø–æ–ª—å–∑—É—é —É–∂–µ –ø—Ä–æ–≤–µ—Ä–µ–Ω–Ω—ã–π —Å—Ç–∞—Ä—Ç–æ–≤—ã–π keyframe.",
-                )
-            elif high_fidelity:
-                await update.effective_message.reply_text("üß¨ –°–æ–±–∏—Ä–∞—é identity-preserving —Å—Ç–∞—Ä—Ç–æ–≤—ã–π keyframe –∏–∑ 4 reference —á–µ—Ä–µ–∑ Gemini/Comet‚Ä¶")
-                keyframe = await synth_fn(
-                    refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"], video_brief
-                )
-                if not keyframe:
-                    raise RuntimeError("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–∏–Ω—Ç–µ–∑–∏—Ä–æ–≤–∞—Ç—å identity-preserving keyframe")
-                img_bytes = keyframe
-                # Kling I2V validates the image asynchronously and rejects data: URLs.
-                # Publish the synthesized keyframe through Telegram so Kling receives the
-                # same kind of HTTPS file URL that the proven photo->clip path uses.
-                keyframe_url = await _upload_bytes_to_telegram_file_url(
-                    update,
-                    context,
-                    keyframe,
-                    "music_video_identity_keyframe.png",
-                    "üß¨ Identity-preserving —Å—Ç–∞—Ä—Ç–æ–≤—ã–π keyframe –ø–æ–¥–≥–æ—Ç–æ–≤–ª–µ–Ω.",
-                )
-                if not keyframe_url.startswith("https://"):
-                    raise RuntimeError("–ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ–ª—É—á–∏—Ç—å –ø—É–±–ª–∏—á–Ω—ã–π HTTPS URL identity keyframe –¥–ª—è Kling.")
-            audio_bytes = saved_source or await _run_suno_music_result_bytes(update, music_brief)
-            if not audio_bytes:
-                raise RuntimeError("Suno –Ω–µ –≤–µ—Ä–Ω—É–ª –≤–æ–∫–∞–ª/–º—É–∑—ã–∫—É.")
-            if not saved_source:
-                await asyncio.to_thread(_save_vocal_artifact, user_id, song_token, "audio", audio_bytes)
-                try:
-                    await _send_vocal_song_file(update.effective_message, audio_bytes, song_token)
-                except Exception:
-                    log.exception("full Suno song Telegram delivery failed; saved for retry")
-                    with contextlib.suppress(Exception):
-                        await update.effective_message.reply_text(
-                            "üéµ –ü–æ–ª–Ω–∞—è –ø–µ—Å–Ω—è Suno —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞, –Ω–æ Telegram –Ω–µ –ø—Ä–∏–Ω—è–ª –∞—É–¥–∏–æ—Ñ–∞–π–ª. "
-                            "–ù–∞–∂–º–∏—Ç–µ ¬´–°–∫–∞—á–∞—Ç—å –ø–æ–ª–Ω—É—é –ø–µ—Å–Ω—é¬ª –ø–æ–∑–¥–Ω–µ–µ.",
-                            reply_markup=_vocal_song_kb(song_token),
-                        )
-            if not saved_source:
-                # Human review gate. Persist enough state to regenerate Suno or resume the SAME
-                # clip after approval without asking the user to re-enter the brief.
-                context.user_data["music_video_pending_prompt"] = prompt
-                context.user_data["music_video_pending_music_brief"] = music_brief
-                context.user_data["music_video_pending_audio_token"] = song_token
-                context.user_data["music_video_pending_keyframe"] = img_bytes
-                context.user_data["music_video_pending_keyframe_url"] = locals().get("keyframe_url", "")
-                await update.effective_message.reply_text(
-                    "üéß –°–Ω–∞—á–∞–ª–∞ –ø—Ä–æ–≤–µ—Ä—å—Ç–µ –ø–æ–ª—É—á–∏–≤—à—É—é—Å—è –ø–µ—Å–Ω—é. –í–∏–¥–µ–æ –µ—â—ë –ù–ï –∑–∞–ø—É—Å–∫–∞—é. "
-                    "–í—ã–±–µ—Ä–∏—Ç–µ: –ø–æ–¥—Ç–≤–µ—Ä–¥–∏—Ç—å —ç—Ç–æ –∞—É–¥–∏–æ –∏–ª–∏ —Å–≥–µ–Ω–µ—Ä–∏—Ä–æ–≤–∞—Ç—å –¥—Ä—É–≥–æ–µ.",
-                    reply_markup=_vocal_song_kb(song_token, pending=True),
-                )
-                # Review is not a completed clip: do not charge the full video operation yet.
-                return False
-            safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
-            segments: list[bytes] = []
-            if high_fidelity:
-                # Fail-safe: vocal_start is not reliably detected yet. Never apply Avatar to an entire
-                # action/orbit/rear-follow scene. Selective lip-sync requires a real face-visible +
-                # vocal-active detector; until then production uses cinematic I2V + untouched Suno master.
-                await update.effective_message.reply_text(
-                    "üéµ –ü–µ—Å–Ω—è –≥–æ—Ç–æ–≤–∞. –í–æ–∫–∞–ª—å–Ω—ã–π —Å—Ç–∞—Ä—Ç –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏ –Ω–µ —É–≥–∞–¥—ã–≤–∞—é: action-—Å—Ü–µ–Ω—É —Ä–µ–Ω–¥–µ—Ä—é cinematic, "
-                    "–±–µ–∑ –ø—Ä–∏–Ω—É–¥–∏—Ç–µ–ª—å–Ω–æ–≥–æ lip-sync –Ω–∞ –≤–µ—Å—å —Ä–æ–ª–∏–∫."
-                )
-                aspect = _music_video_aspect(prompt)
-                continuation_bytes, continuation_url = img_bytes, keyframe_url
-                for idx in range(1, scene_count + 1):
-                    dur_s = min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
-                    await update.effective_message.reply_text(f"üé¨ –°—Ü–µ–Ω–∞ {idx}/{scene_count}: cinematic Kling I2V‚Ä¶")
-                    scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
-                    scene_prompt += (
-                        " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
-                        "The continuation frame controls pose/action continuity but must never redefine identity."
-                    )
-                    scene_video = await _run_kling_photo_clip_result(
-                        continuation_bytes, scene_prompt, dur_s, aspect, continuation_url
-                    )
-                    if not scene_video:
-                        raise RuntimeError(f"Kling –Ω–µ –≤–µ—Ä–Ω—É–ª cinematic —Å—Ü–µ–Ω—É {idx}.")
-                    segments.append(scene_video)
-                    if idx < scene_count:
-                        last_frame = await asyncio.to_thread(_extract_last_video_frame_sync, scene_video)
-                        if not last_frame:
-                            raise RuntimeError(f"–ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ–ª—É—á–∏—Ç—å continuation frame –ø–æ—Å–ª–µ —Å—Ü–µ–Ω—ã {idx}.")
-                        # Re-anchor every scene to the real Character Identity Pack while retaining
-                        # the previous frame only as world/action continuity. This prevents synthetic
-                        # generation loss and stops a supporting character from hijacking the next scene.
-                        next_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx + 1, scene_count)
-                        reanchored = await synth_fn(
-                            refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"],
-                            next_prompt, continuity_frame=last_frame,
-                        )
-                        continuation_bytes = reanchored or last_frame
-                        continuation_url = await _upload_bytes_to_telegram_file_url(
-                            update, context, continuation_bytes, f"music_video_continuation_{idx:02d}.jpg",
-                            f"üß¨ Identity + continuity re-anchor {idx}/{scene_count - 1} –ø–æ–¥–≥–æ—Ç–æ–≤–ª–µ–Ω.",
-                        )
-                        if not continuation_url.startswith("https://"):
-                            raise RuntimeError(f"–ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ–ª—É—á–∏—Ç—å HTTPS continuation frame –ø–æ—Å–ª–µ —Å—Ü–µ–Ω—ã {idx}.")
-            else:
-                # Compatibility only for isolated legacy unit-test harnesses that intentionally execute
-                # _start_vocal_clip without the new identity helpers.
-                await update.effective_message.reply_text("üéµ –ü–µ—Å–Ω—è –≥–æ—Ç–æ–≤–∞. –°–æ–∑–¥–∞—é lip-sync —Å—Ü–µ–Ω—ã —á–µ—Ä–µ–∑ Kling‚Ä¶")
-                for idx in range(1, scene_count + 1):
-                    start_s = (idx - 1) * scene_s
-                    dur_s = min(scene_s, max(2, target_duration - start_s))
-                    audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
-                    if not audio_part:
-                        raise RuntimeError(f"–ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ–¥–≥–æ—Ç–æ–≤–∏—Ç—å –∞—É–¥–∏–æ –¥–ª—è —Å—Ü–µ–Ω—ã {idx}.")
-                    audio_url = await _upload_bytes_to_telegram_file_url(
-                        update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"üéß –ê—É–¥–∏–æ —Å—Ü–µ–Ω—ã {idx}/{scene_count} –ø–æ–¥–≥–æ—Ç–æ–≤–ª–µ–Ω–æ."
-                    )
-                    scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
-                    scene_video = await _run_kling_avatar_result_bytes(
-                        img_bytes, audio_file_url=audio_url, audio_filename=f"vocal_scene_{idx:02d}.mp3",
-                        audio_mime="audio/mpeg", avatar_prompt=scene_prompt, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
-                    )
-                    if not scene_video:
-                        raise RuntimeError(f"Kling –Ω–µ –≤–µ—Ä–Ω—É–ª lip-sync —Å—Ü–µ–Ω—É {idx}.")
-                    segments.append(scene_video)
-
-            await update.effective_message.reply_text("üé¨ –°–æ–±–∏—Ä–∞—é –∏—Ç–æ–≥–æ–≤—ã–π cinematic –≤–∏–¥–µ–æ—Ä—è–¥‚Ä¶")
-            # Long clips must not exist simultaneously as scene bytes + joined bytes + mux bytes.
-            # Spill scenes/audio to disk, release scene buffers, and let ffmpeg stream file->file.
-            finalize_td = tempfile.TemporaryDirectory(prefix="neyro_vocal_finalize_")
-            try:
-                segment_paths = []
-                for i, data in enumerate(segments):
-                    p = os.path.join(finalize_td.name, f"scene_{i:02d}.mp4")
-                    with open(p, "wb") as fh:
-                        fh.write(data)
-                    segment_paths.append(p)
-                segments.clear()
-                # enumerate() and the generation loop otherwise keep the last large scene
-                # alive even after list.clear(). Drop those references before ffmpeg starts.
-                with contextlib.suppress(UnboundLocalError):
-                    del data
-                with contextlib.suppress(UnboundLocalError):
-                    del scene_video
-                joined_path = os.path.join(finalize_td.name, "joined.mp4")
-                joined_path = await asyncio.to_thread(
-                    _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
-                )
-                if not joined_path:
-                    raise RuntimeError("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–±—Ä–∞—Ç—å lip-sync —Å—Ü–µ–Ω—ã –≤ –µ–¥–∏–Ω—ã–π –≤–∏–¥–µ–æ—Ä—è–¥.")
-                audio_path = os.path.join(finalize_td.name, "suno.mp3")
-                with open(audio_path, "wb") as fh:
-                    fh.write(safe_audio)
-                await update.effective_message.reply_text("üì¶ –ü–æ–¥–≥–æ—Ç–∞–≤–ª–∏–≤–∞—é –≤–∏–¥–µ–æ –¥–ª—è Telegram –∏ –¥–æ–±–∞–≤–ª—è—é –∏—Å—Ö–æ–¥–Ω—ã–π —Ç—Ä–µ–∫ Suno‚Ä¶")
-                final_path = os.path.join(finalize_td.name, "final.mp4")
-                final_path = await asyncio.wait_for(
-                    asyncio.to_thread(_mux_video_audio_files_sync, joined_path, audio_path, target_duration, final_path),
-                    timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
-                )
-                if not final_path:
-                    raise RuntimeError("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–±—Ä–∞—Ç—å —Ñ–∏–Ω–∞–ª—å–Ω—ã–π MP4 —Å –≤–æ–∫–∞–ª–æ–º.")
-                # Only the Telegram-sized final artifact is materialized in RAM.
-                with open(final_path, "rb") as fh:
-                    final_bytes = fh.read()
-            finally:
-                finalize_td.cleanup()
-            await asyncio.to_thread(_save_vocal_artifact, user_id, video_token, "video", final_bytes)
-            final_saved = True
-            try:
-                await _reply_video_bytes(
-                    update, final_bytes,
-                    f"AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø —Å –≤–æ–∫–∞–ª–æ–º ‚úÖ –û–¥–∏–Ω MP4 ¬∑ ~{target_duration} —Å–µ–∫ ¬∑ {scene_count} —Å—Ü–µ–Ω"
-                )
-            except Exception:
-                log.exception("completed vocal MP4 delivery failed; saved for retry")
-                await update.effective_message.reply_text(
-                    "‚ö†Ô∏è –ö–ª–∏–ø —É–∂–µ –≥–æ—Ç–æ–≤ –∏ —Å–æ—Ö—Ä–∞–Ω—ë–Ω, –Ω–æ Telegram –ø—Ä–µ—Ä–≤–∞–ª –æ—Ç–ø—Ä–∞–≤–∫—É —Ñ–∞–π–ª–∞. "
-                    "–ù–∞–∂–º–∏—Ç–µ ¬´–ü–æ–≤—Ç–æ—Ä–∏—Ç—å –æ—Ç–ø—Ä–∞–≤–∫—É¬ª: Suno –∏ Kling –ø–æ–≤—Ç–æ—Ä–Ω–æ –Ω–µ –∑–∞–ø—É—Å–∫–∞—é—Ç—Å—è. –ö—Ä–µ–¥–∏—Ç—ã –Ω–µ —Å–ø–∏—Å–∞–Ω—ã.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("üì• –ü–æ–≤—Ç–æ—Ä–∏—Ç—å –æ—Ç–ø—Ä–∞–≤–∫—É –∫–ª–∏–ø–∞", callback_data=f"mvfile:video:{video_token}")],
-                        [InlineKeyboardButton("üéµ –°–∫–∞—á–∞—Ç—å –ø–æ–ª–Ω—É—é –ø–µ—Å–Ω—é", callback_data=f"mvfile:audio:{song_token}")],
-                    ]),
-                )
-                return False
-            with contextlib.suppress(OSError):
-                os.unlink(_vocal_artifact_path(user_id, video_token, "video"))
-            if source_token:
-                context.user_data.pop("vocal_source_token", None)
-            return True
-        except Exception as e:
-            log.exception("vocal clip failed: %s", e)
-            with contextlib.suppress(Exception):
-                await update.effective_message.reply_text(
-                    "‚ùå AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø —Å –≤–æ–∫–∞–ª–æ–º –Ω–µ –ø–æ–ª—É—á–∏–ª—Å—è. –ö—Ä–µ–¥–∏—Ç—ã –Ω–µ —Å–ø–∏—Å–∞–Ω—ã. "
-                    + ("–ì–æ—Ç–æ–≤—ã–π MP4 —Å–æ—Ö—Ä–∞–Ω—ë–Ω: –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ –æ—Ç–ø—Ä–∞–≤–∫—É –∫–Ω–æ–ø–∫–æ–π –≤—ã—à–µ." if final_saved
-                       else "–ü–æ–ª–Ω–∞—è –ø–µ—Å–Ω—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞, –µ—Å–ª–∏ Suno —É—Å–ø–µ–ª –µ—ë —Å–æ–∑–¥–∞—Ç—å. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –ø–æ–∑–∂–µ."),
-                    reply_markup=_vocal_song_kb(song_token)
-                    if _load_vocal_artifact(user_id, song_token, "audio") else None,
-                )
-            return False
-        finally:
-            heartbeat_stop.set()
-            heartbeat_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await heartbeat_task
-            _vocal_clip_background_jobs.discard(job_key)
-
-    await _try_pay_then_do(
-        update, context, update.effective_user.id,
-        "runway", _vocal_clip_provider_cost_usd(scene_count), _job,
-        remember_kind="vocal_cinematic_clip_identity_pack",
-        remember_payload={"prompt": prompt[:500], "duration": target_duration, "scenes": scene_count, "performers": performer_count},
-        silent_failure=True,
-    )
-
-
-async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
-    prompt = (prompt or "").strip()
-    if not prompt:
-        await update.effective_message.reply_text("–û–ø–∏—à–∏—Ç–µ —Å—Ü–µ–Ω—É –¥–ª—è –≤–∏–¥–µ–æ.")
-        return False
-    duration, aspect = parse_video_opts(prompt)
-    engine = (context.user_data.get("text_video_engine") or TEXT_VIDEO_DEFAULT_ENGINE or "kling").strip().lower()
-    if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
-        engine = "kling"
-    if engine not in ("sora", "runway", "kling"):
-        engine = "kling"
-    if engine == "sora" and _prompt_likely_has_people(prompt):
-        await update.effective_message.reply_text(
-            "‚ö†Ô∏è Sora 2 –≤ –±–æ—Ç–µ –∏—Å–ø–æ–ª—å–∑—É–µ—Ç—Å—è —Ç–æ–ª—å–∫–æ –¥–ª—è —Å—Ü–µ–Ω –±–µ–∑ –ª—é–¥–µ–π. –í –∑–∞–ø—Ä–æ—Å–µ –æ–±–Ω–∞—Ä—É–∂–µ–Ω —á–µ–ª–æ–≤–µ–∫/–ø–µ—Ä—Å–æ–Ω–∞–∂. –í—ã–±–µ—Ä–∏—Ç–µ Kling –∏–ª–∏ Runway.",
-            reply_markup=_textvideo_action_kb("act"),
-        )
-        return False
-    provider_cost = _video_provider_cost_usd(engine, duration)
-    label = {"sora": "Sora 2 ¬∑ –±–µ–∑ –ª—é–¥–µ–π", "runway": "Runway", "kling": "Kling"}[engine]
-
-    async def _go():
-        await update.effective_message.reply_text(f"üé¨ –ó–∞–ø—É—Å–∫–∞—é {label}: {duration} —Å–µ–∫ ¬∑ {aspect}.")
-        if engine == "runway":
-            return await _run_runway_video(update, context, prompt, duration, aspect)
-        return await _run_comet_text_video(update, context, engine, prompt, duration, aspect)
-
-    await _try_pay_then_do(
-        update, context, update.effective_user.id,
-        "runway", provider_cost, _go,
-        remember_kind=f"text_video_{engine}",
-        remember_payload={"prompt": prompt[:500], "duration": duration, "aspect": aspect, "engine": engine},
-    )
-    return True
-
-async def _run_kling_photo_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
-    """Legacy wrapper kept for external callers; v61 clean pipeline uses _start_photo_music_clip."""
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    try:
-        video = await _run_kling_photo_clip_result(img_bytes, prompt, duration_s, aspect)
-        if not video:
-            raise RuntimeError("empty video result")
-        await _reply_video_bytes(update, video, "Kling photo‚Üímusic clip ‚úÖ")
-        return True
-    except Exception as e:
-        await update.effective_message.reply_text(f"‚ùå Kling photo‚Üíclip: {str(e)[:700]}")
-        return False
-
-
-async def _start_photo_music_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
-    _, aspect = parse_video_opts(user_prompt or "")
-    if not any(a in (user_prompt or "") for a in _ASPECTS):
-        aspect = "9:16"
-    elif aspect not in _ASPECTS:
-        aspect = "9:16"
-    target_duration = _photo_clip_target_duration(user_prompt or "")
-    base_duration = min(10, target_duration)
-    user_id = update.effective_user.id
-
-    # –ö–ª—é—á –∑–∞—â–∏—Ç—ã –æ—Ç –¥—É–±–ª–µ–π: –¥–ª–∏–Ω–Ω—ã–µ webhook-–∑–∞–¥–∞—á–∏ Telegram –º–æ–∂–µ—Ç –ø–æ–≤—Ç–æ—Ä–Ω–æ –¥–æ—Å—Ç–∞–≤–ª—è—Ç—å.
-    img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
-    job_key = f"{user_id}:{img_digest}:{hashlib.sha1((user_prompt or '').encode('utf-8')).hexdigest()[:16]}:{target_duration}:{aspect}"
-    if job_key in _photo_clip_background_jobs:
-        await update.effective_message.reply_text("‚è≥ –¢–∞–∫–æ–π —Ñ–æ—Ç–æ‚Üí–≤–∏–¥–µ–æ–∫–ª–∏–ø —É–∂–µ –æ–±—Ä–∞–±–∞—Ç—ã–≤–∞–µ—Ç—Å—è. –î–æ–∂–¥–∏—Ç–µ—Å—å —Ä–µ–∑—É–ª—å—Ç–∞—Ç–∞, —á—Ç–æ–±—ã –Ω–µ –ø–æ–ª—É—á–∏—Ç—å –¥—É–±–ª–∏.")
-        return
-
-    async def _photo_clip_job():
-        _photo_clip_background_jobs.add(job_key)
-        try:
-            if not (PHOTO_CLIP_MUX_AUDIO and SUNO_AUTO_FOR_PHOTO_CLIP and SUNO_ENABLED and SUNO_API_KEY):
-                raise RuntimeError("–î–ª—è –ø–æ–ª–Ω–æ–≥–æ –∫–ª–∏–ø–∞ —Å –º—É–∑—ã–∫–æ–π –≤–∫–ª—é—á–∏—Ç–µ SUNO_ENABLED=1, SUNO_AUTO_FOR_PHOTO_CLIP=1 –∏ –∑–∞–¥–∞–π—Ç–µ SUNO_API_KEY (–∏–ª–∏ COMET_API_KEY).")
-
-            await update.effective_message.reply_text(
-                f"üé¨ AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø –ø—Ä–∏–Ω—è—Ç. –î–µ–ª–∞—é –û–î–ò–ù –∏—Ç–æ–≥–æ–≤—ã–π MP4. "
-                f"–í–∏–¥–µ–æ: Kling; –º—É–∑—ã–∫–∞/–ø–µ—Å–Ω—è: Suno; –¥–ª–∏–Ω–∞: ~{target_duration} —Å–µ–∫; "
-                f"—Å—Ü–µ–Ω: {len(_music_video_scene_prompts(user_prompt, target_duration))}. –î–ª—è –¥–ª–∏–Ω–Ω–æ–≥–æ –∫–ª–∏–ø–∞ –æ–∂–∏–¥–∞–Ω–∏–µ –º–æ–∂–µ—Ç –±—ã—Ç—å –±–æ–ª—å—à–µ 15 –º–∏–Ω—É—Ç."
-            )
-            await update.effective_message.reply_text("üéµ –ì–µ–Ω–µ—Ä–∏—Ä—É—é –º—É–∑—ã–∫—É/–ø–µ—Å–Ω—é —á–µ—Ä–µ–∑ Suno‚Ä¶")
-            await update.effective_message.reply_text("üéûÔ∏è –ì–µ–Ω–µ—Ä–∏—Ä—É—é –≤–∏–¥–µ–æ—Ä—è–¥ —á–µ—Ä–µ–∑ Kling‚Ä¶")
-            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-
-            started_at = time.time()
-            kling_image_url = ""
-            with contextlib.suppress(Exception):
-                kling_image_url = _get_cached_photo_url(user_id) or ""
-            scene_prompts = _music_video_scene_prompts(user_prompt, target_duration)
-            async def _render_video_scenes():
-                segments = []
-                for scene_idx, scene_prompt in enumerate(scene_prompts, start=1):
-                    if len(scene_prompts) > 1:
-                        await update.effective_message.reply_text(
-                            f"üéûÔ∏è –°—Ü–µ–Ω–∞ {scene_idx}/{len(scene_prompts)}: —Ä–µ–Ω–¥–µ—Ä —á–µ—Ä–µ–∑ Kling‚Ä¶"
-                        )
-                    seg = await _run_kling_photo_clip_result(
-                        img_bytes, scene_prompt, min(PHOTO_CLIP_SCENE_SECONDS, target_duration), aspect, kling_image_url
-                    )
-                    if not seg:
-                        raise RuntimeError(f"Kling –Ω–µ –≤–µ—Ä–Ω—É–ª —Å—Ü–µ–Ω—É {scene_idx}/{len(scene_prompts)}")
-                    segments.append(seg)
-                if len(segments) == 1:
-                    return segments[0]
-                joined = await asyncio.to_thread(_concat_video_segments_sync, segments, target_duration)
-                if not joined:
-                    raise RuntimeError("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–±—Ä–∞—Ç—å —Å—Ü–µ–Ω—ã Kling –≤ –µ–¥–∏–Ω—ã–π –≤–∏–¥–µ–æ—Ä—è–¥")
-                return joined
-
-            video_task = asyncio.create_task(_render_video_scenes())
-            audio_task = asyncio.create_task(_run_suno_music_result_bytes(update, user_prompt))
-
-            # Long provider renders need visible progress. Do not leave the user with
-            # a silent chat for 10‚Äì20 minutes.
-            progress_marks = (150, 330, 510, 690, 870, 1050)
-            video_bytes = None
-            try:
-                for mark in progress_marks:
-                    remaining = mark - int(time.time() - started_at)
-                    if remaining > 0:
-                        try:
-                            video_bytes = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
-                            break
-                        except asyncio.TimeoutError:
-                            pass
-                    elapsed_min = max(1, int((time.time() - started_at) // 60))
-                    await update.effective_message.reply_text(
-                        f"‚è≥ –ö–ª–∏–ø –≤—Å—ë –µ—â—ë —Å–æ–∑–¥–∞—ë—Ç—Å—è ‚Äî –ø—Ä–æ—à–ª–æ –æ–∫–æ–ª–æ {elapsed_min} –º–∏–Ω. "
-                        "–ë–æ—Ç –Ω–µ –∑–∞–≤–∏—Å: Kling –ø—Ä–æ–¥–æ–ª–∂–∞–µ—Ç —Ä–µ–Ω–¥–µ—Ä, Suno –≥–æ—Ç–æ–≤–∏—Ç –º—É–∑—ã–∫—É. –ü–æ–∂–∞–ª—É–π—Å—Ç–∞, –æ–∂–∏–¥–∞–π—Ç–µ."
-                    )
-                if video_bytes is None:
-                    remaining = max(1, PHOTO_CLIP_TOTAL_USER_WAIT_S - int(time.time() - started_at))
-                    video_bytes = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
-            except asyncio.TimeoutError:
-                video_task.cancel()
-                audio_task.cancel()
-                raise RuntimeError(f"Kling –Ω–µ –≤–µ—Ä–Ω—É–ª –≤–∏–¥–µ–æ –∑–∞ {PHOTO_CLIP_TOTAL_USER_WAIT_S} —Å–µ–∫. –ì–µ–Ω–µ—Ä–∞—Ü–∏—è –æ—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–∞ –ø–æ —Ç–∞–π–º-–∞—É—Ç—É; –ø–æ–ø—Ä–æ–±—É–π—Ç–µ –ø–æ–≤—Ç–æ—Ä–∏—Ç—å –ø–æ–∑–∂–µ.")
-            if not video_bytes:
-                audio_task.cancel()
-                raise RuntimeError("Kling –Ω–µ –≤–µ—Ä–Ω—É–ª –≤–∏–¥–µ–æ")
-
-            await update.effective_message.reply_text("‚úÖ –í–∏–¥–µ–æ—Ä—è–¥ –≥–æ—Ç–æ–≤. –û–∂–∏–¥–∞—é –º—É–∑—ã–∫—É Suno –∏ –∑–∞—Ç–µ–º —Å–æ–±–∏—Ä–∞—é —Ñ–∏–Ω–∞–ª—å–Ω—ã–π MP4‚Ä¶")
-
-            remaining_wait = max(30, PHOTO_CLIP_TOTAL_USER_WAIT_S - int(time.time() - started_at))
-            audio_wait = max(30, min(max(PHOTO_CLIP_AUDIO_AFTER_VIDEO_WAIT_S, remaining_wait), SUNO_TIMEOUT_S))
-            audio_bytes = None
-            if audio_task.done():
-                with contextlib.suppress(Exception):
-                    audio_bytes = audio_task.result()
-            else:
-                try:
-                    audio_bytes = await asyncio.wait_for(audio_task, timeout=audio_wait)
-                except asyncio.TimeoutError:
-                    audio_task.cancel()
-                    audio_bytes = None
-
-            if not audio_bytes:
-                raise RuntimeError(
-                    "Suno –Ω–µ –≤–µ—Ä–Ω—É–ª –º—É–∑—ã–∫—É –≤ –æ—Ç–≤–µ–¥—ë–Ω–Ω–æ–µ –≤—Ä–µ–º—è. –ò—Ç–æ–≥–æ–≤—ã–π –∫–ª–∏–ø –±–µ–∑ –º—É–∑—ã–∫–∏ –Ω–µ –æ—Ç–ø—Ä–∞–≤–ª—è—é. "
-                    "–ü–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑ –∏–ª–∏ —É–≤–µ–ª–∏—á—å—Ç–µ SUNO_TIMEOUT_S / PHOTO_CLIP_TOTAL_USER_WAIT_S."
-                )
-
-            await update.effective_message.reply_text(f"üéß –ú—É–∑—ã–∫–∞ –ø–æ–ª—É—á–µ–Ω–∞. –°–∫–ª–µ–∏–≤–∞—é –∏ —Å–∂–∏–º–∞—é MP4 –ª–æ–∫–∞–ª—å–Ω–æ —á–µ—Ä–µ–∑ ffmpeg, –ª–∏–º–∏—Ç ~{FFMPEG_MUX_TIMEOUT_S} —Å–µ–∫, —Ä–∞–∑–º–µ—Ä –¥–æ ~{FFMPEG_MUX_MAX_MB}MB‚Ä¶")
-
-            final_bytes = None
-            if PHOTO_CLIP_PIPELINE:
-                final_bytes = await asyncio.wait_for(asyncio.to_thread(_mux_video_audio_sync, video_bytes, audio_bytes, target_duration), timeout=max(60, FFMPEG_MUX_TIMEOUT_S + 30))
-            if not final_bytes and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
-                final_bytes = video_bytes
-            if not final_bytes:
-                raise RuntimeError("ffmpeg –Ω–µ —É—Å–ø–µ–ª –∏–ª–∏ –Ω–µ —Å–º–æ–≥ —Å–æ–±—Ä–∞—Ç—å –∏—Ç–æ–≥–æ–≤—ã–π MP4 —Å –º—É–∑—ã–∫–æ–π. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ Render CPU/–ª–æ–≥–∏ ffmpeg –∏–ª–∏ —É–≤–µ–ª–∏—á—å—Ç–µ FFMPEG_MUX_TIMEOUT_S.")
-
-            caption = f"–§–æ—Ç–æ‚Üí–≤–∏–¥–µ–æ–∫–ª–∏–ø —Å –º—É–∑—ã–∫–æ–π ‚úÖ –û–¥–∏–Ω MP4 ¬∑ ~{target_duration} —Å–µ–∫"
-            await _reply_video_bytes(update, final_bytes, caption)
-            return True
-        except Exception as e:
-            log.exception("photo music clip background pipeline failed: %s", e)
-            with contextlib.suppress(Exception):
-                await update.effective_message.reply_text(f"‚ùå –§–æ—Ç–æ‚Üí–≤–∏–¥–µ–æ–∫–ª–∏–ø –Ω–µ –ø–æ–ª—É—á–∏–ª—Å—è. –ü—Ä–∏—á–∏–Ω–∞: {str(e)[:900]}")
-            return False
-        finally:
-            _photo_clip_background_jobs.discard(job_key)
-
-    async def _go():
-        # –ü–ª–∞—Ç–Ω–∞—è –∑–∞–¥–∞—á–∞ –æ—Å—Ç–∞—ë—Ç—Å—è –ø—Ä–∏–≤—è–∑–∞–Ω–Ω–æ–π –¥–æ —É—Å–ø–µ—à–Ω–æ–π –æ—Ç–ø—Ä–∞–≤–∫–∏ –∏—Ç–æ–≥–æ–≤–æ–≥–æ MP4.
-        return await _photo_clip_job()
-
-    await _try_pay_then_do(
-        update, context, update.effective_user.id,
-        "runway", PHOTO_CLIP_UNIT_COST_USD, _go,
-        remember_kind="kling_photo_music_clip_v62_background",
-        remember_payload={"prompt": user_prompt, "duration": target_duration, "aspect": aspect},
-    )
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ AI selfie / Nano Banana style image fusion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _prepare_reference_image_for_gemini(img_bytes: bytes, max_side: int | None = None) -> tuple[str, str]:
-    """Return (base64, mime). JPEG is used to keep payload smaller."""
-    max_side = int(max_side or AI_SELFIE_MAX_SIDE or 1536)
-    if Image is None:
-        return base64.b64encode(img_bytes).decode("ascii"), sniff_image_mime(img_bytes)
-    try:
-        im = Image.open(BytesIO(img_bytes)).convert("RGB")
-        if max(im.size) > max_side:
-            im.thumbnail((max_side, max_side), Image.LANCZOS)
-        bio = BytesIO()
-        im.save(bio, format="JPEG", quality=92, optimize=True)
-        return base64.b64encode(bio.getvalue()).decode("ascii"), "image/jpeg"
-    except Exception:
-        return base64.b64encode(img_bytes).decode("ascii"), sniff_image_mime(img_bytes)
-
-
-def _ai_selfie_final_prompt(user_prompt: str, preset_prompt: str = "") -> str:
-    user_prompt = (user_prompt or "").strip()
-    preset_prompt = (preset_prompt or "").strip()
-    if not user_prompt and not preset_prompt:
-        user_prompt = "realistic iPhone selfie with a celebrity, natural light, social media style, 4:5"
-    if not AI_SELFIE_ALLOW_PUBLIC_FIGURES:
-        safety_line = "Use a generic fictional celebrity-like person instead of a real public figure."
-    else:
-        safety_line = "This is a fictional AI-generated fan/selfie scene, not documentary evidence, endorsement, news, or political support."
-    parts = [
-        "Edit the uploaded user selfie into a new realistic AI photo.",
-        "Preserve the user's face identity and natural likeness.",
-        "Create one coherent iPhone/selfie-style scene with natural lighting, correct perspective and realistic skin.",
-        "No text, no captions, no watermarks, no logos, no UI overlays, no distorted hands, no duplicate faces.",
-        safety_line,
-    ]
-    if preset_prompt:
-        parts.append("Preset: " + preset_prompt[:350])
-    if user_prompt:
-        parts.append("User request: " + user_prompt[:650])
-    parts.append(f"Aspect ratio {AI_SELFIE_DEFAULT_ASPECT}. Output image size {AI_SELFIE_IMAGE_SIZE}.")
-    return " ".join(parts).strip()
-
-
-def _extract_image_b64_from_gemini(obj) -> str:
-    """Robust extraction from Interactions API responses: output_image or nested steps/content image blocks."""
-    if isinstance(obj, dict):
-        oi = obj.get("output_image")
-        if isinstance(oi, dict):
-            data = oi.get("data") or oi.get("b64_json") or oi.get("base64")
-            if isinstance(data, str) and len(data) > 100:
-                return data
-        # Common REST structures and SDK-like serialization.
-        if obj.get("type") == "image":
-            data = obj.get("data") or obj.get("b64_json") or obj.get("base64")
-            if isinstance(data, str) and len(data) > 100:
-                return data
-        for key in ("image", "generated_image", "output", "content", "steps", "candidates", "data", "result", "response"):
-            val = obj.get(key)
-            found = _extract_image_b64_from_gemini(val)
-            if found:
-                return found
-        for val in obj.values():
-            found = _extract_image_b64_from_gemini(val)
-            if found:
-                return found
-    elif isinstance(obj, (list, tuple)):
-        for item in obj:
-            found = _extract_image_b64_from_gemini(item)
-            if found:
-                return found
-    return ""
-
-
-async def _run_comet_music_video_identity_keyframe(
-    face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes, video_brief: str,
-    continuity_frame: bytes | None = None,
-) -> bytes | None:
-    """Synthesize one scene keyframe from four real image parts; no fake multi-reference UX."""
-    if not COMET_API_KEY:
-        return None
-    refs = [
-        ("FACE_FRONT", face_front),
-        ("FACE_3Q", face_3q),
-        ("BODY_FULL", body_full),
-        ("SCENE_REFERENCE", scene_reference),
-    ]
-    if continuity_frame:
-        refs.append(("CONTINUITY_FRAME", continuity_frame))
-    parts = [{"text": (
-        "Create ONE photorealistic starting scene keyframe. The first three identity images and the scene image show the SAME PERSON at different times. "
-        "FACE_FRONT and FACE_3Q are CURRENT photos and are the ABSOLUTE authority for the person's CURRENT FACE and hair. "
-        "Never average, blend, interpolate or revert the current face toward the older face visible in SCENE_REFERENCE. "
-        "BODY_FULL defines current body proportions when visible. SCENE_REFERENCE is an OLDER photo and defines ONLY environment, "
-        "composition, pose, clothing/accessories and visible tattoos; its older face/body shape is NOT an identity reference. "
-        "Render the body slightly fuller when needed to be consistent with the current portrait references, while preserving scene clothing and tattoos. "
-        "Preserve current age, face shape, eyes, nose, lips, chin, hairline and hairstyle exactly from FACE_FRONT/FACE_3Q. "
-        "No beautification, no face redesign, no identity blending, no text, no watermark. "
-        "CRITICAL ACTION PRIMING: SCENE_REFERENCE is not a pose lock. Infer the FIRST ACTIONABLE STATE from the user's director brief "
-        "and build the keyframe at the beginning of that state. Preserve reference appearance/environment only where it does not conflict with the requested action. "
-        "Any pose, held object, gaze direction, body orientation, door/object state, or composition from SCENE_REFERENCE that conflicts with the first requested action "
-        "must transition toward the user's requested state rather than being frozen merely because it appears in the reference. "
-        "Do not invent scenario-specific actions or props that the user did not request. "
-        "If CONTINUITY_FRAME is present, use it as the immutable geometric base and make only a minimal protagonist identity correction. Never collage references, paste a floating head/body, duplicate the protagonist, detach limbs, or move/replace/recompose the vehicle, architecture, supporting characters or persistent props. Preserve its exact camera viewpoint and completed-action state. If clean identity correction would damage geometry, preserve CONTINUITY_FRAME geometry rather than inventing a composite. "
-        "Build the exact START STATE for the next scene contract; supporting characters must remain in their explicitly stated position and role. "
-        f"Director brief ‚Äî execute literally: {(video_brief or '')[:1800]}"
-    )}]
-    for label, raw in refs:
-        b64, mime = _prepare_reference_image_for_gemini(raw, AI_SELFIE_MAX_SIDE)
-        parts.append({"text": label})
-        parts.append({"inlineData": {"mimeType": mime or "image/jpeg", "data": b64}})
-    model = (COMET_IMAGE_EDIT_FALLBACK_MODELS or [COMET_IMAGE_EDIT_MODEL])[0]
-    path = (COMET_IMAGE_EDIT_PATH or "/v1beta/models/{model}:generateContent").replace("{model}", model)
-    payload = {"contents": [{"role": "user", "parts": parts}],
-               "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}}
-    headers = {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=httpx.Timeout(COMET_IMAGE_EDIT_TIMEOUT_S, connect=40.0, read=COMET_IMAGE_EDIT_TIMEOUT_S, write=120.0), follow_redirects=True) as client:
-        r = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, json=payload)
-        if r.status_code >= 400:
-            raise RuntimeError(f"Identity keyframe synthesis failed HTTP {r.status_code}: {_api_error_preview(r)}")
-        out = await _image_bytes_from_response(r, client)
-        if not out:
-            raise RuntimeError("Identity keyframe synthesis returned no image")
-        log.info("Music-video identity keyframe synthesized refs=4 bytes=%d", len(out))
-        return out
-
-
-async def _run_comet_ai_selfie_bytes(img_bytes: bytes, user_prompt: str, preset_prompt: str = "") -> bytes | None:
-    """AI selfie via Comet Nano Banana/Gemini generateContent.
-    v59: one primary Comet route first, longer timeout, smaller reference image, then optional compact retry.
-    """
-    if not COMET_API_KEY:
-        return None
-
-    prompt = _ai_selfie_final_prompt(user_prompt, preset_prompt)
-    img_b64, mime = _prepare_reference_image_for_gemini(img_bytes, AI_SELFIE_MAX_SIDE)
-    mime = mime or "image/jpeg"
-
-    models: list[str] = []
-    for m in COMET_IMAGE_EDIT_FALLBACK_MODELS:
-        m = (m or "").strip()
-        if m and m not in models:
-            models.append(m)
-    if AI_SELFIE_FAST_MODE and models:
-        # In production do not try many slow models before returning; first model must be the enabled Comet channel.
-        models = models[:2]
-
-    base_paths: list[str] = []
-    for p in (COMET_IMAGE_EDIT_PATH, "/v1beta/models/{model}:generateContent"):
-        p = (p or "").strip()
-        if p and p not in base_paths:
-            base_paths.append(p)
-
-    def _mk_generate_content_payload(style: str, compact: bool = False) -> dict:
-        req_prompt = prompt
-        if compact:
-            req_prompt = (
-                "Use the uploaded selfie as identity reference. Create a realistic AI selfie scene. "
-                f"User request: {(user_prompt or preset_prompt or 'celebrity selfie')[:450]}. "
-                "Preserve face identity. No text, no logos, no watermark."
-            )
-        if style == "camel":
-            image_part = {"inlineData": {"mimeType": mime, "data": img_b64}}
-            gen_cfg = {"responseModalities": ["TEXT", "IMAGE"]}
-        else:
-            image_part = {"inline_data": {"mime_type": mime, "data": img_b64}}
-            gen_cfg = {"response_modalities": ["TEXT", "IMAGE"]}
-        return {
-            "contents": [{
-                "role": "user",
-                "parts": [
-                    {"text": req_prompt},
-                    image_part,
-                ],
-            }],
-            "generationConfig": gen_cfg,
-        }
-
-    # Main Comet route. Bearer is the normal gateway auth; avoid slow duplicate auth variants unless explicitly disabled fast mode.
-    header_variants = [
-        {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"},
-    ]
-    if not AI_SELFIE_FAST_MODE:
-        header_variants.extend([
-            {"x-goog-api-key": COMET_API_KEY, "Accept": "application/json", "Content-Type": "application/json"},
-            {"Authorization": COMET_API_KEY, "Accept": "application/json", "Content-Type": "application/json"},
-        ])
-
-    last_err = ""
-    timeout_seen = False
-    async with httpx.AsyncClient(timeout=httpx.Timeout(COMET_IMAGE_EDIT_TIMEOUT_S, connect=40.0, read=COMET_IMAGE_EDIT_TIMEOUT_S, write=120.0), follow_redirects=True) as client:
-        for model in models:
-            for path_tmpl in base_paths:
-                path = path_tmpl.replace("{model}", model)
-                if "/images/" in path and "generateContent" not in path:
-                    continue
-                url = f"{COMET_BASE_URL}{path}"
-                payload_styles = ("camel", "snake") if AI_SELFIE_FAST_MODE else ("camel", "snake")
-                for payload_style in payload_styles:
-                    payload = _mk_generate_content_payload(payload_style, compact=False)
-                    for headers in header_variants:
-                        try:
-                            r = await client.post(url, headers=headers, json=payload)
-                            if r.status_code >= 400:
-                                last_err = f"{r.status_code}: {_api_error_preview(r)}" if "_api_error_preview" in globals() else f"{r.status_code}: {r.text[:500]}"
-                                log.warning("Comet generateContent AI selfie failed model=%s path=%s style=%s: %s", model, path, payload_style, last_err)
-                                continue
-                            out = await _image_bytes_from_response(r, client)
-                            if out:
-                                return out
-                            try:
-                                js = r.json() or {}
-                            except Exception:
-                                js = {}
-                            last_err = f"Comet generateContent: –Ω–µ—Ç –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è –≤ –æ—Ç–≤–µ—Ç–µ {json.dumps(js, ensure_ascii=False)[:800]}"
-                        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException) as e:
-                            timeout_seen = True
-                            last_err = f"Comet image generation timeout after {COMET_IMAGE_EDIT_TIMEOUT_S}s: {type(e).__name__}"
-                            log.warning("Comet generateContent AI selfie timeout model=%s path=%s: %s", model, path, e)
-                            # Do not spend all time on additional variants when the model is just slow.
-                            break
-                        except Exception as e:
-                            last_err = str(e)
-                            log.warning("Comet generateContent AI selfie exception model=%s path=%s: %s", model, path, e)
-                            continue
-                    if timeout_seen and AI_SELFIE_FAST_MODE:
-                        break
-                if timeout_seen and AI_SELFIE_FAST_MODE:
-                    break
-            if timeout_seen and AI_SELFIE_FAST_MODE:
-                break
-
-        if timeout_seen and AI_SELFIE_RETRY_ON_TIMEOUT:
-            # One compact retry with smaller image. This often helps when the gateway times out on upload+generation+download.
-            retry_b64, retry_mime = _prepare_reference_image_for_gemini(img_bytes, 768)
-            img_b64, mime = retry_b64, retry_mime or "image/jpeg"
-            model = models[0] if models else COMET_IMAGE_EDIT_MODEL
-            path = (COMET_IMAGE_EDIT_PATH or "/v1beta/models/{model}:generateContent").replace("{model}", model)
-            url = f"{COMET_BASE_URL}{path}"
-            payload = _mk_generate_content_payload("camel", compact=True)
-            try:
-                r = await client.post(url, headers={"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}, json=payload)
-                if r.status_code < 400:
-                    out = await _image_bytes_from_response(r, client)
-                    if out:
-                        return out
-                    try:
-                        js = r.json() or {}
-                    except Exception:
-                        js = {}
-                    last_err = f"retry: –Ω–µ—Ç –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è –≤ –æ—Ç–≤–µ—Ç–µ {json.dumps(js, ensure_ascii=False)[:800]}"
-                else:
-                    last_err = f"retry {r.status_code}: {_api_error_preview(r)}" if "_api_error_preview" in globals() else f"retry {r.status_code}: {r.text[:500]}"
-            except Exception as e:
-                last_err = f"retry exception: {type(e).__name__}: {e}"
-
-        if COMET_IMAGE_EDIT_OPENAI_FALLBACK:
-            headers = {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"}
-            openai_paths = ["/v1/images/edits", "/v1/images/generations"]
-            edit_bytes, filename, edit_mime = _prepare_image_for_edit(img_bytes)
-            attempts = [
-                {"prompt": prompt, "n": "1", "response_format": "b64_json", "size": "1024x1024"},
-                {"prompt": prompt, "n": "1", "response_format": "b64_json"},
-            ]
-            for path in openai_paths:
-                for model in models:
-                    for data in attempts:
-                        try:
-                            payload = {"model": model, **data}
-                            files = {"image": ("image.png", edit_bytes, edit_mime or "image/png")}
-                            r = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, data=payload, files=files)
-                            if r.status_code >= 400:
-                                last_err = f"{r.status_code}: {_api_error_preview(r)}" if "_api_error_preview" in globals() else f"{r.status_code}: {r.text[:500]}"
-                                continue
-                            out = await _image_bytes_from_response(r, client)
-                            if out:
-                                return out
-                        except Exception as e:
-                            last_err = str(e)
-                            continue
-
-    raise RuntimeError(last_err or "Comet AI selfie generateContent failed")
-
-
-async def _run_openai_ai_selfie_fallback(img_bytes: bytes, user_prompt: str, preset_prompt: str = "") -> bytes | None:
-    if not OPENAI_IMAGE_KEY or OPENAI_IMAGE_KEY.startswith("sk-or-"):
-        return None
-    return await _openai_image_edit_bytes(img_bytes, _ai_selfie_final_prompt(user_prompt, preset_prompt))
-
-
-async def _run_ai_selfie_image(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str, preset_prompt: str = "") -> bool:
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
-    if not img_bytes:
-        await update.effective_message.reply_text("‚ùå –ù–µ—Ç –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è –¥–ª—è AI-—Å–µ–ª—Ñ–∏.")
-        return False
-    try:
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("‚è≥ AI-—Å–µ–ª—Ñ–∏ –ø—Ä–∏–Ω—è—Ç–æ. Comet/Nano Banana –º–æ–∂–µ—Ç –æ–±—Ä–∞–±–∞—Ç—ã–≤–∞—Ç—å 1‚Äì5 –º–∏–Ω—É—Ç, –æ–∂–∏–¥–∞—é —Ä–µ–∑—É–ª—å—Ç–∞—Ç‚Ä¶")
-        out = None
-        if AI_SELFIE_PROVIDER in ("comet", "auto", "nano", "nanobanana", "nano_banana", "gemini") and COMET_API_KEY:
-            out = await _run_comet_ai_selfie_bytes(img_bytes, user_prompt, preset_prompt)
-        if not out and AI_SELFIE_PROVIDER in ("openai", "auto", "gpt", "gptimages", "gpt_images") and OPENAI_IMAGE_KEY and not OPENAI_IMAGE_KEY.startswith("sk-or-"):
-            out = await _run_openai_ai_selfie_fallback(img_bytes, user_prompt, preset_prompt)
-        if not out:
-            await update.effective_message.reply_text(
-                "‚ùå AI-—Å–µ–ª—Ñ–∏ –Ω–µ–¥–æ—Å—Ç—É–ø–Ω–æ: –ø—Ä–æ–≤–µ—Ä—å—Ç–µ COMET_API_KEY, COMET_IMAGE_EDIT_MODEL –∏ COMET_IMAGE_EDIT_PATH. "
-                "–¢–µ–∫—É—â–∏–π –º–∞—Ä—à—Ä—É—Ç: Comet image-edit."
-            )
-            return False
-        bio = BytesIO(out)
-        bio.name = "ai_selfie.png"
-        caption = "ü§≥ AI-—Å–µ–ª—Ñ–∏ –≥–æ—Ç–æ–≤–æ ‚úÖ\n–ü–æ–º–µ—Ç–∫–∞: –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ —Å–≥–µ–Ω–µ—Ä–∏—Ä–æ–≤–∞–Ω–æ –ò–ò; –Ω–µ –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ –∫–∞–∫ –¥–æ–∫–∞–∑–∞—Ç–µ–ª—å—Å—Ç–≤–æ —Ä–µ–∞–ª—å–Ω–æ–π –≤—Å—Ç—Ä–µ—á–∏/–ø–æ–¥–¥–µ—Ä–∂–∫–∏."
-        if AI_SELFIE_SEND_AS_DOCUMENT:
-            await update.effective_message.reply_document(InputFile(bio), caption=caption)
-        else:
-            await update.effective_message.reply_photo(photo=out, caption=caption)
-        return True
-    except Exception as e:
-        log.exception("AI selfie error: %s", e)
-        err_txt = str(e)[:1200]
-        if "timeout" in err_txt.lower() or "timed out" in err_txt.lower():
-            err_txt = (
-                "Comet/Nano Banana –Ω–µ —É—Å–ø–µ–ª –≤–µ—Ä–Ω—É—Ç—å –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –≤ –æ—Ç–≤–µ–¥—ë–Ω–Ω–æ–µ –≤—Ä–µ–º—è. "
-                "–ü–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑ —Å 1K/–∫–æ—Ä–æ—Ç–∫–∏–º –ø—Ä–æ–º–ø—Ç–æ–º –∏–ª–∏ —É–≤–µ–ª–∏—á—å—Ç–µ COMET_IMAGE_EDIT_TIMEOUT_S –¥–æ 600. "
-                f"–¢–µ—Ö–Ω–∏—á–µ—Å–∫–∏: {err_txt}"
-            )
-        await update.effective_message.reply_text(f"‚ùå AI-—Å–µ–ª—Ñ–∏ –Ω–µ –ø–æ–ª—É—á–∏–ª–æ—Å—å. –ü—Ä–∏—á–∏–Ω–∞: {err_txt}")
-        return False
-
-
-async def _start_ai_selfie(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str, preset_prompt: str = ""):
-    async def _go():
-        return bool(await _run_ai_selfie_image(update, context, img_bytes, user_prompt, preset_prompt))
-
-    await _try_pay_then_do(
-        update, context, update.effective_user.id,
-        "img", AI_SELFIE_UNIT_COST_USD, _go,
-        remember_kind="ai_selfie_gemini_image_edit",
-        remember_payload={"prompt": user_prompt, "preset": preset_prompt[:400]},
-    )
-
-def background_presets_kb():
-    # –ü—Ä–µ—Å–µ—Ç—ã –ø–æ –æ–¥–Ω–æ–º—É –≤ —Å—Ç—Ä–æ–∫–µ: –Ω–∞ –º–∞–ª–µ–Ω—å–∫–∏—Ö —ç–∫—Ä–∞–Ω–∞—Ö —Ç–µ–∫—Å—Ç –Ω–µ –æ–±—Ä–µ–∑–∞–µ—Ç—Å—è.
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("üå´ –†–∞–∑–º—ã—Ç—å –∏—Å—Ö–æ–¥–Ω—ã–π —Ñ–æ–Ω", callback_data="pedit:bg:blur")],
-        [InlineKeyboardButton("üèñ –ü–ª—è–∂ / –º–æ—Ä–µ", callback_data="pedit:bg:beach")],
-        [InlineKeyboardButton("‚õ∞ –ì–æ—Ä—ã / –∞–ª—å–ø—ã", callback_data="pedit:bg:mountains")],
-        [InlineKeyboardButton("üåø –ü—Ä–∏—Ä–æ–¥–∞ / –ø–∞—Ä–∫", callback_data="pedit:bg:nature")],
-        [InlineKeyboardButton("üèô –ö—Ä—ã—à–∞ / –≥–æ—Ä–æ–¥", callback_data="pedit:bg:roof")],
-        [InlineKeyboardButton("üè¢ –û—Ñ–∏—Å / –±–∏–∑–Ω–µ—Å", callback_data="pedit:bg:office")],
-        [InlineKeyboardButton("‚ö™ –ë–µ–ª—ã–π —Å—Ç—É–¥–∏–π–Ω—ã–π —Ñ–æ–Ω", callback_data="pedit:bg:white")],
-        [InlineKeyboardButton("‚úçÔ∏è –°–≤–æ–π —Ñ–æ–Ω", callback_data="pedit:bg:custom")],
-        [InlineKeyboardButton("‚¨ÖÔ∏è –ù–∞–∑–∞–¥", callback_data="pedit:back")],
-    ])
-
-
-def _set_waiting_removebg(context):
-    context.user_data["awaiting_photo_for"] = "removebg"
-    context.user_data["photo_flow"] = "removebg"
-
-
-def _is_waiting_removebg(context) -> bool:
-    return bool(context and (context.user_data.get("awaiting_photo_for") == "removebg" or context.user_data.get("photo_flow") == "removebg"))
-
-
-def _clear_removebg_wait(context):
-    if not context:
-        return
-    if context.user_data.get("awaiting_photo_for") == "removebg":
-        context.user_data.pop("awaiting_photo_for", None)
-    if context.user_data.get("photo_flow") == "removebg":
-        context.user_data.pop("photo_flow", None)
-
-
-def _set_waiting_replacebg(context, prompt: str = ""):
-    context.user_data["awaiting_photo_for"] = "replacebg"
-    context.user_data["photo_flow"] = "replacebg"
-    if prompt:
-        context.user_data["replacebg_prompt"] = prompt.strip()
-
-
-def _set_replacebg_wait_text(context):
-    context.user_data["replacebg_wait_text"] = "1"
-
-
-def _is_replacebg_wait_text(context) -> bool:
-    return bool(context and context.user_data.get("replacebg_wait_text"))
-
-
-def _is_waiting_replacebg(context) -> bool:
-    return bool(context and (context.user_data.get("awaiting_photo_for") == "replacebg" or context.user_data.get("photo_flow") == "replacebg"))
-
-
-def _clear_replacebg_wait(context):
-    if not context:
-        return
-    for key in ("replacebg_wait_text", "replacebg_prompt"):
-        context.user_data.pop(key, None)
-    if context.user_data.get("awaiting_photo_for") == "replacebg":
-        context.user_data.pop("awaiting_photo_for", None)
-    if context.user_data.get("photo_flow") == "replacebg":
-        context.user_data.pop("photo_flow", None)
-
-
-def _is_remove_bg_request(text: str) -> bool:
-    tl = (text or "").lower()
-    return any(k in tl for k in ("—É–¥–∞–ª–∏ —Ñ–æ–Ω", "—É–¥–∞–ª–∏—Ç—å —Ñ–æ–Ω", "—É–±–µ—Ä–∏ —Ñ–æ–Ω", "—É–±—Ä–∞—Ç—å —Ñ–æ–Ω", "removebg", "remove background", "–ø—Ä–æ–∑—Ä–∞—á–Ω—ã–π —Ñ–æ–Ω", "–±–µ–∑ —Ñ–æ–Ω–∞"))
-
-
-def _is_replace_bg_request(text: str) -> bool:
-    tl = (text or "").lower()
-    return any(k in tl for k in ("–∑–∞–º–µ–Ω–∏ —Ñ–æ–Ω", "–∑–∞–º–µ–Ω–∏—Ç—å —Ñ–æ–Ω", "–ø–æ–º–µ–Ω—è–π —Ñ–æ–Ω", "–ø–æ–º–µ–Ω—è—Ç—å —Ñ–æ–Ω", "replacebg", "replace background", "—Ñ–æ–Ω –Ω–∞", "–¥—Ä—É–≥–æ–π —Ñ–æ–Ω"))
-
-
-def _bg_kind_from_text(text: str) -> tuple[str, str]:
-    tl = (text or "").lower()
-    if any(k in tl for k in ("–ø–ª—è–∂", "–º–æ—Ä–µ", "–æ–∫–µ–∞–Ω", "beach", "coast", "shore")):
-        return "beach", text
-    if any(k in tl for k in ("–≥–æ—Ä—ã", "–≥–æ—Ä–∞", "mountain", "alps", "–∞–ª—å–ø")):
-        return "mountains", text
-    if any(k in tl for k in ("–∫—Ä—ã—à–∞", "–≥–æ—Ä–æ–¥", "–Ω–µ–±–æ—Å–∫—Ä–µ–±", "rooftop", "city", "skyline", "—Ç–µ—Ä—Ä–∞—Å–∞")):
-        return "roof", text
-    if any(k in tl for k in ("–æ—Ñ–∏—Å", "–∫–∞–±–∏–Ω–µ—Ç", "business", "office", "coworking", "–ø–µ—Ä–µ–≥–æ–≤–æ—Ä")):
-        return "office", text
-    if any(k in tl for k in ("–ø—Ä–∏—Ä–æ–¥–∞", "–ª–µ—Å", "–∑–µ–ª–µ–Ω—å", "nature", "forest", "park", "–ø–∞—Ä–∫")):
-        return "nature", text
-    if any(k in tl for k in ("–±–µ–ª—ã–π", "white", "studio", "—Å—Ç—É–¥")):
-        return "white", text
-    if any(k in tl for k in ("—á–µ—Ä–Ω—ã–π", "—á—ë—Ä–Ω—ã–π", "black")):
-        return "black", text
-    if any(k in tl for k in ("—Ä–∞–∑–º—ã", "blur", "–±–ª—é—Ä")):
-        return "blur", text
-    return "custom", text
-
-
-def _safe_b64decode_image(value: str) -> bytes | None:
-    if not value or not isinstance(value, str):
-        return None
-    s = value.strip()
-    if s.startswith("data:") and "," in s:
-        s = s.split(",", 1)[1]
-    try:
-        return base64.b64decode(s, validate=False)
-    except Exception:
-        return None
-
-
-def _find_first_image_b64(obj) -> bytes | None:
-    if isinstance(obj, dict):
-        # Gemini / Nano Banana generateContent returns candidates[].content.parts[].inlineData/inline_data.data.
-        for key in ("inline_data", "inlineData"):
-            v = obj.get(key)
-            if isinstance(v, dict):
-                mime = str(v.get("mime_type") or v.get("mimeType") or "").lower()
-                if mime.startswith("image/") or v.get("data"):
-                    out = _safe_b64decode_image(v.get("data") or v.get("bytes_base64") or v.get("bytesBase64"))
-                    if out:
-                        return out
-        for key in ("b64_json", "image_b64", "image", "png", "result_b64", "bytes_base64", "bytesBase64"):
-            if key in obj:
-                out = _safe_b64decode_image(obj.get(key))
-                if out:
-                    return out
-        for v in obj.values():
-            out = _find_first_image_b64(v)
-            if out:
-                return out
-    elif isinstance(obj, list):
-        for v in obj:
-            out = _find_first_image_b64(v)
-            if out:
-                return out
-    return None
-
-
-def _find_first_image_url(obj) -> str:
-    if isinstance(obj, dict):
-        for key in ("url", "image_url", "output_url", "result_url", "download_url", "file_url"):
-            val = obj.get(key)
-            if isinstance(val, str) and val.startswith(("http://", "https://")):
-                return val
-            if isinstance(val, dict):
-                nested = val.get("url")
-                if isinstance(nested, str) and nested.startswith(("http://", "https://")):
-                    return nested
-        for v in obj.values():
-            url = _find_first_image_url(v)
-            if url:
-                return url
-    elif isinstance(obj, list):
-        for v in obj:
-            url = _find_first_image_url(v)
-            if url:
-                return url
-    return ""
-
-
-async def _image_bytes_from_response(resp: httpx.Response, client: httpx.AsyncClient) -> bytes | None:
-    ctype = (resp.headers.get("content-type") or "").lower()
-    if ctype.startswith("image/") and resp.content:
-        return bytes(resp.content)
-    try:
-        obj = resp.json()
-    except Exception:
-        return None
-    out = _find_first_image_b64(obj)
-    if out:
-        return out
-    url = _find_first_image_url(obj)
-    if url:
-        try:
-            rr = await client.get(url, timeout=BG_REMOVE_TIMEOUT_S)
-            rr.raise_for_status()
-            if rr.content:
-                return bytes(rr.content)
-        except Exception as e:
-            log.warning("background result url download failed: %s", e)
-    return None
-
-
-def _prepare_bytes_for_rembg(img_bytes: bytes) -> bytes:
-    """
-    Render Starter –º–æ–∂–µ—Ç —É–ø–∏—Ä–∞—Ç—å—Å—è –≤ RAM –Ω–∞ –±–æ–ª—å—à–∏—Ö —Ñ–æ—Ç–æ.
-    –î–ª—è local rembg —É–º–µ–Ω—å—à–∞–µ–º —Å–ª–∏—à–∫–æ–º –∫—Ä—É–ø–Ω—ã–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è –¥–æ REMBG_MAX_SIDE.
-    """
-    if Image is None or not REMBG_MAX_SIDE or REMBG_MAX_SIDE <= 0:
-        return img_bytes
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        with contextlib.suppress(Exception):
-            im = ImageOps.exif_transpose(im)
-        w, h = im.size
-        mx = max(w, h)
-        if mx <= REMBG_MAX_SIDE:
-            return img_bytes
-        scale = REMBG_MAX_SIDE / float(mx)
-        nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
-        resample = getattr(Image, "Resampling", Image).LANCZOS
-        im = im.convert("RGB").resize((nw, nh), resample)
-        out = BytesIO()
-        im.save(out, format="JPEG", quality=94, optimize=True)
-        _bg_note_error(f"local rembg input resized {w}x{h}->{nw}x{nh}")
-        return out.getvalue()
-    except Exception as e:
-        _bg_note_error(f"local rembg resize skipped: {e}")
-        return img_bytes
-
-
-def _get_local_rembg_session():
-    global _REMBG_SESSION
-    if rembg_remove is None:
-        _bg_note_error(f"rembg import failed: {REMBG_IMPORT_ERROR}")
-        return None
-    if rembg_new_session is None:
-        _bg_note_error("rembg.new_session is not available")
-        return None
-    if _REMBG_SESSION is not None:
-        return _REMBG_SESSION
-    with _REMBG_SESSION_LOCK:
-        if _REMBG_SESSION is not None:
-            return _REMBG_SESSION
-        with contextlib.suppress(Exception):
-            os.environ.setdefault("U2NET_HOME", U2NET_HOME)
-            os.makedirs(U2NET_HOME, exist_ok=True)
-            os.makedirs(XDG_CACHE_HOME, exist_ok=True)
-        last_exc = ""
-        for model_name in REMBG_MODEL_FALLBACKS:
-            try:
-                log.info("Initializing local rembg session: model=%s U2NET_HOME=%s", model_name, os.environ.get("U2NET_HOME"))
-                _REMBG_SESSION = rembg_new_session(model_name)
-                log.info("local rembg session ready: model=%s", model_name)
-                return _REMBG_SESSION
-            except Exception as e:
-                last_exc = repr(e)
-                log.warning("local rembg session init failed model=%s: %s", model_name, e)
-                _bg_note_error(f"local rembg session init failed model={model_name}: {e}")
-        _bg_note_error(f"local rembg session unavailable: {last_exc}")
-    return None
-
-
-
-async def _local_rembg_remove_subprocess(img_bytes: bytes) -> bytes | None:
-    """
-    –ò–∑–æ–ª–∏—Ä–æ–≤–∞–Ω–Ω—ã–π local rembg worker. –ï—Å–ª–∏ rembg/onnxruntime –∑–∞–≤–∏—Å–Ω–µ—Ç –ø—Ä–∏ —Å–∫–∞—á–∏–≤–∞–Ω–∏–∏
-    –∏–ª–∏ –∏–Ω–∏—Ü–∏–∞–ª–∏–∑–∞—Ü–∏–∏ –º–æ–¥–µ–ª–∏, –æ—Å–Ω–æ–≤–Ω–æ–π –±–æ—Ç –Ω–µ –∑–∞–≤–∏—Å–∞–µ—Ç: –ø—Ä–æ—Ü–µ—Å—Å —É–±–∏–≤–∞–µ–º –ø–æ timeout.
-    """
-    if not LOCAL_REMBG_ENABLED or rembg_remove is None:
-        return None
-    if Image is not None:
-        img_bytes = _prepare_bytes_for_rembg(img_bytes)
-    timeout_s = max(20.0, float(LOCAL_REMBG_TIMEOUT_S or 180))
-    env = os.environ.copy()
-    env["U2NET_HOME"] = env.get("U2NET_HOME") or U2NET_HOME or "/tmp/.u2net"
-    env["XDG_CACHE_HOME"] = env.get("XDG_CACHE_HOME") or XDG_CACHE_HOME or "/tmp/.cache"
-    env.setdefault("OMP_NUM_THREADS", "1")
-    env.setdefault("MPLCONFIGDIR", "/tmp/.matplotlib")
-    for d in (env["U2NET_HOME"], env["XDG_CACHE_HOME"], env["MPLCONFIGDIR"]):
-        with contextlib.suppress(Exception):
-            os.makedirs(d, exist_ok=True)
-
-    worker_code = r'''
-import os, sys
-from pathlib import Path
-try:
-    from rembg import remove, new_session
-except Exception as e:
-    print(f"IMPORT_ERROR: {e}", file=sys.stderr)
-    sys.exit(11)
-model = os.environ.get("REMBG_MODEL", "u2netp") or "u2netp"
-inp, outp = sys.argv[1], sys.argv[2]
-try:
-    Path(os.environ.get("U2NET_HOME", "/tmp/.u2net")).mkdir(parents=True, exist_ok=True)
-    Path(os.environ.get("XDG_CACHE_HOME", "/tmp/.cache")).mkdir(parents=True, exist_ok=True)
-    data = Path(inp).read_bytes()
-    sess = new_session(model)
-    try:
-        out = remove(data, session=sess, force_return_bytes=True)
-    except TypeError:
-        out = remove(data, session=sess)
-    Path(outp).write_bytes(out)
-except Exception as e:
-    print(f"REMBG_WORKER_ERROR: {type(e).__name__}: {e}", file=sys.stderr)
-    sys.exit(12)
-'''
-    in_path = out_path = None
-    try:
-        with tempfile.NamedTemporaryFile(prefix="rembg_in_", suffix=".jpg", delete=False) as f:
-            f.write(img_bytes)
-            in_path = f.name
-        fd, out_path = tempfile.mkstemp(prefix="rembg_out_", suffix=".png")
-        os.close(fd)
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", worker_code, in_path, out_path,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
-        except asyncio.TimeoutError:
-            with contextlib.suppress(Exception):
-                proc.kill()
-            with contextlib.suppress(Exception):
-                await proc.wait()
-            _bg_note_error(f"local rembg subprocess timeout after {timeout_s:.0f}s")
-            return None
-        if proc.returncode != 0:
-            msg = (stderr or stdout or b"").decode("utf-8", "replace")[:800]
-            _bg_note_error(f"local rembg subprocess failed rc={proc.returncode}: {msg}")
-            return None
-        if not out_path or not os.path.exists(out_path) or os.path.getsize(out_path) < 512:
-            _bg_note_error("local rembg subprocess produced empty output")
-            return None
-        with open(out_path, "rb") as f:
-            return f.read()
-    except Exception as e:
-        _bg_note_error(f"local rembg subprocess exception: {e}")
-        log.warning("local rembg subprocess exception: %s", e)
-        return None
-    finally:
-        for path in (in_path, out_path):
-            if path:
-                with contextlib.suppress(Exception):
-                    os.remove(path)
-
-def _local_rembg_remove_sync(img_bytes: bytes) -> bytes:
-    img_bytes = _prepare_bytes_for_rembg(img_bytes)
-    session = _get_local_rembg_session()
-    if session is not None:
-        try:
-            return rembg_remove(img_bytes, session=session, force_return_bytes=True)
-        except TypeError:
-            return rembg_remove(img_bytes, session=session)
-    try:
-        return rembg_remove(img_bytes, force_return_bytes=True)
-    except TypeError:
-        return rembg_remove(img_bytes)
-
-
-async def _local_rembg_remove_bytes(img_bytes: bytes) -> bytes | None:
-    if not LOCAL_REMBG_ENABLED:
-        return None
-    if rembg_remove is None:
-        log.warning("local rembg is not available: %s", REMBG_IMPORT_ERROR)
-        return None
-
-    if LOCAL_REMBG_SUBPROCESS:
-        return await _local_rembg_remove_subprocess(img_bytes)
-
-    try:
-        return await asyncio.wait_for(
-            asyncio.to_thread(_local_rembg_remove_sync, img_bytes),
-            timeout=LOCAL_REMBG_TIMEOUT_S,
-        )
-    except Exception as e:
-        log.warning("local rembg failed: %s", e)
-        _bg_note_error(f"local rembg failed: {e}")
-        return None
-
-
-
-
-def _resize_image_bytes_for_bg_api(img_bytes: bytes, max_side: int | None = None) -> tuple[bytes, str, str]:
-    """–°–∂–∏–º–∞–µ—Ç –≤—Ö–æ–¥ –ø–µ—Ä–µ–¥ Photoroom, —á—Ç–æ–±—ã –Ω–µ –ª–æ–≤–∏—Ç—å API/Telegram timeout –Ω–∞ –±–æ–ª—å—à–∏—Ö —Ñ–æ—Ç–æ."""
-    max_side = int(max_side or PHOTOROOM_INPUT_MAX_SIDE or 1600)
-    mime = sniff_image_mime(img_bytes) or "image/jpeg"
-    if Image is None or max_side <= 0:
-        ext = ".jpg" if mime == "image/jpeg" else (".png" if mime == "image/png" else ".webp")
-        return img_bytes, f"image{ext}", mime
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        # –î–ª—è –∏—Å—Ö–æ–¥–Ω—ã—Ö —Ñ–æ—Ç–æ –ø—Ä–æ–∑—Ä–∞—á–Ω–æ—Å—Ç—å –Ω–µ –Ω—É–∂–Ω–∞, Photoroom —Å–∞–º –≤–µ—Ä–Ω—ë—Ç PNG/RGBA.
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        if max(im.size) > max_side:
-            im.thumbnail((max_side, max_side), Image.LANCZOS)
-        # JPEG —Å–∏–ª—å–Ω–æ —É–º–µ–Ω—å—à–∞–µ—Ç —Ä–∞–∑–º–µ—Ä –∑–∞–ø—Ä–æ—Å–∞ –∏ —É—Å–∫–æ—Ä—è–µ—Ç –±–µ—Å–ø–ª–∞—Ç–Ω—ã–π API.
-        if im.mode not in ("RGB", "L"):
-            im = im.convert("RGB")
-        bio = BytesIO()
-        im.save(bio, format="JPEG", quality=92, optimize=True, progressive=True)
-        return bio.getvalue(), "image.jpg", "image/jpeg"
-    except Exception as e:
-        _bg_note_error(f"input resize for Photoroom failed: {e}")
-        ext = ".jpg" if mime == "image/jpeg" else (".png" if mime == "image/png" else ".webp")
-        return img_bytes, f"image{ext}", mime
-
-async def _photoroom_api_remove_bytes(img_bytes: bytes) -> bytes | None:
-    """Photoroom Remove Background API. Returns transparent PNG/RGBA bytes."""
-    if not PHOTOROOM_API_KEY:
-        _bg_note_error("Photoroom API key missing: set PHOTOROOM_API_KEY in Render Environment")
-        return None
-    upload_bytes, upload_name, mime = _resize_image_bytes_for_bg_api(img_bytes, PHOTOROOM_INPUT_MAX_SIDE)
-    url = f"{PHOTOROOM_BASE_URL}{PHOTOROOM_REMOVE_PATH}"
-    headers = {"x-api-key": PHOTOROOM_API_KEY}
-    # Photoroom /v1/segment accepts remove.bg-compatible fields.
-    data = {
-        "format": PHOTOROOM_FORMAT or "png",
-        "channels": PHOTOROOM_CHANNELS or "rgba",
-        "size": PHOTOROOM_SIZE or "hd",
-        "crop": PHOTOROOM_CROP or "false",
-        "despill": PHOTOROOM_DESPILL or "false",
-    }
-    timeout = httpx.Timeout(PHOTOROOM_TIMEOUT_S, connect=20.0)
-    try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            files = {"image_file": (upload_name, upload_bytes, mime)}
-            r = await client.post(url, headers=headers, data=data, files=files)
-            if r.status_code >= 400:
-                body = (r.text or "")[:900]
-                _bg_note_error(f"Photoroom API failed status={r.status_code} body={body}")
-                log.warning("Photoroom API failed status=%s body=%s", r.status_code, body)
-                return None
-            ctype = (r.headers.get("content-type") or "").lower()
-            if not r.content or len(r.content) < 300:
-                _bg_note_error(f"Photoroom API returned empty/short content: {len(r.content or b'')} bytes")
-                return None
-            if (not ctype.startswith("image/")) and (r.content[:1] not in (b"\x89", b"\xff")):
-                _bg_note_error(f"Photoroom API returned non-image content-type={ctype} body={(r.text or '')[:700]}")
-                return None
-            return bytes(r.content)
-    except Exception as e:
-        _bg_note_error(f"Photoroom API exception: {type(e).__name__}: {e}")
-        log.warning("Photoroom API exception: %s", e)
-        return None
-
-
-def _normalize_photo_result(img_bytes: bytes) -> bytes:
-    if Image is None:
-        return img_bytes
-    try:
-        im = Image.open(BytesIO(img_bytes)).convert("RGB")
-        max_side = int(BG_OUTPUT_MAX_SIDE or 1600)
-        if max_side > 0 and max(im.size) > max_side:
-            im.thumbnail((max_side, max_side), Image.LANCZOS)
-        bio = BytesIO()
-        im.save(bio, format="JPEG", quality=93, optimize=True, progressive=True)
-        return bio.getvalue()
-    except Exception as e:
-        _bg_note_error(f"normalize photo result failed: {e}")
-        return img_bytes
-
-
-def _clean_bg_prompt_text(prompt: str) -> str:
-    """Remove wording that makes AI draw a visible phone/mirror instead of just selfie-like perspective."""
-    s = (prompt or "").strip()
-    replacements = {
-        "–Ω–∞ —Ç–µ–ª–µ—Ñ–æ–Ω": "",
-        "—Å —Ç–µ–ª–µ—Ñ–æ–Ω–∞": "",
-        "–Ω–∞ —Å–º–∞—Ä—Ç—Ñ–æ–Ω": "",
-        "—Å–æ —Å–º–∞—Ä—Ç—Ñ–æ–Ω–∞": "",
-        "—Ç–µ–ª–µ—Ñ–æ–Ω": "–∫–∞–º–µ—Ä–∞",
-        "—Å–º–∞—Ä—Ç—Ñ–æ–Ω": "–∫–∞–º–µ—Ä–∞",
-        "phone": "camera",
-        "smartphone": "camera",
-        "mirror": "",
-        "–∑–µ—Ä–∫–∞–ª–æ": "",
-        "selfie stick": "",
-        "—Å–µ–ª—Ñ–∏-–ø–∞–ª–∫–∞": "",
-    }
-    for a, b in replacements.items():
-        s = re.sub(re.escape(a), b, s, flags=re.IGNORECASE)
-    s = re.sub(r"\s{2,}", " ", s).strip(" ,.;")
-    return s
-
-
-def _build_background_scene_prompt(kind: str, prompt: str = "") -> str:
-    kind = (kind or "custom").lower().strip()
-    user_prompt = _clean_bg_prompt_text(prompt)
-    preset_map = {
-        "beach": (
-            "photorealistic tropical beach background, natural sandy shore, clean sea horizon, calm blue water, "
-            "soft waves, realistic daylight, believable travel-photo atmosphere, open air, uncluttered foreground, "
-            "no buildings unless naturally distant"
-        ),
-        "mountains": (
-            "photorealistic mountain landscape, scenic alpine or green mountains, open outdoor view, realistic sky, "
-            "natural daylight, atmospheric perspective, clean travel-photo composition, no indoor elements"
-        ),
-        "nature": (
-            "photorealistic park or nature background, greenery, trees, soft depth, realistic outdoor daylight, "
-            "calm natural environment, clean believable background"
-        ),
-        "roof": (
-            "photorealistic rooftop terrace or city skyline, elegant urban atmosphere, realistic architecture in the distance, "
-            "natural perspective, outdoor light, clean modern background"
-        ),
-        "office": (
-            "photorealistic premium office or business-lounge background, modern interior, clean lines, "
-            "soft daylight, realistic depth, elegant professional atmosphere, no random gadgets in foreground"
-        ),
-        "white": "clean white studio background with soft even light and realistic subtle shadow",
-        "black": "clean dark studio background with soft controlled light and realistic subtle shadow",
-        "blur": "soft natural bokeh background derived from the original scene, realistic lens blur, no extra objects",
-        "custom": user_prompt,
-    }
-    scene = user_prompt or preset_map.get(kind) or "photorealistic clean environment"
-    return (
-        "Create only the BACKGROUND SCENE with no people. This is step 2 of a two-stage workflow: "
-        "the subject will be composited later, so leave clean free space for one adult person in the center foreground. "
-        "The result must be photorealistic, believable, natural perspective, eye-level camera angle, realistic light, "
-        "real-world textures, coherent depth and a clean uncluttered composition. "
-        f"Scene request: {scene}."
-    ).strip()
-
-
-def _build_background_negative_prompt(kind: str = "", prompt: str = "") -> str:
-    parts = [
-        "no people", "no portraits", "no selfie", "no face", "no hands", "no body",
-        "no phone", "no smartphone", "no screen", "no mirror", "no selfie stick",
-        "no black panel", "no kiosk", "no wall device", "no random indoor artifact",
-        "no duplicate objects", "no text", "no watermark", "no logo", "no cartoon",
-        "no painting", "no illustration", "no anime", "no CGI", "no 3d render"
-    ]
-    kind = (kind or "").lower().strip()
-    if kind == "beach":
-        parts += ["no snow", "no mountains in foreground", "no office"]
-    elif kind == "mountains":
-        parts += ["no beach", "no ocean", "no tropical palm trees"]
-    elif kind == "office":
-        parts += ["no beach", "no mountains", "no random device close to camera"]
-    return ", ".join(dict.fromkeys(parts))
-
-
-def _build_selfie_background_prompt(kind: str, prompt: str = "") -> str:
-    # Legacy helper kept for compatibility/debug.
-    scene = _build_background_scene_prompt(kind, prompt)
-    negative = _build_background_negative_prompt(kind, prompt)
-    return (
-        "Generate only a new background and keep the original main subject completely unchanged: "
-        "do not alter the face, hair, clothes, body, pose, proportions or skin texture. "
-        + scene + " Avoid: " + negative
-    ).strip()
-
-
-def _should_use_photoroom_ai_background(kind: str, prompt: str = "") -> bool:
-    # In production we now prefer a strict two-stage pipeline: remove background -> build/select new background -> composite.
-    # Photoroom edit is kept only as an optional debug path and is disabled for presets by default.
-    if not PHOTOROOM_EDIT_ENABLED or not PHOTOROOM_API_KEY:
-        return False
-    return False
-
-
-async def _photoroom_api_edit_background_bytes(img_bytes: bytes, kind: str = "custom", prompt: str = "") -> bytes | None:
-    """Legacy direct AI edit path. Kept for optional diagnostics, not used by the default two-stage production pipeline."""
-    if not PHOTOROOM_API_KEY:
-        _bg_note_error("Photoroom API key missing for AI background: set PHOTOROOM_API_KEY in Render Environment")
-        return None
-    if not PHOTOROOM_EDIT_ENABLED:
-        _bg_note_error("Photoroom AI background is disabled by PHOTOROOM_EDIT_ENABLED=0")
-        return None
-    upload_bytes, upload_name, mime = _resize_image_bytes_for_bg_api(img_bytes, PHOTOROOM_INPUT_MAX_SIDE)
-    url = f"{PHOTOROOM_EDIT_BASE_URL}{PHOTOROOM_EDIT_PATH}"
-    headers = {"x-api-key": PHOTOROOM_API_KEY}
-    bg_prompt = _build_selfie_background_prompt(kind, prompt)
-    data = {
-        "referenceBox": "originalImage",
-        "background.prompt": bg_prompt,
-        "background.expandPrompt.mode": PHOTOROOM_EDIT_EXPAND_PROMPT_MODE or "ai.never",
-    }
-    if PHOTOROOM_EDIT_NEGATIVE_PROMPT:
-        data["background.negativePrompt"] = PHOTOROOM_EDIT_NEGATIVE_PROMPT
-    timeout = httpx.Timeout(PHOTOROOM_EDIT_TIMEOUT_S, connect=20.0)
-    try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            files = {"imageFile": (upload_name, upload_bytes, mime)}
-            r = await client.post(url, headers=headers, data=data, files=files)
-            if r.status_code >= 400:
-                body = (r.text or "")[:900]
-                _bg_note_error(f"Photoroom edit API failed status={r.status_code} body={body}")
-                log.warning("Photoroom edit API failed status=%s body=%s", r.status_code, body)
-                return None
-            ctype = (r.headers.get("content-type") or "").lower()
-            if ctype.startswith("image/") and r.content and len(r.content) > 300:
-                return bytes(r.content)
-            out = await _image_bytes_from_response(r, client)
-            if out:
-                return out
-            _bg_note_error(f"Photoroom edit API returned non-image content-type={ctype} body={(r.text or '')[:700]}")
-            return None
-    except Exception as e:
-        _bg_note_error(f"Photoroom edit API exception: {type(e).__name__}: {e}")
-        log.warning("Photoroom edit API exception: %s", e)
-        return None
-
-
-async def _removebg_api_remove_bytes(img_bytes: bytes) -> bytes | None:
-    """Official remove.bg-compatible API primary path. Returns transparent PNG bytes."""
-    if not REMOVE_BG_API_KEY:
-        _bg_note_error("remove.bg API key missing: set REMOVE_BG_API_KEY in Render Environment")
-        return None
-    mime = sniff_image_mime(img_bytes) or "image/jpeg"
-    url = f"{REMOVE_BG_BASE_URL}{REMOVE_BG_PATH}"
-    headers = {"X-Api-Key": REMOVE_BG_API_KEY}
-    data = {
-        "size": REMOVE_BG_SIZE,
-        "format": REMOVE_BG_FORMAT,
-        "type": "auto",
-    }
-    timeout = httpx.Timeout(REMOVE_BG_TIMEOUT_S, connect=20.0)
-    try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            files = {"image_file": ("image.jpg", img_bytes, mime)}
-            r = await client.post(url, headers=headers, data=data, files=files)
-            if r.status_code >= 400:
-                body = (r.text or "")[:700]
-                _bg_note_error(f"remove.bg API failed status={r.status_code} body={body}")
-                log.warning("remove.bg API failed status=%s body=%s", r.status_code, body)
-                return None
-            if not r.content or len(r.content) < 300:
-                _bg_note_error(f"remove.bg API returned empty/short content: {len(r.content or b'')} bytes")
-                return None
-            return bytes(r.content)
-    except Exception as e:
-        _bg_note_error(f"remove.bg API exception: {type(e).__name__}: {e}")
-        log.warning("remove.bg API exception: %s", e)
-        return None
-
-
-async def _comet_bria_remove_bg_bytes(img_bytes: bytes) -> bytes | None:
-    """Remote fallback only. Main production path should be local rembg."""
-    if not COMET_API_KEY:
-        return None
-    headers = {"Authorization": f"Bearer {COMET_API_KEY}"}
-    mime = sniff_image_mime(img_bytes)
-    paths: list[str] = []
-    for p in (BG_COMET_REMOVE_PATH, "/v1/images/edits", "/v1/images/generations"):
-        if p and p not in paths:
-            paths.append(p)
-    timeout = httpx.Timeout(BG_REMOVE_TIMEOUT_S, connect=20.0)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        for path in paths:
-            url = f"{COMET_BASE_URL}{path}"
-            try:
-                files = {"image": ("image.png", img_bytes, mime or "application/octet-stream")}
-                data = {
-                    "model": BG_COMET_MODEL,
-                    "response_format": "b64_json",
-                    "transparent_background": "true",
-                }
-                r = await client.post(url, headers=headers, files=files, data=data)
-                if r.status_code >= 400:
-                    err = f"Comet BG remove failed path={path} status={r.status_code} body={r.text[:500]}"
-                    log.warning(err)
-                    _bg_note_error(err)
-                    continue
-                out = await _image_bytes_from_response(r, client)
-                if out:
-                    return out
-            except Exception as e:
-                msg = f"Comet background remove exception path={path}: {e}"
-                log.warning(msg)
-                _bg_note_error(msg)
-    return None
-
-
-async def _bria_direct_remove_bg_bytes(img_bytes: bytes) -> bytes | None:
-    """Direct Bria fallback, only if BRIA_API_KEY is configured."""
-    if not BRIA_API_KEY:
-        return None
-    mime = sniff_image_mime(img_bytes)
-    headers_variants = [
-        {"Authorization": f"Bearer {BRIA_API_KEY}"},
-        {"api_token": BRIA_API_KEY},
-        {"Authorization": f"Bearer {BRIA_API_KEY}", "api_token": BRIA_API_KEY},
-    ]
-    paths: list[str] = []
-    for p in (BRIA_REMOVE_PATH, "/v1/background/remove", "/v1/remove_background", "/background/remove"):
-        if p and p not in paths:
-            paths.append(p)
-    timeout = httpx.Timeout(BG_REMOVE_TIMEOUT_S, connect=20.0)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        for path in paths:
-            url = f"{BRIA_BASE_URL}{path}"
-            for headers in headers_variants:
-                try:
-                    files = {"image": ("image.png", img_bytes, mime or "application/octet-stream")}
-                    r = await client.post(url, headers=headers, files=files)
-                    if r.status_code >= 400:
-                        _bg_note_error(f"Bria direct failed path={path} status={r.status_code} body={r.text[:400]}")
-                        continue
-                    out = await _image_bytes_from_response(r, client)
-                    if out:
-                        return out
-                except Exception as e:
-                    msg = f"Bria direct remove exception path={path}: {e}"
-                    log.warning(msg)
-                    _bg_note_error(msg)
-    return None
-
-
-def _normalize_transparent_png(img_bytes: bytes) -> bytes:
-    if Image is None:
-        return img_bytes
-    try:
-        im = Image.open(BytesIO(img_bytes)).convert("RGBA")
-        max_side = int(BG_OUTPUT_MAX_SIDE or 1600)
-        if max_side > 0 and max(im.size) > max_side:
-            im.thumbnail((max_side, max_side), Image.LANCZOS)
-        bio = BytesIO()
-        im.save(bio, format="PNG", optimize=True, compress_level=6)
-        return bio.getvalue()
-    except Exception as e:
-        _bg_note_error(f"normalize transparent png failed: {e}")
-        return img_bytes
-
-async def _remove_bg_bytes_primary(img_bytes: bytes) -> bytes | None:
-    """
-    Production background pipeline.
-    Primary: Photoroom Remove Background API.
-    Optional fallbacks are used only in provider=multi/auto. Local rembg remains disabled on Render Starter.
-    """
-    provider = (BG_PROVIDER or "photoroom-api-only").lower().strip()
-    photoroom_only = provider in (
-        "photoroom", "photoroom-api", "photoroom-api-only",
-        "photoroom-only", "api", "api-only"
-    )
-
-    # 1) Stable production path: Photoroom API.
-    if provider in ("auto", "multi", "photoroom", "photoroom-api", "photoroom-api-only", "photoroom-only", "api", "api-only"):
-        out = await _photoroom_api_remove_bytes(img_bytes)
-        if out:
-            return _normalize_transparent_png(out)
-        if photoroom_only:
-            return None
-
-    # 2) Optional legacy remove.bg-compatible fallback if explicitly configured.
-    if provider in ("auto", "multi", "removebg", "remove.bg", "removebg-api", "removebg-api-only", "removebg-only"):
-        out = await _removebg_api_remove_bytes(img_bytes)
-        if out:
-            return _normalize_transparent_png(out)
-        if provider in ("removebg", "remove.bg", "removebg-api", "removebg-api-only", "removebg-only"):
-            return None
-
-    # 3) Optional Comet/Bria fallback only when provider allows remote fallback.
-    remote_allowed = provider not in (
-        "local-only", "rembg-only", "local", "rembg",
-        "photoroom-api-only", "photoroom-only", "api-only"
-    )
-    if remote_allowed and provider in ("auto", "multi", "comet", "cometapi", "bria-comet", "bria/remove-background"):
-        out = await _comet_bria_remove_bg_bytes(img_bytes)
-        if out:
-            return _normalize_transparent_png(out)
-
-    if remote_allowed and provider in ("auto", "multi", "bria", "direct-bria", "bria-direct"):
-        out = await _bria_direct_remove_bg_bytes(img_bytes)
-        if out:
-            return _normalize_transparent_png(out)
-
-    # 4) Last-resort local rembg only if explicitly enabled; disabled in production on Render Starter.
-    local_allowed = bool((not BG_DISABLE_LOCAL_REMBG) and LOCAL_REMBG_ENABLED and rembg_remove is not None and provider not in ("photoroom-api-only", "photoroom-only", "removebg-api-only", "removebg-only", "api-only"))
-    if local_allowed:
-        out = await _local_rembg_remove_bytes(img_bytes)
-        if out:
-            return _normalize_transparent_png(out)
-
-    if not PHOTOROOM_API_KEY and provider in ("photoroom", "photoroom-api", "photoroom-api-only", "photoroom-only", "api", "api-only"):
-        _bg_note_error("PHOTOROOM_API_KEY is not configured")
-    if rembg_remove is None and not BG_DISABLE_LOCAL_REMBG:
-        _bg_note_error(f"local rembg unavailable: import failed {REMBG_IMPORT_ERROR}")
-    return None
-
-def _fit_cover(im, size: tuple[int, int]):
-    if ImageOps:
-        return ImageOps.fit(im, size, method=Image.LANCZOS, centering=(0.5, 0.5))
-    return im.resize(size, Image.LANCZOS)
-
-
-def _gradient_background(size: tuple[int, int], top: tuple[int, int, int], bottom: tuple[int, int, int]):
-    w, h = size
-    bg = Image.new("RGB", size, top)
-    if ImageDraw is None:
-        return bg
-    draw = ImageDraw.Draw(bg)
-    for y in range(max(1, h)):
-        t = y / max(1, h - 1)
-        c = tuple(int(top[i] * (1 - t) + bottom[i] * t) for i in range(3))
-        draw.line([(0, y), (w, y)], fill=c)
-    return bg
-
-
-
-_REAL_BG_URLS = {
-    # –†–µ–∞–ª—å–Ω—ã–µ —Ñ–æ—Ç–æ—Å—Ü–µ–Ω—ã, –∞ –Ω–µ —Ä–∏—Å–æ–≤–∞–Ω–Ω—ã–µ –∑–∞–≥–ª—É—à–∫–∏. –ï—Å–ª–∏ —Å–µ—Ç—å –Ω–µ–¥–æ—Å—Ç—É–ø–Ω–∞ ‚Äî –Ω–∏–∂–µ –æ—Å—Ç–∞–Ω–µ—Ç—Å—è –ª–æ–∫–∞–ª—å–Ω—ã–π fallback.
-    "beach": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1800&q=85",
-    "mountains": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1800&q=85",
-    "nature": "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1800&q=85",
-    "roof": "https://images.unsplash.com/photo-1480714378408-67cf0d13bc1f?auto=format&fit=crop&w=1800&q=85",
-    "office": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1800&q=85",
-}
-
-
-def _safe_cache_name(key: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", key)[:80] or "bg"
-
-
-def _real_photo_background(size: tuple[int, int], kind: str):
-    """–ë–µ—Ä—ë—Ç –Ω–∞—Å—Ç–æ—è—â–∏–π —Ñ–æ—Ç–æ—Ñ–æ–Ω –∏–∑ –∫—ç—à–∞/URL –∏ –∫—Ä–æ–ø–∏—Ç –ø–æ–¥ —Ä–∞–∑–º–µ—Ä –æ–±—ä–µ–∫—Ç–∞."""
-    if Image is None or not BG_REALISTIC_BACKGROUNDS:
-        return None
-    kind = (kind or "").lower().strip()
-    url = _REAL_BG_URLS.get(kind)
-    if not url:
-        return None
-    try:
-        os.makedirs(BG_CACHE_DIR, exist_ok=True)
-        cache_path = os.path.join(BG_CACHE_DIR, _safe_cache_name(kind) + ".jpg")
-        data = None
-        if os.path.exists(cache_path) and os.path.getsize(cache_path) > 1024:
-            with open(cache_path, "rb") as f:
-                data = f.read()
-        else:
-            with httpx.Client(timeout=BG_BACKGROUND_TIMEOUT_S, follow_redirects=True) as client:
-                r = client.get(url, headers={"User-Agent": "GPT5ProBot/1.0"})
-                r.raise_for_status()
-                data = r.content
-            with contextlib.suppress(Exception):
-                with open(cache_path, "wb") as f:
-                    f.write(data)
-        if not data:
-            return None
-        bg = Image.open(BytesIO(data)).convert("RGB")
-        bg = _fit_cover(bg, size)
-        # –õ—ë–≥–∫–æ–µ —Ä–∞–∑–º—ã—Ç–∏–µ –∏ –∑–∞—Ç–µ–º–Ω–µ–Ω–∏–µ, —á—Ç–æ–±—ã –æ–±—ä–µ–∫—Ç –Ω–µ –≤—ã–≥–ª—è–¥–µ–ª –≤–∫–ª–µ–µ–Ω–Ω—ã–º —Å–ª–∏—à–∫–æ–º —Ä–µ–∑–∫–æ.
-        if ImageFilter:
-            bg = bg.filter(ImageFilter.GaussianBlur(radius=max(1.2, min(size) / 450)))
-        return bg
-    except Exception as e:
-        _bg_note_error(f"real background download failed kind={kind}: {type(e).__name__}: {e}")
-        log.warning("real background failed kind=%s: %s", kind, e)
-        return None
-
-def _make_local_background(size: tuple[int, int], kind: str, original_bytes: bytes | None = None, prompt: str = ""):
-    w, h = size
-    kind = (kind or "blur").lower()
-    if BG_REPLACE_USE_STOCK_BACKGROUNDS and kind in ("beach", "mountains", "nature", "roof", "office"):
-        real_bg = _real_photo_background(size, kind)
-        if real_bg is not None:
-            return real_bg
-    if kind == "blur" and original_bytes and ImageFilter:
-        base = Image.open(BytesIO(original_bytes)).convert("RGB")
-        bg = _fit_cover(base, size)
-        return bg.filter(ImageFilter.GaussianBlur(radius=max(18, min(w, h) // 18)))
-    if kind == "white":
-        return Image.new("RGB", size, (255, 255, 255))
-    if kind == "black":
-        return Image.new("RGB", size, (18, 18, 18))
-
-    if kind == "beach":
-        bg = _gradient_background(size, (114, 194, 237), (245, 219, 162))
-        if ImageDraw:
-            d = ImageDraw.Draw(bg)
-            d.rectangle([0, int(h * 0.64), w, h], fill=(233, 203, 147))
-            d.rectangle([0, int(h * 0.48), w, int(h * 0.66)], fill=(58, 161, 202))
-        return bg
-
-    if kind == "mountains":
-        bg = _gradient_background(size, (126, 176, 229), (230, 237, 244))
-        if ImageDraw:
-            d = ImageDraw.Draw(bg)
-            d.polygon([(0, h), (int(w*0.26), int(h*0.40)), (int(w*0.58), h)], fill=(97, 114, 126))
-            d.polygon([(int(w*0.34), h), (int(w*0.67), int(h*0.28)), (w, h)], fill=(78, 93, 108))
-        return bg
-
-    if kind == "roof":
-        bg = _gradient_background(size, (96, 123, 170), (34, 38, 56))
-        if ImageDraw:
-            d = ImageDraw.Draw(bg)
-            for i in range(8):
-                x0 = int(w * (i / 8.0))
-                bw = max(18, w // 12)
-                bh = int(h * (0.15 + (i % 4) * 0.08))
-                d.rectangle([x0, h - bh, x0 + bw, h], fill=(40, 46, 62))
-        return bg
-
-    if kind == "office":
-        bg = _gradient_background(size, (242, 244, 247), (212, 219, 228))
-        if ImageDraw:
-            d = ImageDraw.Draw(bg)
-            d.rectangle([0, int(h*0.70), w, h], fill=(210, 196, 178))
-            for x in range(0, w, max(40, w // 6)):
-                d.rectangle([x, int(h*0.18), min(w, x + max(24, w // 12)), int(h*0.58)], fill=(190, 205, 219))
-        return bg
-
-    # nature/custom fallback: —Å–ø–æ–∫–æ–π–Ω—ã–π –∑–µ–ª—ë–Ω—ã–π —Ñ–æ–Ω —Å –≥–ª—É–±–∏–Ω–æ–π.
-    bg = _gradient_background(size, (125, 190, 140), (35, 80, 50))
-    if ImageDraw:
-        d = ImageDraw.Draw(bg)
-        for i in range(12):
-            x = int(w * i / 11)
-            y = int(h * (0.45 + (i % 3) * 0.07))
-            r = max(30, w // 12)
-            d.ellipse([x-r, y-r, x+r, y+r], fill=(45, 115, 65))
-        d.rectangle([0, int(h*0.70), w, h], fill=(42, 95, 55))
-    return bg
-
-
-def _compose_subject_on_background(bg_rgb, fg_rgba):
-    bg = bg_rgb.convert("RGBA") if getattr(bg_rgb, "mode", "") != "RGBA" else bg_rgb.copy()
-    fg = fg_rgba.convert("RGBA")
-    alpha = fg.getchannel("A")
-    if ImageFilter:
-        try:
-            shadow_mask = alpha.filter(ImageFilter.GaussianBlur(radius=max(6, min(fg.size)//90)))
-            shadow = Image.new("RGBA", fg.size, (0, 0, 0, 0))
-            shadow.putalpha(shadow_mask.point(lambda p: int(p * 0.20)))
-            dx = max(2, fg.size[0] // 100)
-            dy = max(2, fg.size[1] // 90)
-            bg.alpha_composite(shadow, dest=(dx, dy))
-        except Exception:
-            pass
-    bg.alpha_composite(fg)
-    return bg
-
-
-async def _generate_background_only_bytes(size: tuple[int, int], kind: str = "custom", prompt: str = "") -> bytes | None:
-    if Image is None:
-        return None
-    kind = (kind or "custom").lower().strip()
-    want_gen = (kind == "custom" and BG_REPLACE_GENERATE_CUSTOM) or (kind != "custom" and BG_REPLACE_GENERATE_PRESETS)
-    if not want_gen:
-        return None
-    full_prompt = _build_background_scene_prompt(kind, prompt)
-    negative = _build_background_negative_prompt(kind, prompt)
-    final_prompt = f"{full_prompt} Avoid: {negative}."
-    try:
-        data = await _luma_generate_image_bytes(final_prompt)
-        if not data:
-            _bg_note_error(f"background-only generation returned empty output for kind={kind}")
-            return None
-        bg = Image.open(BytesIO(data)).convert("RGB")
-        bg = _fit_cover(bg, size)
-        bio = BytesIO()
-        bg.save(bio, format="JPEG", quality=max(86, min(98, BG_REPLACE_JPEG_QUALITY)), optimize=True, progressive=True)
-        return bio.getvalue()
-    except Exception as e:
-        _bg_note_error(f"background-only generation failed kind={kind}: {type(e).__name__}: {e}")
-        log.warning("background-only generation failed kind=%s: %s", kind, e)
-        return None
-
-
-async def _compose_replace_bg(img_bytes: bytes, bg_kind: str = "blur", prompt: str = "") -> bytes | None:
-    if Image is None:
-        return None
-
-    # Strict production pipeline: 1) remove background, 2) build/select new background, 3) composite subject back.
-    cutout_bytes = await _remove_bg_bytes_primary(img_bytes)
-    if not cutout_bytes:
-        return None
-
-    fg = Image.open(BytesIO(cutout_bytes)).convert("RGBA")
-    target_size = fg.size
-
-    bg_rgb = None
-    gen_bytes = await _generate_background_only_bytes(target_size, kind=bg_kind, prompt=prompt)
-    if gen_bytes:
-        try:
-            bg_rgb = Image.open(BytesIO(gen_bytes)).convert("RGB")
-        except Exception:
-            bg_rgb = None
-
-    if bg_rgb is None:
-        bg_rgb = _make_local_background(target_size, bg_kind, original_bytes=img_bytes, prompt=prompt).convert("RGB")
-
-    composed = _compose_subject_on_background(bg_rgb, fg)
-    bio = BytesIO()
-    composed.convert("RGB").save(
-        bio,
-        format="JPEG",
-        quality=max(86, min(98, BG_REPLACE_JPEG_QUALITY)),
-        optimize=True,
-        progressive=True,
-    )
-    return bio.getvalue()
-
-
-async def _pedit_removebg(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
-    if not context.user_data.pop("_image_processing_quota_ok", False):
-        async def _go():
-            context.user_data["_image_processing_quota_ok"] = True
-            return await _pedit_removebg(update, context, img_bytes)
-        await _try_pay_then_do(
-            update, context, update.effective_user.id,
-            "img", IMG_PROCESS_COST_USD, _go,
-            remember_kind="removebg",
-        )
-        return
-    try:
-        await update.effective_message.reply_text("üßº –£–¥–∞–ª—è—é —Ñ–æ–Ω. –í–µ—Ä–Ω—É PNG —Å –ø—Ä–æ–∑—Ä–∞—á–Ω–æ–π –ø–æ–¥–ª–æ–∂–∫–æ–π.")
-        out = await asyncio.wait_for(_remove_bg_bytes_primary(img_bytes), timeout=BG_ACTION_TIMEOUT_S)
-        if not out:
-            if rembg_remove is None:
-                await update.effective_message.reply_text(
-                    "‚ùå –ù–µ —É–¥–∞–ª–æ—Å—å —É–¥–∞–ª–∏—Ç—å —Ñ–æ–Ω —á–µ—Ä–µ–∑ Photoroom API. "
-                    "–ü—Ä–æ–≤–µ—Ä—å—Ç–µ PHOTOROOM_API_KEY –∏ –ª–∏–º–∏—Ç—ã —Ç–µ—Å—Ç–æ–≤–æ–≥–æ –∫–ª—é—á–∞. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _bg_last_errors_text()
-                )
-            else:
-                await update.effective_message.reply_text("‚ùå –ù–µ —É–¥–∞–ª–æ—Å—å —É–¥–∞–ª–∏—Ç—å —Ñ–æ–Ω. –î–ª—è —Ç–æ—á–Ω–æ–π –ø—Ä–∏—á–∏–Ω—ã –∑–∞–ø—É—Å—Ç–∏—Ç–µ /diag_bg. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _bg_last_errors_text())
-            return False
-        bio = BytesIO(out)
-        bio.name = "no_bg.png"
-        await update.effective_message.reply_document(
-            InputFile(bio),
-            caption="–§–æ–Ω —É–¥–∞–ª—ë–Ω ‚úÖ PNG —Å –ø—Ä–æ–∑—Ä–∞—á–Ω–æ–π –ø–æ–¥–ª–æ–∂–∫–æ–π.",
-            read_timeout=120,
-            write_timeout=120,
-            connect_timeout=30,
-            pool_timeout=30,
-        )
-        return True
-    except TimedOut as e:
-        _bg_note_error(f"telegram upload timeout: {type(e).__name__}: {e}")
-        await update.effective_message.reply_text(
-            "‚ùå –§–æ–Ω —É–¥–∞–ª—ë–Ω, –Ω–æ Telegram –Ω–µ —É—Å–ø–µ–ª –ø—Ä–∏–Ω—è—Ç—å PNG-—Ñ–∞–π–ª. "
-            "–Ø —É–º–µ–Ω—å—à–∏–ª —Ä–∞–∑–º–µ—Ä —Ñ–∞–π–ª–æ–≤ –≤ –Ω–æ–≤–æ–π –≤–µ—Ä—Å–∏–∏; –ø–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑ –∏–ª–∏ –æ—Ç–ø—Ä–∞–≤—å—Ç–µ —Ñ–æ—Ç–æ –º–µ–Ω—å—à–µ–≥–æ —Ä–∞–∑–º–µ—Ä–∞."
-        )
-        return False
-    except asyncio.TimeoutError:
-        _bg_note_error(f"removebg action timeout after {BG_ACTION_TIMEOUT_S:.0f}s")
-        await update.effective_message.reply_text("‚ùå –£–¥–∞–ª–µ–Ω–∏–µ —Ñ–æ–Ω–∞ –∑–∞–Ω—è–ª–æ —Å–ª–∏—à–∫–æ–º –º–Ω–æ–≥–æ –≤—Ä–µ–º–µ–Ω–∏ –∏ –±—ã–ª–æ –æ—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–æ. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ —Ñ–æ—Ç–æ –º–µ–Ω—å—à–µ–≥–æ —Ä–∞–∑–º–µ—Ä–∞ –∏–ª–∏ –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ –ø–æ–∑–∂–µ. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _bg_last_errors_text())
-        return False
-    except Exception as e:
-        log.exception("removebg error: %s", e)
-        _bg_note_error(f"removebg exception: {type(e).__name__}: {e}")
-        await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —É–¥–∞–ª–∏—Ç—å —Ñ–æ–Ω. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _bg_last_errors_text())
-        return False
-
-
-async def _pedit_replacebg(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, kind: str = "blur", prompt: str = ""):
-    if not context.user_data.pop("_image_processing_quota_ok", False):
-        async def _go():
-            context.user_data["_image_processing_quota_ok"] = True
-            return await _pedit_replacebg(update, context, img_bytes, kind=kind, prompt=prompt)
-        await _try_pay_then_do(
-            update, context, update.effective_user.id,
-            "img", IMG_PROCESS_COST_USD, _go,
-            remember_kind="replacebg",
-        )
-        return
-    if Image is None:
-        await update.effective_message.reply_text("Pillow –Ω–µ —É—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω.")
-        return False
-    try:
-        await update.effective_message.reply_text("üñº –ó–∞–ø—É—Å–∫–∞—é –¥–≤—É—Ö—ç—Ç–∞–ø–Ω—É—é –∑–∞–º–µ–Ω—É —Ñ–æ–Ω–∞: 1) –∞–∫–∫—É—Ä–∞—Ç–Ω–æ –≤—ã—Ä–µ–∑–∞—é —á–µ–ª–æ–≤–µ–∫–∞/–æ–±—ä–µ–∫—Ç, 2) –æ—Ç–¥–µ–ª—å–Ω–æ –ø–æ–¥–±–∏—Ä–∞—é –∏–ª–∏ –≥–µ–Ω–µ—Ä–∏—Ä—É—é –Ω–æ–≤—ã–π —Ñ–æ–Ω, 3) —Å–æ–±–∏—Ä–∞—é –∏—Ç–æ–≥ –±–µ–∑ –ø–µ—Ä–µ—Ä–∏—Å–æ–≤–∫–∏ –ª–∏—Ü–∞, –æ–¥–µ–∂–¥—ã –∏ –ø–æ–∑—ã.")
-        out = await asyncio.wait_for(_compose_replace_bg(img_bytes, bg_kind=kind, prompt=prompt), timeout=BG_ACTION_TIMEOUT_S)
-        if not out:
-            await update.effective_message.reply_text("‚ùå –ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–¥–µ–ª–∏—Ç—å –æ–±—ä–µ–∫—Ç –æ—Ç —Ñ–æ–Ω–∞. –î–ª—è —Ç–æ—á–Ω–æ–π –ø—Ä–∏—á–∏–Ω—ã –∑–∞–ø—É—Å—Ç–∏—Ç–µ /diag_bg. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _bg_last_errors_text())
-            return False
-        bio = BytesIO(out)
-        bio.name = f"replace_bg_{kind or 'custom'}.jpg"
-        cap = "–§–æ–Ω –∑–∞–º–µ–Ω—ë–Ω ‚úÖ –û–±—ä–µ–∫—Ç –æ—Å—Ç–∞–≤–ª–µ–Ω –∏–∑ –∏—Å—Ö–æ–¥–Ω–æ–≥–æ —Ñ–æ—Ç–æ."
-        if prompt:
-            cap += f"\n–ó–∞–ø—Ä–æ—Å —Ñ–æ–Ω–∞: {prompt[:250]}"
-        await update.effective_message.reply_photo(
-            InputFile(bio),
-            caption=cap,
-            read_timeout=180,
-            write_timeout=180,
-            connect_timeout=30,
-            pool_timeout=30,
-        )
-        return True
-    except TimedOut as e:
-        _bg_note_error(f"telegram replacebg upload timeout: {type(e).__name__}: {e}")
-        await update.effective_message.reply_text(
-            "‚ö†Ô∏è Telegram —Å–ª–∏—à–∫–æ–º –¥–æ–ª–≥–æ –ø—Ä–∏–Ω–∏–º–∞–ª –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –ø–æ—Å–ª–µ –∑–∞–º–µ–Ω—ã —Ñ–æ–Ω–∞. "
-            "–ï—Å–ª–∏ —Ñ–æ—Ç–æ —É–∂–µ –ø–æ—è–≤–∏–ª–æ—Å—å –≤ —á–∞—Ç–µ ‚Äî —Ä–µ–∑—É–ª—å—Ç–∞—Ç —É—Å–ø–µ—à–Ω–æ –¥–æ—Å—Ç–∞–≤–ª–µ–Ω. "
-            "–ï—Å–ª–∏ —Ñ–æ—Ç–æ –Ω–µ –ø–æ—è–≤–∏–ª–æ—Å—å, –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ –ø–æ–ø—ã—Ç–∫—É –µ—â—ë —Ä–∞–∑ –∏–ª–∏ –æ—Ç–ø—Ä–∞–≤—å—Ç–µ —Ñ–æ—Ç–æ –º–µ–Ω—å—à–µ–≥–æ —Ä–∞–∑–º–µ—Ä–∞."
-        )
-        return False
-    except asyncio.TimeoutError:
-        _bg_note_error(f"replacebg action timeout after {BG_ACTION_TIMEOUT_S:.0f}s")
-        await update.effective_message.reply_text("‚ùå –ó–∞–º–µ–Ω–∞ —Ñ–æ–Ω–∞ –∑–∞–Ω—è–ª–∞ —Å–ª–∏—à–∫–æ–º –º–Ω–æ–≥–æ –≤—Ä–µ–º–µ–Ω–∏ –∏ –±—ã–ª–∞ –æ—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–∞. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ —Ñ–æ—Ç–æ –º–µ–Ω—å—à–µ–≥–æ —Ä–∞–∑–º–µ—Ä–∞ –∏–ª–∏ –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ –ø–æ–∑–∂–µ. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _bg_last_errors_text())
-        return False
-    except Exception as e:
-        log.exception("replacebg error: %s", e)
-        _bg_note_error(f"replacebg exception: {type(e).__name__}: {e}")
-        await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–º–µ–Ω–∏—Ç—å —Ñ–æ–Ω. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _bg_last_errors_text())
-        return False
-
-
-async def _pedit_outpaint(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
-    if not context.user_data.pop("_image_processing_quota_ok", False):
-        async def _go():
-            context.user_data["_image_processing_quota_ok"] = True
-            return await _pedit_outpaint(update, context, img_bytes)
-        await _try_pay_then_do(
-            update, context, update.effective_user.id,
-            "img", IMG_PROCESS_COST_USD, _go,
-            remember_kind="outpaint",
-        )
-        return
-    if Image is None:
-        await update.effective_message.reply_text("Pillow –Ω–µ —É—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω.")
-        return False
-    try:
-        im = Image.open(BytesIO(img_bytes)).convert("RGB")
-        pad = max(64, min(256, max(im.size)//6))
-        big = Image.new("RGB", (im.width + 2*pad, im.height + 2*pad))
-        bg = im.resize(big.size, Image.LANCZOS).filter(ImageFilter.GaussianBlur(radius=24)) if ImageFilter else im.resize(big.size)
-        big.paste(bg, (0, 0)); big.paste(im, (pad, pad))
-        bio = BytesIO(); big.save(bio, format="JPEG", quality=92); bio.seek(0); bio.name = "outpaint.jpg"
-        await update.effective_message.reply_photo(InputFile(bio), caption="–ü—Ä–æ—Å—Ç–æ–π outpaint: —Ä–∞—Å—à–∏—Ä–∏–ª –ø–æ–ª–æ—Ç–Ω–æ —Å –º—è–≥–∫–∏–º–∏ –∫—Ä–∞—è–º–∏.")
-        return True
-    except Exception as e:
-        log.exception("outpaint error: %s", e)
-        await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–¥–µ–ª–∞—Ç—å outpaint.")
-        return False
-
-async def _pedit_storyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes):
-    try:
-        b64 = base64.b64encode(img_bytes).decode("ascii")
-        desc = await ask_openai_vision("–û–ø–∏—à–∏ –∫–ª—é—á–µ–≤—ã–µ —ç–ª–µ–º–µ–Ω—Ç—ã –∫–∞–¥—Ä–∞ –æ—á–µ–Ω—å –∫—Ä–∞—Ç–∫–æ.", b64, sniff_image_mime(img_bytes))
-        plan = await ask_openai_text(
-            "–°–¥–µ–ª–∞–π —Ä–∞—Å–∫–∞–¥—Ä–æ–≤–∫—É (6 –∫–∞–¥—Ä–æ–≤) –ø–æ–¥ 6‚Äì10 —Å–µ–∫—É–Ω–¥–Ω—ã–π –∫–ª–∏–ø. "
-            "–ö–∞–∂–¥—ã–π –∫–∞–¥—Ä ‚Äî 1 —Å—Ç—Ä–æ–∫–∞: –∫–∞–¥—Ä/–¥–µ–π—Å—Ç–≤–∏–µ/—Ä–∞–∫—É—Ä—Å/—Å–≤–µ—Ç. –û—Å–Ω–æ–≤–∞:\n" + (desc or "")
-        )
-        await update.effective_message.reply_text("–†–∞—Å–∫–∞–¥—Ä–æ–≤–∫–∞:\–Ω" + plan)
-    except Exception as e:
-        log.exception("storyboard error: %s", e)
-        await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ—Å—Ç—Ä–æ–∏—Ç—å —Ä–∞—Å–∫–∞–¥—Ä–æ–≤–∫—É.")
-
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Face swap production helpers ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-_faceswap_target_cache = {}   # user_id -> bytes: photo where face must be replaced
-_faceswap_source_cache = {}   # user_id -> bytes: face/reference photo
-_faceswap_target_face_index_cache = {}  # user_id -> Segmind/API face index in target image
-_faceswap_source_face_index_cache = {}  # user_id -> Segmind/API face index in source image
-_faceswap_target_face_count_cache = {}  # user_id -> detected target faces count
-_faceswap_source_face_count_cache = {}  # user_id -> detected source faces count
-_faceswap_target_faces_cache = {}  # user_id -> detected target faces list with boxes
-_faceswap_source_faces_cache = {}  # user_id -> detected source faces list with boxes
-_faceswap_errors = []
-
-
-def _faceswap_note_error(msg: str):
-    try:
-        msg = str(msg).strip()
-        if not msg:
-            return
-        _faceswap_errors.append(msg[:1200])
-        del _faceswap_errors[:-8]
-        log.warning("faceswap: %s", msg)
-    except Exception:
-        pass
-
-
-def _faceswap_last_errors_text() -> str:
-    if not _faceswap_errors:
-        return "–æ—à–∏–±–æ–∫ –ø–æ–∫–∞ –Ω–µ—Ç"
-    return "\n".join("‚Ä¢ " + e for e in _faceswap_errors[-5:])
-
-
-def _faceswap_cv2_status() -> str:
-    if not FACESWAP_FACE_DETECTION_ENABLED:
-        return "disabled_by_env"
-    try:
-        import cv2  # type: ignore
-        ver = getattr(cv2, "__version__", "")
-        if not hasattr(cv2, "CascadeClassifier"):
-            return f"BROKEN {ver}: no CascadeClassifier".strip()
-        if not hasattr(cv2, "data") or not getattr(cv2.data, "haarcascades", ""):
-            return f"BROKEN {ver}: no haarcascades".strip()
-        return f"ok {ver}".strip()
-    except Exception as e:
-        return f"FAILED {type(e).__name__}: {e}"
-
-
-async def cmd_diag_face(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = [
-        f"üß™ FaceSwap diagnostic / {PATCH_VERSION}",
-        f"FACESWAP_ENABLED={FACESWAP_ENABLED} provider={FACESWAP_PROVIDER} fallback={FACESWAP_FALLBACK_PROVIDER}",
-        f"fast_provider={FACESWAP_FAST_PROVIDER} premium_provider={FACESWAP_PREMIUM_PROVIDER}",
-        f"target_choice={FACESWAP_ASK_TARGET_FACE} source_choice={FACESWAP_ASK_SOURCE_FACE} strict_selected={FACESWAP_STRICT_SELECTED_FACE}",
-        f"manual_choice_if_detection_fail={FACESWAP_MANUAL_CHOICE_IF_DETECTION_FAIL}",
-        f"face_detection={FACESWAP_FACE_DETECTION_ENABLED} cv2={_faceswap_cv2_status()} detect_max={FACESWAP_DETECTION_MAX_SIDE} preview_max={FACESWAP_PREVIEW_MAX_SIDE}",
-        f"precise_composite={FACESWAP_PRECISE_COMPOSITE} force_segmind_multi={FACESWAP_FORCE_SEGMIND_FOR_MULTI} segmind_fallback={FACESWAP_GROUP_ALLOW_SEGMIND_FALLBACK}",
-        f"face_filter_ratio={FACESWAP_FACE_BOX_FILTER_RATIO} source_crop={FACESWAP_SOURCE_CROP_MARGIN} hide_margin={FACESWAP_TARGET_HIDE_MARGIN}",
-        f"PIAPI_API_KEY={'on' if PIAPI_API_KEY else 'off'} base={PIAPI_BASE_URL} model={PIAPI_FACE_MODEL} task={PIAPI_FACE_TASK_TYPE}",
-        f"SEGMIND_API_KEY={'on' if SEGMIND_API_KEY else 'off'} base={SEGMIND_BASE_URL} fast={SEGMIND_FACESWAP_MODEL_FAST} premium={SEGMIND_FACESWAP_MODEL_PREMIUM}",
-        f"timeout={FACESWAP_TIMEOUT_S}s poll={FACESWAP_POLL_DELAY_S}s input_max={FACESWAP_INPUT_MAX_SIDE} output_max={FACESWAP_OUTPUT_MAX_SIDE}",
-        "–ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:",
-        _faceswap_last_errors_text(),
-    ]
-    await update.effective_message.reply_text("\n".join(lines)[:3900])
-
-
-def face_swap_quality_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"‚ö° –ë—ã—Å—Ç—Ä–æ ¬∑ {_retail_credits(FACESWAP_FAST_COST_USD)} –∫—Ä.", callback_data="faceswap:run:fast")],
-        [InlineKeyboardButton(f"üíé –ü—Ä–µ–º–∏—É–º ¬∑ {_retail_credits(FACESWAP_PREMIUM_COST_USD)} –∫—Ä.", callback_data="faceswap:run:premium")],
-        [InlineKeyboardButton("‚¨ÖÔ∏è –ù–∞–∑–∞–¥", callback_data="pedit:back")],
-    ])
-
-
-def _is_face_swap_request(text: str) -> bool:
-    tl = (text or "").strip().lower().replace("—ë", "–µ")
-    return any(k in tl for k in (
-        "–∑–∞–º–µ–Ω–∏ –ª–∏—Ü–æ", "–∑–∞–º–µ–Ω–∏—Ç—å –ª–∏—Ü–æ", "–ø–æ–º–µ–Ω—è–π –ª–∏—Ü–æ", "–ø–æ–º–µ–Ω—è—Ç—å –ª–∏—Ü–æ", "–ø–æ–¥—Å—Ç–∞–≤—å –ª–∏—Ü–æ", "–≤—Å—Ç–∞–≤—å –ª–∏—Ü–æ",
-        "face swap", "faceswap", "swap face", "replace face", "—Å–º–µ–Ω–∞ –ª–∏—Ü–∞", "–∑–∞–º–µ–Ω–∞ –ª–∏—Ü–∞"
-    ))
-
-
-def _set_faceswap_wait_source(context, target_bytes: bytes):
-    # –†–µ–∞–ª—å–Ω—ã–π user_id –ø—Ä–æ–∫–∏–¥—ã–≤–∞–µ–º –æ—Ç–¥–µ–ª—å–Ω–æ –≤ –≤—ã–∑–æ–≤–∞—Ö —á–µ—Ä–µ–∑ _faceswap_target_cache.
-    context.user_data["faceswap_flow"] = "await_source"
-
-
-def _clear_faceswap_flow(context):
-    for k in ("faceswap_flow", "awaiting_photo_for"):
-        with contextlib.suppress(Exception):
-            context.user_data.pop(k, None)
-
-
-def _clear_faceswap_user_cache(user_id: int):
-    for d in (
-        _faceswap_target_cache, _faceswap_source_cache,
-        _faceswap_target_face_index_cache, _faceswap_source_face_index_cache,
-        _faceswap_target_face_count_cache, _faceswap_source_face_count_cache,
-        _faceswap_target_faces_cache, _faceswap_source_faces_cache,
-    ):
-        with contextlib.suppress(Exception):
-            d.pop(user_id, None)
-
-
-def _faceswap_target_for(user_id: int) -> bytes | None:
-    return _faceswap_target_cache.get(user_id)
-
-
-def _faceswap_source_for(user_id: int) -> bytes | None:
-    return _faceswap_source_cache.get(user_id)
-
-
-def _faceswap_selected_target_index(user_id: int) -> int:
-    return int(_faceswap_target_face_index_cache.get(user_id, 0) or 0)
-
-
-def _faceswap_selected_source_index(user_id: int) -> int:
-    return int(_faceswap_source_face_index_cache.get(user_id, 0) or 0)
-
-
-def _resize_image_bytes_for_faceswap_api(img_bytes: bytes, max_side: int | None = None) -> tuple[bytes, str, str]:
-    max_side = int(max_side or FACESWAP_INPUT_MAX_SIDE or 1600)
-    mime = sniff_image_mime(img_bytes) or "image/jpeg"
-    if Image is None or max_side <= 0:
-        ext = ".jpg" if mime == "image/jpeg" else (".png" if mime == "image/png" else ".webp")
-        return img_bytes, f"faceswap{ext}", mime
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        if max(im.size) > max_side:
-            im.thumbnail((max_side, max_side), Image.LANCZOS)
-        if im.mode not in ("RGB", "L"):
-            im = im.convert("RGB")
-        bio = BytesIO()
-        im.save(bio, format="JPEG", quality=93, optimize=True, progressive=True)
-        return bio.getvalue(), "faceswap.jpg", "image/jpeg"
-    except Exception as e:
-        _faceswap_note_error(f"faceswap input resize failed: {type(e).__name__}: {e}")
-        ext = ".jpg" if mime == "image/jpeg" else (".png" if mime == "image/png" else ".webp")
-        return img_bytes, f"faceswap{ext}", mime
-
-
-def _b64_for_faceswap(img_bytes: bytes) -> str:
-    b, _name, mime = _resize_image_bytes_for_faceswap_api(img_bytes, FACESWAP_INPUT_MAX_SIDE)
-    raw = base64.b64encode(b).decode("ascii")
-    if FACESWAP_IMAGE_DATA_URL:
-        return f"data:{mime};base64,{raw}"
-    return raw
-
-
-def _normalize_output_image_bytes(img_bytes: bytes) -> bytes:
-    if Image is None or not img_bytes or FACESWAP_OUTPUT_MAX_SIDE <= 0:
-        return img_bytes
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        if max(im.size) > FACESWAP_OUTPUT_MAX_SIDE:
-            im.thumbnail((FACESWAP_OUTPUT_MAX_SIDE, FACESWAP_OUTPUT_MAX_SIDE), Image.LANCZOS)
-        out = BytesIO()
-        if im.mode in ("RGBA", "LA"):
-            im.save(out, format="PNG", optimize=True)
-        else:
-            im = im.convert("RGB")
-            im.save(out, format="JPEG", quality=94, optimize=True, progressive=True)
-        return out.getvalue()
-    except Exception:
-        return img_bytes
-
-
-def _maybe_resize_output_image(img_bytes: bytes) -> bytes:
-    """Backward-compatible output resize helper used by face swap pipeline."""
-    return _normalize_output_image_bytes(img_bytes)
-
-
-def _detect_faces_for_choice(img_bytes: bytes) -> list[dict]:
-    """–û–ø—Ä–µ–¥–µ–ª–µ–Ω–∏–µ –ª–∏—Ü –¥–ª—è UI –∏ –≤—ã–±–æ—Ä–∞ –∏–Ω–¥–µ–∫—Å–æ–≤.
-
-    –í–∞–∂–Ω—ã–π –ø—Ä–∞–∫—Ç–∏—á–µ—Å–∫–∏–π –º–æ–º–µ–Ω—Ç: –≤ —Ä–µ–∞–ª—å–Ω—ã—Ö —Ç–µ—Å—Ç–∞—Ö –ø—Ä–æ–≤–∞–π–¥–µ—Ä—ã –≤–µ–ª–∏ —Å–µ–±—è —Å—Ç–∞–±–∏–ª—å–Ω–µ–µ,
-    –∫–æ–≥–¥–∞ –∏–Ω–¥–µ–∫—Å—ã –ª–∏—Ü –ø–µ—Ä–µ–¥–∞–≤–∞–ª–∏—Å—å –≤ –≤–∏–∑—É–∞–ª—å–Ω–æ–º –ø–æ—Ä—è–¥–∫–µ —Å–ª–µ–≤–∞‚Üí–Ω–∞–ø—Ä–∞–≤–æ.
-    –ü–æ—ç—Ç–æ–º—É api_index –∑–¥–µ—Å—å —Å–∏–Ω—Ö—Ä–æ–Ω–∏–∑–∏—Ä–æ–≤–∞–Ω —Å display_index, –∞ –Ω–µ —Å —Å–æ—Ä—Ç–∏—Ä–æ–≤–∫–æ–π –ø–æ —Ä–∞–∑–º–µ—Ä—É.
-    –î–æ–ø–æ–ª–Ω–∏—Ç–µ–ª—å–Ω–æ —Ä–µ–∂–µ–º –ª–æ–∂–Ω—ã–µ —Å—Ä–∞–±–∞—Ç—ã–≤–∞–Ω–∏—è (–º–µ–ª–∫–∏–µ –±–æ–∫—Å—ã –Ω–∞ –æ–¥–µ–∂–¥–µ/—Ñ–æ–Ω–µ).
-    """
-    if not FACESWAP_FACE_DETECTION_ENABLED or Image is None:
-        return []
-    try:
-        import cv2  # type: ignore
-        import numpy as np  # type: ignore
-
-        def _iou(a: dict, b: dict) -> float:
-            ax1, ay1, ax2, ay2 = a["x"], a["y"], a["x"] + a["w"], a["y"] + a["h"]
-            bx1, by1, bx2, by2 = b["x"], b["y"], b["x"] + b["w"], b["y"] + b["h"]
-            ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-            ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-            iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
-            inter = iw * ih
-            if inter <= 0:
-                return 0.0
-            union = a["area"] + b["area"] - inter
-            return (inter / union) if union > 0 else 0.0
-
-        im = Image.open(BytesIO(img_bytes))
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        im = im.convert("RGB")
-        orig_w, orig_h = im.size
-        img_area = max(1, orig_w * orig_h)
-        scale = 1.0
-        max_side = int(FACESWAP_DETECTION_MAX_SIDE or 1200)
-        if max_side > 0 and max(orig_w, orig_h) > max_side:
-            scale = max_side / float(max(orig_w, orig_h))
-            im_det = im.resize((max(1, int(orig_w * scale)), max(1, int(orig_h * scale))), Image.LANCZOS)
-        else:
-            im_det = im
-        arr = np.array(im_det)
-        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-        cascade_path = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
-        cascade = cv2.CascadeClassifier(cascade_path)
-        if cascade.empty():
-            _faceswap_note_error("cv2 haarcascade_frontalface_default.xml not loaded")
-            return []
-        faces = cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=(40, 40))
-        items = []
-        for (x, y, w, h) in faces:
-            ox = int(round(x / scale)); oy = int(round(y / scale)); ow = int(round(w / scale)); oh = int(round(h / scale))
-            if ow < 24 or oh < 24:
-                continue
-            area = ow * oh
-            # —Å–ª–∏—à–∫–æ–º –º–∞–ª–µ–Ω—å–∫–∏–µ –±–æ–∫—Å—ã –ø–æ—á—Ç–∏ –≤—Å–µ–≥–¥–∞ –ª–æ–∂–Ω—ã–µ —Å—Ä–∞–±–∞—Ç—ã–≤–∞–Ω–∏—è
-            if area < max(1600, int(img_area * 0.004)):
-                continue
-            ratio = (ow / float(max(1, oh)))
-            # —Å–ª–∏—à–∫–æ–º –≤—ã—Ç—è–Ω—É—Ç—ã–µ –±–æ–∫—Å—ã –¥–ª—è –≤—ã–±–æ—Ä–∞ –ª–∏—Ü–∞ –ø–æ—á—Ç–∏ –≤—Å–µ–≥–¥–∞ —à—É–º
-            if ratio < 0.65 or ratio > 1.45:
-                continue
-            cx, cy = ox + ow / 2, oy + oh / 2
-            items.append({"x": ox, "y": oy, "w": ow, "h": oh, "area": area, "cx": cx, "cy": cy})
-
-        if not items:
-            return []
-
-        # NMS / –¥–µ–¥—É–ø–ª–∏–∫–∞—Ü–∏—è —Å–∏–ª—å–Ω–æ –ø–µ—Ä–µ–∫—Ä—ã–≤–∞—é—â–∏—Ö—Å—è –±–æ–∫—Å–æ–≤
-        dedup = []
-        for f in sorted(items, key=lambda z: z["area"], reverse=True):
-            if any(_iou(f, kept) >= 0.35 for kept in dedup):
-                continue
-            dedup.append(f)
-        items = dedup
-
-        if not items:
-            return []
-
-        # v35: –ª–æ–∂–Ω—ã–µ –±–æ–∫—Å—ã –Ω–∞ –∂–∏–ª–µ—Ç–µ/–æ–¥–µ–∂–¥–µ/—Å—Ç–µ–Ω–∞—Ö —á–∞—Å—Ç–æ –±—ã–ª–∏ –º–µ–Ω—å—à–µ —Ä–µ–∞–ª—å–Ω—ã—Ö –ª–∏—Ü.
-        # –î–ª—è –≤—ã–±–æ—Ä–∞ –ª–∏—Ü–∞ –≤ –ø—Ä–æ–¥–∞–∫—à–Ω–µ –ª—É—á—à–µ –ø—Ä–æ–ø—É—Å—Ç–∏—Ç—å –æ—á–µ–Ω—å –º–µ–ª–∫–∏–µ –±–æ–∫—Å—ã, —á–µ–º –¥–∞—Ç—å –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—é
-        # –≤—ã–±—Ä–∞—Ç—å "–ª–∏—Ü–æ", –∫–æ—Ç–æ—Ä–æ–µ –ø—Ä–æ–≤–∞–π–¥–µ—Ä –∑–∞—Ç–µ–º –Ω–µ —Å–º–æ–∂–µ—Ç —Å–æ–ø–æ—Å—Ç–∞–≤–∏—Ç—å.
-        if len(items) > 1:
-            largest_area = max(z["area"] for z in items)
-            min_keep = max(int(largest_area * max(0.10, min(0.80, FACESWAP_FACE_BOX_FILTER_RATIO))), int(img_area * 0.006))
-            items = [z for z in items if z["area"] >= min_keep]
-            if not items:
-                return []
-
-        # –ï—Å–ª–∏ —è–≤–Ω–æ –¥–æ–º–∏–Ω–∏—Ä—É–µ—Ç –æ–¥–Ω–æ –ª–∏—Ü–æ (—Ç–∏–ø–∏—á–Ω—ã–π —Å–µ–ª—Ñ–∏-–∏—Å—Ç–æ—á–Ω–∏–∫),
-        # –æ—Ç–±—Ä–∞—Å—ã–≤–∞–µ–º –º–µ–ª–∫–∏–µ –ª–æ–∂–Ω—ã–µ –±–æ–∫—Å—ã –Ω–∞ –ø–ª–µ—á–µ/—Ñ–æ–Ω–µ.
-        largest = max(items, key=lambda z: z["area"])
-        second_area = max([z["area"] for z in items if z is not largest] or [0])
-        dominant = largest["area"] >= max(2.0 * second_area, int(img_area * 0.03))
-        if dominant:
-            filt = []
-            for f in items:
-                if f is largest:
-                    filt.append(f)
-                    continue
-                if f["area"] >= largest["area"] * 0.45:
-                    filt.append(f)
-            items = filt
-
-        # –ò—Ç–æ–≥–æ–≤—ã–π –ø–æ—Ä—è–¥–æ–∫: —Å–ª–µ–≤–∞ –Ω–∞–ø—Ä–∞–≤–æ, –∑–∞—Ç–µ–º —Å–≤–µ—Ä—Ö—É –≤–Ω–∏–∑.
-        # –¢–∞–∫–æ–π –∂–µ –∏–Ω–¥–µ–∫—Å –ø–µ—Ä–µ–¥–∞—ë–º –ø—Ä–æ–≤–∞–π–¥–µ—Ä—É.
-        display = sorted(items, key=lambda f: (f["cx"], f["cy"]))[:8]
-        for i, f in enumerate(display, 1):
-            f["display_index"] = i
-            f["api_index"] = i - 1
-            if len(display) == 2:
-                f["pos_label"] = "—Å–ª–µ–≤–∞" if i == 1 else "—Å–ø—Ä–∞–≤–∞"
-            elif len(display) == 3:
-                f["pos_label"] = ["—Å–ª–µ–≤–∞", "—Ü–µ–Ω—Ç—Ä", "—Å–ø—Ä–∞–≤–∞"][i - 1]
-            else:
-                f["pos_label"] = f"–ª–∏—Ü–æ {i}"
-        return display
-    except Exception as e:
-        _faceswap_note_error(f"face detection failed: {type(e).__name__}: {e}")
-        return []
-
-
-def _face_choice_preview_bytes(img_bytes: bytes, faces: list[dict], title: str = "–í—ã–±–µ—Ä–∏—Ç–µ –ª–∏—Ü–æ") -> bytes | None:
-    if Image is None or ImageDraw is None or not faces:
-        return None
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        im = im.convert("RGB")
-        scale = 1.0
-        max_side = int(FACESWAP_PREVIEW_MAX_SIDE or 1200)
-        if max_side > 0 and max(im.size) > max_side:
-            scale = max_side / float(max(im.size))
-            im = im.resize((max(1, int(im.width * scale)), max(1, int(im.height * scale))), Image.LANCZOS)
-        draw = ImageDraw.Draw(im)
-        try:
-            font_big = ImageFont.truetype("DejaVuSans-Bold.ttf", max(24, int(42 * scale)))
-            font_small = ImageFont.truetype("DejaVuSans-Bold.ttf", max(14, int(22 * scale)))
-        except Exception:
-            font_big = None
-            font_small = None
-        # title strip
-        draw.rectangle([0, 0, im.width, min(im.height, 44)], fill=(0, 0, 0))
-        draw.text((12, 8), title, fill=(255, 255, 255), font=font_small)
-        for f in faces:
-            x = int(f["x"] * scale); y = int(f["y"] * scale); w = int(f["w"] * scale); h = int(f["h"] * scale)
-            label = str(f.get("display_index") or f.get("api_index") or 0)
-            # –ñ—ë–ª—Ç–∞—è —Ä–∞–º–∫–∞ + —á—ë—Ä–Ω–∞—è –ø–æ–¥–ª–æ–∂–∫–∞ –Ω–æ–º–µ—Ä–∞ —Ö–æ—Ä–æ—à–æ –≤–∏–¥–Ω—ã –≤ Telegram.
-            for off in range(4):
-                draw.rectangle([x-off, y-off, x+w+off, y+h+off], outline=(255, 221, 0))
-            lx, ly = x, max(44, y - 42)
-            draw.ellipse([lx, ly, lx + 42, ly + 42], fill=(255, 221, 0), outline=(0, 0, 0), width=2)
-            draw.text((lx + 14, ly + 6), label, fill=(0, 0, 0), font=font_big)
-        bio = BytesIO()
-        im.save(bio, format="JPEG", quality=92, optimize=True)
-        return bio.getvalue()
-    except Exception as e:
-        _faceswap_note_error(f"face choice preview failed: {type(e).__name__}: {e}")
-        return None
-
-
-def _face_choice_kb(stage: str, faces: list[dict]) -> InlineKeyboardMarkup:
-    buttons = []
-    row = []
-    for f in faces[:8]:
-        disp = int(f.get("display_index") or 0)
-        api_idx = int(f.get("api_index") or 0)
-        pos = str(f.get("pos_label") or "")
-        text = f"{disp} ‚Äî {pos}" if pos and not pos.startswith("–ª–∏—Ü–æ") else f"–õ–∏—Ü–æ {disp}"
-        row.append(InlineKeyboardButton(text, callback_data=f"faceswap:{stage}:{api_idx}"))
-        if len(row) == 2:
-            buttons.append(row); row = []
-    if row:
-        buttons.append(row)
-    buttons.append([InlineKeyboardButton("‚¨ÖÔ∏è –û—Ç–º–µ–Ω–∞", callback_data="pedit:back")])
-    return InlineKeyboardMarkup(buttons)
-
-
-def _manual_face_choice_kb(stage: str) -> InlineKeyboardMarkup:
-    # –†—É—á–Ω–æ–π –≤—ã–±–æ—Ä –Ω—É–∂–µ–Ω, –µ—Å–ª–∏ –¥–µ—Ç–µ–∫—Ç–æ—Ä –ª–∏—Ü –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω/—Å–ª–∞–±—ã–π –∏–ª–∏ Telegram –ø—Ä–∏—Å–ª–∞–ª —Å–ª–æ–∂–Ω–æ–µ –≥—Ä—É–ø–ø–æ–≤–æ–µ —Ñ–æ—Ç–æ.
-    # –ò–Ω–¥–µ–∫—Å—ã –ø–µ—Ä–µ–¥–∞—é—Ç—Å—è –ø—Ä–æ–≤–∞–π–¥–µ—Ä–∞–º –∫–∞–∫ target_face_index/source_face_index.
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("üëà –õ–∏—Ü–æ —Å–ª–µ–≤–∞", callback_data=f"faceswap:{stage}:0")],
-        [InlineKeyboardButton("üéØ –õ–∏—Ü–æ –≤ —Ü–µ–Ω—Ç—Ä–µ", callback_data=f"faceswap:{stage}:1")],
-        [InlineKeyboardButton("üëâ –õ–∏—Ü–æ —Å–ø—Ä–∞–≤–∞", callback_data=f"faceswap:{stage}:2")],
-        [InlineKeyboardButton("ü§ñ –ê–≤—Ç–æ / –ø–µ—Ä–≤–æ–µ –ª–∏—Ü–æ", callback_data=f"faceswap:{stage}:0")],
-        [InlineKeyboardButton("‚¨ÖÔ∏è –û—Ç–º–µ–Ω–∞", callback_data="pedit:back")],
-    ])
-
-
-async def _ask_faceswap_source_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["faceswap_flow"] = "await_source"
-    await update.effective_message.reply_text(
-        "üé≠ –¢–µ–ø–µ—Ä—å –ø—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ –ª–∏—Ü–∞, –∫–æ—Ç–æ—Ä–æ–µ –Ω—É–∂–Ω–æ –≤—Å—Ç–∞–≤–∏—Ç—å.\n\n"
-        "–í–∞–∂–Ω–æ: –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ —Ç–æ–ª—å–∫–æ —Å–≤–æ–∏ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è –∏–ª–∏ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è, –Ω–∞ –∫–æ—Ç–æ—Ä—ã–µ —É –≤–∞—Å –µ—Å—Ç—å –ø—Ä–∞–≤–æ. "
-        "–ù–µ–ª—å–∑—è –∏—Å–ø–æ–ª—å–∑–æ–≤–∞—Ç—å —Ñ—É–Ω–∫—Ü–∏—é –¥–ª—è –æ–±–º–∞–Ω–∞, —à–∞–Ω—Ç–∞–∂–∞, –¥–æ–∫—É–º–µ–Ω—Ç–æ–≤, –∏–Ω—Ç–∏–º–Ω–æ–≥–æ –∫–æ–Ω—Ç–µ–Ω—Ç–∞ –∏ –≤—Ä–µ–¥–æ–Ω–æ—Å–Ω—ã—Ö –ø–æ–¥–¥–µ–ª–æ–∫."
-    )
-
-
-async def _maybe_choose_target_face(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, img: bytes):
-    _faceswap_target_cache[user_id] = img
-    faces = _detect_faces_for_choice(img)
-    _faceswap_target_faces_cache[user_id] = faces
-    _faceswap_target_face_count_cache[user_id] = len(faces)
-    _faceswap_target_face_index_cache[user_id] = 0
-    if FACESWAP_ASK_TARGET_FACE and len(faces) > 1:
-        context.user_data["faceswap_flow"] = "choose_target_face"
-        preview = _face_choice_preview_bytes(img, faces, "–ö–æ–≥–æ –∑–∞–º–µ–Ω–∏—Ç—å? –í—ã–±–µ—Ä–∏—Ç–µ –Ω–æ–º–µ—Ä –ª–∏—Ü–∞")
-        text = "üé≠ –ù–∞ —Ñ–æ—Ç–æ –Ω–∞–π–¥–µ–Ω–æ –Ω–µ—Å–∫–æ–ª—å–∫–æ –ª–∏—Ü. –í—ã–±–µ—Ä–∏—Ç–µ, —É –∫–∞–∫–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞ –∑–∞–º–µ–Ω–∏—Ç—å –ª–∏—Ü–æ."
-        if preview:
-            bio = BytesIO(preview); bio.name = "faces_target_choice.jpg"
-            await update.effective_message.reply_photo(InputFile(bio), caption=text, reply_markup=_face_choice_kb("target", faces))
-        else:
-            await update.effective_message.reply_text(text, reply_markup=_face_choice_kb("target", faces))
-        return
-    if FACESWAP_ASK_TARGET_FACE and not faces and FACESWAP_MANUAL_CHOICE_IF_DETECTION_FAIL:
-        # –ï—Å–ª–∏ OpenCV/–¥–µ—Ç–µ–∫—Ç–æ—Ä –Ω–µ –Ω–∞—à—ë–ª –ª–∏—Ü–∞, –Ω–µ –±–µ—Ä—ë–º —Ä–∞–Ω–¥–æ–º–Ω—ã–π index 0 –º–æ–ª—á–∞.
-        # –î–∞—ë–º –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—é —Ä—É—á–Ω–æ–π –≤—ã–±–æ—Ä: –ª–µ–≤–æ–µ/—Ü–µ–Ω—Ç—Ä/–ø—Ä–∞–≤–æ–µ/–∞–≤—Ç–æ.
-        context.user_data["faceswap_flow"] = "choose_target_face"
-        _faceswap_target_face_count_cache[user_id] = 3
-        await update.effective_message.reply_text(
-            "üé≠ –ù–µ —Å–º–æ–≥ —É–≤–µ—Ä–µ–Ω–Ω–æ –æ–ø—Ä–µ–¥–µ–ª–∏—Ç—å –ª–∏—Ü–∞ –Ω–∞ —Ñ–æ—Ç–æ. –í—ã–±–µ—Ä–∏—Ç–µ –≤—Ä—É—á–Ω—É—é, —É –∫–∞–∫–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞ –∑–∞–º–µ–Ω–∏—Ç—å –ª–∏—Ü–æ:",
-            reply_markup=_manual_face_choice_kb("target"),
-        )
-        return
-    await _ask_faceswap_source_photo(update, context)
-
-
-async def _maybe_choose_source_face(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, img: bytes):
-    _faceswap_source_cache[user_id] = img
-    faces = _detect_faces_for_choice(img)
-    _faceswap_source_faces_cache[user_id] = faces
-    _faceswap_source_face_count_cache[user_id] = len(faces)
-    _faceswap_source_face_index_cache[user_id] = 0
-    if FACESWAP_ASK_SOURCE_FACE and len(faces) > 1:
-        context.user_data["faceswap_flow"] = "choose_source_face"
-        preview = _face_choice_preview_bytes(img, faces, "–ß—å—ë –ª–∏—Ü–æ –≤–∑—è—Ç—å? –í—ã–±–µ—Ä–∏—Ç–µ –Ω–æ–º–µ—Ä")
-        text = "üé≠ –ù–∞ —Ñ–æ—Ç–æ-–∏—Å—Ç–æ—á–Ω–∏–∫–µ –Ω–∞–π–¥–µ–Ω–æ –Ω–µ—Å–∫–æ–ª—å–∫–æ –ª–∏—Ü. –í—ã–±–µ—Ä–∏—Ç–µ, —á—å—ë –ª–∏—Ü–æ –≤—Å—Ç–∞–≤–∏—Ç—å."
-        if preview:
-            bio = BytesIO(preview); bio.name = "faces_source_choice.jpg"
-            await update.effective_message.reply_photo(InputFile(bio), caption=text, reply_markup=_face_choice_kb("source", faces))
-        else:
-            await update.effective_message.reply_text(text, reply_markup=_face_choice_kb("source", faces))
-        return
-    if FACESWAP_ASK_SOURCE_FACE and not faces and FACESWAP_MANUAL_CHOICE_IF_DETECTION_FAIL:
-        context.user_data["faceswap_flow"] = "choose_source_face"
-        _faceswap_source_face_count_cache[user_id] = 3
-        await update.effective_message.reply_text(
-            "üé≠ –ù–µ —Å–º–æ–≥ —É–≤–µ—Ä–µ–Ω–Ω–æ –æ–ø—Ä–µ–¥–µ–ª–∏—Ç—å –ª–∏—Ü–æ-–∏—Å—Ç–æ—á–Ω–∏–∫. –í—ã–±–µ—Ä–∏—Ç–µ –≤—Ä—É—á–Ω—É—é, —á—å—ë –ª–∏—Ü–æ –≤–∑—è—Ç—å:",
-            reply_markup=_manual_face_choice_kb("source"),
-        )
-        return
-    context.user_data["faceswap_flow"] = "ready"
-    await update.effective_message.reply_text("üé≠ –§–æ—Ç–æ –ª–∏—Ü–∞ –ø–æ–ª—É—á–µ–Ω–æ. –í—ã–±–µ—Ä–∏—Ç–µ –∫–∞—á–µ—Å—Ç–≤–æ –∑–∞–º–µ–Ω—ã:", reply_markup=face_swap_quality_kb())
-
-
-async def _extract_image_bytes_from_json_or_response(resp: httpx.Response, client: httpx.AsyncClient) -> bytes | None:
-    out = await _image_bytes_from_response(resp, client)
-    if out:
-        return out
-    try:
-        obj = resp.json()
-    except Exception:
-        return None
-    url = _find_first_image_url(obj)
-    if url:
-        rr = await client.get(url, timeout=60.0)
-        rr.raise_for_status()
-        return bytes(rr.content)
-    return None
-
-
-
-def _faceswap_image_size(img_bytes: bytes) -> tuple[int, int]:
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        return int(im.width), int(im.height)
-    except Exception:
-        return (0, 0)
-
-
-def _faceswap_scaled_faces(faces: list[dict] | None, src_bytes: bytes, dst_bytes: bytes) -> list[dict]:
-    """–ü–µ—Ä–µ—Å—á–∏—Ç–∞—Ç—å –±–æ–∫—Å—ã –ª–∏—Ü –∏–∑ –∏—Å—Ö–æ–¥–Ω–æ–≥–æ —Ä–∞–∑–º–µ—Ä–∞ –≤ —Ä–∞–∑–º–µ—Ä –∫–∞—Ä—Ç–∏–Ω–∫–∏, —Ä–µ–∞–ª—å–Ω–æ –æ—Ç–ø—Ä–∞–≤–ª—è–µ–º–æ–π –≤ API."""
-    if not faces:
-        return []
-    sw, sh = _faceswap_image_size(src_bytes)
-    dw, dh = _faceswap_image_size(dst_bytes)
-    if sw <= 0 or sh <= 0 or dw <= 0 or dh <= 0:
-        return [dict(f) for f in faces]
-    sx, sy = dw / float(sw), dh / float(sh)
-    out = []
-    for f in faces:
-        g = dict(f)
-        g["x"] = int(round(float(f.get("x", 0)) * sx))
-        g["y"] = int(round(float(f.get("y", 0)) * sy))
-        g["w"] = max(1, int(round(float(f.get("w", 1)) * sx)))
-        g["h"] = max(1, int(round(float(f.get("h", 1)) * sy)))
-        g["cx"] = g["x"] + g["w"] / 2.0
-        g["cy"] = g["y"] + g["h"] / 2.0
-        g["area"] = g["w"] * g["h"]
-        out.append(g)
-    return out
-
-
-def _faceswap_get_face_by_index(faces: list[dict] | None, idx: int) -> dict | None:
-    if not faces:
-        return None
-    idx = int(idx or 0)
-    for f in faces:
-        if int(f.get("api_index", -999)) == idx or int(f.get("display_index", 0)) - 1 == idx:
-            return dict(f)
-    if 0 <= idx < len(faces):
-        return dict(faces[idx])
-    return None
-
-
-def _faceswap_expand_box(box: dict, width: int, height: int, margin: float = 1.5,
-                         margin_x: float | None = None, margin_y_up: float | None = None,
-                         margin_y_down: float | None = None) -> tuple[int, int, int, int]:
-    x, y, w, h = int(box.get("x", 0)), int(box.get("y", 0)), int(box.get("w", 1)), int(box.get("h", 1))
-    cx = x + w / 2.0
-    mx = float(margin_x if margin_x is not None else margin)
-    myu = float(margin_y_up if margin_y_up is not None else margin)
-    myd = float(margin_y_down if margin_y_down is not None else margin)
-    x1 = int(round(cx - (w * mx) / 2.0))
-    x2 = int(round(cx + (w * mx) / 2.0))
-    y1 = int(round(y - h * (myu - 1.0)))
-    y2 = int(round(y + h + h * (myd - 1.0)))
-    return max(0, x1), max(0, y1), min(width, x2), min(height, y2)
-
-
-def _faceswap_crop_source_face(img_bytes: bytes, face: dict | None) -> bytes:
-    """–û—Å—Ç–∞–≤–∏—Ç—å –≤ source —Ç–æ–ª—å–∫–æ –≤—ã–±—Ä–∞–Ω–Ω–æ–µ –ª–∏—Ü–æ. –≠—Ç–æ —É–±–∏—Ä–∞–µ—Ç –ª–æ–∂–Ω—ã–µ –∏–Ω–¥–µ–∫—Å—ã –Ω–∞ —Å–µ–ª—Ñ–∏/–æ–¥–µ–∂–¥–µ."""
-    if Image is None or not face:
-        return img_bytes
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        im = im.convert("RGB")
-        x1, y1, x2, y2 = _faceswap_expand_box(face, im.width, im.height, margin=FACESWAP_SOURCE_CROP_MARGIN)
-        if x2 <= x1 or y2 <= y1:
-            return img_bytes
-        crop = im.crop((x1, y1, x2, y2))
-        bio = BytesIO()
-        crop.save(bio, format="JPEG", quality=94, optimize=True)
-        return bio.getvalue()
-    except Exception as e:
-        _faceswap_note_error(f"source face crop failed: {type(e).__name__}: {e}")
-        return img_bytes
-
-
-def _faceswap_hide_other_faces(target_bytes: bytes, faces: list[dict] | None, selected_idx: int) -> bytes:
-    """–°–∫—Ä—ã—Ç—å –≤—Å–µ –ª–∏—Ü–∞, –∫—Ä–æ–º–µ –≤—ã–±—Ä–∞–Ω–Ω–æ–≥–æ, –ø–µ—Ä–µ–¥ –æ—Ç–ø—Ä–∞–≤–∫–æ–π –ø—Ä–æ–≤–∞–π–¥–µ—Ä—É.
-
-    –§–∏–Ω–∞–ª—å–Ω—ã–π —Ä–µ–∑—É–ª—å—Ç–∞—Ç –±–µ—Ä—ë—Ç—Å—è –Ω–µ —Ü–µ–ª–∏–∫–æ–º: –Ω–∏–∂–µ –º—ã –≤–∫–ª–µ–∏–≤–∞–µ–º —Ç–æ–ª—å–∫–æ –æ–±–ª–∞—Å—Ç—å –≤—ã–±—Ä–∞–Ω–Ω–æ–≥–æ –ª–∏—Ü–∞
-    –æ–±—Ä–∞—Ç–Ω–æ –≤ –∏—Å—Ö–æ–¥–Ω—ã–π –∫–∞–¥—Ä. –ü–æ—ç—Ç–æ–º—É –≤—Ä–µ–º–µ–Ω–Ω–æ–µ —Å–∫—Ä—ã—Ç–∏–µ —Å–æ—Å–µ–¥–Ω–∏—Ö –ª–∏—Ü –±–µ–∑–æ–ø–∞—Å–Ω–æ –∏ —Ä–µ—à–∞–µ—Ç
-    –ø—Ä–æ–±–ª–µ–º—É, –∫–æ–≥–¥–∞ API –º–µ–Ω—è–µ—Ç –Ω–µ —Ç–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞.
-    """
-    if Image is None or ImageFilter is None or not faces:
-        return target_bytes
-    try:
-        im = Image.open(BytesIO(target_bytes))
-        im = ImageOps.exif_transpose(im) if ImageOps else im
-        im = im.convert("RGB")
-        selected = _faceswap_get_face_by_index(faces, selected_idx)
-        if not selected:
-            return target_bytes
-        blurred = im.filter(ImageFilter.GaussianBlur(radius=max(18, int(max(im.size) * 0.025))))
-        for f in faces:
-            if int(f.get("api_index", -999)) == int(selected.get("api_index", -888)):
-                continue
-            x1, y1, x2, y2 = _faceswap_expand_box(f, im.width, im.height, margin=FACESWAP_TARGET_HIDE_MARGIN)
-            if x2 <= x1 or y2 <= y1:
-                continue
-            patch = blurred.crop((x1, y1, x2, y2))
-            im.paste(patch, (x1, y1))
-        bio = BytesIO()
-        im.save(bio, format="JPEG", quality=94, optimize=True)
-        return bio.getvalue()
-    except Exception as e:
-        _faceswap_note_error(f"hide other faces failed: {type(e).__name__}: {e}")
-        return target_bytes
-
-
-def _faceswap_composite_selected_region(original_target_bytes: bytes, provider_output: bytes, selected_face: dict | None) -> bytes:
-    """–í–µ—Ä–Ω—É—Ç—å –≤ –∏—Å—Ö–æ–¥–Ω—ã–π –∫–∞–¥—Ä —Ç–æ–ª—å–∫–æ –∏–∑–º–µ–Ω—ë–Ω–Ω—É—é –æ–±–ª–∞—Å—Ç—å –≤—ã–±—Ä–∞–Ω–Ω–æ–≥–æ –ª–∏—Ü–∞."""
-    if Image is None or ImageFilter is None or not selected_face:
-        return provider_output
-    try:
-        base = Image.open(BytesIO(original_target_bytes))
-        base = ImageOps.exif_transpose(base) if ImageOps else base
-        base = base.convert("RGB")
-        out = Image.open(BytesIO(provider_output))
-        out = ImageOps.exif_transpose(out) if ImageOps else out
-        out = out.convert("RGB")
-        if out.size != base.size:
-            out = out.resize(base.size, Image.LANCZOS)
-        x1, y1, x2, y2 = _faceswap_expand_box(
-            selected_face, base.width, base.height,
-            margin_x=FACESWAP_COMPOSITE_MARGIN_X,
-            margin_y_up=FACESWAP_COMPOSITE_MARGIN_Y_UP,
-            margin_y_down=FACESWAP_COMPOSITE_MARGIN_Y_DOWN,
-        )
-        if x2 <= x1 or y2 <= y1:
-            return provider_output
-        patch = out.crop((x1, y1, x2, y2))
-        mask = Image.new("L", (x2 - x1, y2 - y1), 0)
-        md = ImageDraw.Draw(mask)
-        pad = max(2, int(min(mask.size) * 0.04))
-        md.rounded_rectangle([pad, pad, mask.width - pad, mask.height - pad], radius=max(12, int(min(mask.size) * 0.28)), fill=255)
-        mask = mask.filter(ImageFilter.GaussianBlur(radius=max(6, int(min(mask.size) * 0.06))))
-        base.paste(patch, (x1, y1), mask)
-        bio = BytesIO()
-        base.save(bio, format="JPEG", quality=94, optimize=True)
-        return bio.getvalue()
-    except Exception as e:
-        _faceswap_note_error(f"selected face composite failed: {type(e).__name__}: {e}")
-        return provider_output
-
-
-async def _piapi_faceswap(target_img: bytes, source_face: bytes, quality: str = "fast", target_index: int = 0, source_index: int = 0) -> bytes | None:
-    if not PIAPI_API_KEY:
-        _faceswap_note_error("PIAPI_API_KEY missing")
-        return None
-    target_b64 = _b64_for_faceswap(target_img)
-    source_b64 = _b64_for_faceswap(source_face)
-    url = f"{PIAPI_BASE_URL}{PIAPI_FACE_CREATE_PATH}"
-    headers = {"x-api-key": PIAPI_API_KEY, "X-API-Key": PIAPI_API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
-    payload = {
-        "model": PIAPI_FACE_MODEL,
-        "task_type": PIAPI_FACE_TASK_TYPE,
-        "input": {
-            "target_image": target_b64,
-            "swap_image": source_b64,
-            # –ï—Å–ª–∏ PiAPI –Ω–∞—á–Ω—ë—Ç –ø–æ–¥–¥–µ—Ä–∂–∏–≤–∞—Ç—å —è–≤–Ω—ã–π –∏–Ω–¥–µ–∫—Å, —ç—Ç–∏ –ø–æ–ª—è —É–∂–µ –±—É–¥—É—Ç –ø–µ—Ä–µ–¥–∞–Ω—ã.
-            "target_face_index": int(target_index or 0),
-            "source_face_index": int(source_index or 0),
-        },
-    }
-    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        if r.status_code >= 400:
-            _faceswap_note_error(f"PiAPI create failed status={r.status_code} body={r.text[:900]}")
-            return None
-        try:
-            obj = r.json()
-        except Exception:
-            obj = {}
-        direct = await _extract_image_bytes_from_json_or_response(r, client)
-        if direct:
-            return _normalize_output_image_bytes(direct)
-        data = obj.get("data") if isinstance(obj, dict) else None
-        task_id = ""
-        if isinstance(data, dict):
-            task_id = str(data.get("task_id") or data.get("id") or "")
-        task_id = task_id or str(obj.get("task_id") or obj.get("id") or "") if isinstance(obj, dict) else ""
-        if not task_id:
-            _faceswap_note_error(f"PiAPI create returned no task_id body={str(obj)[:900]}")
-            return None
-        deadline = time.monotonic() + max(30.0, FACESWAP_TIMEOUT_S)
-        status_url = f"{PIAPI_BASE_URL}{PIAPI_FACE_STATUS_PATH.format(task_id=task_id)}"
-        last_obj = None
-        while time.monotonic() < deadline:
-            await asyncio.sleep(max(1.0, FACESWAP_POLL_DELAY_S))
-            rr = await client.get(status_url, headers=headers)
-            if rr.status_code >= 400:
-                _faceswap_note_error(f"PiAPI status failed status={rr.status_code} body={rr.text[:900]}")
-                return None
-            try:
-                last_obj = rr.json()
-            except Exception:
-                last_obj = {}
-            img = await _extract_image_bytes_from_json_or_response(rr, client)
-            if img:
-                return _normalize_output_image_bytes(img)
-            data = last_obj.get("data") if isinstance(last_obj, dict) else None
-            st = ""
-            if isinstance(data, dict):
-                st = str(data.get("status") or data.get("state") or "").lower()
-            st = st or str(last_obj.get("status") or last_obj.get("state") or "").lower() if isinstance(last_obj, dict) else ""
-            if st in ("failed", "error", "canceled", "cancelled"):
-                _faceswap_note_error(f"PiAPI task failed status={st} body={str(last_obj)[:900]}")
-                return None
-        _faceswap_note_error(f"PiAPI task timeout after {FACESWAP_TIMEOUT_S:.0f}s task_id={task_id}")
-        return None
-
-
-async def _segmind_faceswap_v2(target_img: bytes, source_face: bytes, target_index: int = 0, source_index: int = 0) -> bytes | None:
-    if not SEGMIND_API_KEY:
-        _faceswap_note_error("SEGMIND_API_KEY missing")
-        return None
-    url = f"{SEGMIND_BASE_URL}/v1/{SEGMIND_FACESWAP_MODEL_FAST}"
-    payload = {
-        "source_img": _b64_for_faceswap(source_face),
-        "target_img": _b64_for_faceswap(target_img),
-        "input_faces_index": str(int(target_index or 0)),
-        "source_faces_index": str(int(source_index or 0)),
-        "face_restore": SEGMIND_FACE_RESTORE,
-        "base64": False,
-    }
-    headers = {"x-api-key": SEGMIND_API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=FACESWAP_TIMEOUT_S, follow_redirects=True) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        if r.status_code >= 400:
-            _faceswap_note_error(f"Segmind v2 failed status={r.status_code} body={r.text[:900]}")
-            return None
-        img = await _extract_image_bytes_from_json_or_response(r, client)
-        if img:
-            return _normalize_output_image_bytes(img)
-        _faceswap_note_error(f"Segmind v2 no output body={r.text[:900]}")
-        return None
-
-
-async def _segmind_faceswap_v4(target_img: bytes, source_face: bytes, quality: str = "premium") -> bytes | None:
-    if not SEGMIND_API_KEY:
-        _faceswap_note_error("SEGMIND_API_KEY missing")
-        return None
-    url = f"{SEGMIND_BASE_URL}/v1/{SEGMIND_FACESWAP_MODEL_PREMIUM}"
-    payload = {
-        "source_image": _b64_for_faceswap(source_face),
-        "target_image": _b64_for_faceswap(target_img),
-        "model_type": "quality" if quality == "premium" else "speed",
-        "swap_type": SEGMIND_FACE_SWAP_TYPE,
-        "style_type": SEGMIND_FACE_STYLE_TYPE,
-        "seed": int(time.time()) % 100000000,
-        "image_format": "png",
-        "image_quality": 95 if quality == "premium" else 90,
-        "hardware": "fast",
-        "base64": False,
-    }
-    headers = {"x-api-key": SEGMIND_API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=FACESWAP_TIMEOUT_S, follow_redirects=True) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        if r.status_code >= 400:
-            _faceswap_note_error(f"Segmind v4 failed status={r.status_code} body={r.text[:900]}")
-            return None
-        img = await _extract_image_bytes_from_json_or_response(r, client)
-        if img:
-            return _normalize_output_image_bytes(img)
-        _faceswap_note_error(f"Segmind v4 no output body={r.text[:900]}")
-        return None
-
-
-def _faceswap_provider_supports_indices(provider: str) -> bool:
-    provider = (provider or "").lower().strip()
-    # –ü—Ä–∞–∫—Ç–∏–∫–∞ —Ç–µ—Å—Ç–æ–≤ –ø–æ–∫–∞–∑–∞–ª–∞:
-    # - Segmind v2 –¥–µ–π—Å—Ç–≤–∏—Ç–µ–ª—å–Ω–æ —É–º–µ–µ—Ç –∞–¥—Ä–µ—Å–Ω—ã–π –≤—ã–±–æ—Ä –ª–∏—Ü –ø–æ –∏–Ω–¥–µ–∫—Å–∞–º.
-    # - PiAPI/Qubico –º–æ–∂–µ—Ç —É—Å–ø–µ—à–Ω–æ —Å–≤–∞–ø–∞—Ç—å –ª–∏—Ü–∞, –Ω–æ –Ω–µ –¥–∞—ë—Ç –Ω–∞–¥—ë–∂–Ω–æ–π –≥–∞—Ä–∞–Ω—Ç–∏–∏,
-    #   —á—Ç–æ target_face_index/source_face_index –±—É–¥—É—Ç —Å–æ–±–ª—é–¥–µ–Ω—ã –¥–ª—è –≥—Ä—É–ø–ø–æ–≤—ã—Ö —Ñ–æ—Ç–æ.
-    # –ü–æ—ç—Ç–æ–º—É –¥–ª—è —Å—Ç—Ä–æ–≥–æ–≥–æ —Ä–µ–∂–∏–º–∞ –≤—ã–±–æ—Ä–∞ –ª–∏—Ü–∞ —Å—á–∏—Ç–∞–µ–º –∏–Ω–¥–µ–∫—Å–∏—Ä—É–µ–º—ã–º —Ç–æ–ª—å–∫–æ Segmind v2.
-    return provider in ("segmind", "segmind-v2", "segmind2")
-
-
-async def _run_faceswap_provider(provider: str, target_img: bytes, source_face: bytes, quality: str, target_index: int = 0, source_index: int = 0) -> bytes | None:
-    provider = (provider or "").lower().strip()
-    if provider in ("piapi", "pi", "qubico"):
-        return await _piapi_faceswap(target_img, source_face, quality=quality, target_index=target_index, source_index=source_index)
-    if provider in ("segmind", "segmind-v2", "segmind2"):
-        return await _segmind_faceswap_v2(target_img, source_face, target_index=target_index, source_index=source_index)
-    if provider in ("segmind-v4", "segmind4"):
-        return await _segmind_faceswap_v4(target_img, source_face, quality=quality)
-    _faceswap_note_error(f"unknown faceswap provider={provider}")
-    return None
-
-
-def _faceswap_provider_order(quality: str, user_id: int) -> list[str]:
-    if quality == "premium":
-        base = [FACESWAP_PREMIUM_PROVIDER, FACESWAP_FALLBACK_PROVIDER, "segmind-v2", FACESWAP_PROVIDER]
-    else:
-        base = [FACESWAP_FAST_PROVIDER, FACESWAP_PROVIDER, FACESWAP_FALLBACK_PROVIDER, "segmind-v2"]
-    seen = []
-    order = [p for p in base if p and not (p in seen or seen.append(p))]
-    selected_multi = (_faceswap_target_face_count_cache.get(user_id, 0) or 0) > 1 or (_faceswap_source_face_count_cache.get(user_id, 0) or 0) > 1
-
-    # v35: –µ—Å–ª–∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å –≤—ã–±–∏—Ä–∞–ª –ª–∏—Ü–æ –Ω–∞ –≥—Ä—É–ø–ø–æ–≤–æ–º —Ñ–æ—Ç–æ, –Ω–µ –æ—Ç–¥–∞—ë–º –∑–∞–¥–∞—á—É PiAPI.
-    # PiAPI —Ö–æ—Ä–æ—à–∏–π –±—ã—Å—Ç—Ä—ã–π –ø—Ä–æ–≤–∞–π–¥–µ—Ä, –Ω–æ –≤ —Ç–µ—Å—Ç–∞—Ö –æ–Ω –∏–Ω–æ–≥–¥–∞ –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞–ª –≤—ã–±—Ä–∞–Ω–Ω—ã–π –∏–Ω–¥–µ–∫—Å.
-    # –î–ª—è —Ç–æ—á–Ω–æ—Å—Ç–∏ –æ—Å—Ç–∞–≤–ª—è–µ–º —Ç–æ–ª—å–∫–æ Segmind; v4 –º–æ–∂–µ—Ç –∏—Å–ø–æ–ª—å–∑–æ–≤–∞—Ç—å—Å—è —á–µ—Ä–µ–∑ isolate+composite,
-    # v2 –æ—Å—Ç–∞—ë—Ç—Å—è –∏–Ω–¥–µ–∫—Å–∏—Ä—É–µ–º—ã–º —Ä–µ–∑–µ—Ä–≤–æ–º, –µ—Å–ª–∏ —Ä–∞–∑—Ä–µ—à—ë–Ω.
-    if FACESWAP_FORCE_SEGMIND_FOR_MULTI and selected_multi:
-        seg = ["segmind-v2"]
-        if quality == "premium" and FACESWAP_GROUP_ALLOW_SEGMIND_FALLBACK:
-            seg.append("segmind-v4")
-        elif quality != "premium" and FACESWAP_GROUP_ALLOW_SEGMIND_FALLBACK:
-            seg.append("segmind-v4")
-        seen2 = []
-        return [p for p in seg if p and not (p in seen2 or seen2.append(p))]
-
-    if FACESWAP_STRICT_SELECTED_FACE and selected_multi:
-        indexed = [p for p in order if _faceswap_provider_supports_indices(p)]
-        if indexed:
-            return indexed
-        _faceswap_note_error("strict target/source face choice needs Segmind faceswap-v2, but no indexed provider configured")
-    return order
-
-async def _faceswap_process(update: Update, context: ContextTypes.DEFAULT_TYPE, quality: str = "fast"):
-    user_id = update.effective_user.id
-    target = _faceswap_target_for(user_id)
-    source = _faceswap_source_for(user_id)
-    target_index = _faceswap_selected_target_index(user_id)
-    source_index = _faceswap_selected_source_index(user_id)
-    if not target or not source:
-        await update.effective_message.reply_text("–ù—É–∂–Ω—ã 2 —Ñ–æ—Ç–æ: —Å–Ω–∞—á–∞–ª–∞ —Ñ–æ—Ç–æ, –≥–¥–µ –∑–∞–º–µ–Ω–∏—Ç—å –ª–∏—Ü–æ, –∑–∞—Ç–µ–º —Ñ–æ—Ç–æ –ª–∏—Ü–∞ –¥–ª—è –≤—Å—Ç–∞–≤–∫–∏.", reply_markup=main_kb)
-        return
-    if not FACESWAP_ENABLED:
-        await update.effective_message.reply_text("üé≠ –ó–∞–º–µ–Ω–∞ –ª–∏—Ü–∞ –≤—Ä–µ–º–µ–Ω–Ω–æ –æ—Ç–∫–ª—é—á–µ–Ω–∞ –≤ –Ω–∞—Å—Ç—Ä–æ–π–∫–∞—Ö —Å–µ—Ä–≤–µ—Ä–∞.")
-        return
-
-    original_target = target
-    target_api, _target_name, _target_mime = _resize_image_bytes_for_faceswap_api(target, FACESWAP_INPUT_MAX_SIDE)
-    target_faces_api = _faceswap_scaled_faces(_faceswap_target_faces_cache.get(user_id), target, target_api)
-    source_faces = _faceswap_source_faces_cache.get(user_id) or []
-    selected_target_face = _faceswap_get_face_by_index(target_faces_api, target_index)
-    selected_source_face = _faceswap_get_face_by_index(source_faces, source_index)
-
-    selected_multi = (_faceswap_target_face_count_cache.get(user_id, 0) or 0) > 1 or (_faceswap_source_face_count_cache.get(user_id, 0) or 0) > 1
-    provider_order = _faceswap_provider_order(quality, user_id)
-    indexed_available = any(_faceswap_provider_supports_indices(p) for p in provider_order)
-    precise = bool(FACESWAP_PRECISE_COMPOSITE and selected_multi and selected_target_face and not indexed_available)
-    provider_target = _faceswap_hide_other_faces(target_api, target_faces_api, target_index) if precise else target_api
-    provider_source = _faceswap_crop_source_face(source, selected_source_face) if selected_source_face else source
-    provider_target_index = 0 if precise else target_index
-    provider_source_index = 0 if selected_source_face else source_index
-
-    await update.effective_message.reply_text(
-        f"üé≠ –ó–∞–ø—É—Å–∫–∞—é –∑–∞–º–µ–Ω—É –ª–∏—Ü–∞ ({'–ü—Ä–µ–º–∏—É–º' if quality == 'premium' else '–ë—ã—Å—Ç—Ä–æ'}). "
-        f"–¶–µ–ª–µ–≤–æ–µ –ª–∏—Ü–æ ‚Ññ{target_index + 1}. –õ–∏—Ü–æ-–∏—Å—Ç–æ—á–Ω–∏–∫ ‚Ññ{source_index + 1}. "
-        f"–ü—Ä–æ–≤–∞–π–¥–µ—Ä—ã: {', '.join(provider_order)}. "
-        "–°–æ—Ö—Ä–∞–Ω—è—é –∏—Å—Ö–æ–¥–Ω–æ–µ —Ç–µ–ª–æ, –æ–¥–µ–∂–¥—É, —Ñ–æ–Ω –∏ –∫–æ–º–ø–æ–∑–∏—Ü–∏—é. –û–±—ã—á–Ω–æ 10‚Äì180 —Å–µ–∫—É–Ω–¥‚Ä¶"
-    )
-
-    async def _go():
-        out = None
-        used_provider = ""
-        for provider in provider_order:
-            try:
-                out = await asyncio.wait_for(
-                    _run_faceswap_provider(provider, provider_target, provider_source, quality, target_index=provider_target_index, source_index=provider_source_index),
-                    timeout=FACESWAP_TIMEOUT_S + 30,
-                )
-                if out:
-                    used_provider = provider
-                    break
-            except asyncio.TimeoutError:
-                _faceswap_note_error(f"{provider} timeout after {FACESWAP_TIMEOUT_S:.0f}s")
-            except Exception as e:
-                _faceswap_note_error(f"{provider} exception: {type(e).__name__}: {e}")
-        if not out:
-            await update.effective_message.reply_text("‚ùå –ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–º–µ–Ω–∏—Ç—å –ª–∏—Ü–æ. –ü–æ—Å–ª–µ–¥–Ω–∏–µ –æ—à–∏–±–∫–∏:\n" + _faceswap_last_errors_text())
-            return False
-        if precise:
-            # –°–æ—Ö—Ä–∞–Ω—è–µ–º –æ—Å—Ç–∞–ª—å–Ω—ã–µ –ª–∏—Ü–∞ –∏ —Ñ–æ–Ω –∏–∑ –∏—Å—Ö–æ–¥–Ω–æ–≥–æ –∫–∞–¥—Ä–∞; –º–µ–Ω—è–µ–º —Ç–æ–ª—å–∫–æ –≤—ã–±—Ä–∞–Ω–Ω—É—é –æ–±–ª–∞—Å—Ç—å.
-            out = _faceswap_composite_selected_region(target_api, out, selected_target_face)
-        out = _maybe_resize_output_image(out)
-        _cache_photo(user_id, out)
-        bio = BytesIO(out)
-        cap = (
-            f"üé≠ –õ–∏—Ü–æ –∑–∞–º–µ–Ω–µ–Ω–æ ‚úÖ –†–µ–∂–∏–º: {'–ü—Ä–µ–º–∏—É–º' if quality == 'premium' else '–ë—ã—Å—Ç—Ä–æ'} ¬∑ –ø—Ä–æ–≤–∞–π–¥–µ—Ä: {used_provider}. "
-            f"–¶–µ–ª–µ–≤–æ–µ –ª–∏—Ü–æ ‚Ññ{target_index + 1}, –∏—Å—Ç–æ—á–Ω–∏–∫ ‚Ññ{source_index + 1}. "
-            "–†–µ–∑—É–ª—å—Ç–∞—Ç —Å–æ—Ö—Ä–∞–Ω—ë–Ω –∫–∞–∫ –∏—Å—Ö–æ–¥–Ω–æ–µ —Ñ–æ—Ç–æ –¥–ª—è –¥–∞–ª—å–Ω–µ–π—à–∏—Ö –¥–µ–π—Å—Ç–≤–∏–π."
-        )
-        if FACESWAP_RESULT_AS_DOCUMENT:
-            bio.name = "face_swap.png"
-            await update.effective_message.reply_document(InputFile(bio), caption=cap, reply_markup=photo_quick_actions_kb())
-        else:
-            bio.name = "face_swap.jpg"
-            await update.effective_message.reply_photo(InputFile(bio), caption=cap, reply_markup=photo_quick_actions_kb())
-        _clear_faceswap_flow(context)
-        _clear_faceswap_user_cache(user_id)
-        return True
-
-    est = FACESWAP_PREMIUM_COST_USD if quality == "premium" else FACESWAP_FAST_COST_USD
-    await _try_pay_then_do(update, context, user_id, "img", est, _go, remember_kind=f"faceswap_{quality}")
-
-async def _start_faceswap_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes | None = None, use_cached: bool = True):
-    user_id = update.effective_user.id
-    target = img_bytes or (_get_cached_photo(user_id) if use_cached else None)
-    if not target:
-        _clear_faceswap_user_cache(user_id)
-        context.user_data["faceswap_flow"] = "await_target"
-        await update.effective_message.reply_text(
-            "üé≠ –ó–∞–º–µ–Ω–∞ –ª–∏—Ü–∞. –ü—Ä–∏—à–ª–∏—Ç–µ –ù–û–í–û–ï —Ñ–æ—Ç–æ, –≥–¥–µ –Ω—É–∂–Ω–æ –∑–∞–º–µ–Ω–∏—Ç—å –ª–∏—Ü–æ. –ï—Å–ª–∏ –Ω–∞ —Ñ–æ—Ç–æ –Ω–µ—Å–∫–æ–ª—å–∫–æ –ª—é–¥–µ–π, —è –ø–æ–∫–∞–∂—É –Ω–æ–º–µ—Ä–∞ –∏ –ø–æ–ø—Ä–æ—à—É –≤—ã–±—Ä–∞—Ç—å –Ω—É–∂–Ω–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞. –ó–∞—Ç–µ–º —è –ø–æ–ø—Ä–æ—à—É —Ñ–æ—Ç–æ –ª–∏—Ü–∞ –¥–ª—è –≤—Å—Ç–∞–≤–∫–∏."
-        )
-        return
-    await _maybe_choose_target_face(update, context, user_id, target)
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ WebApp data (—Ç–∞—Ä–∏—Ñ—ã/–ø–æ–ø–æ–ª–Ω–µ–Ω–∏—è) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        wad = update.effective_message.web_app_data
-        raw = wad.data if wad else ""
-        data = {}
-        try:
-            data = json.loads(raw)
-        except Exception:
-            for part in (raw or "").split("&"):
-                if "=" in part:
-                    k, v = part.split("=", 1)
-                    data[k] = v
-
-        typ = (data.get("type") or data.get("action") or "").lower()
-        immediate = str(data.get("immediate") or "").lower() in ("1", "true", "yes", "on")
-        user_id = update.effective_user.id
-
-        if typ in ("subscribe", "buy", "buy_sub", "sub"):
-            tier = (data.get("tier") or "pro").lower()
-            if tier not in SUBS_TIERS:
-                await update.effective_message.reply_text("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π —Ç–∞—Ä–∏—Ñ. –û—Ç–∫—Ä–æ–π—Ç–µ —Å—Ç—Ä–∞–Ω–∏—Ü—É —Ç–∞—Ä–∏—Ñ–æ–≤ –∑–∞–Ω–æ–≤–æ.")
-                return
-            months = max(1, min(12, int(data.get("months") or 1)))
-            method = (data.get("method") or "yoo_all").lower()
-            if method not in YOO_DIRECT_METHODS:
-                method = "yoo_all"
-
-            if immediate and _yoo_direct_configured():
-                try:
-                    pay = await _yoo_create_direct_payment(user_id, tier, months, method)
-                    payment_id = str(pay.get("id") or "")
-                    conf = pay.get("confirmation") or {}
-                    pay_url = conf.get("confirmation_url") or conf.get("confirmation_data") or conf.get("external_url") or ""
-                    if not pay_url:
-                        raise RuntimeError("YooKassa did not return confirmation URL")
-                    label = YOO_DIRECT_METHODS[method]["label"]
-                    msg = await update.effective_message.reply_text(
-                        f"‚≠ê –¢–∞—Ä–∏—Ñ {tier.upper()} –Ω–∞ {months} –º–µ—Å.\n"
-                        f"–°–ø–æ—Å–æ–±: {label}. –ù–∞–∂–º–∏—Ç–µ –∫–Ω–æ–ø–∫—É –¥–ª—è –æ–ø–ª–∞—Ç—ã; –ø–æ—Å–ª–µ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–∏—è –ø–æ–¥–ø–∏—Å–∫–∞ –∞–∫—Ç–∏–≤–∏—Ä—É–µ—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏.",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(f"{label} ‚Äî –ø–µ—Ä–µ–π—Ç–∏ –∫ –æ–ø–ª–∞—Ç–µ", url=pay_url)],
-                            [InlineKeyboardButton("–î—Ä—É–≥–æ–π —Å–ø–æ—Å–æ–± –æ–ø–ª–∞—Ç—ã", callback_data=f"plan:{tier}")],
-                        ]),
-                    )
-                    kv_set(
-                        f"yoo:pending:{payment_id}",
-                        json.dumps({"user_id": user_id, "tier": tier, "months": months, "method": method}, ensure_ascii=False),
-                    )
-                    context.application.create_task(
-                        _poll_yoo_subscription_payment(context, msg.chat.id, msg.message_id, user_id, payment_id, tier, months)
-                    )
-                    return
-                except Exception as exc:
-                    log.exception("WebApp immediate subscription payment failed: %s", exc)
-
-            await update.effective_message.reply_text(
-                f"–û—Ñ–æ—Ä–º–ª–µ–Ω–∏–µ –ø–æ–¥–ø–∏—Å–∫–∏ {tier.upper()} –Ω–∞ {months} –º–µ—Å.\n–í—ã–±–µ—Ä–∏—Ç–µ —Å–ø–æ—Å–æ–± –æ–ø–ª–∞—Ç—ã:",
-                reply_markup=plan_pay_kb(tier),
-            )
-            return
-
-        if typ in ("topup_rub", "rub_topup", "buy_credits", "credit_pack"):
-            requested_rub = int(data.get("amount") or data.get("rub") or 0)
-            requested_credits = int(data.get("credits") or 0)
-            resolved = _credit_pack_resolve(requested_credits, requested_rub)
-            if not resolved:
-                await update.effective_message.reply_text("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π –ø–∞–∫–µ—Ç –∫—Ä–µ–¥–∏—Ç–æ–≤. –û—Ç–∫—Ä–æ–π—Ç–µ —Å—Ç—Ä–∞–Ω–∏—Ü—É —Ç–∞—Ä–∏—Ñ–æ–≤ –∑–∞–Ω–æ–≤–æ.")
-                return
-            credits, amount_rub = resolved
-            method = (data.get("method") or "yoo_all").lower()
-            if method not in YOO_DIRECT_METHODS:
-                method = "yoo_all"
-
-            if immediate and _yoo_direct_configured():
-                try:
-                    pay = await _yoo_create_credit_payment(user_id, credits, amount_rub, method)
-                    payment_id = str(pay.get("id") or "")
-                    conf = pay.get("confirmation") or {}
-                    pay_url = conf.get("confirmation_url") or conf.get("confirmation_data") or conf.get("external_url") or ""
-                    if not pay_url:
-                        raise RuntimeError("YooKassa did not return confirmation URL")
-                    label = YOO_DIRECT_METHODS[method]["label"]
-                    msg = await update.effective_message.reply_text(
-                        f"ü™ô –ü–∞–∫–µ—Ç: {credits} –∫—Ä–µ–¥–∏—Ç–æ–≤ –∑–∞ {amount_rub} ‚ÇΩ.\n"
-                        f"–°–ø–æ—Å–æ–±: {label}. –ü–æ—Å–ª–µ –æ–ø–ª–∞—Ç—ã –∫—Ä–µ–¥–∏—Ç—ã –Ω–∞—á–∏—Å–ª—è—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏.",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(f"{label} ‚Äî –ø–µ—Ä–µ–π—Ç–∏ –∫ –æ–ø–ª–∞—Ç–µ", url=pay_url)],
-                            [InlineKeyboardButton("–î—Ä—É–≥–∏–µ –ø–∞–∫–µ—Ç—ã", callback_data="topup")],
-                        ]),
-                    )
-                    kv_set(
-                        f"yoo:credit_pending:{payment_id}",
-                        json.dumps({"user_id": user_id, "credits": credits, "amount_rub": amount_rub, "method": method}, ensure_ascii=False),
-                    )
-                    context.application.create_task(
-                        _poll_yoo_credit_payment(context, msg.chat.id, msg.message_id, user_id, payment_id, credits, amount_rub)
-                    )
-                    return
-                except Exception as exc:
-                    log.exception("WebApp immediate credit payment failed: %s", exc)
-
-            await _send_invoice_rub(
-                f"{credits} –∫—Ä–µ–¥–∏—Ç–æ–≤",
-                f"–ü–æ–ø–æ–ª–Ω–µ–Ω–∏–µ –±–∞–ª–∞–Ω—Å–∞ Neyro-Bot: {credits} –∫—Ä–µ–¥–∏—Ç–æ–≤.",
-                amount_rub,
-                f"topup:{credits}:{amount_rub}",
-                update,
-            )
-            return
-
-        if typ in ("topup_crypto", "crypto_topup"):
-            if not CRYPTO_PAY_API_TOKEN:
-                await update.effective_message.reply_text("CryptoBot –Ω–µ –Ω–∞—Å—Ç—Ä–æ–µ–Ω.")
-                return
-            usd = float(data.get("usd") or 0)
-            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT")
-            if not inv_id or not pay_url:
-                await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å —Å—á—ë—Ç –≤ CryptoBot.")
-                return
-            msg = await update.effective_message.reply_text(
-                f"–û–ø–ª–∞—Ç–∏—Ç–µ —á–µ—Ä–µ–∑ CryptoBot: {usd_amount:.2f} {asset} ‚Üí {_credits_fmt_from_usd(usd_amount)}.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("üí† CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("üîé –ü—Ä–æ–≤–µ—Ä–∏—Ç—å", callback_data=f"crypto:check:{inv_id}")],
-                ]),
-            )
-            context.application.create_task(
-                _poll_crypto_invoice(context, msg.chat_id, msg.message_id, user_id, inv_id, usd_amount)
-            )
-            return
-
-        await update.effective_message.reply_text("–ü–æ–ª—É—á–µ–Ω—ã –¥–∞–Ω–Ω—ã–µ –∏–∑ –º–∏–Ω–∏-–ø—Ä–∏–ª–æ–∂–µ–Ω–∏—è, –Ω–æ –∫–æ–º–∞–Ω–¥–∞ –Ω–µ —Ä–∞—Å–ø–æ–∑–Ω–∞–Ω–∞.")
-    except Exception as exc:
-        log.exception("on_webapp_data error: %s", exc)
-        await update.effective_message.reply_text("–û—à–∏–±–∫–∞ –æ–±—Ä–∞–±–æ—Ç–∫–∏ –¥–∞–Ω–Ω—ã—Ö –º–∏–Ω–∏-–ø—Ä–∏–ª–æ–∂–µ–Ω–∏—è.")
-
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ v94: payment deep-link fallback ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def _handle_payment_start_payload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    args = [str(x or "").strip().lower() for x in (context.args or [])]
-    if not args:
-        return False
-    payload = args[0]
-    sub_map = {
-        "pay_sub_start": "start",
-        "pay_sub_pro": "pro",
-        "pay_sub_ultimate": "ultimate",
-    }
-    pack_map = {
-        "pay_pack_1000": (1000, 990),
-        "pay_pack_3000": (3000, 2790),
-        "pay_pack_7000": (7000, 6290),
-    }
-    if payload not in sub_map and payload not in pack_map:
-        return False
-    if not _yoo_direct_configured():
-        await update.effective_message.reply_text(
-            "–û–ø–ª–∞—Ç–∞ –ÆKassa —Å–µ–π—á–∞—Å –Ω–µ –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∞. –û—Ç–∫—Ä–æ–π—Ç–µ ‚≠ê –ü–æ–¥–ø–∏—Å–∫–∞ ¬∑ –ü–æ–º–æ—â—å –∏–ª–∏ –Ω–∞–ø–∏—à–∏—Ç–µ –≤ –ø–æ–¥–¥–µ—Ä–∂–∫—É."
-        )
-        return True
-
-    user_id = update.effective_user.id
-    method = "yoo_all"
-    label = YOO_DIRECT_METHODS[method]["label"]
-    try:
-        if payload in sub_map:
-            tier = sub_map[payload]
-            months = 1
-            pay = await _yoo_create_direct_payment(user_id, tier, months, method)
-            payment_id = str(pay.get("id") or "")
-            conf = pay.get("confirmation") or {}
-            pay_url = str(conf.get("confirmation_url") or conf.get("confirmation_data") or conf.get("external_url") or "")
-            if not payment_id or not pay_url:
-                raise RuntimeError("YooKassa did not return confirmation URL")
-            msg = await update.effective_message.reply_text(
-                f"‚≠ê –¢–∞—Ä–∏—Ñ {tier.upper()} –Ω–∞ {months} –º–µ—Å.\n–ù–∞–∂–º–∏—Ç–µ –∫–Ω–æ–ø–∫—É –¥–ª—è –æ–ø–ª–∞—Ç—ã; –ø–æ—Å–ª–µ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–∏—è –ø–æ–¥–ø–∏—Å–∫–∞ –∞–∫—Ç–∏–≤–∏—Ä—É–µ—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"{label} ‚Äî –ø–µ—Ä–µ–π—Ç–∏ –∫ –æ–ø–ª–∞—Ç–µ", url=pay_url)],
-                    [InlineKeyboardButton("–î—Ä—É–≥–æ–π —Å–ø–æ—Å–æ–± –æ–ø–ª–∞—Ç—ã", callback_data=f"plan:{tier}")],
-                ]),
-            )
-            kv_set(
-                f"yoo:pending:{payment_id}",
-                json.dumps({"user_id": user_id, "tier": tier, "months": months, "method": method}, ensure_ascii=False),
-            )
-            context.application.create_task(
-                _poll_yoo_subscription_payment(context, msg.chat.id, msg.message_id, user_id, payment_id, tier, months)
-            )
-            return True
-
-        credits, amount_rub = pack_map[payload]
-        pay = await _yoo_create_credit_payment(user_id, credits, amount_rub, method)
-        payment_id = str(pay.get("id") or "")
-        conf = pay.get("confirmation") or {}
-        pay_url = str(conf.get("confirmation_url") or conf.get("confirmation_data") or conf.get("external_url") or "")
-        if not payment_id or not pay_url:
-            raise RuntimeError("YooKassa did not return confirmation URL")
-        msg = await update.effective_message.reply_text(
-            f"ü™ô –ü–∞–∫–µ—Ç: {credits} –∫—Ä–µ–¥–∏—Ç–æ–≤ –∑–∞ {amount_rub} ‚ÇΩ.\n–ü–æ—Å–ª–µ –æ–ø–ª–∞—Ç—ã –∫—Ä–µ–¥–∏—Ç—ã –Ω–∞—á–∏—Å–ª—è—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"{label} ‚Äî –ø–µ—Ä–µ–π—Ç–∏ –∫ –æ–ø–ª–∞—Ç–µ", url=pay_url)],
-                [InlineKeyboardButton("–î—Ä—É–≥–∏–µ –ø–∞–∫–µ—Ç—ã", callback_data="topup")],
-            ]),
-        )
-        kv_set(
-            f"yoo:credit_pending:{payment_id}",
-            json.dumps({"user_id": user_id, "credits": credits, "amount_rub": amount_rub, "method": method}, ensure_ascii=False),
-        )
-        context.application.create_task(
-            _poll_yoo_credit_payment(context, msg.chat.id, msg.message_id, user_id, payment_id, credits, amount_rub)
-        )
-        return True
-    except Exception as exc:
-        log.exception("Payment deep-link fallback failed: %s", exc)
-        await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å —Å—á—ë—Ç. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑ –∏–ª–∏ –≤—ã–±–µ—Ä–∏—Ç–µ –æ–ø–ª–∞—Ç—É —á–µ—Ä–µ–∑ ‚≠ê –ü–æ–¥–ø–∏—Å–∫–∞ ¬∑ –ü–æ–º–æ—â—å.")
-        return True
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ v94: server-side checkout bridge for Inline/Menu Mini Apps ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _validate_telegram_webapp_init_data(init_data: str, max_age_s: int = 86400) -> dict:
-    """Validate Telegram Mini App initData and return parsed fields.
-
-    Inline/Menu Mini Apps receive a query_id and must communicate through a
-    server-side bridge. Never trust user id or purchase parameters from JS
-    without validating initData using the bot token.
-    """
-    raw = (init_data or "").strip()
-    if not raw:
-        raise ValueError("Telegram initData is empty")
-    pairs = urllib.parse.parse_qsl(raw, keep_blank_values=True)
-    data = {str(k): str(v) for k, v in pairs}
-    received_hash = data.pop("hash", "")
-    # For bot-token HMAC validation, all received fields except hash remain
-    # in the data-check string, including the optional signature field.
-    if not received_hash:
-        raise ValueError("Telegram initData hash is missing")
-    data_check_string = "\n".join(f"{k}={data[k]}" for k in sorted(data))
-    secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode("utf-8"), hashlib.sha256).digest()
-    calculated_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(calculated_hash, received_hash):
-        raise ValueError("Telegram initData signature is invalid")
-    auth_date = int(data.get("auth_date") or 0)
-    now_ts = int(time.time())
-    if not auth_date or auth_date > now_ts + 60 or now_ts - auth_date > max_age_s:
-        raise ValueError("Telegram initData has expired")
-    user_raw = data.get("user") or "{}"
-    try:
-        user = json.loads(user_raw)
-    except Exception as exc:
-        raise ValueError("Telegram initData user is invalid") from exc
-    user_id = int(user.get("id") or 0)
-    if user_id <= 0:
-        raise ValueError("Telegram user id is missing")
-    data["user_obj"] = user
-    data["user_id"] = user_id
-    return data
-
-
-def _install_webapp_checkout_bridge(application):
-    """Extend PTB's Tornado webhook app with /webapp/checkout.
-
-    PTB 21.6 does not expose custom routes in run_webhook, so this replaces only
-    the small internal WebhookAppClass while preserving TelegramHandler.
-    """
-    try:
-        import tornado.web
-        import telegram.ext._updater as ptb_updater
-        from telegram.ext._utils.webhookhandler import TelegramHandler
-    except Exception as exc:
-        log.exception("Checkout bridge dependencies unavailable: %s", exc)
-        return False
-
-    class CheckoutBridgeHandler(tornado.web.RequestHandler):
-        def set_default_headers(self):
-            self.set_header("Content-Type", "application/json; charset=utf-8")
-            self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header("Access-Control-Allow-Headers", "Content-Type")
-            self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-            self.set_header("Cache-Control", "no-store")
-
-        async def get(self):
-            self.finish(json.dumps({"ok": True, "version": PATCH_VERSION, "route": "/webapp/checkout"}, ensure_ascii=False))
-
-        async def head(self):
-            self.set_status(204)
-            self.finish()
-
-        async def options(self):
-            self.set_status(204)
-            self.finish()
-
-        async def post(self):
-            try:
-                if not _yoo_direct_configured():
-                    self.set_status(503)
-                    self.finish(json.dumps({"ok": False, "error": "YooKassa direct API is not configured"}, ensure_ascii=False))
-                    return
-                try:
-                    body = json.loads(self.request.body.decode("utf-8") or "{}")
-                except Exception:
-                    self.set_status(400)
-                    self.finish(json.dumps({"ok": False, "error": "Invalid JSON"}, ensure_ascii=False))
-                    return
-                init_data = str(body.get("init_data") or "")
-                purchase = body.get("purchase") or {}
-                if not isinstance(purchase, dict):
-                    raise ValueError("Invalid purchase payload")
-                validated = _validate_telegram_webapp_init_data(init_data)
-                user_id = int(validated["user_id"])
-                typ = str(purchase.get("type") or purchase.get("action") or "").lower()
-                method = str(purchase.get("method") or "yoo_all").lower()
-                if method not in YOO_DIRECT_METHODS:
-                    method = "yoo_all"
-
-                if typ in ("subscribe", "buy", "buy_sub", "sub"):
-                    tier = str(purchase.get("tier") or "pro").lower()
-                    if tier not in SUBS_TIERS:
-                        raise ValueError("Unknown subscription tier")
-                    months = max(1, min(12, int(purchase.get("months") or 1)))
-                    pay = await _yoo_create_direct_payment(user_id, tier, months, method)
-                    payment_id = str(pay.get("id") or "")
-                    conf = pay.get("confirmation") or {}
-                    pay_url = str(conf.get("confirmation_url") or conf.get("confirmation_data") or conf.get("external_url") or "")
-                    if not payment_id or not pay_url:
-                        raise RuntimeError("YooKassa did not return confirmation URL")
-                    label = YOO_DIRECT_METHODS[method]["label"]
-                    msg = await application.bot.send_message(
-                        chat_id=user_id,
-                        text=(
-                            f"‚≠ê –¢–∞—Ä–∏—Ñ {tier.upper()} –Ω–∞ {months} –º–µ—Å.\n"
-                            f"–°–ø–æ—Å–æ–±: {label}. –ù–∞–∂–º–∏—Ç–µ –∫–Ω–æ–ø–∫—É –¥–ª—è –æ–ø–ª–∞—Ç—ã; –ø–æ—Å–ª–µ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–∏—è –ø–æ–¥–ø–∏—Å–∫–∞ –∞–∫—Ç–∏–≤–∏—Ä—É–µ—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏."
-                        ),
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(f"{label} ‚Äî –ø–µ—Ä–µ–π—Ç–∏ –∫ –æ–ø–ª–∞—Ç–µ", url=pay_url)],
-                            [InlineKeyboardButton("–î—Ä—É–≥–æ–π —Å–ø–æ—Å–æ–± –æ–ø–ª–∞—Ç—ã", callback_data=f"plan:{tier}")],
-                        ]),
-                    )
-                    kv_set(
-                        f"yoo:pending:{payment_id}",
-                        json.dumps({"user_id": user_id, "tier": tier, "months": months, "method": method}, ensure_ascii=False),
-                    )
-                    simple_context = types.SimpleNamespace(bot=application.bot)
-                    application.create_task(
-                        _poll_yoo_subscription_payment(simple_context, msg.chat.id, msg.message_id, user_id, payment_id, tier, months)
-                    )
-                    result = {"ok": True, "url": pay_url, "payment_id": payment_id, "kind": "subscription"}
-
-                elif typ in ("topup_rub", "rub_topup", "buy_credits", "credit_pack"):
-                    requested_rub = int(purchase.get("amount") or purchase.get("rub") or 0)
-                    requested_credits = int(purchase.get("credits") or 0)
-                    resolved = _credit_pack_resolve(requested_credits, requested_rub)
-                    if not resolved:
-                        raise ValueError("Unknown credit package")
-                    credits, amount_rub = resolved
-                    pay = await _yoo_create_credit_payment(user_id, credits, amount_rub, method)
-                    payment_id = str(pay.get("id") or "")
-                    conf = pay.get("confirmation") or {}
-                    pay_url = str(conf.get("confirmation_url") or conf.get("confirmation_data") or conf.get("external_url") or "")
-                    if not payment_id or not pay_url:
-                        raise RuntimeError("YooKassa did not return confirmation URL")
-                    label = YOO_DIRECT_METHODS[method]["label"]
-                    msg = await application.bot.send_message(
-                        chat_id=user_id,
-                        text=(
-                            f"ü™ô –ü–∞–∫–µ—Ç: {credits} –∫—Ä–µ–¥–∏—Ç–æ–≤ –∑–∞ {amount_rub} ‚ÇΩ.\n"
-                            f"–°–ø–æ—Å–æ–±: {label}. –ü–æ—Å–ª–µ –æ–ø–ª–∞—Ç—ã –∫—Ä–µ–¥–∏—Ç—ã –Ω–∞—á–∏—Å–ª—è—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏."
-                        ),
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(f"{label} ‚Äî –ø–µ—Ä–µ–π—Ç–∏ –∫ –æ–ø–ª–∞—Ç–µ", url=pay_url)],
-                            [InlineKeyboardButton("–î—Ä—É–≥–∏–µ –ø–∞–∫–µ—Ç—ã", callback_data="topup")],
-                        ]),
-                    )
-                    kv_set(
-                        f"yoo:credit_pending:{payment_id}",
-                        json.dumps({"user_id": user_id, "credits": credits, "amount_rub": amount_rub, "method": method}, ensure_ascii=False),
-                    )
-                    simple_context = types.SimpleNamespace(bot=application.bot)
-                    application.create_task(
-                        _poll_yoo_credit_payment(simple_context, msg.chat.id, msg.message_id, user_id, payment_id, credits, amount_rub)
-                    )
-                    result = {"ok": True, "url": pay_url, "payment_id": payment_id, "kind": "credits"}
-                else:
-                    raise ValueError("Unknown purchase type")
-
-                self.set_status(200)
-                self.finish(json.dumps(result, ensure_ascii=False))
-            except ValueError as exc:
-                log.warning("WebApp checkout rejected: %s", exc)
-                self.set_status(400)
-                self.finish(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
-            except Exception as exc:
-                log.exception("WebApp checkout bridge failed: %s", exc)
-                self.set_status(500)
-                message = str(exc)[:500] if YOO_DEBUG_PAY_ERRORS else "–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å –æ–ø–ª–∞—Ç—É"
-                self.finish(json.dumps({"ok": False, "error": message}, ensure_ascii=False))
-
-    class CheckoutWebhookApp(tornado.web.Application):
-        def __init__(self, webhook_path, bot, update_queue, secret_token=None):
-            shared = {"bot": bot, "update_queue": update_queue, "secret_token": secret_token}
-            handlers = [
-                (rf"{webhook_path}/?", TelegramHandler, shared),
-                (r"/webapp/checkout/?", CheckoutBridgeHandler),
-                (r"/healthz/?", HealthBridgeHandler),
-                (r"/?", RootBridgeHandler),
-            ]
-            super().__init__(handlers)
-
-        def log_request(self, handler):
-            status = handler.get_status()
-            if status >= 400:
-                log.warning("HTTP %s %s %s", status, handler.request.method, handler.request.uri)
-
-    class HealthBridgeHandler(tornado.web.RequestHandler):
-        async def get(self):
-            self.set_header("Content-Type", "application/json; charset=utf-8")
-            self.finish(json.dumps({"ok": True, "version": PATCH_VERSION}, ensure_ascii=False))
-
-        async def head(self):
-            self.set_status(204)
-            self.finish()
-
-    class RootBridgeHandler(tornado.web.RequestHandler):
-        async def get(self):
-            self.set_header("Content-Type", "application/json; charset=utf-8")
-            self.finish(json.dumps({"ok": True, "service": "Neyro-Bot", "version": PATCH_VERSION}, ensure_ascii=False))
-
-        async def head(self):
-            self.set_status(204)
-            self.finish()
-
-    ptb_updater.WebhookAppClass = CheckoutWebhookApp
-    log.info("WebApp checkout/menu bridge installed: %s/webapp/checkout", PUBLIC_URL.rstrip("/"))
-    return True
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ CallbackQuery (–≤—Å—ë –æ—Å—Ç–∞–ª—å–Ω–æ–µ) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-_pending_actions = {}
-
-def _new_aid() -> str:
-    return uuid.uuid4().hex[:12]
-
-async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    data = (q.data or "").strip()
-    try:
-        # Presentation/Catalog Studio v86
-        if data.startswith("ps:"):
-            try:
-                await _presentation_studio_get().handle_callback(update, context)
-            except Exception as e:
-                # PresentationStudio already persists state and reports stage-specific errors.
-                # Do not leak this into the bot-wide generic callback/error messages.
-                log.exception("Presentation callback failed locally: %s", e)
-            return
-
-        # Persistent virtual chats
-        if data == "chat:list":
-            await q.answer()
-            await cmd_chats(update, context)
-            return
-        if data == "chat:new":
-            await q.answer()
-            await cmd_newchat(update, context)
-            return
-        if data.startswith("chat:open:"):
-            await q.answer()
-            try: cid = int(data.split(":", 2)[2])
-            except Exception: cid = 0
-            if not cid or not _chat_set_active(q.from_user.id, q.message.chat_id, cid):
-                await q.message.reply_text("–ß–∞—Ç –Ω–µ –Ω–∞–π–¥–µ–Ω.")
-                return
-            _clear_transient_flows(context)
-            title = next((x["title"] for x in _chat_list(q.from_user.id, q.message.chat_id) if x["id"] == cid), "–ß–∞—Ç")
-            await q.message.reply_text(f"‚ñ∂Ô∏è –ß–∞—Ç ¬´{title}¬ª –≤—ã–±—Ä–∞–Ω. –ü—Ä–æ–¥–æ–ª–∂–∞–π—Ç–µ —Ä–∞–∑–≥–æ–≤–æ—Ä.", reply_markup=main_kb)
-            return
-        if data.startswith("chat:history:"):
-            await q.answer()
-            parts = data.split(":")
-            try: cid = int(parts[2]); page = int(parts[3]) if len(parts) > 3 else 0
-            except Exception: cid, page = 0, 0
-            if cid:
-                await _send_chat_history(update, context, cid, page)
-            return
-        if data.startswith("chat:rename:"):
-            await q.answer()
-            try: cid = int(data.split(":", 2)[2])
-            except Exception: cid = 0
-            if cid:
-                context.user_data["awaiting_chat_rename"] = cid
-                await q.message.reply_text("‚úèÔ∏è –û—Ç–ø—Ä–∞–≤—å—Ç–µ –Ω–æ–≤–æ–µ –Ω–∞–∑–≤–∞–Ω–∏–µ —á–∞—Ç–∞ –æ–¥–Ω–∏–º —Å–æ–æ–±—â–µ–Ω–∏–µ–º (–¥–æ 60 —Å–∏–º–≤–æ–ª–æ–≤).")
-            return
-        if data.startswith("chat:delete_confirm:"):
-            await q.answer()
-            try: cid = int(data.split(":", 2)[2])
-            except Exception: cid = 0
-            if cid and _chat_delete(q.from_user.id, q.message.chat_id, cid):
-                await q.message.reply_text("üóë –ß–∞—Ç –∏ –µ–≥–æ –∏—Å—Ç–æ—Ä–∏—è —É–¥–∞–ª–µ–Ω—ã.", reply_markup=_chat_list_kb(q.from_user.id, q.message.chat_id))
-            else:
-                await q.message.reply_text("–ß–∞—Ç –Ω–µ –Ω–∞–π–¥–µ–Ω.")
-            return
-        if data.startswith("chat:delete:"):
-            await q.answer()
-            try: cid = int(data.split(":", 2)[2])
-            except Exception: cid = 0
-            await q.message.reply_text(
-                "–£–¥–∞–ª–∏—Ç—å —ç—Ç–æ—Ç —á–∞—Ç –≤–º–µ—Å—Ç–µ —Å–æ –≤—Å–µ–π –∏—Å—Ç–æ—Ä–∏–µ–π?",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("–î–∞, —É–¥–∞–ª–∏—Ç—å", callback_data=f"chat:delete_confirm:{cid}")],
-                    [InlineKeyboardButton("–û—Ç–º–µ–Ω–∞", callback_data="chat:list")],
-                ]),
-            )
-            return
-
-        if data == "pricing:list":
-            await q.answer()
-            await q.message.reply_text(
-                _pricing_catalog_text(),
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("‚ûï –ü–æ–ø–æ–ª–Ω–∏—Ç—å –±–∞–ª–∞–Ω—Å", callback_data="topup")]]),
-            )
-            return
-
-        # TOPUP –º–µ–Ω—é
-        if data == "topup":
-            await q.answer()
-            await _send_topup_menu(update, context)
-            return
-
-        # TOPUP RUB
-        if data.startswith("topup:rub:"):
-            await q.answer()
-            try:
-                amount_rub = int((data.split(":", 2)[-1] or "0").strip() or "0")
-            except Exception:
-                amount_rub = 0
-            resolved = _credit_pack_resolve(0, amount_rub)
-            if not resolved:
-                await q.message.reply_text("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π –ø–∞–∫–µ—Ç –∫—Ä–µ–¥–∏—Ç–æ–≤. –û—Ç–∫—Ä–æ–π—Ç–µ –º–µ–Ω—é –ø–æ–ø–æ–ª–Ω–µ–Ω–∏—è –∑–∞–Ω–æ–≤–æ.")
-                return
-            credits, amount_rub = resolved
-            ok = await _send_invoice_rub(
-                f"{credits} –∫—Ä–µ–¥–∏—Ç–æ–≤",
-                f"–ü–æ–ø–æ–ª–Ω–µ–Ω–∏–µ –±–∞–ª–∞–Ω—Å–∞ Neyro-Bot: {credits} –∫—Ä–µ–¥–∏—Ç–æ–≤.",
-                amount_rub,
-                f"topup:{credits}:{amount_rub}",
-                update,
-            )
-            await q.answer("–í—ã—Å—Ç–∞–≤–ª—è—é —Å—á—ë—Ç‚Ä¶" if ok else "–ù–µ —É–¥–∞–ª–æ—Å—å –≤—ã—Å—Ç–∞–≤–∏—Ç—å —Å—á—ë—Ç", show_alert=not ok)
-            return
-
-        # TOPUP CRYPTO
-        if data.startswith("topup:crypto:"):
-            await q.answer()
-            if not CRYPTO_PAY_API_TOKEN:
-                await q.message.reply_text("–ù–∞—Å—Ç—Ä–æ–π—Ç–µ CRYPTO_PAY_API_TOKEN –¥–ª—è –æ–ø–ª–∞—Ç—ã —á–µ—Ä–µ–∑ CryptoBot.")
-                return
-            try:
-                usd = float((data.split(":", 2)[-1] or "0").strip() or "0")
-            except Exception:
-                usd = 0.0
-            if usd <= 0.0:
-                await q.message.reply_text("–ù–µ–≤–µ—Ä–Ω–∞—è —Å—É–º–º–∞.")
-                return
-            inv_id, pay_url, usd_amount, asset = await _crypto_create_invoice(usd, asset="USDT", description="Wallet top-up")
-            if not inv_id or not pay_url:
-                await q.message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å —Å—á—ë—Ç –≤ CryptoBot. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –ø–æ–∑–∂–µ.")
-                return
-            msg = await update.effective_message.reply_text(
-                f"–û–ø–ª–∞—Ç–∏—Ç–µ —á–µ—Ä–µ–∑ CryptoBot: {usd_amount:.2f} {asset} ‚Üí {_credits_fmt_from_usd(usd_amount)}.\n–ü–æ—Å–ª–µ –æ–ø–ª–∞—Ç—ã –∫—Ä–µ–¥–∏—Ç—ã –ø–æ–ø–æ–ª–Ω—è—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("üí† CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton("üîé –ü—Ä–æ–≤–µ—Ä–∏—Ç—å", callback_data=f"crypto:check:{inv_id}")]
-                ])
-            )
-            context.application.create_task(_poll_crypto_invoice(
-                context, msg.chat_id, msg.message_id, update.effective_user.id, inv_id, usd_amount
-            ))
-            return
-
-        if data.startswith("crypto:check:"):
-            await q.answer()
-            inv_id = data.split(":", 2)[-1]
-            inv = await _crypto_get_invoice(inv_id)
-            if not inv:
-                await q.message.reply_text("–ù–µ –Ω–∞—à—ë–ª —Å—á—ë—Ç. –°–æ–∑–¥–∞–π—Ç–µ –Ω–æ–≤—ã–π.")
-                return
-            st = (inv.get("status") or "").lower()
-            if st == "paid":
-                usd_amount = float(inv.get("amount", 0.0))
-                if (inv.get("asset") or "").upper() == "TON":
-                    usd_amount *= TON_USD_RATE
-                _wallet_total_add(update.effective_user.id, usd_amount)
-                await q.message.reply_text(f"üí≥ –û–ø–ª–∞—Ç–∞ –ø–æ–ª—É—á–µ–Ω–∞. –ù–∞—á–∏—Å–ª–µ–Ω–æ: {_credits_fmt_from_usd(usd_amount)}.")
-            elif st == "active":
-                await q.answer("–ü–ª–∞—Ç—ë–∂ –µ—â—ë –Ω–µ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥—ë–Ω", show_alert=True)
-            else:
-                await q.message.reply_text(f"–°—Ç–∞—Ç—É—Å —Å—á—ë—Ç–∞: {st}")
-            return
-
-        # –ü–æ–¥–ø–∏—Å–∫–∞: –≤—ã–±–æ—Ä —Å–ø–æ—Å–æ–±–∞
-        if data.startswith("buy:"):
-            await q.answer()
-            _, tier, months = data.split(":", 2)
-            months = int(months)
-            desc = f"–ü–æ–¥–ø–∏—Å–∫–∞ {tier.upper()} –Ω–∞ {months} –º–µ—Å."
-            await q.message.reply_text(
-                f"{desc}\n–í—ã–±–µ—Ä–∏—Ç–µ —Å–ø–æ—Å–æ–± –æ–ø–ª–∞—Ç—ã:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("üí≥ –ö–∞—Ä—Ç–æ–π –ÆKassa", callback_data=f"buyinv:{tier}:{months}")],
-                    [InlineKeyboardButton("ü™ô –° –∫—Ä–µ–¥–∏—Ç–Ω–æ–≥–æ –±–∞–ª–∞–Ω—Å–∞", callback_data=f"buywallet:{tier}:{months}")],
-                ])
-            )
-            return
-
-        # –ü–æ–¥–ø–∏—Å–∫–∞ —á–µ—Ä–µ–∑ –ÆKassa direct API –∏–∑ —Å—Ç–∞—Ä–æ–≥–æ buy-–º–µ–Ω—é
-        if data.startswith("buyyoo:"):
-            await q.answer("–°–æ–∑–¥–∞—é —Å—Å—ã–ª–∫—É –Ω–∞ –æ–ø–ª–∞—Ç—É‚Ä¶")
-            try:
-                _, m, tier, months = data.split(":", 3)
-                months = int(months)
-                method_map = {"sbp": "yoo_sbp", "sberpay": "yoo_sberpay", "tpay": "yoo_tpay", "mirpay": "yoo_mirpay"}
-                method_key = method_map.get(m)
-                if not method_key:
-                    await q.message.reply_text("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π —Å–ø–æ—Å–æ–± –æ–ø–ª–∞—Ç—ã.")
-                    return
-                if not _yoo_direct_configured():
-                    await q.message.reply_text("‚ö†Ô∏è –ë—ã—Å—Ç—Ä–∞—è –æ–ø–ª–∞—Ç–∞ –ÆKassa –ø–æ–∫–∞ –Ω–µ –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∞: –Ω—É–∂–Ω—ã YOO_SHOP_ID/YOO_SECRET_KEY –∏–ª–∏ Secret File yookassa.env —Å YK_ID/YK_KEY.")
-                    return
-                pay = await _yoo_create_direct_payment(update.effective_user.id, tier, months, method_key)
-                payment_id = str(pay.get("id") or "")
-                conf = pay.get("confirmation") or {}
-                pay_url = conf.get("confirmation_url") or conf.get("confirmation_data") or conf.get("external_url") or ""
-                if not pay_url:
-                    raise RuntimeError(f"YooKassa did not return confirmation url: {pay}")
-                label = YOO_DIRECT_METHODS[method_key]["label"]
-                msg = await q.message.reply_text(
-                    f"–ü–æ–¥–ø–∏—Å–∫–∞ {tier.upper()} –Ω–∞ {months} –º–µ—Å.\n–°–ø–æ—Å–æ–± –æ–ø–ª–∞—Ç—ã: {label}\n–û—Ç–∫—Ä–æ–π—Ç–µ —Å—Å—ã–ª–∫—É –¥–ª—è –æ–ø–ª–∞—Ç—ã:",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"{label} ‚Äî –æ–ø–ª–∞—Ç–∏—Ç—å", url=pay_url)]])
-                )
-                kv_set(f"yoo:pending:{payment_id}", json.dumps({"user_id": update.effective_user.id, "tier": tier, "months": months, "method": method_key}, ensure_ascii=False))
-                context.application.create_task(_poll_yoo_subscription_payment(context, msg.chat_id, msg.message_id, update.effective_user.id, payment_id, tier, months))
-            except Exception as e:
-                log.exception("buyyoo payment failed: %s", e)
-                err = str(e)[:700]
-                user_msg = "‚ö†Ô∏è –ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å –æ–ø–ª–∞—Ç—É –ÆKassa. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –¥—Ä—É–≥–æ–π —Å–ø–æ—Å–æ–±."
-                if YOO_DEBUG_PAY_ERRORS:
-                    user_msg += "\n\n–î–∏–∞–≥–Ω–æ—Å—Ç–∏–∫–∞ –ÆKassa: " + err
-                await q.message.reply_text(user_msg)
-            return
-
-        # –ü–æ–¥–ø–∏—Å–∫–∞ —á–µ—Ä–µ–∑ –ÆKassa
-        if data.startswith("buyinv:"):
-            await q.answer()
-            _, tier, months = data.split(":", 2)
-            months = int(months)
-            payload, amount_rub, title = _plan_payload_and_amount(tier, months)
-            desc = f"–û—Ñ–æ—Ä–º–ª–µ–Ω–∏–µ –ø–æ–¥–ø–∏—Å–∫–∏ {tier.upper()} –Ω–∞ {months} –º–µ—Å."
-            ok = await _send_invoice_rub(title, desc, amount_rub, payload, update)
-            if not ok:
-                await q.answer("–ù–µ —É–¥–∞–ª–æ—Å—å –≤—ã—Å—Ç–∞–≤–∏—Ç—å —Å—á—ë—Ç", show_alert=True)
-            return
-
-        # –ü–æ–¥–ø–∏—Å–∫–∞ —Å–ø–∏—Å–∞–Ω–∏–µ–º –∏–∑ –∫—Ä–µ–¥–∏—Ç–Ω–æ–≥–æ –±–∞–ª–∞–Ω—Å–∞
-        if data.startswith("buywallet:"):
-            await q.answer()
-            _, tier, months = data.split(":", 2)
-            months = int(months)
-            amount_rub = _plan_rub(tier, {1: "month", 3: "quarter", 12: "year"}[months])
-            need_usd = _credits_to_usd(amount_rub)
-            if _wallet_total_take(update.effective_user.id, need_usd):
-                until = activate_subscription_with_tier(update.effective_user.id, tier, months)
-                await q.message.reply_text(
-                    f"‚úÖ –ü–æ–¥–ø–∏—Å–∫–∞ {tier.upper()} –∞–∫—Ç–∏–≤–∏—Ä–æ–≤–∞–Ω–∞ –¥–æ {until.strftime('%Y-%m-%d')}.\n"
-                    f"–°–ø–∏—Å–∞–Ω–æ —Å –±–∞–ª–∞–Ω—Å–∞: {int(round(_usd_to_credits(need_usd)))} –∫—Ä."
-                )
-            else:
-                await q.message.reply_text(
-                    "–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ —Å—Ä–µ–¥—Å—Ç–≤ –Ω–∞ –µ–¥–∏–Ω–æ–º –±–∞–ª–∞–Ω—Å–µ.\n–ü–æ–ø–æ–ª–Ω–∏—Ç–µ –±–∞–ª–∞–Ω—Å –∏ –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("‚ûï –ü–æ–ø–æ–ª–Ω–∏—Ç—å –±–∞–ª–∞–Ω—Å", callback_data="topup")]])
-                )
-            return
-
-        # –í—ã–±–æ—Ä –¥–≤–∏–∂–∫–∞
-        if data.startswith("engine:"):
-            await q.answer()
-            engine = data.split(":", 1)[1]
-            if engine == "luma" and LUMA_TEMP_DISABLED:
-                await q.message.reply_text("‚ö†Ô∏è Luma –≤—Ä–µ–º–µ–Ω–Ω–æ –æ—Ç–∫–ª—é—á–µ–Ω–∞ –∏ —Å–∫—Ä—ã—Ç–∞ –∏–∑ –º–µ–Ω—é. –î–ª—è video –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏–ª–∏ Runway.")
-                return
-            if engine == "midjourney":
-                context.user_data["awaiting_midjourney_prompt"] = True
-                await q.message.reply_text(
-                    ENGINE_INFO_TEXT["midjourney"] +
-                    f"\n\n–°—Ç–æ–∏–º–æ—Å—Ç—å –æ–¥–Ω–æ–π –≥–µ–Ω–µ—Ä–∞—Ü–∏–∏: {_retail_credits(MIDJOURNEY_UNIT_COST_USD)} –∫—Ä. –ù–∞–ø–∏—à–∏—Ç–µ –ø—Ä–æ–º–ø—Ç —Å–ª–µ–¥—É—é—â–∏–º —Å–æ–æ–±—â–µ–Ω–∏–µ–º –∏–ª–∏ –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ /mj <–æ–ø–∏—Å–∞–Ω–∏–µ>."
-                )
-                return
-            if engine in ENGINE_INFO_TEXT:
-                price_suffix = ""
-                if engine == "images":
-                    price_suffix = f"\n\n–¶–µ–Ω–∞ –≥–µ–Ω–µ—Ä–∞—Ü–∏–∏: {_retail_credits(IMG_COST_USD)} –∫—Ä."
-                elif engine == "runway":
-                    price_suffix = f"\n\n–¶–µ–Ω–∞ Gen-4.5: {_video_price_credits('runway', 5)} –∫—Ä. –∑–∞ 5 —Å–µ–∫."
-                elif engine == "sora":
-                    price_suffix = f"\n\n–¶–µ–Ω–∞ Sora 2: {_video_price_credits('sora', 5)} –∫—Ä. –∑–∞ 5 —Å–µ–∫."
-                elif engine == "kling":
-                    price_suffix = f"\n\n–¶–µ–Ω–∞ Kling: {_video_price_credits('kling', 5)} –∫—Ä. –∑–∞ 5 —Å–µ–∫."
-                elif engine == "suno":
-                    price_suffix = f"\n\n–¶–µ–Ω–∞ –æ–¥–Ω–æ–π –≥–µ–Ω–µ—Ä–∞—Ü–∏–∏: {_retail_credits(SUNO_COST_USD)} –∫—Ä."
-                await q.message.reply_text(ENGINE_INFO_TEXT[engine] + price_suffix, disable_web_page_preview=True)
-                return
-            username = (update.effective_user.username or "")
-            if engine == "runway":
-                await q.message.reply_text(
-                    "‚úÖ Runway –¥–æ—Å—Ç—É–ø–µ–Ω –¥–ª—è –≤–∏–¥–µ–æ –ø–æ —Ç–µ–∫—Å—Ç—É –∏ –¥–ª—è –æ–∂–∏–≤–ª–µ–Ω–∏—è —Ñ–æ—Ç–æ.\n"
-                    "–î–ª—è –æ–∂–∏–≤–ª–µ–Ω–∏—è –∑–∞–≥—Ä—É–∑–∏—Ç–µ —Ñ–æ—Ç–æ–≥—Ä–∞—Ñ–∏—é –∏ –Ω–∞–∂–º–∏—Ç–µ ‚ú® –û–∂–∏–≤–∏—Ç—å (Runway) –∏–ª–∏ –æ—Ç–ø—Ä–∞–≤—å—Ç–µ —Ñ–æ—Ç–æ —Å –ø–æ–¥–ø–∏—Å—å—é: "
-                    "¬´–æ–∂–∏–≤–∏ —Ñ–æ—Ç–æ: –ª—ë–≥–∫–∞—è —É–ª—ã–±–∫–∞, –¥–≤–∏–∂–µ–Ω–∏–µ –∫–∞–º–µ—Ä—ã, 5 —Å–µ–∫—É–Ω–¥, 9:16¬ª.\n\n"
-                    "–î–ª—è —Å–æ–∑–¥–∞–Ω–∏—è –≤–∏–¥–µ–æ –ø–æ —Ç–µ–∫—Å—Ç—É/–≥–æ–ª–æ—Å—É –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏–ª–∏ Runway."
-                )
-                return
-            if is_unlimited(update.effective_user.id, username):
-                await q.message.reply_text(
-                    f"‚úÖ –î–≤–∏–∂–æ–∫ ¬´{engine}¬ª –¥–æ—Å—Ç—É–ø–µ–Ω –±–µ–∑ –æ–≥—Ä–∞–Ω–∏—á–µ–Ω–∏–π.\n"
-                    f"–î–ª—è text‚Üívideo –¥–æ—Å—Ç—É–ø–Ω—ã Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏ Runway."
-                )
-                return
-
-            if engine in ("gpt", "stt_tts", "midjourney", "sora", "kling"):
-                await q.message.reply_text(
-                    f"‚úÖ –í—ã–±—Ä–∞–Ω ¬´{engine}¬ª. –û—Ç–ø—Ä–∞–≤—å—Ç–µ –∑–∞–ø—Ä–æ—Å —Ç–µ–∫—Å—Ç–æ–º/—Ñ–æ—Ç–æ. "
-                    f"–î–ª—è –≤–∏–¥–µ–æ –Ω–∞–ø–∏—à–∏—Ç–µ: ¬´—Å–æ–∑–¥–∞–π –≤–∏–¥–µ–æ ‚Ä¶ 5 —Å–µ–∫—É–Ω–¥ 16:9¬ª ‚Äî —è –ø—Ä–µ–¥–ª–æ–∂—É Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏ Runway."
-                )
-                return
-
-            est_cost = IMG_COST_USD if engine == "images" else (0.40 if engine == "luma" else max(1.0, RUNWAY_UNIT_COST_USD))
-            map_engine = {"images": "img", "luma": "luma", "runway": "runway"}[engine]
-            ok, offer = _can_spend_or_offer(update.effective_user.id, username, map_engine, est_cost)
-
-            if ok:
-                await q.message.reply_text(
-                    "‚úÖ –î–æ—Å—Ç—É–ø–Ω–æ. " +
-                    ("–ó–∞–ø—É—Å—Ç–∏—Ç–µ: /img –∫–æ—Ç –≤ –æ—á–∫–∞—Ö" if engine == "images"
-                     else "–î–ª—è –≤–∏–¥–µ–æ –ø–æ —Ç–µ–∫—Å—Ç—É –¥–æ—Å—Ç—É–ø–Ω—ã Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏ Runway.")
-                )
-                return
-
-            if offer == "ASK_SUBSCRIBE":
-                await q.message.reply_text(
-                    "–î–ª—è —ç—Ç–æ–≥–æ –¥–≤–∏–∂–∫–∞ –Ω—É–∂–Ω–∞ –∞–∫—Ç–∏–≤–Ω–∞—è –ø–æ–¥–ø–∏—Å–∫–∞ –∏–ª–∏ –µ–¥–∏–Ω—ã–π –±–∞–ª–∞–Ω—Å. –û—Ç–∫—Ä–æ–π—Ç–µ /plans –∏–ª–∏ –ø–æ–ø–æ–ª–Ω–∏—Ç–µ ¬´üßæ –ë–∞–ª–∞–Ω—Å¬ª.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("‚≠ê –¢–∞—Ä–∏—Ñ—ã", web_app=WebAppInfo(url=TARIFF_URL))],
-                         [InlineKeyboardButton("‚ûï –ü–æ–ø–æ–ª–Ω–∏—Ç—å –±–∞–ª–∞–Ω—Å", callback_data="topup")]]
-                    ),
-                )
-                return
-
-            try:
-                need_usd = float(offer.split(":", 1)[-1])
-            except Exception:
-                need_usd = est_cost
-            amount_rub = _calc_oneoff_price_rub(map_engine, need_usd)
-            await q.message.reply_text(
-                f"–í–∞—à –¥–Ω–µ–≤–Ω–æ–π –ª–∏–º–∏—Ç –ø–æ ¬´{engine}¬ª –∏—Å—á–µ—Ä–ø–∞–Ω. –†–∞–∑–æ–≤–∞—è –ø–æ–∫—É–ø–∫–∞ ‚âà {amount_rub} ‚ÇΩ "
-                f"–∏–ª–∏ –ø–æ–ø–æ–ª–Ω–∏—Ç–µ –±–∞–ª–∞–Ω—Å –≤ ¬´üßæ –ë–∞–ª–∞–Ω—Å¬ª.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [InlineKeyboardButton("‚≠ê –¢–∞—Ä–∏—Ñ—ã", web_app=WebAppInfo(url=TARIFF_URL))],
-                        [InlineKeyboardButton("‚ûï –ü–æ–ø–æ–ª–Ω–∏—Ç—å –±–∞–ª–∞–Ω—Å", callback_data="topup")],
-                    ]
-                ),
-            )
-            return
-
-        # –†–µ–∂–∏–º—ã / –î–≤–∏–∂–∫–∏
-        if data == "mode:engines":
-            await q.answer()
-            await q.message.reply_text("–î–≤–∏–∂–∫–∏:", reply_markup=engines_kb())
-            return
-
-        if data.startswith("mode:set:"):
-            await q.answer()
-            mode = data.split(":")[-1]
-            mode_set(update.effective_user.id, mode)
-            if mode == "study":
-                study_sub_set(update.effective_user.id, "explain")
-                await q.message.reply_text("–†–µ–∂–∏–º ¬´–£—á—ë–±–∞¬ª –≤–∫–ª—é—á—ë–Ω. –í—ã–±–µ—Ä–∏—Ç–µ –ø–æ–¥—Ä–µ–∂–∏–º:", reply_markup=study_kb())
-            elif mode == "photo":
-                await q.message.reply_text("–†–µ–∂–∏–º ¬´–§–æ—Ç–æ¬ª –≤–∫–ª—é—á—ë–Ω. –ü—Ä–∏—à–ª–∏—Ç–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ ‚Äî –ø–æ—è–≤—è—Ç—Å—è –±—ã—Å—Ç—Ä—ã–µ –∫–Ω–æ–ø–∫–∏.", reply_markup=photo_quick_actions_kb())
-            elif mode == "docs":
-                await q.message.reply_text("–†–µ–∂–∏–º ¬´–î–æ–∫—É–º–µ–Ω—Ç—ã¬ª. –ü—Ä–∏—à–ª–∏—Ç–µ PDF/DOCX/EPUB/TXT ‚Äî —Å–¥–µ–ª–∞—é –∫–æ–Ω—Å–ø–µ–∫—Ç.")
-            elif mode == "voice":
-                await q.message.reply_text("–†–µ–∂–∏–º ¬´–ì–æ–ª–æ—Å¬ª. –û—Ç–ø—Ä–∞–≤—å—Ç–µ voice/audio. –û–∑–≤—É—á–∫–∞ –æ—Ç–≤–µ—Ç–æ–≤: /voice_on")
-            else:
-                await q.message.reply_text(f"–†–µ–∂–∏–º ¬´{mode}¬ª –∞–∫—Ç–∏–≤–∏—Ä–æ–≤–∞–Ω.")
-            return
-
-        if data.startswith("study:set:"):
-            await q.answer()
-            sub = data.split(":")[-1]
-            study_sub_set(update.effective_user.id, sub)
-            await q.message.reply_text(f"–£—á—ë–±–∞ ‚Üí {sub}. –ù–∞–ø–∏—à–∏—Ç–µ —Ç–µ–º—É/–∑–∞–¥–∞–Ω–∏–µ.", reply_markup=study_kb())
-            return
-
-        # Photo edits require cached image
-        if data.startswith("pedit:"):
-            await q.answer()
-            img = _get_cached_photo(update.effective_user.id)
-            if not img:
-                await q.message.reply_text("–°–Ω–∞—á–∞–ª–∞ –ø—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ, –∑–∞—Ç–µ–º –≤—ã–±–µ—Ä–∏—Ç–µ –¥–µ–π—Å—Ç–≤–∏–µ.", reply_markup=photo_quick_actions_kb())
-                return
-            if data == "pedit:avatar":
-                _clear_medicine_wait(context)
-                if context.user_data.get("avatar_tts_voice"):
-                    _set_avatar_wait(context)
-                    await q.message.reply_text(
-                        f"üó£ –ü–æ—Ä—Ç—Ä–µ—Ç –≤—ã–±—Ä–∞–Ω. –ì–æ–ª–æ—Å —É–∂–µ –≤—ã–±—Ä–∞–Ω: {_avatar_tts_voice_label(_avatar_tts_voice_get(context))}. –¢–µ–ø–µ—Ä—å –ø—Ä–∏—à–ª–∏—Ç–µ —Ç–µ–∫—Å—Ç, voice –∏–ª–∏ –∞—É–¥–∏–æ—Ñ–∞–π–ª MP3/WAV/M4A/AAC –¥–ª—è —Ä–µ—á–∏ –∞–≤–∞—Ç–∞—Ä–∞."
-                    )
-                else:
-                    _set_avatar_voice_choice_wait(context)
-                    await q.message.reply_text(_avatar_voice_choice_text(), reply_markup=_avatar_voice_choice_kb("act"))
-                return
-            if data == "pedit:photoclip":
-                _clear_medicine_wait(context)
-                _set_photo_clip_wait(context)
-                await q.message.reply_text("üéµ –§–æ—Ç–æ –≤—ã–±—Ä–∞–Ω–æ. –û–ø–∏—à–∏—Ç–µ —Å—Ç–∏–ª—å –≤–∏–¥–µ–æ–∫–ª–∏–ø–∞: –º—É–∑—ã–∫–∞, –¥–≤–∏–∂–µ–Ω–∏–µ, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å –∏ —Ñ–æ—Ä–º–∞—Ç 9:16/16:9.")
-                return
-            if data == "pedit:vocalclip":
-                _clear_medicine_wait(context)
-                _clear_transient_flows(context)
-                _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "vocalclip")
-                _set_vocal_clip_wait(context)
-                await q.message.reply_text(
-                    "üé§ –ü–æ—Ä—Ç—Ä–µ—Ç –≤—ã–±—Ä–∞–Ω –¥–ª—è –∫–ª–∏–ø–∞ —Å –≤–æ–∫–∞–ª–æ–º. –¢–µ–ø–µ—Ä—å –æ–ø–∏—à–∏—Ç–µ –ø–µ—Å–Ω—é/–∫–ª–∏–ø: —Å—Ç–∏–ª—å, —è–∑—ã–∫, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, –ø—Ä–∏–ø–µ–≤, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.\n\n"
-                    "–í–∞–∂–Ω–æ: —Ä–µ–∂–∏–º —Ä–∞—Å—Å—á–∏—Ç–∞–Ω –Ω–∞ –æ–¥–Ω–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞ –≤ –∫–∞–¥—Ä–µ."
-                )
-                return
-            if data == "pedit:aiselfie":
-                _clear_medicine_wait(context)
-                _set_ai_selfie_wait(context)
-                await q.message.reply_text("ü§≥ –§–æ—Ç–æ –≤—ã–±—Ä–∞–Ω–æ. –ù–∞–ø–∏—à–∏—Ç–µ —Å—Ü–µ–Ω—É: —Å –∫–∞–∫–æ–π –∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç—å—é/–ø–µ—Ä—Å–æ–Ω–∞–∂–µ–º, –≥–¥–µ, —Å—Ç–∏–ª—å, —Ñ–æ—Ä–º–∞—Ç. –ù–∞–ø—Ä–∏–º–µ—Ä: ¬´—Å–µ–ª—Ñ–∏ —Å –∏–∑–≤–µ—Å—Ç–Ω—ã–º –∞–∫—Ç—ë—Ä–æ–º –Ω–∞ –∫—Ä–∞—Å–Ω–æ–π –¥–æ—Ä–æ–∂–∫–µ, iPhone selfie, 4:5¬ª.")
-                return
-            if data == "pedit:retouch":
-                _clear_medicine_wait(context)
-                _set_retouch_wait_text(context)
-                await q.message.reply_text(
-                    "üßΩ –ß—Ç–æ —É–±—Ä–∞—Ç—å –∏ –≥–¥–µ –Ω–∞—Ö–æ–¥–∏—Ç—Å—è —ç–ª–µ–º–µ–Ω—Ç?\n\n"
-                    "–ù–∞–ø—Ä–∏–º–µ—Ä: ¬´–≤–æ–¥—è–Ω–æ–π –∑–Ω–∞–∫ —Å–ø—Ä–∞–≤–∞ —Å–Ω–∏–∑—É¬ª, ¬´–Ω–∞–¥–ø–∏—Å—å –ø–æ —Ü–µ–Ω—Ç—Ä—É¬ª, ¬´–ª–æ–≥–æ—Ç–∏–ø –≤ –ª–µ–≤–æ–º –≤–µ—Ä—Ö–Ω–µ–º —É–≥–ª—É¬ª.\n"
-                    "–û—Ç–ø—Ä–∞–≤–ª—è—è –∫–æ–º–∞–Ω–¥—É, –≤—ã –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–∞–µ—Ç–µ, —á—Ç–æ —ç—Ç–æ –≤–∞—à–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –∏–ª–∏ —É –≤–∞—Å –µ—Å—Ç—å –ø—Ä–∞–≤–æ –µ–≥–æ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å."
-                )
-                return
-            if data == "pedit:back":
-                context.user_data.pop("photo_flow", None)
-                await q.message.reply_text("–§–æ—Ç–æ-–º–∞—Å—Ç–µ—Ä—Å–∫–∞—è:", reply_markup=photo_quick_actions_kb()); return
-            if data == "pedit:removebg":
-                await _pedit_removebg(update, context, img); return
-            if data == "pedit:replacebg":
-                await q.message.reply_text("–í—ã–±–µ—Ä–∏—Ç–µ –Ω–æ–≤—ã–π —Ñ–æ–Ω. –¢–µ–ø–µ—Ä—å –∑–∞–º–µ–Ω–∞ —Ä–∞–±–æ—Ç–∞–µ—Ç –≤ 2 —ç—Ç–∞–ø–∞: 1) –∞–∫–∫—É—Ä–∞—Ç–Ω–æ –≤—ã—Ä–µ–∑–∞—é —á–µ–ª–æ–≤–µ–∫–∞/–æ–±—ä–µ–∫—Ç, 2) –ø–æ–¥—Å—Ç–∞–≤–ª—è—é –Ω–æ–≤—ã–π —Ñ–æ–Ω –±–µ–∑ –ø–µ—Ä–µ—Ä–∏—Å–æ–≤–∫–∏ —Å–∞–º–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞. –ú–æ–∂–Ω–æ –≤—ã–±—Ä–∞—Ç—å –ø—Ä–µ—Å–µ—Ç –∏–ª–∏ –Ω–∞–ø–∏—Å–∞—Ç—å —Å–≤–æ–π –≤–∞—Ä–∏–∞–Ω—Ç.", reply_markup=background_presets_kb()); return
-            if data == "pedit:faceswap":
-                await _start_faceswap_flow(update, context, img); return
-            if data.startswith("pedit:bg:"):
-                kind = data.split(":")[-1]
-                if kind == "custom":
-                    _set_replacebg_wait_text(context)
-                    await q.message.reply_text("–ù–∞–ø–∏—à–∏—Ç–µ, –∫–∞–∫–æ–π —Ñ–æ–Ω –ø–æ—Å—Ç–∞–≤–∏—Ç—å. –Ø —Å–æ—Ö—Ä–∞–Ω—é —á–µ–ª–æ–≤–µ–∫–∞ –∏–∑ –∏—Å—Ö–æ–¥–Ω–æ–≥–æ —Ñ–æ—Ç–æ, –æ—Ç–¥–µ–ª—å–Ω–æ –ø–æ–¥–±–µ—Ä—É/—Å–≥–µ–Ω–µ—Ä–∏—Ä—É—é –Ω–æ–≤—ã–π —Ñ–æ–Ω –∏ –∑–∞—Ç–µ–º –∞–∫–∫—É—Ä–∞—Ç–Ω–æ —Å–æ–±–µ—Ä—É –∏—Ç–æ–≥. –ü—Ä–∏–º–µ—Ä—ã: ¬´–¥–æ—Ä–æ–≥–æ–π –æ—Ñ–∏—Å —Å –ø–∞–Ω–æ—Ä–∞–º–Ω—ã–º–∏ –æ–∫–Ω–∞–º–∏¬ª, ¬´–ø–ª—è–∂ –°–∞–º—É–∏ –Ω–∞ –∑–∞–∫–∞—Ç–µ¬ª, ¬´–∞–ª—å–ø–∏–π—Å–∫–∏–µ –≥–æ—Ä—ã –ª–µ—Ç–æ–º¬ª, ¬´—Ç–µ—Ä—Ä–∞—Å–∞ –Ω–µ–±–æ—Å–∫—Ä—ë–±–∞ –Ω–æ—á—å—é¬ª. ")
-                    return
-                await _pedit_replacebg(update, context, img, kind=kind); return
-            if data == "pedit:outpaint":
-                await _pedit_outpaint(update, context, img); return
-            if data == "pedit:story":
-                await _pedit_storyboard(update, context, img); return
-            if data == "pedit:revive_menu":
-                context.user_data.pop("revival_custom_prompt", None)
-                context.user_data.pop("revival_identity_mode", None)
-                context.user_data.pop("awaiting_revival_custom_prompt", None)
-                await q.message.reply_text("–í—ã–±–µ—Ä–∏—Ç–µ, –∫–∞–∫ –æ–∂–∏–≤–∏—Ç—å —Ñ–æ—Ç–æ:", reply_markup=photo_revival_actions_kb())
-                return
-            if data == "pedit:revive_auto":
-                context.user_data["revival_custom_prompt"] = ""
-                context.user_data["revival_identity_mode"] = False
-                context.user_data.pop("awaiting_revival_custom_prompt", None)
-                await q.message.reply_text("‚ú® –ï—Å—Ç–µ—Å—Ç–≤–µ–Ω–Ω–æ–µ –æ–∂–∏–≤–ª–µ–Ω–∏–µ –≤—ã–±—Ä–∞–Ω–æ. –¢–µ–ø–µ—Ä—å –≤—ã–±–µ—Ä–∏—Ç–µ –¥–≤–∏–∂–æ–∫:", reply_markup=photo_revival_engines_kb())
-                return
-            if data == "pedit:revive_identity":
-                context.user_data["revival_identity_mode"] = True
-                context.user_data["revival_custom_prompt"] = (
-                    "Preserve every person's exact identity, facial geometry, age, hairstyle, skin texture and recognizable facial features from the source photo. "
-                    "Faces remain stable and recognizable throughout. Keep head rotations small and controlled; natural blinking, subtle smiles and eye movement are allowed. "
-                    "The bodies may move more freely and naturally: people may turn their bodies, stand up, walk while looking toward the camera, hug each other, clap their hands, "
-                    "or give each other a high-five when composition permits. Maintain correct anatomy, hands, clothing and person count. "
-                    "Do not replace, morph, beautify, rejuvenate or redesign faces. Avoid profile views, extreme head turns, face occlusion and identity drift. "
-                    "Natural realistic motion, documentary family-video feeling, smooth camera motion."
-                )
-                context.user_data.pop("awaiting_revival_custom_prompt", None)
-                await q.message.reply_text(
-                    "üõ° –†–µ–∂–∏–º —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∏—è –ª–∏—Ü –≤—ã–±—Ä–∞–Ω. –õ–∏—Ü–∞ –∏ –Ω–µ–±–æ–ª—å—à–∏–µ –¥–≤–∏–∂–µ–Ω–∏—è –≥–æ–ª–æ–≤—ã –±—É–¥—É—Ç –º–∞–∫—Å–∏–º–∞–ª—å–Ω–æ —Å—Ç–∞–±–∏–ª—å–Ω—ã–º–∏, "
-                    "–Ω–æ —Ç–µ–ª–∞–º —Ä–∞–∑—Ä–µ—à–µ–Ω—ã –µ—Å—Ç–µ—Å—Ç–≤–µ–Ω–Ω—ã–µ –¥–µ–π—Å—Ç–≤–∏—è ‚Äî –ø–æ–≤–æ—Ä–æ—Ç, –≤—Å—Ç–∞–≤–∞–Ω–∏–µ, —à–∞–≥–∏, –æ–±—ä—è—Ç–∏—è, —Ö–ª–æ–ø–∫–∏ –∏ –≤–∑–∞–∏–º–æ–¥–µ–π—Å—Ç–≤–∏–µ. –¢–µ–ø–µ—Ä—å –≤—ã–±–µ—Ä–∏—Ç–µ –¥–≤–∏–∂–æ–∫:",
-                    reply_markup=photo_revival_engines_kb(),
-                )
-                return
-            if data == "pedit:revive_custom":
-                context.user_data["awaiting_revival_custom_prompt"] = True
-                await q.message.reply_text(
-                    "‚úçÔ∏è –û–ø–∏—à–∏—Ç–µ, —á—Ç–æ –¥–æ–ª–∂–Ω–æ –ø—Ä–æ–∏–∑–æ–π—Ç–∏ –≤ –∫–∞–¥—Ä–µ. –ù–∞–ø—Ä–∏–º–µ—Ä: ¬´–ª–µ–≤—ã–π —á–µ–ª–æ–≤–µ–∫ –≤—Å—Ç–∞—ë—Ç –∏ –ø–æ–≤–æ—Ä–∞—á–∏–≤–∞–µ—Ç—Å—è –∫ –∫–∞–º–µ—Ä–µ, –ø—Ä–∞–≤—ã–π —É–ª—ã–±–∞–µ—Ç—Å—è, –æ—Å—Ç–∞–ª—å–Ω—ã–µ —Å–ª–µ–≥–∫–∞ –¥–≤–∏–≥–∞—é—Ç—Å—è –µ—Å—Ç–µ—Å—Ç–≤–µ–Ω–Ω–æ¬ª. –ü–æ—Å–ª–µ —ç—Ç–æ–≥–æ —è –ø—Ä–µ–¥–ª–æ–∂—É –≤—ã–±—Ä–∞—Ç—å –¥–≤–∏–∂–æ–∫."
-                )
-                return
-            if data in ("pedit:revive", "pedit:revive_runway", "pedit:revive_luma", "pedit:revive_sora", "pedit:revive_kling"):
-                engine = {
-                    "pedit:revive": "runway",
-                    "pedit:revive_runway": "runway",
-                    "pedit:revive_luma": "luma",
-                    "pedit:revive_sora": "sora",
-                    "pedit:revive_kling": "kling",
-                }.get(data, "runway")
-                if engine == "luma" and LUMA_TEMP_DISABLED:
-                    await q.message.reply_text("‚ö†Ô∏è Luma –≤—Ä–µ–º–µ–Ω–Ω–æ –æ—Ç–∫–ª—é—á–µ–Ω–∞ –∏ —Å–∫—Ä—ã—Ç–∞ –∏–∑ –º–µ–Ω—é. –ò—Å–ø–æ–ª—å–∑—É–π—Ç–µ Runway, Kling –∏–ª–∏ Sora 2 –±–µ–∑ –ª—é–¥–µ–π.")
-                    return
-                # –í–∏–¥–∏–º—ã–π ACK —Å—Ä–∞–∑—É –ø–æ—Å–ª–µ –∫–ª–∏–∫–∞. –¢—è–∂—ë–ª–∞—è –≥–µ–Ω–µ—Ä–∞—Ü–∏—è –∏–¥—ë—Ç –ø–æ—Å–ª–µ –±—ã—Å—Ç—Ä–æ–≥–æ –æ—Ç–≤–µ—Ç–∞ Telegram.
-                with contextlib.suppress(Exception):
-                    shown_engine = "Runway —Å –∞–≤—Ç–æ-—Ä–µ–∑–µ—Ä–≤–æ–º Kling" if engine == "runway" else engine.upper()
-                    suffix = " –ï—Å–ª–∏ –æ—Å–Ω–æ–≤–Ω–æ–π –¥–≤–∏–∂–æ–∫ –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω, –ø–µ—Ä–µ–∫–ª—é—á—É—Å—å –Ω–∞ —Ä–µ–∑–µ—Ä–≤–Ω—ã–π." if engine == "runway" else " –î–≤–∏–∂–æ–∫ –Ω–µ –ø–µ—Ä–µ–∫–ª—é—á–∞—é."
-                    await q.message.reply_text(f"üü¢ –ó–∞–ø—É—Å–∫–∞—é –æ–∂–∏–≤–ª–µ–Ω–∏–µ: {shown_engine}.{suffix}")
-                try:
-                    revival_prompt = (context.user_data.pop("revival_custom_prompt", "") or "").strip()
-                    context.user_data.pop("revival_identity_mode", None)
-                    await _start_photo_revival(update, context, engine=engine, img_bytes=img, prompt=revival_prompt)
-                except Exception as e:
-                    log.exception("pedit revive failed: %s", e)
-                    await update.effective_message.reply_text("‚ö†Ô∏è –ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–ø—É—Å—Ç–∏—Ç—å –æ—Å–Ω–æ–≤–Ω–æ–π –¥–≤–∏–∂–æ–∫. –û—Ç–∫—Ä–æ–π—Ç–µ –º–µ–Ω—é –∏ –ø–æ–ø—Ä–æ–±—É–π—Ç–µ Kling –∏–ª–∏ –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ –ø–æ–∑–∂–µ.")
-                return
-
-            if data == "pedit:lumaimg":
-                _mode_track_set(update.effective_user.id, "lumaimg_wait_text")
-                await q.message.reply_text("–ù–∞–ø–∏—à–∏—Ç–µ –æ–¥–Ω–æ –ø—Ä–µ–¥–ª–æ–∂–µ–Ω–∏–µ ‚Äî —á—Ç–æ —Å–≥–µ–Ω–µ—Ä–∏—Ä–æ–≤–∞—Ç—å. –Ø —Å–¥–µ–ª–∞—é –∫–∞—Ä—Ç–∏–Ω–∫—É.")
-                return
-            if data == "pedit:vision":
-                b64 = base64.b64encode(img).decode("ascii")
-                mime = sniff_image_mime(img)
-                ans = await ask_openai_vision("–û–ø–∏—à–∏ —Ñ–æ—Ç–æ –∏ —Ç–µ–∫—Å—Ç –Ω–∞ –Ω—ë–º –∫—Ä–∞—Ç–∫–æ.", b64, mime)
-                await update.effective_message.reply_text(ans or "–ì–æ—Ç–æ–≤–æ.")
-                return
-
-        if data.startswith("faceswap:target:"):
-            await q.answer()
-            try:
-                idx = int(data.split(":")[-1])
-            except Exception:
-                idx = 0
-            user_id = update.effective_user.id
-            _faceswap_target_face_index_cache[user_id] = max(0, idx)
-            await q.message.reply_text(f"‚úÖ –í—ã–±—Ä–∞–Ω–æ —Ü–µ–ª–µ–≤–æ–µ –ª–∏—Ü–æ ‚Ññ{max(0, idx) + 1}. –¢–µ–ø–µ—Ä—å –ø—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ –ª–∏—Ü–∞, –∫–æ—Ç–æ—Ä–æ–µ –Ω—É–∂–Ω–æ –≤—Å—Ç–∞–≤–∏—Ç—å.")
-            context.user_data["faceswap_flow"] = "await_source"
-            return
-
-        if data.startswith("faceswap:source:"):
-            await q.answer()
-            try:
-                idx = int(data.split(":")[-1])
-            except Exception:
-                idx = 0
-            user_id = update.effective_user.id
-            _faceswap_source_face_index_cache[user_id] = max(0, idx)
-            context.user_data["faceswap_flow"] = "ready"
-            await q.message.reply_text(f"‚úÖ –í—ã–±—Ä–∞–Ω–æ –ª–∏—Ü–æ-–∏—Å—Ç–æ—á–Ω–∏–∫ ‚Ññ{max(0, idx) + 1}. –í—ã–±–µ—Ä–∏—Ç–µ –∫–∞—á–µ—Å—Ç–≤–æ –∑–∞–º–µ–Ω—ã:", reply_markup=face_swap_quality_kb())
-            return
-
-        if data.startswith("faceswap:run:"):
-            await q.answer()
-            quality = data.split(":")[-1]
-            await _faceswap_process(update, context, quality=quality)
-            return
-
-        if data.startswith("chooseimg:"):
-            await q.answer()
-            try:
-                _, engine, aid = data.split(":", 2)
-            except Exception:
-                await q.message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Ä–∞—Å–ø–æ–∑–Ω–∞—Ç—å –≤—ã–±–æ—Ä –¥–≤–∏–∂–∫–∞.")
-                return
-            meta = _pending_actions.pop(aid, None)
-            if not meta or meta.get("kind") != "image_generate":
-                await q.answer("–ó–∞–¥–∞—á–∞ —É—Å—Ç–∞—Ä–µ–ª–∞", show_alert=True)
-                return
-            prompt = (meta.get("prompt") or "").strip()
-            if not prompt:
-                await q.message.reply_text("–ü—Ä–æ–º–ø—Ç –Ω–µ –Ω–∞–π–¥–µ–Ω. –ó–∞–ø—É—Å—Ç–∏—Ç–µ –∑–∞–ø—Ä–æ—Å –µ—â—ë —Ä–∞–∑.")
-                return
-            await _run_selected_image_generation(update, context, prompt, engine)
-            return
-
-        # –ü–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–∏–µ –≤—ã–±–æ—Ä–∞ –¥–≤–∏–∂–∫–∞ –¥–ª—è –≤–∏–¥–µ–æ
-        if data.startswith("choose:"):
-            await q.answer()
-            _, engine, aid = data.split(":", 2)
-            if engine == "luma" and LUMA_TEMP_DISABLED:
-                _pending_actions.pop(aid, None)
-                await q.message.reply_text("‚ö†Ô∏è Luma –≤—Ä–µ–º–µ–Ω–Ω–æ –æ—Ç–∫–ª—é—á–µ–Ω–∞. –í—ã–±–µ—Ä–∏—Ç–µ Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏–ª–∏ Runway.")
-                return
-            meta = _pending_actions.pop(aid, None)
-            if not meta:
-                await q.answer("–ó–∞–¥–∞—á–∞ —É—Å—Ç–∞—Ä–µ–ª–∞", show_alert=True); return
-            prompt, duration, aspect = meta["prompt"], meta["duration"], meta["aspect"]
-            engine = (engine or "").lower()
-            if engine not in ("sora", "kling", "runway"):
-                await update.effective_message.reply_text("‚ùå –î–æ—Å—Ç—É–ø–Ω—ã Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏ Runway."); return
-            if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
-                await update.effective_message.reply_text("‚ö†Ô∏è Runway –≤—Ä–µ–º–µ–Ω–Ω–æ –æ—Ç–∫–ª—é—á—ë–Ω –Ω–∞—Å—Ç—Ä–æ–π–∫–æ–π TEXT_VIDEO_ALLOW_RUNWAY."); return
-            if engine == "sora" and _prompt_likely_has_people(prompt):
-                await update.effective_message.reply_text("‚ö†Ô∏è Sora 2 –∏—Å–ø–æ–ª—å–∑—É–µ—Ç—Å—è —Ç–æ–ª—å–∫–æ –±–µ–∑ –ª—é–¥–µ–π. –î–ª—è —ç—Ç–æ–≥–æ –∑–∞–ø—Ä–æ—Å–∞ –≤—ã–±–µ—Ä–∏—Ç–µ Kling –∏–ª–∏ Runway."); return
-            provider_cost = _video_provider_cost_usd(engine, duration)
-
-            async def _start_real_render():
-                if engine == "runway":
-                    return await _run_runway_video(update, context, prompt, duration, aspect)
-                return await _run_comet_text_video(update, context, engine, prompt, duration, aspect)
-
-            await _try_pay_then_do(
-                update, context, update.effective_user.id,
-                "runway", provider_cost, _start_real_render,
-                remember_kind=f"video_{engine}",
-                remember_payload={"prompt": prompt, "duration": duration, "aspect": aspect, "engine": engine},
-            )
-            return
-
-        await q.answer("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω–∞—è –∫–æ–º–∞–Ω–¥–∞", show_alert=True)
-
-    except Exception as e:
-        msg = str(e)
-        if "query is too old" in msg.lower() or "query id is invalid" in msg.lower():
-            log.warning("stale callback ignored: %s", msg)
-            return
-        log.exception("on_cb error: %s", e)
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("‚ö†Ô∏è –ö–Ω–æ–ø–∫–∞ —É—Å—Ç–∞—Ä–µ–ª–∞. –û—Ç–∫—Ä–æ–π—Ç–µ –º–µ–Ω—é –∑–∞–Ω–æ–≤–æ –∏ –ø–æ–≤—Ç–æ—Ä–∏—Ç–µ –¥–µ–π—Å—Ç–≤–∏–µ.")
-    finally:
-        with contextlib.suppress(Exception):
-            await q.answer()
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ STT ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _mime_from_filename(fn: str) -> str:
-    fnl = (fn or "").lower()
-    if fnl.endswith((".ogg", ".oga")): return "audio/ogg"
-    if fnl.endswith(".mp3"):           return "audio/mpeg"
-    if fnl.endswith((".m4a", ".mp4")): return "audio/mp4"
-    if fnl.endswith(".wav"):           return "audio/wav"
-    if fnl.endswith(".webm"):          return "audio/webm"
-    return "application/octet-stream"
-
-async def transcribe_audio(buf: BytesIO, filename_hint: str = "audio.ogg") -> str:
-    data = buf.getvalue()
-    if DEEPGRAM_API_KEY:
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                params = {"model": "nova-2", "language": "ru", "smart_format": "true", "punctuate": "true"}
-                headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": _mime_from_filename(filename_hint)}
-                r = await client.post("https://api.deepgram.com/v1/listen", params=params, headers=headers, content=data)
-                r.raise_for_status()
-                dg = r.json()
-                text = (dg.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")).strip()
-                if text: return text
-        except Exception as e:
-            log.exception("Deepgram STT error: %s", e)
-    if oai_stt:
-        try:
-            buf2 = BytesIO(data); buf2.seek(0); setattr(buf2, "name", filename_hint)
-            tr = oai_stt.audio.transcriptions.create(model=TRANSCRIBE_MODEL, file=buf2)
-            return (tr.text or "").strip()
-        except Exception as e:
-            log.exception("Whisper STT error: %s", e)
-    return ""
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –î–∏–∞–≥–Ω–æ—Å—Ç–∏–∫–∞ –¥–≤–∏–∂–∫–æ–≤ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def cmd_diag_stt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = []
-    lines.append("üîé STT –¥–∏–∞–≥–Ω–æ—Å—Ç–∏–∫–∞:")
-    lines.append(f"‚Ä¢ OpenAI Whisper: {'‚úÖ –∫–ª–∏–µ–Ω—Ç –∞–∫—Ç–∏–≤–µ–Ω' if oai_stt else '‚ùå –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω'}")
-    lines.append(f"‚Ä¢ –ú–æ–¥–µ–ª—å Whisper: {TRANSCRIBE_MODEL}")
-    lines.append("‚Ä¢ –ü–æ–¥–¥–µ—Ä–∂–∫–∞ —Ñ–æ—Ä–º–∞—Ç–æ–≤: ogg/oga, mp3, m4a/mp4, wav, webm")
-    await update.effective_message.reply_text("\n".join(lines))
-
-async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    key_env  = os.environ.get("OPENAI_IMAGE_KEY", "").strip()
-    key_used = key_env or OPENAI_API_KEY
-    base     = IMAGES_BASE_URL
-    lines = [
-        "üß™ Images (OpenAI) –¥–∏–∞–≥–Ω–æ—Å—Ç–∏–∫–∞:",
-        f"‚Ä¢ OPENAI_IMAGE_KEY: {'‚úÖ –Ω–∞–π–¥–µ–Ω' if key_used else '‚ùå –Ω–µ—Ç'}",
-        f"‚Ä¢ BASE_URL: {base}",
-        f"‚Ä¢ MODEL: {IMAGES_MODEL}",
-    ]
-    if "openrouter" in (base or "").lower():
-        lines.append("‚ö†Ô∏è BASE_URL —É–∫–∞–∑—ã–≤–∞–µ—Ç –Ω–∞ OpenRouter ‚Äî —Ç–∞–º –Ω–µ—Ç gpt-image-1.")
-        lines.append("   –£–∫–∞–∂–∏ https://api.openai.com/v1 (–∏–ª–∏ —Å–≤–æ–π –ø—Ä–æ–∫—Å–∏) –≤ OPENAI_IMAGE_BASE_URL.")
-    await update.effective_message.reply_text("\n".join(lines))
-
-async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = [
-        f"üé¨ –í–∏–¥–µ–æ-–¥–≤–∏–∂–∫–∏ / {PATCH_VERSION}:",
-        f"‚Ä¢ Luma key: {'üö´ —Å–∫—Ä—ã—Ç–æ –≤—Ä–µ–º–µ–Ω–Ω–æ' if LUMA_TEMP_DISABLED else ('‚úÖ' if bool(LUMA_API_KEY) else '‚ùå')}  base={LUMA_BASE_URL}",
-        f"  create={LUMA_CREATE_PATH}  status={LUMA_STATUS_PATH}  model={LUMA_MODEL}",
-        f"‚Ä¢ Runway official: enabled={'‚úÖ' if RUNWAY_DIRECT_ENABLED else '‚ùå'} key={'‚úÖ' if bool(RUNWAY_API_KEY) else '‚ùå'} source={RUNWAY_KEY_SOURCE} fingerprint={runway_safe_key_fingerprint(RUNWAY_API_KEY)}",
-        f"  base={RUNWAY_BASE_URL} version={RUNWAY_API_VERSION} text={RUNWAY_TEXT_CREATE_PATH} i2v={RUNWAY_I2V_PATH}",
-        f"  uploads={RUNWAY_UPLOAD_PATH} org={RUNWAY_ORGANIZATION_PATH} tasks={RUNWAY_STATUS_PATH}",
-        f"  text_models={','.join(_runway_direct_text_model_candidates())} i2v_models={','.join(_runway_direct_i2v_model_candidates())} poll={RUNWAY_DIRECT_POLL_INTERVAL_S:.1f}-{RUNWAY_DIRECT_POLL_MAX_INTERVAL_S:.1f}s upload_attempts={RUNWAY_DIRECT_UPLOAD_ATTEMPTS}",
-        f"‚Ä¢ Comet key: {'‚úÖ' if bool(COMET_API_KEY) else '‚ùå'}  base={COMET_BASE_URL}",
-        f"  Runway/Comet create={RUNWAY_COMET_CREATE_PATH}  status={RUNWAY_COMET_STATUS_PATH}",
-        f"  Runway i2v enabled={'‚úÖ' if RUNWAY_IMAGE2VIDEO_ENABLED else '‚ùå'} models={','.join(_runway_i2v_model_candidates())} cooldown={_provider_cooldown_left('runway_i2v')}s hide_errors={'‚úÖ' if RUNWAY_HIDE_TECH_ERRORS else '‚Äî'}",
-        f"‚Ä¢ BG remove: provider={BG_PROVIDER} photoroom={'‚úÖ' if bool(PHOTOROOM_API_KEY) else '‚ùå'} local_rembg={'‚úÖ' if (LOCAL_REMBG_ENABLED and rembg_remove is not None) else '‚ùå'}",
-        f"‚Ä¢ Sora key: {'‚úÖ' if bool(SORA_API_KEY) else '‚ùå'}  model={SORA_MODEL}  create={SORA_CREATE_PATH}",
-        f"‚Ä¢ Kling key: {'‚úÖ' if bool(KLING_API_KEY) else '‚ùå'}  model={KLING_MODEL}  create={KLING_CREATE_PATH}",
-        f"‚Ä¢ Kling Avatar: create={KLING_AVATAR_CREATE_PATH}  status={KLING_AVATAR_STATUS_PATH}  mode={KLING_AVATAR_MODE}  avatar_voice_default={AVATAR_TTS_DEFAULT_VOICE} cost=${AVATAR_UNIT_COST_USD:.2f}",
-        f"‚Ä¢ Photo‚Üíclip pipeline: {'‚úÖ on' if PHOTO_CLIP_PIPELINE else '‚Äî off'}  engine={PHOTO_CLIP_VIDEO_ENGINE}  native_sound={'on' if PHOTO_CLIP_SOUND else 'off'}  mode={PHOTO_CLIP_MODE}  default={PHOTO_CLIP_DEFAULT_DURATION_S}s max={PHOTO_CLIP_MAX_DURATION_S}s mux_audio={'‚úÖ' if PHOTO_CLIP_MUX_AUDIO else '‚Äî'} cost=${PHOTO_CLIP_UNIT_COST_USD:.2f}",
-        f"‚Ä¢ ffmpeg mux: timeout={FFMPEG_MUX_TIMEOUT_S}s copy_first={'‚úÖ' if FFMPEG_MUX_COPY_FIRST else '‚Äî'} preset={FFMPEG_MUX_REENCODE_PRESET} crf={FFMPEG_MUX_CRF} scale_h={FFMPEG_MUX_SCALE_HEIGHT} fps={FFMPEG_MUX_FPS} audio={FFMPEG_MUX_AUDIO_BITRATE} max={FFMPEG_MUX_MAX_MB}MB",
-        f"‚Ä¢ Suno for photo‚Üíclip: {'‚úÖ auto' if SUNO_AUTO_FOR_PHOTO_CLIP else '‚Äî off'}  enabled={'‚úÖ' if SUNO_ENABLED else '‚Äî'} key={'‚úÖ' if bool(SUNO_API_KEY) else '‚ùå'} create={SUNO_CREATE_PATH} model={SUNO_MODEL}",
-        f"‚Ä¢ AI selfie: provider={AI_SELFIE_PROVIDER} comet_key={'on' if bool(COMET_API_KEY) else 'off'} model={COMET_IMAGE_EDIT_MODEL} fallbacks={','.join(COMET_IMAGE_EDIT_FALLBACK_MODELS)} path={COMET_IMAGE_EDIT_PATH} timeout={COMET_IMAGE_EDIT_TIMEOUT_S}s max_side={AI_SELFIE_MAX_SIDE} size={AI_SELFIE_IMAGE_SIZE} fast={AI_SELFIE_FAST_MODE} cost=${AI_SELFIE_UNIT_COST_USD:.2f}",
-        f"‚Ä¢ –ù–æ—Ä–º–∞–ª–∏–∑–∞—Ü–∏—è duration: Kling 5/10 —Å–µ–∫; Sora 4/8/12 —Å–µ–∫ –±–µ–∑ –ª—é–¥–µ–π; Runway text‚Üívideo –∏ image‚Üívideo; Luma –≤—Ä–µ–º–µ–Ω–Ω–æ —Å–∫—Ä—ã—Ç–∞",
-        f"‚Ä¢ –ü–æ–ª–ª–∏–Ω–≥ –∫–∞–∂–¥—ã–µ {VIDEO_POLL_DELAY_S:.1f} c",
-    ]
-    await update.effective_message.reply_text("\n".join(lines))
-
-async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Runway/Comet health diagnostic.
-
-    –ë–µ–∑ –∞—Ä–≥—É–º–µ–Ω—Ç–æ–≤ ‚Äî –±–µ–∑–æ–ø–∞—Å–Ω–∞—è –¥–∏–∞–≥–Ω–æ—Å—Ç–∏–∫–∞ –∫–æ–Ω—Ñ–∏–≥—É—Ä–∞—Ü–∏–∏ –∏ circuit breaker.
-    /diag_runway auth ‚Äî –±–µ–∑–æ–ø–∞—Å–Ω–æ –ø—Ä–æ–≤–µ—Ä—è–µ—Ç –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π –∫–ª—é—á –∏ API-–∫—Ä–µ–¥–∏—Ç—ã.
-    /diag_runway reset ‚Äî —Å–±—Ä–æ—Å cooldown.
-    /diag_runway test ‚Äî –ø—Ä–æ–±—É–µ—Ç —Ä–µ–∞–ª—å–Ω—É—é i2v –∑–∞–¥–∞—á—É –ø–æ –ø–æ—Å–ª–µ–¥–Ω–µ–º—É —Ñ–æ—Ç–æ.
-    """
-    args = [str(a).lower() for a in (context.args or [])]
-    if "reset" in args:
-        _provider_reset("runway_i2v")
-        _provider_reset("runway_text_comet")
-        _provider_reset("runway_direct")
-        await update.effective_message.reply_text("‚úÖ Runway provider cooldown —Å–±—Ä–æ—à–µ–Ω –¥–ª—è direct, image‚Üívideo –∏ text‚Üívideo.")
-        return
-
-    if "auth" in args:
-        ok, detail = await _runway_direct_org_info()
-        prefix = "‚úÖ –û—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π Runway API –¥–æ—Å—Ç—É–ø–µ–Ω" if ok else "‚ùå –û—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π Runway API –Ω–µ –≥–æ—Ç–æ–≤"
-        await update.effective_message.reply_text(prefix + "\n" + detail)
-        return
-
-    lines = [
-        f"üß™ Runway/Comet –¥–∏–∞–≥–Ω–æ—Å—Ç–∏–∫–∞ / {PATCH_VERSION}",
-        f"‚Ä¢ enabled: {'‚úÖ' if RUNWAY_IMAGE2VIDEO_ENABLED else '‚ùå'}  use_comet={'‚úÖ' if RUNWAY_USE_COMET else '‚Äî'}",
-        f"‚Ä¢ comet_key: {'‚úÖ' if bool(COMET_API_KEY) else '‚ùå'}  base={COMET_BASE_URL}",
-        f"‚Ä¢ create={RUNWAY_COMET_CREATE_PATH}  status={RUNWAY_COMET_STATUS_PATH}",
-        f"‚Ä¢ version={RUNWAY_API_VERSION or '2024-11-06'}",
-        f"‚Ä¢ models={', '.join(_runway_i2v_model_candidates())}",
-        f"‚Ä¢ direct_enabled: {'‚úÖ' if RUNWAY_DIRECT_ENABLED else '‚ùå'}  direct_key: {'‚úÖ' if bool(RUNWAY_API_KEY) else '‚ùå'}  direct_first={'‚úÖ' if RUNWAY_DIRECT_FIRST else '‚Äî'}",
-        f"‚Ä¢ key_source={RUNWAY_KEY_SOURCE}  fingerprint={runway_safe_key_fingerprint(RUNWAY_API_KEY)}",
-        f"‚Ä¢ official_base={RUNWAY_BASE_URL} version={RUNWAY_API_VERSION}",
-        f"‚Ä¢ official_endpoints: text={RUNWAY_TEXT_CREATE_PATH}  i2v={RUNWAY_I2V_PATH}  upload={RUNWAY_UPLOAD_PATH}  org={RUNWAY_ORGANIZATION_PATH}",
-        f"‚Ä¢ direct text models={', '.join(_runway_direct_text_model_candidates())}  i2v models={', '.join(_runway_direct_i2v_model_candidates())}",
-        f"‚Ä¢ polling={RUNWAY_DIRECT_POLL_INTERVAL_S:.1f}-{RUNWAY_DIRECT_POLL_MAX_INTERVAL_S:.1f}s  retries={RUNWAY_DIRECT_RETRY_ATTEMPTS}  upload_attempts={RUNWAY_DIRECT_UPLOAD_ATTEMPTS}  data_uri_fallback={'‚úÖ' if RUNWAY_DIRECT_DATA_URI_FALLBACK else '‚Äî'}",
-        f"‚Ä¢ hide_tech_errors={'‚úÖ' if RUNWAY_HIDE_TECH_ERRORS else '‚Äî'}  fallback_kling={'‚úÖ' if RUNWAY_TEXT_FALLBACK_KLING and RUNWAY_AUTO_FALLBACK_KLING else '‚Äî'}",
-        f"‚Ä¢ i2v_cooldown={_provider_cooldown_left('runway_i2v')}s  text_cooldown={_provider_cooldown_left('runway_text_comet')}s",
-    ]
-    if _provider_last_error.get("runway_i2v"):
-        lines.append("‚Ä¢ last_error=" + _provider_last_error.get("runway_i2v", "")[:700])
-
-    if "test" not in args:
-        lines.append("")
-        lines.append("–ü—Ä–æ–≤–µ—Ä–∏—Ç—å –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π –∫–ª—é—á –∏ API-–∫—Ä–µ–¥–∏—Ç—ã: /diag_runway auth")
-        lines.append("–î–ª—è —Ä–µ–∞–ª—å–Ω–æ–≥–æ —Ç–µ—Å—Ç–∞ –æ—Ç–ø—Ä–∞–≤—å—Ç–µ —á–∏—Å—Ç–æ–µ —Ñ–æ—Ç–æ, –∑–∞—Ç–µ–º: /diag_runway test")
-        await update.effective_message.reply_text("\n".join(lines)[:3900])
-        return
-
-    img = _get_cached_photo(update.effective_user.id)
-    if not img:
-        lines.append("‚ùå –ù–µ—Ç –ø–æ—Å–ª–µ–¥–Ω–µ–≥–æ —Ñ–æ—Ç–æ. –°–Ω–∞—á–∞–ª–∞ –æ—Ç–ø—Ä–∞–≤—å—Ç–µ —Ñ–æ—Ç–æ –≤ –±–æ—Ç, –∑–∞—Ç–µ–º /diag_runway test")
-        await update.effective_message.reply_text("\n".join(lines)[:3900])
-        return
-
-    await update.effective_message.reply_text("\n".join(lines)[:2500] + "\n\n‚ñ∂Ô∏è –ó–∞–ø—É—Å–∫–∞—é —Ä–µ–∞–ª—å–Ω—ã–π –∫–æ—Ä–æ—Ç–∫–∏–π —Ç–µ—Å—Ç –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω–æ–≥–æ Runway. –≠—Ç–æ —Å–ø–∏—à–µ—Ç API-–∫—Ä–µ–¥–∏—Ç—ã, –µ—Å–ª–∏ –∑–∞–¥–∞—á–∞ –±—É–¥–µ—Ç –ø—Ä–∏–Ω—è—Ç–∞.")
-    if not RUNWAY_API_KEY:
-        await update.effective_message.reply_text("‚ùå RUNWAYML_API_SECRET –Ω–µ –Ω–∞–π–¥–µ–Ω. –î–æ–±–∞–≤—å—Ç–µ –∫–ª—é—á –≤ Render Secret File runway.env –∏–ª–∏ –≤ Environment.")
-        return
-    ok = await _run_runway_direct_animate_photo(
-        update, context, img,
-        "subtle portrait animation, keep identity, small natural motion",
-        5, "9:16",
-    )
-    if ok:
-        await update.effective_message.reply_text("‚úÖ Official Runway test: –∑–∞–¥–∞—á–∞ –æ—Ç—Ä–∞–±–æ—Ç–∞–ª–∞.")
-    else:
-        await update.effective_message.reply_text("‚ö†Ô∏è Official Runway test –Ω–µ –ø—Ä–æ—à—ë–ª. –í—ã–ø–æ–ª–Ω–∏—Ç–µ /diag_runway auth –∏ –ø—Ä–æ–≤–µ—Ä—å—Ç–µ API-–∫—Ä–µ–¥–∏—Ç—ã –≤ Developer Portal.")
-
-async def cmd_provider_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Short provider health dashboard for production checks."""
-    args = [str(a).lower() for a in (context.args or [])]
-    if "reset" in args:
-        for name in ("runway_i2v",):
-            _provider_reset(name)
-        await update.effective_message.reply_text("‚úÖ Provider cooldown —Å–±—Ä–æ—à–µ–Ω.")
-        return
-    lines = [
-        f"üìä Provider status / {PATCH_VERSION}",
-        f"‚Ä¢ Runway i2v: {'‚úÖ available' if _provider_is_available('runway_i2v') else 'üü° cooldown'} / cooldown={_provider_cooldown_left('runway_i2v')}s / fails={_provider_fail_counts.get('runway_i2v', 0)}",
-        f"‚Ä¢ Runway models: {', '.join(_runway_i2v_model_candidates())}",
-        f"‚Ä¢ Kling fallback: {'‚úÖ' if (RUNWAY_AUTO_FALLBACK_KLING and bool(COMET_API_KEY)) else '‚ùå'} / path={KLING_CREATE_PATH}",
-        f"‚Ä¢ Hide tech errors: {'‚úÖ' if RUNWAY_HIDE_TECH_ERRORS else '‚ùå'}",
-        f"‚Ä¢ I2V preprocess: {'‚úÖ' if I2V_PREPROCESS_ENABLED else '‚ùå'} / max_side={I2V_MAX_SOURCE_SIDE}",
-    ]
-    if _provider_last_error.get("runway_i2v"):
-        lines.append("‚Ä¢ Runway last_error: " + _provider_last_error.get("runway_i2v", "")[:900])
-    await update.effective_message.reply_text("\n".join(lines)[:3900])
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ MIME –¥–ª—è –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–π ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def sniff_image_mime(data: bytes) -> str:
-    if not data or len(data) < 12:
-        return "application/octet-stream"
-    b = data[:12]
-    if b.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if b[0:3] == b"\xff\xd8\xff":
-        return "image/jpeg"
-    if b[0:4] == b"RIFF" and b[8:12] == b"WEBP":
-        return "image/webp"
-    return "application/octet-stream"
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ü–∞—Ä—Å –æ–ø—Ü–∏–π –≤–∏–¥–µ–æ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-_ASPECTS = {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"}
-
-def parse_video_opts(text: str) -> tuple[int, str]:
-    tl = (text or "").lower()
-    m = re.search(r"(\d+)\s*(?:—Å–µ–∫|—Å)\b", tl)
-    duration = int(m.group(1)) if m else LUMA_DURATION_S
-    duration = max(3, min(20, duration))
-    asp = None
-    for a in _ASPECTS:
-        if a in tl:
-            asp = a
-            break
-    aspect = asp or (LUMA_ASPECT if LUMA_ASPECT in _ASPECTS else "16:9")
-    return duration, aspect
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Luma video ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def _run_luma_video(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    prompt: str,
-    duration_s: int,
-    aspect: str,
-):
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            base = await _pick_luma_base(client)
-            create_url = f"{base}{LUMA_CREATE_PATH}"
-
-            headers = {
-                "Authorization": f"Bearer {LUMA_API_KEY}",
-                "Accept": "application/json",
-            }
-            payload = {
-                "model": LUMA_MODEL,
-                "prompt": prompt,
-                "duration": f"{duration_s}s",
-                "aspect_ratio": aspect,
-            }
-
-            # —Å–æ–∑–¥–∞—ë–º –∑–∞–¥–∞—á—É
-            r = await client.post(create_url, headers=headers, json=payload)
-            if r.status_code >= 400:
-                await update.effective_message.reply_text(
-                    f"‚ö†Ô∏è Luma –æ—Ç–∫–ª–æ–Ω–∏–ª–∞ –∑–∞–¥–∞—á—É ({r.status_code})."
-                )
-                return
-
-            data = r.json() or {}
-            rid = data.get("id") or data.get("generation_id")
-            if not rid:
-                log.error("Luma: no generation id in response: %s", data)
-                await update.effective_message.reply_text("‚ö†Ô∏è Luma –Ω–µ –≤–µ—Ä–Ω—É–ª–∞ id –≥–µ–Ω–µ—Ä–∞—Ü–∏–∏.")
-                return
-
-            await update.effective_message.reply_text(
-                "‚è≥ Luma —Ä–µ–Ω–¥–µ—Ä–∏—Ç‚Ä¶ –Ø —Å–æ–æ–±—â—É, –∫–æ–≥–¥–∞ –≤–∏–¥–µ–æ –±—É–¥–µ—Ç –≥–æ—Ç–æ–≤–æ."
-            )
-
-            status_url = f"{base}{LUMA_STATUS_PATH}".format(id=rid)
-            started = time.time()
-
-            while True:
-                rs = await client.get(status_url, headers=headers)
-                try:
-                    js = rs.json() or {}
-                except Exception:
-                    js = {}
-
-                st = (js.get("state") or js.get("status") or "").lower()
-
-                if st in ("completed", "succeeded", "finished", "ready"):
-                    # --- –ù–û–í–´–ô –Ω–∞–¥—ë–∂–Ω—ã–π –ø–æ–∏—Å–∫ —Å—Å—ã–ª–∫–∏ –Ω–∞ –≤–∏–¥–µ–æ ---
-                    url = None
-                    assets = js.get("assets")
-
-                    def _extract_urls_from_assets(a):
-                        urls = []
-                        if isinstance(a, str):
-                            urls.append(a)
-                        elif isinstance(a, dict):
-                            # —Ç–∏–ø–∏—á–Ω—ã–π —Ñ–æ—Ä–º–∞—Ç: {"video": "https://..."} –∏–ª–∏ {"video": {"url": "..."}}
-                            for v in a.values():
-                                urls.extend(_extract_urls_from_assets(v))
-                        elif isinstance(a, (list, tuple)):
-                            for item in a:
-                                urls.extend(_extract_urls_from_assets(item))
-                        return urls
-
-                    if assets is not None:
-                        for u in _extract_urls_from_assets(assets):
-                            if isinstance(u, str) and u.startswith("http"):
-                                url = u
-                                break
-
-                    # –∑–∞–ø–∞—Å–Ω—ã–µ –∫–ª—é—á–∏ –Ω–∞ –≤—Å—è–∫–∏–π —Å–ª—É—á–∞–π
-                    if not url:
-                        for k in ("output_url", "video_url", "url"):
-                            val = js.get(k)
-                            if isinstance(val, str) and val.startswith("http"):
-                                url = val
-                                break
-
-                    if not url:
-                        log.error("Luma: –æ—Ç–≤–µ—Ç –±–µ–∑ —Å—Å—ã–ª–∫–∏ –Ω–∞ –≤–∏–¥–µ–æ: %s", js)
-                        await update.effective_message.reply_text(
-                            "‚ùå Luma: –æ—Ç–≤–µ—Ç –ø—Ä–∏—à—ë–ª –±–µ–∑ —Å—Å—ã–ª–∫–∏ –Ω–∞ –≤–∏–¥–µ–æ."
-                        )
-                        return
-
-                    # –°–∫–∞—á–∏–≤–∞–µ–º –∏ –æ—Ç–ø—Ä–∞–≤–ª—è–µ–º —Ñ–∞–π–ª –∫–∞–∫ –≤–∏–¥–µ–æ
-                    try:
-                        v = await client.get(url, timeout=120.0)
-                        v.raise_for_status()
-                        bio = BytesIO(v.content)
-                        bio.name = "luma.mp4"
-                        await update.effective_message.reply_video(
-                            InputFile(bio),
-                            caption="üé¨ Luma: –≥–æ—Ç–æ–≤–æ ‚úÖ",
-                        )
-                    except Exception:
-                        # –µ—Å–ª–∏ –Ω–µ –ø–æ–ª—É—á–∏–ª–æ—Å—å —Å–∫–∞—á–∞—Ç—å ‚Äî —Ö–æ—Ç—è –±—ã –¥–∞—ë–º –ø—Ä—è–º—É—é —Å—Å—ã–ª–∫—É
-                        await update.effective_message.reply_text(
-                            f"üé¨ Luma: –≥–æ—Ç–æ–≤–æ ‚úÖ\n{url}"
-                        )
-                    return
-
-                if st in ("failed", "error", "canceled", "cancelled"):
-                    log.error("Luma returned error state: %s", js)
-                    await update.effective_message.reply_text("‚ùå Luma: –æ—à–∏–±–∫–∞ —Ä–µ–Ω–¥–µ—Ä–∞.")
-                    return
-
-                if time.time() - started > LUMA_MAX_WAIT_S:
-                    await update.effective_message.reply_text(
-                        "‚åõ Luma: –≤—Ä–µ–º—è –æ–∂–∏–¥–∞–Ω–∏—è –≤—ã—à–ª–æ."
-                    )
-                    return
-
-                await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
-    except Exception as e:
-        log.exception("Luma error: %s", e)
-        await update.effective_message.reply_text(
-            "‚ùå Luma: –Ω–µ —É–¥–∞–ª–æ—Å—å –∑–∞–ø—É—Å—Ç–∏—Ç—å/–ø–æ–ª—É—á–∏—Ç—å –≤–∏–¥–µ–æ."
-        )
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Runway video ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _dedupe_models(*items: str) -> list[str]:
-    out: list[str] = []
-    for m in items:
-        m = (m or "").strip()
-        if m and m not in out:
-            out.append(m)
-    return out
-
-def _runway_i2v_model_candidates() -> list[str]:
-    """–ú–æ–¥–µ–ª–∏ Runway –¥–ª—è –æ–∂–∏–≤–ª–µ–Ω–∏—è —Ñ–æ—Ç–æ/image‚Üívideo.
-
-    v77: —Å–ø–∏—Å–æ–∫ –±–µ—Ä—ë—Ç—Å—è –∏–∑ RUNWAY_IMAGE2VIDEO_MODELS. –ü–µ—Ä–≤—ã–º —Å—Ç–æ–∏—Ç –ø—É–±–ª–∏—á–Ω—ã–π
-    –∞–ª–∏–∞—Å Comet runwayml-image-to-video, –∑–∞—Ç–µ–º backend-–∞–ª–∏–∞—Å—ã. gen4.5 –Ω–∞–º–µ—Ä–µ–Ω–Ω–æ
-    –Ω–µ –≤–∫–ª—é—á—ë–Ω –≤ –¥–µ—Ñ–æ–ª—Ç, –ø–æ—Ç–æ–º—É —á—Ç–æ –≤ –ª–æ–≥–∞—Ö —á–∞—Å—Ç–æ –æ—Ç–≤–µ—á–∞–ª model_not_found/no available channel.
-    """
-    env_models = [m.strip() for m in (RUNWAY_IMAGE2VIDEO_MODELS_ENV or "").split(",") if m.strip()]
-    return _dedupe_models(*(env_models or ["runwayml-image-to-video", "gen4_turbo", "gen3a_turbo", "veo3.1_fast", "veo3.1", "veo3"]))
-
-def _runway_direct_text_model_candidates() -> list[str]:
-    """Official Runway text‚Üívideo candidates. Gen-4.5 supports text-only input."""
-    env_models = [m.strip() for m in (RUNWAY_DIRECT_TEXT_MODELS_ENV or "").split(",") if m.strip()]
-    return _dedupe_models(*(env_models or [RUNWAY_TEXT_MODEL, "gen4.5"]))
-
-
-def _runway_direct_i2v_model_candidates() -> list[str]:
-    """Official Runway image‚Üívideo candidates only; no Comet aliases or Veo models."""
-    env_models = [m.strip() for m in (RUNWAY_DIRECT_I2V_MODELS_ENV or "").split(",") if m.strip()]
-    return _dedupe_models(*(env_models or ["gen4.5", "gen4_turbo"]))
-
-
-def _runway_comet_text_model_candidates() -> list[str]:
-    """Small fail-fast Comet candidate list; no payload/model storm when the channel is unavailable."""
-    env_models = [m.strip() for m in (RUNWAY_COMET_TEXT_MODELS_ENV or "").split(",") if m.strip()]
-    return _dedupe_models(*(env_models or ["runway-video", "gen4.5"]))
-
-
-def _runway_direct_base_candidates() -> list[str]:
-    """
-    Direct Runway API —Å–µ–π—á–∞—Å —Ä–∞–±–æ—Ç–∞–µ—Ç —á–µ—Ä–µ–∑ https://api.dev.runwayml.com/v1/... .
-    –ï—Å–ª–∏ –≤ ENV –æ—Å—Ç–∞–ª—Å—è —Å—Ç–∞—Ä—ã–π base_url, –≤—Å—ë —Ä–∞–≤–Ω–æ –¥–æ–±–∞–≤–ª—è–µ–º –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π base –∫–∞–∫ fallback.
-    """
-    raw = (RUNWAY_BASE_URL or "").strip().rstrip("/")
-    out: list[str] = []
-    for base in (raw, "https://api.dev.runwayml.com"):
-        if not base:
-            continue
-        if base.endswith("/v1"):
-            base = base[:-3].rstrip("/")
-        if base and base not in out:
-            out.append(base)
-    return out
-
-
-def _runway_direct_headers() -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {RUNWAY_API_KEY}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "X-Runway-Version": RUNWAY_API_VERSION or "2024-11-06",
-    }
-
-
-def _runway_direct_ratio(aspect: str) -> str:
-    """Current Runway Gen-4.5/Gen-4 Turbo landscape or portrait ratio."""
-    return "720:1280" if (aspect or "").strip() in {"9:16", "3:4", "4:5"} else "1280:720"
-
-
-def _runway_official_client() -> RunwayOfficialClient:
-    return RunwayOfficialClient(
-        RUNWAY_API_KEY,
-        base_url=RUNWAY_BASE_URL,
-        api_version=RUNWAY_API_VERSION or "2024-11-06",
-        retry_attempts=RUNWAY_DIRECT_RETRY_ATTEMPTS,
-        retry_base_s=RUNWAY_DIRECT_RETRY_BASE_S,
-        poll_interval_s=RUNWAY_DIRECT_POLL_INTERVAL_S,
-        poll_max_interval_s=RUNWAY_DIRECT_POLL_MAX_INTERVAL_S,
-        upload_attempts=RUNWAY_DIRECT_UPLOAD_ATTEMPTS,
-        data_uri_fallback=RUNWAY_DIRECT_DATA_URI_FALLBACK,
-    )
-
-
-def _runway_user_error_text(exc: Exception) -> str:
-    if isinstance(exc, RunwayTaskTimeout):
-        return "‚åõ Runway –Ω–µ –∑–∞–≤–µ—Ä—à–∏–ª –∑–∞–¥–∞—á—É –∑–∞ –æ—Ç–≤–µ–¥—ë–Ω–Ω–æ–µ –≤—Ä–µ–º—è. –ö—Ä–µ–¥–∏—Ç—ã –±–æ—Ç–∞ –Ω–µ —Å–ø–∏—Å–∞–Ω—ã."
-    if isinstance(exc, RunwayAPIError):
-        code = (exc.failure_code or "").upper()
-        text = str(exc).lower()
-        if code.startswith("SAFETY") or "safety" in text or "moderation" in text:
-            return "‚ö†Ô∏è Runway –æ—Ç–∫–ª–æ–Ω–∏–ª –∑–∞–ø—Ä–æ—Å –ø–æ –ø—Ä–∞–≤–∏–ª–∞–º –±–µ–∑–æ–ø–∞—Å–Ω–æ—Å—Ç–∏. –ò–∑–º–µ–Ω–∏—Ç–µ —Å—Ü–µ–Ω—É –∏–ª–∏ —Ñ–æ—Ä–º—É–ª–∏—Ä–æ–≤–∫—É ‚Äî –∫—Ä–µ–¥–∏—Ç—ã –Ω–µ —Å–ø–∏—Å–∞–Ω—ã."
-        if exc.status_code in {401, 403}:
-            return "‚ùå Runway –Ω–µ –ø—Ä–∏–Ω—è–ª API-–∫–ª—é—á. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ RUNWAYML_API_SECRET –≤ Render Environment –∏–ª–∏ Secret File runway.env."
-        if exc.status_code == 402 or "credit" in text and ("insufficient" in text or "not enough" in text):
-            return "‚ùå –ù–∞ API-–±–∞–ª–∞–Ω—Å–µ Runway –Ω–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –∫—Ä–µ–¥–∏—Ç–æ–≤. –ü–æ–ø–æ–ª–Ω–∏—Ç–µ Billing –≤ Runway Developer Portal."
-        if exc.status_code == 429:
-            return "‚ö†Ô∏è –î–æ—Å—Ç–∏–≥–Ω—É—Ç –ª–∏–º–∏—Ç Runway –¥–ª—è —Ç–µ–∫—É—â–µ–≥–æ API-tier. –ó–∞–¥–∞—á–∞ –±—É–¥–µ—Ç –Ω–∞–ø—Ä–∞–≤–ª–µ–Ω–∞ –≤ —Ä–µ–∑–µ—Ä–≤–Ω—ã–π –¥–≤–∏–∂–æ–∫."
-        if exc.status_code == 400:
-            return "‚ö†Ô∏è Runway –Ω–µ –ø—Ä–∏–Ω—è–ª –ø–∞—Ä–∞–º–µ—Ç—Ä—ã –∑–∞–¥–∞—á–∏. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å, —Ñ–æ—Ä–º–∞—Ç –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è –∏ —Ç–µ–∫—Å—Ç –∑–∞–ø—Ä–æ—Å–∞."
-    return "‚ö†Ô∏è –û—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π Runway –≤—Ä–µ–º–µ–Ω–Ω–æ –Ω–µ –æ—Ç–≤–µ—Ç–∏–ª. –ò—Å–ø–æ–ª—å–∑—É—é —Ä–µ–∑–µ—Ä–≤–Ω—ã–π –º–∞—Ä—à—Ä—É—Ç."
-
-
-async def _runway_request_with_retries(client: httpx.AsyncClient, method: str, url: str, *, headers: dict, json_body: dict | None = None):
-    """Retry only transient Runway responses with exponential backoff and jitter."""
-    transient = {429, 502, 503, 504}
-    last = None
-    for attempt in range(RUNWAY_DIRECT_RETRY_ATTEMPTS):
-        try:
-            r = await client.request(method, url, headers=headers, json=json_body)
-            last = r
-            if r.status_code not in transient or attempt >= RUNWAY_DIRECT_RETRY_ATTEMPTS - 1:
-                return r
-            delay = RUNWAY_DIRECT_RETRY_BASE_S * (2 ** attempt)
-            delay += random.uniform(0, delay * 0.5)
-            log.warning("Runway transient HTTP %s; retry %s/%s in %.1fs", r.status_code, attempt + 1, RUNWAY_DIRECT_RETRY_ATTEMPTS, delay)
-            await asyncio.sleep(delay)
-        except (httpx.TimeoutException, httpx.TransportError) as e:
-            last = e
-            if attempt >= RUNWAY_DIRECT_RETRY_ATTEMPTS - 1:
-                raise
-            delay = RUNWAY_DIRECT_RETRY_BASE_S * (2 ** attempt)
-            delay += random.uniform(0, delay * 0.5)
-            log.warning("Runway transport error; retry %s/%s in %.1fs: %s", attempt + 1, RUNWAY_DIRECT_RETRY_ATTEMPTS, delay, e)
-            await asyncio.sleep(delay)
-    return last
-
-
-async def _runway_direct_org_info() -> tuple[bool, str]:
-    """Read-only official Runway authentication, organization and credit check."""
-    if not (RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY):
-        return False, "RUNWAYML_API_SECRET –Ω–µ –Ω–∞–π–¥–µ–Ω –Ω–∏ –≤ Render Environment, –Ω–∏ –≤ Secret Files."
-    format_ok, format_note = runway_key_format_hint(RUNWAY_API_KEY)
-    source_name = RUNWAY_KEY_SOURCE
-    try:
-        async with _runway_official_client() as rw:
-            org = await rw.organization(endpoint=RUNWAY_ORGANIZATION_PATH)
-        payload = org.get("data") if isinstance(org.get("data"), dict) else org
-        credits = next((payload.get(k) for k in ("creditBalance", "credits", "balance", "availableCredits") if k in payload), None)
-        tier = next((payload.get(k) for k in ("tier", "usageTier", "rateLimitTier") if k in payload), None)
-        parts = [
-            "–∫–ª—é—á –ø—Ä–∏–Ω—è—Ç",
-            f"–ø–µ—Ä–µ–º–µ–Ω–Ω–∞—è: {source_name}",
-            f"fingerprint: {runway_safe_key_fingerprint(RUNWAY_API_KEY)}",
-            format_note,
-        ]
-        if credits is not None:
-            parts.append(f"API-–∫—Ä–µ–¥–∏—Ç—ã: {credits}")
-        if tier is not None:
-            parts.append(f"tier: {tier}")
-        return True, "\n".join(parts)
-    except Exception as e:
-        log.warning("Runway organization auth failed: %s", e)
-        return False, _runway_user_error_text(e) + f"\nFingerprint: {runway_safe_key_fingerprint(RUNWAY_API_KEY)}"
-
-# v76 provider circuit breaker / health cache
-_provider_fail_counts: dict[str, int] = {}
-_provider_cooldown_until: dict[str, float] = {}
-_provider_last_error: dict[str, str] = {}
-
-def _provider_is_available(name: str) -> bool:
-    return time.time() >= float(_provider_cooldown_until.get(name, 0) or 0)
-
-def _provider_cooldown_left(name: str) -> int:
-    return max(0, int(float(_provider_cooldown_until.get(name, 0) or 0) - time.time()))
-
-def _provider_mark_success(name: str) -> None:
-    _provider_fail_counts[name] = 0
-    _provider_cooldown_until.pop(name, None)
-    _provider_last_error.pop(name, None)
-
-def _provider_mark_failure(name: str, reason: str = "") -> None:
-    _provider_last_error[name] = (reason or "")[:700]
-    n = int(_provider_fail_counts.get(name, 0) or 0) + 1
-    _provider_fail_counts[name] = n
-    if n >= max(1, RUNWAY_PROVIDER_FAIL_THRESHOLD):
-        _provider_cooldown_until[name] = time.time() + max(30, RUNWAY_PROVIDER_COOLDOWN_S)
-
-def _provider_reset(name: str) -> None:
-    _provider_fail_counts.pop(name, None)
-    _provider_cooldown_until.pop(name, None)
-    _provider_last_error.pop(name, None)
-
-def _is_runway_unavailable_text(s: str) -> bool:
-    t = (s or "").lower()
-    needles = (
-        "model_not_found", "no available channel", "invalid url",
-        "Ê≠§Ê®°ÂûãÂ∑≤‰∏ãÊû∂", "model has been removed", "model is removed",
-        "not found", "channel", "invalid_request_error"
-    )
-    return any(x in t for x in needles)
-
-def _looks_like_screenshot_or_bad_i2v_source(img_bytes: bytes) -> str:
-    """Soft heuristic only: warn user if input looks like a phone screenshot/frame."""
-    if Image is None:
-        return ""
-    try:
-        im = Image.open(BytesIO(img_bytes)).convert("RGB")
-        w, h = im.size
-        # –û—á–µ–Ω—å –≤—ã—Å–æ–∫–∏–π/—à–∏—Ä–æ–∫–∏–π –∫–∞–¥—Ä —á–∞—â–µ –≤—Å–µ–≥–æ —è–≤–ª—è–µ—Ç—Å—è —Å–∫—Ä–∏–Ω—à–æ—Ç–æ–º —Ç–µ–ª–µ—Ñ–æ–Ω–∞/—ç–∫—Ä–∞–Ω–∞.
-        if h > w * 1.55 or w > h * 1.55:
-            return "–§–æ—Ç–æ –ø–æ—Ö–æ–∂–µ –Ω–∞ —Å–∫—Ä–∏–Ω—à–æ—Ç/–∫–∞–¥—Ä —Å –±–æ–ª—å—à–∏–º–∏ –ø–æ–ª—è–º–∏. –î–ª—è –ª—É—á—à–µ–≥–æ –æ–∂–∏–≤–ª–µ–Ω–∏—è –∑–∞–≥—Ä—É–∑–∏—Ç–µ —á–∏—Å—Ç—ã–π –ø–æ—Ä—Ç—Ä–µ—Ç –±–µ–∑ –∏–Ω—Ç–µ—Ä—Ñ–µ–π—Å–∞ —Ç–µ–ª–µ—Ñ–æ–Ω–∞ –∏ —á—ë—Ä–Ω—ã—Ö —Ä–∞–º–æ–∫."
-        # –ë–æ–ª—å—à–∏–µ —Ç—ë–º–Ω—ã–µ –æ–±–ª–∞—Å—Ç–∏ –ø–æ –∫—Ä–∞—è–º ‚Äî —á–∞—Å—Ç—ã–π –ø—Ä–∏–∑–Ω–∞–∫ —Ñ–æ—Ç–æ —ç–∫—Ä–∞–Ω–∞/–≤–∏–¥–µ–æ-–ø–ª–µ–µ—Ä–∞.
-        try:
-            small = im.resize((64, 64))
-            px = list(small.getdata())
-            dark = sum(1 for r, g, b in px if max(r, g, b) < 32) / max(1, len(px))
-            if dark > 0.35:
-                return "–í –∫–∞–¥—Ä–µ –º–Ω–æ–≥–æ —á—ë—Ä–Ω—ã—Ö –ø–æ–ª–µ–π/—ç–ª–µ–º–µ–Ω—Ç–æ–≤ –∏–Ω—Ç–µ—Ä—Ñ–µ–π—Å–∞. –ú–æ–¥–µ–ª—å –º–æ–∂–µ—Ç –æ–∂–∏–≤–∏—Ç—å —Ä–∞–º–∫—É –∏–ª–∏ —ç–∫—Ä–∞–Ω –≤–º–µ—Å—Ç–æ —á–µ–ª–æ–≤–µ–∫–∞. –õ—É—á—à–µ –∑–∞–≥—Ä—É–∑–∏—Ç—å —á–∏—Å—Ç–æ–µ —Ñ–æ—Ç–æ."
-        except Exception:
-            pass
-    except Exception:
-        return ""
-    return ""
-
-def _prepare_i2v_source_image(img_bytes: bytes, aspect: str = "9:16") -> tuple[bytes, str]:
-    """
-    Production-safe preparation for image‚Üívideo providers.
-    –í–æ–∑–≤—Ä–∞—â–∞–µ—Ç (bytes, note). –ù–µ –¥–µ–ª–∞–µ—Ç –∞–≥—Ä–µ—Å—Å–∏–≤–Ω—ã–π face-crop, —á—Ç–æ–±—ã –Ω–µ –∏—Å–ø–æ—Ä—Ç–∏—Ç—å —Ñ–æ—Ç–æ,
-    –Ω–æ —É–±–∏—Ä–∞–µ—Ç —è–≤–Ω—ã–µ —á—ë—Ä–Ω—ã–µ —Ä–∞–º–∫–∏ –∏ –Ω–æ—Ä–º–∞–ª–∏–∑—É–µ—Ç —Ä–∞–∑–º–µ—Ä/—Ñ–æ—Ä–º–∞—Ç.
-    """
-    if not I2V_PREPROCESS_ENABLED or Image is None:
-        return img_bytes, ""
-    try:
-        im = Image.open(BytesIO(img_bytes)).convert("RGB")
-        w, h = im.size
-        note_parts = []
-
-        # 1) –£–¥–∞–ª–µ–Ω–∏–µ —è–≤–Ω—ã—Ö —á—ë—Ä–Ω—ã—Ö —Ä–∞–º–æ–∫. –ù–µ —Ç—Ä–æ–≥–∞–µ–º, –µ—Å–ª–∏ crop —Å–ª–∏—à–∫–æ–º –º–∞–ª/—Ä–∏—Å–∫–æ–≤–∞–Ω–Ω—ã–π.
-        if I2V_AUTOCROP_BLACK_BORDERS and min(w, h) >= 200:
-            gray = im.convert("L")
-            # –ü–∏–∫—Å–µ–ª–∏ —è—Ä—á–µ –ø–æ—Ä–æ–≥–∞ —Å—á–∏—Ç–∞–µ–º —Å–æ–¥–µ—Ä–∂–∏–º—ã–º.
-            mask = gray.point(lambda p: 255 if p > 28 else 0)
-            bbox = mask.getbbox()
-            if bbox:
-                x1, y1, x2, y2 = bbox
-                bw, bh = x2 - x1, y2 - y1
-                area_ratio = (bw * bh) / max(1, w * h)
-                # crop —Ç–æ–ª—å–∫–æ –µ—Å–ª–∏ –æ–Ω –∑–∞–º–µ—Ç–Ω–æ —É–±–∏—Ä–∞–µ—Ç –∫—Ä–∞—è, –Ω–æ –Ω–µ –ø—Ä–µ–≤—Ä–∞—â–∞–µ—Ç –∫–∞—Ä—Ç–∏–Ω–∫—É –≤ –∫—Ä–æ—à–µ—á–Ω—ã–π —Ñ—Ä–∞–≥–º–µ–Ω—Ç
-                margin_removed = (x1 > w * 0.04 or y1 > h * 0.04 or x2 < w * 0.96 or y2 < h * 0.96)
-                if margin_removed and 0.20 <= area_ratio <= 0.96:
-                    pad = int(max(bw, bh) * 0.04)
-                    x1 = max(0, x1 - pad); y1 = max(0, y1 - pad)
-                    x2 = min(w, x2 + pad); y2 = min(h, y2 + pad)
-                    im = im.crop((x1, y1, x2, y2))
-                    w, h = im.size
-                    note_parts.append("—É–±—Ä–∞–ª –ª–∏—à–Ω–∏–µ —Ç—ë–º–Ω—ã–µ –ø–æ–ª—è")
-
-        # 2) –ù–æ—Ä–º–∞–ª–∏–∑–∞—Ü–∏—è —Ä–∞–∑–º–µ—Ä–∞, —á—Ç–æ–±—ã –Ω–µ –æ—Ç–ø—Ä–∞–≤–ª—è—Ç—å –æ–≥—Ä–æ–º–Ω—ã–µ —Å–∫—Ä–∏–Ω—à–æ—Ç—ã –ø—Ä–æ–≤–∞–π–¥–µ—Ä–∞–º.
-        max_side = max(512, int(I2V_MAX_SOURCE_SIDE or 1280))
-        if max(w, h) > max_side:
-            im.thumbnail((max_side, max_side), getattr(Image, "Resampling", Image).LANCZOS)
-            note_parts.append(f"—Å–∂–∞–ª –∏—Å—Ö–æ–¥–Ω–∏–∫ –¥–æ {max_side}px")
-
-        out = BytesIO()
-        im.save(out, format="JPEG", quality=92, optimize=True)
-        return out.getvalue(), ", ".join(note_parts)
-    except Exception as e:
-        log.warning("i2v source preprocess failed: %s", e)
-        return img_bytes, ""
-
-async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration_s: int, aspect: str):
-    """Production Runway text‚Üívideo: official API first, Comet second, Kling fallback.
-
-    Official route follows current Runway documentation:
-    POST /v1/text_to_video -> GET /v1/tasks/{id}.
-    For backwards compatibility only, a 404/405 can fall back to
-    /v1/image_to_video without promptImage.
-    """
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    prompt = (prompt or "").strip()
-    if not prompt:
-        await update.effective_message.reply_text("‚ùå Runway: –ø—É—Å—Ç–æ–π –∑–∞–ø—Ä–æ—Å –¥–ª—è –≤–∏–¥–µ–æ.")
-        return False
-
-    duration = max(2, min(10, int(_duration_for_engine("runway", duration_s))))
-    ratio = _runway_direct_ratio(aspect)
-    errors: list[str] = []
-    hard_stop = False
-
-    async def try_direct() -> bool:
-        nonlocal hard_stop
-        if not (RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY):
-            return False
-        try:
-            async with _runway_official_client() as rw:
-                task_id = await rw.create_text_to_video(
-                    prompt_text=prompt,
-                    model=_runway_direct_text_model_candidates()[0],
-                    ratio=ratio,
-                    duration=duration,
-                    endpoint=RUNWAY_TEXT_CREATE_PATH,
-                    compatibility_endpoint=RUNWAY_TEXT_COMPAT_PATH,
-                )
-                await update.effective_message.reply_text(
-                    f"‚è≥ Runway Gen-4.5: –∑–∞–¥–∞—á–∞ –ø—Ä–∏–Ω—è—Ç–∞ ({duration} —Å, {aspect}). –û–∂–∏–¥–∞—é —Ä–µ–∑—É–ª—å—Ç–∞—Ç‚Ä¶"
-                )
-                result = await rw.wait_for_task(task_id, timeout_s=RUNWAY_MAX_WAIT_S)
-
-            async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as dl_client:
-                await _reply_video_from_url(
-                    update, dl_client, result.first_output,
-                    "Runway text‚Üívideo ‚úÖ ¬∑ Powered by Runway",
-                    task_id=task_id,
-                )
-            _provider_mark_success("runway_direct")
-            return True
-        except RunwayAPIError as e:
-            errors.append(str(e)); _provider_mark_failure("runway_direct", str(e))
-            log.warning("Official Runway text-to-video failed: %s", e)
-            code = (e.failure_code or "").upper()
-            if code.startswith("SAFETY") or e.status_code in {400, 401, 403, 402}:
-                hard_stop = True
-                await update.effective_message.reply_text(_runway_user_error_text(e))
-            return False
-        except Exception as e:
-            errors.append(str(e)); _provider_mark_failure("runway_direct", str(e))
-            log.exception("Official Runway text route failed: %s", e)
-            return False
-
-    async def try_comet() -> bool:
-        provider_name = "runway_text_comet"
-        if not (RUNWAY_USE_COMET and COMET_API_KEY):
-            return False
-        if not _provider_is_available(provider_name):
-            log.warning("Runway text/Comet skipped: cooldown %ss", _provider_cooldown_left(provider_name))
-            return False
-        headers = {
-            "Authorization": f"Bearer {COMET_API_KEY}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "X-Runway-Version": RUNWAY_API_VERSION or "2024-11-06",
-        }
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            for model in _runway_comet_text_model_candidates():
-                payload = {"model": model, "promptText": prompt, "duration": duration, "ratio": ratio}
-                try:
-                    r = await client.post(f"{COMET_BASE_URL}{RUNWAY_COMET_CREATE_PATH}", headers=headers, json=payload)
-                    if r.status_code >= 400:
-                        err = f"Comet Runway {r.status_code}: {_api_error_preview(r)}"
-                        errors.append(err); log.warning(err)
-                        if _is_runway_unavailable_text(err) or r.status_code == 503:
-                            _provider_mark_failure(provider_name, err)
-                            break
-                        continue
-                    js = r.json() or {}
-                    ready_url = _extract_first_url(js.get("output")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
-                    if ready_url:
-                        _provider_mark_success(provider_name)
-                        await _reply_video_from_url(update, client, ready_url, "Runway/Comet text‚Üívideo ‚úÖ ¬∑ Powered by Runway")
-                        return True
-                    task_id = str(js.get("id") or js.get("task_id") or js.get("generation_id") or ((js.get("data") or {}).get("id") if isinstance(js.get("data"), dict) else "") or "").strip()
-                    if not task_id:
-                        err = f"Comet Runway: no task id: {json.dumps(js, ensure_ascii=False)[:500]}"
-                        errors.append(err); _provider_mark_failure(provider_name, err)
-                        continue
-                    await update.effective_message.reply_text("‚è≥ Runway/Comet: –∑–∞–¥–∞—á–∞ –ø—Ä–∏–Ω—è—Ç–∞, –æ–∂–∏–¥–∞—é —Ä–µ–∑—É–ª—å—Ç–∞—Ç‚Ä¶")
-                    ok = bool(await _poll_video_task_generic(
-                        update, client, headers, COMET_BASE_URL,
-                        [RUNWAY_COMET_STATUS_PATH, "/runwayml/v1/tasks/{id}", "/v1/tasks/{id}"],
-                        task_id, "Runway/Comet text‚Üívideo ¬∑ Powered by Runway", RUNWAY_MAX_WAIT_S,
-                    ))
-                    if ok:
-                        _provider_mark_success(provider_name)
-                    else:
-                        _provider_mark_failure(provider_name, "polling failed")
-                    return ok
-                except Exception as e:
-                    err = f"Comet Runway exception: {e}"
-                    errors.append(err); log.warning(err); _provider_mark_failure(provider_name, err)
-        return False
-
-    routes = (try_direct, try_comet) if RUNWAY_DIRECT_FIRST else (try_comet, try_direct)
-    for route in routes:
-        if hard_stop:
-            return False
-        try:
-            if await route():
-                return True
-        except Exception as e:
-            errors.append(str(e)); log.exception("Runway text route failed: %s", e)
-
-    if hard_stop:
-        return False
-
-    if RUNWAY_TEXT_FALLBACK_KLING and RUNWAY_AUTO_FALLBACK_KLING and COMET_API_KEY:
-        await update.effective_message.reply_text(RUNWAY_PUBLIC_FALLBACK_TEXT)
-        try:
-            return bool(await _run_comet_text_video(update, context, "kling", prompt, duration, aspect))
-        except Exception as e:
-            errors.append(f"Kling fallback: {e}"); log.exception("Runway‚ÜíKling fallback failed: %s", e)
-
-    if RUNWAY_HIDE_TECH_ERRORS:
-        await update.effective_message.reply_text(
-            "‚ö†Ô∏è Runway —Å–µ–π—á–∞—Å –Ω–µ –ø—Ä–∏–Ω—è–ª –∑–∞–¥–∞—á—É. –ö—Ä–µ–¥–∏—Ç—ã –∑–∞ –Ω–µ—É—Å–ø–µ—à–Ω—É—é –≥–µ–Ω–µ—Ä–∞—Ü–∏—é –Ω–µ —Å–ø–∏—Å—ã–≤–∞—é—Ç—Å—è. "
-            "–ü—Ä–æ–≤–µ—Ä—å—Ç–µ /diag_runway auth –∏–ª–∏ –≤—ã–±–µ—Ä–∏—Ç–µ Kling."
-        )
-    else:
-        details = "\n".join(errors[-3:]) or "API –Ω–µ –≤–µ—Ä–Ω—É–ª –ø–æ–¥—Ä–æ–±–Ω–æ—Å—Ç–∏."
-        await update.effective_message.reply_text(f"‚ùå Runway: –∑–∞–¥–∞—á–∞ –Ω–µ –≤—ã–ø–æ–ª–Ω–µ–Ω–∞.\n{details[:1600]}")
-    return False
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Image‚ÜíVideo helpers ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _api_error_preview(resp, limit: int = 900) -> str:
-    try:
-        body = json.dumps(resp.json(), ensure_ascii=False)
-    except Exception:
-        body = getattr(resp, "text", "") or ""
-    body = re.sub(r"\s+", " ", body).strip()
-    return body[:limit] if body else "–±–µ–∑ —Ç–µ–ª–∞ –æ—Ç–≤–µ—Ç–∞"
-
-
-def _sora_people_moderation_text() -> str:
-    return (
-        "‚ö†Ô∏è Sora 2 –∑–∞–±–ª–æ–∫–∏—Ä–æ–≤–∞–ª–∞ —ç—Ç–æ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –Ω–∞ –º–æ–¥–µ—Ä–∞—Ü–∏–∏, –ø–æ—Ç–æ–º—É —á—Ç–æ –Ω–∞ —Ñ–æ—Ç–æ –µ—Å—Ç—å —á–µ–ª–æ–≤–µ–∫/–ª—é–¥–∏.\n\n"
-        "–≠—Ç–æ –æ–≥—Ä–∞–Ω–∏—á–µ–Ω–∏–µ Sora/Comet, –∞ –Ω–µ –æ—à–∏–±–∫–∞ –¥–µ–ø–ª–æ—è –∏ –Ω–µ –æ—à–∏–±–∫–∞ –∫–ª—é—á–∞.\n\n"
-        "–î–ª—è –æ–∂–∏–≤–ª–µ–Ω–∏—è —Ñ–æ—Ç–æ —Å –ª—é–¥—å–º–∏ –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ:\n"
-        "‚Ä¢ ‚ú® –û–∂–∏–≤–∏—Ç—å (Runway)\n"
-        "‚Ä¢ ‚ú® –û–∂–∏–≤–∏—Ç—å (Kling)\n\n"
-        "Sora 2 –æ—Å—Ç–∞–≤–ª–µ–Ω–∞ –¥–ª—è –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–π –±–µ–∑ –ª—é–¥–µ–π: –ø—Ä–µ–¥–º–µ—Ç—ã, –∂–∏–≤–æ—Ç–Ω—ã–µ, –∑–¥–∞–Ω–∏—è, –ø–µ–π–∑–∞–∂–∏, –∏–Ω—Ç–µ—Ä—å–µ—Ä."
-    )
-
-
-def is_sora_people_moderation_error(err: object) -> bool:
-    try:
-        text = json.dumps(err, ensure_ascii=False).lower()
-    except Exception:
-        text = str(err).lower()
-    return (
-        "people-in-user-uploads" in text
-        or "blocked by our moderation system" in text
-        or ("moderation system" in text and "sora" in text)
-        or ("request is blocked" in text and "people" in text)
-    )
-
-def _extract_first_url(obj) -> str | None:
-    if isinstance(obj, str):
-        if obj.startswith("http://") or obj.startswith("https://"):
-            return obj
-        return None
-    if isinstance(obj, dict):
-        preferred = ("video", "video_url", "output_url", "url", "download_url", "file", "asset_url")
-        for k in preferred:
-            if k in obj:
-                found = _extract_first_url(obj.get(k))
-                if found:
-                    return found
-        for v in obj.values():
-            found = _extract_first_url(v)
-            if found:
-                return found
-    if isinstance(obj, (list, tuple)):
-        for item in obj:
-            found = _extract_first_url(item)
-            if found:
-                return found
-    return None
-
-
-
-def _cleanup_sent_video_keys():
-    now = time.time()
-    stale = [k for k, ts in _SENT_VIDEO_KEYS.items() if (now - ts) > VIDEO_RESULT_DEDUPE_TTL_S]
-    for k in stale:
-        _SENT_VIDEO_KEYS.pop(k, None)
-
-
-def _mark_video_sent_once(key: str) -> bool:
-    if not key:
-        return False
-    _cleanup_sent_video_keys()
-    if key in _SENT_VIDEO_KEYS:
-        return True
-    _SENT_VIDEO_KEYS[key] = time.time()
-    return False
-
-
-def _video_result_key(chat_id: int | str, task_id: str = "", url: str = "", content: bytes | None = None) -> str:
-    base = f"{chat_id}|{task_id or ''}|{url or ''}"
-    if content:
-        try:
-            digest = hashlib.sha1(content).hexdigest()
-        except Exception:
-            digest = ""
-        base += f"|{digest}"
-    return base
-
-
-def _compress_video_for_telegram_sync(video_bytes: bytes, max_mb: int = 48) -> bytes | None:
-    """Re-encode a provider MP4 to a Telegram-safe document/video size.
-    Used only as a fallback when Telegram rejects the original file or it is too large.
-    """
-    if not video_bytes:
-        return None
-    max_bytes = max(5, int(max_mb or 48)) * 1024 * 1024
-    try:
-        ffmpeg = _ffmpeg_exe()
-        with tempfile.TemporaryDirectory() as td:
-            src = os.path.join(td, "input.mp4")
-            out = os.path.join(td, "tg_safe.mp4")
-            with open(src, "wb") as f:
-                f.write(video_bytes)
-            cmd = [
-                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-                "-i", src,
-                "-vf", "scale='min(720,iw)':-2,fps=24",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "34", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "96k",
-                "-movflags", "+faststart",
-                out,
-            ]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
-            if res.returncode != 0:
-                log.warning("telegram video compress failed rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-500:])
-                return None
-            if os.path.exists(out) and os.path.getsize(out) > 1024:
-                with open(out, "rb") as f:
-                    data = f.read()
-                if len(data) <= max_bytes:
-                    return data
-                log.warning("telegram video compress too large: %s > %s", len(data), max_bytes)
-    except Exception as e:
-        log.warning("telegram video compress exception: %s", e)
-    return None
-
-async def _compress_video_for_telegram(video_bytes: bytes, max_mb: int = 48) -> bytes | None:
-    return await asyncio.to_thread(_compress_video_for_telegram_sync, video_bytes, max_mb)
-
-async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = ""):
-    """
-    –û—Ç–ø—Ä–∞–≤–ª—è–µ—Ç –û–î–ò–ù —Ä–µ–∑—É–ª—å—Ç–∞—Ç –≤ Telegram.
-    –ü–æ —É–º–æ–ª—á–∞–Ω–∏—é ‚Äî MP4 –∫–∞–∫ document, —á—Ç–æ–±—ã Telegram –Ω–µ –º–∞—Ä–∫–∏—Ä–æ–≤–∞–ª –∫–æ—Ä–æ—Ç–∫–∏–π —Ä–æ–ª–∏–∫ –∫–∞–∫ GIF.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; GPT5ProBot/1.0)",
-        "Accept": "video/mp4,video/*,*/*;q=0.8",
-    }
-
-    downloaded: bytes | None = None
-    try:
-        r = await client.get(url, headers=headers, timeout=240.0, follow_redirects=True)
-        r.raise_for_status()
-        content_type = (r.headers.get("content-type") or "").lower()
-        if not r.content or len(r.content) < 512:
-            raise RuntimeError(f"empty video response: {len(r.content)} bytes")
-        if "text/html" in content_type or "application/json" in content_type:
-            raise RuntimeError(f"not a video response: {content_type}; {r.text[:300]}")
-        downloaded = r.content
-    except Exception as e:
-        log.warning("reply_video_from_url: local download failed: %s", e)
-
-    chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
-    dedupe_key = _video_result_key(chat_id, task_id=task_id, url=url, content=downloaded)
-    if _mark_video_sent_once(dedupe_key):
-        log.info("reply_video_from_url: duplicate suppressed task_id=%s", task_id)
-        return
-
-    if downloaded:
-        # v70: for Telegram rejection/size issues, try a compact MP4 before falling back to a raw link.
-        if TELEGRAM_VIDEO_COMPRESS_ON_FAIL and len(downloaded) > max(5, int(TELEGRAM_RESULT_MAX_MB or 48)) * 1024 * 1024:
-            compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
-            if compact:
-                downloaded = compact
-        if VIDEO_RESULT_SEND_AS_DOCUMENT:
-            try:
-                bio = BytesIO(downloaded)
-                bio.name = "result.mp4"
-                await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-                return
-            except Exception as e:
-                log.warning("reply_video_from_url: document send failed: %s", e)
-        try:
-            bio = BytesIO(downloaded)
-            bio.name = "result.mp4"
-            await update.effective_message.reply_video(video=InputFile(bio), caption=caption, supports_streaming=True)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: video send failed: %s", e)
-        try:
-            bio = BytesIO(downloaded)
-            bio.name = "result.mp4"
-            await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: document send fallback failed: %s", e)
-        if TELEGRAM_VIDEO_COMPRESS_ON_FAIL:
-            compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
-            if compact and compact != downloaded:
-                try:
-                    bio = BytesIO(compact)
-                    bio.name = "result_tg_safe.mp4"
-                    await update.effective_message.reply_document(document=InputFile(bio), caption=caption + "\nüì¶ –í–∏–¥–µ–æ —Å–∂–∞—Ç–æ –¥–ª—è –æ—Ç–ø—Ä–∞–≤–∫–∏ –≤ Telegram.")
-                    return
-                except Exception as e:
-                    log.warning("reply_video_from_url: compressed document send failed: %s", e)
-
-    if not VIDEO_RESULT_SEND_AS_DOCUMENT:
-        try:
-            await update.effective_message.reply_video(video=url, caption=caption, supports_streaming=True)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: telegram URL video send failed: %s", e)
-    try:
-        await update.effective_message.reply_document(document=url, caption=caption)
-        return
-    except Exception as e:
-        log.warning("reply_video_from_url: telegram URL document send failed: %s", e)
-
-    safe_url = (url or "")[:3500]
-    await update.effective_message.reply_text(
-        f"{caption}\n‚ö†Ô∏è Telegram –Ω–µ –ø—Ä–∏–Ω—è–ª –≤–∏–¥–µ–æ—Ñ–∞–π–ª –Ω–∞–ø—Ä—è–º—É—é, –æ—Å—Ç–∞–≤–ª—è—é —Å—Å—ã–ª–∫—É:\n{safe_url}",
-        disable_web_page_preview=False,
-    )
-
-async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_id: str = ""):
-    if not content or len(content) < 512:
-        raise RuntimeError(f"empty video bytes: {len(content or b'')} bytes")
-    chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
-    dedupe_key = _video_result_key(chat_id, task_id=task_id, content=content)
-    if _mark_video_sent_once(dedupe_key):
-        log.info("reply_video_bytes: duplicate suppressed task_id=%s", task_id)
-        return
-    sent_ok = False
-    try:
-        bio = BytesIO(content)
-        bio.name = "result.mp4"
-        if VIDEO_RESULT_SEND_AS_DOCUMENT:
-            await update.effective_message.reply_document(
-                document=InputFile(bio), caption=caption,
-                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
-            )
-        else:
-            await update.effective_message.reply_video(
-                video=InputFile(bio), caption=caption, supports_streaming=True,
-                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
-            )
-        sent_ok = True
-    finally:
-        if not sent_ok:
-            # A transport failure must not turn a retry into a suppressed duplicate.
-            _SENT_VIDEO_KEYS.pop(dedupe_key, None)
-
-def _ratio_for_aspect(aspect: str) -> str:
-    """
-    –î–ª—è Runway API version 2024-11-06 ratio –¥–æ–ª–∂–µ–Ω –±—ã—Ç—å —Ä–∞–∑—Ä–µ—à–µ–Ω–∏–µ–º,
-    –∞ –Ω–µ —Å—Ç—Ä–æ–∫–æ–π 9:16 / 16:9.
-    """
-    mapping = {
-        "9:16": "768:1280",
-        "16:9": "1280:768",
-        "1:1": "960:960",
-        "4:5": "768:960",
-        "3:4": "768:1024",
-        "4:3": "1024:768",
-    }
-    return mapping.get((aspect or "").strip(), "768:1280")
-
-def _duration_for_engine(engine: str, duration_s: int) -> int:
-    try:
-        d = int(duration_s or 5)
-    except Exception:
-        d = 5
-    engine = (engine or "").lower()
-    if engine == "runway":
-        return max(2, min(10, d))
-    if engine == "kling":
-        return 10 if d >= 7 else 5
-    if engine == "sora":
-        # Sora/Comet —Å—Ç–∞–±–∏–ª—å–Ω–µ–µ –ø—Ä–∏–Ω–∏–º–∞–µ—Ç seconds = 4/8/12.
-        # 10 —Å–µ–∫—É–Ω–¥ –∏–∑ UI –Ω–æ—Ä–º–∞–ª–∏–∑—É–µ–º –≤ –±–ª–∏–∂–∞–π—à–∏–π –ø–æ–¥–¥–µ—Ä–∂–∏–≤–∞–µ–º—ã–π –≤–∞—Ä–∏–∞–Ω—Ç ‚Äî 8,
-        # –¥–ª–∏–Ω–Ω—ã–µ –∑–∞–ø—Ä–æ—Å—ã ‚Äî 12.
-        if d <= 5:
-            return 4
-        if d <= 10:
-            return 8
-        return 12
-    if engine == "luma":
-        return 9 if d >= 7 else 5
-    return max(5, min(15, d))
-
-def _guess_aspect_from_image(img_bytes: bytes, fallback: str = "9:16") -> str:
-    if Image is None:
-        return fallback
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        w, h = im.size
-        if h > w * 1.2:
-            return "9:16"
-        if w > h * 1.2:
-            return "16:9"
-        return "1:1"
-    except Exception:
-        return fallback
-
-def _image_refs_for_i2v(update: Update, img_bytes: bytes) -> tuple[str, str]:
-    """
-    –í–æ–∑–≤—Ä–∞—â–∞–µ–º —Å–Ω–∞—á–∞–ª–∞ data_url, –ø–æ—Ç–æ–º Telegram URL.
-    –î–ª—è Comet / Runway / Kling –±–µ–∑–æ–ø–∞—Å–Ω–µ–µ –ø–µ—Ä–≤—ã–º –ø—Ä–æ–±–æ–≤–∞—Ç—å base64 data-url,
-    –ø–æ—Ç–æ–º—É —á—Ç–æ –≤–Ω–µ—à–Ω–∏–µ API —á–∞—Å—Ç–æ –Ω–µ –º–æ–≥—É—Ç –∫–æ—Ä—Ä–µ–∫—Ç–Ω–æ –∑–∞–±—Ä–∞—Ç—å Telegram file_path.
-    """
-    data_url = (
-        f"data:{sniff_image_mime(img_bytes)};base64,"
-        f"{base64.b64encode(img_bytes).decode('ascii')}"
-    )
-
-    tg_url = ""
-    try:
-        tg_url = _get_cached_photo_url(update.effective_user.id)
-    except Exception:
-        tg_url = ""
-
-    return data_url, tg_url
-
-def _sora_size_for_aspect(aspect: str) -> tuple[str, int, int]:
-    # Sora Videos API –ø—Ä–∏–Ω–∏–º–∞–µ—Ç –Ω–µ 9:16/16:9, –∞ size.
-    # –î–ª—è —Å—Ç–∞–Ω–¥–∞—Ä—Ç–Ω–æ–≥–æ sora-2 —Å—Ç–∞–±–∏–ª—å–Ω—ã–µ —Ä–∞–∑–º–µ—Ä—ã: 720x1280 –∏–ª–∏ 1280x720.
-    a = (aspect or "").strip()
-    if a == "16:9":
-        return "1280x720", 1280, 720
-    return "720x1280", 720, 1280
-
-def _prepare_sora_reference_image(img_bytes: bytes, aspect: str) -> tuple[bytes, str, str, str]:
-    """
-    –ì–æ—Ç–æ–≤–∏—Ç –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –¥–ª—è Sora image‚Üívideo.
-    –í–∞–∂–Ω–æ: –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π Videos API —Ç—Ä–µ–±—É–µ—Ç, —á—Ç–æ–±—ã reference image —Å–æ–≤–ø–∞–¥–∞–ª
-    —Å —Ü–µ–ª–µ–≤—ã–º —Ä–∞–∑–º–µ—Ä–æ–º video size. –ü–æ—ç—Ç–æ–º—É –¥–µ–ª–∞–µ–º center-crop + resize.
-    –í–æ–∑–≤—Ä–∞—â–∞–µ—Ç: (bytes, mime, data_url, size).
-    """
-    size, tw, th = _sora_size_for_aspect(aspect)
-
-    if Image is None:
-        mime = sniff_image_mime(img_bytes)
-        data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}"
-        return img_bytes, mime, data_url, size
-
-    try:
-        im = Image.open(BytesIO(img_bytes))
-        try:
-            im = ImageOps.exif_transpose(im)
-        except Exception:
-            pass
-        im = im.convert("RGB")
-        w, h = im.size
-        target_ratio = tw / th
-        cur_ratio = w / max(1, h)
-
-        if cur_ratio > target_ratio:
-            # –°–ª–∏—à–∫–æ–º —à–∏—Ä–æ–∫–æ–µ ‚Äî —Ä–µ–∂–µ–º –∫—Ä–∞—è.
-            new_w = int(h * target_ratio)
-            left = max(0, (w - new_w) // 2)
-            im = im.crop((left, 0, left + new_w, h))
-        elif cur_ratio < target_ratio:
-            # –°–ª–∏—à–∫–æ–º –≤—ã—Å–æ–∫–æ–µ ‚Äî —Ä–µ–∂–µ–º –≤–µ—Ä—Ö/–Ω–∏–∑.
-            new_h = int(w / target_ratio)
-            top = max(0, (h - new_h) // 2)
-            im = im.crop((0, top, w, top + new_h))
-
-        resample = getattr(Image, "Resampling", Image).LANCZOS
-        im = im.resize((tw, th), resample)
-        out = BytesIO()
-        im.save(out, format="JPEG", quality=92, optimize=True)
-        prepared = out.getvalue()
-        mime = "image/jpeg"
-        data_url = f"data:{mime};base64,{base64.b64encode(prepared).decode('ascii')}"
-        return prepared, mime, data_url, size
-    except Exception as e:
-        log.warning("Sora image prepare failed, using original bytes: %s", e)
-        mime = sniff_image_mime(img_bytes)
-        data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}"
-        return img_bytes, mime, data_url, size
-
-async def _start_photo_revival(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, img_bytes: bytes, prompt: str = ""):
-    engine = (engine or "runway").lower().strip()
-    if engine == "luma" and LUMA_TEMP_DISABLED:
-        await update.effective_message.reply_text("‚ö†Ô∏è Luma –≤—Ä–µ–º–µ–Ω–Ω–æ –æ—Ç–∫–ª—é—á–µ–Ω–∞ –∏ —Å–∫—Ä—ã—Ç–∞ –∏–∑ –º–µ–Ω—é. –ò—Å–ø–æ–ª—å–∑—É–π—Ç–µ Runway, Kling –∏–ª–∏ Sora 2 –±–µ–∑ –ª—é–¥–µ–π.")
-        return
-    prompt = (prompt or "subtle lifelike animation, natural micro-movements, smooth cinematic camera motion").strip()
-    dur, asp = parse_video_opts(prompt)
-    if not re.search(r"(?:9:16|16:9|1:1|4:5|3:4|4:3)", prompt or "", re.I):
-        asp = _guess_aspect_from_image(img_bytes, asp)
-    dur = _duration_for_engine(engine, dur)
-
-    pay_engine = "runway" if engine in ("runway", "kling", "sora") else "luma"
-    est = _video_provider_cost_usd(engine, dur) if engine in ("runway", "kling", "sora") else 0.40
-
-    async def _go():
-        await update.effective_message.reply_text(
-            f"‚úÖ –ó–∞–ø—É—Å–∫–∞—é –æ–∂–∏–≤–ª–µ–Ω–∏–µ —Ñ–æ—Ç–æ: {engine.upper()} ‚Ä¢ {dur} —Å–µ–∫ ‚Ä¢ {asp}."
-        )
-        if engine == "runway":
-            return bool(await _run_runway_animate_photo(update, context, img_bytes, prompt=prompt, duration_s=dur, aspect=asp))
-        if engine == "luma":
-            return bool(await _run_luma_animate_photo(update, context, img_bytes, prompt=prompt, duration_s=dur, aspect=asp))
-        if engine in ("sora", "kling"):
-            return bool(await _run_comet_i2v(update, context, engine, img_bytes, prompt=prompt, duration_s=dur, aspect=asp))
-        await update.effective_message.reply_text("‚ùå –ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π –¥–≤–∏–∂–æ–∫ –æ–∂–∏–≤–ª–µ–Ω–∏—è —Ñ–æ—Ç–æ.")
-        return False
-
-    await _try_pay_then_do(
-        update, context, update.effective_user.id, pay_engine, est, _go,
-        remember_kind=f"revive_photo_{engine}",
-        remember_payload={"engine": engine, "duration": dur, "aspect": asp, "prompt": prompt},
-    )
-
-async def _poll_video_task_generic(
-    update: Update,
-    client: httpx.AsyncClient,
-    headers: dict,
-    base_url: str,
-    status_paths: list[str],
-    task_id: str,
-    caption: str,
-    max_wait_s: int = 1200,
-    task_not_exist_soft_fail_s: int = 0,
-    silent_soft_fail: bool = False,
-) -> bool:
-    """
-    –£–Ω–∏–≤–µ—Ä—Å–∞–ª—å–Ω—ã–π polling –¥–ª—è async-video –∑–∞–¥–∞—á.
-
-    –í–∞–∂–Ω–æ –¥–ª—è Comet/Runway: –æ—Ç–≤–µ—Ç task_not_exist –º–æ–∂–µ—Ç –ø—Ä–∏—Ö–æ–¥–∏—Ç—å –Ω–µ –∫–∞–∫ —Ñ–∏–Ω–∞–ª—å–Ω–∞—è –æ—à–∏–±–∫–∞,
-    –∞ –∫–∞–∫ —Å—Ç–∞–¥–∏—è –ø–µ—Ä–≤–∏—á–Ω–æ–π –∏–Ω–∏—Ü–∏–∞–ª–∏–∑–∞—Ü–∏–∏ –∑–∞–¥–∞—á–∏. –ü–æ—ç—Ç–æ–º—É –º—ã –Ω–µ —Å—á–∏—Ç–∞–µ–º –µ–≥–æ –º–≥–Ω–æ–≤–µ–Ω–Ω—ã–º
-    –ø—Ä–æ–≤–∞–ª–æ–º. –ù–æ –µ—Å–ª–∏ –æ–Ω –¥–µ—Ä–∂–∏—Ç—Å—è –¥–æ–ª—å—à–µ task_not_exist_soft_fail_s, –≤–æ–∑–≤—Ä–∞—â–∞–µ–º False,
-    —á—Ç–æ–±—ã –≤–µ—Ä—Ö–Ω–∏–π —É—Ä–æ–≤–µ–Ω—å –º–æ–≥ –ø–µ—Ä–µ–∫–ª—é—á–∏—Ç—å—Å—è –Ω–∞ –¥—Ä—É–≥–æ–π –¥–≤–∏–∂–æ–∫/–º–æ–¥–µ–ª—å.
-    """
-    started = time.time()
-    task_not_exist_seen_at: float | None = None
-    is_talking_avatar = "kling talking avatar" in (caption or "").lower()
-    avatar_notice_after_s = 150
-    avatar_notice_every_s = 180
-    next_avatar_notice_s = avatar_notice_after_s
-
-    while True:
-        last_body = ""
-        soft_not_exist_seen_this_round = False
-
-        for path in status_paths:
-            url = f"{base_url}{path}".format(id=task_id)
-            try:
-                rs = await client.get(url, headers=headers, timeout=60.0)
-                body_preview = _api_error_preview(rs)
-
-                if rs.status_code >= 400:
-                    last_body = f"{rs.status_code}: {body_preview}"
-
-                    # CometAPI/Runway soft-state: task created, but status storage is not ready yet.
-                    if "task_not_exist" in (body_preview or "").lower():
-                        soft_not_exist_seen_this_round = True
-                        if task_not_exist_seen_at is None:
-                            task_not_exist_seen_at = time.time()
-                        if task_not_exist_soft_fail_s and (time.time() - task_not_exist_seen_at) >= task_not_exist_soft_fail_s:
-                            log.warning(
-                                "%s: task_not_exist persisted %.1fs for task_id=%s; soft fallback",
-                                caption, time.time() - task_not_exist_seen_at, task_id,
-                            )
-                            if not silent_soft_fail:
-                                await update.effective_message.reply_text(
-                                    f"‚ö†Ô∏è {caption}: –∑–∞–¥–∞—á–∞ —Å–ª–∏—à–∫–æ–º –¥–æ–ª–≥–æ –Ω–µ –ø–æ—è–≤–ª—è–µ—Ç—Å—è –≤ Comet/Runway. –ü–µ—Ä–µ–∫–ª—é—á–∞—é—Å—å –Ω–∞ —Ä–µ–∑–µ—Ä–≤–Ω—ã–π –ø—É—Ç—å."
-                                )
-                            return False
-                        continue
-
-                    continue
-
-                try:
-                    js = rs.json() or {}
-                except Exception:
-                    js = {}
-
-            except Exception as e:
-                last_body = str(e)
-                continue
-
-            st = str(js.get("status") or js.get("state") or js.get("task_status") or "").lower()
-
-            # Comet/Runway –∏–Ω–æ–≥–¥–∞ –æ—Ç–¥–∞—ë—Ç task_not_exist –≤–Ω—É—Ç—Ä–∏ JSON –ø—Ä–∏ 200 OK.
-            if st == "task_not_exist" or "task_not_exist" in json.dumps(js, ensure_ascii=False).lower():
-                soft_not_exist_seen_this_round = True
-                last_body = json.dumps(js, ensure_ascii=False)[:700]
-                if task_not_exist_seen_at is None:
-                    task_not_exist_seen_at = time.time()
-                if task_not_exist_soft_fail_s and (time.time() - task_not_exist_seen_at) >= task_not_exist_soft_fail_s:
-                    log.warning(
-                        "%s: task_not_exist JSON persisted %.1fs for task_id=%s; soft fallback",
-                        caption, time.time() - task_not_exist_seen_at, task_id,
-                    )
-                    if not silent_soft_fail:
-                        await update.effective_message.reply_text(
-                            f"‚ö†Ô∏è {caption}: –∑–∞–¥–∞—á–∞ —Å–ª–∏—à–∫–æ–º –¥–æ–ª–≥–æ –Ω–µ –ø–æ—è–≤–ª—è–µ—Ç—Å—è –≤ Comet/Runway. –ü–µ—Ä–µ–∫–ª—é—á–∞—é—Å—å –Ω–∞ —Ä–µ–∑–µ—Ä–≤–Ω—ã–π –ø—É—Ç—å."
-                        )
-                    return False
-                continue
-
-            url = _extract_first_url(js.get("output")) or _extract_first_url(js.get("assets")) or _extract_first_url(js)
-            if st in ("completed", "succeeded", "success", "finished", "ready", "done", "succeed") or (url and not st):
-                if not url:
-                    # OpenAI/Sora Videos API —á–∞—Å—Ç–æ –≤–æ–∑–≤—Ä–∞—â–∞–µ—Ç completed –±–µ–∑ URL.
-                    # –§–∏–Ω–∞–ª—å–Ω—ã–π MP4 –Ω–∞–¥–æ –∑–∞–±—Ä–∞—Ç—å –æ—Ç–¥–µ–ª—å–Ω—ã–º GET /v1/videos/{id}/content.
-                    if "sora" in (caption or "").lower() or "/v1/videos" in " ".join(status_paths):
-                        try:
-                            content_url = f"{base_url.rstrip("/")}/v1/videos/{task_id}/content"
-                            cr = await client.get(content_url, headers=headers, timeout=240.0, follow_redirects=True)
-                            if cr.status_code < 400 and cr.content and "application/json" not in (cr.headers.get("content-type") or "").lower():
-                                await _reply_video_bytes(update, cr.content, f"{caption} ‚úÖ", task_id=task_id)
-                                return True
-                            log.warning("%s content download failed: %s %s", caption, cr.status_code, _api_error_preview(cr))
-                        except Exception as e:
-                            log.warning("%s content download exception: %s", caption, e)
-                    await update.effective_message.reply_text(f"‚ö†Ô∏è {caption}: –∑–∞–¥–∞—á–∞ –≥–æ—Ç–æ–≤–∞, –Ω–æ —Å—Å—ã–ª–∫–∞/MP4 –Ω–∞ –≤–∏–¥–µ–æ –Ω–µ –Ω–∞–π–¥–µ–Ω—ã.")
-                    return True
-                await _reply_video_from_url(update, client, url, f"{caption} ‚úÖ", task_id=task_id)
-                if "runway" in (caption or "").lower():
-                    _provider_mark_success("runway_i2v")
-                return True
-            if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
-                if "sora" in (caption or "").lower() and is_sora_people_moderation_error(js):
-                    await update.effective_message.reply_text(_sora_people_moderation_text())
-                    return True
-                if "runway" in (caption or "").lower() and RUNWAY_HIDE_TECH_ERRORS:
-                    _provider_mark_failure("runway_i2v", json.dumps(js, ensure_ascii=False)[:700])
-                    return False
-                raw_failure = json.dumps(js, ensure_ascii=False)
-                log.warning("%s terminal render failure task_id=%s: %s", caption, task_id, raw_failure[:1500])
-                if "kling" in (caption or "").lower():
-                    await update.effective_message.reply_text(
-                        "‚ùå Kling –Ω–µ —Å–º–æ–≥ –æ–±—Ä–∞–±–æ—Ç–∞—Ç—å —ç—Ç–æ —Ñ–æ—Ç–æ. –î–≤–∏–∂–æ–∫ –Ω–µ –ø–µ—Ä–µ–∫–ª—é—á–∞–ª—Å—è. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑."
-                    )
-                    return True
-                await update.effective_message.reply_text(f"‚ùå {caption}: –æ—à–∏–±–∫–∞ —Ä–µ–Ω–¥–µ—Ä–∞.")
-                return True
-
-        elapsed_s = time.time() - started
-        if is_talking_avatar and elapsed_s >= next_avatar_notice_s:
-            elapsed_min = max(1, int(elapsed_s // 60))
-            await update.effective_message.reply_text(
-                f"‚è≥ –ê–≤–∞—Ç–∞—Ä –≤—Å—ë –µ—â—ë —Å–æ–∑–¥–∞—ë—Ç—Å—è ‚Äî –±–æ—Ç –Ω–µ –∑–∞–≤–∏—Å, Kling –ø—Ä–æ–¥–æ–ª–∂–∞–µ—Ç –æ–±—Ä–∞–±–æ—Ç–∫—É. "
-                f"–ü—Ä–æ—à–ª–æ –æ–∫–æ–ª–æ {elapsed_min} –º–∏–Ω. –û–±—ã—á–Ω–æ —Å–æ–∑–¥–∞–Ω–∏–µ –∑–∞–Ω–∏–º–∞–µ—Ç –¥–æ 10 –º–∏–Ω—É—Ç, "
-                "–∏–Ω–æ–≥–¥–∞ –Ω–µ–º–Ω–æ–≥–æ –¥–æ–ª—å—à–µ. –ü–æ–∂–∞–ª—É–π—Å—Ç–∞, –æ–∂–∏–¥–∞–π—Ç–µ ‚Äî —Ä–µ–∑—É–ª—å—Ç–∞—Ç –ø—Ä–∏–¥—ë—Ç —Å—é–¥–∞ –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏."
-            )
-            next_avatar_notice_s += avatar_notice_every_s
-
-        if elapsed_s > max_wait_s:
-            # –î–ª—è Runway/Comet timeout –¥–æ–ª–∂–µ–Ω –¥–∞—Ç—å —à–∞–Ω—Å –≤–µ—Ä—Ö–Ω–µ–º—É fallback-—É—Ä–æ–≤–Ω—é.
-            if task_not_exist_seen_at is not None and silent_soft_fail:
-                log.warning("%s: timeout with task_not_exist for task_id=%s; soft fallback", caption, task_id)
-                return False
-            if "runway" in (caption or "").lower() and RUNWAY_HIDE_TECH_ERRORS:
-                _provider_mark_failure("runway_i2v", last_body[:700])
-                return False
-            await update.effective_message.reply_text(f"‚åõ {caption}: –≤—Ä–µ–º—è –æ–∂–∏–¥–∞–Ω–∏—è –≤—ã—à–ª–æ. –ü–æ—Å–ª–µ–¥–Ω–∏–π –æ—Ç–≤–µ—Ç: {last_body[:500]}")
-            return False
-
-        # –ï—Å–ª–∏ –≤—Å–µ –ø—É—Ç–∏ –¥–∞–ª–∏ —Ç–æ–ª—å–∫–æ –º—è–≥–∫–∏–π task_not_exist ‚Äî –ø—Ä–æ—Å—Ç–æ –∂–¥—ë–º —Å–ª–µ–¥—É—é—â–∏–π —Ü–∏–∫–ª.
-        await asyncio.sleep(VIDEO_POLL_DELAY_S)
-
-async def _create_and_poll_i2v(
-    update: Update,
-    base_url: str,
-    api_key: str,
-    create_payloads: list[tuple[str, dict]],
-    status_paths: list[str],
-    caption: str,
-    task_not_exist_soft_fail_s: int = 0,
-    silent_soft_fail: bool = False,
-    max_wait_s: int | None = None,
-) -> bool:
-    if not api_key:
-        await update.effective_message.reply_text(f"‚ùå {caption}: API-–∫–ª—é—á –Ω–µ –∑–∞–¥–∞–Ω –≤ ENV.")
-        return True
-
-    auth_headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Accept": "application/json",
-    }
-
-    last_err = ""
-    all_errors: list[str] = []
-
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        for path, payload in create_payloads:
-            try:
-                headers = dict(auth_headers)
-
-                # Runway —á–µ—Ä–µ–∑ Comet —Ç—Ä–µ–±—É–µ—Ç –≤–µ—Ä—Å–∏—é API.
-                if str(path).startswith("/runwayml/"):
-                    headers["X-Runway-Version"] = RUNWAY_API_VERSION or "2024-11-06"
-
-                # –°–ø–µ—Ü-—Ä–µ–∂–∏–º –¥–ª—è Sora/OpenAI Videos API: input_reference –∫–∞–∫ —Ñ–∞–π–ª
-                # –¥–æ–ª–∂–µ–Ω —É—Ö–æ–¥–∏—Ç—å multipart/form-data, –∞ –Ω–µ JSON. –í —ç—Ç–æ–º —Ä–µ–∂–∏–º–µ
-                # Content-Type –Ω–µ —Å—Ç–∞–≤–∏–º –≤—Ä—É—á–Ω—É—é ‚Äî httpx —Å–∞–º –¥–æ–±–∞–≤–∏—Ç boundary.
-                if isinstance(payload, dict) and payload.get("__multipart"):
-                    mp = payload.get("__multipart") or {}
-                    data = mp.get("data") or {}
-                    files = mp.get("files") or {}
-                    r = await client.post(f"{base_url}{path}", headers=headers, data=data, files=files)
-                else:
-                    headers["Content-Type"] = "application/json"
-                    r = await client.post(f"{base_url}{path}", headers=headers, json=payload)
-
-                if r.status_code >= 400:
-                    mode = "multipart" if isinstance(payload, dict) and payload.get("__multipart") else "json"
-                    last_err = f"POST {path} [{mode}] ‚Üí {r.status_code}: {_api_error_preview(r)}"
-                    all_errors.append(last_err)
-                    log.warning("%s create failed: %s", caption, last_err)
-                    continue
-
-                try:
-                    js = r.json() or {}
-                except Exception:
-                    js = {}
-
-                ready_url = (
-                    _extract_first_url(js.get("output"))
-                    or _extract_first_url(js.get("outputs"))
-                    or _extract_first_url(js.get("assets"))
-                    or _extract_first_url(js.get("data"))
-                    or _extract_first_url(js.get("result"))
-                    or _extract_first_url(js.get("response"))
-                    or _extract_first_url(js.get("payload"))
-                    or _extract_first_url(js)
-                )
-
-                if ready_url:
-                    await _reply_video_from_url(update, client, ready_url, f"{caption} ‚úÖ")
-                    return True
-
-                task_id = str(
-                    js.get("id")
-                    or js.get("task_id")
-                    or js.get("generation_id")
-                    or js.get("video_id")
-                    or js.get("taskId")
-                    or js.get("taskID")
-                    or js.get("request_id")
-                    or js.get("uuid")
-                    or ""
-                ).strip()
-
-                if not task_id and isinstance(js.get("data"), dict):
-                    d = js.get("data") or {}
-                    task_id = str(
-                        d.get("id")
-                        or d.get("task_id")
-                        or d.get("generation_id")
-                        or d.get("video_id")
-                        or d.get("taskId")
-                        or d.get("taskID")
-                        or d.get("request_id")
-                        or d.get("uuid")
-                        or ""
-                    ).strip()
-
-                if not task_id and isinstance(js.get("result"), dict):
-                    d = js.get("result") or {}
-                    task_id = str(
-                        d.get("id")
-                        or d.get("task_id")
-                        or d.get("generation_id")
-                        or d.get("video_id")
-                        or d.get("taskId")
-                        or d.get("taskID")
-                        or d.get("request_id")
-                        or d.get("uuid")
-                        or ""
-                    ).strip()
-
-                if not task_id:
-                    last_err = f"POST {path}: –Ω–µ—Ç id –∑–∞–¥–∞—á–∏ –≤ –æ—Ç–≤–µ—Ç–µ {json.dumps(js, ensure_ascii=False)[:700]}"
-                    all_errors.append(last_err)
-                    continue
-
-                if "kling talking avatar" in (caption or "").lower():
-                    await update.effective_message.reply_text(
-                        "‚è≥ Kling talking avatar: –∑–∞–¥–∞—á–∞ –ø—Ä–∏–Ω—è—Ç–∞. –°–æ–∑–¥–∞–Ω–∏–µ –æ–±—ã—á–Ω–æ –∑–∞–Ω–∏–º–∞–µ—Ç –¥–æ 10 –º–∏–Ω—É—Ç, "
-                        "–∏–Ω–æ–≥–¥–∞ –Ω–µ–º–Ω–æ–≥–æ –¥–æ–ª—å—à–µ. –ë–æ—Ç –ø—Ä–æ–¥–æ–ª–∂–∏—Ç —Ä–∞–±–æ—Ç—É –∏ –ø—Ä–∏—à–ª—ë—Ç –≤–∏–¥–µ–æ –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏."
-                    )
-                else:
-                    await update.effective_message.reply_text(f"‚è≥ {caption}: –∑–∞–¥–∞—á–∞ –ø—Ä–∏–Ω—è—Ç–∞, –æ–∂–∏–¥–∞—é —Ä–µ–∑—É–ª—å—Ç–∞—Ç‚Ä¶")
-                log.info("%s accepted: path=%s task_id=%s response=%s", caption, path, task_id, json.dumps(js, ensure_ascii=False)[:1200])
-
-                return await _poll_video_task_generic(
-                    update,
-                    client,
-                    headers,
-                    base_url,
-                    status_paths,
-                    task_id,
-                    caption,
-                    max_wait_s=int(max_wait_s or max(LUMA_MAX_WAIT_S, RUNWAY_MAX_WAIT_S)),
-                    task_not_exist_soft_fail_s=task_not_exist_soft_fail_s,
-                    silent_soft_fail=silent_soft_fail,
-                )
-
-            except Exception as e:
-                last_err = f"POST {path}: {e}"
-                all_errors.append(last_err)
-                log.warning("%s create exception: %s", caption, e)
-                continue
-
-    if all_errors:
-        details = "\n".join(all_errors[-5:])
-    else:
-        details = last_err
-
-    if "runway" in (caption or "").lower():
-        if _is_runway_unavailable_text(details):
-            _provider_mark_failure("runway_i2v", details)
-        if silent_soft_fail or RUNWAY_HIDE_TECH_ERRORS:
-            log.warning("%s hidden create failure: %s", caption, details[:1500])
-            return False
-
-    if "sora" in (caption or "").lower() and is_sora_people_moderation_error(details):
-        await update.effective_message.reply_text(_sora_people_moderation_text())
-        return False
-    if "invalid api channeltype" in (details or "").lower():
-        await update.effective_message.reply_text(
-            f"‚ö†Ô∏è {caption}: —É —Ç–µ–∫—É—â–µ–≥–æ –ø—Ä–æ–≤–∞–π–¥–µ—Ä–∞/–∫–∞–Ω–∞–ª–∞ Sora —Å–µ–π—á–∞—Å –Ω–µ–¥–æ—Å—Ç—É–ø–Ω–∞ (invalid api channelType)."
-        )
-        return False
-    await update.effective_message.reply_text(f"‚ùå {caption}: –Ω–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å –∑–∞–¥–∞—á—É.\n{details[:900]}")
-    return False
-
-async def _run_luma_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
-    if not LUMA_API_KEY:
-        await update.effective_message.reply_text("‚ùå Luma: LUMA_API_KEY –Ω–µ –∑–∞–¥–∞–Ω –≤ ENV.")
-        return False
-    data_url, tg_url = _image_refs_for_i2v(update, img_bytes)
-    image_ref = data_url or tg_url
-    duration_s = _duration_for_engine("luma", duration_s)
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        base = await _pick_luma_base(client)
-    payloads = [
-        (LUMA_CREATE_PATH, {
-            "model": LUMA_MODEL,
-            "prompt": prompt,
-            "duration": f"{duration_s}s",
-            "aspect_ratio": aspect,
-            "keyframes": {"frame0": {"type": "image", "url": image_ref}},
-        }),
-        (LUMA_CREATE_PATH, {
-            "model": LUMA_MODEL,
-            "prompt": prompt,
-            "duration": f"{duration_s}s",
-            "aspect_ratio": aspect,
-            "image_ref": image_ref,
-        }),
-    ]
-    return bool(await _create_and_poll_i2v(update, base, LUMA_API_KEY, payloads, [LUMA_STATUS_PATH], "Luma image‚Üívideo"))
-
-async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
-    engine = (engine or "").lower()
-
-    # –î–ª—è Kling/Runway/Sora –Ω–µ –æ—Ç–ø—Ä–∞–≤–ª—è–µ–º –æ–≥—Ä–æ–º–Ω—ã–µ —Å–∫—Ä–∏–Ω—à–æ—Ç—ã –∫–∞–∫ –µ—Å—Ç—å: –Ω–æ—Ä–º–∞–ª–∏–∑—É–µ–º JPEG –∏
-    # –º—è–≥–∫–æ —É–±–∏—Ä–∞–µ–º —á—ë—Ä–Ω—ã–µ –ø–æ–ª—è, –µ—Å–ª–∏ —ç—Ç–æ –±–µ–∑–æ–ø–∞—Å–Ω–æ.
-    prepared_note = ""
-    if engine in ("kling", "runway", "sora"):
-        img_bytes, prepared_note = _prepare_i2v_source_image(img_bytes, aspect)
-        if prepared_note:
-            log.info("i2v source prepared for %s: %s", engine, prepared_note)
-
-    data_url, tg_url = _image_refs_for_i2v(update, img_bytes)
-    raw_b64 = base64.b64encode(img_bytes).decode("ascii")
-
-    if engine == "sora":
-        d = _duration_for_engine("sora", duration_s)
-
-        # –ü–æ —Ñ–∞–∫—Ç—É –≤–∞—à–∏—Ö —Ç–µ—Å—Ç–æ–≤ Comet/OpenAI /v1/videos –ù–ï –ø—Ä–∏–Ω–∏–º–∞–µ—Ç:
-        #   - top-level image_url / image_urls
-        #   - input_image
-        #   - duration
-        #   - aspect_ratio
-        # –ü–æ —Ñ–∞–∫—Ç—É Comet/OpenAI proxy –≤ –≤–∞—à–∏—Ö –ª–æ–≥–∞—Ö –æ–∂–∏–¥–∞–µ—Ç input_reference –∫–∞–∫ –°–¢–†–û–ö–£,
-        # –∞ –Ω–µ –∫–∞–∫ –æ–±—ä–µ–∫—Ç. –ü–æ—ç—Ç–æ–º—É –ø—Ä–æ–±—É–µ–º –≤ –ø–µ—Ä–≤—É—é –æ—á–µ—Ä–µ–¥—å string data-url,
-        # –∑–∞—Ç–µ–º string –±–µ–∑ seconds, –∑–∞—Ç–µ–º multipart-—Ñ–∞–π–ª –∫–∞–∫ –∑–∞–ø–∞—Å–Ω–æ–π –≤–∞—Ä–∏–∞–Ω—Ç.
-        sora_bytes, sora_mime, sora_data_url, size = _prepare_sora_reference_image(img_bytes, aspect)
-
-        payloads = []
-
-        def _add_json(payload: dict):
-            for bad in ("input_image", "duration", "aspect_ratio", "image_url", "image_urls"):
-                payload.pop(bad, None)
-            payloads.append((SORA_CREATE_PATH, payload))
-
-        def _add_multipart(seconds_value: str | None = None):
-            data = {
-                "model": SORA_MODEL,
-                "prompt": prompt,
-                "size": size,
-            }
-            if seconds_value:
-                data["seconds"] = seconds_value
-            files = {
-                "input_reference": ("reference.jpg", sora_bytes, sora_mime or "image/jpeg"),
-            }
-            payloads.append((SORA_CREATE_PATH, {"__multipart": {"data": data, "files": files}}))
-
-        # 1) –û—Å–Ω–æ–≤–Ω–æ–π –≤–∞—Ä–∏–∞–Ω—Ç: input_reference –∫–∞–∫ string (data URL) + seconds + size.
-        _add_json({
-            "model": SORA_MODEL,
-            "prompt": prompt,
-            "input_reference": sora_data_url,
-            "seconds": str(d),
-            "size": size,
-        })
-
-        # 2) –¢–æ –∂–µ –±–µ–∑ seconds ‚Äî –µ—Å–ª–∏ –∫–∞–Ω–∞–ª —Å–∞–º –Ω–æ—Ä–º–∞–ª–∏–∑—É–µ—Ç –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.
-        _add_json({
-            "model": SORA_MODEL,
-            "prompt": prompt,
-            "input_reference": sora_data_url,
-            "size": size,
-        })
-
-        # 3) –ó–∞–ø–∞—Å–Ω–æ–π –≤–∞—Ä–∏–∞–Ω—Ç —á–µ—Ä–µ–∑ –ø—É–±–ª–∏—á–Ω—ã–π Telegram URL, –µ—Å–ª–∏ proxy –Ω–µ –ª—é–±–∏—Ç data URL.
-        if tg_url and tg_url.startswith("https://"):
-            _add_json({
-                "model": SORA_MODEL,
-                "prompt": prompt,
-                "input_reference": tg_url,
-                "seconds": str(d),
-                "size": size,
-            })
-            _add_json({
-                "model": SORA_MODEL,
-                "prompt": prompt,
-                "input_reference": tg_url,
-                "size": size,
-            })
-
-        # 4) Multipart-–≤–∞—Ä–∏–∞–Ω—Ç –∫–∞–∫ –∑–∞–ø–∞—Å–Ω–æ–π fallback.
-        _add_multipart(str(d))
-        _add_multipart(None)
-
-        sora_ok = await _create_and_poll_i2v(
-            update,
-            COMET_BASE_URL,
-            SORA_API_KEY,
-            payloads,
-            [SORA_STATUS_PATH, "/v1/videos/{id}", "/v1/tasks/{id}"],
-            "Sora 2 image‚Üívideo (–±–µ–∑ –ª—é–¥–µ–π)",
-        )
-        if (not sora_ok) and SORA_AUTO_FALLBACK_KLING:
-            await update.effective_message.reply_text(
-                "‚Ü™Ô∏è Sora —Å–µ–π—á–∞—Å –Ω–µ–¥–æ—Å—Ç—É–ø–Ω–∞ –∏–ª–∏ –Ω–µ —Å–æ–∑–¥–∞–ª–∞ –∑–∞–¥–∞—á—É. –ü–µ—Ä–µ–∫–ª—é—á–∞—é—Å—å –Ω–∞ Kling image‚Üívideo –∫–∞–∫ —Ä–µ–∑–µ—Ä–≤."
-            )
-            return bool(await _run_comet_i2v(update, context, "kling", img_bytes, prompt, duration_s, aspect))
-        return bool(sora_ok)
-
-    if engine == "kling":
-        # Kling/Comet currently validates "image" as a URL. Sending raw base64 can be
-        # accepted by the create endpoint but then fails asynchronously with
-        # InvalidParameterValue.UrlIllegal. Prefer the public Telegram file URL.
-        d = str(_duration_for_engine("kling", duration_s))
-        safe_prompt = (prompt or "").strip()
-        if I2V_KLING_SAFE_PROMPT_SUFFIX and I2V_KLING_SAFE_PROMPT_SUFFIX.lower() not in safe_prompt.lower():
-            safe_prompt = (safe_prompt + "; " + I2V_KLING_SAFE_PROMPT_SUFFIX).strip("; ")
-
-        kling_image_ref = tg_url if (tg_url and tg_url.startswith("https://")) else data_url
-        payloads = [
-            (
-                KLING_CREATE_PATH,
-                {
-                    "model_name": KLING_MODEL,
-                    "prompt": safe_prompt,
-                    "negative_prompt": "blurry, low quality, distorted faces, extra limbs, watermark, text overlay",
-                    "cfg_scale": 0.5,
-                    "image": kling_image_ref,
-                    "duration": d,
-                    "aspect_ratio": aspect,
-                    "mode": "std",
-                },
-            ),
-        ]
-
-        # Explicit Kling action must remain Kling: no Runway/Sora fallback.
-        return bool(await _create_and_poll_i2v(
-            update,
-            COMET_BASE_URL,
-            KLING_API_KEY,
-            payloads,
-            ["/kling/v1/videos/image2video/{id}", KLING_STATUS_PATH, "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"],
-            "Kling image‚Üívideo",
-        ))
-
-    await update.effective_message.reply_text("‚ùå –ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π Comet image‚Üívideo –¥–≤–∏–∂–æ–∫.")
-    return False
-
-
-async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, prompt: str, duration_s: int, aspect: str) -> bool:
-    """Text-to-video through CometAPI: Sora 2, Kling, or Runway."""
-    engine = (engine or "").lower().strip(); prompt = (prompt or "").strip()
-    if not prompt:
-        await update.effective_message.reply_text("‚ùå –ü—É—Å—Ç–æ–π –∑–∞–ø—Ä–æ—Å –¥–ª—è –≤–∏–¥–µ–æ.")
-        return False
-    if engine == "sora" and _prompt_likely_has_people(prompt):
-        await update.effective_message.reply_text("‚ö†Ô∏è Sora 2 –¥–æ—Å—Ç—É–ø–Ω–∞ —Ç–æ–ª—å–∫–æ –¥–ª—è —Å—Ü–µ–Ω –±–µ–∑ –ª—é–¥–µ–π. –ò—Å–ø–æ–ª—å–∑—É–π—Ç–µ Kling –∏–ª–∏ Runway.")
-        return False
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    if engine == "runway":
-        return bool(await _run_runway_video(update, context, prompt, duration_s, aspect))
-    if engine == "sora":
-        d = _duration_for_engine("sora", duration_s); size, _, _ = _sora_size_for_aspect(aspect)
-        payloads = [
-            (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "seconds": str(d), "size": size}),
-            (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "seconds": d, "size": size}),
-            (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "size": size}),
-        ]
-        return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, SORA_API_KEY, payloads, [SORA_STATUS_PATH, "/v1/videos/{id}", "/v1/tasks/{id}"], "Sora 2 text‚Üívideo ¬∑ –±–µ–∑ –ª—é–¥–µ–π"))
-    if engine == "kling":
-        d = str(_duration_for_engine("kling", duration_s))
-        payloads = [
-            (KLING_TEXT_CREATE_PATH, {"model": KLING_MODEL, "prompt": prompt, "duration": d, "aspect_ratio": aspect}),
-            ("/kling/v1/videos/text2video", {"model": KLING_MODEL, "prompt": prompt, "duration": d, "aspect_ratio": aspect}),
-            (KLING_TEXT_CREATE_PATH, {"prompt": prompt, "duration": d, "aspect_ratio": aspect}),
-        ]
-        return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, KLING_API_KEY, payloads, [KLING_TEXT_STATUS_PATH, "/kling/v1/videos/text2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"], "Kling text‚Üívideo"))
-    await update.effective_message.reply_text("‚ùå –ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π text‚Üívideo –¥–≤–∏–∂–æ–∫. –î–æ—Å—Ç—É–ø–Ω—ã Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏ Runway.")
-    return False
-
-async def _run_runway_comet_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str) -> bool:
-    if not (RUNWAY_IMAGE2VIDEO_ENABLED and RUNWAY_USE_COMET and COMET_API_KEY):
-        return False
-    if not _provider_is_available("runway_i2v"):
-        log.warning("Runway/Comet skipped: cooldown %ss", _provider_cooldown_left("runway_i2v"))
-        return False
-
-    img_bytes, prep_note = _prepare_i2v_source_image(img_bytes, aspect)
-    if prep_note:
-        log.info("Runway i2v source prepared: %s", prep_note)
-    data_url, tg_url = _image_refs_for_i2v(update, img_bytes)
-
-    duration = _duration_for_engine("runway", duration_s)
-    ratio = _ratio_for_aspect(aspect)
-
-    payloads = []
-    # –î–ª—è image‚Üívideo –Ω–∞ Comet –Ω–µ –∏—Å–ø–æ–ª—å–∑—É–µ–º gen4.5 –ø–µ—Ä–≤—ã–º: —É –≤–∞—Å –æ–Ω —á–∞—Å—Ç–æ –æ—Ç–≤–µ—á–∞–µ—Ç no available channel.
-    # gen4_turbo/gen3a_turbo ‚Äî –Ω–æ—Ä–º–∞–ª—å–Ω—ã–µ –∫–∞–Ω–¥–∏–¥–∞—Ç—ã –¥–ª—è –æ–∂–∏–≤–ª–µ–Ω–∏—è —Ñ–æ—Ç–æ.
-    for model in _runway_i2v_model_candidates():
-        # –û—Å–Ω–æ–≤–Ω–æ–π —Ñ–æ—Ä–º–∞—Ç Runway API 2024-11-06.
-        payloads.append((RUNWAY_COMET_CREATE_PATH, {
-            "model": model,
-            "promptImage": data_url,
-            "promptText": prompt,
-            "duration": duration,
-            "ratio": ratio,
-            "watermark": False,
-        }))
-        # –§–æ—Ä–º–∞—Ç promptImage –∫–∞–∫ –º–∞—Å—Å–∏–≤ —Å position=first ‚Äî —ç–∫–≤–∏–≤–∞–ª–µ–Ω—Ç–µ–Ω string –∏ —Å—Ç–∞–±–∏–ª—å–Ω–µ–µ –Ω–∞ –Ω–µ–∫–æ—Ç–æ—Ä—ã—Ö –ø—Ä–æ–∫—Å–∏.
-        payloads.append((RUNWAY_COMET_CREATE_PATH, {
-            "model": model,
-            "promptImage": [{"uri": data_url, "position": "first"}],
-            "promptText": prompt,
-            "duration": duration,
-            "ratio": ratio,
-            "watermark": False,
-        }))
-        # snake_case fallback –¥–ª—è —Å–æ–≤–º–µ—Å—Ç–∏–º–æ—Å—Ç–∏ —Å —Ä–∞–∑–Ω—ã–º–∏ –ø—Ä–æ–∫—Å–∏.
-        payloads.append((RUNWAY_COMET_CREATE_PATH, {
-            "model": model,
-            "prompt_image": data_url,
-            "prompt_text": prompt,
-            "duration": duration,
-            "ratio": ratio,
-            "watermark": False,
-        }))
-
-    # –ó–∞–ø–∞—Å–Ω–æ–π –≤–∞—Ä–∏–∞–Ω—Ç —á–µ—Ä–µ–∑ Telegram URL, –µ—Å–ª–∏ Comet –Ω–µ –ø—Ä–∏–º–µ—Ç data-uri.
-    if tg_url and tg_url.startswith("https://"):
-        for model in _runway_i2v_model_candidates():
-            payloads.append((RUNWAY_COMET_CREATE_PATH, {
-                "model": model,
-                "promptImage": tg_url,
-                "promptText": prompt,
-                "duration": duration,
-                "ratio": ratio,
-                "watermark": False,
-            }))
-
-    return await _create_and_poll_i2v(
-        update,
-        COMET_BASE_URL,
-        COMET_API_KEY,
-        payloads,
-        [RUNWAY_COMET_STATUS_PATH, "/runwayml/v1/tasks/{id}", "/v1/tasks/{id}"],
-        "Runway/Comet image‚Üívideo",
-        task_not_exist_soft_fail_s=RUNWAY_TASK_NOT_EXIST_FALLBACK_S,
-        silent_soft_fail=True,
-    )
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Runway: –∞–Ω–∏–º–∞—Ü–∏—è –∑–∞–≥—Ä—É–∂–µ–Ω–Ω–æ–≥–æ —Ñ–æ—Ç–æ (image‚Üívideo) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def _run_runway_direct_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str) -> bool:
-    """Official Runway image‚Üívideo using ephemeral upload + task polling."""
-    if not (RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY):
-        return False
-
-    img_bytes, prep_note = _prepare_i2v_source_image(img_bytes, aspect)
-    if prep_note:
-        log.info("Runway direct i2v source prepared: %s", prep_note)
-    mime_type = sniff_image_mime(img_bytes)
-    if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
-        mime_type = "image/jpeg"
-    extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(mime_type, "jpg")
-    filename = f"runway_input.{extension}"
-    ratio = _runway_direct_ratio(aspect)
-    duration = max(2, min(10, int(duration_s or 5)))
-    last_err = ""
-
-    for model in _runway_direct_i2v_model_candidates():
-        try:
-            async with _runway_official_client() as rw:
-                task_id = await rw.create_image_to_video(
-                    image_bytes=img_bytes,
-                    filename=filename,
-                    mime_type=mime_type,
-                    prompt_text=prompt,
-                    model=model,
-                    ratio=ratio,
-                    duration=duration,
-                    endpoint=RUNWAY_I2V_PATH,
-                    upload_endpoint=RUNWAY_UPLOAD_PATH,
-                )
-                await update.effective_message.reply_text(
-                    f"‚è≥ Runway {model}: –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –∑–∞–≥—Ä—É–∂–µ–Ω–æ, –∑–∞–¥–∞—á–∞ –ø—Ä–∏–Ω—è—Ç–∞. –û–∂–∏–¥–∞—é —Ä–µ–∑—É–ª—å—Ç–∞—Ç‚Ä¶"
-                )
-                result = await rw.wait_for_task(task_id, timeout_s=RUNWAY_MAX_WAIT_S)
-
-            async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as dl_client:
-                await _reply_video_from_url(
-                    update, dl_client, result.first_output,
-                    "‚ú® –û–∂–∏–≤–∏–ª —Ñ–æ—Ç–æ ‚úÖ ¬∑ Powered by Runway",
-                    task_id=task_id,
-                )
-            _provider_mark_success("runway_direct")
-            return True
-        except RunwayAPIError as e:
-            last_err = str(e)
-            log.warning("Runway direct i2v model=%s failed: %s", model, e)
-            # Authentication, billing, moderation and invalid-input errors are not fixed by switching models.
-            code = (e.failure_code or "").upper()
-            if e.status_code in {400, 401, 402, 403} or code.startswith("SAFETY"):
-                _provider_last_error["runway_direct"] = last_err[:700]
-                context.user_data["_runway_direct_hard_stop"] = True
-                await update.effective_message.reply_text(_runway_user_error_text(e))
-                return False
-            continue
-        except Exception as e:
-            last_err = str(e)
-            log.warning("Runway direct i2v exception model=%s: %s", model, e)
-            continue
-
-    if last_err:
-        _provider_last_error["runway_direct"] = last_err[:700]
-        _provider_mark_failure("runway_direct", last_err)
-    return False
-
-
-async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
-    prompt = (prompt or "animate the input photo with subtle camera motion, lifelike micro-movements; keep the original person, do not transform identity, do not add phone frames or UI").strip()
-    seconds = _duration_for_engine("runway", duration_s)
-    ratio = _ratio_for_aspect(aspect)
-    bad_src_note = _looks_like_screenshot_or_bad_i2v_source(img_bytes)
-    if bad_src_note and I2V_WARN_BAD_SOURCE:
-        with contextlib.suppress(Exception):
-            if I2V_BAD_SOURCE_POLICY == "ask_clean":
-                await update.effective_message.reply_text("‚ÑπÔ∏è " + bad_src_note + "\n\n–ü—Ä–∏—à–ª–∏—Ç–µ —á–∏—Å—Ç–æ–µ —Ñ–æ—Ç–æ, —á—Ç–æ–±—ã –ø–æ–ª—É—á–∏—Ç—å —Å—Ç–∞–±–∏–ª—å–Ω—ã–π —Ä–µ–∑—É–ª—å—Ç–∞—Ç.")
-                return False
-            await update.effective_message.reply_text("‚ÑπÔ∏è " + bad_src_note + "\n–ü—Ä–æ–¥–æ–ª–∂–∞—é –æ–±—Ä–∞–±–æ—Ç–∫—É, –Ω–æ –∫–∞—á–µ—Å—Ç–≤–æ –º–æ–∂–µ—Ç –±—ã—Ç—å —Ö—É–∂–µ.")
-
-    # v88: –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π Runway Developer API ‚Äî –æ—Å–Ω–æ–≤–Ω–æ–π –º–∞—Ä—à—Ä—É—Ç.
-    context.user_data.pop("_runway_direct_hard_stop", None)
-    if RUNWAY_DIRECT_FIRST and RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY:
-        try:
-            if await _run_runway_direct_animate_photo(update, context, img_bytes, prompt, seconds, aspect):
-                _provider_mark_success("runway_direct")
-                return True
-            if context.user_data.pop("_runway_direct_hard_stop", False):
-                return False
-            _provider_mark_failure("runway_direct", _provider_last_error.get("runway_direct", "direct i2v failed"))
-        except Exception as e:
-            _provider_mark_failure("runway_direct", str(e))
-            log.warning("Runway direct i2v failed; trying Comet: %s", e)
-
-    # Comet is only a fallback; its Runway distributor channel can disappear independently.
-    try:
-        if await _run_runway_comet_animate_photo(update, context, img_bytes, prompt, seconds, aspect):
-            return True
-    except Exception as e:
-        log.warning("Runway Comet route failed: %s", e)
-
-    if (not RUNWAY_DIRECT_FIRST) and RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY:
-        try:
-            if await _run_runway_direct_animate_photo(update, context, img_bytes, prompt, seconds, aspect):
-                _provider_mark_success("runway_direct")
-                return True
-            if context.user_data.pop("_runway_direct_hard_stop", False):
-                return False
-        except Exception as e:
-            _provider_mark_failure("runway_direct", str(e))
-            log.warning("Runway direct fallback failed: %s", e)
-
-    if RUNWAY_AUTO_FALLBACK_KLING and COMET_API_KEY:
-        await update.effective_message.reply_text(RUNWAY_PUBLIC_FALLBACK_TEXT)
-        return bool(await _run_comet_i2v(update, context, "kling", img_bytes, prompt, seconds, aspect))
-
-    if RUNWAY_API_KEY:
-        await update.effective_message.reply_text("‚ö†Ô∏è –û—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–π Runway –Ω–µ –ø—Ä–∏–Ω—è–ª –∑–∞–¥–∞—á—É. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ RUNWAYML_API_SECRET (Environment/Secret File) –∏ API-–∫—Ä–µ–¥–∏—Ç—ã: /diag_runway auth")
-    else:
-        await update.effective_message.reply_text("‚ö†Ô∏è –î–ª—è –ø–æ—Å—Ç–æ—è–Ω–Ω–æ–≥–æ –¥–æ—Å—Ç—É–ø–∞ –∫ Runway –¥–æ–±–∞–≤—å—Ç–µ RUNWAYML_API_SECRET –≤ Render Secret File runway.env –∏–ª–∏ Environment.")
-    return False
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ü–æ–∫—É–ø–∫–∏/–∏–Ω–≤–æ–π—Å—ã ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _plan_rub(tier: str, term: str) -> int:
-    tier = (tier or "pro").lower()
-    term = (term or "month").lower()
-    return int(PLAN_PRICE_TABLE.get(tier, PLAN_PRICE_TABLE["pro"]).get(term, PLAN_PRICE_TABLE["pro"]["month"]))
-
-def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
-    term = {1: "month", 3: "quarter", 12: "year"}.get(months, "month")
-    amount = _plan_rub(tier, term)
-    title = f"–ü–æ–¥–ø–∏—Å–∫–∞ {tier.upper()} ({term})"
-    payload = f"sub:{tier}:{months}"
-    return payload, amount, title
-
-async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
-    try:
-        # –±–µ—Ä—ë–º —Ç–æ–∫–µ–Ω –∏ –≤–∞–ª—é—Ç—É –∏–∑ –¥–≤—É—Ö –∏—Å—Ç–æ—á–Ω–∏–∫–æ–≤ (—Å—Ç–∞—Ä—ã–π PROVIDER_TOKEN –ò–õ–ò –Ω–æ–≤—ã–π YOOKASSA_PROVIDER_TOKEN)
-        token = (PROVIDER_TOKEN or YOOKASSA_PROVIDER_TOKEN)
-        curr  = (CURRENCY if (CURRENCY and CURRENCY != "RUB") else YOOKASSA_CURRENCY) or "RUB"
-
-        if not token:
-            await update.effective_message.reply_text("‚ö†Ô∏è –ÆKassa –Ω–µ –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∞ (–Ω–µ—Ç —Ç–æ–∫–µ–Ω–∞).")
-            return False
-
-        prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub) * 100)]
-
-        await update.effective_message.reply_invoice(
-            title=title,
-            description=desc[:255],
-            payload=payload,
-            provider_token=token,
-            currency=curr,
-            prices=prices,
-            need_email=False,
-            need_name=False,
-            need_phone_number=False,
-            need_shipping_address=False,
-            is_flexible=False
-        )
-        return True
-
-    except Exception as e:
-        log.exception("send_invoice error: %s", e)
-        try:
-            await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å –≤—ã—Å—Ç–∞–≤–∏—Ç—å —Å—á—ë—Ç.")
-        except Exception:
-            pass
-        return False
-
-async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        q = update.pre_checkout_query
-        await q.answer(ok=True)
-    except Exception as e:
-        log.exception("precheckout error: %s", e)
-
-async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        sp = update.message.successful_payment
-        payload = sp.invoice_payload or ""
-        total_minor = sp.total_amount or 0
-        rub = total_minor / 100.0
-        uid = update.effective_user.id
-
-        if payload.startswith("sub:"):
-            _, tier, months = payload.split(":", 2)
-            months = int(months)
-            until = activate_subscription_with_tier(uid, tier, months)
-            await update.effective_message.reply_text(f"‚úÖ –ü–æ–¥–ø–∏—Å–∫–∞ {tier.upper()} –∞–∫—Ç–∏–≤–∏—Ä–æ–≤–∞–Ω–∞ –¥–æ {until.strftime('%Y-%m-%d')}.\nü™ô –ö—Ä–µ–¥–∏—Ç—ã –Ω–∞—á–∏—Å–ª–µ–Ω—ã: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} –∫—Ä.")
-            return
-
-        if payload.startswith("topup:"):
-            try:
-                _, credits_s, rub_s = payload.split(":", 2)
-                resolved = _credit_pack_resolve(int(credits_s), int(rub_s))
-                if resolved:
-                    credits, expected_rub = resolved
-                    _wallet_total_add(uid, _credits_to_usd(credits))
-                    await update.effective_message.reply_text(
-                        f"‚úÖ –û–ø–ª–∞—Ç–∞ –ø—Ä–æ—à–ª–∞ —É—Å–ø–µ—à–Ω–æ. –ù–∞—á–∏—Å–ª–µ–Ω–æ: {credits} –∫—Ä–µ–¥–∏—Ç–æ–≤ –∑–∞ {expected_rub} ‚ÇΩ."
-                    )
-                    return
-            except Exception:
-                log.exception("Failed to parse topup payload: %s", payload)
-
-        # –õ—é–±–æ–µ –∏–Ω–æ–µ payload ‚Äî –ø–æ–ø–æ–ª–Ω–µ–Ω–∏–µ –µ–¥–∏–Ω–æ–≥–æ –∫–æ—à–µ–ª—å–∫–∞
-        usd = _credits_to_usd(rub)
-        _wallet_total_add(uid, usd)
-        await update.effective_message.reply_text(f"üí≥ –ü–æ–ø–æ–ª–Ω–µ–Ω–∏–µ: {rub:.0f} ‚ÇΩ. –ù–∞—á–∏—Å–ª–µ–Ω–æ: {_credits_fmt_from_usd(usd)}.")
-    except Exception as e:
-        log.exception("successful_payment handler error: %s", e)
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ CryptoBot ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
-CRYPTO_BASE = "https://pay.crypt.bot/api"
-TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # –∑–∞–ø–∞—Å–Ω–æ–π –∫—É—Ä—Å
-
-async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str|None, str|None, float, str]:
-    if not CRYPTO_PAY_API_TOKEN:
-        return None, None, 0.0, asset
-    try:
-        payload = {"asset": asset, "amount": round(float(usd_amount), 2), "description": description or "Top-up"}
-        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(f"{CRYPTO_BASE}/createInvoice", headers=headers, json=payload)
-            j = r.json()
-            ok = j.get("ok") is True
-            if not ok:
-                return None, None, 0.0, asset
-            res = j.get("result", {})
-            return str(res.get("invoice_id")), res.get("pay_url"), float(res.get("amount", usd_amount)), res.get("asset") or asset
-    except Exception as e:
-        log.exception("crypto create error: %s", e)
-        return None, None, 0.0, asset
-
-async def _crypto_get_invoice(invoice_id: str) -> dict | None:
-    if not CRYPTO_PAY_API_TOKEN:
-        return None
-    try:
-        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.get(f"{CRYPTO_BASE}/getInvoices?invoice_ids={invoice_id}", headers=headers)
-            j = r.json()
-            if not j.get("ok"):
-                return None
-            items = (j.get("result", {}) or {}).get("items", [])
-            return items[0] if items else None
-    except Exception as e:
-        log.exception("crypto get error: %s", e)
-        return None
-
-async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, user_id: int, invoice_id: str, usd_amount: float):
-    try:
-        for _ in range(120):  # ~12 –º–∏–Ω—É—Ç –ø—Ä–∏ 6—Å –∑–∞–¥–µ—Ä–∂–∫–µ
-            inv = await _crypto_get_invoice(invoice_id)
-            st = (inv or {}).get("status", "").lower() if inv else ""
-            if st == "paid":
-                _wallet_total_add(user_id, float(usd_amount))
-                with contextlib.suppress(Exception):
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"‚úÖ CryptoBot: –ø–ª–∞—Ç—ë–∂ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥—ë–Ω. –ù–∞—á–∏—Å–ª–µ–Ω–æ: {_credits_fmt_from_usd(float(usd_amount))}.")
-                return
-            if st in ("expired", "cancelled", "canceled", "failed"):
-                with contextlib.suppress(Exception):
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                        text=f"‚ùå CryptoBot: –ø–ª–∞—Ç—ë–∂ –Ω–µ –∑–∞–≤–µ—Ä—à—ë–Ω (—Å—Ç–∞—Ç—É—Å: {st}).")
-                return
-            await asyncio.sleep(6.0)
-        with contextlib.suppress(Exception):
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                text="‚åõ CryptoBot: –≤—Ä–µ–º—è –æ–∂–∏–¥–∞–Ω–∏—è –≤—ã—à–ª–æ. –ù–∞–∂–º–∏—Ç–µ ¬´üîé –ü—Ä–æ–≤–µ—Ä–∏—Ç—å¬ª –ø–æ–∑–∂–µ.")
-    except Exception as e:
-        log.exception("crypto poll error: %s", e)
-
-async def _poll_crypto_sub_invoice(
-    context: ContextTypes.DEFAULT_TYPE,
-    chat_id: int,
-    message_id: int,
-    user_id: int,
-    invoice_id: str,
-    tier: str,
-    months: int
-):
-    try:
-        for _ in range(120):  # ~12 –º–∏–Ω—É—Ç –ø—Ä–∏ –∑–∞–¥–µ—Ä–∂–∫–µ 6—Å
-            inv = await _crypto_get_invoice(invoice_id)
-            st = (inv or {}).get("status", "").lower() if inv else ""
-            if st == "paid":
-                until = activate_subscription_with_tier(user_id, tier, months)
-                with contextlib.suppress(Exception):
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id, message_id=message_id,
-                        text=f"‚úÖ CryptoBot: –ø–ª–∞—Ç—ë–∂ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥—ë–Ω.\n"
-                             f"–ü–æ–¥–ø–∏—Å–∫–∞ {tier.upper()} –∞–∫—Ç–∏–≤–Ω–∞ –¥–æ {until.strftime('%Y-%m-%d')}.\nü™ô –ö—Ä–µ–¥–∏—Ç—ã –Ω–∞—á–∏—Å–ª–µ–Ω—ã: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} –∫—Ä."
-                    )
-                return
-            if st in ("expired", "cancelled", "canceled", "failed"):
-                with contextlib.suppress(Exception):
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id, message_id=message_id,
-                        text=f"‚ùå CryptoBot: –æ–ø–ª–∞—Ç–∞ –Ω–µ –∑–∞–≤–µ—Ä—à–µ–Ω–∞ (—Å—Ç–∞—Ç—É—Å: {st})."
-                    )
-                return
-            await asyncio.sleep(6.0)
-
-        # –¢–∞–π–º–∞—É—Ç
-        with contextlib.suppress(Exception):
-            await context.bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id,
-                text="‚åõ CryptoBot: –≤—Ä–µ–º—è –æ–∂–∏–¥–∞–Ω–∏—è –≤—ã—à–ª–æ. –ù–∞–∂–º–∏—Ç–µ ¬´üîé –ü—Ä–æ–≤–µ—Ä–∏—Ç—å¬ª –∏–ª–∏ –æ–ø–ª–∞—Ç–∏—Ç–µ –∑–∞–Ω–æ–≤–æ."
-            )
-    except Exception as e:
-        log.exception("crypto poll (subscription) error: %s", e)
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ü—Ä–µ–¥–ª–æ–∂–µ–Ω–∏–µ –ø–æ–ø–æ–ª–Ω–µ–Ω–∏—è ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # v83: –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—é –ø–æ–∫–∞–∑—ã–≤–∞–µ–º –∫—Ä–µ–¥–∏—Ç—ã, –≤–Ω—É—Ç—Ä–∏ legacy-–±–∞–ª–∞–Ω—Å —Ö—Ä–∞–Ω–∏—Ç—Å—è –≤ —Ç–µ—Ö–Ω–∏—á–µ—Å–∫–æ–º —ç–∫–≤–∏–≤–∞–ª–µ–Ω—Ç–µ.
-    small_cr = int(os.environ.get("CREDIT_PACK_SMALL_CREDITS", "1000") or 1000)
-    mid_cr = int(os.environ.get("CREDIT_PACK_MID_CREDITS", "3000") or 3000)
-    big_cr = int(os.environ.get("CREDIT_PACK_BIG_CREDITS", "7000") or 7000)
-    small_rub = int(os.environ.get("CREDIT_PACK_SMALL_RUB", "990") or 990)
-    mid_rub = int(os.environ.get("CREDIT_PACK_MID_RUB", "2790") or 2790)
-    big_rub = int(os.environ.get("CREDIT_PACK_BIG_RUB", "6290") or 6290)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"{small_cr} –∫—Ä. ‚Ä¢ {small_rub} ‚ÇΩ", callback_data=f"topup:rub:{small_rub}"),
-         InlineKeyboardButton(f"{mid_cr} –∫—Ä. ‚Ä¢ {mid_rub} ‚ÇΩ", callback_data=f"topup:rub:{mid_rub}")],
-        [InlineKeyboardButton(f"{big_cr} –∫—Ä. ‚Ä¢ {big_rub} ‚ÇΩ", callback_data=f"topup:rub:{big_rub}")],
-        [InlineKeyboardButton(f"Crypto ~{small_cr} –∫—Ä.", callback_data=f"topup:crypto:{_credits_to_usd(small_cr):.2f}"),
-         InlineKeyboardButton(f"Crypto ~{mid_cr} –∫—Ä.", callback_data=f"topup:crypto:{_credits_to_usd(mid_cr):.2f}")],
-    ])
-    await update.effective_message.reply_text(
-        "ü™ô –ö—Ä–µ–¥–∏—Ç—ã –∏—Å–ø–æ–ª—å–∑—É—é—Ç—Å—è –¥–ª—è —Ç—è–∂—ë–ª—ã—Ö —Ñ—É–Ω–∫—Ü–∏–π: –≤–∏–¥–µ–æ, –º—É–∑—ã–∫–∞, AI-—Ñ–æ—Ç–æ, FaceSwap, –≥–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä –∏ –ø—Ä–µ–º–∏—É–º-—Ä–µ–Ω–¥–µ—Ä—ã.\n"
-        "1 –∫—Ä–µ–¥–∏—Ç = 1 ‚ÇΩ. –í—ã–±–µ—Ä–∏—Ç–µ –ø–∞–∫–µ—Ç:",
-        reply_markup=kb,
-    )
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ü—Ä–æ–º–æ-–∫–≤–æ—Ç—ã –ø–æ —Ñ—É–Ω–∫—Ü–∏—è–º ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _promo_feature_key(engine: str, remember_kind: str = "") -> str:
-    rk = (remember_kind or "").strip().lower()
-    eng = (engine or "").strip().lower()
-    if "vocal" in rk and ("clip" in rk or "lipsync" in rk):
-        return "vocal_lipsync_clip"
-    if "photo_music_clip" in rk or "photo_clip" in rk:
-        return "photo_music_clip"
-    if "talking_avatar" in rk or "avatar" in rk:
-        return "talking_avatar"
-    if rk.startswith("text_video") or rk.startswith("video_"):
-        return rk
-    if "revive_photo" in rk:
-        return rk
-    if "suno" in rk:
-        return "suno_music"
-    if "business_logo" in rk or "logo" in rk:
-        return "business_logo"
-    if "faceswap" in rk or "face_swap" in rk:
-        return "faceswap"
-    if "ai_selfie" in rk:
-        return "ai_selfie"
-    if "removebg" in rk or "remove_background" in rk:
-        return "remove_background"
-    if "replacebg" in rk or "replace_background" in rk:
-        return "replace_background"
-    if "outpaint" in rk:
-        return "outpaint"
-    if "image_retouch" in rk or "retouch" in rk:
-        return "image_retouch"
-    if "img_generate" in rk or "image_generate" in rk or eng == "img":
-        return "image_generation"
-    return rk or eng or "function"
-
-def _promo_quota_kv_key(user_id: int, feature: str, ymd: str | None = None) -> str:
-    safe = re.sub(r"[^a-z0-9_\-]+", "_", (feature or "function").lower())[:80]
-    return f"promo5:{user_id}:{ymd or _today_ymd()}:{safe}"
-
-def _try_consume_promo_daily5_quota(user_id: int, username: str | None, engine: str, remember_kind: str = "") -> tuple[bool, int, int, str]:
-    if not is_promo_daily5_user(user_id, username):
-        return False, 0, PROMO_DAILY5_PER_FUNCTION_LIMIT, ""
-    feature = _promo_feature_key(engine, remember_kind)
-    limit = max(0, int(PROMO_DAILY5_PER_FUNCTION_LIMIT))
-    if limit <= 0:
-        return False, 0, limit, feature
-    key = _promo_quota_kv_key(user_id, feature)
-    used = int(kv_get(key, "0") or "0")
-    if used >= limit:
-        return False, 0, limit, feature
-    kv_set(key, str(used + 1))
-    return True, max(0, limit - used - 1), limit, feature
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ü–æ–ø—ã—Ç–∫–∞ –æ–ø–ª–∞—Ç–∏—Ç—å ‚Üí –≤—ã–ø–æ–ª–Ω–∏—Ç—å ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def _try_pay_then_do(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    user_id: int,
-    engine: str,
-    est_cost_usd: float,
-    coro_func,
-    remember_kind: str = "",
-    remember_payload: dict | None = None,
-    silent_failure: bool = False,
-):
-    """Reserve capacity, run provider, and charge only after the action explicitly returns True."""
-    username = (update.effective_user.username or "")
-
-    promo_ok, promo_left, promo_limit, promo_feature = _try_consume_promo_daily5_quota(user_id, username, engine, remember_kind)
-    if promo_ok:
-        try:
-            with contextlib.suppress(Exception):
-                await update.effective_message.reply_text(f"üéÅ –ü—Ä–æ–º–æ-–¥–æ—Å—Ç—É–ø: —Ñ—É–Ω–∫—Ü–∏—è ¬´{promo_feature}¬ª. –û—Å—Ç–∞–ª–æ—Å—å —Å–µ–≥–æ–¥–Ω—è: {promo_left}/{promo_limit}.")
-            result = await coro_func()
-            if result is False:
-                raise RuntimeError("provider returned unsuccessful result")
-        except Exception as e:
-            log.exception("promo daily5 action failed: %s", e)
-            if not silent_failure:
-                await update.effective_message.reply_text("‚ùå –ó–∞–¥–∞—á–∞ –Ω–µ –≤—ã–ø–æ–ª–Ω–µ–Ω–∞. –ü—Ä–æ–º–æ-–∫—Ä–µ–¥–∏—Ç—ã –Ω–µ —Å–ø–∏—Å—ã–≤–∞—é—Ç—Å—è.")
-        return
-    if is_promo_daily5_user(user_id, username) and promo_feature:
-        await update.effective_message.reply_text(f"–ü—Ä–æ–º–æ-–ª–∏–º–∏—Ç –Ω–∞ —Ñ—É–Ω–∫—Ü–∏—é ¬´{promo_feature}¬ª —Å–µ–≥–æ–¥–Ω—è –∏—Å—á–µ—Ä–ø–∞–Ω: {promo_limit}/{promo_limit}. GPT-—á–∞—Ç –æ—Å—Ç–∞—ë—Ç—Å—è –±–µ–∑–ª–∏–º–∏—Ç–Ω—ã–º.")
-        return
-
-    free_kind = _free_quota_category(engine, remember_kind)
-    if free_kind and get_subscription_tier(user_id) == "free" and not is_unlimited(user_id, username):
-        q_ok, q_left, q_limit = _try_consume_free_daily_quota(user_id, username, free_kind)
-        if q_ok:
-            try:
-                with contextlib.suppress(Exception): await update.effective_message.reply_text(f"üéÅ –ë–µ—Å–ø–ª–∞—Ç–Ω–æ–µ –¥–µ–π—Å—Ç–≤–∏–µ: {_free_quota_label(free_kind)}. –û—Å—Ç–∞–ª–æ—Å—å —Å–µ–≥–æ–¥–Ω—è: {q_left}/{q_limit}.")
-                result = await coro_func()
-                if result is False: raise RuntimeError("provider returned unsuccessful result")
-            except Exception as e:
-                log.exception("free action failed: %s", e)
-                if not silent_failure:
-                    await update.effective_message.reply_text("‚ùå –ó–∞–¥–∞—á–∞ –Ω–µ –≤—ã–ø–æ–ª–Ω–µ–Ω–∞. –î–µ–Ω–µ–∂–Ω–æ–≥–æ —Å–ø–∏—Å–∞–Ω–∏—è –Ω–µ –±—ã–ª–æ.")
-            return
-        await _send_free_quota_exhausted(update, context, free_kind); return
-
-    if is_unlimited(user_id, username):
-        try:
-            result = await coro_func()
-            if result is False: raise RuntimeError("provider returned unsuccessful result")
-        except Exception as e:
-            log.exception("unlimited action failed: %s", e)
-            if not silent_failure:
-                await update.effective_message.reply_text("‚ùå –ó–∞–¥–∞—á–∞ –Ω–µ –≤—ã–ø–æ–ª–Ω–µ–Ω–∞. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –ø–æ–∑–∂–µ.")
-        return
-
-    provider_cost = max(0.0, float(est_cost_usd or 0.0))
-    retail_usd = _retail_usd(provider_cost)
-    price_credits = _retail_credits(provider_cost)
-    tx_id = None
-    try:
-        tx_id, available_before = _credit_reserve(user_id, engine, remember_kind or engine, provider_cost, retail_usd, remember_payload)
-    except Exception as e:
-        log.exception("credit reserve failed: %s", e)
-        await update.effective_message.reply_text("‚ùå –ù–µ —É–¥–∞–ª–æ—Å—å –ø—Ä–æ–≤–µ—Ä–∏—Ç—å –∫—Ä–µ–¥–∏—Ç–Ω—ã–π –±–∞–ª–∞–Ω—Å. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑.")
-        return
-
-    if not tx_id:
-        available_cr = int(round(_usd_to_credits(available_before)))
-        missing_cr = max(0, price_credits - available_cr)
-        await update.effective_message.reply_text(
-            f"–ù–µ–¥–æ—Å—Ç–∞—Ç–æ—á–Ω–æ –∫—Ä–µ–¥–∏—Ç–æ–≤. –°—Ç–æ–∏–º–æ—Å—Ç—å: {price_credits} –∫—Ä. –î–æ—Å—Ç—É–ø–Ω–æ: {available_cr} –∫—Ä. –ù–µ —Ö–≤–∞—Ç–∞–µ—Ç: {missing_cr} –∫—Ä.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("‚≠ê –¢–∞—Ä–∏—Ñ—ã", web_app=WebAppInfo(url=TARIFF_URL))],[InlineKeyboardButton("‚ûï –ü–æ–ø–æ–ª–Ω–∏—Ç—å –±–∞–ª–∞–Ω—Å", callback_data="topup")]])
-        )
-        return
-
-    after_cr = max(0, int(round(_usd_to_credits(available_before - retail_usd))))
-    with contextlib.suppress(Exception):
-        await update.effective_message.reply_text(f"ü™ô –°—Ç–æ–∏–º–æ—Å—Ç—å: {price_credits} –∫—Ä. –°–ø–∏—Å–∞–Ω–∏–µ –ø—Ä–æ–∏–∑–æ–π–¥—ë—Ç —Ç–æ–ª—å–∫–æ –ø–æ—Å–ª–µ —É—Å–ø–µ—à–Ω–æ–≥–æ —Ä–µ–∑—É–ª—å—Ç–∞—Ç–∞. –ü–æ—Å–ª–µ –≤—ã–ø–æ–ª–Ω–µ–Ω–∏—è –æ—Å—Ç–∞–Ω–µ—Ç—Å—è: {after_cr} –∫—Ä.")
-
-    try:
-        result = await coro_func()
-        if result is not True:
-            _credit_release(tx_id, "released")
-            if not silent_failure:
-                await update.effective_message.reply_text("‚Ü©Ô∏è –ì–µ–Ω–µ—Ä–∞—Ü–∏—è –Ω–µ –∑–∞–≤–µ—Ä—à–∏–ª–∞—Å—å ‚Äî –∫—Ä–µ–¥–∏—Ç—ã –Ω–µ —Å–ø–∏—Å–∞–Ω—ã.")
-            return
-        if not _credit_commit(tx_id):
-            _credit_release(tx_id, "released")
-            await update.effective_message.reply_text("‚ö†Ô∏è –†–µ–∑—É–ª—å—Ç–∞—Ç –ø–æ–ª—É—á–µ–Ω, –Ω–æ —Å–ø–∏—Å–∞–Ω–∏–µ –Ω–µ –∑–∞—Ñ–∏–∫—Å–∏—Ä–æ–≤–∞–Ω–æ. –û–±—Ä–∞—Ç–∏—Ç–µ—Å—å –≤ –ø–æ–¥–¥–µ—Ä–∂–∫—É, –ø–æ–≤—Ç–æ—Ä–Ω–æ –∑–∞–ø—É—Å–∫–∞—Ç—å –æ–ø–ª–∞—Ç—É –Ω–µ –Ω—É–∂–Ω–æ.")
-            return
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text(f"‚úÖ –°–ø–∏—Å–∞–Ω–æ: {price_credits} –∫—Ä.")
-    except Exception as e:
-        _credit_release(tx_id, "released")
-        log.exception("paid action failed: %s", e)
-        if not silent_failure:
-            await update.effective_message.reply_text("‚ùå –ó–∞–¥–∞—á–∞ –Ω–µ –≤—ã–ø–æ–ª–Ω–µ–Ω–∞. –ö—Ä–µ–¥–∏—Ç—ã –Ω–µ —Å–ø–∏—Å–∞–Ω—ã.")
-
-
-async def cmd_diag_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id if user else 0
-    username = user.username if user else ""
-    await update.effective_message.reply_text(
-        "üîê Access diagnostic\n"
-        f"user_id: {user_id}\n"
-        f"username: @{username or '-'}\n"
-        f"unlimited: {is_unlimited(user_id, username)}\n"
-        f"promo_unlim_gpt: {is_promo_unlim_gpt(user_id, username)}\n"
-        f"promo_daily5: {is_promo_daily5_user(user_id, username)}\n"
-        f"promo_limit_per_function: {PROMO_DAILY5_PER_FUNCTION_LIMIT}"
-    )
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ /plans ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = ["‚≠ê –¢–∞—Ä–∏—Ñ—ã –∏ –∫—Ä–µ–¥–∏—Ç—ã:", "–ü–æ–¥–ø–∏—Å–∫–∞ –æ—Ç–∫—Ä—ã–≤–∞–µ—Ç –¥–æ—Å—Ç—É–ø, –∫—Ä–µ–¥–∏—Ç—ã —Ä–∞—Å—Ö–æ–¥—É—é—Ç—Å—è –Ω–∞ —Ç—è–∂—ë–ª—ã–µ –≥–µ–Ω–µ—Ä–∞—Ü–∏–∏."]
-    for tier, terms in PLAN_PRICE_TABLE.items():
-        lines.append(f"‚Äî {tier.upper()}: "
-                     f"{terms['month']}‚ÇΩ/–º–µ—Å ‚Ä¢ {terms['quarter']}‚ÇΩ/–∫–≤–∞—Ä—Ç–∞–ª ‚Ä¢ {terms['year']}‚ÇΩ/–≥–æ–¥ ‚Ä¢ {SUBSCRIPTION_CREDITS.get(tier,0)} –∫—Ä./–º–µ—Å")
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("START 1 –º–µ—Å",    callback_data="buy:start:1"),
-         InlineKeyboardButton("PRO 1 –º–µ—Å",      callback_data="buy:pro:1")],
-        [InlineKeyboardButton("ULTIMATE 1 –º–µ—Å", callback_data="buy:ultimate:1")],
-        [InlineKeyboardButton("–ú–∏–Ω–∏-–≤–∏—Ç—Ä–∏–Ω–∞",    web_app=WebAppInfo(url=TARIFF_URL))]
-    ])
-    await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –û–±—ë—Ä—Ç–∫–∞ –¥–ª—è –ø–µ—Ä–µ–¥–∞—á–∏ –ø—Ä–æ–∏–∑–≤–æ–ª—å–Ω–æ–≥–æ —Ç–µ–∫—Å—Ç–∞ (–Ω–∞–ø—Ä. –∏–∑ STT) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_text_with_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    text: str,
-):
-    """
-    –û–±—ë—Ä—Ç–∫–∞ –¥–ª—è –ø–µ—Ä–µ–¥–∞—á–∏ —Ç–µ–∫—Å—Ç–∞ (–Ω–∞–ø—Ä–∏–º–µ—Ä, –ø–æ—Å–ª–µ STT) –≤ on_text,
-    –±–µ–∑ –ø–æ–ø—ã—Ç–æ–∫ –∏–∑–º–µ–Ω–∏—Ç—å update.message (read-only!).
-    """
-    text = (text or "").strip()
-    if not text:
-        await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Ä–∞—Å–ø–æ–∑–Ω–∞—Ç—å —Ç–µ–∫—Å—Ç.")
-        return
-
-    await on_text(update, context, manual_text=text)
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –¢–µ–∫—Å—Ç–æ–≤—ã–π –≤—Ö–æ–¥ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    manual_text: str | None = None,
-):
-    # –ï—Å–ª–∏ —Ç–µ–∫—Å—Ç –ø–µ—Ä–µ–¥–∞–Ω –∏–∑–≤–Ω–µ ‚Üí –∏—Å–ø–æ–ª—å–∑—É–µ–º –µ–≥–æ
-    # –∏–Ω–∞—á–µ ‚Äî –æ–±—ã—á–Ω—ã–π —Ç–µ–∫—Å—Ç —Å–æ–æ–±—â–µ–Ω–∏—è
-    if manual_text is not None:
-        text = manual_text.strip()
-    else:
-        text = (update.message.text or "").strip()
-
-    # Idempotency guard: the priority Presentation Studio handler may already own this update.
-    with contextlib.suppress(Exception):
-        if context.chat_data.get("_presentation_last_update_token") == _presentation_update_token(update):
-            return
-
-    # Rename virtual chat before routing the message to GPT.
-    rename_cid = context.user_data.pop("awaiting_chat_rename", None)
-    if rename_cid:
-        if _chat_rename(update.effective_user.id, update.effective_chat.id, int(rename_cid), text):
-            await update.effective_message.reply_text("‚úÖ –ù–∞–∑–≤–∞–Ω–∏–µ —á–∞—Ç–∞ –æ–±–Ω–æ–≤–ª–µ–Ω–æ.", reply_markup=_chat_list_kb(update.effective_user.id, update.effective_chat.id))
-        else:
-            await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å –ø–µ—Ä–µ–∏–º–µ–Ω–æ–≤–∞—Ç—å —á–∞—Ç.")
-        return
-
-    if context.user_data.pop("awaiting_midjourney_prompt", None):
-        await _start_midjourney_image(update, context, text)
-        return
-
-    # Active presentation/catalog project has absolute priority over generic GPT/live-search routing.
-    _studio = _presentation_studio_get()
-    if await _studio.handle_text(update, context, text):
-        return
-    # When a project is active but the current stage expects a button/upload rather than free text,
-    # never pass the same message to generic GPT or live-search.
-    _active_presentation = _studio._active_project(update.effective_user.id, update.effective_chat.id)
-    if _active_presentation:
-        await update.effective_message.reply_text(
-            "–ü—Ä–æ–µ–∫—Ç –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏–∏ –∞–∫—Ç–∏–≤–µ–Ω. –ù–∞ —ç—Ç–æ–º —ç—Ç–∞–ø–µ –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ –∫–Ω–æ–ø–∫–∏ –º–∞—Å—Ç–µ—Ä–∞ –∏–ª–∏ –Ω–∞–∂–º–∏—Ç–µ ¬´–ü—Ä–æ–¥–æ–ª–∂–∏—Ç—å¬ª."
-        )
-        return
-
-    # Keep music-video revisions in the same mode; never send a draft to generic chat.
-    draft = context.user_data.get("music_video_draft")
-    if draft:
-        edit = context.user_data.get("music_video_draft_edit")
-        if edit in ("augment", "rewrite", "voice_rewrite"):
-            if edit == "augment":
-                prompt = _merge_music_video_prompt(draft["prompt"], text)
-                await _stage_music_video_draft(update, context, prompt)
-            elif edit == "rewrite":
-                await _stage_music_video_draft(update, context, text)
-            else:
-                seconds = int(draft.get("duration") or _photo_clip_target_duration(draft["prompt"]))
-                generated = await ask_openai_text(
-                    "–ü—Ä–µ–æ–±—Ä–∞–∑—É–π –≥–æ–ª–æ—Å–æ–≤–æ–µ –æ–ø–∏—Å–∞–Ω–∏–µ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è –≤ –¥–≤–∞ –ø—Ä–æ—Ñ–µ—Å—Å–∏–æ–Ω–∞–ª—å–Ω—ã—Ö –ø—Ä–æ–º–ø—Ç–∞. –°–æ—Ö—Ä–∞–Ω–∏ –µ–≥–æ –∑–∞–º—ã—Å–µ–ª. "
-                    f"–í–∏–¥–µ–æ —Ä–æ–≤–Ω–æ {seconds} —Å–µ–∫—É–Ω–¥; VIDEO_BRIEF —Ä–∞–∑–±–µ–π –ø–æ 10 —Å–µ–∫—É–Ω–¥ —Å continuity –∏ START/END states. "
-                    "MUSIC_BRIEF –æ–ø—Ç–∏–º–∏–∑–∏—Ä—É–π –¥–ª—è Suno. –í–µ—Ä–Ω–∏ —Å—Ç—Ä–æ–≥–æ [MUSIC_BRIEF] –∑–∞—Ç–µ–º [VIDEO_BRIEF].\n\n–û–ø–∏—Å–∞–Ω–∏–µ: " + text,
-                    user_id=update.effective_user.id, chat_id=update.effective_chat.id,
-                    extra_system="–¢—ã prompt-director AI music video. –ù–µ –≤—ã–¥—É–º—ã–≤–∞–π —Å—é–∂–µ—Ç–Ω—ã–µ —Ñ–∞–∫—Ç—ã —Å–≤–µ—Ä—Ö –≥–æ–ª–æ—Å–æ–≤–æ–≥–æ –æ–ø–∏—Å–∞–Ω–∏—è."
-                )
-                await _stage_music_video_draft(update, context, generated)
-        
-        else:
-            await update.effective_message.reply_text(
-                "–°—Ü–µ–Ω–∞—Ä–∏–π –æ–∂–∏–¥–∞–µ—Ç —Ä–µ—à–µ–Ω–∏—è. –ù–∞–∂–º–∏—Ç–µ ¬´–£—Ç–≤–µ—Ä–∂–¥–∞—é¬ª, ¬´–î–æ–ø–æ–ª–Ω–∏—Ç—å¬ª –∏–ª–∏ ¬´–ù–∞–ø–∏—Å–∞—Ç—å –∑–∞–Ω–æ–≤–æ¬ª.",
-                reply_markup=_music_video_approval_kb(draft["token"]),
-            )
-        return
-
-    # –í–æ–ø—Ä–æ—Å—ã –æ FaceSwap –¥–æ–ª–∂–Ω—ã –æ—Ç–≤–µ—á–∞—Ç—å –æ–ø–∏—Å–∞–Ω–∏–µ–º —Ñ—É–Ω–∫—Ü–∏–∏, –∞ –Ω–µ —Å—Ä–∞–∑—É –∑–∞–ø—É—Å–∫–∞—Ç—å —Ä–µ–∂–∏–º.
-    if re.search(r"(–º–æ–∂(–µ—à—å|–µ—Ç–µ|–Ω–æ)|—É–º–µ(–µ—à—å|–µ—Ç–µ)|—Å–ø–æ—Å–æ–±–µ–Ω|–ø–æ–¥–¥–µ—Ä–∂–∏–≤–∞–µ—à—å|–¥–µ–ª–∞–µ—à—å|–º–æ–∂–µ—Ç\s+–ª–∏)", text or "", re.I) and re.search(r"(–ª–∏—Ü|–ª–∏—Ü–∞|–ª–∏—Ü–æ|face|faceswap)", text or "", re.I):
-        cap_early = capability_answer(text)
-        if cap_early:
-            await update.effective_message.reply_text(cap_early, reply_markup=main_kb)
-            with contextlib.suppress(Exception):
-                _chat_memory_add(update.effective_user.id, update.effective_chat.id, "user", text)
-                _chat_memory_add(update.effective_user.id, update.effective_chat.id, "assistant", cap_early)
-            return
-
-    # –ó–∞–º–µ–Ω–∞ –ª–∏—Ü–∞: –æ—Ç–¥–µ–ª—å–Ω—ã–π –¥–≤—É—Ö—à–∞–≥–æ–≤—ã–π —Ä–µ–∂–∏–º.
-    if _is_face_swap_request(text):
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        await _start_faceswap_flow(update, context, None, use_cached=False)
-        return
-
-    # –£–¥–∞–ª–µ–Ω–∏–µ/–∑–∞–º–µ–Ω–∞ —Ñ–æ–Ω–∞: –µ—Å–ª–∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å —É–∂–µ –∑–∞–≥—Ä—É–∑–∏–ª —Ñ–æ—Ç–æ –∏–ª–∏ –±–æ—Ç –∂–¥—ë—Ç —É—Ç–æ—á–Ω–µ–Ω–∏–µ.
-    if _is_replacebg_wait_text(context):
-        img = _get_cached_photo(update.effective_user.id)
-        if not img:
-            _clear_replacebg_wait(context)
-            await update.effective_message.reply_text("–°–Ω–∞—á–∞–ª–∞ –ø—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ, –∑–∞—Ç–µ–º –≤—ã–±–µ—Ä–∏—Ç–µ –∑–∞–º–µ–Ω—É —Ñ–æ–Ω–∞.", reply_markup=main_kb)
-            return
-        kind, prompt = _bg_kind_from_text(text)
-        _clear_medicine_wait(context)
-        _clear_replacebg_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        await _pedit_replacebg(update, context, img, kind=kind, prompt=prompt)
-        return
-
-    if _is_remove_bg_request(text):
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        img = _get_cached_photo(update.effective_user.id)
-        if img:
-            await _pedit_removebg(update, context, img)
-            return
-        _set_waiting_removebg(context)
-        await update.effective_message.reply_text("–ü—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ ‚Äî —É–¥–∞–ª—é —Ñ–æ–Ω –∏ –≤–µ—Ä–Ω—É PNG —Å –ø—Ä–æ–∑—Ä–∞—á–Ω–æ–π –ø–æ–¥–ª–æ–∂–∫–æ–π.", reply_markup=main_kb)
-        return
-
-    if _is_replace_bg_request(text):
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        img = _get_cached_photo(update.effective_user.id)
-        kind, prompt = _bg_kind_from_text(text)
-        if img:
-            await _pedit_replacebg(update, context, img, kind=kind, prompt=prompt)
-            return
-        _set_waiting_replacebg(context, prompt=text)
-        await update.effective_message.reply_text("–ü—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ ‚Äî –≤—ã—Ä–µ–∂—É –æ–±—ä–µ–∫—Ç –∏ –∑–∞–º–µ–Ω—é —Ç–æ–ª—å–∫–æ —Ñ–æ–Ω. –î–ª—è –ø—Ä–µ—Å–µ—Ç–æ–≤ –∏ —Ç–µ–∫—Å—Ç–æ–≤–æ–≥–æ –æ–ø–∏—Å–∞–Ω–∏—è –ø–æ—Å—Ç–∞—Ä–∞—é—Å—å —Å–¥–µ–ª–∞—Ç—å —Ä–µ–∑—É–ª—å—Ç–∞—Ç –∫–∞–∫ –Ω–∞—Å—Ç–æ—è—â–µ–µ —Å–µ–ª—Ñ–∏.", reply_markup=main_kb)
-        return
-
-    # –†–µ—Ç—É—à—å —Å–æ–±—Å—Ç–≤–µ–Ω–Ω–æ–≥–æ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è: –µ—Å–ª–∏ —Ñ–æ—Ç–æ —É–∂–µ –∑–∞–≥—Ä—É–∂–µ–Ω–æ –∏ –±–æ—Ç –∂–¥—ë—Ç —É—Ç–æ—á–Ω–µ–Ω–∏–µ.
-    if _is_retouch_wait_text(context):
-        img = _get_cached_photo(update.effective_user.id)
-        if not img:
-            _clear_image_retouch_wait(context)
-            await update.effective_message.reply_text(_retouch_user_hint_text(), reply_markup=main_kb)
-            return
-        instruction = text or context.user_data.get("retouch_prompt") or "—É–±—Ä–∞—Ç—å –ª–∏—à–Ω—é—é –Ω–∞–¥–ø–∏—Å—å/–≤–æ–¥—è–Ω–æ–π –∑–Ω–∞–∫"
-        _clear_medicine_wait(context)
-        _clear_image_retouch_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        await _start_image_retouch(update, context, img, instruction)
-        return
-
-    # AI-—Å–µ–ª—Ñ–∏: —Ñ–æ—Ç–æ —É–∂–µ –∑–∞–≥—Ä—É–∂–µ–Ω–æ, –∂–¥—ë–º —Å—Ü–µ–Ω—É/–∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç—å/–ø–µ—Ä—Å–æ–Ω–∞–∂–∞.
-    if context.user_data.get("awaiting_ai_selfie_prompt"):
-        img = _get_cached_photo(update.effective_user.id)
-        if not img:
-            _clear_ai_selfie_wait(context)
-            await update.effective_message.reply_text("–°–Ω–∞—á–∞–ª–∞ –∑–∞–≥—Ä—É–∑–∏—Ç–µ —Å–≤–æ—ë —Å–µ–ª—Ñ–∏, –∑–∞—Ç–µ–º –Ω–∞–∂–º–∏—Ç–µ ü§≥ AI-—Å–µ–ª—Ñ–∏ —Å–æ –∑–≤–µ–∑–¥–æ–π.", reply_markup=main_kb)
-            return
-        preset = (context.user_data.pop("ai_selfie_preset_prompt", "") or "").strip()
-        _clear_ai_selfie_wait(context)
-        await _start_ai_selfie(update, context, img, text, preset)
-        return
-
-    # –ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä: –ø–æ—Ä—Ç—Ä–µ—Ç —É–∂–µ –∑–∞–≥—Ä—É–∂–µ–Ω, –Ω–æ –ø–µ—Ä–µ–¥ —Ç–µ–∫—Å—Ç–æ–º —Ç—Ä–µ–±—É–µ—Ç—Å—è –≤—ã–±—Ä–∞—Ç—å –≥–æ–ª–æ—Å.
-    if context.user_data.get("awaiting_avatar_voice_choice"):
-        tl = (text or "").strip().lower()
-        voice_aliases = {
-            "nova": "nova", "–Ω–æ–≤–∞": "nova",
-            "onyx": "onyx", "–æ–Ω–∏–∫—Å": "onyx",
-            "alloy": "alloy", "–∞–ª–ª–æ–π": "alloy",
-            "shimmer": "shimmer", "—à–∏–º–º–µ—Ä": "shimmer",
-            "fable": "fable", "—Ñ–µ–π–±–ª": "fable",
-        }
-        if tl in voice_aliases:
-            chosen = voice_aliases[tl]
-            context.user_data["avatar_tts_voice"] = chosen
-            context.user_data.pop("awaiting_avatar_voice_choice", None)
-            pending_script = (context.user_data.get("avatar_pending_script") or "").strip()
-            img = _get_cached_photo(update.effective_user.id)
-            if pending_script and img:
-                context.user_data.pop("avatar_pending_script", None)
-                _clear_avatar_wait(context)
-                await update.effective_message.reply_text(f"‚úÖ –î–ª—è –∞–≤–∞—Ç–∞—Ä–∞ –≤—ã–±—Ä–∞–Ω –≥–æ–ª–æ—Å: {_avatar_tts_voice_label(chosen)}. –¢–µ–∫—Å—Ç —É–∂–µ –ø–æ–ª—É—á–µ–Ω ‚Äî –∑–∞–ø—É—Å–∫–∞—é –≥–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä.")
-                await _start_talking_avatar(update, context, img, script_text=pending_script)
-                return
-            _set_avatar_wait(context)
-            await update.effective_message.reply_text(f"‚úÖ –î–ª—è –∞–≤–∞—Ç–∞—Ä–∞ –≤—ã–±—Ä–∞–Ω –≥–æ–ª–æ—Å: {_avatar_tts_voice_label(chosen)}. –¢–µ–ø–µ—Ä—å –ø—Ä–∏—à–ª–∏—Ç–µ —Ç–µ–∫—Å—Ç, –∫–æ—Ç–æ—Ä—ã–π –¥–æ–ª–∂–µ–Ω –ø—Ä–æ–∏–∑–Ω–µ—Å—Ç–∏ –∞–≤–∞—Ç–∞—Ä.")
-            return
-        await update.effective_message.reply_text(_avatar_voice_choice_text(), reply_markup=_avatar_voice_choice_kb("act"))
-        return
-
-    # –ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä: —Ñ–æ—Ç–æ —É–∂–µ –∑–∞–≥—Ä—É–∂–µ–Ω–æ, –∂–¥—ë–º —Ç–µ–∫—Å—Ç/–≥–æ–ª–æ—Å –¥–ª—è —Ä–µ—á–∏.
-    if context.user_data.get("awaiting_avatar_script"):
-        img = _get_cached_photo(update.effective_user.id)
-        if not img:
-            _clear_avatar_wait(context)
-            await update.effective_message.reply_text("–°–Ω–∞—á–∞–ª–∞ –∑–∞–≥—Ä—É–∑–∏—Ç–µ –ø–æ—Ä—Ç—Ä–µ—Ç —á–µ–ª–æ–≤–µ–∫–∞, –∑–∞—Ç–µ–º –Ω–∞–∂–º–∏—Ç–µ üó£ –ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä.", reply_markup=main_kb)
-            return
-        _clear_avatar_wait(context)
-        await _start_talking_avatar(update, context, img, script_text=text)
-        return
-
-    # AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø: –¥–≤–∞ –Ω–µ–∑–∞–≤–∏—Å–∏–º—ã—Ö –≤–æ–ø—Ä–æ—Å–∞ ‚Äî —Å–Ω–∞—á–∞–ª–∞ –ø–µ—Å–Ω—è, –∑–∞—Ç–µ–º —Ä–µ–∂–∏—Å—Å—É—Ä–∞ –≤–∏–¥–µ–æ.
-    if context.user_data.get("awaiting_vocal_clip_prompt"):
-        img = _get_cached_photo(update.effective_user.id)
-        if not img:
-            _clear_vocal_clip_wait(context)
-            await update.effective_message.reply_text("–°–Ω–∞—á–∞–ª–∞ –∑–∞–≥—Ä—É–∑–∏—Ç–µ –ø–æ—Ä—Ç—Ä–µ—Ç –æ–¥–Ω–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞, –∑–∞—Ç–µ–º –Ω–∞–∂–º–∏—Ç–µ üé§ –ö–ª–∏–ø —Å –≤–æ–∫–∞–ª–æ–º.", reply_markup=main_kb)
-            return
-        context.user_data.pop("awaiting_vocal_clip_prompt", None)
-        context.user_data["music_video_music_brief"] = text.strip()
-        context.user_data["awaiting_music_video_video_brief"] = True
-        # Persist the VIDEO stage as well as the song brief. Telegram updates can
-        # land on a fresh worker/process, so user_data alone is not authoritative.
-        with contextlib.suppress(Exception):
-            kv_set(f"music_video_music_brief:{update.effective_user.id}", text.strip())
-            _mode_track_set(update.effective_user.id, "musicvideo:video")
-        await update.effective_message.reply_text(
-            "üé• –¢–µ–ø–µ—Ä—å –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –í–ò–î–ï–û: —á—Ç–æ –ø—Ä–æ–∏—Å—Ö–æ–¥–∏—Ç –≤ –∫–∞–¥—Ä–µ, –¥–µ–π—Å—Ç–≤–∏—è –≥–µ—Ä–æ—è, –∫—É–¥–∞ –æ–Ω –∏–¥—ë—Ç, –∫–∞–∫ –¥–≤–∏–∂–µ—Ç—Å—è –∫–∞–º–µ—Ä–∞, –æ–∫—Ä—É–∂–µ–Ω–∏–µ, —Å–≤–µ—Ç –∏ —Ñ–∏–Ω–∞–ª—å–Ω—ã–π –∫–∞–¥—Ä.\n\n"
-            "–ù–∞–ø—Ä–∏–º–µ—Ä: –¥–≤–µ—Ä–∏ –ª–∏—Ñ—Ç–∞ –æ—Ç–∫—Ä—ã–≤–∞—é—Ç—Å—è ‚Üí —è –≤—ã—Ö–æ–∂—É ‚Üí –∫–∞–º–µ—Ä–∞ –æ–±—Ö–æ–¥–∏—Ç –º–µ–Ω—è –∏ –ø–µ—Ä–µ—Ö–æ–¥–∏—Ç –∑–∞ —Å–ø–∏–Ω—É ‚Üí —Å–ª–µ–¥—É–µ—Ç —Å–∑–∞–¥–∏ ‚Üí —è –≤—ã—Ö–æ–∂—É –Ω–∞ —Å–æ–ª–Ω–µ—á–Ω—É—é —É–ª–∏—Ü—É –∫ –æ—Ä–∞–Ω–∂–µ–≤–æ–º—É Lamborghini Urus."
-        )
-        return
-
-    if context.user_data.get("awaiting_music_video_video_brief"):
-        img = _get_cached_photo(update.effective_user.id)
-        music_brief = (context.user_data.get("music_video_music_brief") or "").strip()
-        if not img or not music_brief:
-            context.user_data.pop("awaiting_music_video_video_brief", None)
-            context.user_data.pop("music_video_music_brief", None)
-            await update.effective_message.reply_text("–ß–µ—Ä–Ω–æ–≤–∏–∫ –∫–ª–∏–ø–∞ –ø–æ—Ç–µ—Ä—è–ª –∏—Å—Ö–æ–¥–Ω—ã–µ –¥–∞–Ω–Ω—ã–µ. –ù–∞—á–Ω–∏—Ç–µ —Ä–µ–∂–∏–º AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞ –µ—â—ë —Ä–∞–∑.")
-            return
-        await _stage_music_video_draft(update, context, music_brief=music_brief, video_brief=text)
-        return
-
-    # –û–∂–∏–≤–ª–µ–Ω–∏–µ —Ñ–æ—Ç–æ –ø–æ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å—Å–∫–æ–º—É —Å—Ü–µ–Ω–∞—Ä–∏—é: —Ñ–æ—Ç–æ —É–∂–µ –∑–∞–≥—Ä—É–∂–µ–Ω–æ,
-    # –∂–¥—ë–º –∫–æ—Ä–æ—Ç–∫–∏–π motion prompt, –∑–∞—Ç–µ–º –ø—Ä–µ–¥–ª–∞–≥–∞–µ–º –≤—ã–±—Ä–∞—Ç—å –¥–≤–∏–∂–æ–∫.
-    if context.user_data.pop("awaiting_revival_custom_prompt", None):
-        img = _get_cached_photo(update.effective_user.id)
-        if not img:
-            context.user_data.pop("revival_custom_prompt", None)
-            await update.effective_message.reply_text("–°–Ω–∞—á–∞–ª–∞ –∑–∞–≥—Ä—É–∑–∏—Ç–µ —Ñ–æ—Ç–æ –∏ —Å–Ω–æ–≤–∞ –æ—Ç–∫—Ä–æ–π—Ç–µ ¬´–û–∂–∏–≤–∏—Ç—å —Ñ–æ—Ç–æ¬ª.")
-            return
-        context.user_data["revival_custom_prompt"] = text.strip()
-        await update.effective_message.reply_text(
-            "‚úÖ –°—Ü–µ–Ω–∞—Ä–∏–π —Å–æ—Ö—Ä–∞–Ω—ë–Ω. –¢–µ–ø–µ—Ä—å –≤—ã–±–µ—Ä–∏—Ç–µ –¥–≤–∏–∂–æ–∫:",
-            reply_markup=photo_revival_engines_kb(),
-        )
-        return
-
-    # –í–∏–¥–µ–æ –ø–æ —Ç–µ–∫—Å—Ç—É/–≥–æ–ª–æ—Å—É: –∂–¥—ë–º prompt –ø–æ—Å–ª–µ –≤—ã–±–æ—Ä–∞ –¥–≤–∏–∂–∫–∞.
-    if context.user_data.get("awaiting_text_video_prompt"):
-        _clear_text_video_wait(context)
-        await _start_text_video(update, context, text)
-        return
-
-    # –§–æ—Ç–æ‚Üí–≤–∏–¥–µ–æ–∫–ª–∏–ø: –ø–µ—Ä–≤—ã–π —Ç–µ–∫—Å—Ç –ø–æ—Å–ª–µ —Ñ–æ—Ç–æ ‚Äî —Ç–æ–ª—å–∫–æ –º—É–∑—ã–∫–∞–ª—å–Ω—ã–π –±—Ä–∏—Ñ.
-    # –ù–µ –ø–µ—Ä–µ–¥–∞—ë–º –µ–≥–æ –∫–∞–∫ legacy combined prompt, –∏–Ω–∞—á–µ –æ–Ω –¥—É–±–ª–∏—Ä—É–µ—Ç—Å—è –≤ VIDEO_BRIEF.
-    if context.user_data.get("awaiting_photo_clip_prompt"):
-        img = _get_cached_photo(update.effective_user.id)
-        if not img:
-            _clear_photo_clip_wait(context)
-            await update.effective_message.reply_text("–°–Ω–∞—á–∞–ª–∞ –∑–∞–≥—Ä—É–∑–∏—Ç–µ —Ñ–æ—Ç–æ —á–µ–ª–æ–≤–µ–∫–∞, –∑–∞—Ç–µ–º –Ω–∞–∂–º–∏—Ç–µ üéµ –§–æ—Ç–æ ‚Üí –≤–∏–¥–µ–æ–∫–ª–∏–ø.", reply_markup=main_kb)
-            return
-        context.user_data.pop("awaiting_photo_clip_prompt", None)
-        context.user_data["music_video_music_brief"] = text.strip()
-        context.user_data["awaiting_music_video_video_brief"] = True
-        # Persist the VIDEO stage as well as the song brief. This prevents the
-        # next message from falling through to generic GPT/Suno capability text.
-        with contextlib.suppress(Exception):
-            kv_set(f"music_video_music_brief:{update.effective_user.id}", text.strip())
-            _mode_track_set(update.effective_user.id, "musicvideo:video")
-        await update.effective_message.reply_text(
-            "üé¨ –¢–µ–ø–µ—Ä—å –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –í–ò–î–ï–û: —á—Ç–æ –ø—Ä–æ–∏—Å—Ö–æ–¥–∏—Ç –≤ –∫–∞–¥—Ä–µ, –¥–µ–π—Å—Ç–≤–∏—è –≥–µ—Ä–æ—è, –∫—É–¥–∞ –æ–Ω –∏–¥—ë—Ç, –∫–∞–∫ –¥–≤–∏–∂–µ—Ç—Å—è –∫–∞–º–µ—Ä–∞, –æ–∫—Ä—É–∂–µ–Ω–∏–µ, —Å–≤–µ—Ç –∏ —Ñ–∏–Ω–∞–ª—å–Ω—ã–π –∫–∞–¥—Ä.\n\n"
-            "–ù–∞–ø—Ä–∏–º–µ—Ä: –¥–≤–µ—Ä–∏ –ª–∏—Ñ—Ç–∞ –æ—Ç–∫—Ä—ã–≤–∞—é—Ç—Å—è ‚Üí —è –≤—ã—Ö–æ–∂—É ‚Üí –∫–∞–º–µ—Ä–∞ –ø–ª–∞–≤–Ω–æ –æ–±—Ö–æ–¥–∏—Ç –º–µ–Ω—è –∏ –ø–µ—Ä–µ—Ö–æ–¥–∏—Ç –∑–∞ —Å–ø–∏–Ω—É ‚Üí —Å–ª–µ–¥—É–µ—Ç —Å–∑–∞–¥–∏ –ø–æ –∫–æ—Ä–∏–¥–æ—Ä—É ‚Üí —è –≤—ã—Ö–æ–∂—É –Ω–∞ —Å–æ–ª–Ω–µ—á–Ω—É—é —É–ª–∏—Ü—É –∫ –æ—Ä–∞–Ω–∂–µ–≤–æ–º—É Lamborghini Urus.\n\n"
-            "–≠—Ç–∞ —á–∞—Å—Ç—å –Ω–µ –±—É–¥–µ—Ç –æ—Ç–ø—Ä–∞–≤–ª—è—Ç—å—Å—è –≤ Suno."
-        )
-        return
-
-    # –¢–µ–∫—Å—Ç–æ–≤—ã–π/–≥–æ–ª–æ—Å–æ–≤–æ–π –∑–∞–ø—Ä–æ—Å –Ω–∞ —Ä–µ—Ç—É—à—å –¥–æ –∑–∞–≥—Ä—É–∑–∫–∏ —Ñ–æ—Ç–æ.
-    # –≠—Ç–æ —Å–±—Ä–∞—Å—ã–≤–∞–µ—Ç –º–µ–¥–∏—Ü–∏–Ω—É –∏ –ø–µ—Ä–µ–≤–æ–¥–∏—Ç —Å–ª–µ–¥—É—é—â–µ–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –≤ image-edit.
-    if _is_image_retouch_request(text):
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        img = _get_cached_photo(update.effective_user.id)
-        if img and _has_own_image_confirmation(text):
-            await _start_image_retouch(update, context, img, text)
-            return
-        _set_waiting_image_retouch(update, context, text)
-        await update.effective_message.reply_text(_retouch_user_hint_text(), reply_markup=main_kb)
-        return
-
-    if _is_ai_selfie_intent(text):
-        img = _get_cached_photo(update.effective_user.id)
-        prompt = _clean_ai_selfie_prompt(text)
-        if img and prompt:
-            await _start_ai_selfie(update, context, img, prompt)
-            return
-        _set_ai_selfie_wait(context)
-        await update.effective_message.reply_text(
-            "–î–∞, —Å–¥–µ–ª–∞—é AI-—Å–µ–ª—Ñ–∏: –∑–∞–≥—Ä—É–∑–∏—Ç–µ —Å–≤–æ—ë —Ñ–æ—Ç–æ, –∑–∞—Ç–µ–º –Ω–∞–ø–∏—à–∏—Ç–µ, —Å –∫–µ–º/–≥–¥–µ —Å–¥–µ–ª–∞—Ç—å —Å—Ü–µ–Ω—É. –ù–∞–ø—Ä–∏–º–µ—Ä: ¬´—Å–µ–ª—Ñ–∏ —Å –∏–∑–≤–µ—Å—Ç–Ω—ã–º –∞–∫—Ç—ë—Ä–æ–º –Ω–∞ –∫—Ä–∞—Å–Ω–æ–π –¥–æ—Ä–æ–∂–∫–µ, iPhone selfie, 4:5¬ª.",
-            reply_markup=main_kb,
-        )
-        return
-
-    if _is_avatar_intent(text):
-        img = _get_cached_photo(update.effective_user.id)
-        script = _clean_avatar_script(text)
-        if img:
-            if script and len(script) > 8:
-                context.user_data["avatar_pending_script"] = script
-            if context.user_data.get("avatar_tts_voice"):
-                pending_script = (context.user_data.get("avatar_pending_script") or "").strip()
-                if pending_script:
-                    context.user_data.pop("avatar_pending_script", None)
-                    await update.effective_message.reply_text(
-                        f"‚úÖ –ü–æ—Ä—Ç—Ä–µ—Ç –Ω–∞–π–¥–µ–Ω. –ì–æ–ª–æ—Å —É–∂–µ –≤—ã–±—Ä–∞–Ω: {_avatar_tts_voice_label(_avatar_tts_voice_get(context))}. –¢–µ–∫—Å—Ç —É–∂–µ –ø–æ–ª—É—á–µ–Ω ‚Äî –∑–∞–ø—É—Å–∫–∞—é –≥–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä."
-                    )
-                    await _start_talking_avatar(update, context, img, script_text=pending_script)
-                else:
-                    _set_avatar_wait(context)
-                    await update.effective_message.reply_text(
-                        f"‚úÖ –ü–æ—Ä—Ç—Ä–µ—Ç –Ω–∞–π–¥–µ–Ω. –ì–æ–ª–æ—Å —É–∂–µ –≤—ã–±—Ä–∞–Ω: {_avatar_tts_voice_label(_avatar_tts_voice_get(context))}. –¢–µ–ø–µ—Ä—å –ø—Ä–∏—à–ª–∏—Ç–µ —Ç–µ–∫—Å—Ç, voice –∏–ª–∏ –∞—É–¥–∏–æ—Ñ–∞–π–ª 2‚Äì60 —Å–µ–∫—É–Ω–¥."
-                    )
-            else:
-                _set_avatar_voice_choice_wait(context)
-                await update.effective_message.reply_text(_avatar_voice_choice_text(), reply_markup=_avatar_voice_choice_kb("act"))
-        else:
-            context.user_data["awaiting_avatar_photo"] = True
-            if script and len(script) > 8:
-                context.user_data["avatar_pending_script"] = script
-            await update.effective_message.reply_text(
-                "–î–∞, —Å–¥–µ–ª–∞—é –≥–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä. –°–Ω–∞—á–∞–ª–∞ –∑–∞–≥—Ä—É–∑–∏—Ç–µ –ø–æ—Ä—Ç—Ä–µ—Ç —á–µ–ª–æ–≤–µ–∫–∞. –ü–æ—Å–ª–µ –∑–∞–≥—Ä—É–∑–∫–∏ —è –æ–±—è–∑–∞—Ç–µ–ª—å–Ω–æ –ø—Ä–µ–¥–ª–æ–∂—É –≤—ã–±—Ä–∞—Ç—å –≥–æ–ª–æ—Å, –∞ –∑–∞—Ç–µ–º –∏—Å–ø–æ–ª—å–∑—É—é –≤–∞—à —Ç–µ–∫—Å—Ç, voice –∏–ª–∏ –∞—É–¥–∏–æ—Ñ–∞–π–ª 2‚Äì60 —Å–µ–∫—É–Ω–¥.",
-                reply_markup=main_kb,
-            )
-        return
-
-    if _is_photo_clip_intent(text):
-        img = _get_cached_photo(update.effective_user.id)
-        prompt = _clean_photo_clip_prompt(text)
-        if img and prompt:
-            await _stage_music_video_draft(update, context, prompt)
-            return
-        _set_photo_clip_wait(context)
-        await update.effective_message.reply_text(
-            "–î–∞, —Å–¥–µ–ª–∞—é –≤–∏–¥–µ–æ–∫–ª–∏–ø –∏–∑ —Ñ–æ—Ç–æ. –ó–∞–≥—Ä—É–∑–∏—Ç–µ —Ñ–æ—Ç–æ —á–µ–ª–æ–≤–µ–∫–∞, –∑–∞—Ç–µ–º –æ–ø–∏—à–∏—Ç–µ —Å—Ç–∏–ª—å –∫–ª–∏–ø–∞/–º—É–∑—ã–∫–∏, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å –∏ —Ñ–æ—Ä–º–∞—Ç.",
-            reply_markup=main_kb,
-        )
-        return
-
-    # –í–æ–ø—Ä–æ—Å/–∫–æ–º–∞–Ω–¥–∞ –ø—Ä–æ –æ–∂–∏–≤–ª–µ–Ω–∏–µ —Ñ–æ—Ç–æ –¥–æ–ª–∂–Ω—ã —Å–±—Ä–∞—Å—ã–≤–∞—Ç—å –º–µ–¥–∏—Ü–∏–Ω—Å–∫—É—é –≤–µ—Ç–∫—É.
-    # –ò–Ω–∞—á–µ –ø–æ—Å–ª–µ –∫–Ω–æ–ø–∫–∏ ¬´–ú–µ–¥–∏—Ü–∏–Ω–∞¬ª —Å–ª–µ–¥—É—é—â–µ–µ –æ–±—ã—á–Ω–æ–µ —Ñ–æ—Ç–æ –æ—à–∏–±–æ—á–Ω–æ —É—Ö–æ–¥–∏—Ç –≤ –º–µ–¥. –∞–Ω–∞–ª–∏–∑.
-    if _is_photo_revival_question(text) or _is_photo_revival_intent(text):
-        _set_waiting_photo_revival(update, context)
-        await update.effective_message.reply_text(_photo_revival_capability_text(), reply_markup=main_kb)
-        return
-
-    # Legacy presentation flags from older deployments are migrated into the v86 studio.
-    if context.user_data.pop("awaiting_work_presentation_brief", None):
-        await _presentation_studio_get().start(update, context, "presentation")
-        if await _presentation_studio_get().handle_text(update, context, text):
-            return
-
-    if context.user_data.pop("awaiting_work_catalog_brief", None):
-        await _presentation_studio_get().start(update, context, "catalog")
-        if await _presentation_studio_get().handle_text(update, context, text):
-            return
-
-    if context.user_data.get("awaiting_work_logo_brief"):
-        context.user_data.pop("awaiting_work_logo_brief", None)
-        _mode_track_set(update.effective_user.id, "work_logo")
-        await _generate_business_logo(update, context, text)
-        return
-
-    if context.user_data.get("awaiting_music_video_audio_prompt_edit"):
-        context.user_data.pop("awaiting_music_video_audio_prompt_edit", None)
-        context.user_data.pop("vocal_source_token", None)
-        context.user_data.pop("music_video_pending_audio_token", None)
-        new_brief = text.strip()
-        if not new_brief:
-            await update.effective_message.reply_text("–ü—Ä–æ–º–ø—Ç –ø—É—Å—Ç–æ–π. –ù–∞–∂–º–∏—Ç–µ ¬´‚úèÔ∏è –ò–∑–º–µ–Ω–∏—Ç—å –ø—Ä–æ–º–ø—Ç –∞—É–¥–∏–æ¬ª –µ—â—ë —Ä–∞–∑.")
-            return
-        context.user_data["music_video_pending_music_brief"] = new_brief
-        pending_prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
-        if pending_prompt:
-            _, pending_video = _music_video_split_briefs(pending_prompt)
-            context.user_data["music_video_pending_prompt"] = _music_video_join_briefs(new_brief, pending_video)
-        await update.effective_message.reply_text("‚úèÔ∏è –ü—Ä–æ–º–ø—Ç –æ–±–Ω–æ–≤–ª—ë–Ω. –ì–µ–Ω–µ—Ä–∏—Ä—É—é –Ω–æ–≤—ã–π –≤–∞—Ä–∏–∞–Ω—Ç Suno; –≤–∏–¥–µ–æ –ø–æ–∫–∞ –Ω–µ –∑–∞–ø—É—Å–∫–∞—é.")
-        fresh = await _run_suno_music_result_bytes(update, new_brief)
-        if not fresh:
-            await update.effective_message.reply_text("‚ùå Suno –Ω–µ –≤–µ—Ä–Ω—É–ª –Ω–æ–≤—ã–π –≤–∞—Ä–∏–∞–Ω—Ç. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –∏–∑–º–µ–Ω–∏—Ç—å –ø—Ä–æ–º–ø—Ç –µ—â—ë —Ä–∞–∑.")
-            return
-        new_token = uuid.uuid4().hex[:12]
-        context.user_data["music_video_pending_audio_token"] = new_token
-        await asyncio.to_thread(_save_vocal_artifact, update.effective_user.id, new_token, "audio", fresh)
-        await _send_vocal_song_file(update.effective_message, fresh, new_token)
-        await update.effective_message.reply_text("üéß –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –Ω–æ–≤—ã–π –≤–∞—Ä–∏–∞–Ω—Ç.", reply_markup=_vocal_song_kb(new_token, pending=True))
-        return
-
-    if context.user_data.get("awaiting_suno_brief"):
-        context.user_data.pop("awaiting_suno_brief", None)
-        _mode_track_set(update.effective_user.id, "suno_music")
-        suno_brief = _prepare_suno_brief_from_context(context, text)
-        await _run_suno_music(update, context, suno_brief)
-        return
-
-    # –ï—Å–ª–∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å –≤—ã–±—Ä–∞–ª Reels/—Ñ–∏–ª—å–º –≤ –º–µ–Ω—é –∏ —Ç–µ–ø–µ—Ä—å –ø–∏—à–µ—Ç –≤–≤–æ–¥–Ω—ã–µ ‚Äî
-    # —Å–Ω–∞—á–∞–ª–∞ –¥–∞—ë–º —Å—Ç—Ä—É–∫—Ç—É—Ä–∏—Ä–æ–≤–∞–Ω–Ω—ã–π —Å—Ü–µ–Ω–∞—Ä–Ω—ã–π –æ—Ç–≤–µ—Ç, –∞ –Ω–µ –æ–±—â–∏–π —á–∞—Ç.
-    if context.user_data.get("awaiting_reels_material"):
-        context.user_data.pop("awaiting_reels_material", None)
-        _mode_track_set(update.effective_user.id, "fun_reels")
-        prompt = (
-            "–¢—ã –ø—Ä–æ–¥—é—Å–µ—Ä –∫–æ—Ä–æ—Ç–∫–∏—Ö Reels/Shorts. –ù–∞ —Ä—É—Å—Å–∫–æ–º –ø–æ–¥–≥–æ—Ç–æ–≤—å: 1) —Ö—É–∫, 2) —Å—Ü–µ–Ω–∞—Ä–∏–π –ø–æ —Å–µ–∫—É–Ω–¥–∞–º, "
-            "3) —Ç–µ–∫—Å—Ç –Ω–∞ —ç–∫—Ä–∞–Ω–µ, 4) voice-over, 5) CTA, 6) –ø—Ä–æ–º–ø—Ç—ã –¥–ª—è Sora/Kling, "
-            "7) –º–æ–Ω—Ç–∞–∂–Ω—ã–µ –ø–æ–¥—Å–∫–∞–∑–∫–∏. –ó–∞–ø—Ä–æ—Å –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è:\n" + text
-        )
-        reply = await ask_openai_text(prompt)
-        await update.effective_message.reply_text(reply[:3900], reply_markup=main_kb)
-        if len(reply) > 3900:
-            await update.effective_message.reply_text(reply[3900:7800])
-        await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
-        return
-
-    if context.user_data.get("awaiting_film_material"):
-        context.user_data.pop("awaiting_film_material", None)
-        _mode_track_set(update.effective_user.id, "fun_film")
-        prompt = (
-            "–¢—ã —Ä–µ–∂–∏—Å—Å—ë—Ä –∏ –ø—Ä–æ–º–ø—Ç-–∏–Ω–∂–µ–Ω–µ—Ä AI-–≤–∏–¥–µ–æ. –ù–∞ —Ä—É—Å—Å–∫–æ–º –ø–æ–¥–≥–æ—Ç–æ–≤—å –º–∏–Ω–∏-—Ñ–∏–ª—å–º: "
-            "1) –ª–æ–≥–ª–∞–π–Ω, 2) —Å—Ç—Ä—É–∫—Ç—É—Ä–∞ —Å—Ü–µ–Ω, 3) —Ä–∞—Å–∫–∞–¥—Ä–æ–≤–∫–∞, 4) –ø—Ä–æ–º–ø—Ç—ã –¥–ª—è –∫–æ—Ä–æ—Ç–∫–∏—Ö –∫–ª–∏–ø–æ–≤ 5-10 —Å–µ–∫ "
-            "—á–µ—Ä–µ–∑ Sora 2 –±–µ–∑ –ª—é–¥–µ–π, Kling –∏–ª–∏ Runway, 5) –º–æ–Ω—Ç–∞–∂/–∑–≤—É–∫/—Ç–∏—Ç—Ä—ã, 6) –ø–ª–∞–Ω —Å–±–æ—Ä–∫–∏. –ó–∞–ø—Ä–æ—Å –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è:\n" + text
-        )
-        reply = await ask_openai_text(prompt)
-        await update.effective_message.reply_text(reply[:3900], reply_markup=main_kb)
-        if len(reply) > 3900:
-            await update.effective_message.reply_text(reply[3900:7800])
-        await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
-        return
-
-    # –í–æ–ø—Ä–æ—Å—ã –æ –≤–æ–∑–º–æ–∂–Ω–æ—Å—Ç—è—Ö.
-    # –ï—Å–ª–∏ –≤–æ–ø—Ä–æ—Å –Ω–µ –º–µ–¥–∏—Ü–∏–Ω—Å–∫–∏–π, —Å–±—Ä–∞—Å—ã–≤–∞–µ–º –∑–∞–≤–∏—Å—à–∏–π –º–µ–¥. —Ä–µ–∂–∏–º,
-    # —á—Ç–æ–±—ã —Å–ª–µ–¥—É—é—â–∏–µ —Ñ–æ—Ç–æ/–¥–æ–∫—É–º–µ–Ω—Ç—ã –Ω–µ —É—Ö–æ–¥–∏–ª–∏ –æ—à–∏–±–æ—á–Ω–æ –≤ –º–µ–¥–∏—Ü–∏–Ω—É.
-    cap = capability_answer(text)
-    if cap:
-        if not _is_medical_capability_question(text):
-            _clear_medicine_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(update.effective_user.id, "")
-        await update.effective_message.reply_text(cap, reply_markup=main_kb)
-        return
-
-    # –ù–∞–º—ë–∫ –Ω–∞ –º—É–∑—ã–∫—É / –ø–µ—Å–Ω—é —á–µ—Ä–µ–∑ Suno
-    if re.search(r"(?:—Å–æ–∑–¥–∞[–π–∏]|—Å–¥–µ–ª–∞[–π–∏]|—Å–≥–µ–Ω–µ—Ä–∏—Ä—É[–π–∏]|–Ω–∞–ø–∏—à–∏|–∑–∞–ø—É—Å—Ç–∏).{0,80}(–º—É–∑—ã–∫|–ø–µ—Å–Ω|—Ç—Ä–µ–∫|–¥–∂–∏–Ω–≥–ª|–º–∏–Ω—É—Å–æ–≤–∫|suno)", text, re.I):
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "suno_music")
-        await _run_suno_music(update, context, text)
-        return
-
-    # –ù–∞–º—ë–∫ –Ω–∞ –≥–µ–Ω–µ—Ä–∞—Ü–∏—é –≤–∏–¥–µ–æ—Ä–æ–ª–∏–∫–∞
-    mtype, rest = detect_media_intent(text)
-    if mtype == "video":
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        duration, aspect = parse_video_opts(text)
-        prompt = rest or re.sub(
-            r"\b(\d+\s*(?:—Å–µ–∫|—Å)\b|(?:9:16|16:9|1:1|4:5|3:4|4:3))",
-            "",
-            text,
-            flags=re.I,
-        ).strip(" ,.")
-
-        if not prompt:
-            await update.effective_message.reply_text(
-                "–û–ø–∏—à–∏—Ç–µ, —á—Ç–æ –∏–º–µ–Ω–Ω–æ —Å–Ω—è—Ç—å, –Ω–∞–ø—Ä.: ¬´—Ä–µ—Ç—Ä–æ-–∞–≤—Ç–æ –Ω–∞ –±–µ—Ä–µ–≥—É, –∑–∞–∫–∞—Ç¬ª."
-            )
-            return
-
-        aid = _new_aid()
-        _pending_actions[aid] = {
-            "prompt": prompt,
-            "duration": duration,
-            "aspect": aspect,
-        }
-
-        people_present = _prompt_likely_has_people(prompt)
-        buttons = []
-        if not people_present:
-            buttons.append([InlineKeyboardButton(f"üéû Sora 2 ¬∑ –±–µ–∑ –ª—é–¥–µ–π ¬∑ {_video_price_credits('sora', duration)} –∫—Ä.", callback_data=f"choose:sora:{aid}")])
-        buttons.append([InlineKeyboardButton(f"üé¨ Kling ¬∑ {_video_price_credits('kling', duration)} –∫—Ä.", callback_data=f"choose:kling:{aid}")])
-        if TEXT_VIDEO_ALLOW_RUNWAY:
-            buttons.append([InlineKeyboardButton(f"üé• Runway ¬∑ {_video_price_credits('runway', duration)} –∫—Ä.", callback_data=f"choose:runway:{aid}")])
-        kb = InlineKeyboardMarkup(buttons)
-        sora_note = "–í –∑–∞–ø—Ä–æ—Å–µ –æ–±–Ω–∞—Ä—É–∂–µ–Ω —á–µ–ª–æ–≤–µ–∫ ‚Äî Sora 2 —Å–∫—Ä—ã—Ç–∞." if people_present else "Sora 2 –¥–æ—Å—Ç—É–ø–Ω–∞ —Ç–æ–ª—å–∫–æ –¥–ª—è —Å—Ü–µ–Ω –±–µ–∑ –ª—é–¥–µ–π."
-        await update.effective_message.reply_text(
-            f"–ß—Ç–æ –∏—Å–ø–æ–ª—å–∑–æ–≤–∞—Ç—å?\n–î–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å: {duration} c ‚Ä¢ –ê—Å–ø–µ–∫—Ç: {aspect}\n–ó–∞–ø—Ä–æ—Å: ¬´{prompt}¬ª\n\n{sora_note}\n–°—Ç–æ–∏–º–æ—Å—Ç—å —É–∂–µ –≤–∫–ª—é—á–∞–µ—Ç –º–∞—Ä–∂—É –±–æ—Ç–∞ –∏ –±—É–¥–µ—Ç —Å–ø–∏—Å–∞–Ω–∞ —Ç–æ–ª—å–∫–æ –ø–æ—Å–ª–µ —É—Å–ø–µ—à–Ω–æ–≥–æ —Ä–µ–∑—É–ª—å—Ç–∞—Ç–∞.",
-            reply_markup=kb,
-        )
-        return
-
-
-
-    # –ù–∞–º—ë–∫ –Ω–∞ –∫–∞—Ä—Ç–∏–Ω–∫—É
-    if mtype == "image":
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-        prompt = rest or re.sub(
-            r"^(img|image|picture)\s*[:\-]\s*",
-            "",
-            text,
-            flags=re.I,
-        ).strip()
-
-        if not prompt:
-            await update.effective_message.reply_text(
-                "–§–æ—Ä–º–∞—Ç: /img <–æ–ø–∏—Å–∞–Ω–∏–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è>"
-            )
-            return
-
-        await _ask_image_engine_choice(update, context, prompt)
-        return
-
-    # Live-–∑–∞–ø—Ä–æ—Å—ã: –∫—É—Ä—Å—ã, –Ω–æ–≤–æ—Å—Ç–∏, –∑–∞–∫–æ–Ω—ã, –ø–æ–≥–æ–¥–∞, —Ä–µ–ª–∏–∑—ã –∏ –ª—é–±—ã–µ –∞–∫—Ç—É–∞–ª—å–Ω—ã–µ –¥–∞–Ω–Ω—ã–µ.
-    # –ì–æ–ª–æ—Å–æ–≤—ã–µ –∑–∞–ø—Ä–æ—Å—ã –ø–æ–ø–∞–¥–∞—é—Ç —Å—é–¥–∞ —á–µ—Ä–µ–∑ on_text_with_text –ø–æ—Å–ª–µ STT.
-    if not _MEDICAL_TERMS_RE.search(text):
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(update.effective_user.id, "")
-    if await maybe_handle_live_query(update, context, text):
-        return
-
-    # –û–±—ã—á–Ω—ã–π —Ç–µ–∫—Å—Ç ‚Üí GPT
-    ok, _, _ = check_text_and_inc(
-        update.effective_user.id,
-        update.effective_user.username or "",
-    )
-
-    if not ok:
-        await update.effective_message.reply_text(
-            "–õ–∏–º–∏—Ç —Ç–µ–∫—Å—Ç–æ–≤—ã—Ö –∑–∞–ø—Ä–æ—Å–æ–≤ –Ω–∞ —Å–µ–≥–æ–¥–Ω—è –∏—Å—á–µ—Ä–ø–∞–Ω. "
-            "–û—Ñ–æ—Ä–º–∏—Ç–µ ‚≠ê –ø–æ–¥–ø–∏—Å–∫—É –∏–ª–∏ –ø–æ–ø—Ä–æ–±—É–π—Ç–µ –∑–∞–≤—Ç—Ä–∞."
-        )
-        return
-
-    user_id = update.effective_user.id
-
-    # –†–µ–∂–∏–º—ã
-    try:
-        mode = _mode_get(user_id)
-        track = _mode_track_get(user_id)
-    except NameError:
-        mode, track = "none", ""
-
-    if mode and mode != "none":
-        text_for_llm = f"[–†–µ–∂–∏–º: {mode}; –ü–æ–¥—Ä–µ–∂–∏–º: {track or '-'}]\n{text}"
-    else:
-        text_for_llm = text
-
-    if _MEDICAL_TERMS_RE.search(text):
-        # –Ø–≤–Ω—ã–π –º–µ–¥–∏—Ü–∏–Ω—Å–∫–∏–π –≤–æ–ø—Ä–æ—Å/—Ç–µ–∫—Å—Ç ‚Äî —Ä–∞–∑–±–∏—Ä–∞–µ–º –∫–∞–∫ –º–µ–¥. –º–∞—Ç–µ—Ä–∏–∞–ª.
-        await _medical_analyze_text(update, context, text)
-        _clear_medicine_wait(context)
-        with contextlib.suppress(Exception):
-            _mode_track_set(user_id, "")
-        return
-
-    # –ï—Å–ª–∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å —Ä–∞–Ω—å—à–µ –Ω–∞–∂–∞–ª –º–µ–¥. –ø–æ–¥–º–µ–Ω—é, –Ω–æ —Ç–µ–ø–µ—Ä—å —Å–ø—Ä–∞—à–∏–≤–∞–µ—Ç –ø—Ä–æ PDF, –∫–Ω–∏–≥–∏, —Ñ–æ—Ç–æ,
-    # –≤–∏–¥–µ–æ, –Ω–æ–≤–æ—Å—Ç–∏, –∫—É—Ä—Å BTC –∏ —Ç.–ø., –Ω–µ –¥–µ—Ä–∂–∏–º –µ–≥–æ –≤ –º–µ–¥–∏—Ü–∏–Ω—Å–∫–æ–π –≤–µ—Ç–∫–µ.
-    if (track or "").startswith("med_") and not context.user_data.get("medicine_waiting_for_material"):
-        with contextlib.suppress(Exception):
-            _mode_track_set(user_id, "")
-
-    if mode == "–£—á—ë–±–∞" and track:
-        await study_process_text(update, context, text)
-        return
-
-    chat_id = update.effective_chat.id if update.effective_chat else 0
-    # –ï—Å–ª–∏ —ç—Ç–æ –∫–æ—Ä–æ—Ç–∫–∏–π –æ—Ç–≤–µ—Ç –Ω–∞ –ø—Ä–µ–¥—ã–¥—É—â–∏–π —É—Ç–æ—á–Ω—è—é—â–∏–π –≤–æ–ø—Ä–æ—Å, —Ä–∞—Å—à–∏—Ä—è–µ–º –∑–∞–ø—Ä–æ—Å –∫–æ–Ω—Ç–µ–∫—Å—Ç–æ–º.
-    llm_input = _chat_memory_followup_query(user_id, chat_id, text_for_llm)
-    reply = await ask_openai_text(llm_input, user_id=user_id, chat_id=chat_id)
-    await update.effective_message.reply_text(reply)
-    _chat_memory_add(user_id, chat_id, "user", text)
-    _chat_memory_add(user_id, chat_id, "assistant", reply)
-    await maybe_tts_reply(update, context, reply[:TTS_MAX_CHARS])
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –§–æ—Ç–æ / –î–æ–∫—É–º–µ–Ω—Ç—ã / –ì–æ–ª–æ—Å ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        ph = update.message.photo[-1]
-        f = await ph.get_file()
-        data = await f.download_as_bytearray()
-        img = bytes(data)
-        _cache_photo(update.effective_user.id, img, getattr(f, "file_path", "") or "")
-
-        user_id = update.effective_user.id
-        caption = (update.message.caption or "").strip()
-
-        # High-fidelity music-video pack owns these four uploads before every generic photo flow.
-        identity_slot = _music_video_identity_wait_slot(context)
-        # Defensive recovery: Telegram/user_data is process-local and can be lost on a
-        # deploy/restart. While the user is still in the photoclip track, an incomplete
-        # identity pack means the next unclaimed photo belongs to the first missing slot,
-        # not to the generic photo menu.
-        if not identity_slot:
-            with contextlib.suppress(Exception):
-                if _mode_track_get(user_id) == "photoclip" and not _music_video_identity_complete(user_id):
-                    refs = _music_video_identity_pack(user_id)
-                    identity_slot = next(
-                        (slot for slot in ("face_front", "face_3q", "body_full", "scene_reference") if not refs.get(slot)),
-                        "",
-                    )
-                    if identity_slot:
-                        _set_music_video_identity_wait(context, identity_slot)
-        if identity_slot:
-            _music_video_identity_put(user_id, identity_slot, img)
-            if identity_slot == "face_front":
-                _set_music_video_identity_wait(context, "face_3q")
-                await update.effective_message.reply_text(
-                    "‚úÖ 1/3 ‚Äî –ª–∏—Ü–æ –∞–Ω—Ñ–∞—Å —Å–æ—Ö—Ä–∞–Ω–µ–Ω–æ –æ—Ç–¥–µ–ª—å–Ω–æ.\n\n"
-                    "2/3 ‚Äî –∑–∞–≥—Ä—É–∑–∏—Ç–µ –ª–∏—Ü–æ —Å –ø–æ–≤–æ—Ä–æ—Ç–æ–º –ø—Ä–∏–º–µ—Ä–Ω–æ 30‚Äì45¬∞."
-                )
-            elif identity_slot == "face_3q":
-                _set_music_video_identity_wait(context, "body_full")
-                await update.effective_message.reply_text(
-                    "‚úÖ 2/3 ‚Äî —Ä–∞–∫—É—Ä—Å 30‚Äì45¬∞ —Å–æ—Ö—Ä–∞–Ω—ë–Ω –æ—Ç–¥–µ–ª—å–Ω–æ.\n\n"
-                    "3/3 ‚Äî –∑–∞–≥—Ä—É–∑–∏—Ç–µ —Ñ–æ—Ç–æ –í –ü–û–õ–ù–´–ô –†–û–°–¢, –æ—Ç –≥–æ–ª–æ–≤—ã –¥–æ –Ω–æ–≥."
-                )
-            elif identity_slot == "body_full":
-                _set_music_video_identity_wait(context, "scene_reference")
-                await update.effective_message.reply_text(
-                    "‚úÖ Character Identity Pack —Å–æ–±—Ä–∞–Ω: FACE_FRONT + FACE_3Q + BODY_FULL.\n\n"
-                    "–¢–µ–ø–µ—Ä—å –∑–∞–≥—Ä—É–∑–∏—Ç–µ SCENE_REFERENCE ‚Äî —Å—Ç–∞—Ä—Ç–æ–≤—ã–π –∫–∞–¥—Ä –æ–∫—Ä—É–∂–µ–Ω–∏—è/–ø–æ–∑—ã. "
-                    "–û–Ω –∑–∞–¥–∞—ë—Ç —Å—Ü–µ–Ω—É –∏ –∫–æ–º–ø–æ–∑–∏—Ü–∏—é, –Ω–æ –ù–ï –∑–∞–º–µ–Ω—è–µ—Ç —Ñ–æ—Ç–æ–≥—Ä–∞—Ñ–∏–∏ –ª–∏—á–Ω–æ—Å—Ç–∏."
-                )
-            else:
-                _set_music_video_identity_wait(context, "scene_reference")
-                context.user_data.pop("music_video_scene_reference", None)
-                _set_photo_clip_wait(context)
-                await update.effective_message.reply_text(
-                    "‚úÖ SCENE_REFERENCE —Å–æ—Ö—Ä–∞–Ω—ë–Ω –æ—Ç–¥–µ–ª—å–Ω–æ. –í—Å–µ 4 reference –≥–æ—Ç–æ–≤—ã.\n\n"
-                    "üéµ –¢–µ–ø–µ—Ä—å –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –ü–ï–°–ù–Æ: –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫, —Ç–µ–º—É —Ç–µ–∫—Å—Ç–∞, "
-                    "–Ω—É–∂–µ–Ω –ª–∏ –≤–æ–∫–∞–ª –∏ –∫–∞–∫–∏–º –≥–æ–ª–æ—Å–æ–º. –ü–æ—Å–ª–µ —ç—Ç–æ–≥–æ —è –æ—Ç–¥–µ–ª—å–Ω–æ —Å–ø—Ä–æ—à—É –í–ò–î–ï–û."
-                )
-            return
-
-        # Presentation Studio: logo/product photo bulk upload.
-        if await _presentation_studio_get().handle_photo(update, context, img, mime="image/jpeg", caption=caption):
-            return
-
-        if context.user_data.pop("music_video_draft", None):
-            context.user_data.pop("music_video_draft_edit", None)
-            _set_photo_clip_wait(context)
-            await update.effective_message.reply_text(
-                "üì∏ –§–æ—Ç–æ –¥–ª—è –∫–ª–∏–ø–∞ –æ–±–Ω–æ–≤–ª–µ–Ω–æ. –û–ø–∏—à–∏—Ç–µ —Å—Ü–µ–Ω–∞—Ä–∏–π –µ—â—ë —Ä–∞–∑, —á—Ç–æ–±—ã —É—Ç–≤–µ—Ä–¥–∏—Ç—å –µ–≥–æ –¥–ª—è —ç—Ç–æ–≥–æ —Ñ–æ—Ç–æ."
-            )
-            return
-
-        # 0) –ó–∞–º–µ–Ω–∞ –ª–∏—Ü–∞: –¥–≤—É—Ö—à–∞–≥–æ–≤—ã–π —Ä–µ–∂–∏–º –¥–æ–ª–∂–µ–Ω —Å—Ä–∞–±–∞—Ç—ã–≤–∞—Ç—å —Ä–∞–Ω—å—à–µ –æ—Å—Ç–∞–ª—å–Ω—ã—Ö —Ñ–æ—Ç–æ-–≤–µ—Ç–æ–∫.
-        if context.user_data.get("faceswap_flow") == "await_target":
-            await _maybe_choose_target_face(update, context, user_id, img)
-            return
-        if context.user_data.get("faceswap_flow") == "await_source":
-            await _maybe_choose_source_face(update, context, user_id, img)
-            return
-        if caption and _is_face_swap_request(caption):
-            _clear_medicine_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            await _start_faceswap_flow(update, context, img)
-            return
-
-        # 0.5) –ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä / —Ñ–æ—Ç–æ‚Üí–≤–∏–¥–µ–æ–∫–ª–∏–ø –∏–∑ –ø–æ–¥–ø–∏—Å–∏ –∫ —Ñ–æ—Ç–æ.
-        if caption and _is_avatar_intent(caption):
-            script = _clean_avatar_script(caption)
-            _clear_medicine_wait(context)
-            if script and len(script) > 8:
-                context.user_data["avatar_pending_script"] = script
-            _set_avatar_voice_choice_wait(context)
-            await update.effective_message.reply_text("–ü–æ—Ä—Ç—Ä–µ—Ç –ø–æ–ª—É—á–µ–Ω. –¢–µ–ø–µ—Ä—å –≤—ã–±–µ—Ä–∏—Ç–µ –≥–æ–ª–æ—Å –¥–ª—è —Ç–µ–∫—Å—Ç–æ–≤–æ–π –æ–∑–≤—É—á–∫–∏ –∏–ª–∏ –ø—Ä–∏—à–ª–∏—Ç–µ —Å–≤–æ–π voice/audio.", reply_markup=_avatar_voice_choice_kb("act"))
-            return
-
-        if caption and _is_photo_clip_intent(caption):
-            prompt = _clean_photo_clip_prompt(caption)
-            _clear_medicine_wait(context)
-            if prompt:
-                await _stage_music_video_draft(update, context, prompt)
-            else:
-                _set_photo_clip_wait(context)
-                await update.effective_message.reply_text("üéµ –§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –°–Ω–∞—á–∞–ª–∞ –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –ü–ï–°–ù–Æ: –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫, —Ç–µ–º—É —Ç–µ–∫—Å—Ç–∞, –Ω—É–∂–µ–Ω –ª–∏ –≤–æ–∫–∞–ª –∏ –∫–∞–∫–∏–º –≥–æ–ª–æ—Å–æ–º. –ü–æ—Å–ª–µ —ç—Ç–æ–≥–æ —è –æ—Ç–¥–µ–ª—å–Ω–æ —Å–ø—Ä–æ—à—É –í–ò–î–ï–û.")
-            return
-
-        if caption and _is_ai_selfie_intent(caption):
-            prompt = _clean_ai_selfie_prompt(caption)
-            _clear_medicine_wait(context)
-            if prompt:
-                await _start_ai_selfie(update, context, img, prompt)
-            else:
-                _set_ai_selfie_wait(context)
-                await update.effective_message.reply_text("–°–µ–ª—Ñ–∏ –ø–æ–ª—É—á–µ–Ω–æ. –¢–µ–ø–µ—Ä—å –Ω–∞–ø–∏—à–∏—Ç–µ, —Å –∫–µ–º/–≥–¥–µ —Å–¥–µ–ª–∞—Ç—å AI-—Ñ–æ—Ç–æ: –∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç—å, –ø–µ—Ä—Å–æ–Ω–∞–∂, –ø—Ä–µ–º—å–µ—Ä–∞, —Ä–µ–∫–ª–∞–º–∞, travel/luxury.")
-            return
-
-        if context.user_data.get("awaiting_ai_selfie_photo"):
-            context.user_data.pop("awaiting_ai_selfie_photo", None)
-            preset = (context.user_data.get("ai_selfie_preset_prompt", "") or "").strip()
-            _set_ai_selfie_wait(context)
-            if preset:
-                await update.effective_message.reply_text("ü§≥ –°–µ–ª—Ñ–∏ –ø–æ–ª—É—á–µ–Ω–æ. –ü—Ä–µ—Å–µ—Ç –≤—ã–±—Ä–∞–Ω. –¢–µ–ø–µ—Ä—å –Ω–∞–ø–∏—à–∏—Ç–µ –∏–º—è –∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç–∏/–ø–µ—Ä—Å–æ–Ω–∞–∂–∞ –∏ –¥–µ—Ç–∞–ª–∏ —Å—Ü–µ–Ω—ã.")
-            else:
-                await update.effective_message.reply_text("ü§≥ –°–µ–ª—Ñ–∏ –ø–æ–ª—É—á–µ–Ω–æ. –¢–µ–ø–µ—Ä—å –Ω–∞–ø–∏—à–∏—Ç–µ, —Å –∫–µ–º/–≥–¥–µ —Å–¥–µ–ª–∞—Ç—å AI-—Ñ–æ—Ç–æ: –∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç—å, –ø–µ—Ä—Å–æ–Ω–∞–∂, –ø—Ä–µ–º—å–µ—Ä–∞, —Ä–µ–∫–ª–∞–º–∞, travel/luxury.")
-            return
-
-        if context.user_data.get("awaiting_avatar_photo"):
-            context.user_data.pop("awaiting_avatar_photo", None)
-            # Upload flow is deterministic: a newly uploaded portrait always advances to step 2.
-            # Do not silently skip voice selection because a stale voice remained from an earlier avatar session.
-            context.user_data.pop("avatar_tts_voice", None)
-            _set_avatar_voice_choice_wait(context)
-            await update.effective_message.reply_text(
-                "‚úÖ –ü–æ—Ä—Ç—Ä–µ—Ç –ø–æ–ª—É—á–µ–Ω. –®–∞–≥ 2/3: –≤—ã–±–µ—Ä–∏—Ç–µ –≥–æ–ª–æ—Å –¥–ª—è —Ç–µ–∫—Å—Ç–æ–≤–æ–π –æ–∑–≤—É—á–∫–∏ –∏–ª–∏ –ø—Ä–∏—à–ª–∏—Ç–µ —Å–≤–æ–π voice/audio.",
-                reply_markup=_avatar_voice_choice_kb("act"),
-            )
-            return
-
-        if context.user_data.get("awaiting_vocal_clip_photo"):
-            context.user_data.pop("awaiting_vocal_clip_photo", None)
-            _set_vocal_clip_wait(context)
-            await update.effective_message.reply_text(
-                "üé§ –ü–æ—Ä—Ç—Ä–µ—Ç –ø–æ–ª—É—á–µ–Ω. –û–ø–∏—à–∏—Ç–µ –ø–µ—Å–Ω—é, –≤–æ–∫–∞–ª, –¥–≤–∏–∂–µ–Ω–∏–µ, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å –∏ —Ñ–æ—Ä–º–∞—Ç ‚Äî –ø–æ–∫–∞–∂—É —Å—Ü–µ–Ω–∞—Ä–∏–π –¥–ª—è —É—Ç–≤–µ—Ä–∂–¥–µ–Ω–∏—è."
-            )
-            return
-
-        if context.user_data.get("awaiting_photo_clip_photo"):
-            context.user_data.pop("awaiting_photo_clip_photo", None)
-            preset_prompt = (context.user_data.pop("photo_clip_preset_prompt", "") or "").strip()
-            if preset_prompt:
-                await _stage_music_video_draft(update, context, preset_prompt)
-            else:
-                _set_photo_clip_wait(context)
-                await update.effective_message.reply_text("üéµ –§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –°–Ω–∞—á–∞–ª–∞ –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –ü–ï–°–ù–Æ: –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫, —Ç–µ–º—É —Ç–µ–∫—Å—Ç–∞, –Ω—É–∂–µ–Ω –ª–∏ –≤–æ–∫–∞–ª –∏ –∫–∞–∫–∏–º –≥–æ–ª–æ—Å–æ–º. –ü–æ—Å–ª–µ —ç—Ç–æ–≥–æ —è –æ—Ç–¥–µ–ª—å–Ω–æ —Å–ø—Ä–æ—à—É –í–ò–î–ï–û.")
-            return
-
-        # 0) –§–æ—Ç–æ –ø—Ä–∏—à–ª–æ –ø–æ—Å–ª–µ –≤—Ö–æ–¥–∞ –∏–∑ –º–µ–Ω—é ¬´–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è ‚Üí –ó–∞–º–µ–Ω–∏—Ç—å —Ñ–æ–Ω¬ª.
-        # –ù–µ –∑–∞–ø—É—Å–∫–∞–µ–º –∑–∞–º–µ–Ω—É —Å—Ä–∞–∑—É, –∞ –ø–æ–∫–∞–∑—ã–≤–∞–µ–º –≤–∞—Ä–∏–∞–Ω—Ç—ã —Ñ–æ–Ω–∞.
-        if context.user_data.get("photo_flow") == "replacebg_menu":
-            context.user_data.pop("photo_flow", None)
-            await update.effective_message.reply_text(
-                "üñº –§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –í—ã–±–µ—Ä–∏—Ç–µ –Ω–æ–≤—ã–π —Ñ–æ–Ω –∏–ª–∏ –Ω–∞–ø–∏—à–∏—Ç–µ —Å–≤–æ–π –≤–∞—Ä–∏–∞–Ω—Ç —Ç–µ–∫—Å—Ç–æ–º:",
-                reply_markup=background_presets_kb(),
-            )
-            return
-
-        # 0) –£–¥–∞–ª–µ–Ω–∏–µ/–∑–∞–º–µ–Ω–∞ —Ñ–æ–Ω–∞ –¥–æ–ª–∂–Ω—ã –ø–µ—Ä–µ–±–∏–≤–∞—Ç—å –º–µ–¥–∏—Ü–∏–Ω—Å–∫–∏–π –∫–æ–Ω—Ç–µ–∫—Å—Ç.
-        if caption and _is_remove_bg_request(caption):
-            _clear_medicine_wait(context)
-            _clear_removebg_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            await _pedit_removebg(update, context, img)
-            return
-
-        if _is_waiting_removebg(context):
-            _clear_medicine_wait(context)
-            _clear_removebg_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            await _pedit_removebg(update, context, img)
-            return
-
-        if caption and _is_replace_bg_request(caption):
-            kind, prompt = _bg_kind_from_text(caption)
-            _clear_medicine_wait(context)
-            _clear_replacebg_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            await _pedit_replacebg(update, context, img, kind=kind, prompt=prompt)
-            return
-
-        if _is_waiting_replacebg(context):
-            prompt = caption or context.user_data.get("replacebg_prompt") or "—Ä–∞–∑–º—ã—Ç—ã–π —Ñ–æ–Ω"
-            kind, prompt = _bg_kind_from_text(prompt)
-            _clear_medicine_wait(context)
-            _clear_replacebg_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            await _pedit_replacebg(update, context, img, kind=kind, prompt=prompt)
-            return
-
-        # 0) –†–µ—Ç—É—à—å —Å–æ–±—Å—Ç–≤–µ–Ω–Ω–æ–≥–æ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è / —É–¥–∞–ª–µ–Ω–∏–µ –ª–∏—à–Ω–µ–π –Ω–∞–¥–ø–∏—Å–∏ / watermark.
-        # –≠—Ç–æ –¥–æ–ª–∂–Ω–æ –ø–µ—Ä–µ–±–∏–≤–∞—Ç—å –º–µ–¥–∏—Ü–∏–Ω—Å–∫–∏–π –∫–æ–Ω—Ç–µ–∫—Å—Ç, –µ—Å–ª–∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å —è–≤–Ω–æ –ø—Ä–æ—Å–∏—Ç —Ä–µ—Ç—É—à—å.
-        if caption and _is_image_retouch_request(caption):
-            _clear_medicine_wait(context)
-            _clear_image_retouch_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            await _start_image_retouch(update, context, img, caption)
-            return
-
-        if _is_waiting_image_retouch(context):
-            instruction = context.user_data.get("retouch_prompt") or caption or "—É–±—Ä–∞—Ç—å –ª–∏—à–Ω—é—é –Ω–∞–¥–ø–∏—Å—å/–≤–æ–¥—è–Ω–æ–π –∑–Ω–∞–∫"
-            _clear_medicine_wait(context)
-            _clear_image_retouch_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            await _start_image_retouch(update, context, img, instruction)
-            return
-
-        # 1) –°–∞–º—ã–π –≤—ã—Å–æ–∫–∏–π –ø—Ä–∏–æ—Ä–∏—Ç–µ—Ç: —è–≤–Ω–∞—è –∫–æ–º–∞–Ω–¥–∞ –æ–∂–∏–≤–∏—Ç—å/–∞–Ω–∏–º–∏—Ä–æ–≤–∞—Ç—å —Ñ–æ—Ç–æ –≤ –ø–æ–¥–ø–∏—Å–∏.
-        # –≠—Ç–æ –¥–æ–ª–∂–Ω–æ –ø–µ—Ä–µ–±–∏–≤–∞—Ç—å –¥–∞–∂–µ —Ä–∞–Ω–µ–µ –æ—Ç–∫—Ä—ã—Ç—ã–π —Ä–∞–∑–¥–µ–ª ¬´–ú–µ–¥–∏—Ü–∏–Ω–∞¬ª.
-        if caption and _is_photo_revival_intent(caption):
-            _set_waiting_photo_revival(update, context)
-            engine = _revival_engine_from_text(caption, default="runway")
-            prompt = _clean_revival_prompt(caption)
-            _clear_photo_revival_wait(context)
-            await _start_photo_revival(update, context, engine=engine, img_bytes=img, prompt=prompt)
-            return
-
-        # 2) –ï—Å–ª–∏ –ø–µ—Ä–µ–¥ —Ñ–æ—Ç–æ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å –≥–æ–ª–æ—Å–æ–º/—Ç–µ–∫—Å—Ç–æ–º —Å–ø—Ä–æ—Å–∏–ª –ø—Ä–æ –æ–∂–∏–≤–ª–µ–Ω–∏–µ —Ñ–æ—Ç–æ ‚Äî
-        # –ø–æ–∫–∞–∑—ã–≤–∞–µ–º —Ñ–æ—Ç–æ-–º–∞—Å—Ç–µ—Ä—Å–∫—É—é, –∞ –Ω–µ –º–µ–¥–∏—Ü–∏–Ω—Å–∫–∏–π –∞–Ω–∞–ª–∏–∑.
-        if _is_waiting_photo_revival(context):
-            _clear_photo_revival_wait(context)
-            await update.effective_message.reply_text(
-                "–§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –í—ã–±–µ—Ä–∏—Ç–µ —Å—Ü–µ–Ω–∞—Ä–∏–π –æ–∂–∏–≤–ª–µ–Ω–∏—è:",
-                reply_markup=photo_revival_actions_kb(),
-            )
-            return
-
-        # 3) –ú–µ–¥–∏—Ü–∏–Ω—Å–∫–∞—è –≤–µ—Ç–∫–∞ ‚Äî —Ç–æ–ª—å–∫–æ —è–≤–Ω—ã–π –º–µ–¥. –ø–æ–¥—Ä–µ–∂–∏–º/–æ–∂–∏–¥–∞–Ω–∏–µ –∏–ª–∏ –º–µ–¥. —Å–ª–æ–≤–∞ –≤ –ø–æ–¥–ø–∏—Å–∏.
-        if _should_route_medical(context, user_id, caption, "photo"):
-            await _medical_analyze_image(update, context, img, goal=caption or None)
-            _clear_medicine_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(user_id, "")
-            return
-
-        if caption:
-            tl = caption.lower()
-            # –æ–∂–∏–≤–∏—Ç—å —Ñ–æ—Ç–æ ‚Üí –≤—ã–±—Ä–∞–Ω–Ω—ã–π –¥–≤–∏–∂–æ–∫ –∏–∑ –ø–æ–¥–ø–∏—Å–∏ –∏–ª–∏ Runway –ø–æ —É–º–æ–ª—á–∞–Ω–∏—é
-            if any(k in tl for k in ("–æ–∂–∏–≤–∏", "–æ–∂–∏–≤–∏—Ç—å", "–∞–Ω–∏–º–∏—Ä—É", "–∞–Ω–∏–º–∏—Ä–æ–≤–∞—Ç—å", "—Å–¥–µ–ª–∞–π –≤–∏–¥–µ–æ", "revive", "animate", "image to video", "i2v")):
-                engine = _revival_engine_from_text(caption, default="runway")
-                prompt = _clean_revival_prompt(caption)
-                await _start_photo_revival(update, context, engine=engine, img_bytes=img, prompt=prompt)
-                return
-
-            # —Ä–µ—Ç—É—à—å / —É–±—Ä–∞—Ç—å –≤–æ–¥—è–Ω–æ–π –∑–Ω–∞–∫ / –ª–∏—à–Ω—é—é –Ω–∞–¥–ø–∏—Å—å
-            if _is_image_retouch_request(caption):
-                await _start_image_retouch(update, context, img, caption); return
-
-            # —É–¥–∞–ª–∏—Ç—å —Ñ–æ–Ω
-            if any(k in tl for k in ("—É–¥–∞–ª–∏ —Ñ–æ–Ω", "removebg", "—É–±—Ä–∞—Ç—å —Ñ–æ–Ω")):
-                await _pedit_removebg(update, context, img); return
-
-            # –∑–∞–º–µ–Ω–∏—Ç—å —Ñ–æ–Ω
-            if any(k in tl for k in ("–∑–∞–º–µ–Ω–∏ —Ñ–æ–Ω", "replacebg", "—Ä–∞–∑–º—ã—Ç—ã–π —Ñ–æ–Ω", "blur")):
-                kind, prompt = _bg_kind_from_text(caption)
-                await _pedit_replacebg(update, context, img, kind=kind, prompt=prompt); return
-
-            # outpaint
-            if "outpaint" in tl or "—Ä–∞—Å—à–∏—Ä" in tl:
-                await _pedit_outpaint(update, context, img); return
-
-            # —Ä–∞—Å–∫–∞–¥—Ä–æ–≤–∫–∞
-            if "—Ä–∞—Å–∫–∞–¥—Ä–æ–≤" in tl or "storyboard" in tl:
-                await _pedit_storyboard(update, context, img); return
-
-            # –∫–∞—Ä—Ç–∏–Ω–∫–∞ –ø–æ –æ–ø–∏—Å–∞–Ω–∏—é (Luma / —Ñ–æ–ª–±—ç–∫ OpenAI)
-            if any(k in tl for k in ("–∫–∞—Ä—Ç–∏–Ω", "–∏–∑–æ–±—Ä–∞–∂–µ–Ω", "image", "img")) and any(k in tl for k in ("—Å–≥–µ–Ω–µ—Ä–∏—Ä—É", "—Å–æ–∑–¥–∞", "—Å–¥–µ–ª–∞–π")):
-                await _start_luma_img(update, context, caption); return
-
-        # –µ—Å–ª–∏ —è–≤–Ω–æ–π –∫–æ–º–∞–Ω–¥—ã –≤ –ø–æ–¥–ø–∏—Å–∏ –Ω–µ—Ç ‚Äî –ø–æ–∫–∞–∑—ã–≤–∞–µ–º –±—ã—Å—Ç—Ä—ã–µ –∫–Ω–æ–ø–∫–∏
-        await update.effective_message.reply_text("–§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –ß—Ç–æ —Å–¥–µ–ª–∞—Ç—å?",
-                                                  reply_markup=photo_quick_actions_kb())
-    except Exception as e:
-        log.exception("on_photo error: %s", e)
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("‚ùå –§–æ—Ç–æ –Ω–µ —Ä–∞—Å–ø–æ–∑–Ω–∞–Ω–æ, –ø–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑.")
-
-async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if not update.message or not update.message.document:
-            return
-        doc = update.message.document
-        mt = (doc.mime_type or "").lower()
-        tg_file = await doc.get_file()
-        data = await tg_file.download_as_bytearray()
-        raw = bytes(data)
-
-        caption = (update.message.caption or "").strip()
-
-        # Presentation Studio accepts image documents and ZIP archives with many photos.
-        if await _presentation_studio_get().handle_document(
-            update, context, raw, doc.file_name or "file", mt, caption=caption
-        ):
-            return
-
-        if context.user_data.get("awaiting_avatar_script") and (mt.startswith("audio/") or (doc.file_name or "").lower().endswith((".mp3", ".wav", ".m4a", ".aac", ".ogg"))):
-            img = _get_cached_photo(update.effective_user.id)
-            if not img:
-                _clear_avatar_wait(context)
-                await update.effective_message.reply_text("–°–Ω–∞—á–∞–ª–∞ –∑–∞–≥—Ä—É–∑–∏—Ç–µ –ø–æ—Ä—Ç—Ä–µ—Ç —á–µ–ª–æ–≤–µ–∫–∞, –∑–∞—Ç–µ–º –Ω–∞–∂–º–∏—Ç–µ üó£ –ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä.")
-                return
-            _clear_avatar_wait(context)
-            await _start_talking_avatar(
-                update, context, img,
-                script_text=caption if caption and not _is_avatar_intent(caption) else _clean_avatar_script(caption),
-                audio_bytes=raw,
-                audio_filename=doc.file_name or "audio",
-                audio_file_url=getattr(tg_file, "file_path", "") or "",
-                audio_mime=mt,
-            )
-            return
-
-        if mt.startswith("image/"):
-            _cache_photo(update.effective_user.id, raw, getattr(tg_file, "file_path", "") or "")
-
-            if context.user_data.pop("music_video_draft", None):
-                context.user_data.pop("music_video_draft_edit", None)
-                _set_photo_clip_wait(context)
-                await update.effective_message.reply_text(
-                    "üì∏ –§–æ—Ç–æ –¥–ª—è –∫–ª–∏–ø–∞ –æ–±–Ω–æ–≤–ª–µ–Ω–æ. –û–ø–∏—à–∏—Ç–µ —Å—Ü–µ–Ω–∞—Ä–∏–π –µ—â—ë —Ä–∞–∑, —á—Ç–æ–±—ã —É—Ç–≤–µ—Ä–¥–∏—Ç—å –µ–≥–æ –¥–ª—è —ç—Ç–æ–≥–æ —Ñ–æ—Ç–æ."
-                )
-                return
-
-            # v70: –µ—Å–ª–∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å —É–∂–µ –≤—ã–±—Ä–∞–ª —Ä–µ–∂–∏–º ¬´–ö–ª–∏–ø —Å –≤–æ–∫–∞–ª–æ–º¬ª,
-            # —Å–ª–µ–¥—É—é—â–∞—è —Ñ–æ—Ç–æ–≥—Ä–∞—Ñ–∏—è –¥–æ–ª–∂–Ω–∞ –ø—Ä–æ–¥–æ–ª–∂–∞—Ç—å —ç—Ç–æ—Ç —Å—Ü–µ–Ω–∞—Ä–∏–π, –∞ –Ω–µ –æ—Ç–∫—Ä—ã–≤–∞—Ç—å
-            # –æ–±—â–µ–µ –º–µ–Ω—é ¬´–§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –ß—Ç–æ —Å–¥–µ–ª–∞—Ç—å?¬ª. –≠—Ç–æ —Å—Ç—Ä–∞—Ö—É–µ—Ç —Å–ª—É—á–∞–∏,
-            # –∫–æ–≥–¥–∞ Telegram/–∫–ª–∏–µ–Ω—Ç –ø–æ—Ç–µ—Ä—è–ª transient flag, –Ω–æ mode_track —Å–æ—Ö—Ä–∞–Ω–∏–ª—Å—è.
-            try:
-                _track_now = _mode_track_get(update.effective_user.id)
-            except Exception:
-                _track_now = ""
-            if context.user_data.get("awaiting_vocal_clip_photo") or _track_now == "vocalclip":
-                context.user_data.pop("awaiting_vocal_clip_photo", None)
-                _set_mode_clean(update.effective_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "vocalclip")
-                _set_vocal_clip_wait(context)
-                await update.effective_message.reply_text(
-                    "üéµ –ü–æ—Ä—Ç—Ä–µ—Ç –ø–æ–ª—É—á–µ–Ω. –°–Ω–∞—á–∞–ª–∞ –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –ü–ï–°–ù–Æ: –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫, —Ç–µ–º—É —Ç–µ–∫—Å—Ç–∞, –≤–æ–∫–∞–ª –∏ –∂–µ–ª–∞–µ–º—É—é –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.\n\n"
-                    "–°–ª–µ–¥—É—é—â–∏–º —Å–æ–æ–±—â–µ–Ω–∏–µ–º —è –æ—Ç–¥–µ–ª—å–Ω–æ —Å–ø—Ä–æ—à—É —Å—Ü–µ–Ω–∞—Ä–∏–π –≤–∏–¥–µ–æ."
-                )
-                return
-
-            if context.user_data.get("faceswap_flow") == "await_target":
-                await _maybe_choose_target_face(update, context, update.effective_user.id, raw)
-                return
-            if context.user_data.get("faceswap_flow") == "await_source":
-                await _maybe_choose_source_face(update, context, update.effective_user.id, raw)
-                return
-            if caption and _is_face_swap_request(caption):
-                _clear_medicine_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                await _start_faceswap_flow(update, context, raw)
-                return
-
-            if caption and _is_avatar_intent(caption):
-                script = _clean_avatar_script(caption)
-                _clear_medicine_wait(context)
-                if script and len(script) > 8:
-                    context.user_data["avatar_pending_script"] = script
-                _set_avatar_voice_choice_wait(context)
-                await update.effective_message.reply_text("–ü–æ—Ä—Ç—Ä–µ—Ç –ø–æ–ª—É—á–µ–Ω. –¢–µ–ø–µ—Ä—å –≤—ã–±–µ—Ä–∏—Ç–µ –≥–æ–ª–æ—Å –¥–ª—è —Ç–µ–∫—Å—Ç–æ–≤–æ–π –æ–∑–≤—É—á–∫–∏ –∏–ª–∏ –ø—Ä–∏—à–ª–∏—Ç–µ —Å–≤–æ–π voice/audio.", reply_markup=_avatar_voice_choice_kb("act"))
-                return
-
-            if caption and _is_photo_clip_intent(caption):
-                prompt = _clean_photo_clip_prompt(caption)
-                _clear_medicine_wait(context)
-                if prompt:
-                    await _stage_music_video_draft(update, context, prompt)
-                else:
-                    _set_photo_clip_wait(context)
-                    await update.effective_message.reply_text("üéµ –§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –°–Ω–∞—á–∞–ª–∞ –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –ü–ï–°–ù–Æ: –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫, —Ç–µ–º—É —Ç–µ–∫—Å—Ç–∞, –Ω—É–∂–µ–Ω –ª–∏ –≤–æ–∫–∞–ª –∏ –∫–∞–∫–∏–º –≥–æ–ª–æ—Å–æ–º. –ü–æ—Å–ª–µ —ç—Ç–æ–≥–æ —è –æ—Ç–¥–µ–ª—å–Ω–æ —Å–ø—Ä–æ—à—É –í–ò–î–ï–û.")
-                return
-
-            if caption and _is_ai_selfie_intent(caption):
-                prompt = _clean_ai_selfie_prompt(caption)
-                _clear_medicine_wait(context)
-                if prompt:
-                    await _start_ai_selfie(update, context, raw, prompt)
-                else:
-                    _set_ai_selfie_wait(context)
-                    await update.effective_message.reply_text("–°–µ–ª—Ñ–∏ –ø–æ–ª—É—á–µ–Ω–æ. –¢–µ–ø–µ—Ä—å –Ω–∞–ø–∏—à–∏—Ç–µ, —Å –∫–µ–º/–≥–¥–µ —Å–¥–µ–ª–∞—Ç—å AI-—Ñ–æ—Ç–æ: –∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç—å, –ø–µ—Ä—Å–æ–Ω–∞–∂, –ø—Ä–µ–º—å–µ—Ä–∞, —Ä–µ–∫–ª–∞–º–∞, travel/luxury.")
-                return
-
-            if context.user_data.get("awaiting_ai_selfie_photo"):
-                context.user_data.pop("awaiting_ai_selfie_photo", None)
-                preset = (context.user_data.get("ai_selfie_preset_prompt", "") or "").strip()
-                _set_ai_selfie_wait(context)
-                if preset:
-                    await update.effective_message.reply_text("ü§≥ –°–µ–ª—Ñ–∏ –ø–æ–ª—É—á–µ–Ω–æ. –ü—Ä–µ—Å–µ—Ç –≤—ã–±—Ä–∞–Ω. –¢–µ–ø–µ—Ä—å –Ω–∞–ø–∏—à–∏—Ç–µ –∏–º—è –∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç–∏/–ø–µ—Ä—Å–æ–Ω–∞–∂–∞ –∏ –¥–µ—Ç–∞–ª–∏ —Å—Ü–µ–Ω—ã.")
-                else:
-                    await update.effective_message.reply_text("ü§≥ –°–µ–ª—Ñ–∏ –ø–æ–ª—É—á–µ–Ω–æ. –¢–µ–ø–µ—Ä—å –Ω–∞–ø–∏—à–∏—Ç–µ, —Å –∫–µ–º/–≥–¥–µ —Å–¥–µ–ª–∞—Ç—å AI-—Ñ–æ—Ç–æ: –∑–Ω–∞–º–µ–Ω–∏—Ç–æ—Å—Ç—å, –ø–µ—Ä—Å–æ–Ω–∞–∂, –ø—Ä–µ–º—å–µ—Ä–∞, —Ä–µ–∫–ª–∞–º–∞, travel/luxury.")
-                return
-
-            if context.user_data.get("awaiting_vocal_clip_photo"):
-                context.user_data.pop("awaiting_vocal_clip_photo", None)
-                _set_vocal_clip_wait(context)
-                await update.effective_message.reply_text(
-                    "üé§ –ü–æ—Ä—Ç—Ä–µ—Ç –ø–æ–ª—É—á–µ–Ω. –¢–µ–ø–µ—Ä—å –æ–ø–∏—à–∏—Ç–µ –ø–µ—Å–Ω—é/–∫–ª–∏–ø: —Å—Ç–∏–ª—å, —è–∑—ã–∫, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, –ø—Ä–∏–ø–µ–≤, –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å.\n\n–í–∞–∂–Ω–æ: —Ä–µ–∂–∏–º —Ä–∞—Å—Å—á–∏—Ç–∞–Ω –Ω–∞ –æ–¥–Ω–æ–≥–æ —á–µ–ª–æ–≤–µ–∫–∞ –≤ –∫–∞–¥—Ä–µ."
-                )
-                return
-
-            if context.user_data.get("awaiting_avatar_photo"):
-                context.user_data.pop("awaiting_avatar_photo", None)
-                context.user_data.pop("avatar_tts_voice", None)
-                _set_avatar_voice_choice_wait(context)
-                await update.effective_message.reply_text(
-                    "‚úÖ –ü–æ—Ä—Ç—Ä–µ—Ç –ø–æ–ª—É—á–µ–Ω. –®–∞–≥ 2/3: –≤—ã–±–µ—Ä–∏—Ç–µ –≥–æ–ª–æ—Å –¥–ª—è —Ç–µ–∫—Å—Ç–æ–≤–æ–π –æ–∑–≤—É—á–∫–∏ –∏–ª–∏ –ø—Ä–∏—à–ª–∏—Ç–µ —Å–≤–æ–π voice/audio.",
-                    reply_markup=_avatar_voice_choice_kb("act"),
-                )
-                return
-
-            if context.user_data.get("awaiting_photo_clip_photo"):
-                context.user_data.pop("awaiting_photo_clip_photo", None)
-                preset_prompt = (context.user_data.pop("photo_clip_preset_prompt", "") or "").strip()
-                if preset_prompt:
-                    await _stage_music_video_draft(update, context, preset_prompt)
-                else:
-                    _set_photo_clip_wait(context)
-                    await update.effective_message.reply_text("üéµ –§–æ—Ç–æ –ø–æ–ª—É—á–µ–Ω–æ. –°–Ω–∞—á–∞–ª–∞ –æ—Ç–¥–µ–ª—å–Ω–æ –æ–ø–∏—à–∏—Ç–µ –ü–ï–°–ù–Æ: –∂–∞–Ω—Ä, –Ω–∞—Å—Ç—Ä–æ–µ–Ω–∏–µ, —è–∑—ã–∫, —Ç–µ–º—É —Ç–µ–∫—Å—Ç–∞, –Ω—É–∂–µ–Ω –ª–∏ –≤–æ–∫–∞–ª –∏ –∫–∞–∫–∏–º –≥–æ–ª–æ—Å–æ–º. –ü–æ—Å–ª–µ —ç—Ç–æ–≥–æ —è –æ—Ç–¥–µ–ª—å–Ω–æ —Å–ø—Ä–æ—à—É –í–ò–î–ï–û.")
-                return
-
-            if context.user_data.get("photo_flow") == "replacebg_menu":
-                context.user_data.pop("photo_flow", None)
-                await update.effective_message.reply_text(
-                    "üñº –ò–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –ø–æ–ª—É—á–µ–Ω–æ. –í—ã–±–µ—Ä–∏—Ç–µ –Ω–æ–≤—ã–π —Ñ–æ–Ω. –ó–∞–º–µ–Ω–∞ –≤—ã–ø–æ–ª–Ω—è–µ—Ç—Å—è –≤ 2 —ç—Ç–∞–ø–∞: –≤—ã—Ä–µ–∑–∞—é —á–µ–ª–æ–≤–µ–∫–∞, –∑–∞—Ç–µ–º –ø–æ–¥—Å—Ç–∞–≤–ª—è—é –Ω–æ–≤—ã–π —Ñ–æ–Ω –±–µ–∑ –ø–µ—Ä–µ—Ä–∏—Å–æ–≤–∫–∏ –ª–∏—Ü–∞ –∏ –æ–¥–µ–∂–¥—ã.",
-                    reply_markup=background_presets_kb(),
-                )
-                return
-
-            if caption and _is_remove_bg_request(caption):
-                _clear_medicine_wait(context)
-                _clear_removebg_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                await _pedit_removebg(update, context, raw)
-                return
-
-            if _is_waiting_removebg(context):
-                _clear_medicine_wait(context)
-                _clear_removebg_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                await _pedit_removebg(update, context, raw)
-                return
-
-            if caption and _is_replace_bg_request(caption):
-                kind, prompt = _bg_kind_from_text(caption)
-                _clear_medicine_wait(context)
-                _clear_replacebg_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                await _pedit_replacebg(update, context, raw, kind=kind, prompt=prompt)
-                return
-
-            if _is_waiting_replacebg(context):
-                prompt = caption or context.user_data.get("replacebg_prompt") or "—Ä–∞–∑–º—ã—Ç—ã–π —Ñ–æ–Ω"
-                kind, prompt = _bg_kind_from_text(prompt)
-                _clear_medicine_wait(context)
-                _clear_replacebg_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                await _pedit_replacebg(update, context, raw, kind=kind, prompt=prompt)
-                return
-
-            if caption and _is_image_retouch_request(caption):
-                _clear_medicine_wait(context)
-                _clear_image_retouch_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                await _start_image_retouch(update, context, raw, caption)
-                return
-
-            if _is_waiting_image_retouch(context):
-                instruction = context.user_data.get("retouch_prompt") or caption or "—É–±—Ä–∞—Ç—å –ª–∏—à–Ω—é—é –Ω–∞–¥–ø–∏—Å—å/–≤–æ–¥—è–Ω–æ–π –∑–Ω–∞–∫"
-                _clear_medicine_wait(context)
-                _clear_image_retouch_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                await _start_image_retouch(update, context, raw, instruction)
-                return
-
-            if caption and _is_photo_revival_intent(caption):
-                _set_waiting_photo_revival(update, context)
-                engine = _revival_engine_from_text(caption, default="runway")
-                prompt = _clean_revival_prompt(caption)
-                _clear_photo_revival_wait(context)
-                await _start_photo_revival(update, context, engine=engine, img_bytes=raw, prompt=prompt)
-                return
-
-            if _is_waiting_photo_revival(context):
-                _clear_photo_revival_wait(context)
-                await update.effective_message.reply_text("–ò–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –ø–æ–ª—É—á–µ–Ω–æ –∫–∞–∫ –¥–æ–∫—É–º–µ–Ω—Ç. –í—ã–±–µ—Ä–∏—Ç–µ –¥–æ—Å—Ç—É–ø–Ω—ã–π –¥–≤–∏–∂–æ–∫ –¥–ª—è –æ–∂–∏–≤–ª–µ–Ω–∏—è:", reply_markup=photo_quick_actions_kb())
-                return
-
-            if _should_route_medical(context, update.effective_user.id, caption, doc.file_name or "image"):
-                await _medical_analyze_image(update, context, raw, goal=caption or None)
-                _clear_medicine_wait(context)
-                with contextlib.suppress(Exception):
-                    _mode_track_set(update.effective_user.id, "")
-                return
-            await update.effective_message.reply_text("–ò–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ –ø–æ–ª—É—á–µ–Ω–æ –∫–∞–∫ –¥–æ–∫—É–º–µ–Ω—Ç. –ß—Ç–æ —Å–¥–µ–ª–∞—Ç—å?", reply_markup=photo_quick_actions_kb())
-            return
-
-        text, kind = extract_text_from_document(raw, doc.file_name or "file")
-        if not (text or "").strip():
-            await update.effective_message.reply_text(f"–ù–µ —É–¥–∞–ª–æ—Å—å –∏–∑–≤–ª–µ—á—å —Ç–µ–∫—Å—Ç –∏–∑ {kind}.")
-            return
-
-        # A text document can serve as the brief or revision for an active presentation project.
-        if await _presentation_studio_get().handle_text(update, context, text):
-            return
-
-        goal = (update.message.caption or "").strip() or None
-        if _should_route_medical(context, update.effective_user.id, caption, doc.file_name or "file"):
-            await _medical_analyze_text(update, context, text, goal=goal)
-            _clear_medicine_wait(context)
-            with contextlib.suppress(Exception):
-                _mode_track_set(update.effective_user.id, "")
-            return
-
-        await update.effective_message.reply_text(f"üìÑ –ò–∑–≤–ª–µ–∫–∞—é —Ç–µ–∫—Å—Ç ({kind}), –≥–æ—Ç–æ–≤–ª—é –∫–æ–Ω—Å–ø–µ–∫—Ç‚Ä¶")
-        summary = await summarize_long_text(text, query=goal)
-        summary = summary or "–ì–æ—Ç–æ–≤–æ."
-        await update.effective_message.reply_text(summary)
-        await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
-    except Exception as e:
-        log.exception("on_doc error: %s", e)
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("‚ùå –§–æ—Ç–æ/–¥–æ–∫—É–º–µ–Ω—Ç –Ω–µ —Ä–∞—Å–ø–æ–∑–Ω–∞–Ω, –ø–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑.")
-
-async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if not update.message or not update.message.voice:
-            return
-        vf = await update.message.voice.get_file()
-        bio = BytesIO(await vf.download_as_bytearray())
-        bio.seek(0)
-        setattr(bio, "name", f"voice.ogg")
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-        text = await transcribe_audio(bio, "voice.ogg")
-        if not text:
-            await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Ä–∞—Å–ø–æ–∑–Ω–∞—Ç—å —Ä–µ—á—å.")
-            return
-        await on_text(update, context, manual_text=text)
-    except Exception as e:
-        log.exception("on_voice error: %s", e)
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("–û—à–∏–±–∫–∞ –ø—Ä–∏ –æ–±—Ä–∞–±–æ—Ç–∫–µ voice.")
-
-async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if not update.message or not update.message.audio:
-            return
-        af = await update.message.audio.get_file()
-        filename = update.message.audio.file_name or "audio.mp3"
-        bio = BytesIO(await af.download_as_bytearray())
-        bio.seek(0)
-        setattr(bio, "name", filename)
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-        text = await transcribe_audio(bio, filename)
-        if not text:
-            await update.effective_message.reply_text("–ù–µ —É–¥–∞–ª–æ—Å—å —Ä–∞—Å–ø–æ–∑–Ω–∞—Ç—å —Ä–µ—á—å –∏–∑ –∞—É–¥–∏–æ.")
-            return
-        await on_text(update, context, manual_text=text)
-    except Exception as e:
-        log.exception("on_audio error: %s", e)
-        with contextlib.suppress(Exception):
-            await update.effective_message.reply_text("–û—à–∏–±–∫–∞ –ø—Ä–∏ –æ–±—Ä–∞–±–æ—Ç–∫–µ –∞—É–¥–∏–æ.")
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –û–±—Ä–∞–±–æ—Ç—á–∏–∫ –æ—à–∏–±–æ–∫ PTB ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_error(update: object, context_: ContextTypes.DEFAULT_TYPE):
-    log.exception("Unhandled error: %s", context_.error)
-    try:
-        if isinstance(update, Update):
-            cb_data = (getattr(getattr(update, "callback_query", None), "data", "") or "").strip()
-            presentation_active = bool(getattr(context_, "user_data", {}).get("presentation_studio_active"))
-            # The presentation wizard handles and reports its own errors after saving state.
-            # Suppress the misleading second message ¬´–£–ø—Å, –ø—Ä–æ–∏–∑–æ—à–ª–∞ –æ—à–∏–±–∫–∞¬ª.
-            if cb_data.startswith("ps:") or presentation_active:
-                return
-            if update.effective_message:
-                await update.effective_message.reply_text("–£–ø—Å, –ø—Ä–æ–∏–∑–æ—à–ª–∞ –æ—à–∏–±–∫–∞. –Ø —É–∂–µ —Ä–∞–∑–±–∏—Ä–∞—é—Å—å.")
-    except Exception:
-        pass
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –†–æ—É—Ç–µ—Ä—ã –¥–ª—è —Ç–µ–∫—Å—Ç–æ–≤—ã—Ö –∫–Ω–æ–ø–æ–∫/—Ä–µ–∂–∏–º–æ–≤ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_btn_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await cmd_engines(update, context)
-
-async def on_btn_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await cmd_balance(update, context)
-
-async def on_btn_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = _plans_overview_text(user_id)
-    await update.effective_message.reply_text(text, reply_markup=plans_root_kb())
-
-async def on_mode_school_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = (
-        "üéì *–£—á—ë–±–∞*\n"
-        "–ü–æ–º–æ–≥—É: –∫–æ–Ω—Å–ø–µ–∫—Ç—ã –∏–∑ PDF/EPUB/DOCX/TXT, —Ä–∞–∑–±–æ—Ä –∑–∞–¥–∞—á –ø–æ—à–∞–≥–æ–≤–æ, —ç—Å—Å–µ/—Ä–µ—Ñ–µ—Ä–∞—Ç—ã, –º–∏–Ω–∏-–∫–≤–∏–∑—ã.\n\n"
-        "_–ë—ã—Å—Ç—Ä—ã–µ –¥–µ–π—Å—Ç–≤–∏—è:_\n"
-        "‚Ä¢ –†–∞–∑–æ–±—Ä–∞—Ç—å PDF ‚Üí –∫–æ–Ω—Å–ø–µ–∫—Ç\n"
-        "‚Ä¢ –°–æ–∫—Ä–∞—Ç–∏—Ç—å –≤ —à–ø–∞—Ä–≥–∞–ª–∫—É\n"
-        "‚Ä¢ –û–±—ä—è—Å–Ω–∏—Ç—å —Ç–µ–º—É —Å –ø—Ä–∏–º–µ—Ä–∞–º–∏\n"
-        "‚Ä¢ –ü–ª–∞–Ω –æ—Ç–≤–µ—Ç–∞ / –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏–∏"
-    )
-    await update.effective_message.reply_text(txt, parse_mode="Markdown")
-
-async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = (
-        "üíº *–†–∞–±–æ—Ç–∞/–ë–∏–∑–Ω–µ—Å*\n"
-        "–ü–∏—Å—å–º–∞, –ö–ü, –¥–æ–≥–æ–≤–æ—Ä–Ω—ã–µ —á–µ—Ä–Ω–æ–≤–∏–∫–∏, –∞–Ω–∞–ª–∏—Ç–∏–∫–∞, –ø–ª–∞–Ω—ã, –±—Ä–∏—Ñ—ã, –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏–∏, PDF-–∫–∞—Ç–∞–ª–æ–≥–∏, –ª–æ–≥–æ—Ç–∏–ø—ã –∏ —Ä–µ—Ç—É—à—å –±–∏–∑–Ω–µ—Å-—Ñ–æ—Ç–æ.\n\n"
-        "_–ë—ã—Å—Ç—Ä—ã–µ –¥–µ–π—Å—Ç–≤–∏—è:_\n"
-        "‚Ä¢ üìÑ –ü–∏—Å—å–º–æ / –¥–æ–∫—É–º–µ–Ω—Ç\n"
-        "‚Ä¢ üìä –°–æ–∑–¥–∞—Ç—å –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏—é\n"
-        "‚Ä¢ üìï –°–æ–∑–¥–∞—Ç—å PDF-–∫–∞—Ç–∞–ª–æ–≥\n"
-        "‚Ä¢ üé® –°–æ–∑–¥–∞—Ç—å –ª–æ–≥–æ—Ç–∏–ø\n"
-        "‚Ä¢ üßΩ –£–¥–∞–ª–∏—Ç—å –≤–æ–¥—è–Ω–æ–π –∑–Ω–∞–∫ / –Ω–∞–¥–ø–∏—Å—å —Å —Ñ–æ—Ç–æ"
-    )
-    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_mode_kb("work"))
-
-async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = (
-        "üî• *–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è*\n"
-        "–ó–¥–µ—Å—å –±—ã—Å—Ç—Ä—ã–µ —Ç–≤–æ—Ä—á–µ—Å–∫–∏–µ —Å—Ü–µ–Ω–∞—Ä–∏–∏: –æ–∂–∏–≤–∏—Ç—å —Ñ–æ—Ç–æ–≥—Ä–∞—Ñ–∏—é, —Å–¥–µ–ª–∞—Ç—å –≥–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä, —Å–æ–∑–¥–∞—Ç—å —Ñ–æ—Ç–æ‚Üí–≤–∏–¥–µ–æ–∫–ª–∏–ø —Å –º—É–∑—ã–∫–æ–π, –∫–ª–∏–ø —Å –≤–æ–∫–∞–ª–æ–º –¥–ª—è 1 —á–µ–ª–æ–≤–µ–∫–∞, –≤–∏–¥–µ–æ –ø–æ —Ç–µ–∫—Å—Ç—É/–≥–æ–ª–æ—Å—É, "
-        "–∑–∞–º–µ–Ω–∏—Ç—å –ª–∏—Ü–æ, —É–¥–∞–ª–∏—Ç—å –∏–ª–∏ –∑–∞–º–µ–Ω–∏—Ç—å —Ñ–æ–Ω, —Å–¥–µ–ª–∞—Ç—å Reels/Shorts, —Å–æ–∑–¥–∞—Ç—å –º–∏–Ω–∏-—Ñ–∏–ª—å–º, –ø—Ä–∏–¥—É–º–∞—Ç—å –∏–¥–µ–∏, —Å—Ü–µ–Ω–∞—Ä–∏–π, –∏–≥—Ä—É –∏–ª–∏ –∫–≤–∏–∑.\n\n"
-        "–í—ã–±–µ—Ä–∏ –¥–µ–π—Å—Ç–≤–∏–µ –Ω–∏–∂–µ –∏–ª–∏ –Ω–∞–ø–∏—à–∏ —Å–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å."
-    )
-    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ö–ª–∞–≤–∏–∞—Ç—É—Ä–∞ ¬´–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è¬ª —Å –Ω–æ–≤—ã–º–∏ –∫–Ω–æ–ø–∫–∞–º–∏ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _fun_quick_kb() -> InlineKeyboardMarkup:
-    rows = [
-        [InlineKeyboardButton("ü™Ñ –û–∂–∏–≤–∏—Ç—å —Ñ–æ—Ç–æ", callback_data="fun:revive")],
-        [InlineKeyboardButton("üó£ –ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä", callback_data="fun:avatar")],
-        [InlineKeyboardButton("üé§ AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø / –ø–µ—Å–Ω—è", callback_data="fun:photoclip")],
-        [InlineKeyboardButton("üé¨ –í–∏–¥–µ–æ –ø–æ —Ç–µ–∫—Å—Ç—É/–≥–æ–ª–æ—Å—É", callback_data="fun:textvideo")],
-        [InlineKeyboardButton("ü§≥ AI-—Å–µ–ª—Ñ–∏ —Å–æ –∑–≤–µ–∑–¥–æ–π", callback_data="fun:aiselfie")],
-        [InlineKeyboardButton("üé≠ –ó–∞–º–µ–Ω–∞ –ª–∏—Ü–∞ –Ω–∞ —Ñ–æ—Ç–æ", callback_data="fun:faceswap")],
-        [InlineKeyboardButton("üßº –£–¥–∞–ª–∏—Ç—å —Ñ–æ–Ω –Ω–∞ —Ñ–æ—Ç–æ", callback_data="fun:removebg")],
-        [InlineKeyboardButton("üñº –ó–∞–º–µ–Ω–∏—Ç—å —Ñ–æ–Ω –Ω–∞ —Ñ–æ—Ç–æ", callback_data="fun:replacebg")],
-        [InlineKeyboardButton("üì± Reels / Shorts", callback_data="fun:reels")],
-        [InlineKeyboardButton("üéû –°–æ–∑–¥–∞—Ç—å –º–∏–Ω–∏-—Ñ–∏–ª—å–º", callback_data="fun:film")],
-        [InlineKeyboardButton("üé¨ –°—Ü–µ–Ω–∞—Ä–∏–π / –∫–∞–¥—Ä—ã", callback_data="fun:storyboard")],
-        [InlineKeyboardButton("üéµ –ú—É–∑—ã–∫–∞ / –ø–µ—Å–Ω—è", callback_data="fun:music")],
-        [InlineKeyboardButton("üéÆ –ò–≥—Ä—ã / –∫–≤–∏–∑", callback_data="fun:quiz")],
-        [InlineKeyboardButton("üé≠ –ò–¥–µ–∏ –¥–ª—è –¥–æ—Å—É–≥–∞", callback_data="fun:ideas")],
-        [InlineKeyboardButton("üìù –°–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å", callback_data="fun:free")],
-        [InlineKeyboardButton("‚¨ÖÔ∏è –ù–∞–∑–∞–¥", callback_data="fun:back")],
-    ]
-    return InlineKeyboardMarkup(rows)
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –û–±—Ä–∞–±–æ—Ç—á–∏–∫ –±—ã—Å—Ç—Ä—ã—Ö –¥–µ–π—Å—Ç–≤–∏–π ¬´–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è¬ª (fallback-friendly) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    data = (q.data or "").strip()
-    action = data.split(":", 1)[1] if ":" in data else ""
-
-    async def _try_call(*fn_names, **kwargs):
-        fn = _pick_first_defined(*fn_names)
-        if callable(fn):
-            return await fn(update, context, **kwargs)
-        return None
-
-    if action == "avatar":
-        await q.answer("–ì–æ–≤–æ—Ä—è—â–∏–π –∞–≤–∞—Ç–∞—Ä")
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "avatar")
-        await q.message.reply_text(_avatar_menu_text(), parse_mode="Markdown", reply_markup=_avatar_action_kb("fun"))
-        return
-
-    if action.startswith("av_voice_"):
-        voice = action.rsplit("_", 1)[-1].strip()
-        context.user_data["avatar_tts_voice"] = voice
-        context.user_data.pop("awaiting_avatar_voice_choice", None)
-        if _get_cached_photo(q.from_user.id):
-            _set_avatar_wait(context)
-            await q.answer(f"–ì–æ–ª–æ—Å: {voice}")
-            await q.message.reply_text(f"‚úÖ –î–ª—è –∞–≤–∞—Ç–∞—Ä–∞ –≤—ã–±—Ä–∞–Ω –≥–æ–ª–æ—Å: {_avatar_tts_voice_label(voice)}. –®–∞–≥ 3/3: –ø—Ä–∏—à–ª–∏—Ç–µ —Ç–µ–∫—Å—Ç, –∫–æ—Ç–æ—Ä—ã–π –¥–æ–ª–∂–µ–Ω –ø—Ä–æ–∏–∑–Ω–µ—Å—Ç–∏ –∞–≤–∞—Ç–∞—Ä.")
-        else:
-            context.user_data["awaiting_avatar_photo"] = True
-            await q.answer(f"–ì–æ–ª–æ—Å: {voice}")
-            await q.message.reply_text(f"‚úÖ –ì–æ–ª–æ—Å –≤—ã–±—Ä–∞–Ω: {_avatar_tts_voice_label(voice)}. –¢–µ–ø–µ—Ä—å –ø—Ä–∏—à–ª–∏—Ç–µ –ø–æ—Ä—Ç—Ä–µ—Ç —á–µ–ª–æ–≤–µ–∫–∞.")
-        return
-
-    if action == "avatar_upload":
-        await q.answer("–ó–∞–≥—Ä—É–∑–∏—Ç–µ –ø–æ—Ä—Ç—Ä–µ—Ç")
-        await _handle_avatar_upload_choice(update, context, q, prefix="fun")
-        return
-
-    if action in {"avatar_last", "avatar_text"}:
-        await _handle_avatar_script_choice(update, context, q, prefix="fun", voice_mode=False)
-        return
-
-    if action == "avatar_voice":
-        await _handle_avatar_script_choice(update, context, q, prefix="fun", voice_mode=True)
-        return
-
-    if action == "vocalclip":
-        await q.answer("–ö–ª–∏–ø —Å –≤–æ–∫–∞–ª–æ–º")
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "vocalclip")
-        await q.message.reply_text(_vocal_clip_menu_text(), parse_mode="Markdown", reply_markup=_vocal_clip_action_kb("fun"))
-        return
-
-    if action == "vocalclip_upload":
-        await q.answer("–ó–∞–≥—Ä—É–∑–∏—Ç–µ –ø–æ—Ä—Ç—Ä–µ—Ç")
-        await _handle_vocalclip_upload_choice(update, context, q, prefix="fun")
-        return
-
-    if action in {"vocalclip_last", "vocalclip_prompt"}:
-        await _handle_vocalclip_prompt_choice(update, context, q, prefix="fun")
-        return
-
-    if action == "textvideo":
-        await q.answer("–í–∏–¥–µ–æ –ø–æ —Ç–µ–∫—Å—Ç—É/–≥–æ–ª–æ—Å—É")
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "textvideo")
-        await q.message.reply_text(_textvideo_menu_text(), parse_mode="Markdown", reply_markup=_textvideo_action_kb("fun"))
-        return
-
-    if action == "tv_engine_sora":
-        await _handle_textvideo_engine_choice(update, context, q, "sora", prefix="fun")
-        return
-
-    if action == "tv_engine_kling":
-        await _handle_textvideo_engine_choice(update, context, q, "kling", prefix="fun")
-        return
-
-    if action == "tv_engine_runway":
-        await _handle_textvideo_engine_choice(update, context, q, "runway", prefix="fun")
-        return
-
-    if action == "tv_prompt":
-        await _handle_textvideo_prompt_choice(update, context, q, prefix="fun")
-        return
-
-    if action == "photoclip":
-        await q.answer("–§–æ—Ç–æ ‚Üí –≤–∏–¥–µ–æ–∫–ª–∏–ø")
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "photoclip")
-        await q.message.reply_text(_photoclip_menu_text(), parse_mode="Markdown", reply_markup=_photoclip_action_kb("fun"))
-        return
-
-    if action == "photoclip_upload":
-        await q.answer("–ó–∞–≥—Ä—É–∑–∏—Ç–µ —Ñ–æ—Ç–æ")
-        await _handle_photoclip_upload_choice(update, context, q, prefix="fun")
-        return
-
-    if action == "photoclip_last":
-        await _handle_photoclip_prompt_choice(update, context, q, prefix="fun")
-        return
-
-    if action == "photoclip_custom":
-        if _music_video_identity_complete(q.from_user.id):
-            await _handle_photoclip_prompt_choice(update, context, q, prefix="fun")
-        else:
-            await q.answer("–°–Ω–∞—á–∞–ª–∞ —Å–æ–±–µ—Ä—ë–º Character Identity Pack")
-            await _handle_photoclip_upload_choice(update, context, q, prefix="fun")
-        return
-
-    if action.startswith("pc_preset_"):
-        kind = action.rsplit("_", 1)[-1]
-        await _handle_photoclip_preset_choice(update, context, q, kind, prefix="fun")
-        return
-
-    if action == "faceswap":
-        await q.answer("–ó–∞–º–µ–Ω–∞ –ª–∏—Ü–∞")
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "faceswap")
-        await _start_faceswap_flow(update, context, None, use_cached=False)
-        return
-
-    if action == "removebg":
-        await q.answer("–£–¥–∞–ª–µ–Ω–∏–µ —Ñ–æ–Ω–∞")
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "removebg")
-        img = _get_cached_photo(q.from_user.id)
-        if img:
-            await q.message.reply_text("üßº –ò—Å–ø–æ–ª—å–∑—É—é –ø–æ—Å–ª–µ–¥–Ω–µ–µ –∑–∞–≥—Ä—É–∂–µ–Ω–Ω–æ–µ —Ñ–æ—Ç–æ –∏ —É–¥–∞–ª—è—é —Ñ–æ–Ω.")
-            await _pedit_removebg(update, context, img)
-        else:
-            _set_waiting_removebg(context)
-            await q.message.reply_text("üßº –ü—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ ‚Äî —É–¥–∞–ª—é —Ñ–æ–Ω –∏ –≤–µ—Ä–Ω—É PNG —Å –ø—Ä–æ–∑—Ä–∞—á–Ω–æ–π –ø–æ–¥–ª–æ–∂–∫–æ–π.", reply_markup=_fun_quick_kb())
-        return
-
-    if action == "replacebg":
-        await q.answer("–ó–∞–º–µ–Ω–∞ —Ñ–æ–Ω–∞")
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "replacebg")
-        img = _get_cached_photo(q.from_user.id)
-        if img:
-            await q.message.reply_text("üñº –í—ã–±–µ—Ä–∏—Ç–µ –Ω–æ–≤—ã–π —Ñ–æ–Ω –¥–ª—è –ø–æ—Å–ª–µ–¥–Ω–µ–≥–æ –∑–∞–≥—Ä—É–∂–µ–Ω–Ω–æ–≥–æ —Ñ–æ—Ç–æ:", reply_markup=background_presets_kb())
-        else:
-            context.user_data["photo_flow"] = "replacebg_menu"
-            await q.message.reply_text("üñº –ü—Ä–∏—à–ª–∏—Ç–µ —Ñ–æ—Ç–æ. –ü–æ—Å–ª–µ –∑–∞–≥—Ä—É–∑–∫–∏ —è –ø–æ–∫–∞–∂—É –≤–∞—Ä–∏–∞–Ω—Ç—ã —Ñ–æ–Ω–∞: –ø–ª—è–∂, –≥–æ—Ä—ã, –ø—Ä–∏—Ä–æ–¥–∞, –≥–æ—Ä–æ–¥ –∏–ª–∏ —Å–≤–æ–π —Ç–µ–∫—Å—Ç.", reply_markup=_fun_quick_kb())
-        return
-
-    if action == "revive":
-        if await _try_call("revive_old_photo_flow", "do_revive_photo"):
-            return
-        _set_waiting_photo_revival(update, context)
-        await q.answer("–û–∂–∏–≤–ª–µ–Ω–∏–µ —Ñ–æ—Ç–æ")
-        await q.message.reply_text(_fun_revive_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
-        return
-
-    if action in {"smartreels", "reels"}:
-        if await _try_call("smart_reels_from_video", "video_sense_reels"):
-            return
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "fun_reels")
-        context.user_data["awaiting_reels_material"] = True
-        await q.answer("Reels / Shorts")
-        await q.message.reply_text(_fun_reels_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
-        return
-
-    if action == "film":
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "fun_film")
-        context.user_data["awaiting_film_material"] = True
-        await q.answer("–°–æ–∑–¥–∞—Ç—å —Ñ–∏–ª—å–º")
-        await q.message.reply_text(_fun_film_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
-        return
-
-    if action == "clip":
-        if await _try_call("start_runway_flow", "luma_make_clip", "runway_make_clip"):
-            return
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "fun_reels")
-        context.user_data["awaiting_reels_material"] = True
-        await q.answer()
-        await q.message.reply_text(_fun_reels_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
-        return
-
-    if action == "img":
-        if await _try_call("cmd_img", "midjourney_flow", "images_make"):
-            return
-        await q.answer()
-        await q.message.reply_text("–í–≤–µ–¥–∏ /img –∏ —Ç–µ–º—É –∫–∞—Ä—Ç–∏–Ω–∫–∏, –∏–ª–∏ –ø—Ä–∏—à–ª–∏ —Ä–µ—Ñ—ã.", reply_markup=_fun_quick_kb())
-        return
-
-    if action == "storyboard":
-        if await _try_call("start_storyboard", "storyboard_make"):
-            return
-        await q.answer()
-        await q.message.reply_text("–ù–∞–ø–∏—à–∏ —Ç–µ–º—É —à–æ—Ä—Ç–∞ ‚Äî –Ω–∞–∫–∏–¥–∞—é —Å—Ç—Ä—É–∫—Ç—É—Ä—É –∏ —Ä–∞—Å–∫–∞–¥—Ä–æ–≤–∫—É.", reply_markup=_fun_quick_kb())
-        return
-
-    if action == "music":
-        _clear_transient_flows(context)
-        _set_mode_clean(q.from_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "suno_music")
-        context.user_data["awaiting_suno_brief"] = True
-        await q.answer("–ú—É–∑—ã–∫–∞ / Suno")
-        await _show_suno_help_from_callback(q, context, reply_markup=_suno_menu_kb(), submenu=True)
-        return
-
-    if action in {"ideas", "quiz", "speech", "free", "back"}:
-        _clear_transient_flows(context)
-        await q.answer()
-        await q.message.reply_text(
-            "–ì–æ—Ç–æ–≤! –ù–∞–ø–∏—à–∏ –∑–∞–¥–∞—á—É –∏–ª–∏ –≤—ã–±–µ—Ä–∏ –∫–Ω–æ–ø–∫—É –≤—ã—à–µ.",
-            reply_markup=_fun_quick_kb()
-        )
-        return
-
-    await q.answer()
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –†–æ—É—Ç–µ—Ä—ã-–∫–Ω–æ–ø–∫–∏ —Ä–µ–∂–∏–º–æ–≤ (–µ–¥–∏–Ω–∞—è —Ç–æ—á–∫–∞ –≤—Ö–æ–¥–∞) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def on_btn_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _clear_transient_flows(context)
-    _set_mode_clean(update.effective_user.id, "–£—á—ë–±–∞", "")
-    fn = globals().get("_send_mode_menu")
-    if callable(fn):
-        return await fn(update, context, "study")
-    return await on_mode_school_text(update, context)
-
-async def on_btn_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _clear_transient_flows(context)
-    _set_mode_clean(update.effective_user.id, "–†–∞–±–æ—Ç–∞/–ë–∏–∑–Ω–µ—Å", "")
-    fn = globals().get("_send_mode_menu")
-    if callable(fn):
-        return await fn(update, context, "work")
-    return await on_mode_work_text(update, context)
-
-async def on_btn_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _clear_transient_flows(context)
-    _set_mode_clean(update.effective_user.id, "–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è", "")
-    fn = globals().get("_send_mode_menu")
-    if callable(fn):
-        return await fn(update, context, "fun")
-    return await on_mode_fun_text(update, context)
-
-async def on_btn_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    _set_medical_waiting(update, context, "")
-    await update.effective_message.reply_text(_medical_menu_text(), reply_markup=medicine_kb())
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ü—Ä–∏–æ—Ä–∏—Ç–µ—Ç–Ω—ã–π —Ä–æ—É—Ç–µ—Ä AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _music_video_text_state(context: ContextTypes.DEFAULT_TYPE, user_id: int | None = None) -> str:
-    """–ê–∫—Ç–∏–≤–Ω—ã–π —ç—Ç–∞–ø PHOTO -> SONG -> VIDEO. –û–Ω –≤—Å–µ–≥–¥–∞ –≤—ã—à–µ generic media/capability intents."""
-    if context.user_data.get("awaiting_music_video_video_brief"):
-        return "video"
-    if context.user_data.get("awaiting_photo_clip_prompt") or context.user_data.get("awaiting_vocal_clip_prompt"):
-        return "music"
-    if context.user_data.get("music_video_draft_edit"):
-        return "draft_edit"
-    if user_id:
-        with contextlib.suppress(Exception):
-            track = (_mode_track_get(user_id) or "").strip().lower()
-            if track == "musicvideo:video":
-                return "video"
-            if track == "musicvideo:music":
-                return "music"
-    return ""
-
-
-async def on_music_video_text_priority(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """–ï–¥–∏–Ω—Å—Ç–≤–µ–Ω–Ω—ã–π –≤–ª–∞–¥–µ–ª–µ—Ü —Ç–µ–∫—Å—Ç–∞, –ø–æ–∫–∞ –∞–∫—Ç–∏–≤–µ–Ω –º–∞—Å—Ç–µ—Ä AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞."""
-    uid = update.effective_user.id if update.effective_user else 0
-    stage = _music_video_text_state(context, uid)
-    if not stage:
-        return
-
-    if uid and not _get_cached_photo(uid):
-        await update.effective_message.reply_text(
-            "‚ö†Ô∏è –†–µ–∂–∏–º AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞ –∞–∫—Ç–∏–≤–µ–Ω, –Ω–æ –∏—Å—Ö–æ–¥–Ω–æ–µ —Ñ–æ—Ç–æ –ø–æ—Ç–µ—Ä—è–Ω–æ. –ü—Ä–∏—à–ª–∏—Ç–µ —Ç–æ –∂–µ —Ñ–æ—Ç–æ –∏ –Ω–∞—á–Ω–∏—Ç–µ –∫–ª–∏–ø —Å–Ω–æ–≤–∞."
-        )
-        raise ApplicationHandlerStop
-
-    # VIDEO_BRIEF consumes here and never re-enters generic on_text intent routing.
-    if stage == "video":
-        music_brief = (context.user_data.get("music_video_music_brief") or "").strip()
-        if not music_brief and uid:
-            with contextlib.suppress(Exception):
-                music_brief = (kv_get(f"music_video_music_brief:{uid}", "") or "").strip()
-        if not music_brief:
-            await update.effective_message.reply_text(
-                "–ß–µ—Ä–Ω–æ–≤–∏–∫ –∫–ª–∏–ø–∞ –ø–æ—Ç–µ—Ä—è–ª –æ–ø–∏—Å–∞–Ω–∏–µ –ø–µ—Å–Ω–∏. –ù–∞—á–Ω–∏—Ç–µ —Ä–µ–∂–∏–º AI-–≤–∏–¥–µ–æ–∫–ª–∏–ø–∞ –µ—â—ë —Ä–∞–∑."
-            )
-            raise ApplicationHandlerStop
-        context.user_data["music_video_music_brief"] = music_brief
-        context.user_data["awaiting_music_video_video_brief"] = True
-        video_brief = (getattr(update.effective_message, "text", "") or "").strip()
-        await _stage_music_video_draft(
-            update, context, music_brief=music_brief, video_brief=video_brief
-        )
-        raise ApplicationHandlerStop
-
-    await on_text(update, context)
-    raise ApplicationHandlerStop
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –ü–æ–∑–∏—Ç–∏–≤–Ω—ã–π –∞–≤—Ç–æ-–æ—Ç–≤–µ—Ç –ø—Ä–æ –≤–æ–∑–º–æ–∂–Ω–æ—Å—Ç–∏ (—Ç–µ–∫—Å—Ç/–≥–æ–ª–æ—Å) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-_CAPS_PATTERN = re.compile(
-    r"(—É–º–µ–µ—à—å|–º–æ–∂–µ—à—å|–¥–µ–ª–∞–µ—à—å|–∞–Ω–∞–ª–∏–∑–∏—Ä—É–µ—à—å|—Ä–∞–±–æ—Ç–∞–µ—à—å|–ø–æ–¥–¥–µ—Ä–∂–∏–≤–∞–µ—à—å|—É–º–µ–µ—Ç\s+–ª–∏|–º–æ–∂–µ—Ç\s+–ª–∏|–º–æ–∂–Ω–æ\s+–ª–∏)"
-    r".{0,160}"
-    r"(pdf|epub|fb2|docx|txt|–∫–Ω–∏–≥|–∫–Ω–∏–≥–∞|–∏–∑–æ–±—Ä–∞–∂–µ–Ω|—Ñ–æ—Ç–æ|—Ñ–æ—Ç–æ–≥—Ä–∞—Ñ|–∫–∞—Ä—Ç–∏–Ω|–æ–∂–∏–≤|–∞–Ω–∏–º–∏—Ä|"
-    r"image|jpeg|png|video|–≤–∏–¥–µ–æ|mp4|mov|–∞—É–¥–∏–æ|audio|mp3|wav|"
-    r"–º–µ–¥–∏—Ü–∏–Ω|–º–µ–¥–∫–∞—Ä—Ç|–≤—ã–ø–∏—Å–∫|–∞–Ω–∞–º–Ω–µ–∑|–∞–Ω–∞–ª–∏–∑|—Å–Ω–∏–º–æ–∫|–º—Ä—Ç|–∫—Ç|–∑–∞–∫–ª—é—á–µ–Ω–∏|–≤—Ä–∞—á–µ–±–Ω|–¥–∏–∞–≥–Ω–æ–∑|—É–∑–∏|—Ä–µ–Ω—Ç–≥–µ–Ω|–ª–∏—Ü–æ|–ª–∏—Ü–∞|–ª–∏—Ü|faceswap|face\s*swap|–º—É–∑—ã–∫|–ø–µ—Å–Ω|—Ç—Ä–µ–∫|suno)",
-    re.I | re.S,
-)
-
-async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    incoming_text = (getattr(update.effective_message, "text", "") or "").strip()
-    # Stateful music-video prompts have priority over the generic capability matcher.
-    # In particular, words such as "—Ñ–æ—Ç–æ—Ä–µ–∞–ª–∏–∑–º" + "–¥–≤–∏–∂–µ–Ω–∏–µ" inside VIDEO_BRIEF
-    # must never reset the flow to ordinary photo revival.
-    if any(context.user_data.get(key) for key in (
-        "awaiting_photo_clip_prompt",
-        "awaiting_vocal_clip_prompt",
-        "awaiting_music_video_video_brief",
-        "music_video_draft_edit",
-    )):
-        # This handler runs in an earlier PTB group than the general text handler.
-        # Dispatch the active stateful flow here and stop propagation so a matching
-        # capability phrase can never answer instead of consuming SONG/VIDEO input.
-        await on_text(update, context)
-        raise ApplicationHandlerStop
-    # Never interpret a presentation brief as a generic capability/live-data question.
-    studio = _presentation_studio_get()
-    if update.effective_user and update.effective_chat and studio._active_project(update.effective_user.id, update.effective_chat.id):
-        if await studio.handle_text(update, context, incoming_text):
-            raise ApplicationHandlerStop
-        return
-    if _is_photo_revival_question(incoming_text) or _is_photo_revival_intent(incoming_text):
-        _set_waiting_photo_revival(update, context)
-    cap = capability_answer(incoming_text)
-    if cap:
-        await update.effective_message.reply_text(cap, reply_markup=main_kb)
-        return
-
-    msg = (
-        "–î–∞, —É–º–µ—é —Ä–∞–±–æ—Ç–∞—Ç—å —Å —Ñ–∞–π–ª–∞–º–∏, –º–µ–¥–∏–∞ –∏ –º–µ–¥–∏—Ü–∏–Ω—Å–∫–∏–º–∏ –º–∞—Ç–µ—Ä–∏–∞–ª–∞–º–∏:\n"
-        "‚Ä¢ üìÑ –î–æ–∫—É–º–µ–Ω—Ç—ã: PDF/EPUB/FB2/DOCX/TXT ‚Äî –∫–æ–Ω—Å–ø–µ–∫—Ç, —Ä–µ–∑—é–º–µ, –∏–∑–≤–ª–µ—á–µ–Ω–∏–µ —Ç–∞–±–ª–∏—Ü, –ø—Ä–æ–≤–µ—Ä–∫–∞ —Ñ–∞–∫—Ç–æ–≤.\n"
-        "‚Ä¢ üñº –ò–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è: –∞–Ω–∞–ª–∏–∑/–æ–ø–∏—Å–∞–Ω–∏–µ, —É–¥–∞–ª–µ–Ω–∏–µ –∏ –∑–∞–º–µ–Ω–∞ —Ñ–æ–Ω–∞, –∑–∞–º–µ–Ω–∞ –ª–∏—Ü–∞, —Ä–µ—Ç—É—à—å, outpaint.\n"
-        "‚Ä¢ ‚ú® –û–∂–∏–≤–ª–µ–Ω–∏–µ —Ñ–æ—Ç–æ: –∑–∞–≥—Ä—É–∑–∏ —Ñ–æ—Ç–æ ‚Äî –º–æ–∂–Ω–æ –≤—ã–±—Ä–∞—Ç—å Runway, Kling –∏–ª–∏ Sora 2 —Ç–æ–ª—å–∫–æ –¥–ª—è –∫–∞–¥—Ä–æ–≤ –±–µ–∑ –ª—é–¥–µ–π.\n"
-        "‚Ä¢ üéû –í–∏–¥–µ–æ: —Ä–∞–∑–±–æ—Ä —Å–º—ã—Å–ª–∞, —Ç–∞–π–º–∫–æ–¥—ã, *Reels –∏–∑ –¥–ª–∏–Ω–Ω–æ–≥–æ –≤–∏–¥–µ–æ*, –∏–¥–µ–∏/—Å–∫—Ä–∏–ø—Ç, —Å—É–±—Ç–∏—Ç—Ä—ã.\n"
-        "‚Ä¢ üéß –ê—É–¥–∏–æ/–∫–Ω–∏–≥–∏: —Ç—Ä–∞–Ω—Å–∫—Ä–∏–ø—Ü–∏—è, —Ç–µ–∑–∏—Å—ã, –ø–ª–∞–Ω.\n"
-        "‚Ä¢ ü©∫ –ú–µ–¥–∏—Ü–∏–Ω–∞: –≤—ã–ø–∏—Å–∫–∏, –∞–Ω–∞–º–Ω–µ–∑, –∑–∞–∫–ª—é—á–µ–Ω–∏—è, –∞–Ω–∞–ª–∏–∑—ã, —Å–Ω–∏–º–∫–∏, –ú–†–¢/–ö–¢ ‚Äî —Å–ø—Ä–∞–≤–æ—á–Ω—ã–π —Ä–∞–∑–±–æ—Ä –∏ –≤–æ–ø—Ä–æ—Å—ã –≤—Ä–∞—á—É.\n\n"
-        "_–ü–æ–¥—Å–∫–∞–∑–∫–∏:_ –ø—Ä–æ—Å—Ç–æ –∑–∞–≥—Ä—É–∑–∏—Ç–µ —Ñ–∞–π–ª –∏–ª–∏ –ø—Ä–∏—à–ª–∏—Ç–µ —Å—Å—ã–ª–∫—É + –∫–æ—Ä–æ—Ç–∫–æ–µ –¢–ó. "
-        "–î–ª—è —Ñ–æ—Ç–æ ‚Äî –º–æ–∂–Ω–æ –Ω–∞–∂–∞—Ç—å ¬´‚ú® –û–∂–∏–≤–∏—Ç—å¬ª, –¥–ª—è –≤–∏–¥–µ–æ ‚Äî ¬´üé¨ Reels –∏–∑ –¥–ª–∏–Ω–Ω–æ–≥–æ –≤–∏–¥–µ–æ¬ª."
-    )
-    await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=_fun_quick_kb())
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ v98 LIVE SEARCH DIAGNOSTICS / PROVIDER HARDENING ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-# Tavily is the primary retrieval provider. OpenAI Responses web_search is the
-# fallback only when OPENAI_API_KEY is an official OpenAI key (not sk-or-*).
-_LIVE_SEARCH_LAST_STATUS: dict[str, dict] = {
-    "tavily": {"state": "not_tested", "detail": ""},
-    "openai": {"state": "not_tested", "detail": ""},
-    "summary": {"state": "not_tested", "detail": ""},
-}
-
-
-def _masked_key_state(value: str) -> str:
-    value = (value or "").strip()
-    if not value:
-        return "off"
-    return f"on ({value[:4]}‚Ä¶{value[-4:]}, len={len(value)})"
-
-
-def _official_openai_web_key_available() -> bool:
-    key = (OPENAI_API_KEY or "").strip()
-    return bool(key and not key.startswith("sk-or-"))
-
-
-def _live_search_failure_message() -> str:
-    tavily_state = _LIVE_SEARCH_LAST_STATUS.get("tavily", {}).get("state", "not_tested")
-    openai_state = _LIVE_SEARCH_LAST_STATUS.get("openai", {}).get("state", "not_tested")
-    if not TAVILY_API_KEY and not _official_openai_web_key_available():
-        return (
-            "‚ö†Ô∏è Live-–ø–æ–∏—Å–∫ —Å–µ–π—á–∞—Å –Ω–µ –Ω–∞—Å—Ç—Ä–æ–µ–Ω: –æ—Ç—Å—É—Ç—Å—Ç–≤—É–µ—Ç TAVILY_API_KEY, –∞ OPENAI_API_KEY "
-            "–Ω–µ —è–≤–ª—è–µ—Ç—Å—è –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–º –∫–ª—é—á–æ–º OpenAI –¥–ª—è —Ä–µ–∑–µ—Ä–≤–Ω–æ–≥–æ web-search. "
-            "–û–±—ã—á–Ω—ã–π GPT-—á–∞—Ç –ø—Ä–æ–¥–æ–ª–∂–∞–µ—Ç —Ä–∞–±–æ—Ç–∞—Ç—å. –ê–¥–º–∏–Ω–∏—Å—Ç—Ä–∞—Ç–æ—Ä—É: –≤—ã–ø–æ–ª–Ω–∏—Ç–µ /diag_live_search."
-        )
-    if tavily_state in {"unauthorized", "quota", "http_error", "network_error"}:
-        return (
-            "‚ö†Ô∏è –ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ–ª—É—á–∏—Ç—å —Å–≤–µ–∂–∏–µ –¥–∞–Ω–Ω—ã–µ —á–µ—Ä–µ–∑ Tavily. –û–±—ã—á–Ω—ã–π GPT-—á–∞—Ç –ø—Ä–æ–¥–æ–ª–∂–∞–µ—Ç —Ä–∞–±–æ—Ç–∞—Ç—å. "
-            "–ö–ª—é—á –º–æ–∂–µ—Ç –±—ã—Ç—å –Ω–µ–¥–µ–π—Å—Ç–≤–∏—Ç–µ–ª—å–Ω—ã–º, –∏—Å—á–µ—Ä–ø–∞–Ω –ª–∏–º–∏—Ç –∏–ª–∏ –ø—Ä–æ–≤–∞–π–¥–µ—Ä –≤—Ä–µ–º–µ–Ω–Ω–æ –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω. "
-            "–ê–¥–º–∏–Ω–∏—Å—Ç—Ä–∞—Ç–æ—Ä—É: –≤—ã–ø–æ–ª–Ω–∏—Ç–µ /diag_live_search –∏ /test_live_search."
-        )
-    if openai_state in {"unauthorized", "quota", "http_error", "network_error"}:
-        return (
-            "‚ö†Ô∏è –û—Å–Ω–æ–≤–Ω–æ–π live-–ø–æ–∏—Å–∫ –Ω–µ –≤–µ—Ä–Ω—É–ª —Ä–µ–∑—É–ª—å—Ç–∞—Ç, –∞ —Ä–µ–∑–µ—Ä–≤–Ω—ã–π web-search OpenAI —Ç–∞–∫–∂–µ –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω. "
-            "–û–±—ã—á–Ω—ã–π GPT-—á–∞—Ç –ø—Ä–æ–¥–æ–ª–∂–∞–µ—Ç —Ä–∞–±–æ—Ç–∞—Ç—å. –ê–¥–º–∏–Ω–∏—Å—Ç—Ä–∞—Ç–æ—Ä—É: –≤—ã–ø–æ–ª–Ω–∏—Ç–µ /diag_live_search."
-        )
-    return (
-        "‚ö†Ô∏è –°–µ–π—á–∞—Å –Ω–µ —É–¥–∞–ª–æ—Å—å –ø–æ–ª—É—á–∏—Ç—å —Å–≤–µ–∂–∏–µ –¥–∞–Ω–Ω—ã–µ –∏–∑ –∏–Ω—Ç–µ—Ä–Ω–µ—Ç–∞. –û–±—ã—á–Ω—ã–π GPT-—á–∞—Ç –ø—Ä–æ–¥–æ–ª–∂–∞–µ—Ç —Ä–∞–±–æ—Ç–∞—Ç—å. "
-        "–ü–æ–ø—Ä–æ–±—É–π—Ç–µ –ø–æ–≤—Ç–æ—Ä–∏—Ç—å –∑–∞–ø—Ä–æ—Å; –∞–¥–º–∏–Ω–∏—Å—Ç—Ä–∞—Ç–æ—Ä—É –¥–æ—Å—Ç—É–ø–Ω–∞ –ø—Ä–æ–≤–µ—Ä–∫–∞ /test_live_search."
-    )
-
-
-async def _tavily_live_search_context(query: str) -> str | None:
-    """Current Tavily Search API: Bearer authentication plus structured status."""
-    if not TAVILY_API_KEY:
-        _LIVE_SEARCH_LAST_STATUS["tavily"] = {"state": "missing_key", "detail": "TAVILY_API_KEY is empty"}
-        return None
-    original_query = (query or "").strip()
-    search_query = _live_search_query_with_date(original_query)
-    is_news = _is_news_intent(original_query)
-    has_relative_date = bool(_RELATIVE_DATE_RE.search(original_query))
-    payload = {
-        "query": search_query,
-        "search_depth": "advanced" if (is_news or has_relative_date) else "basic",
-        "topic": "news" if is_news else "general",
-        "include_answer": False,
-        "include_raw_content": False,
-        "max_results": LIVE_SEARCH_NEWS_MAX_RESULTS if is_news else 5,
-    }
-    if is_news or has_relative_date:
-        payload["time_range"] = LIVE_SEARCH_TODAY_TIME_RANGE if has_relative_date else LIVE_SEARCH_RECENT_TIME_RANGE
-    headers = {
-        "Authorization": f"Bearer {TAVILY_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=LIVE_SEARCH_TIMEOUT_S, follow_redirects=True) as client:
-            r = await client.post("https://api.tavily.com/search", headers=headers, json=payload)
-        if r.status_code in (401, 403):
-            _LIVE_SEARCH_LAST_STATUS["tavily"] = {"state": "unauthorized", "detail": f"HTTP {r.status_code}: {r.text[:240]}"}
-            log.warning("Tavily authorization failed HTTP %s: %s", r.status_code, r.text[:300])
-            return None
-        if r.status_code == 429:
-            _LIVE_SEARCH_LAST_STATUS["tavily"] = {"state": "quota", "detail": f"HTTP 429: {r.text[:240]}"}
-            log.warning("Tavily quota/rate limit: %s", r.text[:300])
-            return None
-        if r.status_code // 100 != 2:
-            _LIVE_SEARCH_LAST_STATUS["tavily"] = {"state": "http_error", "detail": f"HTTP {r.status_code}: {r.text[:240]}"}
-            log.warning("Tavily HTTP %s: %s", r.status_code, r.text[:300])
-            return None
-        js = r.json() or {}
-        results = js.get("results") or []
-        parts = []
-        for idx, item in enumerate(results, 1):
-            if not isinstance(item, dict):
-                continue
-            title = (item.get("title") or "–ë–µ–∑ –Ω–∞–∑–≤–∞–Ω–∏—è").strip()
-            url = (item.get("url") or "").strip()
-            content = (item.get("content") or "").strip()
-            published = item.get("published_date") or item.get("publishedDate") or item.get("date") or "–¥–∞—Ç–∞ –Ω–µ —É–∫–∞–∑–∞–Ω–∞"
-            if url or content:
-                parts.append(
-                    f"[{idx}] {title}\n–î–∞—Ç–∞ –ø—É–±–ª–∏–∫–∞—Ü–∏–∏/–æ–±–Ω–æ–≤–ª–µ–Ω–∏—è: {published}\nURL: {url}\n–§—Ä–∞–≥–º–µ–Ω—Ç: {content[:1100]}"
-                )
-        if not parts:
-            _LIVE_SEARCH_LAST_STATUS["tavily"] = {"state": "empty", "detail": "HTTP 200, results empty"}
-            return None
-        _LIVE_SEARCH_LAST_STATUS["tavily"] = {"state": "ok", "detail": f"HTTP 200, results={len(parts)}"}
-        return "\n\n".join(parts)
-    except Exception as exc:
-        _LIVE_SEARCH_LAST_STATUS["tavily"] = {"state": "network_error", "detail": repr(exc)[:240]}
-        log.warning("Tavily live search failed: %s", exc)
-        return None
-
-
-async def openai_live_web_search(user_text: str) -> str | None:
-    """Official OpenAI Responses API + hosted web_search tool."""
-    api_key = (OPENAI_API_KEY or "").strip()
-    if not api_key:
-        _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "missing_key", "detail": "OPENAI_API_KEY is empty"}
-        return None
-    if api_key.startswith("sk-or-"):
-        _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "ineligible_key", "detail": "OpenRouter key cannot call api.openai.com"}
-        return None
-    if not LIVE_SEARCH_ENABLED:
-        _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "disabled", "detail": "LIVE_SEARCH_ENABLED=0"}
-        return None
-    system_text = (
-        "–¢—ã live-–ø–æ–∏—Å–∫–æ–≤—ã–π –ø–æ–º–æ—â–Ω–∏–∫ –≤–Ω—É—Ç—Ä–∏ Telegram-–±–æ—Ç–∞ Neyro-Bot GPT 5 Studio. "
-        + _current_date_system_text() + " "
-        "–û—Ç–≤–µ—á–∞–π –ø–æ-—Ä—É—Å—Å–∫–∏, –∫—Ä–∞—Ç–∫–æ –∏ –ø–æ –¥–µ–ª—É. –ò—Å–ø–æ–ª—å–∑—É–π –≤–µ–±-–ø–æ–∏—Å–∫ –¥–ª—è —Å–≤–µ–∂–∏—Ö –¥–∞–Ω–Ω—ã—Ö. "
-        "–ù–µ –Ω–∞–∑—ã–≤–∞–π —Å—Ç–∞—Ä—ã–µ —Å–æ–±—ã—Ç–∏—è —Å–µ–≥–æ–¥–Ω—è—à–Ω–∏–º–∏. –í –∫–æ–Ω—Ü–µ –¥–∞–π –∏—Å—Ç–æ—á–Ω–∏–∫–∏."
-    )
-    payload = {
-        "model": OPENAI_WEB_SEARCH_MODEL,
-        "input": [
-            {"role": "system", "content": system_text},
-            {"role": "user", "content": _live_search_query_with_date(user_text)},
-        ],
-        "tools": [{"type": "web_search", "search_context_size": "low"}],
-        "tool_choice": "auto",
-    }
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    try:
-        async with httpx.AsyncClient(timeout=max(30.0, LIVE_SEARCH_TIMEOUT_S), follow_redirects=True) as client:
-            r = await client.post("https://api.openai.com/v1/responses", headers=headers, json=payload)
-        if r.status_code in (401, 403):
-            _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "unauthorized", "detail": f"HTTP {r.status_code}: {r.text[:240]}"}
-            log.warning("OpenAI live search auth HTTP %s: %s", r.status_code, r.text[:300])
-            return None
-        if r.status_code == 429:
-            _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "quota", "detail": f"HTTP 429: {r.text[:240]}"}
-            log.warning("OpenAI live search quota: %s", r.text[:300])
-            return None
-        if r.status_code // 100 != 2:
-            _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "http_error", "detail": f"HTTP {r.status_code}: {r.text[:240]}"}
-            log.warning("OpenAI live search HTTP %s: %s", r.status_code, r.text[:300])
-            return None
-        txt = _extract_openai_response_text(r.json())
-        if not txt:
-            _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "empty", "detail": "HTTP 200, output text empty"}
-            return None
-        _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "ok", "detail": f"HTTP 200, chars={len(txt)}"}
-        return txt[:3900]
-    except Exception as exc:
-        _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "network_error", "detail": repr(exc)[:240]}
-        log.warning("OpenAI live search failed: %s", exc)
-        return None
-
-
-async def cmd_diag_live_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    official_openai = _official_openai_web_key_available()
-    lines = [
-        f"üåê Live Search diagnostic / {PATCH_VERSION}",
-        f"enabled={LIVE_SEARCH_ENABLED}",
-        f"timezone={APP_TIMEZONE}",
-        f"timeout_s={LIVE_SEARCH_TIMEOUT_S}",
-        f"tavily_key={_masked_key_state(TAVILY_API_KEY)}",
-        f"openai_key={_masked_key_state(OPENAI_API_KEY)}",
-        f"openai_official_web_eligible={official_openai}",
-        f"openai_web_model={OPENAI_WEB_SEARCH_MODEL}",
-        f"tavily_last={_LIVE_SEARCH_LAST_STATUS.get('tavily')}",
-        f"openai_last={_LIVE_SEARCH_LAST_STATUS.get('openai')}",
-        "–ü—Ä–æ–≤–µ—Ä–∫–∞ —Å–µ—Ç–∏ –∏ –∫–ª—é—á–µ–π: /test_live_search",
-    ]
-    await update.effective_message.reply_text("\n".join(lines))
-
-
-async def cmd_test_live_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("üåê –ü—Ä–æ–≤–µ—Ä—è—é Tavily –∏ —Ä–µ–∑–µ—Ä–≤–Ω—ã–π web-search OpenAI‚Ä¶")
-    query = "–ö–∞–∫–∏–µ –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—ã–µ –Ω–æ–≤–æ—Å—Ç–∏ OpenAI –æ–ø—É–±–ª–∏–∫–æ–≤–∞–Ω—ã –∑–∞ –ø–æ—Å–ª–µ–¥–Ω–∏–µ 7 –¥–Ω–µ–π?"
-    tavily_ctx = await _tavily_live_search_context(query)
-    tavily_status = _LIVE_SEARCH_LAST_STATUS.get("tavily", {})
-    openai_answer = None
-    # Test OpenAI fallback independently only when it is actually configured.
-    if _official_openai_web_key_available():
-        openai_answer = await openai_live_web_search("–ù–∞–∑–æ–≤–∏ –æ–¥–Ω—É –∞–∫—Ç—É–∞–ª—å–Ω—É—é –æ—Ñ–∏—Ü–∏–∞–ª—å–Ω—É—é –Ω–æ–≤–æ—Å—Ç—å OpenAI –∑–∞ –ø–æ—Å–ª–µ–¥–Ω–∏–µ 7 –¥–Ω–µ–π –∏ –∏—Å—Ç–æ—á–Ω–∏–∫.")
-    openai_status = _LIVE_SEARCH_LAST_STATUS.get("openai", {})
-    lines = [
-        "–†–µ–∑—É–ª—å—Ç–∞—Ç –ø—Ä–æ–≤–µ—Ä–∫–∏ live-–ø–æ–∏—Å–∫–∞:",
-        f"Tavily: {tavily_status.get('state')} ‚Äî {tavily_status.get('detail', '')}",
-        f"OpenAI web fallback: {openai_status.get('state')} ‚Äî {openai_status.get('detail', '')}",
-    ]
-    if tavily_ctx:
-        lines.append("‚úÖ –û—Å–Ω–æ–≤–Ω–æ–π live-–ø–æ–∏—Å–∫ Tavily —Ä–∞–±–æ—Ç–∞–µ—Ç.")
-    elif openai_answer:
-        lines.append("‚úÖ –†–µ–∑–µ—Ä–≤–Ω—ã–π live-–ø–æ–∏—Å–∫ OpenAI —Ä–∞–±–æ—Ç–∞–µ—Ç; Tavily —Ç—Ä–µ–±—É–µ—Ç –ø—Ä–æ–≤–µ—Ä–∫–∏.")
-    else:
-        lines.append("‚ùå –ù–∏ –æ–¥–∏–Ω live-–ø—Ä–æ–≤–∞–π–¥–µ—Ä –Ω–µ –ø—Ä–æ—à—ë–ª —Ç–µ—Å—Ç. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –∫–ª—é—á–∏/–ª–∏–º–∏—Ç—ã –≤ Render.")
-    await update.effective_message.reply_text("\n".join(lines)[:3900])
-
-
-def _presentation_update_token(update: Update) -> str:
-    """Stable token preventing one Telegram update from being routed twice."""
-    update_id = getattr(update, "update_id", None)
-    message = getattr(update, "effective_message", None)
-    message_id = getattr(message, "message_id", None)
-    chat = getattr(update, "effective_chat", None)
-    chat_id = getattr(chat, "id", None)
-    return f"{update_id}:{chat_id}:{message_id}"
-
-
-async def on_presentation_text_priority(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Hard-stop all generic text handlers while Presentation Studio owns the chat."""
-    if not update.effective_user or not update.effective_chat or not update.effective_message:
-        return
-    text = (getattr(update.effective_message, "text", "") or "").strip()
-    if not text:
-        return
-    token = _presentation_update_token(update)
-    if context.chat_data.get("_presentation_last_update_token") == token:
-        raise ApplicationHandlerStop
-    studio = _presentation_studio_get()
-    project = studio._active_project(update.effective_user.id, update.effective_chat.id)
-    if not project:
-        return
-    # Mark before I/O so a second handler in this process cannot repeat the reply.
-    context.chat_data["_presentation_last_update_token"] = token
-    handled = await studio.handle_text(update, context, text)
-    if not handled:
-        await update.effective_message.reply_text(
-            "–ü—Ä–æ–µ–∫—Ç –ø—Ä–µ–∑–µ–Ω—Ç–∞—Ü–∏–∏ –∞–∫—Ç–∏–≤–µ–Ω. –ù–∞ —ç—Ç–æ–º —ç—Ç–∞–ø–µ –∏—Å–ø–æ–ª—å–∑—É–π—Ç–µ –∫–Ω–æ–ø–∫–∏ –º–∞—Å—Ç–µ—Ä–∞ –∏–ª–∏ –Ω–∞–∂–º–∏—Ç–µ ¬´–ü—Ä–æ–¥–æ–ª–∂–∏—Ç—å¬ª."
-        )
-    raise ApplicationHandlerStop
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –í—Å–ø–æ–º–æ–≥–∞—Ç–µ–ª—å–Ω–æ–µ: –≤–∑—è—Ç—å –ø–µ—Ä–≤—É—é –æ–±—ä—è–≤–ª–µ–Ω–Ω—É—é —Ñ—É–Ω–∫—Ü–∏—é –ø–æ –∏–º–µ–Ω–∏ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def _pick_first_defined(*names):
-    for n in names:
-        fn = globals().get(n)
-        if callable(fn):
-            return fn
-    return None
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ Telegram profile setup ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-async def _post_init_bot_profile(app):
-    """–û–±–Ω–æ–≤–ª—è–µ—Ç –ø—Ä–æ—Ñ–∏–ª—å –∏ —Å–∏—Å—Ç–µ–º–Ω—É—é –∫–Ω–æ–ø–∫—É –º–µ–Ω—é Telegram –ø–æ—Å–ª–µ –∑–∞–ø—É—Å–∫–∞."""
-    if AUTO_SET_BOT_PROFILE:
-        try:
-            if BOT_PUBLIC_NAME:
-                await app.bot.set_my_name(name=BOT_PUBLIC_NAME)
-            if BOT_SHORT_DESCRIPTION:
-                await app.bot.set_my_short_description(short_description=BOT_SHORT_DESCRIPTION)
-            if BOT_DESCRIPTION:
-                await app.bot.set_my_description(description=BOT_DESCRIPTION)
-            log.info("Telegram bot profile updated: %s", BOT_PUBLIC_NAME)
-        except Exception as e:
-            log.warning("Telegram bot profile update skipped: %s", e)
-
-    if AUTO_SET_BOT_MENU:
-        try:
-            await app.bot.set_chat_menu_button(
-                menu_button=MenuButtonWebApp(
-                    text=BOT_MENU_TEXT,
-                    web_app=WebAppInfo(url=TARIFF_URL),
-                )
-            )
-            log.info("Telegram menu button updated: %s -> %s", BOT_MENU_TEXT, TARIFF_URL)
-        except Exception as e:
-            log.warning("Telegram menu button update skipped: %s", e)
-
-
-# ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ –†–µ–≥–∏—Å—Ç—Ä–∞—Ü–∏—è —Ö–µ–Ω–¥–ª–µ—Ä–æ–≤ –∏ –∑–∞–ø—É—Å–∫ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-def build_application() -> "Application":
-    if not BOT_TOKEN:
-        raise RuntimeError("–ù–µ –∑–∞–¥–∞–Ω BOT_TOKEN –≤ –ø–µ—Ä–µ–º–µ–Ω–Ω—ã—Ö –æ–∫—Ä—É–∂–µ–Ω–∏—è.")
-
-    builder = ApplicationBuilder().token(BOT_TOKEN)
-    if AUTO_SET_BOT_PROFILE or AUTO_SET_BOT_MENU:
-        builder = builder.post_init(_post_init_bot_profile)
-    app = builder.build()
-
-    # –ö–æ–º–∞–Ω–¥—ã
-    app.add_handler(CommandHandler("start",        cmd_start))
-    app.add_handler(CommandHandler("help",         cmd_help))
-    app.add_handler(CommandHandler("examples",     cmd_examples))
-    app.add_handler(CommandHandler("version",      cmd_version))
-    app.add_handler(CommandHandler("engines",      cmd_engines))
-    app.add_handler(CommandHandler("plans",        cmd_plans))
-    app.add_handler(CommandHandler("balance",      cmd_balance))
-    app.add_handler(CommandHandler("prices",       cmd_prices))
-    app.add_handler(CommandHandler("set_welcome",  cmd_set_welcome))
-    app.add_handler(CommandHandler("show_welcome", cmd_show_welcome))
-    app.add_handler(CommandHandler("diag_limits",  cmd_diag_limits))
-    app.add_handler(CommandHandler("diag_access",  cmd_diag_access))
-    app.add_handler(CommandHandler("diag_stt",     cmd_diag_stt))
-    app.add_handler(CommandHandler("diag_images",  cmd_diag_images))
-    app.add_handler(CommandHandler("diag_video",   cmd_diag_video))
-    app.add_handler(CommandHandler("diag_runway",  cmd_diag_runway))
-    app.add_handler(CommandHandler("diag_yookassa", cmd_diag_yookassa))
-    app.add_handler(CommandHandler("provider_status", cmd_provider_status))
-    app.add_handler(CommandHandler("diag_bg",      cmd_diag_bg))
-    app.add_handler(CommandHandler("diag_face",    cmd_diag_face))
-    app.add_handler(CommandHandler("diag_suno",    cmd_diag_suno))
-    app.add_handler(CommandHandler("img",          cmd_img))
-    app.add_handler(CommandHandler("mj",           cmd_midjourney))
-    app.add_handler(CommandHandler("midjourney",   cmd_midjourney))
-    app.add_handler(CommandHandler("presentation", cmd_presentation))
-    app.add_handler(CommandHandler("catalog",      cmd_catalog))
-    app.add_handler(CommandHandler("diag_presentation", cmd_diag_presentation))
-    app.add_handler(CommandHandler("diag_live_search", cmd_diag_live_search))
-    app.add_handler(CommandHandler("test_live_search", cmd_test_live_search))
-    app.add_handler(CommandHandler("chats",        cmd_chats))
-    app.add_handler(CommandHandler("newchat",      cmd_newchat))
-    app.add_handler(CommandHandler("music",       cmd_music))
-    app.add_handler(CommandHandler("voice_on",     cmd_voice_on))
-    app.add_handler(CommandHandler("voice_off",    cmd_voice_off))
-    app.add_handler(CommandHandler("medicine",     cmd_mode_medicine))
-
-    # –ü–ª–∞—Ç–µ–∂–∏
-    app.add_handler(PreCheckoutQueryHandler(on_precheckout))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
-
-    # >>> PATCH START ‚Äî Handlers wiring (WebApp + callbacks + media + text) >>>
-
-    # –î–∞–Ω–Ω—ã–µ –∏–∑ –º–∏–Ω–∏-–ø—Ä–∏–ª–æ–∂–µ–Ω–∏—è (WebApp)
-    with contextlib.suppress(Exception):
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
-    with contextlib.suppress(Exception):
-        if hasattr(filters, "WEB_APP_DATA"):
-            app.add_handler(MessageHandler(filters.WEB_APP_DATA, on_webapp_data))
-
-    # === –ü–ê–¢–ß 4: –ü–æ—Ä—è–¥–æ–∫ callback-—Ö–µ–Ω–¥–ª–µ—Ä–æ–≤ (—É–∑–∫–∏–µ ‚Üí –æ–±—â–∏–µ) ===
-    # 1) –ü–æ–¥–ø–∏—Å–∫–∞/–æ–ø–ª–∞—Ç—ã
-    app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
-
-    # 2) –ù–æ–≤—ã–µ —Ä–µ–∂–∏–º—ã/–ø–æ–¥–º–µ–Ω—é: mode:* –∏ act:* (–£—á—ë–±–∞/–†–∞–±–æ—Ç–∞/–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è/–ú–µ–¥–∏—Ü–∏–Ω–∞)
-    app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
-
-    # Music-video draft approval: consumed once before the generic callback router.
-    app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
-    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio|editaudio):[0-9a-f]{12}$"), group=0)
-
-    # 2b) –°—Ç–∞—Ä—ã–µ school:/work: callbacks, –µ—Å–ª–∏ —Ç–∞–∫–∏–µ –∫–Ω–æ–ø–∫–∏ –µ—â—ë –≥–¥–µ-—Ç–æ –∏—Å–ø–æ–ª—å–∑—É—é—Ç—Å—è
-    app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)
-
-    # 3) –ë—ã—Å—Ç—Ä—ã–µ —Ä–∞–∑–≤–ª–µ—á–µ–Ω–∏—è (–ª—é–±—ã–µ fun:...)
-    app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
-
-    # 3b) –ü–æ–¥–º–µ–Ω—é Suno: —Å–≤–æ–±–æ–¥–Ω—ã–π –∑–∞–ø—Ä–æ—Å –∏ –ø—Ä–µ—Å–µ—Ç—ã
-    app.add_handler(CallbackQueryHandler(on_cb_suno,  pattern=r"^suno:"), group=0)
-
-    # 4) –û—Å—Ç–∞–ª—å–Ω–æ–π catch-all (pedit/topup/engine/buy –∏ —Ç.–ø.)
-    # –†–∞–∑–º–µ—â–∞–µ–º –≤ –ø—Ä–∏–æ—Ä–∏—Ç–µ—Ç–Ω–æ–π –≥—Ä—É–ø–ø–µ, —á—Ç–æ–±—ã –∫–æ–ª–±—ç–∫–∏ –æ–±—Ä–∞–±–∞—Ç—ã–≤–∞–ª–∏—Å—å —Å—Ä–∞–∑—É
-    app.add_handler(CallbackQueryHandler(on_cb), group=0)
-
-    # Active AI-videoclip state owns text before presentation/capability/generic media routing.
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, on_music_video_text_priority),
-        group=-2,
-    )
-
-    # Presentation Studio owns active presentation/catalog chats before every other text handler.
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, on_presentation_text_priority),
-        group=-1,
-    )
-
-    # –ì–æ–ª–æ—Å/–∞—É–¥–∏–æ ‚Äî –æ—Ç–Ω–æ—Å–∏–º –∫ –º–µ–¥–∏–∞–≥—Ä—É–ø–ø–µ (–∏–¥—ë—Ç —Ä–∞–Ω—å—à–µ –æ–±—â–µ–≥–æ —Ç–µ–∫—Å—Ç–æ–≤–æ–≥–æ —Ö–µ–Ω–¥–ª–µ—Ä–∞)
-    voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
-    if voice_fn:
-        app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_fn), group=1)
-
-    # –¢–µ–∫—Å—Ç–æ–≤—ã–µ –∫–Ω–æ–ø–∫–∏/—è—Ä–ª—ã–∫–∏ (–æ—Å—Ç–∞–ª—å–Ω—ã–µ) ‚Äî –ß–ò–°–¢–û –±–µ–∑ –¥—É–±–ª–µ–π
-    import re
-
-    # –°—Ç—Ä–æ–≥–∏–µ –ø–∞—Ç—Ç–µ—Ä–Ω—ã: –æ–¥–Ω–æ –Ω–∞–∑–≤–∞–Ω–∏–µ = –æ–¥–∏–Ω —Ö–µ–Ω–¥–ª–µ—Ä (—ç–º–æ–¥–∑–∏ –¥–æ–ø—É—Å–∫–∞–µ–º, –ª–∏—à–Ω–∏–µ –ø—Ä–æ–±–µ–ª—ã ‚Äî —Ç–æ–∂–µ)
-    BTN_ENGINES = re.compile(r"^\s*(?:üß†\s*)?–î–≤–∏–∂–∫–∏\s*$")
-    BTN_BALANCE = re.compile(r"^\s*(?:üí≥|üßæ)?\s*–ë–∞–ª–∞–Ω—Å\s*$")
-    BTN_PLANS   = re.compile(r"^\s*(?:‚≠ê\s*)?–ü–æ–¥–ø–∏—Å–∫–∞(?:\s*[¬∑‚Ä¢]\s*–ü–æ–º–æ—â—å)?\s*$")
-    BTN_STUDY   = re.compile(r"^\s*(?:üéì\s*)?–£—á[–µ—ë]–±–∞\s*$")
-    BTN_WORK    = re.compile(r"^\s*(?:üíº\s*)?(?:–†–∞–±–æ—Ç–∞(?:\s*/\s*–ë–∏–∑–Ω–µ—Å)?|–ë–∏–∑–Ω–µ—Å)\s*$")
-    BTN_FUN     = re.compile(r"^\s*(?:üî•\s*)?–†–∞–∑–≤–ª–µ—á–µ–Ω–∏—è\s*$")
-    BTN_MED     = re.compile(r"^\s*(?:ü©∫|‚öïÔ∏è)?\s*–ú–µ–¥–∏—Ü–∏–Ω–∞\s*$")
-    BTN_CHATS   = re.compile(r"^\s*(?:üí¨\s*)?–ú–æ–∏ —á–∞—Ç—ã\s*$", re.I)
-    BTN_NEWCHAT = re.compile(r"^\s*(?:‚ûï\s*)?–ù–æ–≤—ã–π —á–∞—Ç\s*$", re.I)
-
-    # –ö–Ω–æ–ø–∫–∏ –≤ –ø—Ä–∏–æ—Ä–∏—Ç–µ—Ç–Ω–æ–π –≥—Ä—É–ø–ø–µ (0), —á—Ç–æ–±—ã –æ–Ω–∏ —Å—Ä–∞–±–∞—Ç—ã–≤–∞–ª–∏ —Ä–∞–Ω—å—à–µ –ª—é–±—ã—Ö –æ–±—â–∏—Ö –æ–±—Ä–∞–±–æ—Ç—á–∏–∫–æ–≤
-    app.add_handler(MessageHandler(filters.Regex(BTN_ENGINES), on_btn_engines), group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_BALANCE), on_btn_balance), group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_PLANS),   on_btn_plans),   group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_STUDY),   on_btn_study),   group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_WORK),    on_btn_work),    group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_FUN),     on_btn_fun),     group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_MED),     on_btn_medicine), group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_CHATS),   cmd_chats), group=0)
-    app.add_handler(MessageHandler(filters.Regex(BTN_NEWCHAT), cmd_newchat), group=0)
-
-    # Generic photo-revival regex interceptor removed: explicit revival commands are routed only by on_text.\n    # ‚ûï –ü–æ–∑–∏—Ç–∏–≤–Ω—ã–π –∞–≤—Ç–æ-–æ—Ç–≤–µ—Ç –Ω–∞ ¬´–∞ —É–º–µ–µ—à—å –ª–∏‚Ä¶¬ª ‚Äî –¥–æ –æ–±—â–µ–≥–æ —Ç–µ–∫—Å—Ç–∞ (–æ—Ç–¥–µ–ª—å–Ω–∞—è –≥—Ä—É–ø–ø–∞, –Ω–∏–∂–µ –∫–Ω–æ–ø–æ–∫)
-    app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
-
-    # –ú–µ–¥–∏–∞ (—Ñ–æ—Ç–æ/–¥–æ–∫–∏/–≤–∏–¥–µ–æ/–≥–∏—Ñ) ‚Äî —Ç–æ–∂–µ –ø–µ—Ä–µ–¥ –æ–±—â–∏–º —Ç–µ–∫—Å—Ç–æ–º
-    photo_fn = _pick_first_defined("handle_photo", "on_photo", "photo_handler", "handle_image_message")
-    if photo_fn:
-        app.add_handler(MessageHandler(filters.PHOTO, photo_fn), group=1)
-
-    doc_fn = _pick_first_defined("handle_doc", "on_doc", "on_document", "handle_document", "doc_handler")
-    if doc_fn:
-        app.add_handler(MessageHandler(filters.Document.ALL, doc_fn), group=1)
-
-    video_fn = _pick_first_defined("handle_video", "on_video", "video_handler")
-    if video_fn:
-        app.add_handler(MessageHandler(filters.VIDEO, video_fn), group=1)
-
-    gif_fn = _pick_first_defined("handle_gif", "on_gif", "animation_handler")
-    if gif_fn:
-        app.add_handler(MessageHandler(filters.ANIMATION, gif_fn), group=1)
-
-    # >>> PATCH END <<<
-
-    # –û–±—â–∏–π —Ç–µ–∫—Å—Ç ‚Äî –°–ê–ú–´–ô –ø–æ—Å–ª–µ–¥–Ω–∏–π (–Ω–∏–∂–µ –≤—Å–µ—Ö —á–∞—Å—Ç–Ω—ã—Ö –∫–µ–π—Å–æ–≤)
-    text_fn = _pick_first_defined("handle_text", "on_text", "text_handler", "default_text_handler")
-    if text_fn:
-        btn_filters = (filters.Regex(BTN_ENGINES) | filters.Regex(BTN_BALANCE) |
-                       filters.Regex(BTN_PLANS)   | filters.Regex(BTN_STUDY)   |
-                       filters.Regex(BTN_WORK)    | filters.Regex(BTN_FUN) |
-                       filters.Regex(BTN_MED)     | filters.Regex(BTN_CHATS) |
-                       filters.Regex(BTN_NEWCHAT))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~btn_filters, text_fn), group=2)
-
-    # –û—à–∏–±–∫–∏
-    err_fn = _pick_first_defined("on_error", "handle_error")
-    if err_fn:
-        app.add_error_handler(err_fn)
-
-    return app
-
-
-# === main() —Å –±–µ–∑–æ–ø–∞—Å–Ω–æ–π –∏–Ω–∏—Ü–∏–∞–ª–∏–∑–∞—Ü–∏–µ–π –ë–î (–±–µ–∑ –∏–∑–º–µ–Ω–µ–Ω–∏–π –ø–æ —Å—É—Ç–∏) ===
-def main():
-    log.info("Starting bot patch version: %s", PATCH_VERSION)
-    with contextlib.suppress(Exception):
-        db_init()
-    with contextlib.suppress(Exception):
-        db_init_usage()
-    with contextlib.suppress(Exception):
-        _chat_memory_init()
-    with contextlib.suppress(Exception):
-        _db_init_prefs()
-
-    app = build_application()
-
-    if USE_WEBHOOK:
-        _install_webapp_checkout_bridge(app)
-        log.info("üöÄ WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=WEBHOOK_PATH.lstrip("/"),
-            webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
-            secret_token=(WEBHOOK_SECRET or None),
-            allowed_updates=Update.ALL_TYPES,
-        )
-    else:
-        log.info("üöÄ POLLING mode.")
-        with contextlib.suppress(Exception):
-            asyncio.get_event_loop().run_until_complete(
-                app.bot.delete_webhook(drop_pending_updates=True)
-            )
-        app.run_polling(
-            close_loop=False,
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=False,
-        )
-
-
-if __name__ == "__main__":
-    main()
-# === END PATCH ===
+            "–¢—ã —Ä–∞–€]5◊¶ÚµÎ(ö+my÷Ê∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯˘í	≠ΩçÚ=ÌÌB"¬6∆∆&6µˆFF“'VFóC¶&sß&ˆˆb"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯˙"	ÌMçÚç}›]"¬6∆∆&6µˆFF“'VFóC¶&s¶ˆffñ6R"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.)™¢	]ΩΩí-=Mçù›ΩíMÌ“"¬6∆∆&6µˆFF“'VFóC¶&sßvÜóFR"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.)»ﬁ˚àÚ
+-ÌíMÌ“"¬6∆∆&6µˆFF“'VFóC¶&s¶7W7Fˆ“"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*»^˚àÚ	›}B"¬6∆∆&6µˆFF“'VFóC¶&6≤"ï“¿¢“ê††¶FVb˜6WE˜vóFñÊu˜&V÷˜fV&rÜ6ˆÁFWáBì†¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊu˜Ü˜Fıˆf˜"%““'&V÷˜fV&r ¢6ˆÁFWáBÁW6W%ˆFF≤'Ü˜Fıˆf∆˜r%““'&V÷˜fV&r ††¶FVbˆó5˜vóFñÊu˜&V÷˜fV&rÜ6ˆÁFWáBí”‚&ˆˆ√†¢&WGW&‚&ˆˆ¬Ü6ˆÁFWáBÊBÜ6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆf˜""í”“'&V÷˜fV&r"˜"6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'Ü˜Fıˆf∆˜r"í”“'&V÷˜fV&r"íê††¶FVbˆ6∆V%˜&V÷˜fV&u˜vóBÜ6ˆÁFWáBì†¢ñbÊ˜B6ˆÁFWáC†¢&WGW&‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆf˜""í”“'&V÷˜fV&r#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜Ü˜Fıˆf˜""¬ÊˆÊRê¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'Ü˜Fıˆf∆˜r"í”“'&V÷˜fV&r#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'Ü˜Fıˆf∆˜r"¬ÊˆÊRê††¶FVb˜6WE˜vóFñÊu˜&W∆6V&rÜ6ˆÁFWáB¬&ˆ◊C¢7G"“""ì†¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊu˜Ü˜Fıˆf˜"%““'&W∆6V&r ¢6ˆÁFWáBÁW6W%ˆFF≤'Ü˜Fıˆf∆˜r%““'&W∆6V&r ¢ñb&ˆ◊C†¢6ˆÁFWáBÁW6W%ˆFF≤'&W∆6V&u˜&ˆ◊B%““&ˆ◊BÁ7G&óÇê††¶FVb˜6WE˜&W∆6V&u˜vóE˜FWáBÜ6ˆÁFWáBì†¢6ˆÁFWáBÁW6W%ˆFF≤'&W∆6V&u˜vóE˜FWáB%““# ††¶FVbˆó5˜&W∆6V&u˜vóE˜FWáBÜ6ˆÁFWáBí”‚&ˆˆ√†¢&WGW&‚&ˆˆ¬Ü6ˆÁFWáBÊB6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'&W∆6V&u˜vóE˜FWáB"íê††¶FVbˆó5˜vóFñÊu˜&W∆6V&rÜ6ˆÁFWáBí”‚&ˆˆ√†¢&WGW&‚&ˆˆ¬Ü6ˆÁFWáBÊBÜ6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆf˜""í”“'&W∆6V&r"˜"6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'Ü˜Fıˆf∆˜r"í”“'&W∆6V&r"íê††¶FVbˆ6∆V%˜&W∆6V&u˜vóBÜ6ˆÁFWáBì†¢ñbÊ˜B6ˆÁFWáC†¢&WGW&‡¢f˜"∂Wíñ‚Ç'&W∆6V&u˜vóE˜FWáB"¬'&W∆6V&u˜&ˆ◊B"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ü∂Wí¬ÊˆÊRê¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆf˜""í”“'&W∆6V&r#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜Ü˜Fıˆf˜""¬ÊˆÊRê¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'Ü˜Fıˆf∆˜r"í”“'&W∆6V&r#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'Ü˜Fıˆf∆˜r"¬ÊˆÊRê††¶FVbˆó5˜&V÷˜fUˆ&u˜&WVW7BáFWáC¢7G"í”‚&ˆˆ√†¢F¬“áFWáB˜"""íÊ∆˜vW"Çê¢&WGW&‚ÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-=MΩÇMÌ“"¬-=MΩç-¬MÌ“"¬-=]ÇMÌ“"¬-=-¬MÌ“"¬'&V÷˜fV&r"¬'&V÷˜fR&6∂w&˜VÊB"¬-˝Ì}}›ΩíMÌ“"¬-]rMÌ›"íê††¶FVbˆó5˜&W∆6Uˆ&u˜&WVW7BáFWáC¢7G"í”‚&ˆˆ√†¢F¬“áFWáB˜"""íÊ∆˜vW"Çê¢&WGW&‚ÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-}Õ]›ÇMÌ“"¬-}Õ]›ç-¬MÌ“"¬-˝ÌÕ]›˝íMÌ“"¬-˝ÌÕ]›˝-¬MÌ“"¬'&W∆6V&r"¬'&W∆6R&6∂w&˜VÊB"¬-MÌ“›"¬-M==ÌíMÌ“"íê††¶FVbˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBáFWáC¢7G"í”‚GW∆U∑7G"¬7G%”†¢F¬“áFWáB˜"""íÊ∆˜vW"Çê¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-˝Ω˝b"¬-ÕÌR"¬-Ì≠]“"¬&&V6Ç"¬&6ˆ7B"¬'6Ü˜&R"íì†¢&WGW&‚&&V6Ç"¬FWá@¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-=Ì≤"¬-=Ì"¬&÷˜VÁFñ‚"¬&«2"¬-ΩÕÚ"íì†¢&WGW&‚&÷˜VÁFñÁ2"¬FWá@¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-≠Ωç"¬-=ÌÌB"¬-›]Ì≠]"¬'&ˆˆgF˜"¬&6óGí"¬'6∑ñ∆ñÊR"¬--]"íì†¢&WGW&‚'&ˆˆb"¬FWá@¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-ÌMç"¬-≠ç›]""¬&'W6ñÊW72"¬&ˆffñ6R"¬&6˜v˜&∂ñÊr"¬-˝]]=Ì-Ì"íì†¢&WGW&‚&ˆffñ6R"¬FWá@¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-˝çÌM"¬-Ω]"¬-}]Ω]›¬"¬&ÊGW&R"¬&f˜&W7B"¬'&≤"¬-˝¢"íì†¢&WGW&‚&ÊGW&R"¬FWá@¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-]ΩΩí"¬'vÜóFR"¬'7GVFñÚ"¬--=B"íì†¢&WGW&‚'vÜóFR"¬FWá@¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-}]›Ωí"¬-}›Ωí"¬&&∆6≤"íì†¢&WGW&‚&&∆6≤"¬FWá@¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-}Õ≤"¬&&«W""¬-ΩÌ"íì†¢&WGW&‚&&«W""¬FWá@¢&WGW&‚&7W7Fˆ“"¬FWá@††¶FVb˜6fUˆ#cFFV6ˆFUˆñ÷vRáf«VS¢7G"í”‚'óFW2¬ÊˆÊS†¢ñbÊ˜Bf«VR˜"Ê˜Bó6ñÁ7FÊ6Ráf«VR¬7G"ì†¢&WGW&‚ÊˆÊP¢2“f«VRÁ7G&óÇê¢ñb2Á7F'G7vóFÇÇ&FF¢"íÊB"¬"ñ‚3†¢2“2Á7∆óBÇ"¬"¬ï≥–¢G'ì†¢&WGW&‚&6ScBÊ#cFFV6ˆFRá2¬f∆ñFFS‘f«6Rê¢WÜ6WBWÜ6WFñˆ„†¢&WGW&‚ÊˆÊP††¶FVbˆfñÊEˆfó'7Eˆñ÷vUˆ#cBÜˆ&¢í”‚'óFW2¬ÊˆÊS†¢ñbó6ñÁ7FÊ6RÜˆ&¢¬Fñ7Bì†¢2vV÷ñÊíÚÊÊÚ&ÊÊvVÊW&FT6ˆÁFVÁB&WGW&Á26ÊFñFFW5µ“Ê6ˆÁFVÁBÁ'G5µ“ÊñÊ∆ñÊTFFˆñÊ∆ñÊUˆFFÊFF‡¢f˜"∂Wíñ‚Ç&ñÊ∆ñÊUˆFF"¬&ñÊ∆ñÊTFF"ì†¢b“ˆ&¢ÊvWBÜ∂Wíê¢ñbó6ñÁ7FÊ6Ráb¬Fñ7Bì†¢÷ñ÷R“7G"ábÊvWBÇ&÷ñ÷U˜GóR"í˜"bÊvWBÇ&÷ñ÷UGóR"í˜"""íÊ∆˜vW"Çê¢ñb÷ñ÷RÁ7F'G7vóFÇÇ&ñ÷vRÚ"í˜"bÊvWBÇ&FF"ì†¢˜WB“˜6fUˆ#cFFV6ˆFUˆñ÷vRábÊvWBÇ&FF"í˜"bÊvWBÇ&'óFW5ˆ&6ScB"í˜"bÊvWBÇ&'óFW4&6ScB"íê¢ñb˜WC†¢&WGW&‚˜W@¢f˜"∂Wíñ‚Ç&#cEˆß6ˆ‚"¬&ñ÷vUˆ#cB"¬&ñ÷vR"¬'Êr"¬'&W7V«Eˆ#cB"¬&'óFW5ˆ&6ScB"¬&'óFW4&6ScB"ì†¢ñb∂Wíñ‚ˆ&£†¢˜WB“˜6fUˆ#cFFV6ˆFUˆñ÷vRÜˆ&¢ÊvWBÜ∂Wííê¢ñb˜WC†¢&WGW&‚˜W@¢f˜"bñ‚ˆ&¢Áf«VW2Çì†¢˜WB“ˆfñÊEˆfó'7Eˆñ÷vUˆ#cBábê¢ñb˜WC†¢&WGW&‚˜W@¢V∆ñbó6ñÁ7FÊ6RÜˆ&¢¬∆ó7Bì†¢f˜"bñ‚ˆ&£†¢˜WB“ˆfñÊEˆfó'7Eˆñ÷vUˆ#cBábê¢ñb˜WC†¢&WGW&‚˜W@¢&WGW&‚ÊˆÊP††¶FVbˆfñÊEˆfó'7Eˆñ÷vU˜W&¬Üˆ&¢í”‚7G#†¢ñbó6ñÁ7FÊ6RÜˆ&¢¬Fñ7Bì†¢f˜"∂Wíñ‚Ç'W&¬"¬&ñ÷vU˜W&¬"¬&˜WGWE˜W&¬"¬'&W7V«E˜W&¬"¬&F˜vÊ∆ˆE˜W&¬"¬&fñ∆U˜W&¬"ì†¢f¬“ˆ&¢ÊvWBÜ∂Wíê¢ñbó6ñÁ7FÊ6Ráf¬¬7G"íÊBf¬Á7F'G7vóFÇÇÇ&áGG¢ÚÚ"¬&áGG3¢ÚÚ"íì†¢&WGW&‚f¿¢ñbó6ñÁ7FÊ6Ráf¬¬Fñ7Bì†¢ÊW7FVB“f¬ÊvWBÇ'W&¬"ê¢ñbó6ñÁ7FÊ6RÜÊW7FVB¬7G"íÊBÊW7FVBÁ7F'G7vóFÇÇÇ&áGG¢ÚÚ"¬&áGG3¢ÚÚ"íì†¢&WGW&‚ÊW7FV@¢f˜"bñ‚ˆ&¢Áf«VW2Çì†¢W&¬“ˆfñÊEˆfó'7Eˆñ÷vU˜W&¬ábê¢ñbW&√†¢&WGW&‚W&¿¢V∆ñbó6ñÁ7FÊ6RÜˆ&¢¬∆ó7Bì†¢f˜"bñ‚ˆ&£†¢W&¬“ˆfñÊEˆfó'7Eˆñ÷vU˜W&¬ábê¢ñbW&√†¢&WGW&‚W&¿¢&WGW&‚" ††¶7ñÊ2FVbˆñ÷vUˆ'óFW5ˆg&ˆ’˜&W7ˆÁ6Rá&W7¢áGGÇÂ&W7ˆÁ6R¬6∆ñVÁC¢áGGÇ‰7ñÊ46∆ñVÁBí”‚'óFW2¬ÊˆÊS†¢7GóR“á&W7ÊÜVFW'2ÊvWBÇ&6ˆÁFVÁB◊GóR"í˜"""íÊ∆˜vW"Çê¢ñb7GóRÁ7F'G7vóFÇÇ&ñ÷vRÚ"íÊB&W7Ê6ˆÁFVÁC†¢&WGW&‚'óFW2á&W7Ê6ˆÁFVÁBê¢G'ì†¢ˆ&¢“&W7Êß6ˆ‚Çê¢WÜ6WBWÜ6WFñˆ„†¢&WGW&‚ÊˆÊP¢˜WB“ˆfñÊEˆfó'7Eˆñ÷vUˆ#cBÜˆ&¢ê¢ñb˜WC†¢&WGW&‚˜W@¢W&¬“ˆfñÊEˆfó'7Eˆñ÷vU˜W&¬Üˆ&¢ê¢ñbW&√†¢G'ì†¢'"“vóB6∆ñVÁBÊvWBáW&¬¬Fñ÷V˜WC‘$uı$T‘ıdUıDî‘TıUEı2ê¢'"Á&ó6Uˆf˜%˜7FGW2Çê¢ñb'"Ê6ˆÁFVÁC†¢&WGW&‚'óFW2á'"Ê6ˆÁFVÁBê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ&&6∂w&˜VÊB&W7V«BW&¬F˜vÊ∆ˆBfñ∆VC¢W2"¬Rê¢&WGW&‚ÊˆÊP††¶FVb˜&W&Uˆ'óFW5ˆf˜%˜&V÷&rÜñ÷uˆ'óFW3¢'óFW2í”‚'óFW3†¢"" ¢&VÊFW"7F'FW"ÕÌm]"=˝ç-ÕÚ"$“›ÌΩÕççRMÌ-‚‡¢	MΩÚ∆ˆ6¬&V÷&r=Õ]›Õç]¬Ωçç≠Ì¬≠=˝›ΩRç}Ìm]›çÚM‚$T‘$uÙ‘Öı4îDR‡¢"" ¢ñbñ÷vRó2ÊˆÊR˜"Ê˜B$T‘$uÙ‘Öı4îDR˜"$T‘$uÙ‘Öı4îDR√“†¢&WGW&‚ñ÷uˆ'óFW0¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“ê¢r¬Ç“ñ“Á6ó¶P¢◊Ç“÷Çár¬Çê¢ñb◊Ç√“$T‘$uÙ‘Öı4îDS†¢&WGW&‚ñ÷uˆ'óFW0¢66∆R“$T‘$uÙ‘Öı4îDRÚf∆ˆBÜ◊Çê¢Ár¬ÊÇ“÷ÇÉ¬ñÁBár¢66∆Ríí¬÷ÇÉ¬ñÁBÜÇ¢66∆Ríê¢&W6◊∆R“vWFGG"Ññ÷vR¬%&W6◊∆ñÊr"¬ñ÷vRí‰ƒ‰5§ı0¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""íÁ&W6ó¶RÇÜÁr¬ÊÇí¬&W6◊∆Rê¢˜WB“'óFW4îÚÇê¢ñ“Á6fRÜ˜WB¬f˜&÷C“$•Tr"¬V∆óGì”ìB¬˜Fñ÷ó¶S’G'VRê¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&rñÁWB&W6ó¶VB∑w◊á∂á“”Á∂Áw◊á∂Êá“"ê¢&WGW&‚˜WBÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&r&W6ó¶R6∂óVC¢∂W“"ê¢&WGW&‚ñ÷uˆ'óFW0††¶FVbˆvWEˆ∆ˆ6≈˜&V÷&u˜6W76ñˆ‚Çì†¢v∆ˆ&¬ı$T‘$uı4U54îÙ‡¢ñb&V÷&u˜&V÷˜fRó2ÊˆÊS†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&V÷&rñ◊˜'Bfñ∆VC¢µ$T‘$uÙî’ı%EÙU%$ı'“"ê¢&WGW&‚ÊˆÊP¢ñb&V÷&uˆÊWu˜6W76ñˆ‚ó2ÊˆÊS†¢ˆ&uˆÊ˜FUˆW'&˜"Ç'&V÷&rÊÊWu˜6W76ñˆ‚ó2Ê˜Bfñ∆&∆R"ê¢&WGW&‚ÊˆÊP¢ñbı$T‘$uı4U54îÙ‚ó2Ê˜BÊˆÊS†¢&WGW&‚ı$T‘$uı4U54îÙ‡¢vóFÇı$T‘$uı4U54îÙÂÙƒÙ4≥†¢ñbı$T‘$uı4U54îÙ‚ó2Ê˜BÊˆÊS†¢&WGW&‚ı$T‘$uı4U54îÙ‡¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢˜2ÊVÁfó&ˆ‚Á6WFFVfV«BÇ%S$‰UEÙÑÙ‘R"¬S$‰UEÙÑÙ‘Rê¢˜2Ê÷∂VFó'2ÖS$‰UEÙÑÙ‘R¬WÜó7Eˆˆ≥’G'VRê¢˜2Ê÷∂VFó'2ÖÑDuÙ44ÑUÙÑÙ‘R¬WÜó7Eˆˆ≥’G'VRê¢∆7EˆWÜ2“" ¢f˜"÷ˆFV≈ˆÊ÷Rñ‚$T‘$uÙ‘ÙDT≈Ùdƒƒ$4µ3†¢G'ì†¢∆ˆrÊñÊfÚÇ$ñÊóFñ∆ó¶ñÊr∆ˆ6¬&V÷&r6W76ñˆ„¢÷ˆFV√“W2S$‰UEÙÑÙ‘S“W2"¬÷ˆFV≈ˆÊ÷R¬˜2ÊVÁfó&ˆ‚ÊvWBÇ%S$‰UEÙÑÙ‘R"íê¢ı$T‘$uı4U54îÙ‚“&V÷&uˆÊWu˜6W76ñˆ‚Ü÷ˆFV≈ˆÊ÷Rê¢∆ˆrÊñÊfÚÇ&∆ˆ6¬&V÷&r6W76ñˆ‚&VGì¢÷ˆFV√“W2"¬÷ˆFV≈ˆÊ÷Rê¢&WGW&‚ı$T‘$uı4U54îÙ‡¢WÜ6WBWÜ6WFñˆ‚2S†¢∆7EˆWÜ2“&W"ÜRê¢∆ˆrÁv&ÊñÊrÇ&∆ˆ6¬&V÷&r6W76ñˆ‚ñÊóBfñ∆VB÷ˆFV√“W3¢W2"¬÷ˆFV≈ˆÊ÷R¬Rê¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&r6W76ñˆ‚ñÊóBfñ∆VB÷ˆFV√◊∂÷ˆFV≈ˆÊ÷W”¢∂W“"ê¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&r6W76ñˆ‚VÊfñ∆&∆S¢∂∆7EˆWÜ7“"ê¢&WGW&‚ÊˆÊP†††¶7ñÊ2FVbˆ∆ˆ6≈˜&V÷&u˜&V÷˜fU˜7V'&ˆ6W72Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW2¬ÊˆÊS†¢"" ¢	ç}ÌΩçÌ-››Ωí∆ˆ6¬&V÷&rv˜&∂W"‚	]ΩÇ&V÷&rˆˆÊÁá'VÁFñ÷R}-ç›]"˝Ç≠}ç-›çÄ¢çΩÇç›çmçΩç}mçÇÕÌM]ΩÇ¬Ì›Ì-›ÌíÌ"›R}-ç]#¢˝Ìm]=ç-]¬˝‚Fñ÷V˜WB‡¢"" ¢ñbÊ˜BƒÙ4≈ı$T‘$uÙT‰$ƒTB˜"&V÷&u˜&V÷˜fRó2ÊˆÊS†¢&WGW&‚ÊˆÊP¢ñbñ÷vRó2Ê˜BÊˆÊS†¢ñ÷uˆ'óFW2“˜&W&Uˆ'óFW5ˆf˜%˜&V÷&rÜñ÷uˆ'óFW2ê¢Fñ÷V˜WE˜2“÷ÇÉ#„¬f∆ˆBÑƒÙ4≈ı$T‘$uıDî‘TıUEı2˜"Éíê¢VÁb“˜2ÊVÁfó&ˆ‚Ê6˜íÇê¢VÁe≤%S$‰UEÙÑÙ‘R%““VÁbÊvWBÇ%S$‰UEÙÑÙ‘R"í˜"S$‰UEÙÑÙ‘R˜""˜F◊ÚÁS&ÊWB ¢VÁe≤%ÑDuÙ44ÑUÙÑÙ‘R%““VÁbÊvWBÇ%ÑDuÙ44ÑUÙÑÙ‘R"í˜"ÑDuÙ44ÑUÙÑÙ‘R˜""˜F◊ÚÊ66ÜR ¢VÁbÁ6WFFVfV«BÇ$Ù’ÙÂT’ıDÖ$TE2"¬#"ê¢VÁbÁ6WFFVfV«BÇ$’ƒ4Ù‰dîtDï""¬"˜F◊ÚÊ÷G∆˜F∆ñ""ê¢f˜"Bñ‚ÜVÁe≤%S$‰UEÙÑÙ‘R%“¬VÁe≤%ÑDuÙ44ÑUÙÑÙ‘R%“¬VÁe≤$’ƒ4Ù‰dîtDï"%“ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢˜2Ê÷∂VFó'2ÜB¬WÜó7Eˆˆ≥’G'VRê†¢v˜&∂W%ˆ6ˆFR“"rrp¶ñ◊˜'B˜2¬7ó0¶g&ˆ“FÜ∆ñ"ñ◊˜'BFÄßG'ì†¢g&ˆ“&V÷&rñ◊˜'B&V÷˜fR¬ÊWu˜6W76ñˆ‡¶WÜ6WBWÜ6WFñˆ‚2S†¢&ñÁBÜb$î’ı%EÙU%$ı#¢∂W“"¬fñ∆S◊7ó2Á7FFW'"ê¢7ó2ÊWÜóBÉê¶÷ˆFV¬“˜2ÊVÁfó&ˆ‚ÊvWBÇ%$T‘$uÙ‘ÙDT¬"¬'S&ÊWG"í˜"'S&ÊWG ¶ñÁ¬˜WG“7ó2Ê&we≥“¬7ó2Ê&we≥%–ßG'ì†¢FÇÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ%S$‰UEÙÑÙ‘R"¬"˜F◊ÚÁS&ÊWB"ííÊ÷∂Fó"á&VÁG3’G'VR¬WÜó7Eˆˆ≥’G'VRê¢FÇÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ%ÑDuÙ44ÑUÙÑÙ‘R"¬"˜F◊ÚÊ66ÜR"ííÊ÷∂Fó"á&VÁG3’G'VR¬WÜó7Eˆˆ≥’G'VRê¢FF“FÇÜñÁíÁ&VEˆ'óFW2Çê¢6W72“ÊWu˜6W76ñˆ‚Ü÷ˆFV¬ê¢G'ì†¢˜WB“&V÷˜fRÜFF¬6W76ñˆ„◊6W72¬f˜&6U˜&WGW&Âˆ'óFW3’G'VRê¢WÜ6WBGóTW'&˜#†¢˜WB“&V÷˜fRÜFF¬6W76ñˆ„◊6W72ê¢FÇÜ˜WGíÁw&óFUˆ'óFW2Ü˜WBê¶WÜ6WBWÜ6WFñˆ‚2S†¢&ñÁBÜb%$T‘$uıtı$¥U%ÙU%$ı#¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"¬fñ∆S◊7ó2Á7FFW'"ê¢7ó2ÊWÜóBÉ"ê¢rrp¢ñÂ˜FÇ“˜WE˜FÇ“ÊˆÊP¢G'ì†¢vóFÇFV◊fñ∆R‰Ê÷VEFV◊˜&'îfñ∆Rá&VfóÉ“'&V÷&uˆñÂÚ"¬7VffóÉ“"Êßr"¬FV∆WFS‘f«6Rí2c†¢bÁw&óFRÜñ÷uˆ'óFW2ê¢ñÂ˜FÇ“bÊÊ÷P¢fB¬˜WE˜FÇ“FV◊fñ∆RÊ÷∑7FV◊á&VfóÉ“'&V÷&uˆ˜WEÚ"¬7VffóÉ“"ÁÊr"ê¢˜2Ê6∆˜6RÜfBê¢&ˆ2“vóB7ñÊ6ñÚÊ7&VFU˜7V'&ˆ6W75ˆWÜV2Ä¢7ó2ÊWÜV7WF&∆R¬"÷2"¬v˜&∂W%ˆ6ˆFR¬ñÂ˜FÇ¬˜WE˜FÇ¿¢7FF˜WC÷7ñÊ6ñÚÁ7V'&ˆ6W72ÂïR¿¢7FFW'#÷7ñÊ6ñÚÁ7V'&ˆ6W72ÂïR¿¢VÁc÷VÁb¿¢ê¢G'ì†¢7FF˜WB¬7FFW'"“vóB7ñÊ6ñÚÁvóEˆf˜"á&ˆ2Ê6ˆ÷◊VÊñ6FRÇí¬Fñ÷V˜WC◊Fñ÷V˜WE˜2ê¢WÜ6WB7ñÊ6ñÚÂFñ÷V˜WDW'&˜#†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢&ˆ2Ê∂ñ∆¬Çê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóB&ˆ2ÁvóBÇê¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&r7V'&ˆ6W72Fñ÷V˜WBgFW"∑Fñ÷V˜WE˜3¢„g◊2"ê¢&WGW&‚ÊˆÊP¢ñb&ˆ2Á&WGW&Ê6ˆFR“†¢◊6r“á7FFW'"˜"7FF˜WB˜""""íÊFV6ˆFRÇ'WFb”Ç"¬'&W∆6R"ï≥£É–¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&r7V'&ˆ6W72fñ∆VB&3◊∑&ˆ2Á&WGW&Ê6ˆFW”¢∂◊6w“"ê¢&WGW&‚ÊˆÊP¢ñbÊ˜B˜WE˜FÇ˜"Ê˜B˜2ÁFÇÊWÜó7G2Ü˜WE˜FÇí˜"˜2ÁFÇÊvWG6ó¶RÜ˜WE˜FÇí¬S#†¢ˆ&uˆÊ˜FUˆW'&˜"Ç&∆ˆ6¬&V÷&r7V'&ˆ6W72&ˆGV6VBV◊Gí˜WGWB"ê¢&WGW&‚ÊˆÊP¢vóFÇ˜V‚Ü˜WE˜FÇ¬'&""í2c†¢&WGW&‚bÁ&VBÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&r7V'&ˆ6W72WÜ6WFñˆ„¢∂W“"ê¢∆ˆrÁv&ÊñÊrÇ&∆ˆ6¬&V÷&r7V'&ˆ6W72WÜ6WFñˆ„¢W2"¬Rê¢&WGW&‚ÊˆÊP¢fñÊ∆«ì†¢f˜"FÇñ‚ÜñÂ˜FÇ¬˜WE˜FÇì†¢ñbFÉ†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢˜2Á&V÷˜fRáFÇê†¶FVbˆ∆ˆ6≈˜&V÷&u˜&V÷˜fU˜7ñÊ2Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW3†¢ñ÷uˆ'óFW2“˜&W&Uˆ'óFW5ˆf˜%˜&V÷&rÜñ÷uˆ'óFW2ê¢6W76ñˆ‚“ˆvWEˆ∆ˆ6≈˜&V÷&u˜6W76ñˆ‚Çê¢ñb6W76ñˆ‚ó2Ê˜BÊˆÊS†¢G'ì†¢&WGW&‚&V÷&u˜&V÷˜fRÜñ÷uˆ'óFW2¬6W76ñˆ„◊6W76ñˆ‚¬f˜&6U˜&WGW&Âˆ'óFW3’G'VRê¢WÜ6WBGóTW'&˜#†¢&WGW&‚&V÷&u˜&V÷˜fRÜñ÷uˆ'óFW2¬6W76ñˆ„◊6W76ñˆ‚ê¢G'ì†¢&WGW&‚&V÷&u˜&V÷˜fRÜñ÷uˆ'óFW2¬f˜&6U˜&WGW&Âˆ'óFW3’G'VRê¢WÜ6WBGóTW'&˜#†¢&WGW&‚&V÷&u˜&V÷˜fRÜñ÷uˆ'óFW2ê††¶7ñÊ2FVbˆ∆ˆ6≈˜&V÷&u˜&V÷˜fUˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW2¬ÊˆÊS†¢ñbÊ˜BƒÙ4≈ı$T‘$uÙT‰$ƒTC†¢&WGW&‚ÊˆÊP¢ñb&V÷&u˜&V÷˜fRó2ÊˆÊS†¢∆ˆrÁv&ÊñÊrÇ&∆ˆ6¬&V÷&ró2Ê˜Bfñ∆&∆S¢W2"¬$T‘$uÙî’ı%EÙU%$ı"ê¢&WGW&‚ÊˆÊP†¢ñbƒÙ4≈ı$T‘$uı5T%$Ù4U53†¢&WGW&‚vóBˆ∆ˆ6≈˜&V÷&u˜&V÷˜fU˜7V'&ˆ6W72Üñ÷uˆ'óFW2ê†¢G'ì†¢&WGW&‚vóB7ñÊ6ñÚÁvóEˆf˜"Ä¢7ñÊ6ñÚÁFı˜Fá&VBÖˆ∆ˆ6≈˜&V÷&u˜&V÷˜fU˜7ñÊ2¬ñ÷uˆ'óFW2í¿¢Fñ÷V˜WC‘ƒÙ4≈ı$T‘$uıDî‘TıUEı2¿¢ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ&∆ˆ6¬&V÷&rfñ∆VC¢W2"¬Rê¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&rfñ∆VC¢∂W“"ê¢&WGW&‚ÊˆÊP††††¶FVb˜&W6ó¶Uˆñ÷vUˆ'óFW5ˆf˜%ˆ&uˆíÜñ÷uˆ'óFW3¢'óFW2¬÷Ö˜6ñFS¢ñÁB¬ÊˆÊR“ÊˆÊRí”‚GW∆U∂'óFW2¬7G"¬7G%”†¢""-
+mçÕ]"-]ÌB˝]]BÜ˜F˜&ˆˆ“¬}-Ì≤›RΩÌ-ç-¬íıFV∆Vw&“Fñ÷V˜WB›ÌΩÕççRMÌ-‚‚"" ¢÷Ö˜6ñFR“ñÁBÜ÷Ö˜6ñFR˜"ÑıDı$ÙÙ’ÙîÂUEÙ‘Öı4îDR˜"cê¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2í˜"&ñ÷vRˆßVr ¢ñbñ÷vRó2ÊˆÊR˜"÷Ö˜6ñFR√“†¢WáB“"Êßr"ñb÷ñ÷R”“&ñ÷vRˆßVr"V«6RÇ"ÁÊr"ñb÷ñ÷R”“&ñ÷vR˜Êr"V«6R"ÁvV'"ê¢&WGW&‚ñ÷uˆ'óFW2¬b&ñ÷vW∂WáG“"¬÷ñ÷P¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢2	MΩÚç]ÌM›ΩRMÌ-‚˝Ì}}›Ì-¬›R›=m›¬Ü˜F˜&ˆˆ“¬-]›"‰rı$t$‡¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢ñb÷ÇÜñ“Á6ó¶Rí‚÷Ö˜6ñFS†¢ñ“ÁFáV÷&Êñ¬ÇÜ÷Ö˜6ñFR¬÷Ö˜6ñFRí¬ñ÷vR‰ƒ‰5§ı2ê¢2•TrçΩÕ›‚=Õ]›Õç]"}Õ]}˝ÌÇ=≠Ì˝]"]˝Ω-›Ωíí‡¢ñbñ“Ê÷ˆFRÊ˜Bñ‚Ç%$t""¬$¬"ì†¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢&ñÚ“'óFW4îÚÇê¢ñ“Á6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ì"¬˜Fñ÷ó¶S’G'VR¬&ˆw&W76ófS’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇí¬&ñ÷vRÊßr"¬&ñ÷vRˆßVr ¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&ñÁWB&W6ó¶Rf˜"Ü˜F˜&ˆˆ“fñ∆VC¢∂W“"ê¢WáB“"Êßr"ñb÷ñ÷R”“&ñ÷vRˆßVr"V«6RÇ"ÁÊr"ñb÷ñ÷R”“&ñ÷vR˜Êr"V«6R"ÁvV'"ê¢&WGW&‚ñ÷uˆ'óFW2¬b&ñ÷vW∂WáG“"¬÷ñ÷P†¶7ñÊ2FVb˜Ü˜F˜&ˆˆ’ˆï˜&V÷˜fUˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW2¬ÊˆÊS†¢""%Ü˜F˜&ˆˆ“&V÷˜fR&6∂w&˜VÊBí‚&WGW&Á2G&Á7&VÁB‰rı$t$'óFW2‚"" ¢ñbÊ˜BÑıDı$ÙÙ’ÙïÙ¥Uì†¢ˆ&uˆÊ˜FUˆW'&˜"Ç%Ü˜F˜&ˆˆ“í∂Wí÷ó76ñÊs¢6WBÑıDı$ÙÙ’ÙïÙ¥Uíñ‚&VÊFW"VÁfó&ˆÊ÷VÁB"ê¢&WGW&‚ÊˆÊP¢W∆ˆEˆ'óFW2¬W∆ˆEˆÊ÷R¬÷ñ÷R“˜&W6ó¶Uˆñ÷vUˆ'óFW5ˆf˜%ˆ&uˆíÜñ÷uˆ'óFW2¬ÑıDı$ÙÙ’ÙîÂUEÙ‘Öı4îDRê¢W&¬“b'µÑıDı$ÙÙ’Ù$4UıU$«◊µÑıDı$ÙÙ’ı$T‘ıdUıDá“ ¢ÜVFW'2“≤'Ç÷í÷∂Wí#¢ÑıDı$ÙÙ’ÙïÙ¥Uó–¢2Ü˜F˜&ˆˆ“˜c˜6Vv÷VÁB66WG2&V÷˜fRÊ&r÷6ˆ◊Fñ&∆RfñV∆G2‡¢FF“∞¢&f˜&÷B#¢ÑıDı$ÙÙ’Ùdı$‘B˜"'Êr"¿¢&6ÜÊÊV«2#¢ÑıDı$ÙÙ’Ù4Ñ‰‰T≈2˜"'&v&"¿¢'6ó¶R#¢ÑıDı$ÙÙ’ı4ï§R˜"&ÜB"¿¢&7&˜#¢ÑıDı$ÙÙ’Ù5$ı˜"&f«6R"¿¢&FW7ñ∆¬#¢ÑıDı$ÙÙ’ÙDU5îƒ¬˜"&f«6R"¿¢–¢Fñ÷V˜WB“áGGÇÂFñ÷V˜WBÖÑıDı$ÙÙ’ıDî‘TıUEı2¬6ˆÊÊV7C”#„ê¢G'ì†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC◊Fñ÷V˜WB¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢fñ∆W2“≤&ñ÷vUˆfñ∆R#¢áW∆ˆEˆÊ÷R¬W∆ˆEˆ'óFW2¬÷ñ÷Ró–¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬FF÷FF¬fñ∆W3÷fñ∆W2ê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢&ˆGí“á"ÁFWáB˜"""ï≥£ì–¢ˆ&uˆÊ˜FUˆW'&˜"Üb%Ü˜F˜&ˆˆ“ífñ∆VB7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∂&ˆGó“"ê¢∆ˆrÁv&ÊñÊrÇ%Ü˜F˜&ˆˆ“ífñ∆VB7FGW3“W2&ˆGì“W2"¬"Á7FGW5ˆ6ˆFR¬&ˆGíê¢&WGW&‚ÊˆÊP¢7GóR“á"ÊÜVFW'2ÊvWBÇ&6ˆÁFVÁB◊GóR"í˜"""íÊ∆˜vW"Çê¢ñbÊ˜B"Ê6ˆÁFVÁB˜"∆V‚á"Ê6ˆÁFVÁBí¬3†¢ˆ&uˆÊ˜FUˆW'&˜"Üb%Ü˜F˜&ˆˆ“í&WGW&ÊVBV◊Gí˜6Ü˜'B6ˆÁFVÁC¢∂∆V‚á"Ê6ˆÁFVÁB˜""rró“'óFW2"ê¢&WGW&‚ÊˆÊP¢ñbÜÊ˜B7GóRÁ7F'G7vóFÇÇ&ñ÷vRÚ"ííÊBá"Ê6ˆÁFVÁE≥£“Ê˜Bñ‚Ü"%«ÉÉí"¬"%«Üfb"íì†¢ˆ&uˆÊ˜FUˆW'&˜"Üb%Ü˜F˜&ˆˆ“í&WGW&ÊVBÊˆ‚÷ñ÷vR6ˆÁFVÁB◊GóS◊∂7GóW“&ˆGì◊≤á"ÁFWáB˜"rrï≥£s◊“"ê¢&WGW&‚ÊˆÊP¢&WGW&‚'óFW2á"Ê6ˆÁFVÁBê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb%Ü˜F˜&ˆˆ“íWÜ6WFñˆ„¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢∆ˆrÁv&ÊñÊrÇ%Ü˜F˜&ˆˆ“íWÜ6WFñˆ„¢W2"¬Rê¢&WGW&‚ÊˆÊP††¶FVbˆÊ˜&÷∆ó¶U˜Ü˜Fı˜&W7V«BÜñ÷uˆ'óFW3¢'óFW2í”‚'óFW3†¢ñbñ÷vRó2ÊˆÊS†¢&WGW&‚ñ÷uˆ'óFW0¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2ííÊ6ˆÁfW'BÇ%$t""ê¢÷Ö˜6ñFR“ñÁBÑ$uÙıUEUEÙ‘Öı4îDR˜"cê¢ñb÷Ö˜6ñFR‚ÊB÷ÇÜñ“Á6ó¶Rí‚÷Ö˜6ñFS†¢ñ“ÁFáV÷&Êñ¬ÇÜ÷Ö˜6ñFR¬÷Ö˜6ñFRí¬ñ÷vR‰ƒ‰5§ı2ê¢&ñÚ“'óFW4îÚÇê¢ñ“Á6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ì2¬˜Fñ÷ó¶S’G'VR¬&ˆw&W76ófS’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&Ê˜&÷∆ó¶RÜ˜FÚ&W7V«Bfñ∆VC¢∂W“"ê¢&WGW&‚ñ÷uˆ'óFW0††¶FVbˆ6∆VÂˆ&u˜&ˆ◊E˜FWáBá&ˆ◊C¢7G"í”‚7G#†¢""%&V÷˜fRv˜&FñÊrFÜB÷∂W2íG&rfó6ñ&∆RÜˆÊRˆ÷ó'&˜"ñÁ7FVBˆbßW7B6V∆fñR÷∆ñ∂RW'7V7FófR‚"" ¢2“á&ˆ◊B˜"""íÁ7G&óÇê¢&W∆6V÷VÁG2“∞¢-›-]Ω]MÌ“#¢""¿¢--]Ω]MÌ›#¢""¿¢-›Õ-MÌ“#¢""¿¢-‚Õ-MÌ›#¢""¿¢--]Ω]MÌ“#¢-≠Õ]"¿¢-Õ-MÌ“#¢-≠Õ]"¿¢'ÜˆÊR#¢&6÷W&"¿¢'6÷'GÜˆÊR#¢&6÷W&"¿¢&÷ó'&˜"#¢""¿¢-}]≠Ω‚#¢""¿¢'6V∆fñR7Fñ6≤#¢""¿¢-]ΩMÇ›˝Ω≠#¢""¿¢–¢f˜"¬"ñ‚&W∆6V÷VÁG2ÊóFV◊2Çì†¢2“&RÁ7V"á&RÊW66RÜí¬"¬2¬f∆w3◊&R‰ît‰ı$T44Rê¢2“&RÁ7V"á"%«7≥"«“"¬""¬2íÁ7G&óÇ"¬„≤"ê¢&WGW&‚0††¶FVbˆ'Vñ∆Eˆ&6∂w&˜VÊE˜66VÊU˜&ˆ◊BÜ∂ñÊC¢7G"¬&ˆ◊C¢7G"“""í”‚7G#†¢∂ñÊB“Ü∂ñÊB˜"&7W7Fˆ“"íÊ∆˜vW"ÇíÁ7G&óÇê¢W6W%˜&ˆ◊B“ˆ6∆VÂˆ&u˜&ˆ◊E˜FWáBá&ˆ◊Bê¢&W6WEˆ÷“∞¢&&V6Ç#¢Ä¢'Ü˜F˜&V∆ó7Fñ2G&˜ñ6¬&V6Ç&6∂w&˜VÊB¬ÊGW&¬6ÊGí6Ü˜&R¬6∆V‚6VÜ˜&ó¶ˆ‚¬6∆“&«VRvFW"¬ ¢'6ˆgBvfW2¬&V∆ó7Fñ2Fñ∆ñváB¬&V∆ñWf&∆RG&fV¬◊Ü˜FÚF÷˜7ÜW&R¬˜V‚ó"¬VÊ6«WGFW&VBf˜&Vw&˜VÊB¬ ¢&ÊÚ'Vñ∆FñÊw2VÊ∆W72ÊGW&∆«íFó7FÁB ¢í¿¢&÷˜VÁFñÁ2#¢Ä¢'Ü˜F˜&V∆ó7Fñ2÷˜VÁFñ‚∆ÊG66R¬66VÊñ2«ñÊR˜"w&VV‚÷˜VÁFñÁ2¬˜V‚˜WFFˆ˜"fñWr¬&V∆ó7Fñ26∑í¬ ¢&ÊGW&¬Fñ∆ñváB¬F÷˜7ÜW&ñ2W'7V7FófR¬6∆V‚G&fV¬◊Ü˜FÚ6ˆ◊˜6óFñˆ‚¬ÊÚñÊFˆ˜"V∆V÷VÁG2 ¢í¿¢&ÊGW&R#¢Ä¢'Ü˜F˜&V∆ó7Fñ2&≤˜"ÊGW&R&6∂w&˜VÊB¬w&VVÊW'í¬G&VW2¬6ˆgBFWFÇ¬&V∆ó7Fñ2˜WFFˆ˜"Fñ∆ñváB¬ ¢&6∆“ÊGW&¬VÁfó&ˆÊ÷VÁB¬6∆V‚&V∆ñWf&∆R&6∂w&˜VÊB ¢í¿¢'&ˆˆb#¢Ä¢'Ü˜F˜&V∆ó7Fñ2&ˆˆgF˜FW'&6R˜"6óGí6∑ñ∆ñÊR¬V∆VvÁBW&&‚F÷˜7ÜW&R¬&V∆ó7Fñ2&6ÜóFV7GW&Rñ‚FÜRFó7FÊ6R¬ ¢&ÊGW&¬W'7V7FófR¬˜WFFˆ˜"∆ñváB¬6∆V‚÷ˆFW&‚&6∂w&˜VÊB ¢í¿¢&ˆffñ6R#¢Ä¢'Ü˜F˜&V∆ó7Fñ2&V÷óV“ˆffñ6R˜"'W6ñÊW72÷∆˜VÊvR&6∂w&˜VÊB¬÷ˆFW&‚ñÁFW&ñ˜"¬6∆V‚∆ñÊW2¬ ¢'6ˆgBFñ∆ñváB¬&V∆ó7Fñ2FWFÇ¬V∆VvÁB&ˆfW76ñˆÊ¬F÷˜7ÜW&R¬ÊÚ&ÊFˆ“vFvWG2ñ‚f˜&Vw&˜VÊB ¢í¿¢'vÜóFR#¢&6∆V‚vÜóFR7GVFñÚ&6∂w&˜VÊBvóFÇ6ˆgBWfV‚∆ñváBÊB&V∆ó7Fñ27V'F∆R6ÜF˜r"¿¢&&∆6≤#¢&6∆V‚F&≤7GVFñÚ&6∂w&˜VÊBvóFÇ6ˆgB6ˆÁG&ˆ∆∆VB∆ñváBÊB&V∆ó7Fñ27V'F∆R6ÜF˜r"¿¢&&«W"#¢'6ˆgBÊGW&¬&ˆ∂VÇ&6∂w&˜VÊBFW&ófVBg&ˆ“FÜR˜&ñvñÊ¬66VÊR¬&V∆ó7Fñ2∆VÁ2&«W"¬ÊÚWáG&ˆ&¶V7G2"¿¢&7W7Fˆ“#¢W6W%˜&ˆ◊B¿¢–¢66VÊR“W6W%˜&ˆ◊B˜"&W6WEˆ÷ÊvWBÜ∂ñÊBí˜"'Ü˜F˜&V∆ó7Fñ26∆V‚VÁfó&ˆÊ÷VÁB ¢&WGW&‚Ä¢$7&VFRˆÊ«íFÜR$4¥u$ıT‰B44T‰RvóFÇÊÚV˜∆R‚FÜó2ó27FW"ˆbGvÚ◊7FvRv˜&∂f∆˜s¢ ¢'FÜR7V&¶V7Bvñ∆¬&R6ˆ◊˜6óFVB∆FW"¬6Ú∆VfR6∆V‚g&VR76Rf˜"ˆÊRGV«BW'6ˆ‚ñ‚FÜR6VÁFW"f˜&Vw&˜VÊB‚ ¢%FÜR&W7V«B◊W7B&RÜ˜F˜&V∆ó7Fñ2¬&V∆ñWf&∆R¬ÊGW&¬W'7V7FófR¬WñR÷∆WfV¬6÷W&Êv∆R¬&V∆ó7Fñ2∆ñváB¬ ¢'&V¬◊v˜&∆BFWáGW&W2¬6ˆÜW&VÁBFWFÇÊB6∆V‚VÊ6«WGFW&VB6ˆ◊˜6óFñˆ‚‚ ¢b%66VÊR&WVW7C¢∑66VÊW“‚ ¢íÁ7G&óÇê††¶FVbˆ'Vñ∆Eˆ&6∂w&˜VÊEˆÊVvFófU˜&ˆ◊BÜ∂ñÊC¢7G"“""¬&ˆ◊C¢7G"“""í”‚7G#†¢'G2“∞¢&ÊÚV˜∆R"¬&ÊÚ˜'G&óG2"¬&ÊÚ6V∆fñR"¬&ÊÚf6R"¬&ÊÚÜÊG2"¬&ÊÚ&ˆGí"¿¢&ÊÚÜˆÊR"¬&ÊÚ6÷'GÜˆÊR"¬&ÊÚ67&VV‚"¬&ÊÚ÷ó'&˜""¬&ÊÚ6V∆fñR7Fñ6≤"¿¢&ÊÚ&∆6≤ÊV¬"¬&ÊÚ∂ñ˜6≤"¬&ÊÚv∆¬FWfñ6R"¬&ÊÚ&ÊFˆ“ñÊFˆ˜"'Fñf7B"¿¢&ÊÚGW∆ñ6FRˆ&¶V7G2"¬&ÊÚFWáB"¬&ÊÚvFW&÷&≤"¬&ÊÚ∆ˆvÚ"¬&ÊÚ6'Fˆˆ‚"¿¢&ÊÚñÁFñÊr"¬&ÊÚñ∆«W7G&Fñˆ‚"¬&ÊÚÊñ÷R"¬&ÊÚ4tí"¬&ÊÚ6B&VÊFW" ¢–¢∂ñÊB“Ü∂ñÊB˜"""íÊ∆˜vW"ÇíÁ7G&óÇê¢ñb∂ñÊB”“&&V6Ç#†¢'G2≥“≤&ÊÚ6Ê˜r"¬&ÊÚ÷˜VÁFñÁ2ñ‚f˜&Vw&˜VÊB"¬&ÊÚˆffñ6R%–¢V∆ñb∂ñÊB”“&÷˜VÁFñÁ2#†¢'G2≥“≤&ÊÚ&V6Ç"¬&ÊÚˆ6V‚"¬&ÊÚG&˜ñ6¬∆“G&VW2%–¢V∆ñb∂ñÊB”“&ˆffñ6R#†¢'G2≥“≤&ÊÚ&V6Ç"¬&ÊÚ÷˜VÁFñÁ2"¬&ÊÚ&ÊFˆ“FWfñ6R6∆˜6RFÚ6÷W&%–¢&WGW&‚"¬"Ê¶ˆñ‚ÜFñ7BÊg&ˆ÷∂Wó2á'G2íê††¶FVbˆ'Vñ∆E˜6V∆fñUˆ&6∂w&˜VÊE˜&ˆ◊BÜ∂ñÊC¢7G"¬&ˆ◊C¢7G"“""í”‚7G#†¢2∆Vv7íÜV«W"∂WBf˜"6ˆ◊Fñ&ñ∆óGíˆFV'Vr‡¢66VÊR“ˆ'Vñ∆Eˆ&6∂w&˜VÊE˜66VÊU˜&ˆ◊BÜ∂ñÊB¬&ˆ◊Bê¢ÊVvFófR“ˆ'Vñ∆Eˆ&6∂w&˜VÊEˆÊVvFófU˜&ˆ◊BÜ∂ñÊB¬&ˆ◊Bê¢&WGW&‚Ä¢$vVÊW&FRˆÊ«íÊWr&6∂w&˜VÊBÊB∂VWFÜR˜&ñvñÊ¬÷ñ‚7V&¶V7B6ˆ◊∆WFV«íVÊ6ÜÊvVC¢ ¢&FÚÊ˜B«FW"FÜRf6R¬Üó"¬6∆˜FÜW2¬&ˆGí¬˜6R¬&˜˜'FñˆÁ2˜"6∂ñ‚FWáGW&R‚ ¢≤66VÊR≤"fˆñC¢"≤ÊVvFófP¢íÁ7G&óÇê††¶FVb˜6Ü˜V∆E˜W6U˜Ü˜F˜&ˆˆ’ˆïˆ&6∂w&˜VÊBÜ∂ñÊC¢7G"¬&ˆ◊C¢7G"“""í”‚&ˆˆ√†¢2ñ‚&ˆGV7Fñˆ‚vRÊ˜r&VfW"7G&ñ7BGvÚ◊7FvRóV∆ñÊS¢&V÷˜fR&6∂w&˜VÊB”‚'Vñ∆B˜6V∆V7BÊWr&6∂w&˜VÊB”‚6ˆ◊˜6óFR‡¢2Ü˜F˜&ˆˆ“VFóBó2∂WBˆÊ«í2‚˜FñˆÊ¬FV'VrFÇÊBó2Fó6&∆VBf˜"&W6WG2'íFVfV«B‡¢ñbÊ˜BÑıDı$ÙÙ’ÙTDïEÙT‰$ƒTB˜"Ê˜BÑıDı$ÙÙ’ÙïÙ¥Uì†¢&WGW&‚f«6P¢&WGW&‚f«6P††¶7ñÊ2FVb˜Ü˜F˜&ˆˆ’ˆïˆVFóEˆ&6∂w&˜VÊEˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2¬∂ñÊC¢7G"“&7W7Fˆ“"¬&ˆ◊C¢7G"“""í”‚'óFW2¬ÊˆÊS†¢""$∆Vv7íFó&V7BíVFóBFÇ‚∂WBf˜"˜FñˆÊ¬FñvÊ˜7Fñ72¬Ê˜BW6VB'íFÜRFVfV«BGvÚ◊7FvR&ˆGV7Fñˆ‚óV∆ñÊR‚"" ¢ñbÊ˜BÑıDı$ÙÙ’ÙïÙ¥Uì†¢ˆ&uˆÊ˜FUˆW'&˜"Ç%Ü˜F˜&ˆˆ“í∂Wí÷ó76ñÊrf˜"í&6∂w&˜VÊC¢6WBÑıDı$ÙÙ’ÙïÙ¥Uíñ‚&VÊFW"VÁfó&ˆÊ÷VÁB"ê¢&WGW&‚ÊˆÊP¢ñbÊ˜BÑıDı$ÙÙ’ÙTDïEÙT‰$ƒTC†¢ˆ&uˆÊ˜FUˆW'&˜"Ç%Ü˜F˜&ˆˆ“í&6∂w&˜VÊBó2Fó6&∆VB'íÑıDı$ÙÙ’ÙTDïEÙT‰$ƒTC”"ê¢&WGW&‚ÊˆÊP¢W∆ˆEˆ'óFW2¬W∆ˆEˆÊ÷R¬÷ñ÷R“˜&W6ó¶Uˆñ÷vUˆ'óFW5ˆf˜%ˆ&uˆíÜñ÷uˆ'óFW2¬ÑıDı$ÙÙ’ÙîÂUEÙ‘Öı4îDRê¢W&¬“b'µÑıDı$ÙÙ’ÙTDïEÙ$4UıU$«◊µÑıDı$ÙÙ’ÙTDïEıDá“ ¢ÜVFW'2“≤'Ç÷í÷∂Wí#¢ÑıDı$ÙÙ’ÙïÙ¥Uó–¢&u˜&ˆ◊B“ˆ'Vñ∆E˜6V∆fñUˆ&6∂w&˜VÊE˜&ˆ◊BÜ∂ñÊB¬&ˆ◊Bê¢FF“∞¢'&VfW&VÊ6T&˜Ç#¢&˜&ñvñÊƒñ÷vR"¿¢&&6∂w&˜VÊBÁ&ˆ◊B#¢&u˜&ˆ◊B¿¢&&6∂w&˜VÊBÊWáÊE&ˆ◊BÊ÷ˆFR#¢ÑıDı$ÙÙ’ÙTDïEÙUÖ‰Eı$Ù’EÙ‘ÙDR˜"&íÊÊWfW""¿¢–¢ñbÑıDı$ÙÙ’ÙTDïEÙ‰TtDïdUı$Ù’C†¢FF≤&&6∂w&˜VÊBÊÊVvFófU&ˆ◊B%““ÑıDı$ÙÙ’ÙTDïEÙ‰TtDïdUı$Ù’@¢Fñ÷V˜WB“áGGÇÂFñ÷V˜WBÖÑıDı$ÙÙ’ÙTDïEıDî‘TıUEı2¬6ˆÊÊV7C”#„ê¢G'ì†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC◊Fñ÷V˜WB¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢fñ∆W2“≤&ñ÷vTfñ∆R#¢áW∆ˆEˆÊ÷R¬W∆ˆEˆ'óFW2¬÷ñ÷Ró–¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬FF÷FF¬fñ∆W3÷fñ∆W2ê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢&ˆGí“á"ÁFWáB˜"""ï≥£ì–¢ˆ&uˆÊ˜FUˆW'&˜"Üb%Ü˜F˜&ˆˆ“VFóBífñ∆VB7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∂&ˆGó“"ê¢∆ˆrÁv&ÊñÊrÇ%Ü˜F˜&ˆˆ“VFóBífñ∆VB7FGW3“W2&ˆGì“W2"¬"Á7FGW5ˆ6ˆFR¬&ˆGíê¢&WGW&‚ÊˆÊP¢7GóR“á"ÊÜVFW'2ÊvWBÇ&6ˆÁFVÁB◊GóR"í˜"""íÊ∆˜vW"Çê¢ñb7GóRÁ7F'G7vóFÇÇ&ñ÷vRÚ"íÊB"Ê6ˆÁFVÁBÊB∆V‚á"Ê6ˆÁFVÁBí‚3†¢&WGW&‚'óFW2á"Ê6ˆÁFVÁBê¢˜WB“vóBˆñ÷vUˆ'óFW5ˆg&ˆ’˜&W7ˆÁ6Rá"¬6∆ñVÁBê¢ñb˜WC†¢&WGW&‚˜W@¢ˆ&uˆÊ˜FUˆW'&˜"Üb%Ü˜F˜&ˆˆ“VFóBí&WGW&ÊVBÊˆ‚÷ñ÷vR6ˆÁFVÁB◊GóS◊∂7GóW“&ˆGì◊≤á"ÁFWáB˜"rrï≥£s◊“"ê¢&WGW&‚ÊˆÊP¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb%Ü˜F˜&ˆˆ“VFóBíWÜ6WFñˆ„¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢∆ˆrÁv&ÊñÊrÇ%Ü˜F˜&ˆˆ“VFóBíWÜ6WFñˆ„¢W2"¬Rê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVb˜&V÷˜fV&uˆï˜&V÷˜fUˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW2¬ÊˆÊS†¢""$ˆffñ6ñ¬&V÷˜fRÊ&r÷6ˆ◊Fñ&∆Rí&ñ÷'íFÇ‚&WGW&Á2G&Á7&VÁB‰r'óFW2‚"" ¢ñbÊ˜B$T‘ıdUÙ$uÙïÙ¥Uì†¢ˆ&uˆÊ˜FUˆW'&˜"Ç'&V÷˜fRÊ&rí∂Wí÷ó76ñÊs¢6WB$T‘ıdUÙ$uÙïÙ¥Uíñ‚&VÊFW"VÁfó&ˆÊ÷VÁB"ê¢&WGW&‚ÊˆÊP¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2í˜"&ñ÷vRˆßVr ¢W&¬“b'µ$T‘ıdUÙ$uÙ$4UıU$«◊µ$T‘ıdUÙ$uıDá“ ¢ÜVFW'2“≤%Ç‘í‘∂Wí#¢$T‘ıdUÙ$uÙïÙ¥Uó–¢FF“∞¢'6ó¶R#¢$T‘ıdUÙ$uı4ï§R¿¢&f˜&÷B#¢$T‘ıdUÙ$uÙdı$‘B¿¢'GóR#¢&WFÚ"¿¢–¢Fñ÷V˜WB“áGGÇÂFñ÷V˜WBÖ$T‘ıdUÙ$uıDî‘TıUEı2¬6ˆÊÊV7C”#„ê¢G'ì†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC◊Fñ÷V˜WB¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢fñ∆W2“≤&ñ÷vUˆfñ∆R#¢Ç&ñ÷vRÊßr"¬ñ÷uˆ'óFW2¬÷ñ÷Ró–¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬FF÷FF¬fñ∆W3÷fñ∆W2ê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢&ˆGí“á"ÁFWáB˜"""ï≥£s–¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&V÷˜fRÊ&rífñ∆VB7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∂&ˆGó“"ê¢∆ˆrÁv&ÊñÊrÇ'&V÷˜fRÊ&rífñ∆VB7FGW3“W2&ˆGì“W2"¬"Á7FGW5ˆ6ˆFR¬&ˆGíê¢&WGW&‚ÊˆÊP¢ñbÊ˜B"Ê6ˆÁFVÁB˜"∆V‚á"Ê6ˆÁFVÁBí¬3†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&V÷˜fRÊ&rí&WGW&ÊVBV◊Gí˜6Ü˜'B6ˆÁFVÁC¢∂∆V‚á"Ê6ˆÁFVÁB˜""rró“'óFW2"ê¢&WGW&‚ÊˆÊP¢&WGW&‚'óFW2á"Ê6ˆÁFVÁBê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&V÷˜fRÊ&ríWÜ6WFñˆ„¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢∆ˆrÁv&ÊñÊrÇ'&V÷˜fRÊ&ríWÜ6WFñˆ„¢W2"¬Rê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVbˆ6ˆ÷WEˆ'&ñ˜&V÷˜fUˆ&uˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW2¬ÊˆÊS†¢""%&V÷˜FRf∆∆&6≤ˆÊ«í‚÷ñ‚&ˆGV7Fñˆ‚FÇ6Ü˜V∆B&R∆ˆ6¬&V÷&r‚"" ¢ñbÊ˜B4Ù‘UEÙïÙ¥Uì†¢&WGW&‚ÊˆÊP¢ÜVFW'2“≤$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"¥4Ù‘UEÙïÙ¥Uó“'–¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2ê¢Fá3¢∆ó7E∑7G%““µ–¢f˜"ñ‚Ñ$uÙ4Ù‘UEı$T‘ıdUıDÇ¬"˜cˆñ÷vW2ˆVFóG2"¬"˜cˆñ÷vW2ˆvVÊW&FñˆÁ2"ì†¢ñbÊBÊ˜Bñ‚Fá3†¢Fá2ÊVÊBáê¢Fñ÷V˜WB“áGGÇÂFñ÷V˜WBÑ$uı$T‘ıdUıDî‘TıUEı2¬6ˆÊÊV7C”#„ê¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC◊Fñ÷V˜WB¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢f˜"FÇñ‚Fá3†¢W&¬“b'¥4Ù‘UEÙ$4UıU$«◊∑Fá“ ¢G'ì†¢fñ∆W2“≤&ñ÷vR#¢Ç&ñ÷vRÁÊr"¬ñ÷uˆ'óFW2¬÷ñ÷R˜"&∆ñ6Fñˆ‚ˆˆ7FWB◊7G&V“"ó–¢FF“∞¢&÷ˆFV¬#¢$uÙ4Ù‘UEÙ‘ÙDT¬¿¢'&W7ˆÁ6Uˆf˜&÷B#¢&#cEˆß6ˆ‚"¿¢'G&Á7&VÁEˆ&6∂w&˜VÊB#¢'G'VR"¿¢–¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬fñ∆W3÷fñ∆W2¬FF÷FFê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢W'"“b$6ˆ÷WB$r&V÷˜fRfñ∆VBFÉ◊∑Fá“7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∑"ÁFWáE≥£S◊“ ¢∆ˆrÁv&ÊñÊrÜW'"ê¢ˆ&uˆÊ˜FUˆW'&˜"ÜW'"ê¢6ˆÁFñÁVP¢˜WB“vóBˆñ÷vUˆ'óFW5ˆg&ˆ’˜&W7ˆÁ6Rá"¬6∆ñVÁBê¢ñb˜WC†¢&WGW&‚˜W@¢WÜ6WBWÜ6WFñˆ‚2S†¢◊6r“b$6ˆ÷WB&6∂w&˜VÊB&V÷˜fRWÜ6WFñˆ‚FÉ◊∑Fá”¢∂W“ ¢∆ˆrÁv&ÊñÊrÜ◊6rê¢ˆ&uˆÊ˜FUˆW'&˜"Ü◊6rê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVbˆ'&ñˆFó&V7E˜&V÷˜fUˆ&uˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW2¬ÊˆÊS†¢""$Fó&V7B'&ñf∆∆&6≤¬ˆÊ«íñb%$îÙïÙ¥Uíó26ˆÊfñwW&VB‚"" ¢ñbÊ˜B%$îÙïÙ¥Uì†¢&WGW&‚ÊˆÊP¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2ê¢ÜVFW'5˜f&ñÁG2“∞¢≤$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"¥%$îÙïÙ¥Uó“'“¿¢≤&ï˜Fˆ∂V‚#¢%$îÙïÙ¥Uó“¿¢≤$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"¥%$îÙïÙ¥Uó“"¬&ï˜Fˆ∂V‚#¢%$îÙïÙ¥Uó“¿¢–¢Fá3¢∆ó7E∑7G%““µ–¢f˜"ñ‚Ñ%$îı$T‘ıdUıDÇ¬"˜cˆ&6∂w&˜VÊB˜&V÷˜fR"¬"˜c˜&V÷˜fUˆ&6∂w&˜VÊB"¬"ˆ&6∂w&˜VÊB˜&V÷˜fR"ì†¢ñbÊBÊ˜Bñ‚Fá3†¢Fá2ÊVÊBáê¢Fñ÷V˜WB“áGGÇÂFñ÷V˜WBÑ$uı$T‘ıdUıDî‘TıUEı2¬6ˆÊÊV7C”#„ê¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC◊Fñ÷V˜WB¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢f˜"FÇñ‚Fá3†¢W&¬“b'¥%$îÙ$4UıU$«◊∑Fá“ ¢f˜"ÜVFW'2ñ‚ÜVFW'5˜f&ñÁG3†¢G'ì†¢fñ∆W2“≤&ñ÷vR#¢Ç&ñ÷vRÁÊr"¬ñ÷uˆ'óFW2¬÷ñ÷R˜"&∆ñ6Fñˆ‚ˆˆ7FWB◊7G&V“"ó–¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬fñ∆W3÷fñ∆W2ê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢ˆ&uˆÊ˜FUˆW'&˜"Üb$'&ñFó&V7Bfñ∆VBFÉ◊∑Fá“7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∑"ÁFWáE≥£C◊“"ê¢6ˆÁFñÁVP¢˜WB“vóBˆñ÷vUˆ'óFW5ˆg&ˆ’˜&W7ˆÁ6Rá"¬6∆ñVÁBê¢ñb˜WC†¢&WGW&‚˜W@¢WÜ6WBWÜ6WFñˆ‚2S†¢◊6r“b$'&ñFó&V7B&V÷˜fRWÜ6WFñˆ‚FÉ◊∑Fá”¢∂W“ ¢∆ˆrÁv&ÊñÊrÜ◊6rê¢ˆ&uˆÊ˜FUˆW'&˜"Ü◊6rê¢&WGW&‚ÊˆÊP††¶FVbˆÊ˜&÷∆ó¶U˜G&Á7&VÁE˜ÊrÜñ÷uˆ'óFW3¢'óFW2í”‚'óFW3†¢ñbñ÷vRó2ÊˆÊS†¢&WGW&‚ñ÷uˆ'óFW0¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2ííÊ6ˆÁfW'BÇ%$t$"ê¢÷Ö˜6ñFR“ñÁBÑ$uÙıUEUEÙ‘Öı4îDR˜"cê¢ñb÷Ö˜6ñFR‚ÊB÷ÇÜñ“Á6ó¶Rí‚÷Ö˜6ñFS†¢ñ“ÁFáV÷&Êñ¬ÇÜ÷Ö˜6ñFR¬÷Ö˜6ñFRí¬ñ÷vR‰ƒ‰5§ı2ê¢&ñÚ“'óFW4îÚÇê¢ñ“Á6fRÜ&ñÚ¬f˜&÷C“%‰r"¬˜Fñ÷ó¶S’G'VR¬6ˆ◊&W75ˆ∆WfV√”bê¢&WGW&‚&ñÚÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&Ê˜&÷∆ó¶RG&Á7&VÁBÊrfñ∆VC¢∂W“"ê¢&WGW&‚ñ÷uˆ'óFW0†¶7ñÊ2FVb˜&V÷˜fUˆ&uˆ'óFW5˜&ñ÷'íÜñ÷uˆ'óFW3¢'óFW2í”‚'óFW2¬ÊˆÊS†¢"" ¢&ˆGV7Fñˆ‚&6∂w&˜VÊBóV∆ñÊR‡¢&ñ÷'ì¢Ü˜F˜&ˆˆ“&V÷˜fR&6∂w&˜VÊBí‡¢˜FñˆÊ¬f∆∆&6∑2&RW6VBˆÊ«íñ‚&˜fñFW#÷◊V«FíˆWFÚ‚∆ˆ6¬&V÷&r&V÷ñÁ2Fó6&∆VBˆ‚&VÊFW"7F'FW"‡¢"" ¢&˜fñFW"“Ñ$uı$ıdîDU"˜"'Ü˜F˜&ˆˆ“÷í÷ˆÊ«í"íÊ∆˜vW"ÇíÁ7G&óÇê¢Ü˜F˜&ˆˆ’ˆˆÊ«í“&˜fñFW"ñ‚Ä¢'Ü˜F˜&ˆˆ“"¬'Ü˜F˜&ˆˆ“÷í"¬'Ü˜F˜&ˆˆ“÷í÷ˆÊ«í"¿¢'Ü˜F˜&ˆˆ“÷ˆÊ«í"¬&í"¬&í÷ˆÊ«í ¢ê†¢2í7F&∆R&ˆGV7Fñˆ‚FÉ¢Ü˜F˜&ˆˆ“í‡¢ñb&˜fñFW"ñ‚Ç&WFÚ"¬&◊V«Fí"¬'Ü˜F˜&ˆˆ“"¬'Ü˜F˜&ˆˆ“÷í"¬'Ü˜F˜&ˆˆ“÷í÷ˆÊ«í"¬'Ü˜F˜&ˆˆ“÷ˆÊ«í"¬&í"¬&í÷ˆÊ«í"ì†¢˜WB“vóB˜Ü˜F˜&ˆˆ’ˆï˜&V÷˜fUˆ'óFW2Üñ÷uˆ'óFW2ê¢ñb˜WC†¢&WGW&‚ˆÊ˜&÷∆ó¶U˜G&Á7&VÁE˜ÊrÜ˜WBê¢ñbÜ˜F˜&ˆˆ’ˆˆÊ«ì†¢&WGW&‚ÊˆÊP†¢2"í˜FñˆÊ¬∆Vv7í&V÷˜fRÊ&r÷6ˆ◊Fñ&∆Rf∆∆&6≤ñbWá∆ñ6óF«í6ˆÊfñwW&VB‡¢ñb&˜fñFW"ñ‚Ç&WFÚ"¬&◊V«Fí"¬'&V÷˜fV&r"¬'&V÷˜fRÊ&r"¬'&V÷˜fV&r÷í"¬'&V÷˜fV&r÷í÷ˆÊ«í"¬'&V÷˜fV&r÷ˆÊ«í"ì†¢˜WB“vóB˜&V÷˜fV&uˆï˜&V÷˜fUˆ'óFW2Üñ÷uˆ'óFW2ê¢ñb˜WC†¢&WGW&‚ˆÊ˜&÷∆ó¶U˜G&Á7&VÁE˜ÊrÜ˜WBê¢ñb&˜fñFW"ñ‚Ç'&V÷˜fV&r"¬'&V÷˜fRÊ&r"¬'&V÷˜fV&r÷í"¬'&V÷˜fV&r÷í÷ˆÊ«í"¬'&V÷˜fV&r÷ˆÊ«í"ì†¢&WGW&‚ÊˆÊP†¢22í˜FñˆÊ¬6ˆ÷WBÙ'&ñf∆∆&6≤ˆÊ«ívÜV‚&˜fñFW"∆∆˜w2&V÷˜FRf∆∆&6≤‡¢&V÷˜FUˆ∆∆˜vVB“&˜fñFW"Ê˜Bñ‚Ä¢&∆ˆ6¬÷ˆÊ«í"¬'&V÷&r÷ˆÊ«í"¬&∆ˆ6¬"¬'&V÷&r"¿¢'Ü˜F˜&ˆˆ“÷í÷ˆÊ«í"¬'Ü˜F˜&ˆˆ“÷ˆÊ«í"¬&í÷ˆÊ«í ¢ê¢ñb&V÷˜FUˆ∆∆˜vVBÊB&˜fñFW"ñ‚Ç&WFÚ"¬&◊V«Fí"¬&6ˆ÷WB"¬&6ˆ÷WFí"¬&'&ñ÷6ˆ÷WB"¬&'&ñ˜&V÷˜fR÷&6∂w&˜VÊB"ì†¢˜WB“vóBˆ6ˆ÷WEˆ'&ñ˜&V÷˜fUˆ&uˆ'óFW2Üñ÷uˆ'óFW2ê¢ñb˜WC†¢&WGW&‚ˆÊ˜&÷∆ó¶U˜G&Á7&VÁE˜ÊrÜ˜WBê†¢ñb&V÷˜FUˆ∆∆˜vVBÊB&˜fñFW"ñ‚Ç&WFÚ"¬&◊V«Fí"¬&'&ñ"¬&Fó&V7B÷'&ñ"¬&'&ñ÷Fó&V7B"ì†¢˜WB“vóBˆ'&ñˆFó&V7E˜&V÷˜fUˆ&uˆ'óFW2Üñ÷uˆ'óFW2ê¢ñb˜WC†¢&WGW&‚ˆÊ˜&÷∆ó¶U˜G&Á7&VÁE˜ÊrÜ˜WBê†¢2Bí∆7B◊&W6˜'B∆ˆ6¬&V÷&rˆÊ«íñbWá∆ñ6óF«íVÊ&∆VC≤Fó6&∆VBñ‚&ˆGV7Fñˆ‚ˆ‚&VÊFW"7F'FW"‡¢∆ˆ6≈ˆ∆∆˜vVB“&ˆˆ¬ÇÜÊ˜B$uÙDï4$ƒUÙƒÙ4≈ı$T‘$ríÊBƒÙ4≈ı$T‘$uÙT‰$ƒTBÊB&V÷&u˜&V÷˜fRó2Ê˜BÊˆÊRÊB&˜fñFW"Ê˜Bñ‚Ç'Ü˜F˜&ˆˆ“÷í÷ˆÊ«í"¬'Ü˜F˜&ˆˆ“÷ˆÊ«í"¬'&V÷˜fV&r÷í÷ˆÊ«í"¬'&V÷˜fV&r÷ˆÊ«í"¬&í÷ˆÊ«í"íê¢ñb∆ˆ6≈ˆ∆∆˜vVC†¢˜WB“vóBˆ∆ˆ6≈˜&V÷&u˜&V÷˜fUˆ'óFW2Üñ÷uˆ'óFW2ê¢ñb˜WC†¢&WGW&‚ˆÊ˜&÷∆ó¶U˜G&Á7&VÁE˜ÊrÜ˜WBê†¢ñbÊ˜BÑıDı$ÙÙ’ÙïÙ¥UíÊB&˜fñFW"ñ‚Ç'Ü˜F˜&ˆˆ“"¬'Ü˜F˜&ˆˆ“÷í"¬'Ü˜F˜&ˆˆ“÷í÷ˆÊ«í"¬'Ü˜F˜&ˆˆ“÷ˆÊ«í"¬&í"¬&í÷ˆÊ«í"ì†¢ˆ&uˆÊ˜FUˆW'&˜"Ç%ÑıDı$ÙÙ’ÙïÙ¥Uíó2Ê˜B6ˆÊfñwW&VB"ê¢ñb&V÷&u˜&V÷˜fRó2ÊˆÊRÊBÊ˜B$uÙDï4$ƒUÙƒÙ4≈ı$T‘$s†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&∆ˆ6¬&V÷&rVÊfñ∆&∆S¢ñ◊˜'Bfñ∆VBµ$T‘$uÙî’ı%EÙU%$ı'“"ê¢&WGW&‚ÊˆÊP†¶FVbˆfóEˆ6˜fW"Üñ“¬6ó¶S¢GW∆U∂ñÁB¬ñÁE“ì†¢ñbñ÷vT˜3†¢&WGW&‚ñ÷vT˜2ÊfóBÜñ“¬6ó¶R¬÷WFÜˆC‘ñ÷vR‰ƒ‰5§ı2¬6VÁFW&ñÊs“É„R¬„Ríê¢&WGW&‚ñ“Á&W6ó¶Rá6ó¶R¬ñ÷vR‰ƒ‰5§ı2ê††¶FVbˆw&FñVÁEˆ&6∂w&˜VÊBá6ó¶S¢GW∆U∂ñÁB¬ñÁE“¬F˜¢GW∆U∂ñÁB¬ñÁB¬ñÁE“¬&˜GFˆ”¢GW∆U∂ñÁB¬ñÁB¬ñÁE“ì†¢r¬Ç“6ó¶P¢&r“ñ÷vRÊÊWrÇ%$t""¬6ó¶R¬F˜ê¢ñbñ÷vTG&ró2ÊˆÊS†¢&WGW&‚&p¢G&r“ñ÷vTG&r‰G&rÜ&rê¢f˜"íñ‚&ÊvRÜ÷ÇÉ¬Çíì†¢B“íÚ÷ÇÉ¬Ç“ê¢2“GW∆RÜñÁBáF˜∂ï“¢É“Bí≤&˜GFˆ’∂ï“¢Bíf˜"íñ‚&ÊvRÉ2íê¢G&rÊ∆ñÊRÖ≤É¬íí¬ár¬íï“¬fñ∆√÷2ê¢&WGW&‚&p†††•ı$T≈Ù$uıU$≈2“∞¢2
+]ΩÕ›ΩRMÌ-Ìm]›≤¬›RçÌ-››ΩR}=Ω=ç≠Ç‚	]ΩÇ]-¬›]MÌ-=˝›(	B›çmRÌ-›]-ÚΩÌ≠ΩÕ›Ωíf∆∆&6≤‡¢&&V6Ç#¢&áGG3¢Úˆñ÷vW2ÁVÁ7∆6ÇÊ6ˆ“˜Ü˜FÚ”SsS#SC#É3B÷#s#66cìcC6SˆWFÛ÷f˜&÷BffóC÷7&˜gs”Ég”ÉR"¿¢&÷˜VÁFñÁ2#¢&áGG3¢Úˆñ÷vW2ÁVÁ7∆6ÇÊ6ˆ“˜Ü˜FÚ”ScìSì#S3Cb”#&FFC3&FcCˆWFÛ÷f˜&÷BffóC÷7&˜gs”Ég”ÉR"¿¢&ÊGW&R#¢&áGG3¢Úˆñ÷vW2ÁVÁ7∆6ÇÊ6ˆ“˜Ü˜FÚ”CCÉ3sS#CSÉb”ÉÉ#svF#ÉÉÜ#ˆWFÛ÷f˜&÷BffóC÷7&˜gs”Ég”ÉR"¿¢'&ˆˆb#¢&áGG3¢Úˆñ÷vW2ÁVÁ7∆6ÇÊ6ˆ“˜Ü˜FÚ”CÉsC3sÉCÇ”cv6cC6&3cˆWFÛ÷f˜&÷BffóC÷7&˜gs”Ég”ÉR"¿¢&ˆffñ6R#¢&áGG3¢Úˆñ÷vW2ÁVÁ7∆6ÇÊ6ˆ“˜Ü˜FÚ”Cìs3ccsSC3R÷c#ìcÜfSs#ˆWFÛ÷f˜&÷BffóC÷7&˜gs”Ég”ÉR"¿ß–††¶FVb˜6fUˆ66ÜUˆÊ÷RÜ∂Wì¢7G"í”‚7G#†¢&WGW&‚&RÁ7V"á"%µÊ◊§’£”ïÚ‚’“≤"¬%Ú"¬∂Wíï≥£É“˜"&&r ††¶FVb˜&V≈˜Ü˜Fıˆ&6∂w&˜VÊBá6ó¶S¢GW∆U∂ñÁB¬ñÁE“¬∂ñÊC¢7G"ì†¢""-	]"›-Ì˝ùçíMÌ-ÌMÌ“çr≠›çıU$¬Ç≠Ì˝ç"˝ÌB}Õ]Ì≠]≠-‚"" ¢ñbñ÷vRó2ÊˆÊR˜"Ê˜B$uı$Tƒï5Dî5Ù$4¥u$ıT‰E3†¢&WGW&‚ÊˆÊP¢∂ñÊB“Ü∂ñÊB˜"""íÊ∆˜vW"ÇíÁ7G&óÇê¢W&¬“ı$T≈Ù$uıU$≈2ÊvWBÜ∂ñÊBê¢ñbÊ˜BW&√†¢&WGW&‚ÊˆÊP¢G'ì†¢˜2Ê÷∂VFó'2Ñ$uÙ44ÑUÙDï"¬WÜó7Eˆˆ≥’G'VRê¢66ÜU˜FÇ“˜2ÁFÇÊ¶ˆñ‚Ñ$uÙ44ÑUÙDï"¬˜6fUˆ66ÜUˆÊ÷RÜ∂ñÊBí≤"Êßr"ê¢FF“ÊˆÊP¢ñb˜2ÁFÇÊWÜó7G2Ü66ÜU˜FÇíÊB˜2ÁFÇÊvWG6ó¶RÜ66ÜU˜FÇí‚#C†¢vóFÇ˜V‚Ü66ÜU˜FÇ¬'&""í2c†¢FF“bÁ&VBÇê¢V«6S†¢vóFÇáGGÇ‰6∆ñVÁBáFñ÷V˜WC‘$uÙ$4¥u$ıT‰EıDî‘TıUEı2¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢"“6∆ñVÁBÊvWBáW&¬¬ÜVFW'3◊≤%W6W"‘vVÁB#¢$uCU&Ù&˜BÛ„'“ê¢"Á&ó6Uˆf˜%˜7FGW2Çê¢FF“"Ê6ˆÁFVÁ@¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóFÇ˜V‚Ü66ÜU˜FÇ¬'v""í2c†¢bÁw&óFRÜFFê¢ñbÊ˜BFF†¢&WGW&‚ÊˆÊP¢&r“ñ÷vRÊ˜V‚Ñ'óFW4îÚÜFFííÊ6ˆÁfW'BÇ%$t""ê¢&r“ˆfóEˆ6˜fW"Ü&r¬6ó¶Rê¢2	Ω=≠ÌR}ÕΩ-çRÇ}-]Õ›]›çR¬}-Ì≤Ì≠]≠"›R-Ω=Ω˝M]≤-≠Ω]]››Ω¬Ωçç≠Ì¬]}≠‚‡¢ñbñ÷vTfñ«FW#†¢&r“&rÊfñ«FW"Ññ÷vTfñ«FW"‰vW76ñ‰&«W"á&FóW3÷÷ÇÉ„"¬÷ñ‚á6ó¶RíÚCSííê¢&WGW&‚&p¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&V¬&6∂w&˜VÊBF˜vÊ∆ˆBfñ∆VB∂ñÊC◊∂∂ñÊG”¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢∆ˆrÁv&ÊñÊrÇ'&V¬&6∂w&˜VÊBfñ∆VB∂ñÊC“W3¢W2"¬∂ñÊB¬Rê¢&WGW&‚ÊˆÊP†¶FVbˆ÷∂Uˆ∆ˆ6≈ˆ&6∂w&˜VÊBá6ó¶S¢GW∆U∂ñÁB¬ñÁE“¬∂ñÊC¢7G"¬˜&ñvñÊ≈ˆ'óFW3¢'óFW2¬ÊˆÊR“ÊˆÊR¬&ˆ◊C¢7G"“""ì†¢r¬Ç“6ó¶P¢∂ñÊB“Ü∂ñÊB˜"&&«W""íÊ∆˜vW"Çê¢ñb$uı$Uƒ4UıU4Uı5DÙ4µÙ$4¥u$ıT‰E2ÊB∂ñÊBñ‚Ç&&V6Ç"¬&÷˜VÁFñÁ2"¬&ÊGW&R"¬'&ˆˆb"¬&ˆffñ6R"ì†¢&V≈ˆ&r“˜&V≈˜Ü˜Fıˆ&6∂w&˜VÊBá6ó¶R¬∂ñÊBê¢ñb&V≈ˆ&ró2Ê˜BÊˆÊS†¢&WGW&‚&V≈ˆ&p¢ñb∂ñÊB”“&&«W""ÊB˜&ñvñÊ≈ˆ'óFW2ÊBñ÷vTfñ«FW#†¢&6R“ñ÷vRÊ˜V‚Ñ'óFW4îÚÜ˜&ñvñÊ≈ˆ'óFW2ííÊ6ˆÁfW'BÇ%$t""ê¢&r“ˆfóEˆ6˜fW"Ü&6R¬6ó¶Rê¢&WGW&‚&rÊfñ«FW"Ññ÷vTfñ«FW"‰vW76ñ‰&«W"á&FóW3÷÷ÇÉÇ¬÷ñ‚ár¬ÇíÚÚÇííê¢ñb∂ñÊB”“'vÜóFR#†¢&WGW&‚ñ÷vRÊÊWrÇ%$t""¬6ó¶R¬É#SR¬#SR¬#SRíê¢ñb∂ñÊB”“&&∆6≤#†¢&WGW&‚ñ÷vRÊÊWrÇ%$t""¬6ó¶R¬ÉÇ¬Ç¬Çíê†¢ñb∂ñÊB”“&&V6Ç#†¢&r“ˆw&FñVÁEˆ&6∂w&˜VÊBá6ó¶R¬ÉB¬ìB¬#3rí¬É#CR¬#í¬c"íê¢ñbñ÷vTG&s†¢B“ñ÷vTG&r‰G&rÜ&rê¢BÁ&V7FÊv∆RÖ≥¬ñÁBÜÇ¢„cBí¬r¬Ö“¬fñ∆√“É#32¬#2¬Críê¢BÁ&V7FÊv∆RÖ≥¬ñÁBÜÇ¢„CÇí¬r¬ñÁBÜÇ¢„cbï“¬fñ∆√“ÉSÇ¬c¬#"íê¢&WGW&‚&p†¢ñb∂ñÊB”“&÷˜VÁFñÁ2#†¢&r“ˆw&FñVÁEˆ&6∂w&˜VÊBá6ó¶R¬É#b¬sb¬##íí¬É#3¬#3r¬#CBíê¢ñbñ÷vTG&s†¢B“ñ÷vTG&r‰G&rÜ&rê¢BÁˆ«ñvˆ‚Ö≤É¬Çí¬ÜñÁBár£„#bí¬ñÁBÜÇ£„Cíí¬ÜñÁBár£„SÇí¬Çï“¬fñ∆√“Éìr¬B¬#bíê¢BÁˆ«ñvˆ‚Ö≤ÜñÁBár£„3Bí¬Çí¬ÜñÁBár£„crí¬ñÁBÜÇ£„#Çíí¬ár¬Çï“¬fñ∆√“ÉsÇ¬ì2¬Çíê¢&WGW&‚&p†¢ñb∂ñÊB”“'&ˆˆb#†¢&r“ˆw&FñVÁEˆ&6∂w&˜VÊBá6ó¶R¬Éìb¬#2¬sí¬É3B¬3Ç¬Sbíê¢ñbñ÷vTG&s†¢B“ñ÷vTG&r‰G&rÜ&rê¢f˜"íñ‚&ÊvRÉÇì†¢É“ñÁBár¢ÜíÚÇ„íê¢'r“÷ÇÉÇ¬rÚÚ"ê¢&Ç“ñÁBÜÇ¢É„R≤ÜíRBí¢„Çíê¢BÁ&V7FÊv∆RÖ∑É¬Ç“&Ç¬É≤'r¬Ö“¬fñ∆√“ÉC¬Cb¬c"íê¢&WGW&‚&p†¢ñb∂ñÊB”“&ˆffñ6R#†¢&r“ˆw&FñVÁEˆ&6∂w&˜VÊBá6ó¶R¬É#C"¬#CB¬#Crí¬É#"¬#í¬##Çíê¢ñbñ÷vTG&s†¢B“ñ÷vTG&r‰G&rÜ&rê¢BÁ&V7FÊv∆RÖ≥¬ñÁBÜÇ£„sí¬r¬Ö“¬fñ∆√“É#¬ìb¬sÇíê¢f˜"Çñ‚&ÊvRÉ¬r¬÷ÇÉC¬rÚÚbíì†¢BÁ&V7FÊv∆RÖ∑Ç¬ñÁBÜÇ£„Çí¬÷ñ‚ár¬Ç≤÷ÇÉ#B¬rÚÚ"íí¬ñÁBÜÇ£„SÇï“¬fñ∆√“Éì¬#R¬#ííê¢&WGW&‚&p†¢2ÊGW&Rˆ7W7Fˆ“f∆∆&6≥¢˝Ì≠Ìù›Ωí}]Ω›ΩíMÌ“=Ω=ç›Ìí‡¢&r“ˆw&FñVÁEˆ&6∂w&˜VÊBá6ó¶R¬É#R¬ì¬Cí¬É3R¬É¬Síê¢ñbñ÷vTG&s†¢B“ñ÷vTG&r‰G&rÜ&rê¢f˜"íñ‚&ÊvRÉ"ì†¢Ç“ñÁBár¢íÚê¢í“ñÁBÜÇ¢É„CR≤ÜíR2í¢„ríê¢"“÷ÇÉ3¬rÚÚ"ê¢BÊV∆∆ó6RÖ∑Ç◊"¬í◊"¬Ç∑"¬í∑%“¬fñ∆√“ÉCR¬R¬cRíê¢BÁ&V7FÊv∆RÖ≥¬ñÁBÜÇ£„sí¬r¬Ö“¬fñ∆√“ÉC"¬ìR¬SRíê¢&WGW&‚&p††¶FVbˆ6ˆ◊˜6U˜7V&¶V7EˆˆÂˆ&6∂w&˜VÊBÜ&u˜&v"¬fu˜&v&ì†¢&r“&u˜&v"Ê6ˆÁfW'BÇ%$t$"íñbvWFGG"Ü&u˜&v"¬&÷ˆFR"¬""í“%$t$"V«6R&u˜&v"Ê6˜íÇê¢fr“fu˜&v&Ê6ˆÁfW'BÇ%$t$"ê¢«Ü“frÊvWF6ÜÊÊV¬Ç$"ê¢ñbñ÷vTfñ«FW#†¢G'ì†¢6ÜF˜uˆ÷6≤“«ÜÊfñ«FW"Ññ÷vTfñ«FW"‰vW76ñ‰&«W"á&FóW3÷÷ÇÉb¬÷ñ‚ÜfrÁ6ó¶RíÚÛìííê¢6ÜF˜r“ñ÷vRÊÊWrÇ%$t$"¬frÁ6ó¶R¬É¬¬¬íê¢6ÜF˜rÁWF«Üá6ÜF˜uˆ÷6≤ÁˆñÁBÜ∆÷&F¢ñÁBá¢„#ííê¢GÇ“÷ÇÉ"¬frÁ6ó¶U≥“ÚÚê¢Gí“÷ÇÉ"¬frÁ6ó¶U≥“ÚÚìê¢&rÊ«Üˆ6ˆ◊˜6óFRá6ÜF˜r¬FW7C“ÜGÇ¬Gííê¢WÜ6WBWÜ6WFñˆ„†¢70¢&rÊ«Üˆ6ˆ◊˜6óFRÜfrê¢&WGW&‚&p††¶7ñÊ2FVbˆvVÊW&FUˆ&6∂w&˜VÊEˆˆÊ«ïˆ'óFW2á6ó¶S¢GW∆U∂ñÁB¬ñÁE“¬∂ñÊC¢7G"“&7W7Fˆ“"¬&ˆ◊C¢7G"“""í”‚'óFW2¬ÊˆÊS†¢ñbñ÷vRó2ÊˆÊS†¢&WGW&‚ÊˆÊP¢∂ñÊB“Ü∂ñÊB˜"&7W7Fˆ“"íÊ∆˜vW"ÇíÁ7G&óÇê¢vÁEˆvV‚“Ü∂ñÊB”“&7W7Fˆ“"ÊB$uı$Uƒ4UÙtT‰U$DUÙ5U5DÙ“í˜"Ü∂ñÊB“&7W7Fˆ“"ÊB$uı$Uƒ4UÙtT‰U$DUı$U4UE2ê¢ñbÊ˜BvÁEˆvV„†¢&WGW&‚ÊˆÊP¢gV∆≈˜&ˆ◊B“ˆ'Vñ∆Eˆ&6∂w&˜VÊE˜66VÊU˜&ˆ◊BÜ∂ñÊB¬&ˆ◊Bê¢ÊVvFófR“ˆ'Vñ∆Eˆ&6∂w&˜VÊEˆÊVvFófU˜&ˆ◊BÜ∂ñÊB¬&ˆ◊Bê¢fñÊ≈˜&ˆ◊B“b'∂gV∆≈˜&ˆ◊G“fˆñC¢∂ÊVvFófW“‚ ¢G'ì†¢FF“vóBˆ«V÷ˆvVÊW&FUˆñ÷vUˆ'óFW2ÜfñÊ≈˜&ˆ◊Bê¢ñbÊ˜BFF†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&&6∂w&˜VÊB÷ˆÊ«ívVÊW&Fñˆ‚&WGW&ÊVBV◊Gí˜WGWBf˜"∂ñÊC◊∂∂ñÊG“"ê¢&WGW&‚ÊˆÊP¢&r“ñ÷vRÊ˜V‚Ñ'óFW4îÚÜFFííÊ6ˆÁfW'BÇ%$t""ê¢&r“ˆfóEˆ6˜fW"Ü&r¬6ó¶Rê¢&ñÚ“'óFW4îÚÇê¢&rÁ6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì÷÷ÇÉÉb¬÷ñ‚ÉìÇ¬$uı$Uƒ4UÙ•TuıTƒïEííí¬˜Fñ÷ó¶S’G'VR¬&ˆw&W76ófS’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb&&6∂w&˜VÊB÷ˆÊ«ívVÊW&Fñˆ‚fñ∆VB∂ñÊC◊∂∂ñÊG”¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢∆ˆrÁv&ÊñÊrÇ&&6∂w&˜VÊB÷ˆÊ«ívVÊW&Fñˆ‚fñ∆VB∂ñÊC“W3¢W2"¬∂ñÊB¬Rê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVbˆ6ˆ◊˜6U˜&W∆6Uˆ&rÜñ÷uˆ'óFW3¢'óFW2¬&uˆ∂ñÊC¢7G"“&&«W""¬&ˆ◊C¢7G"“""í”‚'óFW2¬ÊˆÊS†¢ñbñ÷vRó2ÊˆÊS†¢&WGW&‚ÊˆÊP†¢27G&ñ7B&ˆGV7Fñˆ‚óV∆ñÊS¢í&V÷˜fR&6∂w&˜VÊB¬"í'Vñ∆B˜6V∆V7BÊWr&6∂w&˜VÊB¬2í6ˆ◊˜6óFR7V&¶V7B&6≤‡¢7WF˜WEˆ'óFW2“vóB˜&V÷˜fUˆ&uˆ'óFW5˜&ñ÷'íÜñ÷uˆ'óFW2ê¢ñbÊ˜B7WF˜WEˆ'óFW3†¢&WGW&‚ÊˆÊP†¢fr“ñ÷vRÊ˜V‚Ñ'óFW4îÚÜ7WF˜WEˆ'óFW2ííÊ6ˆÁfW'BÇ%$t$"ê¢F&vWE˜6ó¶R“frÁ6ó¶P†¢&u˜&v"“ÊˆÊP¢vVÂˆ'óFW2“vóBˆvVÊW&FUˆ&6∂w&˜VÊEˆˆÊ«ïˆ'óFW2áF&vWE˜6ó¶R¬∂ñÊC÷&uˆ∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢ñbvVÂˆ'óFW3†¢G'ì†¢&u˜&v"“ñ÷vRÊ˜V‚Ñ'óFW4îÚÜvVÂˆ'óFW2ííÊ6ˆÁfW'BÇ%$t""ê¢WÜ6WBWÜ6WFñˆ„†¢&u˜&v"“ÊˆÊP†¢ñb&u˜&v"ó2ÊˆÊS†¢&u˜&v"“ˆ÷∂Uˆ∆ˆ6≈ˆ&6∂w&˜VÊBáF&vWE˜6ó¶R¬&uˆ∂ñÊB¬˜&ñvñÊ≈ˆ'óFW3÷ñ÷uˆ'óFW2¬&ˆ◊C◊&ˆ◊BíÊ6ˆÁfW'BÇ%$t""ê†¢6ˆ◊˜6VB“ˆ6ˆ◊˜6U˜7V&¶V7EˆˆÂˆ&6∂w&˜VÊBÜ&u˜&v"¬frê¢&ñÚ“'óFW4îÚÇê¢6ˆ◊˜6VBÊ6ˆÁfW'BÇ%$t""íÁ6fRÄ¢&ñÚ¿¢f˜&÷C“$•Tr"¿¢V∆óGì÷÷ÇÉÉb¬÷ñ‚ÉìÇ¬$uı$Uƒ4UÙ•TuıTƒïEííí¿¢˜Fñ÷ó¶S’G'VR¿¢&ˆw&W76ófS’G'VR¿¢ê¢&WGW&‚&ñÚÊvWGf«VRÇê††¶7ñÊ2FVb˜VFóE˜&V÷˜fV&ráWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2ì†¢ñbÊ˜B6ˆÁFWáBÁW6W%ˆFFÁ˜Ç%ˆñ÷vU˜&ˆ6W76ñÊu˜V˜Fˆˆ≤"¬f«6Rì†¢7ñÊ2FVbˆvÚÇì†¢6ˆÁFWáBÁW6W%ˆFF≤%ˆñ÷vU˜&ˆ6W76ñÊu˜V˜Fˆˆ≤%““G'VP¢&WGW&‚vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2ê¢vóB˜G'ï˜ï˜FÜVÂˆFÚÄ¢WFFR¬6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¿¢&ñ÷r"¬î‘uı$Ù4U55Ù4ı5EıU4B¬ˆvÚ¿¢&V÷V÷&W%ˆ∂ñÊC“'&V÷˜fV&r"¿¢ê¢&WGW&‡¢G'ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	˙{¬
+=MΩ˝‚MÌ“‚	-]›2‰r˝Ì}}›Ìí˝ÌMΩÌm≠Ìí‚"ê¢˜WB“vóB7ñÊ6ñÚÁvóEˆf˜"Ö˜&V÷˜fUˆ&uˆ'óFW5˜&ñ÷'íÜñ÷uˆ'óFW2í¬Fñ÷V˜WC‘$uÙ5DîÙÂıDî‘TıUEı2ê¢ñbÊ˜B˜WC†¢ñb&V÷&u˜&V÷˜fRó2ÊˆÊS†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)ÿ¬	›R=MΩÌ¬=MΩç-¬MÌ“}]]rÜ˜F˜&ˆˆ“í‚ ¢-	˝Ì-]Õ-RÑıDı$ÙÙ’ÙïÙ¥UíÇΩçÕç-≤-]-Ì-Ì=‚≠ΩÌ}‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆ&uˆ∆7EˆW'&˜'5˜FWáBÇê¢ê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	›R=MΩÌ¬=MΩç-¬MÌ“‚	MΩÚ-Ì}›Ìí˝ç}ç›≤}˝=-ç-RˆFñuˆ&r‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆ&uˆ∆7EˆW'&˜'5˜FWáBÇíê¢&WGW&‚f«6P¢&ñÚ“'óFW4îÚÜ˜WBê¢&ñÚÊÊ÷R“&Êıˆ&rÁÊr ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆFˆ7V÷VÁBÄ¢ñÁWDfñ∆RÜ&ñÚí¿¢6Fñˆ„“-
+MÌ“=MΩ“)»R‰r˝Ì}}›Ìí˝ÌMΩÌm≠Ìí‚"¿¢&VE˜Fñ÷V˜WC”#¿¢w&óFU˜Fñ÷V˜WC”#¿¢6ˆÊÊV7E˜Fñ÷V˜WC”3¿¢ˆˆ≈˜Fñ÷V˜WC”3¿¢ê¢&WGW&‚G'VP¢WÜ6WBFñ÷VD˜WB2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'FV∆Vw&“W∆ˆBFñ÷V˜WC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)ÿ¬
+MÌ“=MΩ“¬›‚FV∆Vw&“›R=˝]≤˝ç›˝-¬‰r›Mù≤‚ ¢-
+Ú=Õ]›Õçç≤}Õ]MùΩÌ""›Ì-Ìí-]çÉ≤˝Ì˝Ì=ù-R]ùrçΩÇÌ-˝-Õ-RMÌ-‚Õ]›Õç]=‚}Õ]‚ ¢ê¢&WGW&‚f«6P¢WÜ6WB7ñÊ6ñÚÂFñ÷V˜WDW'&˜#†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&V÷˜fV&r7Fñˆ‚Fñ÷V˜WBgFW"¥$uÙ5DîÙÂıDî‘TıUEı3¢„g◊2"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬
+=MΩ]›çRMÌ›}›˝Ω‚Ωçç≠Ì¬Õ›Ì=‚-]Õ]›ÇÇΩΩ‚Ì-›Ì-Ω]›‚‚	˝Ì˝Ì=ù-RMÌ-‚Õ]›Õç]=‚}Õ]çΩÇ˝Ì--Ìç-R˝Ì}mR‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆ&uˆ∆7EˆW'&˜'5˜FWáBÇíê¢&WGW&‚f«6P¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'&V÷˜fV&rW'&˜#¢W2"¬Rê¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&V÷˜fV&rWÜ6WFñˆ„¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬=MΩç-¬MÌ“‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆ&uˆ∆7EˆW'&˜'5˜FWáBÇíê¢&WGW&‚f«6P††¶7ñÊ2FVb˜VFóE˜&W∆6V&ráWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2¬∂ñÊC¢7G"“&&«W""¬&ˆ◊C¢7G"“""ì†¢ñbÊ˜B6ˆÁFWáBÁW6W%ˆFFÁ˜Ç%ˆñ÷vU˜&ˆ6W76ñÊu˜V˜Fˆˆ≤"¬f«6Rì†¢7ñÊ2FVbˆvÚÇì†¢6ˆÁFWáBÁW6W%ˆFF≤%ˆñ÷vU˜&ˆ6W76ñÊu˜V˜Fˆˆ≤%““G'VP¢&WGW&‚vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢vóB˜G'ï˜ï˜FÜVÂˆFÚÄ¢WFFR¬6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¿¢&ñ÷r"¬î‘uı$Ù4U55Ù4ı5EıU4B¬ˆvÚ¿¢&V÷V÷&W%ˆ∂ñÊC“'&W∆6V&r"¿¢ê¢&WGW&‡¢ñbñ÷vRó2ÊˆÊS†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%ñ∆∆˜r›R=-›Ì-Ω]“‚"ê¢&WGW&‚f«6P¢G'ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	˘k¬	}˝=≠‚M-=]›-˝›=‚}Õ]›2MÌ›¢í≠≠=-›‚-Ω]}‚}]ΩÌ-]≠˝Ì≠]≠"¬"íÌ-M]ΩÕ›‚˝ÌMç‚çΩÇ=]›]ç=‚›Ì-ΩíMÌ“¬2íÌç‚ç-Ì2]r˝]]çÌ-≠ÇΩçm¬ÌM]mM≤Ç˝Ì}≤‚"ê¢˜WB“vóB7ñÊ6ñÚÁvóEˆf˜"Öˆ6ˆ◊˜6U˜&W∆6Uˆ&rÜñ÷uˆ'óFW2¬&uˆ∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bí¬Fñ÷V˜WC‘$uÙ5DîÙÂıDî‘TıUEı2ê¢ñbÊ˜B˜WC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	›R=MΩÌ¬Ì-M]Ωç-¬Ì≠]≠"Ì"MÌ›‚	MΩÚ-Ì}›Ìí˝ç}ç›≤}˝=-ç-RˆFñuˆ&r‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆ&uˆ∆7EˆW'&˜'5˜FWáBÇíê¢&WGW&‚f«6P¢&ñÚ“'óFW4îÚÜ˜WBê¢&ñÚÊÊ÷R“b'&W∆6Uˆ&u˜∂∂ñÊB˜"v7W7Fˆ“w“Êßr ¢6“-
+MÌ“}Õ]›“)»R	Ì≠]≠"Ì--Ω]“çrç]ÌM›Ì=‚MÌ-‚‚ ¢ñb&ˆ◊C†¢6≥“b%∆Ì	}˝ÌMÌ›¢∑&ˆ◊E≥£#S◊“ ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜Ü˜FÚÄ¢ñÁWDfñ∆RÜ&ñÚí¿¢6Fñˆ„÷6¿¢&VE˜Fñ÷V˜WC”É¿¢w&óFU˜Fñ÷V˜WC”É¿¢6ˆÊÊV7E˜Fñ÷V˜WC”3¿¢ˆˆ≈˜Fñ÷V˜WC”3¿¢ê¢&WGW&‚G'VP¢WÜ6WBFñ÷VD˜WB2S†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'FV∆Vw&“&W∆6V&rW∆ˆBFñ÷V˜WC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)™˚àÚFV∆Vw&“Ωçç≠Ì¬MÌΩ=‚˝ç›çÕ≤ç}Ìm]›çR˝ÌΩR}Õ]›≤MÌ›‚ ¢-	]ΩÇMÌ-‚=mR˝Ì˝-çΩÌ¬"}-R(	B]}=ΩÕ-"=˝]ç›‚MÌ--Ω]“‚ ¢-	]ΩÇMÌ-‚›R˝Ì˝-çΩÌ¬¬˝Ì--Ìç-R˝Ì˝Ω-≠2]ùrçΩÇÌ-˝-Õ-RMÌ-‚Õ]›Õç]=‚}Õ]‚ ¢ê¢&WGW&‚f«6P¢WÜ6WB7ñÊ6ñÚÂFñ÷V˜WDW'&˜#†¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&W∆6V&r7Fñˆ‚Fñ÷V˜WBgFW"¥$uÙ5DîÙÂıDî‘TıUEı3¢„g◊2"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	}Õ]›MÌ›}›˝ΩΩçç≠Ì¬Õ›Ì=‚-]Õ]›ÇÇΩΩÌ-›Ì-Ω]›‚	˝Ì˝Ì=ù-RMÌ-‚Õ]›Õç]=‚}Õ]çΩÇ˝Ì--Ìç-R˝Ì}mR‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆ&uˆ∆7EˆW'&˜'5˜FWáBÇíê¢&WGW&‚f«6P¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'&W∆6V&rW'&˜#¢W2"¬Rê¢ˆ&uˆÊ˜FUˆW'&˜"Üb'&W∆6V&rWÜ6WFñˆ„¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬}Õ]›ç-¬MÌ“‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆ&uˆ∆7EˆW'&˜'5˜FWáBÇíê¢&WGW&‚f«6P††¶7ñÊ2FVb˜VFóEˆ˜WGñÁBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2ì†¢ñbÊ˜B6ˆÁFWáBÁW6W%ˆFFÁ˜Ç%ˆñ÷vU˜&ˆ6W76ñÊu˜V˜Fˆˆ≤"¬f«6Rì†¢7ñÊ2FVbˆvÚÇì†¢6ˆÁFWáBÁW6W%ˆFF≤%ˆñ÷vU˜&ˆ6W76ñÊu˜V˜Fˆˆ≤%““G'VP¢&WGW&‚vóB˜VFóEˆ˜WGñÁBáWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2ê¢vóB˜G'ï˜ï˜FÜVÂˆFÚÄ¢WFFR¬6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¿¢&ñ÷r"¬î‘uı$Ù4U55Ù4ı5EıU4B¬ˆvÚ¿¢&V÷V÷&W%ˆ∂ñÊC“&˜WGñÁB"¿¢ê¢&WGW&‡¢ñbñ÷vRó2ÊˆÊS†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%ñ∆∆˜r›R=-›Ì-Ω]“‚"ê¢&WGW&‚f«6P¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2ííÊ6ˆÁfW'BÇ%$t""ê¢B“÷ÇÉcB¬÷ñ‚É#Sb¬÷ÇÜñ“Á6ó¶RíÚÛbíê¢&ñr“ñ÷vRÊÊWrÇ%$t""¬Üñ“ÁvñGFÇ≤"ßB¬ñ“ÊÜVñváB≤"ßBíê¢&r“ñ“Á&W6ó¶RÜ&ñrÁ6ó¶R¬ñ÷vR‰ƒ‰5§ı2íÊfñ«FW"Ññ÷vTfñ«FW"‰vW76ñ‰&«W"á&FóW3”#Bííñbñ÷vTfñ«FW"V«6Rñ“Á&W6ó¶RÜ&ñrÁ6ó¶Rê¢&ñrÁ7FRÜ&r¬É¬íì≤&ñrÁ7FRÜñ“¬áB¬Bíê¢&ñÚ“'óFW4îÚÇì≤&ñrÁ6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ì"ì≤&ñÚÁ6VV≤Éì≤&ñÚÊÊ÷R“&˜WGñÁBÊßr ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜Ü˜FÚÑñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„“-	˝Ì-Ìí˜WGñÁC¢ççç≤˝ÌΩÌ-›‚Õ˝=≠çÕÇ≠˝ÕÇ‚"ê¢&WGW&‚G'VP¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&˜WGñÁBW'&˜#¢W2"¬Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬M]Ω-¬˜WGñÁB‚"ê¢&WGW&‚f«6P†¶7ñÊ2FVb˜VFóE˜7F˜'ñ&ˆ&BáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2ì†¢G'ì†¢#cB“&6ScBÊ#cFVÊ6ˆFRÜñ÷uˆ'óFW2íÊFV6ˆFRÇ&66ñí"ê¢FW62“vóB6µˆ˜VÊï˜fó6ñˆ‚Ç-	Ì˝ççÇ≠ΩÌ}]-ΩR›Ω]Õ]›-≤≠MÌ}]›¬≠-≠‚‚"¬#cB¬6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2íê¢∆‚“vóB6µˆ˜VÊï˜FWáBÄ¢-
+M]Ωí≠MÌ-≠2Éb≠MÌ"í˝ÌBn(	3]≠=›M›Ωí≠ΩçÚ‚ ¢-	≠mMΩí≠M(	B-Ì≠¢≠M˝M]ù--çR˝≠=˝-]"‚	Ì›Ì-•∆‚"≤ÜFW62˜"""ê¢ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+≠MÌ-≠•Õ“"≤∆‚ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'7F˜'ñ&ˆ&BW'&˜#¢W2"¬Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬˝Ì-Ìç-¬≠MÌ-≠2‚"ê†††¢2)H)H)H)H)H)H)H)H)Hf6R7v&ˆGV7Fñˆ‚ÜV«W'2)H)H)H)H)H)H)H)H)H •ˆf6W7v˜F&vWEˆ66ÜR“∑“2W6W%ˆñB”‚'óFW3¢Ü˜FÚvÜW&Rf6R◊W7B&R&W∆6V@•ˆf6W7v˜6˜W&6Uˆ66ÜR“∑“2W6W%ˆñB”‚'óFW3¢f6R˜&VfW&VÊ6RÜ˜F•ˆf6W7v˜F&vWEˆf6UˆñÊFWÖˆ66ÜR“∑“2W6W%ˆñB”‚6Vv÷ñÊBÙíf6RñÊFWÇñ‚F&vWBñ÷vP•ˆf6W7v˜6˜W&6Uˆf6UˆñÊFWÖˆ66ÜR“∑“2W6W%ˆñB”‚6Vv÷ñÊBÙíf6RñÊFWÇñ‚6˜W&6Rñ÷vP•ˆf6W7v˜F&vWEˆf6Uˆ6˜VÁEˆ66ÜR“∑“2W6W%ˆñB”‚FWFV7FVBF&vWBf6W26˜VÁ@•ˆf6W7v˜6˜W&6Uˆf6Uˆ6˜VÁEˆ66ÜR“∑“2W6W%ˆñB”‚FWFV7FVB6˜W&6Rf6W26˜VÁ@•ˆf6W7v˜F&vWEˆf6W5ˆ66ÜR“∑“2W6W%ˆñB”‚FWFV7FVBF&vWBf6W2∆ó7BvóFÇ&˜ÜW0•ˆf6W7v˜6˜W&6Uˆf6W5ˆ66ÜR“∑“2W6W%ˆñB”‚FWFV7FVB6˜W&6Rf6W2∆ó7BvóFÇ&˜ÜW0•ˆf6W7vˆW'&˜'2“µ–††¶FVbˆf6W7vˆÊ˜FUˆW'&˜"Ü◊6s¢7G"ì†¢G'ì†¢◊6r“7G"Ü◊6ríÁ7G&óÇê¢ñbÊ˜B◊6s†¢&WGW&‡¢ˆf6W7vˆW'&˜'2ÊVÊBÜ◊6u≥£#“ê¢FV¬ˆf6W7vˆW'&˜'5≥¢”Ö–¢∆ˆrÁv&ÊñÊrÇ&f6W7v¢W2"¬◊6rê¢WÜ6WBWÜ6WFñˆ„†¢70††¶FVbˆf6W7vˆ∆7EˆW'&˜'5˜FWáBÇí”‚7G#†¢ñbÊ˜Bˆf6W7vˆW'&˜'3†¢&WGW&‚-ÌççÌ¢˝Ì≠›]" ¢&WGW&‚%∆‚"Ê¶ˆñ‚Ç.(
+""≤Rf˜"Rñ‚ˆf6W7vˆW'&˜'5≤”S•“ê††¶FVbˆf6W7vˆ7c%˜7FGW2Çí”‚7G#†¢ñbÊ˜Bd4U5tÙd4UÙDUDT5DîÙÂÙT‰$ƒTC†¢&WGW&‚&Fó6&∆VEˆ'ïˆVÁb ¢G'ì†¢ñ◊˜'B7c"2GóS¢ñvÊ˜&P¢fW"“vWFGG"Ü7c"¬%ı˜fW'6ñˆÂıÚ"¬""ê¢ñbÊ˜BÜ6GG"Ü7c"¬$666FT6∆76ñfñW""ì†¢&WGW&‚b$%$Ù¥T‚∑fW'”¢ÊÚ666FT6∆76ñfñW""Á7G&óÇê¢ñbÊ˜BÜ6GG"Ü7c"¬&FF"í˜"Ê˜BvWFGG"Ü7c"ÊFF¬&Ü&666FW2"¬""ì†¢&WGW&‚b$%$Ù¥T‚∑fW'”¢ÊÚÜ&666FW2"Á7G&óÇê¢&WGW&‚b&ˆ≤∑fW'“"Á7G&óÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢&WGW&‚b$dîƒTB∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“ ††¶7ñÊ2FVb6÷EˆFñuˆf6RáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢∆ñÊW2“∞¢b/	˙z¢f6U7vFñvÊ˜7Fñ2ÚµD4ÖıdU%4îÙÁ“"¿¢b$d4U5tÙT‰$ƒTC◊¥d4U5tÙT‰$ƒTG“&˜fñFW#◊¥d4U5tı$ıdîDU'“f∆∆&6≥◊¥d4U5tÙdƒƒ$4µı$ıdîDU'“"¿¢b&f7E˜&˜fñFW#◊¥d4U5tÙd5Eı$ıdîDU'“&V÷óV’˜&˜fñFW#◊¥d4U5tı$T‘ïT’ı$ıdîDU'“"¿¢b'F&vWEˆ6Üˆñ6S◊¥d4U5tÙ4µıD$tUEÙd4W“6˜W&6Uˆ6Üˆñ6S◊¥d4U5tÙ4µı4ıU$4UÙd4W“7G&ñ7E˜6V∆V7FVC◊¥d4U5tı5E$î5Eı4TƒT5DTEÙd4W“"¿¢b&÷ÁV≈ˆ6Üˆñ6UˆñeˆFWFV7FñˆÂˆfñ√◊¥d4U5tÙ‘ÂT≈Ù4ÑÙî4UÙîeÙDUDT5DîÙÂÙdî«“"¿¢b&f6UˆFWFV7Fñˆ„◊¥d4U5tÙd4UÙDUDT5DîÙÂÙT‰$ƒTG“7c#◊µˆf6W7vˆ7c%˜7FGW2Çó“FWFV7Eˆ÷É◊¥d4U5tÙDUDT5DîÙÂÙ‘Öı4îDW“&WfñWuˆ÷É◊¥d4U5tı$UdîUuÙ‘Öı4îDW“"¿¢b'&V6ó6Uˆ6ˆ◊˜6óFS◊¥d4U5tı$T4ï4UÙ4Ù’ı4ïDW“f˜&6U˜6Vv÷ñÊEˆ◊V«Fì◊¥d4U5tÙdı$4Uı4Tt‘î‰EÙdı%Ù’T≈Dó“6Vv÷ñÊEˆf∆∆&6≥◊¥d4U5tÙu$ıUÙƒƒıuı4Tt‘î‰EÙdƒƒ$4∑“"¿¢b&f6Uˆfñ«FW%˜&FñÛ◊¥d4U5tÙd4UÙ$ıÖÙdî≈DU%ı$Dî˜“6˜W&6Uˆ7&˜◊¥d4U5tı4ıU$4UÙ5$ıÙ‘$tîÁ“ÜñFUˆ÷&vñ„◊¥d4U5tıD$tUEÙÑîDUÙ‘$tîÁ“"¿¢b%îïÙïÙ¥Uì◊≤vˆ‚rñbîïÙïÙ¥UíV«6Rvˆfbw“&6S◊µîïÙ$4UıU$«“÷ˆFV√◊µîïÙd4UÙ‘ÙDT«“F6≥◊µîïÙd4UıD4µıEïW“"¿¢b%4Tt‘î‰EÙïÙ¥Uì◊≤vˆ‚rñb4Tt‘î‰EÙïÙ¥UíV«6Rvˆfbw“&6S◊µ4Tt‘î‰EÙ$4UıU$«“f7C◊µ4Tt‘î‰EÙd4U5tÙ‘ÙDT≈Ùd5G“&V÷óV”◊µ4Tt‘î‰EÙd4U5tÙ‘ÙDT≈ı$T‘ïT◊“"¿¢b'Fñ÷V˜WC◊¥d4U5tıDî‘TıUEı7◊2ˆ∆√◊¥d4U5tıÙƒ≈ÙDTƒïı7◊2ñÁWEˆ÷É◊¥d4U5tÙîÂUEÙ‘Öı4îDW“˜WGWEˆ÷É◊¥d4U5tÙıUEUEÙ‘Öı4îDW“"¿¢-	˝ÌΩ]M›çRÌçç≠É¢"¿¢ˆf6W7vˆ∆7EˆW'&˜'5˜FWáBÇí¿¢–¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2ï≥£3ì“ê††¶FVbf6U˜7v˜V∆óGïˆ∂"Çì†¢&WGW&‚ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb.)™	Ω-‚+rµ˜&WFñ≈ˆ7&VFóG2Ñd4U5tÙd5EÙ4ı5EıU4Bó“≠‚"¬6∆∆&6µˆFF“&f6W7vß'V„¶f7B"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb/	˘(‚	˝]Õç=¬+rµ˜&WFñ≈ˆ7&VFóG2Ñd4U5tı$T‘ïT’Ù4ı5EıU4Bó“≠‚"¬6∆∆&6µˆFF“&f6W7vß'V„ß&V÷óV“"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*»^˚àÚ	›}B"¬6∆∆&6µˆFF“'VFóC¶&6≤"ï“¿¢“ê††¶FVbˆó5ˆf6U˜7v˜&WVW7BáFWáC¢7G"í”‚&ˆˆ√†¢F¬“áFWáB˜"""íÁ7G&óÇíÊ∆˜vW"ÇíÁ&W∆6RÇ-"¬-R"ê¢&WGW&‚ÁíÜ≤ñ‚F¬f˜"≤ñ‚Ä¢-}Õ]›ÇΩçm‚"¬-}Õ]›ç-¬Ωçm‚"¬-˝ÌÕ]›˝íΩçm‚"¬-˝ÌÕ]›˝-¬Ωçm‚"¬-˝ÌM--¬Ωçm‚"¬----¬Ωçm‚"¿¢&f6R7v"¬&f6W7v"¬'7vf6R"¬'&W∆6Rf6R"¬-Õ]›Ωçm"¬-}Õ]›Ωçm ¢íê††¶FVb˜6WEˆf6W7v˜vóE˜6˜W&6RÜ6ˆÁFWáB¬F&vWEˆ'óFW3¢'óFW2ì†¢2
+]ΩÕ›ΩíW6W%ˆñB˝Ì≠çMΩ-]¬Ì-M]ΩÕ›‚"-Ω}Ì-R}]]rˆf6W7v˜F&vWEˆ66ÜR‡¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&vóE˜6˜W&6R ††¶FVbˆ6∆V%ˆf6W7vˆf∆˜rÜ6ˆÁFWáBì†¢f˜"≤ñ‚Ç&f6W7vˆf∆˜r"¬&vóFñÊu˜Ü˜Fıˆf˜""ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ü≤¬ÊˆÊRê††¶FVbˆ6∆V%ˆf6W7v˜W6W%ˆ66ÜRáW6W%ˆñC¢ñÁBì†¢f˜"Bñ‚Ä¢ˆf6W7v˜F&vWEˆ66ÜR¬ˆf6W7v˜6˜W&6Uˆ66ÜR¿¢ˆf6W7v˜F&vWEˆf6UˆñÊFWÖˆ66ÜR¬ˆf6W7v˜6˜W&6Uˆf6UˆñÊFWÖˆ66ÜR¿¢ˆf6W7v˜F&vWEˆf6Uˆ6˜VÁEˆ66ÜR¬ˆf6W7v˜6˜W&6Uˆf6Uˆ6˜VÁEˆ66ÜR¿¢ˆf6W7v˜F&vWEˆf6W5ˆ66ÜR¬ˆf6W7v˜6˜W&6Uˆf6W5ˆ66ÜR¿¢ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢BÁ˜áW6W%ˆñB¬ÊˆÊRê††¶FVbˆf6W7v˜F&vWEˆf˜"áW6W%ˆñC¢ñÁBí”‚'óFW2¬ÊˆÊS†¢&WGW&‚ˆf6W7v˜F&vWEˆ66ÜRÊvWBáW6W%ˆñBê††¶FVbˆf6W7v˜6˜W&6Uˆf˜"áW6W%ˆñC¢ñÁBí”‚'óFW2¬ÊˆÊS†¢&WGW&‚ˆf6W7v˜6˜W&6Uˆ66ÜRÊvWBáW6W%ˆñBê††¶FVbˆf6W7v˜6V∆V7FVE˜F&vWEˆñÊFWÇáW6W%ˆñC¢ñÁBí”‚ñÁC†¢&WGW&‚ñÁBÖˆf6W7v˜F&vWEˆf6UˆñÊFWÖˆ66ÜRÊvWBáW6W%ˆñB¬í˜"ê††¶FVbˆf6W7v˜6V∆V7FVE˜6˜W&6UˆñÊFWÇáW6W%ˆñC¢ñÁBí”‚ñÁC†¢&WGW&‚ñÁBÖˆf6W7v˜6˜W&6Uˆf6UˆñÊFWÖˆ66ÜRÊvWBáW6W%ˆñB¬í˜"ê††¶FVb˜&W6ó¶Uˆñ÷vUˆ'óFW5ˆf˜%ˆf6W7vˆíÜñ÷uˆ'óFW3¢'óFW2¬÷Ö˜6ñFS¢ñÁB¬ÊˆÊR“ÊˆÊRí”‚GW∆U∂'óFW2¬7G"¬7G%”†¢÷Ö˜6ñFR“ñÁBÜ÷Ö˜6ñFR˜"d4U5tÙîÂUEÙ‘Öı4îDR˜"cê¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2í˜"&ñ÷vRˆßVr ¢ñbñ÷vRó2ÊˆÊR˜"÷Ö˜6ñFR√“†¢WáB“"Êßr"ñb÷ñ÷R”“&ñ÷vRˆßVr"V«6RÇ"ÁÊr"ñb÷ñ÷R”“&ñ÷vR˜Êr"V«6R"ÁvV'"ê¢&WGW&‚ñ÷uˆ'óFW2¬b&f6W7v∂WáG“"¬÷ñ÷P¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢ñb÷ÇÜñ“Á6ó¶Rí‚÷Ö˜6ñFS†¢ñ“ÁFáV÷&Êñ¬ÇÜ÷Ö˜6ñFR¬÷Ö˜6ñFRí¬ñ÷vR‰ƒ‰5§ı2ê¢ñbñ“Ê÷ˆFRÊ˜Bñ‚Ç%$t""¬$¬"ì†¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢&ñÚ“'óFW4îÚÇê¢ñ“Á6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ì2¬˜Fñ÷ó¶S’G'VR¬&ˆw&W76ófS’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇí¬&f6W7vÊßr"¬&ñ÷vRˆßVr ¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb&f6W7vñÁWB&W6ó¶Rfñ∆VC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢WáB“"Êßr"ñb÷ñ÷R”“&ñ÷vRˆßVr"V«6RÇ"ÁÊr"ñb÷ñ÷R”“&ñ÷vR˜Êr"V«6R"ÁvV'"ê¢&WGW&‚ñ÷uˆ'óFW2¬b&f6W7v∂WáG“"¬÷ñ÷P††¶FVbˆ#cEˆf˜%ˆf6W7vÜñ÷uˆ'óFW3¢'óFW2í”‚7G#†¢"¬ˆÊ÷R¬÷ñ÷R“˜&W6ó¶Uˆñ÷vUˆ'óFW5ˆf˜%ˆf6W7vˆíÜñ÷uˆ'óFW2¬d4U5tÙîÂUEÙ‘Öı4îDRê¢&r“&6ScBÊ#cFVÊ6ˆFRÜ"íÊFV6ˆFRÇ&66ñí"ê¢ñbd4U5tÙî‘tUÙDDıU$√†¢&WGW&‚b&FFß∂÷ñ÷W”∂&6ScB«∑&w“ ¢&WGW&‚&p††¶FVbˆÊ˜&÷∆ó¶Uˆ˜WGWEˆñ÷vUˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2í”‚'óFW3†¢ñbñ÷vRó2ÊˆÊR˜"Ê˜Bñ÷uˆ'óFW2˜"d4U5tÙıUEUEÙ‘Öı4îDR√“†¢&WGW&‚ñ÷uˆ'óFW0¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢ñb÷ÇÜñ“Á6ó¶Rí‚d4U5tÙıUEUEÙ‘Öı4îDS†¢ñ“ÁFáV÷&Êñ¬ÇÑd4U5tÙıUEUEÙ‘Öı4îDR¬d4U5tÙıUEUEÙ‘Öı4îDRí¬ñ÷vR‰ƒ‰5§ı2ê¢˜WB“'óFW4îÚÇê¢ñbñ“Ê÷ˆFRñ‚Ç%$t$"¬$ƒ"ì†¢ñ“Á6fRÜ˜WB¬f˜&÷C“%‰r"¬˜Fñ÷ó¶S’G'VRê¢V«6S†¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢ñ“Á6fRÜ˜WB¬f˜&÷C“$•Tr"¬V∆óGì”ìB¬˜Fñ÷ó¶S’G'VR¬&ˆw&W76ófS’G'VRê¢&WGW&‚˜WBÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ„†¢&WGW&‚ñ÷uˆ'óFW0††¶FVbˆ÷ñ&U˜&W6ó¶Uˆ˜WGWEˆñ÷vRÜñ÷uˆ'óFW3¢'óFW2í”‚'óFW3†¢""$&6∑v&B÷6ˆ◊Fñ&∆R˜WGWB&W6ó¶RÜV«W"W6VB'íf6R7vóV∆ñÊR‚"" ¢&WGW&‚ˆÊ˜&÷∆ó¶Uˆ˜WGWEˆñ÷vUˆ'óFW2Üñ÷uˆ'óFW2ê††¶FVbˆFWFV7Eˆf6W5ˆf˜%ˆ6Üˆñ6RÜñ÷uˆ'óFW3¢'óFW2í”‚∆ó7E∂Fñ7E”†¢""-	Ì˝]M]Ω]›çRΩçbMΩÚTíÇ-ΩÌç›M]≠Ì"‡†¢	-m›Ωí˝≠-ç}]≠çíÕÌÕ]›#¢"]ΩÕ›ΩR-]-R˝Ì-ùM]≤-]ΩÇ]Ú-çΩÕ›]R¿¢≠Ì=Mç›M]≠≤Ωçb˝]]M-Ωç¬"-ç}=ΩÕ›Ì¬˝Ì˝M≠RΩ]-(i-›˝-‚‡¢	˝Ì›-ÌÕ2ïˆñÊFWÇ}M]¬ç›]Ì›ç}çÌ-“Fó7∆ïˆñÊFWÇ¬›RÌ-çÌ-≠Ìí˝‚}Õ]2‡¢	MÌ˝ÌΩ›ç-]ΩÕ›‚]m]¬ΩÌm›ΩR-Ω-›çÚçÕ]Ω≠çRÌ≠≤›ÌM]mMR˝MÌ›Rí‡¢"" ¢ñbÊ˜Bd4U5tÙd4UÙDUDT5DîÙÂÙT‰$ƒTB˜"ñ÷vRó2ÊˆÊS†¢&WGW&‚µ–¢G'ì†¢ñ◊˜'B7c"2GóS¢ñvÊ˜&P¢ñ◊˜'BÁV◊í2Á2GóS¢ñvÊ˜&P†¢FVbˆñ˜RÜ¢Fñ7B¬#¢Fñ7Bí”‚f∆ˆC†¢É¬ì¬É"¬ì"“≤'Ç%“¬≤'í%“¬≤'Ç%“≤≤'r%“¬≤'í%“≤≤&Ç%–¢'É¬'ì¬'É"¬'ì"“%≤'Ç%“¬%≤'í%“¬%≤'Ç%“≤%≤'r%“¬%≤'í%“≤%≤&Ç%–¢óÉ¬óì“÷ÇÜÉ¬'Éí¬÷ÇÜì¬'ìê¢óÉ"¬óì"“÷ñ‚ÜÉ"¬'É"í¬÷ñ‚Üì"¬'ì"ê¢ór¬ñÇ“÷ÇÉ¬óÉ"“óÉí¬÷ÇÉ¬óì"“óìê¢ñÁFW"“ór¢ñÄ¢ñbñÁFW"√“†¢&WGW&‚„ ¢VÊñˆ‚“≤&&V%“≤%≤&&V%““ñÁFW ¢&WGW&‚ÜñÁFW"ÚVÊñˆ‚íñbVÊñˆ‚‚V«6R„ †¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢˜&ñu˜r¬˜&ñuˆÇ“ñ“Á6ó¶P¢ñ÷uˆ&V“÷ÇÉ¬˜&ñu˜r¢˜&ñuˆÇê¢66∆R“„ ¢÷Ö˜6ñFR“ñÁBÑd4U5tÙDUDT5DîÙÂÙ‘Öı4îDR˜"#ê¢ñb÷Ö˜6ñFR‚ÊB÷ÇÜ˜&ñu˜r¬˜&ñuˆÇí‚÷Ö˜6ñFS†¢66∆R“÷Ö˜6ñFRÚf∆ˆBÜ÷ÇÜ˜&ñu˜r¬˜&ñuˆÇíê¢ñ’ˆFWB“ñ“Á&W6ó¶RÇÜ÷ÇÉ¬ñÁBÜ˜&ñu˜r¢66∆Ríí¬÷ÇÉ¬ñÁBÜ˜&ñuˆÇ¢66∆Rííí¬ñ÷vR‰ƒ‰5§ı2ê¢V«6S†¢ñ’ˆFWB“ñ–¢'"“ÁÊ'&íÜñ’ˆFWBê¢w&í“7c"Ê7gD6ˆ∆˜"Ü'"¬7c"‰4Ùƒı%ı$t#$u$íê¢666FU˜FÇ“˜2ÁFÇÊ¶ˆñ‚Ü7c"ÊFFÊÜ&666FW2¬&Ü&666FUˆg&ˆÁF∆f6UˆFVfV«BÁÜ÷¬"ê¢666FR“7c"‰666FT6∆76ñfñW"Ü666FU˜FÇê¢ñb666FRÊV◊GíÇì†¢ˆf6W7vˆÊ˜FUˆW'&˜"Ç&7c"Ü&666FUˆg&ˆÁF∆f6UˆFVfV«BÁÜ÷¬Ê˜B∆ˆFVB"ê¢&WGW&‚µ–¢f6W2“666FRÊFWFV7D◊V«Fï66∆RÜw&í¬66∆Tf7F˜#”„Ç¬÷ñ‰ÊVñvÜ&˜'3”R¬÷ñÂ6ó¶S“ÉC¬Cíê¢óFV◊2“µ–¢f˜"áÇ¬í¬r¬Çíñ‚f6W3†¢˜Ç“ñÁBá&˜VÊBáÇÚ66∆Ríì≤˜í“ñÁBá&˜VÊBáíÚ66∆Ríì≤˜r“ñÁBá&˜VÊBárÚ66∆Ríì≤ˆÇ“ñÁBá&˜VÊBÜÇÚ66∆Ríê¢ñb˜r¬#B˜"ˆÇ¬#C†¢6ˆÁFñÁVP¢&V“˜r¢ˆÄ¢2Ωçç≠Ì¬ÕΩ]›Õ≠çRÌ≠≤˝Ì}-Ç-]=MΩÌm›ΩR-Ω-›ç¢ñb&V¬÷ÇÉc¬ñÁBÜñ÷uˆ&V¢„Bíì†¢6ˆÁFñÁVP¢&FñÚ“Ü˜rÚf∆ˆBÜ÷ÇÉ¬ˆÇííê¢2Ωçç≠Ì¬-Ω-˝›=-ΩRÌ≠≤MΩÚ-ΩÌΩçm˝Ì}-Ç-]=Mç=¿¢ñb&FñÚ¬„cR˜"&FñÚ‚„CS†¢6ˆÁFñÁVP¢7Ç¬7í“˜Ç≤˜rÚ"¬˜í≤ˆÇÚ ¢óFV◊2ÊVÊBá≤'Ç#¢˜Ç¬'í#¢˜í¬'r#¢˜r¬&Ç#¢ˆÇ¬&&V#¢&V¬&7Ç#¢7Ç¬&7í#¢7ó“ê†¢ñbÊ˜BóFV◊3†¢&WGW&‚µ–†¢2‰’2ÚM]M=˝Ωç≠mçÚçΩÕ›‚˝]]≠Ω-Ìùç]ÚÌ≠Ì ¢FVGW“µ–¢f˜"bñ‚6˜'FVBÜóFV◊2¬∂Wì÷∆÷&F£¢•≤&&V%“¬&WfW'6S’G'VRì†¢ñbÁíÖˆñ˜RÜb¬∂WBí„“„3Rf˜"∂WBñ‚FVGWì†¢6ˆÁFñÁVP¢FVGWÊVÊBÜbê¢óFV◊2“FVGW †¢ñbÊ˜BóFV◊3†¢&WGW&‚µ–†¢2c3S¢ΩÌm›ΩRÌ≠≤›mçΩ]-R˝ÌM]mMR˝-]›R}-‚ΩΩÇÕ]›ÕçR]ΩÕ›ΩRΩçb‡¢2	MΩÚ-ΩÌΩçm"˝ÌM≠ç›RΩ=}çR˝Ì˝=-ç-¬Ì}]›¬Õ]Ω≠çRÌ≠≤¬}]¬M-¬˝ÌΩÕ}Ì--]Ω‡¢2-Ω-¬-Ωçm‚"¬≠Ì-ÌÌR˝Ì-ùM]}-]¬›RÕÌm]"Ì˝Ì--ç-¬‡¢ñb∆V‚ÜóFV◊2í‚†¢∆&vW7Eˆ&V“÷Çá•≤&&V%“f˜"¢ñ‚óFV◊2ê¢÷ñÂˆ∂VW“÷ÇÜñÁBÜ∆&vW7Eˆ&V¢÷ÇÉ„¬÷ñ‚É„É¬d4U5tÙd4UÙ$ıÖÙdî≈DU%ı$DîÚííí¬ñÁBÜñ÷uˆ&V¢„bíê¢óFV◊2“∑¢f˜"¢ñ‚óFV◊2ñb•≤&&V%“„“÷ñÂˆ∂VW–¢ñbÊ˜BóFV◊3†¢&WGW&‚µ–†¢2	]ΩÇ˝-›‚MÌÕç›ç=]"ÌM›‚Ωçm‚ç-ç˝ç}›Ωí]ΩMÇ›ç-Ì}›ç¢í¿¢2Ì-Ω-]¬Õ]Ω≠çRΩÌm›ΩRÌ≠≤›˝Ω]}R˝MÌ›R‡¢∆&vW7B“÷ÇÜóFV◊2¬∂Wì÷∆÷&F£¢•≤&&V%“ê¢6V6ˆÊEˆ&V“÷ÇÖ∑•≤&&V%“f˜"¢ñ‚óFV◊2ñb¢ó2Ê˜B∆&vW7E“˜"≥“ê¢Fˆ÷ñÊÁB“∆&vW7E≤&&V%“„“÷ÇÉ"„¢6V6ˆÊEˆ&V¬ñÁBÜñ÷uˆ&V¢„2íê¢ñbFˆ÷ñÊÁC†¢fñ«B“µ–¢f˜"bñ‚óFV◊3†¢ñbbó2∆&vW7C†¢fñ«BÊVÊBÜbê¢6ˆÁFñÁVP¢ñbe≤&&V%“„“∆&vW7E≤&&V%“¢„CS†¢fñ«BÊVÊBÜbê¢óFV◊2“fñ«@†¢2	ç-Ì=Ì-Ωí˝Ì˝MÌ£¢Ω]-›˝-‚¬}-]¬-]]2-›çr‡¢2
+-≠ÌímRç›M]≠˝]]M¬˝Ì-ùM]2‡¢Fó7∆í“6˜'FVBÜóFV◊2¬∂Wì÷∆÷&Fc¢Üe≤&7Ç%“¬e≤&7í%“íï≥£Ö–¢f˜"í¬bñ‚VÁV÷W&FRÜFó7∆í¬ì†¢e≤&Fó7∆ïˆñÊFWÇ%““ê¢e≤&ïˆñÊFWÇ%““í“¢ñb∆V‚ÜFó7∆íí”“#†¢e≤'˜5ˆ∆&V¬%““-Ω]-"ñbí”“V«6R-˝- ¢V∆ñb∆V‚ÜFó7∆íí”“3†¢e≤'˜5ˆ∆&V¬%““≤-Ω]-"¬-m]›-"¬-˝-%’∂í“–¢V«6S†¢e≤'˜5ˆ∆&V¬%““b-Ωçm‚∂ó“ ¢&WGW&‚Fó7∆ê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb&f6RFWFV7Fñˆ‚fñ∆VC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢&WGW&‚µ–††¶FVbˆf6Uˆ6Üˆñ6U˜&WfñWuˆ'óFW2Üñ÷uˆ'óFW3¢'óFW2¬f6W3¢∆ó7E∂Fñ7E“¬FóF∆S¢7G"“-	-Ω]ç-RΩçm‚"í”‚'óFW2¬ÊˆÊS†¢ñbñ÷vRó2ÊˆÊR˜"ñ÷vTG&ró2ÊˆÊR˜"Ê˜Bf6W3†¢&WGW&‚ÊˆÊP¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢66∆R“„ ¢÷Ö˜6ñFR“ñÁBÑd4U5tı$UdîUuÙ‘Öı4îDR˜"#ê¢ñb÷Ö˜6ñFR‚ÊB÷ÇÜñ“Á6ó¶Rí‚÷Ö˜6ñFS†¢66∆R“÷Ö˜6ñFRÚf∆ˆBÜ÷ÇÜñ“Á6ó¶Ríê¢ñ““ñ“Á&W6ó¶RÇÜ÷ÇÉ¬ñÁBÜñ“ÁvñGFÇ¢66∆Ríí¬÷ÇÉ¬ñÁBÜñ“ÊÜVñváB¢66∆Rííí¬ñ÷vR‰ƒ‰5§ı2ê¢G&r“ñ÷vTG&r‰G&rÜñ“ê¢G'ì†¢fˆÁEˆ&ñr“ñ÷vTfˆÁBÁG'VWGóRÇ$FV¶gU6Á2‘&ˆ∆BÁGFb"¬÷ÇÉ#B¬ñÁBÉC"¢66∆Rííê¢fˆÁE˜6÷∆¬“ñ÷vTfˆÁBÁG'VWGóRÇ$FV¶gU6Á2‘&ˆ∆BÁGFb"¬÷ÇÉB¬ñÁBÉ#"¢66∆Rííê¢WÜ6WBWÜ6WFñˆ„†¢fˆÁEˆ&ñr“ÊˆÊP¢fˆÁE˜6÷∆¬“ÊˆÊP¢2FóF∆R7G&ó ¢G&rÁ&V7FÊv∆RÖ≥¬¬ñ“ÁvñGFÇ¬÷ñ‚Üñ“ÊÜVñváB¬CBï“¬fñ∆√“É¬¬íê¢G&rÁFWáBÇÉ"¬Çí¬FóF∆R¬fñ∆√“É#SR¬#SR¬#SRí¬fˆÁC÷fˆÁE˜6÷∆¬ê¢f˜"bñ‚f6W3†¢Ç“ñÁBÜe≤'Ç%“¢66∆Rì≤í“ñÁBÜe≤'í%“¢66∆Rì≤r“ñÁBÜe≤'r%“¢66∆Rì≤Ç“ñÁBÜe≤&Ç%“¢66∆Rê¢∆&V¬“7G"ÜbÊvWBÇ&Fó7∆ïˆñÊFWÇ"í˜"bÊvWBÇ&ïˆñÊFWÇ"í˜"ê¢2	mΩ-ÚÕ≠≤}›Ú˝ÌMΩÌm≠›ÌÕ]]ÌÌç‚-çM›≤"FV∆Vw&“‡¢f˜"ˆfbñ‚&ÊvRÉBì†¢G&rÁ&V7FÊv∆RÖ∑Ç÷ˆfb¬í÷ˆfb¬Ç∑r∂ˆfb¬í∂Ç∂ˆfe“¬˜WF∆ñÊS“É#SR¬##¬íê¢«Ç¬«í“Ç¬÷ÇÉCB¬í“C"ê¢G&rÊV∆∆ó6RÖ∂«Ç¬«í¬«Ç≤C"¬«í≤C%“¬fñ∆√“É#SR¬##¬í¬˜WF∆ñÊS“É¬¬í¬vñGFÉ”"ê¢G&rÁFWáBÇÜ«Ç≤B¬«í≤bí¬∆&V¬¬fñ∆√“É¬¬í¬fˆÁC÷fˆÁEˆ&ñrê¢&ñÚ“'óFW4îÚÇê¢ñ“Á6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ì"¬˜Fñ÷ó¶S’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb&f6R6Üˆñ6R&WfñWrfñ∆VC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢&WGW&‚ÊˆÊP††¶FVbˆf6Uˆ6Üˆñ6Uˆ∂"á7FvS¢7G"¬f6W3¢∆ó7E∂Fñ7E“í”‚ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑W†¢'WGFˆÁ2“µ–¢&˜r“µ–¢f˜"bñ‚f6W5≥£Ö”†¢Fó7“ñÁBÜbÊvWBÇ&Fó7∆ïˆñÊFWÇ"í˜"ê¢ïˆñGÇ“ñÁBÜbÊvWBÇ&ïˆñÊFWÇ"í˜"ê¢˜2“7G"ÜbÊvWBÇ'˜5ˆ∆&V¬"í˜"""ê¢FWáB“b'∂Fó7“(	B∑˜7“"ñb˜2ÊBÊ˜B˜2Á7F'G7vóFÇÇ-Ωçm‚"íV«6Rb-	Ωçm‚∂Fó7“ ¢&˜rÊVÊBÑñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚áFWáB¬6∆∆&6µˆFF÷b&f6W7vß∑7FvW”ß∂ïˆñGá“"íê¢ñb∆V‚á&˜rí”“#†¢'WGFˆÁ2ÊVÊBá&˜rì≤&˜r“µ–¢ñb&˜s†¢'WGFˆÁ2ÊVÊBá&˜rê¢'WGFˆÁ2ÊVÊBÖ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*»^˚àÚ	Ì-Õ]›"¬6∆∆&6µˆFF“'VFóC¶&6≤"ï“ê¢&WGW&‚ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÜ'WGFˆÁ2ê††¶FVbˆ÷ÁV≈ˆf6Uˆ6Üˆñ6Uˆ∂"á7FvS¢7G"í”‚ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑W†¢2
+=}›Ìí-ΩÌ›=m]“¬]ΩÇM]-]≠-ÌΩçb›]MÌ-=˝]“˝ΩΩíçΩÇFV∆Vw&“˝çΩ≤ΩÌm›ÌR==˝˝Ì-ÌRMÌ-‚‡¢2	ç›M]≠≤˝]]MÌ-Ú˝Ì-ùM]¬≠¢F&vWEˆf6UˆñÊFWÇ˜6˜W&6Uˆf6UˆñÊFWÇ‡¢&WGW&‚ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘Ç	Ωçm‚Ω]-"¬6∆∆&6µˆFF÷b&f6W7vß∑7FvW”£"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯ÍÚ	Ωçm‚"m]›-R"¬6∆∆&6µˆFF÷b&f6W7vß∑7FvW”£"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘í	Ωçm‚˝-"¬6∆∆&6µˆFF÷b&f6W7vß∑7FvW”£""ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˙Ib	--‚Ú˝]-ÌRΩçm‚"¬6∆∆&6µˆFF÷b&f6W7vß∑7FvW”£"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*»^˚àÚ	Ì-Õ]›"¬6∆∆&6µˆFF“'VFóC¶&6≤"ï“¿¢“ê††¶7ñÊ2FVbˆ6µˆf6W7v˜6˜W&6U˜Ü˜FÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&vóE˜6˜W&6R ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯Í“
+-]˝]¬˝ççΩç-RMÌ-‚Ωçm¬≠Ì-ÌÌR›=m›‚---ç-¬Â∆Â∆‚ ¢-	-m›„¢ç˝ÌΩÕ}=ù-R-ÌΩÕ≠‚-ÌÇç}Ìm]›çÚçΩÇç}Ìm]›çÚ¬›≠Ì-ÌΩR2-]-¬˝-‚‚ ¢-	›]ΩÕ}Úç˝ÌΩÕ}Ì--¬M=›≠mç‚MΩÚÌÕ›¬ç›-m¬MÌ≠=Õ]›-Ì"¬ç›-çÕ›Ì=‚≠Ì›-]›-Ç-]MÌ›Ì›ΩR˝ÌMM]ΩÌ¢‚ ¢ê††¶7ñÊ2FVbˆ÷ñ&Uˆ6Üˆ˜6U˜F&vWEˆf6RáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬W6W%ˆñC¢ñÁB¬ñ÷s¢'óFW2ì†¢ˆf6W7v˜F&vWEˆ66ÜU∑W6W%ˆñE““ñ÷p¢f6W2“ˆFWFV7Eˆf6W5ˆf˜%ˆ6Üˆñ6RÜñ÷rê¢ˆf6W7v˜F&vWEˆf6W5ˆ66ÜU∑W6W%ˆñE““f6W0¢ˆf6W7v˜F&vWEˆf6Uˆ6˜VÁEˆ66ÜU∑W6W%ˆñE““∆V‚Üf6W2ê¢ˆf6W7v˜F&vWEˆf6UˆñÊFWÖˆ66ÜU∑W6W%ˆñE““ ¢ñbd4U5tÙ4µıD$tUEÙd4RÊB∆V‚Üf6W2í‚†¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&6Üˆ˜6U˜F&vWEˆf6R ¢&WfñWr“ˆf6Uˆ6Üˆñ6U˜&WfñWuˆ'óFW2Üñ÷r¬f6W2¬-	≠Ì=‚}Õ]›ç-√Ú	-Ω]ç-R›ÌÕ]Ωçm"ê¢FWáB“/	¯Í“	›MÌ-‚›ùM]›‚›]≠ÌΩÕ≠‚Ωçb‚	-Ω]ç-R¬2≠≠Ì=‚}]ΩÌ-]≠}Õ]›ç-¬Ωçm‚‚ ¢ñb&WfñWs†¢&ñÚ“'óFW4îÚá&WfñWrì≤&ñÚÊÊ÷R“&f6W5˜F&vWEˆ6Üˆñ6RÊßr ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜Ü˜FÚÑñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„◊FWáB¬&W«ïˆ÷&∑W’ˆf6Uˆ6Üˆñ6Uˆ∂"Ç'F&vWB"¬f6W2íê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBáFWáB¬&W«ïˆ÷&∑W’ˆf6Uˆ6Üˆñ6Uˆ∂"Ç'F&vWB"¬f6W2íê¢&WGW&‡¢ñbd4U5tÙ4µıD$tUEÙd4RÊBÊ˜Bf6W2ÊBd4U5tÙ‘ÂT≈Ù4ÑÙî4UÙîeÙDUDT5DîÙÂÙdî√†¢2	]ΩÇ˜V‰5b˝M]-]≠-Ì›R›ç≤Ωçm¬›R]¬›MÌÕ›ΩíñÊFWÇÕÌΩ}‡¢2	M¬˝ÌΩÕ}Ì--]Ω‚=}›Ìí-ΩÌ¢Ω]-ÌR˝m]›-˝˝-ÌR˝--‚‡¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&6Üˆ˜6U˜F&vWEˆf6R ¢ˆf6W7v˜F&vWEˆf6Uˆ6˜VÁEˆ66ÜU∑W6W%ˆñE““0¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯Í“	›RÕÌ2=-]]››‚Ì˝]M]Ωç-¬Ωçm›MÌ-‚‚	-Ω]ç-R-=}›=‚¬2≠≠Ì=‚}]ΩÌ-]≠}Õ]›ç-¬Ωçm„¢"¿¢&W«ïˆ÷&∑W’ˆ÷ÁV≈ˆf6Uˆ6Üˆñ6Uˆ∂"Ç'F&vWB"í¿¢ê¢&WGW&‡¢vóBˆ6µˆf6W7v˜6˜W&6U˜Ü˜FÚáWFFR¬6ˆÁFWáBê††¶7ñÊ2FVbˆ÷ñ&Uˆ6Üˆ˜6U˜6˜W&6Uˆf6RáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬W6W%ˆñC¢ñÁB¬ñ÷s¢'óFW2ì†¢ˆf6W7v˜6˜W&6Uˆ66ÜU∑W6W%ˆñE““ñ÷p¢f6W2“ˆFWFV7Eˆf6W5ˆf˜%ˆ6Üˆñ6RÜñ÷rê¢ˆf6W7v˜6˜W&6Uˆf6W5ˆ66ÜU∑W6W%ˆñE““f6W0¢ˆf6W7v˜6˜W&6Uˆf6Uˆ6˜VÁEˆ66ÜU∑W6W%ˆñE““∆V‚Üf6W2ê¢ˆf6W7v˜6˜W&6Uˆf6UˆñÊFWÖˆ66ÜU∑W6W%ˆñE““ ¢ñbd4U5tÙ4µı4ıU$4UÙd4RÊB∆V‚Üf6W2í‚†¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&6Üˆ˜6U˜6˜W&6Uˆf6R ¢&WfñWr“ˆf6Uˆ6Üˆñ6U˜&WfñWuˆ'óFW2Üñ÷r¬f6W2¬-
+}ÕΩçm‚-}˝-√Ú	-Ω]ç-R›ÌÕ]"ê¢FWáB“/	¯Í“	›MÌ-‚›ç-Ì}›ç≠R›ùM]›‚›]≠ÌΩÕ≠‚Ωçb‚	-Ω]ç-R¬}ÕΩçm‚---ç-¬‚ ¢ñb&WfñWs†¢&ñÚ“'óFW4îÚá&WfñWrì≤&ñÚÊÊ÷R“&f6W5˜6˜W&6Uˆ6Üˆñ6RÊßr ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜Ü˜FÚÑñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„◊FWáB¬&W«ïˆ÷&∑W’ˆf6Uˆ6Üˆñ6Uˆ∂"Ç'6˜W&6R"¬f6W2íê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBáFWáB¬&W«ïˆ÷&∑W’ˆf6Uˆ6Üˆñ6Uˆ∂"Ç'6˜W&6R"¬f6W2íê¢&WGW&‡¢ñbd4U5tÙ4µı4ıU$4UÙd4RÊBÊ˜Bf6W2ÊBd4U5tÙ‘ÂT≈Ù4ÑÙî4UÙîeÙDUDT5DîÙÂÙdî√†¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&6Üˆ˜6U˜6˜W&6Uˆf6R ¢ˆf6W7v˜6˜W&6Uˆf6Uˆ6˜VÁEˆ66ÜU∑W6W%ˆñE““0¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯Í“	›RÕÌ2=-]]››‚Ì˝]M]Ωç-¬Ωçm‚›ç-Ì}›ç¢‚	-Ω]ç-R-=}›=‚¬}ÕΩçm‚-}˝-√¢"¿¢&W«ïˆ÷&∑W’ˆ÷ÁV≈ˆf6Uˆ6Üˆñ6Uˆ∂"Ç'6˜W&6R"í¿¢ê¢&WGW&‡¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““'&VGí ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯Í“
+MÌ-‚Ωçm˝ÌΩ=}]›‚‚	-Ω]ç-R≠}]--‚}Õ]›≥¢"¬&W«ïˆ÷&∑W÷f6U˜7v˜V∆óGïˆ∂"Çíê††¶7ñÊ2FVbˆWáG&7Eˆñ÷vUˆ'óFW5ˆg&ˆ’ˆß6ˆÂˆ˜%˜&W7ˆÁ6Rá&W7¢áGGÇÂ&W7ˆÁ6R¬6∆ñVÁC¢áGGÇ‰7ñÊ46∆ñVÁBí”‚'óFW2¬ÊˆÊS†¢˜WB“vóBˆñ÷vUˆ'óFW5ˆg&ˆ’˜&W7ˆÁ6Rá&W7¬6∆ñVÁBê¢ñb˜WC†¢&WGW&‚˜W@¢G'ì†¢ˆ&¢“&W7Êß6ˆ‚Çê¢WÜ6WBWÜ6WFñˆ„†¢&WGW&‚ÊˆÊP¢W&¬“ˆfñÊEˆfó'7Eˆñ÷vU˜W&¬Üˆ&¢ê¢ñbW&√†¢'"“vóB6∆ñVÁBÊvWBáW&¬¬Fñ÷V˜WC”c„ê¢'"Á&ó6Uˆf˜%˜7FGW2Çê¢&WGW&‚'óFW2á'"Ê6ˆÁFVÁBê¢&WGW&‚ÊˆÊP†††¶FVbˆf6W7vˆñ÷vU˜6ó¶RÜñ÷uˆ'óFW3¢'óFW2í”‚GW∆U∂ñÁB¬ñÁE”†¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢&WGW&‚ñÁBÜñ“ÁvñGFÇí¬ñÁBÜñ“ÊÜVñváBê¢WÜ6WBWÜ6WFñˆ„†¢&WGW&‚É¬ê††¶FVbˆf6W7v˜66∆VEˆf6W2Üf6W3¢∆ó7E∂Fñ7E“¬ÊˆÊR¬7&5ˆ'óFW3¢'óFW2¬G7Eˆ'óFW3¢'óFW2í”‚∆ó7E∂Fñ7E”†¢""-	˝]]}ç--¬Ì≠≤Ωçbçrç]ÌM›Ì=‚}Õ]"}Õ]≠-ç›≠Ç¬]ΩÕ›‚Ì-˝-Ω˝]ÕÌí"í‚"" ¢ñbÊ˜Bf6W3†¢&WGW&‚µ–¢7r¬6Ç“ˆf6W7vˆñ÷vU˜6ó¶Rá7&5ˆ'óFW2ê¢Gr¬FÇ“ˆf6W7vˆñ÷vU˜6ó¶RÜG7Eˆ'óFW2ê¢ñb7r√“˜"6Ç√“˜"Gr√“˜"FÇ√“†¢&WGW&‚∂Fñ7BÜbíf˜"bñ‚f6W5–¢7Ç¬7í“GrÚf∆ˆBá7rí¬FÇÚf∆ˆBá6Çê¢˜WB“µ–¢f˜"bñ‚f6W3†¢r“Fñ7BÜbê¢u≤'Ç%““ñÁBá&˜VÊBÜf∆ˆBÜbÊvWBÇ'Ç"¬íí¢7Çíê¢u≤'í%““ñÁBá&˜VÊBÜf∆ˆBÜbÊvWBÇ'í"¬íí¢7ííê¢u≤'r%““÷ÇÉ¬ñÁBá&˜VÊBÜf∆ˆBÜbÊvWBÇ'r"¬íí¢7Çííê¢u≤&Ç%““÷ÇÉ¬ñÁBá&˜VÊBÜf∆ˆBÜbÊvWBÇ&Ç"¬íí¢7íííê¢u≤&7Ç%““u≤'Ç%“≤u≤'r%“Ú"„ ¢u≤&7í%““u≤'í%“≤u≤&Ç%“Ú"„ ¢u≤&&V%““u≤'r%“¢u≤&Ç%–¢˜WBÊVÊBÜrê¢&WGW&‚˜W@††¶FVbˆf6W7vˆvWEˆf6Uˆ'ïˆñÊFWÇÜf6W3¢∆ó7E∂Fñ7E“¬ÊˆÊR¬ñGÉ¢ñÁBí”‚Fñ7B¬ÊˆÊS†¢ñbÊ˜Bf6W3†¢&WGW&‚ÊˆÊP¢ñGÇ“ñÁBÜñGÇ˜"ê¢f˜"bñ‚f6W3†¢ñbñÁBÜbÊvWBÇ&ïˆñÊFWÇ"¬”ììííí”“ñGÇ˜"ñÁBÜbÊvWBÇ&Fó7∆ïˆñÊFWÇ"¬íí“”“ñGÉ†¢&WGW&‚Fñ7BÜbê¢ñb√“ñGÇ¬∆V‚Üf6W2ì†¢&WGW&‚Fñ7BÜf6W5∂ñGÖ“ê¢&WGW&‚ÊˆÊP††¶FVbˆf6W7vˆWáÊEˆ&˜ÇÜ&˜É¢Fñ7B¬vñGFÉ¢ñÁB¬ÜVñváC¢ñÁB¬÷&vñ„¢f∆ˆB“„R¿¢÷&vñÂ˜É¢f∆ˆB¬ÊˆÊR“ÊˆÊR¬÷&vñÂ˜ï˜W¢f∆ˆB¬ÊˆÊR“ÊˆÊR¿¢÷&vñÂ˜ïˆF˜v„¢f∆ˆB¬ÊˆÊR“ÊˆÊRí”‚GW∆U∂ñÁB¬ñÁB¬ñÁB¬ñÁE”†¢Ç¬í¬r¬Ç“ñÁBÜ&˜ÇÊvWBÇ'Ç"¬íí¬ñÁBÜ&˜ÇÊvWBÇ'í"¬íí¬ñÁBÜ&˜ÇÊvWBÇ'r"¬íí¬ñÁBÜ&˜ÇÊvWBÇ&Ç"¬íê¢7Ç“Ç≤rÚ"„ ¢◊Ç“f∆ˆBÜ÷&vñÂ˜Çñb÷&vñÂ˜Çó2Ê˜BÊˆÊRV«6R÷&vñ‚ê¢◊óR“f∆ˆBÜ÷&vñÂ˜ï˜Wñb÷&vñÂ˜ï˜Wó2Ê˜BÊˆÊRV«6R÷&vñ‚ê¢◊ñB“f∆ˆBÜ÷&vñÂ˜ïˆF˜v‚ñb÷&vñÂ˜ïˆF˜v‚ó2Ê˜BÊˆÊRV«6R÷&vñ‚ê¢É“ñÁBá&˜VÊBÜ7Ç“ár¢◊ÇíÚ"„íê¢É"“ñÁBá&˜VÊBÜ7Ç≤ár¢◊ÇíÚ"„íê¢ì“ñÁBá&˜VÊBáí“Ç¢Ü◊óR“„ííê¢ì"“ñÁBá&˜VÊBáí≤Ç≤Ç¢Ü◊ñB“„ííê¢&WGW&‚÷ÇÉ¬Éí¬÷ÇÉ¬ìí¬÷ñ‚ávñGFÇ¬É"í¬÷ñ‚ÜÜVñváB¬ì"ê††¶FVbˆf6W7vˆ7&˜˜6˜W&6Uˆf6RÜñ÷uˆ'óFW3¢'óFW2¬f6S¢Fñ7B¬ÊˆÊRí”‚'óFW3†¢""-	Ì--ç-¬"6˜W&6R-ÌΩÕ≠‚-Ω››ÌRΩçm‚‚
+›-‚=ç]"ΩÌm›ΩRç›M]≠≤›]ΩMÇ˝ÌM]mMR‚"" ¢ñbñ÷vRó2ÊˆÊR˜"Ê˜Bf6S†¢&WGW&‚ñ÷uˆ'óFW0¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢É¬ì¬É"¬ì"“ˆf6W7vˆWáÊEˆ&˜ÇÜf6R¬ñ“ÁvñGFÇ¬ñ“ÊÜVñváB¬÷&vñ„‘d4U5tı4ıU$4UÙ5$ıÙ‘$tî‚ê¢ñbÉ"√“É˜"ì"√“ì†¢&WGW&‚ñ÷uˆ'óFW0¢7&˜“ñ“Ê7&˜ÇáÉ¬ì¬É"¬ì"íê¢&ñÚ“'óFW4îÚÇê¢7&˜Á6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ìB¬˜Fñ÷ó¶S’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb'6˜W&6Rf6R7&˜fñ∆VC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢&WGW&‚ñ÷uˆ'óFW0††¶FVbˆf6W7vˆÜñFUˆ˜FÜW%ˆf6W2áF&vWEˆ'óFW3¢'óFW2¬f6W3¢∆ó7E∂Fñ7E“¬ÊˆÊR¬6V∆V7FVEˆñGÉ¢ñÁBí”‚'óFW3†¢""-
+≠Ω-¬-RΩçm¬≠ÌÕR-Ω››Ì=‚¬˝]]BÌ-˝-≠Ìí˝Ì-ùM]2‡†¢
+Mç›ΩÕ›Ωí]}=ΩÕ-"]-Ú›Rm]Ωç≠Ì√¢›çmRÕ≤-≠Ω]ç-]¬-ÌΩÕ≠‚ÌΩ-¬-Ω››Ì=‚Ωçm ¢Ì-›‚"ç]ÌM›Ωí≠M‚	˝Ì›-ÌÕ2-]Õ]››ÌR≠Ω-çRÌ]M›çRΩçb]}Ì˝›‚Ç]ç] ¢˝ÌΩ]Õ2¬≠Ì=MíÕ]›˝]"›R-Ì=‚}]ΩÌ-]≠‡¢"" ¢ñbñ÷vRó2ÊˆÊR˜"ñ÷vTfñ«FW"ó2ÊˆÊR˜"Ê˜Bf6W3†¢&WGW&‚F&vWEˆ'óFW0¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚáF&vWEˆ'óFW2íê¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“íñbñ÷vT˜2V«6Rñ–¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢6V∆V7FVB“ˆf6W7vˆvWEˆf6Uˆ'ïˆñÊFWÇÜf6W2¬6V∆V7FVEˆñGÇê¢ñbÊ˜B6V∆V7FVC†¢&WGW&‚F&vWEˆ'óFW0¢&«W'&VB“ñ“Êfñ«FW"Ññ÷vTfñ«FW"‰vW76ñ‰&«W"á&FóW3÷÷ÇÉÇ¬ñÁBÜ÷ÇÜñ“Á6ó¶Rí¢„#Ríííê¢f˜"bñ‚f6W3†¢ñbñÁBÜbÊvWBÇ&ïˆñÊFWÇ"¬”ììííí”“ñÁBá6V∆V7FVBÊvWBÇ&ïˆñÊFWÇ"¬”ÉÉÇíì†¢6ˆÁFñÁVP¢É¬ì¬É"¬ì"“ˆf6W7vˆWáÊEˆ&˜ÇÜb¬ñ“ÁvñGFÇ¬ñ“ÊÜVñváB¬÷&vñ„‘d4U5tıD$tUEÙÑîDUÙ‘$tî‚ê¢ñbÉ"√“É˜"ì"√“ì†¢6ˆÁFñÁVP¢F6Ç“&«W'&VBÊ7&˜ÇáÉ¬ì¬É"¬ì"íê¢ñ“Á7FRáF6Ç¬áÉ¬ìíê¢&ñÚ“'óFW4îÚÇê¢ñ“Á6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ìB¬˜Fñ÷ó¶S’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb&ÜñFR˜FÜW"f6W2fñ∆VC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢&WGW&‚F&vWEˆ'óFW0††¶FVbˆf6W7vˆ6ˆ◊˜6óFU˜6V∆V7FVE˜&Vvñˆ‚Ü˜&ñvñÊ≈˜F&vWEˆ'óFW3¢'óFW2¬&˜fñFW%ˆ˜WGWC¢'óFW2¬6V∆V7FVEˆf6S¢Fñ7B¬ÊˆÊRí”‚'óFW3†¢""-	-]›=-¬"ç]ÌM›Ωí≠M-ÌΩÕ≠‚ç}Õ]›››=‚ÌΩ-¬-Ω››Ì=‚Ωçm‚"" ¢ñbñ÷vRó2ÊˆÊR˜"ñ÷vTfñ«FW"ó2ÊˆÊR˜"Ê˜B6V∆V7FVEˆf6S†¢&WGW&‚&˜fñFW%ˆ˜WGW@¢G'ì†¢&6R“ñ÷vRÊ˜V‚Ñ'óFW4îÚÜ˜&ñvñÊ≈˜F&vWEˆ'óFW2íê¢&6R“ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜ&6Ríñbñ÷vT˜2V«6R&6P¢&6R“&6RÊ6ˆÁfW'BÇ%$t""ê¢˜WB“ñ÷vRÊ˜V‚Ñ'óFW4îÚá&˜fñFW%ˆ˜WGWBíê¢˜WB“ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜ˜WBíñbñ÷vT˜2V«6R˜W@¢˜WB“˜WBÊ6ˆÁfW'BÇ%$t""ê¢ñb˜WBÁ6ó¶R“&6RÁ6ó¶S†¢˜WB“˜WBÁ&W6ó¶RÜ&6RÁ6ó¶R¬ñ÷vR‰ƒ‰5§ı2ê¢É¬ì¬É"¬ì"“ˆf6W7vˆWáÊEˆ&˜ÇÄ¢6V∆V7FVEˆf6R¬&6RÁvñGFÇ¬&6RÊÜVñváB¿¢÷&vñÂ˜É‘d4U5tÙ4Ù’ı4ïDUÙ‘$tîÂıÇ¿¢÷&vñÂ˜ï˜W‘d4U5tÙ4Ù’ı4ïDUÙ‘$tîÂıïıU¿¢÷&vñÂ˜ïˆF˜v„‘d4U5tÙ4Ù’ı4ïDUÙ‘$tîÂıïÙDıt‚¿¢ê¢ñbÉ"√“É˜"ì"√“ì†¢&WGW&‚&˜fñFW%ˆ˜WGW@¢F6Ç“˜WBÊ7&˜ÇáÉ¬ì¬É"¬ì"íê¢÷6≤“ñ÷vRÊÊWrÇ$¬"¬áÉ"“É¬ì"“ìí¬ê¢÷B“ñ÷vTG&r‰G&rÜ÷6≤ê¢B“÷ÇÉ"¬ñÁBÜ÷ñ‚Ü÷6≤Á6ó¶Rí¢„Bíê¢÷BÁ&˜VÊFVE˜&V7FÊv∆RÖ∑B¬B¬÷6≤ÁvñGFÇ“B¬÷6≤ÊÜVñváB“E“¬&FóW3÷÷ÇÉ"¬ñÁBÜ÷ñ‚Ü÷6≤Á6ó¶Rí¢„#Çíí¬fñ∆√”#SRê¢÷6≤“÷6≤Êfñ«FW"Ññ÷vTfñ«FW"‰vW76ñ‰&«W"á&FóW3÷÷ÇÉb¬ñÁBÜ÷ñ‚Ü÷6≤Á6ó¶Rí¢„bíííê¢&6RÁ7FRáF6Ç¬áÉ¬ìí¬÷6≤ê¢&ñÚ“'óFW4îÚÇê¢&6RÁ6fRÜ&ñÚ¬f˜&÷C“$•Tr"¬V∆óGì”ìB¬˜Fñ÷ó¶S’G'VRê¢&WGW&‚&ñÚÊvWGf«VRÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb'6V∆V7FVBf6R6ˆ◊˜6óFRfñ∆VC¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢&WGW&‚&˜fñFW%ˆ˜WGW@††¶7ñÊ2FVb˜ñïˆf6W7váF&vWEˆñ÷s¢'óFW2¬6˜W&6Uˆf6S¢'óFW2¬V∆óGì¢7G"“&f7B"¬F&vWEˆñÊFWÉ¢ñÁB“¬6˜W&6UˆñÊFWÉ¢ñÁB“í”‚'óFW2¬ÊˆÊS†¢ñbÊ˜BîïÙïÙ¥Uì†¢ˆf6W7vˆÊ˜FUˆW'&˜"Ç%îïÙïÙ¥Uí÷ó76ñÊr"ê¢&WGW&‚ÊˆÊP¢F&vWEˆ#cB“ˆ#cEˆf˜%ˆf6W7váF&vWEˆñ÷rê¢6˜W&6Uˆ#cB“ˆ#cEˆf˜%ˆf6W7vá6˜W&6Uˆf6Rê¢W&¬“b'µîïÙ$4UıU$«◊µîïÙd4UÙ5$TDUıDá“ ¢ÜVFW'2“≤'Ç÷í÷∂Wí#¢îïÙïÙ¥Uí¬%Ç‘í‘∂Wí#¢îïÙïÙ¥Uí¬$6ˆÁFVÁB’GóR#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¬$66WB#¢&∆ñ6Fñˆ‚ˆß6ˆ‚'–¢ñ∆ˆB“∞¢&÷ˆFV¬#¢îïÙd4UÙ‘ÙDT¬¿¢'F6µ˜GóR#¢îïÙd4UıD4µıEïR¿¢&ñÁWB#¢∞¢'F&vWEˆñ÷vR#¢F&vWEˆ#cB¿¢'7vˆñ÷vR#¢6˜W&6Uˆ#cB¿¢2	]ΩÇîí›}›"˝ÌMM]mç--¬˝-›Ωíç›M]≠¬›-Ç˝ÌΩÚ=mR=M="˝]]M›≤‡¢'F&vWEˆf6UˆñÊFWÇ#¢ñÁBáF&vWEˆñÊFWÇ˜"í¿¢'6˜W&6Uˆf6UˆñÊFWÇ#¢ñÁBá6˜W&6UˆñÊFWÇ˜"í¿¢“¿¢–¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”c„¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%îí7&VFRfñ∆VB7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∑"ÁFWáE≥£ì◊“"ê¢&WGW&‚ÊˆÊP¢G'ì†¢ˆ&¢“"Êß6ˆ‚Çê¢WÜ6WBWÜ6WFñˆ„†¢ˆ&¢“∑–¢Fó&V7B“vóBˆWáG&7Eˆñ÷vUˆ'óFW5ˆg&ˆ’ˆß6ˆÂˆ˜%˜&W7ˆÁ6Rá"¬6∆ñVÁBê¢ñbFó&V7C†¢&WGW&‚ˆÊ˜&÷∆ó¶Uˆ˜WGWEˆñ÷vUˆ'óFW2ÜFó&V7Bê¢FF“ˆ&¢ÊvWBÇ&FF"íñbó6ñÁ7FÊ6RÜˆ&¢¬Fñ7BíV«6RÊˆÊP¢F6µˆñB“" ¢ñbó6ñÁ7FÊ6RÜFF¬Fñ7Bì†¢F6µˆñB“7G"ÜFFÊvWBÇ'F6µˆñB"í˜"FFÊvWBÇ&ñB"í˜"""ê¢F6µˆñB“F6µˆñB˜"7G"Üˆ&¢ÊvWBÇ'F6µˆñB"í˜"ˆ&¢ÊvWBÇ&ñB"í˜"""íñbó6ñÁ7FÊ6RÜˆ&¢¬Fñ7BíV«6R" ¢ñbÊ˜BF6µˆñC†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%îí7&VFR&WGW&ÊVBÊÚF6µˆñB&ˆGì◊∑7G"Üˆ&¢ï≥£ì◊“"ê¢&WGW&‚ÊˆÊP¢FVF∆ñÊR“Fñ÷RÊ÷ˆÊ˜FˆÊñ2Çí≤÷ÇÉ3„¬d4U5tıDî‘TıUEı2ê¢7FGW5˜W&¬“b'µîïÙ$4UıU$«◊µîïÙd4Uı5DEU5ıDÇÊf˜&÷BáF6µˆñC◊F6µˆñBó“ ¢∆7Eˆˆ&¢“ÊˆÊP¢vÜñ∆RFñ÷RÊ÷ˆÊ˜FˆÊñ2Çí¬FVF∆ñÊS†¢vóB7ñÊ6ñÚÁ6∆VWÜ÷ÇÉ„¬d4U5tıÙƒ≈ÙDTƒïı2íê¢'"“vóB6∆ñVÁBÊvWBá7FGW5˜W&¬¬ÜVFW'3÷ÜVFW'2ê¢ñb'"Á7FGW5ˆ6ˆFR„“C†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%îí7FGW2fñ∆VB7FGW3◊∑'"Á7FGW5ˆ6ˆFW“&ˆGì◊∑'"ÁFWáE≥£ì◊“"ê¢&WGW&‚ÊˆÊP¢G'ì†¢∆7Eˆˆ&¢“'"Êß6ˆ‚Çê¢WÜ6WBWÜ6WFñˆ„†¢∆7Eˆˆ&¢“∑–¢ñ÷r“vóBˆWáG&7Eˆñ÷vUˆ'óFW5ˆg&ˆ’ˆß6ˆÂˆ˜%˜&W7ˆÁ6Rá'"¬6∆ñVÁBê¢ñbñ÷s†¢&WGW&‚ˆÊ˜&÷∆ó¶Uˆ˜WGWEˆñ÷vUˆ'óFW2Üñ÷rê¢FF“∆7Eˆˆ&¢ÊvWBÇ&FF"íñbó6ñÁ7FÊ6RÜ∆7Eˆˆ&¢¬Fñ7BíV«6RÊˆÊP¢7B“" ¢ñbó6ñÁ7FÊ6RÜFF¬Fñ7Bì†¢7B“7G"ÜFFÊvWBÇ'7FGW2"í˜"FFÊvWBÇ'7FFR"í˜"""íÊ∆˜vW"Çê¢7B“7B˜"7G"Ü∆7Eˆˆ&¢ÊvWBÇ'7FGW2"í˜"∆7Eˆˆ&¢ÊvWBÇ'7FFR"í˜"""íÊ∆˜vW"Çíñbó6ñÁ7FÊ6RÜ∆7Eˆˆ&¢¬Fñ7BíV«6R" ¢ñb7Bñ‚Ç&fñ∆VB"¬&W'&˜""¬&6Ê6V∆VB"¬&6Ê6V∆∆VB"ì†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%îíF6≤fñ∆VB7FGW3◊∑7G“&ˆGì◊∑7G"Ü∆7Eˆˆ&¢ï≥£ì◊“"ê¢&WGW&‚ÊˆÊP¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%îíF6≤Fñ÷V˜WBgFW"¥d4U5tıDî‘TıUEı3¢„g◊2F6µˆñC◊∑F6µˆñG“"ê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVb˜6Vv÷ñÊEˆf6W7v˜c"áF&vWEˆñ÷s¢'óFW2¬6˜W&6Uˆf6S¢'óFW2¬F&vWEˆñÊFWÉ¢ñÁB“¬6˜W&6UˆñÊFWÉ¢ñÁB“í”‚'óFW2¬ÊˆÊS†¢ñbÊ˜B4Tt‘î‰EÙïÙ¥Uì†¢ˆf6W7vˆÊ˜FUˆW'&˜"Ç%4Tt‘î‰EÙïÙ¥Uí÷ó76ñÊr"ê¢&WGW&‚ÊˆÊP¢W&¬“b'µ4Tt‘î‰EÙ$4UıU$«“˜c˜µ4Tt‘î‰EÙd4U5tÙ‘ÙDT≈Ùd5G“ ¢ñ∆ˆB“∞¢'6˜W&6Uˆñ÷r#¢ˆ#cEˆf˜%ˆf6W7vá6˜W&6Uˆf6Rí¿¢'F&vWEˆñ÷r#¢ˆ#cEˆf˜%ˆf6W7váF&vWEˆñ÷rí¿¢&ñÁWEˆf6W5ˆñÊFWÇ#¢7G"ÜñÁBáF&vWEˆñÊFWÇ˜"íí¿¢'6˜W&6Uˆf6W5ˆñÊFWÇ#¢7G"ÜñÁBá6˜W&6UˆñÊFWÇ˜"íí¿¢&f6U˜&W7F˜&R#¢4Tt‘î‰EÙd4Uı$U5Dı$R¿¢&&6ScB#¢f«6R¿¢–¢ÜVFW'2“≤'Ç÷í÷∂Wí#¢4Tt‘î‰EÙïÙ¥Uí¬$6ˆÁFVÁB’GóR#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¬$66WB#¢&∆ñ6Fñˆ‚ˆß6ˆ‚'–¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC‘d4U5tıDî‘TıUEı2¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%6Vv÷ñÊBc"fñ∆VB7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∑"ÁFWáE≥£ì◊“"ê¢&WGW&‚ÊˆÊP¢ñ÷r“vóBˆWáG&7Eˆñ÷vUˆ'óFW5ˆg&ˆ’ˆß6ˆÂˆ˜%˜&W7ˆÁ6Rá"¬6∆ñVÁBê¢ñbñ÷s†¢&WGW&‚ˆÊ˜&÷∆ó¶Uˆ˜WGWEˆñ÷vUˆ'óFW2Üñ÷rê¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%6Vv÷ñÊBc"ÊÚ˜WGWB&ˆGì◊∑"ÁFWáE≥£ì◊“"ê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVb˜6Vv÷ñÊEˆf6W7v˜cBáF&vWEˆñ÷s¢'óFW2¬6˜W&6Uˆf6S¢'óFW2¬V∆óGì¢7G"“'&V÷óV“"í”‚'óFW2¬ÊˆÊS†¢ñbÊ˜B4Tt‘î‰EÙïÙ¥Uì†¢ˆf6W7vˆÊ˜FUˆW'&˜"Ç%4Tt‘î‰EÙïÙ¥Uí÷ó76ñÊr"ê¢&WGW&‚ÊˆÊP¢W&¬“b'µ4Tt‘î‰EÙ$4UıU$«“˜c˜µ4Tt‘î‰EÙd4U5tÙ‘ÙDT≈ı$T‘ïT◊“ ¢ñ∆ˆB“∞¢'6˜W&6Uˆñ÷vR#¢ˆ#cEˆf˜%ˆf6W7vá6˜W&6Uˆf6Rí¿¢'F&vWEˆñ÷vR#¢ˆ#cEˆf˜%ˆf6W7váF&vWEˆñ÷rí¿¢&÷ˆFV≈˜GóR#¢'V∆óGí"ñbV∆óGí”“'&V÷óV“"V«6R'7VVB"¿¢'7v˜GóR#¢4Tt‘î‰EÙd4Uı5tıEïR¿¢'7Gñ∆U˜GóR#¢4Tt‘î‰EÙd4Uı5EîƒUıEïR¿¢'6VVB#¢ñÁBáFñ÷RÁFñ÷RÇííR¿¢&ñ÷vUˆf˜&÷B#¢'Êr"¿¢&ñ÷vU˜V∆óGí#¢ìRñbV∆óGí”“'&V÷óV“"V«6Rì¿¢&Ü&Gv&R#¢&f7B"¿¢&&6ScB#¢f«6R¿¢–¢ÜVFW'2“≤'Ç÷í÷∂Wí#¢4Tt‘î‰EÙïÙ¥Uí¬$6ˆÁFVÁB’GóR#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¬$66WB#¢&∆ñ6Fñˆ‚ˆß6ˆ‚'–¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC‘d4U5tıDî‘TıUEı2¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢"“vóB6∆ñVÁBÁ˜7BáW&¬¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%6Vv÷ñÊBcBfñ∆VB7FGW3◊∑"Á7FGW5ˆ6ˆFW“&ˆGì◊∑"ÁFWáE≥£ì◊“"ê¢&WGW&‚ÊˆÊP¢ñ÷r“vóBˆWáG&7Eˆñ÷vUˆ'óFW5ˆg&ˆ’ˆß6ˆÂˆ˜%˜&W7ˆÁ6Rá"¬6∆ñVÁBê¢ñbñ÷s†¢&WGW&‚ˆÊ˜&÷∆ó¶Uˆ˜WGWEˆñ÷vUˆ'óFW2Üñ÷rê¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb%6Vv÷ñÊBcBÊÚ˜WGWB&ˆGì◊∑"ÁFWáE≥£ì◊“"ê¢&WGW&‚ÊˆÊP††¶FVbˆf6W7v˜&˜fñFW%˜7W˜'G5ˆñÊFñ6W2á&˜fñFW#¢7G"í”‚&ˆˆ√†¢&˜fñFW"“á&˜fñFW"˜"""íÊ∆˜vW"ÇíÁ7G&óÇê¢2	˝≠-ç≠-]-Ì"˝Ì≠}Ω†¢2“6Vv÷ñÊBc"M]ù--ç-]ΩÕ›‚=Õ]]"M]›Ωí-ΩÌΩçb˝‚ç›M]≠¬‡¢2“îíıV&ñ6ÚÕÌm]"=˝]ç›‚-˝-¬Ωçm¬›‚›RM"›Mm›Ìí=›-çÇ¿¢2}-‚F&vWEˆf6UˆñÊFWÇ˜6˜W&6Uˆf6UˆñÊFWÇ=M="ÌΩÌM]›≤MΩÚ==˝˝Ì-ΩRMÌ-‚‡¢2	˝Ì›-ÌÕ2MΩÚ-Ì=Ì=‚]mçÕ-ΩÌΩçm}ç-]¬ç›M]≠ç=]ÕΩ¬-ÌΩÕ≠‚6Vv÷ñÊBc"‡¢&WGW&‚&˜fñFW"ñ‚Ç'6Vv÷ñÊB"¬'6Vv÷ñÊB◊c""¬'6Vv÷ñÊC""ê††¶7ñÊ2FVb˜'VÂˆf6W7v˜&˜fñFW"á&˜fñFW#¢7G"¬F&vWEˆñ÷s¢'óFW2¬6˜W&6Uˆf6S¢'óFW2¬V∆óGì¢7G"¬F&vWEˆñÊFWÉ¢ñÁB“¬6˜W&6UˆñÊFWÉ¢ñÁB“í”‚'óFW2¬ÊˆÊS†¢&˜fñFW"“á&˜fñFW"˜"""íÊ∆˜vW"ÇíÁ7G&óÇê¢ñb&˜fñFW"ñ‚Ç'ñí"¬'í"¬'V&ñ6Ú"ì†¢&WGW&‚vóB˜ñïˆf6W7váF&vWEˆñ÷r¬6˜W&6Uˆf6R¬V∆óGì◊V∆óGí¬F&vWEˆñÊFWÉ◊F&vWEˆñÊFWÇ¬6˜W&6UˆñÊFWÉ◊6˜W&6UˆñÊFWÇê¢ñb&˜fñFW"ñ‚Ç'6Vv÷ñÊB"¬'6Vv÷ñÊB◊c""¬'6Vv÷ñÊC""ì†¢&WGW&‚vóB˜6Vv÷ñÊEˆf6W7v˜c"áF&vWEˆñ÷r¬6˜W&6Uˆf6R¬F&vWEˆñÊFWÉ◊F&vWEˆñÊFWÇ¬6˜W&6UˆñÊFWÉ◊6˜W&6UˆñÊFWÇê¢ñb&˜fñFW"ñ‚Ç'6Vv÷ñÊB◊cB"¬'6Vv÷ñÊCB"ì†¢&WGW&‚vóB˜6Vv÷ñÊEˆf6W7v˜cBáF&vWEˆñ÷r¬6˜W&6Uˆf6R¬V∆óGì◊V∆óGíê¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb'VÊ∂Ê˜v‚f6W7v&˜fñFW#◊∑&˜fñFW'“"ê¢&WGW&‚ÊˆÊP††¶FVbˆf6W7v˜&˜fñFW%ˆ˜&FW"áV∆óGì¢7G"¬W6W%ˆñC¢ñÁBí”‚∆ó7E∑7G%”†¢ñbV∆óGí”“'&V÷óV“#†¢&6R“¥d4U5tı$T‘ïT’ı$ıdîDU"¬d4U5tÙdƒƒ$4µı$ıdîDU"¬'6Vv÷ñÊB◊c""¬d4U5tı$ıdîDU%–¢V«6S†¢&6R“¥d4U5tÙd5Eı$ıdîDU"¬d4U5tı$ıdîDU"¬d4U5tÙdƒƒ$4µı$ıdîDU"¬'6Vv÷ñÊB◊c"%–¢6VV‚“µ–¢˜&FW"“∑f˜"ñ‚&6RñbÊBÊ˜Báñ‚6VV‚˜"6VV‚ÊVÊBáíï–¢6V∆V7FVEˆ◊V«Fí“Öˆf6W7v˜F&vWEˆf6Uˆ6˜VÁEˆ66ÜRÊvWBáW6W%ˆñB¬í˜"í‚˜"Öˆf6W7v˜6˜W&6Uˆf6Uˆ6˜VÁEˆ66ÜRÊvWBáW6W%ˆñB¬í˜"í‚†¢2c3S¢]ΩÇ˝ÌΩÕ}Ì--]Ω¬-Ωç≤Ωçm‚›==˝˝Ì-Ì¬MÌ-‚¬›RÌ-M¬}M}2îí‡¢2îí]ÌÌççíΩ-Ωí˝Ì-ùM]¬›‚"-]-RÌ“ç›Ì=Mç=›ÌçÌ-≤-Ω››Ωíç›M]≠‡¢2	MΩÚ-Ì}›Ì-ÇÌ--Ω˝]¬-ÌΩÕ≠‚6Vv÷ñÊC≤cBÕÌm]"ç˝ÌΩÕ}Ì--ÕÚ}]]ró6ˆ∆FR∂6ˆ◊˜6óFR¿¢2c"Ì--Úç›M]≠ç=]ÕΩ¬]}]-Ì¬¬]ΩÇ}]ç“‡¢ñbd4U5tÙdı$4Uı4Tt‘î‰EÙdı%Ù’T≈DíÊB6V∆V7FVEˆ◊V«Fì†¢6Vr“≤'6Vv÷ñÊB◊c"%–¢ñbV∆óGí”“'&V÷óV“"ÊBd4U5tÙu$ıUÙƒƒıuı4Tt‘î‰EÙdƒƒ$4≥†¢6VrÊVÊBÇ'6Vv÷ñÊB◊cB"ê¢V∆ñbV∆óGí“'&V÷óV“"ÊBd4U5tÙu$ıUÙƒƒıuı4Tt‘î‰EÙdƒƒ$4≥†¢6VrÊVÊBÇ'6Vv÷ñÊB◊cB"ê¢6VV„"“µ–¢&WGW&‚∑f˜"ñ‚6VrñbÊBÊ˜Báñ‚6VV„"˜"6VV„"ÊVÊBáíï–†¢ñbd4U5tı5E$î5Eı4TƒT5DTEÙd4RÊB6V∆V7FVEˆ◊V«Fì†¢ñÊFWÜVB“∑f˜"ñ‚˜&FW"ñbˆf6W7v˜&˜fñFW%˜7W˜'G5ˆñÊFñ6W2áï–¢ñbñÊFWÜVC†¢&WGW&‚ñÊFWÜV@¢ˆf6W7vˆÊ˜FUˆW'&˜"Ç'7G&ñ7BF&vWB˜6˜W&6Rf6R6Üˆñ6RÊVVG26Vv÷ñÊBf6W7v◊c"¬'WBÊÚñÊFWÜVB&˜fñFW"6ˆÊfñwW&VB"ê¢&WGW&‚˜&FW †¶7ñÊ2FVbˆf6W7v˜&ˆ6W72áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬V∆óGì¢7G"“&f7B"ì†¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@¢F&vWB“ˆf6W7v˜F&vWEˆf˜"áW6W%ˆñBê¢6˜W&6R“ˆf6W7v˜6˜W&6Uˆf˜"áW6W%ˆñBê¢F&vWEˆñÊFWÇ“ˆf6W7v˜6V∆V7FVE˜F&vWEˆñÊFWÇáW6W%ˆñBê¢6˜W&6UˆñÊFWÇ“ˆf6W7v˜6V∆V7FVE˜6˜W&6UˆñÊFWÇáW6W%ˆñBê¢ñbÊ˜BF&vWB˜"Ê˜B6˜W&6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›=m›≤"MÌ-„¢›}ΩMÌ-‚¬=MR}Õ]›ç-¬Ωçm‚¬}-]¬MÌ-‚ΩçmMΩÚ---≠Ç‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢ñbÊ˜Bd4U5tÙT‰$ƒTC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯Í“	}Õ]›Ωçm-]Õ]››‚Ì-≠ΩÌ}]›"›-Ìù≠R]-]‚"ê¢&WGW&‡†¢˜&ñvñÊ≈˜F&vWB“F&vW@¢F&vWEˆí¬˜F&vWEˆÊ÷R¬˜F&vWEˆ÷ñ÷R“˜&W6ó¶Uˆñ÷vUˆ'óFW5ˆf˜%ˆf6W7vˆíáF&vWB¬d4U5tÙîÂUEÙ‘Öı4îDRê¢F&vWEˆf6W5ˆí“ˆf6W7v˜66∆VEˆf6W2Öˆf6W7v˜F&vWEˆf6W5ˆ66ÜRÊvWBáW6W%ˆñBí¬F&vWB¬F&vWEˆíê¢6˜W&6Uˆf6W2“ˆf6W7v˜6˜W&6Uˆf6W5ˆ66ÜRÊvWBáW6W%ˆñBí˜"µ–¢6V∆V7FVE˜F&vWEˆf6R“ˆf6W7vˆvWEˆf6Uˆ'ïˆñÊFWÇáF&vWEˆf6W5ˆí¬F&vWEˆñÊFWÇê¢6V∆V7FVE˜6˜W&6Uˆf6R“ˆf6W7vˆvWEˆf6Uˆ'ïˆñÊFWÇá6˜W&6Uˆf6W2¬6˜W&6UˆñÊFWÇê†¢6V∆V7FVEˆ◊V«Fí“Öˆf6W7v˜F&vWEˆf6Uˆ6˜VÁEˆ66ÜRÊvWBáW6W%ˆñB¬í˜"í‚˜"Öˆf6W7v˜6˜W&6Uˆf6Uˆ6˜VÁEˆ66ÜRÊvWBáW6W%ˆñB¬í˜"í‚¢&˜fñFW%ˆ˜&FW"“ˆf6W7v˜&˜fñFW%ˆ˜&FW"áV∆óGí¬W6W%ˆñBê¢ñÊFWÜVEˆfñ∆&∆R“ÁíÖˆf6W7v˜&˜fñFW%˜7W˜'G5ˆñÊFñ6W2áíf˜"ñ‚&˜fñFW%ˆ˜&FW"ê¢&V6ó6R“&ˆˆ¬Ñd4U5tı$T4ï4UÙ4Ù’ı4ïDRÊB6V∆V7FVEˆ◊V«FíÊB6V∆V7FVE˜F&vWEˆf6RÊBÊ˜BñÊFWÜVEˆfñ∆&∆Rê¢&˜fñFW%˜F&vWB“ˆf6W7vˆÜñFUˆ˜FÜW%ˆf6W2áF&vWEˆí¬F&vWEˆf6W5ˆí¬F&vWEˆñÊFWÇíñb&V6ó6RV«6RF&vWEˆê¢&˜fñFW%˜6˜W&6R“ˆf6W7vˆ7&˜˜6˜W&6Uˆf6Rá6˜W&6R¬6V∆V7FVE˜6˜W&6Uˆf6Ríñb6V∆V7FVE˜6˜W&6Uˆf6RV«6R6˜W&6P¢&˜fñFW%˜F&vWEˆñÊFWÇ“ñb&V6ó6RV«6RF&vWEˆñÊFWÄ¢&˜fñFW%˜6˜W&6UˆñÊFWÇ“ñb6V∆V7FVE˜6˜W&6Uˆf6RV«6R6˜W&6UˆñÊFWÄ†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b/	¯Í“	}˝=≠‚}Õ]›2Ωçmá≤}	˝]Õç=¬rñbV∆óGí”“w&V÷óV“rV«6R}	Ω-‚w“í‚ ¢b-
+m]Ω]-ÌRΩçm‚(Ig∑F&vWEˆñÊFWÇ≤“‚	Ωçm‚›ç-Ì}›ç¢(Ig∑6˜W&6UˆñÊFWÇ≤“‚ ¢b-	˝Ì-ùM]≥¢≤r¬rÊ¶ˆñ‚á&˜fñFW%ˆ˜&FW"ó“‚ ¢-
+Ì]›˝‚ç]ÌM›ÌR-]Ω‚¬ÌM]mM2¬MÌ“Ç≠ÌÕ˝Ì}çmç‚‚	ÌΩ}›‚(	3É]≠=›N(
+b ¢ê†¢7ñÊ2FVbˆvÚÇì†¢˜WB“ÊˆÊP¢W6VE˜&˜fñFW"“" ¢f˜"&˜fñFW"ñ‚&˜fñFW%ˆ˜&FW#†¢G'ì†¢˜WB“vóB7ñÊ6ñÚÁvóEˆf˜"Ä¢˜'VÂˆf6W7v˜&˜fñFW"á&˜fñFW"¬&˜fñFW%˜F&vWB¬&˜fñFW%˜6˜W&6R¬V∆óGí¬F&vWEˆñÊFWÉ◊&˜fñFW%˜F&vWEˆñÊFWÇ¬6˜W&6UˆñÊFWÉ◊&˜fñFW%˜6˜W&6UˆñÊFWÇí¿¢Fñ÷V˜WC‘d4U5tıDî‘TıUEı2≤3¿¢ê¢ñb˜WC†¢W6VE˜&˜fñFW"“&˜fñFW ¢'&V∞¢WÜ6WB7ñÊ6ñÚÂFñ÷V˜WDW'&˜#†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb'∑&˜fñFW'“Fñ÷V˜WBgFW"¥d4U5tıDî‘TıUEı3¢„g◊2"ê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆf6W7vˆÊ˜FUˆW'&˜"Üb'∑&˜fñFW'“WÜ6WFñˆ„¢∑GóRÜRíÂıˆÊ÷Uı˜”¢∂W“"ê¢ñbÊ˜B˜WC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	›R=MΩÌ¬}Õ]›ç-¬Ωçm‚‚	˝ÌΩ]M›çRÌçç≠É•∆‚"≤ˆf6W7vˆ∆7EˆW'&˜'5˜FWáBÇíê¢&WGW&‚f«6P¢ñb&V6ó6S†¢2
+Ì]›˝]¬Ì-ΩÕ›ΩRΩçmÇMÌ“çrç]ÌM›Ì=‚≠M≤Õ]›˝]¬-ÌΩÕ≠‚-Ω››=‚ÌΩ-¬‡¢˜WB“ˆf6W7vˆ6ˆ◊˜6óFU˜6V∆V7FVE˜&Vvñˆ‚áF&vWEˆí¬˜WB¬6V∆V7FVE˜F&vWEˆf6Rê¢˜WB“ˆ÷ñ&U˜&W6ó¶Uˆ˜WGWEˆñ÷vRÜ˜WBê¢ˆ66ÜU˜Ü˜FÚáW6W%ˆñB¬˜WBê¢&ñÚ“'óFW4îÚÜ˜WBê¢6“Ä¢b/	¯Í“	Ωçm‚}Õ]›]›‚)»R
+]mç√¢≤}	˝]Õç=¬rñbV∆óGí”“w&V÷óV“rV«6R}	Ω-‚w“+r˝Ì-ùM]¢∑W6VE˜&˜fñFW'“‚ ¢b-
+m]Ω]-ÌRΩçm‚(Ig∑F&vWEˆñÊFWÇ≤“¬ç-Ì}›ç¢(Ig∑6˜W&6UˆñÊFWÇ≤“‚ ¢-
+]}=ΩÕ-"Ì]›“≠¢ç]ÌM›ÌRMÌ-‚MΩÚMΩÕ›]ùççRM]ù--çí‚ ¢ê¢ñbd4U5tı$U5T≈EÙ5ÙDÙ5T‘TÂC†¢&ñÚÊÊ÷R“&f6U˜7vÁÊr ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆFˆ7V÷VÁBÑñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6¬&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíê¢V«6S†¢&ñÚÊÊ÷R“&f6U˜7vÊßr ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜Ü˜FÚÑñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6¬&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíê¢ˆ6∆V%ˆf6W7vˆf∆˜rÜ6ˆÁFWáBê¢ˆ6∆V%ˆf6W7v˜W6W%ˆ66ÜRáW6W%ˆñBê¢&WGW&‚G'VP†¢W7B“d4U5tı$T‘ïT’Ù4ı5EıU4BñbV∆óGí”“'&V÷óV“"V«6Rd4U5tÙd5EÙ4ı5EıU4@¢vóB˜G'ï˜ï˜FÜVÂˆFÚáWFFR¬6ˆÁFWáB¬W6W%ˆñB¬&ñ÷r"¬W7B¬ˆvÚ¬&V÷V÷&W%ˆ∂ñÊC÷b&f6W7v˜∑V∆óGó“"ê†¶7ñÊ2FVb˜7F'Eˆf6W7vˆf∆˜ráWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2¬ÊˆÊR“ÊˆÊR¬W6Uˆ66ÜVC¢&ˆˆ¬“G'VRì†¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@¢F&vWB“ñ÷uˆ'óFW2˜"ÖˆvWEˆ66ÜVE˜Ü˜FÚáW6W%ˆñBíñbW6Uˆ66ÜVBV«6RÊˆÊRê¢ñbÊ˜BF&vWC†¢ˆ6∆V%ˆf6W7v˜W6W%ˆ66ÜRáW6W%ˆñBê¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&vóE˜F&vWB ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯Í“	}Õ]›Ωçm‚	˝ççΩç-R	›	Ì	-	Ì	RMÌ-‚¬=MR›=m›‚}Õ]›ç-¬Ωçm‚‚	]ΩÇ›MÌ-‚›]≠ÌΩÕ≠‚ΩÌM]í¬Ú˝Ì≠m2›ÌÕ]Ç˝Ì˝Ìç2-Ω-¬›=m›Ì=‚}]ΩÌ-]≠‚	}-]¬Ú˝Ì˝Ìç2MÌ-‚ΩçmMΩÚ---≠Ç‚ ¢ê¢&WGW&‡¢vóBˆ÷ñ&Uˆ6Üˆ˜6U˜F&vWEˆf6RáWFFR¬6ˆÁFWáB¬W6W%ˆñB¬F&vWBê†¢2)H)H)H)H)H)H)H)H)HvV$FFç-çM≤˝˝Ì˝ÌΩ›]›çÚí)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÂ˜vV&ˆFFáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢G'ì†¢vB“WFFRÊVffV7FófUˆ÷W76vRÁvV%ˆˆFF¢&r“vBÊFFñbvBV«6R" ¢FF“∑–¢G'ì†¢FF“ß6ˆ‚Ê∆ˆG2á&rê¢WÜ6WBWÜ6WFñˆ„†¢f˜"'Bñ‚á&r˜"""íÁ7∆óBÇ"b"ì†¢ñb#“"ñ‚'C†¢≤¬b“'BÁ7∆óBÇ#“"¬ê¢FF∂µ““`†¢Gó“ÜFFÊvWBÇ'GóR"í˜"FFÊvWBÇ&7Fñˆ‚"í˜"""íÊ∆˜vW"Çê¢ñ÷÷VFñFR“7G"ÜFFÊvWBÇ&ñ÷÷VFñFR"í˜"""íÊ∆˜vW"Çíñ‚Ç#"¬'G'VR"¬'ñW2"¬&ˆ‚"ê¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@†¢ñbGóñ‚Ç'7V'67&ñ&R"¬&'Wí"¬&'Wï˜7V""¬'7V""ì†¢FñW"“ÜFFÊvWBÇ'FñW""í˜"'&Ú"íÊ∆˜vW"Çê¢ñbFñW"Ê˜Bñ‚5T%5ıDîU%3†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›]ç}-]-›Ωí-çB‚	Ì-≠Ìù-R-›çm2-çMÌ"}›Ì-‚‚"ê¢&WGW&‡¢÷ˆÁFá2“÷ÇÉ¬÷ñ‚É"¬ñÁBÜFFÊvWBÇ&÷ˆÁFá2"í˜"ííê¢÷WFÜˆB“ÜFFÊvWBÇ&÷WFÜˆB"í˜"'ñˆıˆ∆¬"íÊ∆˜vW"Çê¢ñb÷WFÜˆBÊ˜Bñ‚îÙıÙDï$T5EÙ‘UDÑÙE3†¢÷WFÜˆB“'ñˆıˆ∆¬ †¢ñbñ÷÷VFñFRÊB˜ñˆıˆFó&V7Eˆ6ˆÊfñwW&VBÇì†¢G'ì†¢í“vóB˜ñˆıˆ7&VFUˆFó&V7E˜ñ÷VÁBáW6W%ˆñB¬FñW"¬÷ˆÁFá2¬÷WFÜˆBê¢ñ÷VÁEˆñB“7G"áíÊvWBÇ&ñB"í˜"""ê¢6ˆÊb“íÊvWBÇ&6ˆÊfó&÷Fñˆ‚"í˜"∑–¢ï˜W&¬“6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂ˜W&¬"í˜"6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂˆFF"í˜"6ˆÊbÊvWBÇ&WáFW&Ê≈˜W&¬"í˜"" ¢ñbÊ˜Bï˜W&√†¢&ó6R'VÁFñ÷TW'&˜"Ç%ñˆÙ∂76FñBÊ˜B&WGW&‚6ˆÊfó&÷Fñˆ‚U$¬"ê¢∆&V¬“îÙıÙDï$T5EÙ‘UDÑÙE5∂÷WFÜˆE’≤&∆&V¬%–¢◊6r“vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.*Ÿ
+-çB∑FñW"ÁWW"Çó“›∂÷ˆÁFá7“Õ]Â∆‚ ¢b-
+˝ÌÌ¢∂∆&V«“‚	›mÕç-R≠›Ì˝≠2MΩÚÌ˝Ω-≥≤˝ÌΩR˝ÌM--]mM]›çÚ˝ÌM˝ç≠≠-ç-ç=]-Ú--ÌÕ-ç}]≠Ç‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂∆&V«“(	B˝]]ù-Ç¢Ì˝Ω-R"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	M==Ìí˝ÌÌÌ˝Ω-≤"¬6∆∆&6µˆFF÷b'∆„ß∑FñW'“"ï“¿¢“í¿¢ê¢∑e˜6WBÄ¢b'ñˆÛßVÊFñÊsß∑ñ÷VÁEˆñG“"¿¢ß6ˆ‚ÊGV◊2á≤'W6W%ˆñB#¢W6W%ˆñB¬'FñW"#¢FñW"¬&÷ˆÁFá2#¢÷ˆÁFá2¬&÷WFÜˆB#¢÷WFÜˆG“¬VÁ7W&Uˆ66ñì‘f«6Rí¿¢ê¢6ˆÁFWáBÊ∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ä¢˜ˆ∆≈˜ñˆı˜7V'67&óFñˆÂ˜ñ÷VÁBÜ6ˆÁFWáB¬◊6rÊ6ÜBÊñB¬◊6rÊ÷W76vUˆñB¬W6W%ˆñB¬ñ÷VÁEˆñB¬FñW"¬÷ˆÁFá2ê¢ê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢∆ˆrÊWÜ6WFñˆ‚Ç%vV$ñ÷÷VFñFR7V'67&óFñˆ‚ñ÷VÁBfñ∆VC¢W2"¬WÜ2ê†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b-	ÌMÌÕΩ]›çR˝ÌM˝ç≠Ç∑FñW"ÁWW"Çó“›∂÷ˆÁFá7“Õ]Â∆Ì	-Ω]ç-R˝ÌÌÌ˝Ω-≥¢"¿¢&W«ïˆ÷&∑W◊∆Â˜ïˆ∂"áFñW"í¿¢ê¢&WGW&‡†¢ñbGóñ‚Ç'F˜W˜'V""¬''V%˜F˜W"¬&'Wïˆ7&VFóG2"¬&7&VFóE˜6≤"ì†¢&WVW7FVE˜'V"“ñÁBÜFFÊvWBÇ&÷˜VÁB"í˜"FFÊvWBÇ''V""í˜"ê¢&WVW7FVEˆ7&VFóG2“ñÁBÜFFÊvWBÇ&7&VFóG2"í˜"ê¢&W6ˆ«fVB“ˆ7&VFóE˜6µ˜&W6ˆ«fRá&WVW7FVEˆ7&VFóG2¬&WVW7FVE˜'V"ê¢ñbÊ˜B&W6ˆ«fVC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›]ç}-]-›Ωí˝≠]"≠]Mç-Ì"‚	Ì-≠Ìù-R-›çm2-çMÌ"}›Ì-‚‚"ê¢&WGW&‡¢7&VFóG2¬÷˜VÁE˜'V"“&W6ˆ«fV@¢÷WFÜˆB“ÜFFÊvWBÇ&÷WFÜˆB"í˜"'ñˆıˆ∆¬"íÊ∆˜vW"Çê¢ñb÷WFÜˆBÊ˜Bñ‚îÙıÙDï$T5EÙ‘UDÑÙE3†¢÷WFÜˆB“'ñˆıˆ∆¬ †¢ñbñ÷÷VFñFRÊB˜ñˆıˆFó&V7Eˆ6ˆÊfñwW&VBÇì†¢G'ì†¢í“vóB˜ñˆıˆ7&VFUˆ7&VFóE˜ñ÷VÁBáW6W%ˆñB¬7&VFóG2¬÷˜VÁE˜'V"¬÷WFÜˆBê¢ñ÷VÁEˆñB“7G"áíÊvWBÇ&ñB"í˜"""ê¢6ˆÊb“íÊvWBÇ&6ˆÊfó&÷Fñˆ‚"í˜"∑–¢ï˜W&¬“6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂ˜W&¬"í˜"6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂˆFF"í˜"6ˆÊbÊvWBÇ&WáFW&Ê≈˜W&¬"í˜"" ¢ñbÊ˜Bï˜W&√†¢&ó6R'VÁFñ÷TW'&˜"Ç%ñˆÙ∂76FñBÊ˜B&WGW&‚6ˆÊfó&÷Fñˆ‚U$¬"ê¢∆&V¬“îÙıÙDï$T5EÙ‘UDÑÙE5∂÷WFÜˆE’≤&∆&V¬%–¢◊6r“vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b/	˙©í	˝≠]#¢∂7&VFóG7“≠]Mç-Ì"}∂÷˜VÁE˜'V'“(+“Â∆‚ ¢b-
+˝ÌÌ¢∂∆&V«“‚	˝ÌΩRÌ˝Ω-≤≠]Mç-≤›}çΩ˝-Ú--ÌÕ-ç}]≠Ç‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂∆&V«“(	B˝]]ù-Ç¢Ì˝Ω-R"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	M==çR˝≠]-≤"¬6∆∆&6µˆFF“'F˜W"ï“¿¢“í¿¢ê¢∑e˜6WBÄ¢b'ñˆÛ¶7&VFóE˜VÊFñÊsß∑ñ÷VÁEˆñG“"¿¢ß6ˆ‚ÊGV◊2á≤'W6W%ˆñB#¢W6W%ˆñB¬&7&VFóG2#¢7&VFóG2¬&÷˜VÁE˜'V"#¢÷˜VÁE˜'V"¬&÷WFÜˆB#¢÷WFÜˆG“¬VÁ7W&Uˆ66ñì‘f«6Rí¿¢ê¢6ˆÁFWáBÊ∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ä¢˜ˆ∆≈˜ñˆıˆ7&VFóE˜ñ÷VÁBÜ6ˆÁFWáB¬◊6rÊ6ÜBÊñB¬◊6rÊ÷W76vUˆñB¬W6W%ˆñB¬ñ÷VÁEˆñB¬7&VFóG2¬÷˜VÁE˜'V"ê¢ê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢∆ˆrÊWÜ6WFñˆ‚Ç%vV$ñ÷÷VFñFR7&VFóBñ÷VÁBfñ∆VC¢W2"¬WÜ2ê†¢vóB˜6VÊEˆñÁfˆñ6U˜'V"Ä¢b'∂7&VFóG7“≠]Mç-Ì""¿¢b-	˝Ì˝ÌΩ›]›çRΩ›ÊWó&Ú‘&˜C¢∂7&VFóG7“≠]Mç-Ì"‚"¿¢÷˜VÁE˜'V"¿¢b'F˜Wß∂7&VFóG7”ß∂÷˜VÁE˜'V'“"¿¢WFFR¿¢ê¢&WGW&‡†¢ñbGóñ‚Ç'F˜Wˆ7'óFÚ"¬&7'óFı˜F˜W"ì†¢ñbÊ˜B5%ïDııïÙïıDÙ¥T„†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ$7'óFÙ&˜B›R›-Ì]“‚"ê¢&WGW&‡¢W6B“f∆ˆBÜFFÊvWBÇ'W6B"í˜"ê¢ñÁeˆñB¬ï˜W&¬¬W6Eˆ÷˜VÁB¬76WB“vóBˆ7'óFıˆ7&VFUˆñÁfˆñ6RáW6B¬76WC“%U4EB"ê¢ñbÊ˜BñÁeˆñB˜"Ê˜Bï˜W&√†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬Ì}M-¬}""7'óFÙ&˜B‚"ê¢&WGW&‡¢◊6r“vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b-	Ì˝Ω-ç-R}]]r7'óFÙ&˜C¢∑W6Eˆ÷˜VÁC¢„&g“∂76WG“(i"µˆ7&VFóG5ˆf◊Eˆg&ˆ’˜W6BáW6Eˆ÷˜VÁBó“‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘*7'óFÙ&˜B"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘H‚	˝Ì-]ç-¬"¬6∆∆&6µˆFF÷b&7'óFÛ¶6ÜV6≥ß∂ñÁeˆñG“"ï“¿¢“í¿¢ê¢6ˆÁFWáBÊ∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ä¢˜ˆ∆≈ˆ7'óFıˆñÁfˆñ6RÜ6ˆÁFWáB¬◊6rÊ6ÜEˆñB¬◊6rÊ÷W76vUˆñB¬W6W%ˆñB¬ñÁeˆñB¬W6Eˆ÷˜VÁBê¢ê¢&WGW&‡†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	˝ÌΩ=}]›≤M››ΩRçrÕç›Ç›˝çΩÌm]›çÚ¬›‚≠ÌÕ›M›R˝Ì}››‚"ê¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢∆ˆrÊWÜ6WFñˆ‚Ç&ˆÂ˜vV&ˆFFW'&˜#¢W2"¬WÜ2ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	Ìçç≠ÌÌ-≠ÇM››ΩRÕç›Ç›˝çΩÌm]›çÚ‚"ê†††¢2)H)H)H)H)H)H)H)H)HcìC¢ñ÷VÁBFVW÷∆ñÊ≤f∆∆&6≤)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÜÊF∆U˜ñ÷VÁE˜7F'E˜ñ∆ˆBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRí”‚&ˆˆ√†¢&w2“∑7G"áÇ˜"""íÁ7G&óÇíÊ∆˜vW"Çíf˜"Çñ‚Ü6ˆÁFWáBÊ&w2˜"µ“ï–¢ñbÊ˜B&w3†¢&WGW&‚f«6P¢ñ∆ˆB“&w5≥–¢7V%ˆ÷“∞¢'ï˜7V%˜7F'B#¢'7F'B"¿¢'ï˜7V%˜&Ú#¢'&Ú"¿¢'ï˜7V%˜V«Fñ÷FR#¢'V«Fñ÷FR"¿¢–¢6µˆ÷“∞¢'ï˜6µÛ#¢É¬ììí¿¢'ï˜6µÛ3#¢É3¬#sìí¿¢'ï˜6µÛs#¢És¬c#ìí¿¢–¢ñbñ∆ˆBÊ˜Bñ‚7V%ˆ÷ÊBñ∆ˆBÊ˜Bñ‚6µˆ÷†¢&WGW&‚f«6P¢ñbÊ˜B˜ñˆıˆFó&V7Eˆ6ˆÊfñwW&VBÇì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	Ì˝Ω-
+‰∂76]ù}›R›-Ì]›‚	Ì-≠Ìù-R*Ÿ	˝ÌM˝ç≠+r	˝ÌÕÌù¬çΩÇ›˝ççç-R"˝ÌMM]m≠2‚ ¢ê¢&WGW&‚G'VP†¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@¢÷WFÜˆB“'ñˆıˆ∆¬ ¢∆&V¬“îÙıÙDï$T5EÙ‘UDÑÙE5∂÷WFÜˆE’≤&∆&V¬%–¢G'ì†¢ñbñ∆ˆBñ‚7V%ˆ÷†¢FñW"“7V%ˆ÷∑ñ∆ˆE–¢÷ˆÁFá2“¢í“vóB˜ñˆıˆ7&VFUˆFó&V7E˜ñ÷VÁBáW6W%ˆñB¬FñW"¬÷ˆÁFá2¬÷WFÜˆBê¢ñ÷VÁEˆñB“7G"áíÊvWBÇ&ñB"í˜"""ê¢6ˆÊb“íÊvWBÇ&6ˆÊfó&÷Fñˆ‚"í˜"∑–¢ï˜W&¬“7G"Ü6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂ˜W&¬"í˜"6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂˆFF"í˜"6ˆÊbÊvWBÇ&WáFW&Ê≈˜W&¬"í˜"""ê¢ñbÊ˜Bñ÷VÁEˆñB˜"Ê˜Bï˜W&√†¢&ó6R'VÁFñ÷TW'&˜"Ç%ñˆÙ∂76FñBÊ˜B&WGW&‚6ˆÊfó&÷Fñˆ‚U$¬"ê¢◊6r“vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.*Ÿ
+-çB∑FñW"ÁWW"Çó“›∂÷ˆÁFá7“Õ]Â∆Ì	›mÕç-R≠›Ì˝≠2MΩÚÌ˝Ω-≥≤˝ÌΩR˝ÌM--]mM]›çÚ˝ÌM˝ç≠≠-ç-ç=]-Ú--ÌÕ-ç}]≠Ç‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂∆&V«“(	B˝]]ù-Ç¢Ì˝Ω-R"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	M==Ìí˝ÌÌÌ˝Ω-≤"¬6∆∆&6µˆFF÷b'∆„ß∑FñW'“"ï“¿¢“í¿¢ê¢∑e˜6WBÄ¢b'ñˆÛßVÊFñÊsß∑ñ÷VÁEˆñG“"¿¢ß6ˆ‚ÊGV◊2á≤'W6W%ˆñB#¢W6W%ˆñB¬'FñW"#¢FñW"¬&÷ˆÁFá2#¢÷ˆÁFá2¬&÷WFÜˆB#¢÷WFÜˆG“¬VÁ7W&Uˆ66ñì‘f«6Rí¿¢ê¢6ˆÁFWáBÊ∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ä¢˜ˆ∆≈˜ñˆı˜7V'67&óFñˆÂ˜ñ÷VÁBÜ6ˆÁFWáB¬◊6rÊ6ÜBÊñB¬◊6rÊ÷W76vUˆñB¬W6W%ˆñB¬ñ÷VÁEˆñB¬FñW"¬÷ˆÁFá2ê¢ê¢&WGW&‚G'VP†¢7&VFóG2¬÷˜VÁE˜'V"“6µˆ÷∑ñ∆ˆE–¢í“vóB˜ñˆıˆ7&VFUˆ7&VFóE˜ñ÷VÁBáW6W%ˆñB¬7&VFóG2¬÷˜VÁE˜'V"¬÷WFÜˆBê¢ñ÷VÁEˆñB“7G"áíÊvWBÇ&ñB"í˜"""ê¢6ˆÊb“íÊvWBÇ&6ˆÊfó&÷Fñˆ‚"í˜"∑–¢ï˜W&¬“7G"Ü6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂ˜W&¬"í˜"6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂˆFF"í˜"6ˆÊbÊvWBÇ&WáFW&Ê≈˜W&¬"í˜"""ê¢ñbÊ˜Bñ÷VÁEˆñB˜"Ê˜Bï˜W&√†¢&ó6R'VÁFñ÷TW'&˜"Ç%ñˆÙ∂76FñBÊ˜B&WGW&‚6ˆÊfó&÷Fñˆ‚U$¬"ê¢◊6r“vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b/	˙©í	˝≠]#¢∂7&VFóG7“≠]Mç-Ì"}∂÷˜VÁE˜'V'“(+“Â∆Ì	˝ÌΩRÌ˝Ω-≤≠]Mç-≤›}çΩ˝-Ú--ÌÕ-ç}]≠Ç‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂∆&V«“(	B˝]]ù-Ç¢Ì˝Ω-R"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	M==çR˝≠]-≤"¬6∆∆&6µˆFF“'F˜W"ï“¿¢“í¿¢ê¢∑e˜6WBÄ¢b'ñˆÛ¶7&VFóE˜VÊFñÊsß∑ñ÷VÁEˆñG“"¿¢ß6ˆ‚ÊGV◊2á≤'W6W%ˆñB#¢W6W%ˆñB¬&7&VFóG2#¢7&VFóG2¬&÷˜VÁE˜'V"#¢÷˜VÁE˜'V"¬&÷WFÜˆB#¢÷WFÜˆG“¬VÁ7W&Uˆ66ñì‘f«6Rí¿¢ê¢6ˆÁFWáBÊ∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ä¢˜ˆ∆≈˜ñˆıˆ7&VFóE˜ñ÷VÁBÜ6ˆÁFWáB¬◊6rÊ6ÜBÊñB¬◊6rÊ÷W76vUˆñB¬W6W%ˆñB¬ñ÷VÁEˆñB¬7&VFóG2¬÷˜VÁE˜'V"ê¢ê¢&WGW&‚G'VP¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢∆ˆrÊWÜ6WFñˆ‚Ç%ñ÷VÁBFVW÷∆ñÊ≤f∆∆&6≤fñ∆VC¢W2"¬WÜ2ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬Ì}M-¬}"‚	˝Ì˝Ì=ù-R]ùrçΩÇ-Ω]ç-RÌ˝Ω-2}]]r*Ÿ	˝ÌM˝ç≠+r	˝ÌÕÌù¬‚"ê¢&WGW&‚G'VP††¢2)H)H)H)H)H)H)H)H)HcìC¢6W'fW"◊6ñFR6ÜV6∂˜WB'&ñFvRf˜"ñÊ∆ñÊRÙ÷VÁR÷ñÊí2)H)H)H)H)H)H)H)H)H ¶FVb˜f∆ñFFU˜FV∆Vw&’˜vV&ˆñÊóEˆFFÜñÊóEˆFF¢7G"¬÷ÖˆvU˜3¢ñÁB“ÉcCí”‚Fñ7C†¢""%f∆ñFFRFV∆Vw&“÷ñÊíñÊóDFFÊB&WGW&‚'6VBfñV∆G2‡†¢ñÊ∆ñÊRÙ÷VÁR÷ñÊí2&V6VófRVW'ïˆñBÊB◊W7B6ˆ÷◊VÊñ6FRFá&˜VvÇ¢6W'fW"◊6ñFR'&ñFvR‚ÊWfW"G'W7BW6W"ñB˜"W&6Ü6R&÷WFW'2g&ˆ“•0¢vóFÜ˜WBf∆ñFFñÊrñÊóDFFW6ñÊrFÜR&˜BFˆ∂V‚‡¢"" ¢&r“ÜñÊóEˆFF˜"""íÁ7G&óÇê¢ñbÊ˜B&s†¢&ó6Rf«VTW'&˜"Ç%FV∆Vw&“ñÊóDFFó2V◊Gí"ê¢ó'2“W&∆∆ñ"Á'6RÁ'6U˜6¬á&r¬∂VWˆ&∆Êµ˜f«VW3’G'VRê¢FF“∑7G"Ü≤ì¢7G"ábíf˜"≤¬bñ‚ó'7–¢&V6VófVEˆÜ6Ç“FFÁ˜Ç&Ü6Ç"¬""ê¢2f˜"&˜B◊Fˆ∂V‚Ñ‘2f∆ñFFñˆ‚¬∆¬&V6VófVBfñV∆G2WÜ6WBÜ6Ç&V÷ñ‡¢2ñ‚FÜRFF÷6ÜV6≤7G&ñÊr¬ñÊ6«VFñÊrFÜR˜FñˆÊ¬6ñvÊGW&RfñV∆B‡¢ñbÊ˜B&V6VófVEˆÜ6É†¢&ó6Rf«VTW'&˜"Ç%FV∆Vw&“ñÊóDFFÜ6Çó2÷ó76ñÊr"ê¢FFˆ6ÜV6µ˜7G&ñÊr“%∆‚"Ê¶ˆñ‚Üb'∂∑”◊∂FF∂µ◊“"f˜"≤ñ‚6˜'FVBÜFFíê¢6V7&WEˆ∂Wí“Ü÷2ÊÊWrÜ"%vV$FF"¬$ıEıDÙ¥T‚ÊVÊ6ˆFRÇ'WFb”Ç"í¬Ü6Ü∆ñ"Á6Ü#SbíÊFñvW7BÇê¢6∆7V∆FVEˆÜ6Ç“Ü÷2ÊÊWrá6V7&WEˆ∂Wí¬FFˆ6ÜV6µ˜7G&ñÊrÊVÊ6ˆFRÇ'WFb”Ç"í¬Ü6Ü∆ñ"Á6Ü#SbíÊÜWÜFñvW7BÇê¢ñbÊ˜BÜ÷2Ê6ˆ◊&UˆFñvW7BÜ6∆7V∆FVEˆÜ6Ç¬&V6VófVEˆÜ6Çì†¢&ó6Rf«VTW'&˜"Ç%FV∆Vw&“ñÊóDFF6ñvÊGW&Ró2ñÁf∆ñB"ê¢WFÖˆFFR“ñÁBÜFFÊvWBÇ&WFÖˆFFR"í˜"ê¢Ê˜u˜G2“ñÁBáFñ÷RÁFñ÷RÇíê¢ñbÊ˜BWFÖˆFFR˜"WFÖˆFFR‚Ê˜u˜G2≤c˜"Ê˜u˜G2“WFÖˆFFR‚÷ÖˆvU˜3†¢&ó6Rf«VTW'&˜"Ç%FV∆Vw&“ñÊóDFFÜ2Wáó&VB"ê¢W6W%˜&r“FFÊvWBÇ'W6W""í˜"'∑“ ¢G'ì†¢W6W"“ß6ˆ‚Ê∆ˆG2áW6W%˜&rê¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢&ó6Rf«VTW'&˜"Ç%FV∆Vw&“ñÊóDFFW6W"ó2ñÁf∆ñB"íg&ˆ“WÜ0¢W6W%ˆñB“ñÁBáW6W"ÊvWBÇ&ñB"í˜"ê¢ñbW6W%ˆñB√“†¢&ó6Rf«VTW'&˜"Ç%FV∆Vw&“W6W"ñBó2÷ó76ñÊr"ê¢FF≤'W6W%ˆˆ&¢%““W6W ¢FF≤'W6W%ˆñB%““W6W%ˆñ@¢&WGW&‚FF††¶FVbˆñÁ7F∆≈˜vV&ˆ6ÜV6∂˜WEˆ'&ñFvRÜ∆ñ6Fñˆ‚ì†¢""$WáFVÊBD"w2F˜&ÊFÚvV&Üˆˆ≤vóFÇ˜vV&ˆ6ÜV6∂˜WB‡†¢D"#„bFˆW2Ê˜BWá˜6R7W7Fˆ“&˜WFW2ñ‚'VÂ˜vV&Üˆˆ≤¬6ÚFÜó2&W∆6W2ˆÊ«ê¢FÜR6÷∆¬ñÁFW&Ê¬vV&Üˆˆ¥6∆72vÜñ∆R&W6W'fñÊrFV∆Vw&‘ÜÊF∆W"‡¢"" ¢G'ì†¢ñ◊˜'BF˜&ÊFÚÁvV ¢ñ◊˜'BFV∆Vw&“ÊWáBÂ˜WFFW"2F%˜WFFW ¢g&ˆ“FV∆Vw&“ÊWáBÂ˜WFñ«2ÁvV&Üˆˆ∂ÜÊF∆W"ñ◊˜'BFV∆Vw&‘ÜÊF∆W ¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢∆ˆrÊWÜ6WFñˆ‚Ç$6ÜV6∂˜WB'&ñFvRFWVÊFVÊ6ñW2VÊfñ∆&∆S¢W2"¬WÜ2ê¢&WGW&‚f«6P†¢6∆726ÜV6∂˜WD'&ñFvTÜÊF∆W"áF˜&ÊFÚÁvV"Â&WVW7DÜÊF∆W"ì†¢FVb6WEˆFVfV«EˆÜVFW'2á6V∆bì†¢6V∆bÁ6WEˆÜVFW"Ç$6ˆÁFVÁB’GóR"¬&∆ñ6Fñˆ‚ˆß6ˆ„≤6Ü'6WC◊WFb”Ç"ê¢6V∆bÁ6WEˆÜVFW"Ç$66W72‘6ˆÁG&ˆ¬‘∆∆˜r‘˜&ñvñ‚"¬"¢"ê¢6V∆bÁ6WEˆÜVFW"Ç$66W72‘6ˆÁG&ˆ¬‘∆∆˜r‘ÜVFW'2"¬$6ˆÁFVÁB’GóR"ê¢6V∆bÁ6WEˆÜVFW"Ç$66W72‘6ˆÁG&ˆ¬‘∆∆˜r‘÷WFÜˆG2"¬%ı5B¬ıDîÙÂ2"ê¢6V∆bÁ6WEˆÜVFW"Ç$66ÜR‘6ˆÁG&ˆ¬"¬&ÊÚ◊7F˜&R"ê†¢7ñÊ2FVbvWBá6V∆bì†¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á≤&ˆ≤#¢G'VR¬'fW'6ñˆ‚#¢D4ÖıdU%4îÙ‚¬'&˜WFR#¢"˜vV&ˆ6ÜV6∂˜WB'“¬VÁ7W&Uˆ66ñì‘f«6Ríê†¢7ñÊ2FVbÜVBá6V∆bì†¢6V∆bÁ6WE˜7FGW2É#Bê¢6V∆bÊfñÊó6ÇÇê†¢7ñÊ2FVb˜FñˆÁ2á6V∆bì†¢6V∆bÁ6WE˜7FGW2É#Bê¢6V∆bÊfñÊó6ÇÇê†¢7ñÊ2FVb˜7Bá6V∆bì†¢G'ì†¢ñbÊ˜B˜ñˆıˆFó&V7Eˆ6ˆÊfñwW&VBÇì†¢6V∆bÁ6WE˜7FGW2ÉS2ê¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á≤&ˆ≤#¢f«6R¬&W'&˜"#¢%ñˆÙ∂76Fó&V7Bíó2Ê˜B6ˆÊfñwW&VB'“¬VÁ7W&Uˆ66ñì‘f«6Ríê¢&WGW&‡¢G'ì†¢&ˆGí“ß6ˆ‚Ê∆ˆG2á6V∆bÁ&WVW7BÊ&ˆGíÊFV6ˆFRÇ'WFb”Ç"í˜"'∑“"ê¢WÜ6WBWÜ6WFñˆ„†¢6V∆bÁ6WE˜7FGW2ÉCê¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á≤&ˆ≤#¢f«6R¬&W'&˜"#¢$ñÁf∆ñB•4Ù‚'“¬VÁ7W&Uˆ66ñì‘f«6Ríê¢&WGW&‡¢ñÊóEˆFF“7G"Ü&ˆGíÊvWBÇ&ñÊóEˆFF"í˜"""ê¢W&6Ü6R“&ˆGíÊvWBÇ'W&6Ü6R"í˜"∑–¢ñbÊ˜Bó6ñÁ7FÊ6RáW&6Ü6R¬Fñ7Bì†¢&ó6Rf«VTW'&˜"Ç$ñÁf∆ñBW&6Ü6Rñ∆ˆB"ê¢f∆ñFFVB“˜f∆ñFFU˜FV∆Vw&’˜vV&ˆñÊóEˆFFÜñÊóEˆFFê¢W6W%ˆñB“ñÁBáf∆ñFFVE≤'W6W%ˆñB%“ê¢Gó“7G"áW&6Ü6RÊvWBÇ'GóR"í˜"W&6Ü6RÊvWBÇ&7Fñˆ‚"í˜"""íÊ∆˜vW"Çê¢÷WFÜˆB“7G"áW&6Ü6RÊvWBÇ&÷WFÜˆB"í˜"'ñˆıˆ∆¬"íÊ∆˜vW"Çê¢ñb÷WFÜˆBÊ˜Bñ‚îÙıÙDï$T5EÙ‘UDÑÙE3†¢÷WFÜˆB“'ñˆıˆ∆¬ †¢ñbGóñ‚Ç'7V'67&ñ&R"¬&'Wí"¬&'Wï˜7V""¬'7V""ì†¢FñW"“7G"áW&6Ü6RÊvWBÇ'FñW""í˜"'&Ú"íÊ∆˜vW"Çê¢ñbFñW"Ê˜Bñ‚5T%5ıDîU%3†¢&ó6Rf«VTW'&˜"Ç%VÊ∂Ê˜v‚7V'67&óFñˆ‚FñW""ê¢÷ˆÁFá2“÷ÇÉ¬÷ñ‚É"¬ñÁBáW&6Ü6RÊvWBÇ&÷ˆÁFá2"í˜"ííê¢í“vóB˜ñˆıˆ7&VFUˆFó&V7E˜ñ÷VÁBáW6W%ˆñB¬FñW"¬÷ˆÁFá2¬÷WFÜˆBê¢ñ÷VÁEˆñB“7G"áíÊvWBÇ&ñB"í˜"""ê¢6ˆÊb“íÊvWBÇ&6ˆÊfó&÷Fñˆ‚"í˜"∑–¢ï˜W&¬“7G"Ü6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂ˜W&¬"í˜"6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂˆFF"í˜"6ˆÊbÊvWBÇ&WáFW&Ê≈˜W&¬"í˜"""ê¢ñbÊ˜Bñ÷VÁEˆñB˜"Ê˜Bï˜W&√†¢&ó6R'VÁFñ÷TW'&˜"Ç%ñˆÙ∂76FñBÊ˜B&WGW&‚6ˆÊfó&÷Fñˆ‚U$¬"ê¢∆&V¬“îÙıÙDï$T5EÙ‘UDÑÙE5∂÷WFÜˆE’≤&∆&V¬%–¢◊6r“vóB∆ñ6Fñˆ‚Ê&˜BÁ6VÊEˆ÷W76vRÄ¢6ÜEˆñC◊W6W%ˆñB¿¢FWáC“Ä¢b.*Ÿ
+-çB∑FñW"ÁWW"Çó“›∂÷ˆÁFá7“Õ]Â∆‚ ¢b-
+˝ÌÌ¢∂∆&V«“‚	›mÕç-R≠›Ì˝≠2MΩÚÌ˝Ω-≥≤˝ÌΩR˝ÌM--]mM]›çÚ˝ÌM˝ç≠≠-ç-ç=]-Ú--ÌÕ-ç}]≠Ç‚ ¢í¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂∆&V«“(	B˝]]ù-Ç¢Ì˝Ω-R"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	M==Ìí˝ÌÌÌ˝Ω-≤"¬6∆∆&6µˆFF÷b'∆„ß∑FñW'“"ï“¿¢“í¿¢ê¢∑e˜6WBÄ¢b'ñˆÛßVÊFñÊsß∑ñ÷VÁEˆñG“"¿¢ß6ˆ‚ÊGV◊2á≤'W6W%ˆñB#¢W6W%ˆñB¬'FñW"#¢FñW"¬&÷ˆÁFá2#¢÷ˆÁFá2¬&÷WFÜˆB#¢÷WFÜˆG“¬VÁ7W&Uˆ66ñì‘f«6Rí¿¢ê¢6ñ◊∆Uˆ6ˆÁFWáB“GóW2Â6ñ◊∆TÊ÷W76RÜ&˜C÷∆ñ6Fñˆ‚Ê&˜Bê¢∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ä¢˜ˆ∆≈˜ñˆı˜7V'67&óFñˆÂ˜ñ÷VÁBá6ñ◊∆Uˆ6ˆÁFWáB¬◊6rÊ6ÜBÊñB¬◊6rÊ÷W76vUˆñB¬W6W%ˆñB¬ñ÷VÁEˆñB¬FñW"¬÷ˆÁFá2ê¢ê¢&W7V«B“≤&ˆ≤#¢G'VR¬'W&¬#¢ï˜W&¬¬'ñ÷VÁEˆñB#¢ñ÷VÁEˆñB¬&∂ñÊB#¢'7V'67&óFñˆ‚'–†¢V∆ñbGóñ‚Ç'F˜W˜'V""¬''V%˜F˜W"¬&'Wïˆ7&VFóG2"¬&7&VFóE˜6≤"ì†¢&WVW7FVE˜'V"“ñÁBáW&6Ü6RÊvWBÇ&÷˜VÁB"í˜"W&6Ü6RÊvWBÇ''V""í˜"ê¢&WVW7FVEˆ7&VFóG2“ñÁBáW&6Ü6RÊvWBÇ&7&VFóG2"í˜"ê¢&W6ˆ«fVB“ˆ7&VFóE˜6µ˜&W6ˆ«fRá&WVW7FVEˆ7&VFóG2¬&WVW7FVE˜'V"ê¢ñbÊ˜B&W6ˆ«fVC†¢&ó6Rf«VTW'&˜"Ç%VÊ∂Ê˜v‚7&VFóB6∂vR"ê¢7&VFóG2¬÷˜VÁE˜'V"“&W6ˆ«fV@¢í“vóB˜ñˆıˆ7&VFUˆ7&VFóE˜ñ÷VÁBáW6W%ˆñB¬7&VFóG2¬÷˜VÁE˜'V"¬÷WFÜˆBê¢ñ÷VÁEˆñB“7G"áíÊvWBÇ&ñB"í˜"""ê¢6ˆÊb“íÊvWBÇ&6ˆÊfó&÷Fñˆ‚"í˜"∑–¢ï˜W&¬“7G"Ü6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂ˜W&¬"í˜"6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂˆFF"í˜"6ˆÊbÊvWBÇ&WáFW&Ê≈˜W&¬"í˜"""ê¢ñbÊ˜Bñ÷VÁEˆñB˜"Ê˜Bï˜W&√†¢&ó6R'VÁFñ÷TW'&˜"Ç%ñˆÙ∂76FñBÊ˜B&WGW&‚6ˆÊfó&÷Fñˆ‚U$¬"ê¢∆&V¬“îÙıÙDï$T5EÙ‘UDÑÙE5∂÷WFÜˆE’≤&∆&V¬%–¢◊6r“vóB∆ñ6Fñˆ‚Ê&˜BÁ6VÊEˆ÷W76vRÄ¢6ÜEˆñC◊W6W%ˆñB¿¢FWáC“Ä¢b/	˙©í	˝≠]#¢∂7&VFóG7“≠]Mç-Ì"}∂÷˜VÁE˜'V'“(+“Â∆‚ ¢b-
+˝ÌÌ¢∂∆&V«“‚	˝ÌΩRÌ˝Ω-≤≠]Mç-≤›}çΩ˝-Ú--ÌÕ-ç}]≠Ç‚ ¢í¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂∆&V«“(	B˝]]ù-Ç¢Ì˝Ω-R"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	M==çR˝≠]-≤"¬6∆∆&6µˆFF“'F˜W"ï“¿¢“í¿¢ê¢∑e˜6WBÄ¢b'ñˆÛ¶7&VFóE˜VÊFñÊsß∑ñ÷VÁEˆñG“"¿¢ß6ˆ‚ÊGV◊2á≤'W6W%ˆñB#¢W6W%ˆñB¬&7&VFóG2#¢7&VFóG2¬&÷˜VÁE˜'V"#¢÷˜VÁE˜'V"¬&÷WFÜˆB#¢÷WFÜˆG“¬VÁ7W&Uˆ66ñì‘f«6Rí¿¢ê¢6ñ◊∆Uˆ6ˆÁFWáB“GóW2Â6ñ◊∆TÊ÷W76RÜ&˜C÷∆ñ6Fñˆ‚Ê&˜Bê¢∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ä¢˜ˆ∆≈˜ñˆıˆ7&VFóE˜ñ÷VÁBá6ñ◊∆Uˆ6ˆÁFWáB¬◊6rÊ6ÜBÊñB¬◊6rÊ÷W76vUˆñB¬W6W%ˆñB¬ñ÷VÁEˆñB¬7&VFóG2¬÷˜VÁE˜'V"ê¢ê¢&W7V«B“≤&ˆ≤#¢G'VR¬'W&¬#¢ï˜W&¬¬'ñ÷VÁEˆñB#¢ñ÷VÁEˆñB¬&∂ñÊB#¢&7&VFóG2'–¢V«6S†¢&ó6Rf«VTW'&˜"Ç%VÊ∂Ê˜v‚W&6Ü6RGóR"ê†¢6V∆bÁ6WE˜7FGW2É#ê¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á&W7V«B¬VÁ7W&Uˆ66ñì‘f«6Ríê¢WÜ6WBf«VTW'&˜"2WÜ3†¢∆ˆrÁv&ÊñÊrÇ%vV$6ÜV6∂˜WB&V¶V7FVC¢W2"¬WÜ2ê¢6V∆bÁ6WE˜7FGW2ÉCê¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á≤&ˆ≤#¢f«6R¬&W'&˜"#¢7G"ÜWÜ2ó“¬VÁ7W&Uˆ66ñì‘f«6Ríê¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢∆ˆrÊWÜ6WFñˆ‚Ç%vV$6ÜV6∂˜WB'&ñFvRfñ∆VC¢W2"¬WÜ2ê¢6V∆bÁ6WE˜7FGW2ÉSê¢÷W76vR“7G"ÜWÜ2ï≥£S“ñbîÙıÙDT%TuıïÙU%$ı%2V«6R-	›R=MΩÌ¬Ì}M-¬Ì˝Ω-2 ¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á≤&ˆ≤#¢f«6R¬&W'&˜"#¢÷W76vW“¬VÁ7W&Uˆ66ñì‘f«6Ríê†¢6∆726ÜV6∂˜WEvV&Üˆˆ¥áF˜&ÊFÚÁvV"‰∆ñ6Fñˆ‚ì†¢FVbıˆñÊóEıÚá6V∆b¬vV&Üˆˆµ˜FÇ¬&˜B¬WFFU˜VWVR¬6V7&WE˜Fˆ∂V„‘ÊˆÊRì†¢6Ü&VB“≤&&˜B#¢&˜B¬'WFFU˜VWVR#¢WFFU˜VWVR¬'6V7&WE˜Fˆ∂V‚#¢6V7&WE˜Fˆ∂VÁ–¢ÜÊF∆W'2“∞¢á&b'∑vV&Üˆˆµ˜Fá“ÛÚ"¬FV∆Vw&‘ÜÊF∆W"¬6Ü&VBí¿¢á""˜vV&ˆ6ÜV6∂˜WBÛÚ"¬6ÜV6∂˜WD'&ñFvTÜÊF∆W"í¿¢á""ˆÜV«Fá¢ÛÚ"¬ÜV«FÑ'&ñFvTÜÊF∆W"í¿¢á""ÛÚ"¬&ˆ˜D'&ñFvTÜÊF∆W"í¿¢–¢7WW"ÇíÂıˆñÊóEıÚÜÜÊF∆W'2ê†¢FVb∆ˆu˜&WVW7Bá6V∆b¬ÜÊF∆W"ì†¢7FGW2“ÜÊF∆W"ÊvWE˜7FGW2Çê¢ñb7FGW2„“C†¢∆ˆrÁv&ÊñÊrÇ$ÖEEW2W2W2"¬7FGW2¬ÜÊF∆W"Á&WVW7BÊ÷WFÜˆB¬ÜÊF∆W"Á&WVW7BÁW&íê†¢6∆72ÜV«FÑ'&ñFvTÜÊF∆W"áF˜&ÊFÚÁvV"Â&WVW7DÜÊF∆W"ì†¢7ñÊ2FVbvWBá6V∆bì†¢6V∆bÁ6WEˆÜVFW"Ç$6ˆÁFVÁB’GóR"¬&∆ñ6Fñˆ‚ˆß6ˆ„≤6Ü'6WC◊WFb”Ç"ê¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á≤&ˆ≤#¢G'VR¬'fW'6ñˆ‚#¢D4ÖıdU%4îÙÁ“¬VÁ7W&Uˆ66ñì‘f«6Ríê†¢7ñÊ2FVbÜVBá6V∆bì†¢6V∆bÁ6WE˜7FGW2É#Bê¢6V∆bÊfñÊó6ÇÇê†¢6∆72&ˆ˜D'&ñFvTÜÊF∆W"áF˜&ÊFÚÁvV"Â&WVW7DÜÊF∆W"ì†¢7ñÊ2FVbvWBá6V∆bì†¢6V∆bÁ6WEˆÜVFW"Ç$6ˆÁFVÁB’GóR"¬&∆ñ6Fñˆ‚ˆß6ˆ„≤6Ü'6WC◊WFb”Ç"ê¢6V∆bÊfñÊó6ÇÜß6ˆ‚ÊGV◊2á≤&ˆ≤#¢G'VR¬'6W'fñ6R#¢$ÊWó&Ú‘&˜B"¬'fW'6ñˆ‚#¢D4ÖıdU%4îÙÁ“¬VÁ7W&Uˆ66ñì‘f«6Ríê†¢7ñÊ2FVbÜVBá6V∆bì†¢6V∆bÁ6WE˜7FGW2É#Bê¢6V∆bÊfñÊó6ÇÇê†¢F%˜WFFW"ÂvV&Üˆˆ¥6∆72“6ÜV6∂˜WEvV&Üˆˆ¥ ¢∆ˆrÊñÊfÚÇ%vV$6ÜV6∂˜WBˆ÷VÁR'&ñFvRñÁ7F∆∆VC¢W2˜vV&ˆ6ÜV6∂˜WB"¬T$ƒî5ıU$¬Á'7G&óÇ"Ú"íê¢&WGW&‚G'VP††¢2)H)H)H)H)H)H)H)H)H6∆∆&6µVW'íç-Ì-ΩÕ›ÌRí)H)H)H)H)H)H)H)H)H •˜VÊFñÊuˆ7FñˆÁ2“∑–†¶FVbˆÊWuˆñBÇí”‚7G#†¢&WGW&‚WVñBÁWVñCBÇíÊÜWÖ≥£%–†¶7ñÊ2FVbˆÂˆ6"áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢“WFFRÊ6∆∆&6µ˜VW'ê¢FF“áÊFF˜"""íÁ7G&óÇê¢G'ì†¢2&W6VÁFFñˆ‚Ù6F∆ˆr7GVFñÚcÉ`¢ñbFFÁ7F'G7vóFÇÇ'3¢"ì†¢G'ì†¢vóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÊÜÊF∆Uˆ6∆∆&6≤áWFFR¬6ˆÁFWáBê¢WÜ6WBWÜ6WFñˆ‚2S†¢2&W6VÁFFñˆÂ7GVFñÚ«&VGíW'6ó7G27FFRÊB&W˜'G27FvR◊7V6ñfñ2W'&˜'2‡¢2FÚÊ˜B∆V≤FÜó2ñÁFÚFÜR&˜B◊vñFRvVÊW&ñ26∆∆&6≤ˆW'&˜"÷W76vW2‡¢∆ˆrÊWÜ6WFñˆ‚Ç%&W6VÁFFñˆ‚6∆∆&6≤fñ∆VB∆ˆ6∆«ì¢W2"¬Rê¢&WGW&‡†¢2W'6ó7FVÁBfó'GV¬6ÜG0¢ñbFF”“&6ÜC¶∆ó7B#†¢vóBÊÁ7vW"Çê¢vóB6÷Eˆ6ÜG2áWFFR¬6ˆÁFWáBê¢&WGW&‡¢ñbFF”“&6ÜC¶ÊWr#†¢vóBÊÁ7vW"Çê¢vóB6÷EˆÊWv6ÜBáWFFR¬6ˆÁFWáBê¢&WGW&‡¢ñbFFÁ7F'G7vóFÇÇ&6ÜC¶˜V„¢"ì†¢vóBÊÁ7vW"Çê¢G'ì¢6ñB“ñÁBÜFFÁ7∆óBÇ#¢"¬"ï≥%“ê¢WÜ6WBWÜ6WFñˆ„¢6ñB“ ¢ñbÊ˜B6ñB˜"Ê˜Bˆ6ÜE˜6WEˆ7FófRáÊg&ˆ’˜W6W"ÊñB¬Ê÷W76vRÊ6ÜEˆñB¬6ñBì†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+}"›R›ùM]“‚"ê¢&WGW&‡¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢FóF∆R“ÊWáBÇáÖ≤'FóF∆R%“f˜"Çñ‚ˆ6ÜEˆ∆ó7BáÊg&ˆ’˜W6W"ÊñB¬Ê÷W76vRÊ6ÜEˆñBíñbÖ≤&ñB%“”“6ñBí¬-
+}""ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb.)kn˚àÚ
+}"*∑∑FóF∆W‹+≤-Ω“‚	˝ÌMÌΩmù-R}=Ì-Ì‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢ñbFFÁ7F'G7vóFÇÇ&6ÜC¶Üó7F˜'ì¢"ì†¢vóBÊÁ7vW"Çê¢'G2“FFÁ7∆óBÇ#¢"ê¢G'ì¢6ñB“ñÁBá'G5≥%“ì≤vR“ñÁBá'G5≥5“íñb∆V‚á'G2í‚2V«6R ¢WÜ6WBWÜ6WFñˆ„¢6ñB¬vR“¬ ¢ñb6ñC†¢vóB˜6VÊEˆ6ÜEˆÜó7F˜'íáWFFR¬6ˆÁFWáB¬6ñB¬vRê¢&WGW&‡¢ñbFFÁ7F'G7vóFÇÇ&6ÜCß&VÊ÷S¢"ì†¢vóBÊÁ7vW"Çê¢G'ì¢6ñB“ñÁBÜFFÁ7∆óBÇ#¢"¬"ï≥%“ê¢WÜ6WBWÜ6WFñˆ„¢6ñB“ ¢ñb6ñC†¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆ6ÜE˜&VÊ÷R%““6ñ@¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ.)»˛˚àÚ	Ì-˝-Õ-R›Ì-ÌR›}-›çR}-ÌM›ç¬ÌÌù]›ç]¬çM‚cçÕ-ÌΩÌ"í‚"ê¢&WGW&‡¢ñbFFÁ7F'G7vóFÇÇ&6ÜC¶FV∆WFUˆ6ˆÊfó&”¢"ì†¢vóBÊÁ7vW"Çê¢G'ì¢6ñB“ñÁBÜFFÁ7∆óBÇ#¢"¬"ï≥%“ê¢WÜ6WBWÜ6WFñˆ„¢6ñB“ ¢ñb6ñBÊBˆ6ÜEˆFV∆WFRáÊg&ˆ’˜W6W"ÊñB¬Ê÷W76vRÊ6ÜEˆñB¬6ñBì†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ/	˘y
+}"Ç]=‚ç-ÌçÚ=MΩ]›≤‚"¬&W«ïˆ÷&∑W’ˆ6ÜEˆ∆ó7Eˆ∂"áÊg&ˆ’˜W6W"ÊñB¬Ê÷W76vRÊ6ÜEˆñBíê¢V«6S†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+}"›R›ùM]“‚"ê¢&WGW&‡¢ñbFFÁ7F'G7vóFÇÇ&6ÜC¶FV∆WFS¢"ì†¢vóBÊÁ7vW"Çê¢G'ì¢6ñB“ñÁBÜFFÁ7∆óBÇ#¢"¬"ï≥%“ê¢WÜ6WBWÜ6WFñˆ„¢6ñB“ ¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢-
+=MΩç-¬›-Ì"}"-Õ]-R‚-]íç-Ìç]ìÚ"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	M¬=MΩç-¬"¬6∆∆&6µˆFF÷b&6ÜC¶FV∆WFUˆ6ˆÊfó&”ß∂6ñG“"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	Ì-Õ]›"¬6∆∆&6µˆFF“&6ÜC¶∆ó7B"ï“¿¢“í¿¢ê¢&WGW&‡†¢ñbFF”“'&ñ6ñÊs¶∆ó7B#†¢vóBÊÁ7vW"Çê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢˜&ñ6ñÊuˆ6F∆ˆu˜FWáBÇí¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖµ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.)ÈR	˝Ì˝ÌΩ›ç-¬Ω›"¬6∆∆&6µˆFF“'F˜W"ï’“í¿¢ê¢&WGW&‡†¢2DıUÕ]›‡¢ñbFF”“'F˜W#†¢vóBÊÁ7vW"Çê¢vóB˜6VÊE˜F˜Wˆ÷VÁRáWFFR¬6ˆÁFWáBê¢&WGW&‡†¢2DıU%T ¢ñbFFÁ7F'G7vóFÇÇ'F˜Wß'V#¢"ì†¢vóBÊÁ7vW"Çê¢G'ì†¢÷˜VÁE˜'V"“ñÁBÇÜFFÁ7∆óBÇ#¢"¬"ï≤”“˜"#"íÁ7G&óÇí˜"#"ê¢WÜ6WBWÜ6WFñˆ„†¢÷˜VÁE˜'V"“ ¢&W6ˆ«fVB“ˆ7&VFóE˜6µ˜&W6ˆ«fRÉ¬÷˜VÁE˜'V"ê¢ñbÊ˜B&W6ˆ«fVC†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›]ç}-]-›Ωí˝≠]"≠]Mç-Ì"‚	Ì-≠Ìù-RÕ]›‚˝Ì˝ÌΩ›]›çÚ}›Ì-‚‚"ê¢&WGW&‡¢7&VFóG2¬÷˜VÁE˜'V"“&W6ˆ«fV@¢ˆ≤“vóB˜6VÊEˆñÁfˆñ6U˜'V"Ä¢b'∂7&VFóG7“≠]Mç-Ì""¿¢b-	˝Ì˝ÌΩ›]›çRΩ›ÊWó&Ú‘&˜C¢∂7&VFóG7“≠]Mç-Ì"‚"¿¢÷˜VÁE˜'V"¿¢b'F˜Wß∂7&VFóG7”ß∂÷˜VÁE˜'V'“"¿¢WFFR¿¢ê¢vóBÊÁ7vW"Ç-	-Ω--Ω˝‚}.(
+b"ñbˆ≤V«6R-	›R=MΩÌ¬-Ω--ç-¬}""¬6Ü˜uˆ∆W'C÷Ê˜Bˆ≤ê¢&WGW&‡†¢2DıU5%ïD¢ñbFFÁ7F'G7vóFÇÇ'F˜W¶7'óFÛ¢"ì†¢vóBÊÁ7vW"Çê¢ñbÊ˜B5%ïDııïÙïıDÙ¥T„†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›-Ìù-R5%ïDııïÙïıDÙ¥T‚MΩÚÌ˝Ω-≤}]]r7'óFÙ&˜B‚"ê¢&WGW&‡¢G'ì†¢W6B“f∆ˆBÇÜFFÁ7∆óBÇ#¢"¬"ï≤”“˜"#"íÁ7G&óÇí˜"#"ê¢WÜ6WBWÜ6WFñˆ„†¢W6B“„ ¢ñbW6B√“„†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›]-]›Ú=ÕÕ‚"ê¢&WGW&‡¢ñÁeˆñB¬ï˜W&¬¬W6Eˆ÷˜VÁB¬76WB“vóBˆ7'óFıˆ7&VFUˆñÁfˆñ6RáW6B¬76WC“%U4EB"¬FW67&óFñˆ„“%v∆∆WBF˜◊W"ê¢ñbÊ˜BñÁeˆñB˜"Ê˜Bï˜W&√†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬Ì}M-¬}""7'óFÙ&˜B‚	˝Ì˝Ì=ù-R˝Ì}mR‚"ê¢&WGW&‡¢◊6r“vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b-	Ì˝Ω-ç-R}]]r7'óFÙ&˜C¢∑W6Eˆ÷˜VÁC¢„&g“∂76WG“(i"µˆ7&VFóG5ˆf◊Eˆg&ˆ’˜W6BáW6Eˆ÷˜VÁBó“Â∆Ì	˝ÌΩRÌ˝Ω-≤≠]Mç-≤˝Ì˝ÌΩ›˝-Ú--ÌÕ-ç}]≠Ç‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘*7'óFÙ&˜B"¬W&√◊ï˜W&¬ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘H‚	˝Ì-]ç-¬"¬6∆∆&6µˆFF÷b&7'óFÛ¶6ÜV6≥ß∂ñÁeˆñG“"ï–¢“ê¢ê¢6ˆÁFWáBÊ∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ö˜ˆ∆≈ˆ7'óFıˆñÁfˆñ6RÄ¢6ˆÁFWáB¬◊6rÊ6ÜEˆñB¬◊6rÊ÷W76vUˆñB¬WFFRÊVffV7FófU˜W6W"ÊñB¬ñÁeˆñB¬W6Eˆ÷˜VÁ@¢íê¢&WGW&‡†¢ñbFFÁ7F'G7vóFÇÇ&7'óFÛ¶6ÜV6≥¢"ì†¢vóBÊÁ7vW"Çê¢ñÁeˆñB“FFÁ7∆óBÇ#¢"¬"ï≤”–¢ñÁb“vóBˆ7'óFıˆvWEˆñÁfˆñ6RÜñÁeˆñBê¢ñbÊ˜BñÁc†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›R›ç≤}"‚
+Ì}Mù-R›Ì-Ωí‚"ê¢&WGW&‡¢7B“ÜñÁbÊvWBÇ'7FGW2"í˜"""íÊ∆˜vW"Çê¢ñb7B”“'ñB#†¢W6Eˆ÷˜VÁB“f∆ˆBÜñÁbÊvWBÇ&÷˜VÁB"¬„íê¢ñbÜñÁbÊvWBÇ&76WB"í˜"""íÁWW"Çí”“%DÙ‚#†¢W6Eˆ÷˜VÁB£“DÙÂıU4Eı$DP¢˜v∆∆WE˜F˜F≈ˆFBáWFFRÊVffV7FófU˜W6W"ÊñB¬W6Eˆ÷˜VÁBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb/	˘+2	Ì˝Ω-˝ÌΩ=}]›‚	›}çΩ]›„¢µˆ7&VFóG5ˆf◊Eˆg&ˆ’˜W6BáW6Eˆ÷˜VÁBó“‚"ê¢V∆ñb7B”“&7FófR#†¢vóBÊÁ7vW"Ç-	˝Ω-b]ù›R˝ÌM--]mM“"¬6Ü˜uˆ∆W'C’G'VRê¢V«6S†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb-
+--=}-¢∑7G“"ê¢&WGW&‡†¢2	˝ÌM˝ç≠¢-ΩÌ˝ÌÌ ¢ñbFFÁ7F'G7vóFÇÇ&'Wì¢"ì†¢vóBÊÁ7vW"Çê¢Ú¬FñW"¬÷ˆÁFá2“FFÁ7∆óBÇ#¢"¬"ê¢÷ˆÁFá2“ñÁBÜ÷ˆÁFá2ê¢FW62“b-	˝ÌM˝ç≠∑FñW"ÁWW"Çó“›∂÷ˆÁFá7“Õ]‚ ¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢b'∂FW67’∆Ì	-Ω]ç-R˝ÌÌÌ˝Ω-≥¢"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘+2	≠-Ìí
+‰∂76"¬6∆∆&6µˆFF÷b&'WññÁcß∑FñW'”ß∂÷ˆÁFá7“"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˙©í
+≠]Mç-›Ì=‚Ω›"¬6∆∆&6µˆFF÷b&'Wóv∆∆WCß∑FñW'”ß∂÷ˆÁFá7“"ï“¿¢“ê¢ê¢&WGW&‡†¢2	˝ÌM˝ç≠}]]r
+‰∂76Fó&V7Bíçr-Ì=‚'Wí›Õ]›‡¢ñbFFÁ7F'G7vóFÇÇ&'WóñˆÛ¢"ì†¢vóBÊÁ7vW"Ç-
+Ì}M‚ΩΩ≠2›Ì˝Ω->(
+b"ê¢G'ì†¢Ú¬“¬FñW"¬÷ˆÁFá2“FFÁ7∆óBÇ#¢"¬2ê¢÷ˆÁFá2“ñÁBÜ÷ˆÁFá2ê¢÷WFÜˆEˆ÷“≤'6'#¢'ñˆı˜6'"¬'6&W'í#¢'ñˆı˜6&W'í"¬'Gí#¢'ñˆı˜Gí"¬&÷ó'í#¢'ñˆıˆ÷ó'í'–¢÷WFÜˆEˆ∂Wí“÷WFÜˆEˆ÷ÊvWBÜ“ê¢ñbÊ˜B÷WFÜˆEˆ∂Wì†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›]ç}-]-›Ωí˝ÌÌÌ˝Ω-≤‚"ê¢&WGW&‡¢ñbÊ˜B˜ñˆıˆFó&V7Eˆ6ˆÊfñwW&VBÇì†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ	Ω-ÚÌ˝Ω-
+‰∂76˝Ì≠›R›-Ì]›¢›=m›≤îÙıı4ÑıÙîBıîÙıı4T5$UEÙ¥UíçΩÇ6V7&WBfñ∆Rñˆˆ∂76ÊVÁbîµÙîBıîµÙ¥Uí‚"ê¢&WGW&‡¢í“vóB˜ñˆıˆ7&VFUˆFó&V7E˜ñ÷VÁBáWFFRÊVffV7FófU˜W6W"ÊñB¬FñW"¬÷ˆÁFá2¬÷WFÜˆEˆ∂Wíê¢ñ÷VÁEˆñB“7G"áíÊvWBÇ&ñB"í˜"""ê¢6ˆÊb“íÊvWBÇ&6ˆÊfó&÷Fñˆ‚"í˜"∑–¢ï˜W&¬“6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂ˜W&¬"í˜"6ˆÊbÊvWBÇ&6ˆÊfó&÷FñˆÂˆFF"í˜"6ˆÊbÊvWBÇ&WáFW&Ê≈˜W&¬"í˜"" ¢ñbÊ˜Bï˜W&√†¢&ó6R'VÁFñ÷TW'&˜"Üb%ñˆÙ∂76FñBÊ˜B&WGW&‚6ˆÊfó&÷Fñˆ‚W&√¢∑ó“"ê¢∆&V¬“îÙıÙDï$T5EÙ‘UDÑÙE5∂÷WFÜˆEˆ∂Wï’≤&∆&V¬%–¢◊6r“vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢b-	˝ÌM˝ç≠∑FñW"ÁWW"Çó“›∂÷ˆÁFá7“Õ]Â∆Ì
+˝ÌÌÌ˝Ω-≥¢∂∆&V«’∆Ì	Ì-≠Ìù-RΩΩ≠2MΩÚÌ˝Ω-≥¢"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖµ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂∆&V«“(	BÌ˝Ω-ç-¬"¬W&√◊ï˜W&¬ï’“ê¢ê¢∑e˜6WBÜb'ñˆÛßVÊFñÊsß∑ñ÷VÁEˆñG“"¬ß6ˆ‚ÊGV◊2á≤'W6W%ˆñB#¢WFFRÊVffV7FófU˜W6W"ÊñB¬'FñW"#¢FñW"¬&÷ˆÁFá2#¢÷ˆÁFá2¬&÷WFÜˆB#¢÷WFÜˆEˆ∂Wó“¬VÁ7W&Uˆ66ñì‘f«6Ríê¢6ˆÁFWáBÊ∆ñ6Fñˆ‚Ê7&VFU˜F6≤Ö˜ˆ∆≈˜ñˆı˜7V'67&óFñˆÂ˜ñ÷VÁBÜ6ˆÁFWáB¬◊6rÊ6ÜEˆñB¬◊6rÊ÷W76vUˆñB¬WFFRÊVffV7FófU˜W6W"ÊñB¬ñ÷VÁEˆñB¬FñW"¬÷ˆÁFá2íê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&'WóñˆÚñ÷VÁBfñ∆VC¢W2"¬Rê¢W'"“7G"ÜRï≥£s–¢W6W%ˆ◊6r“.)™˚àÚ	›R=MΩÌ¬Ì}M-¬Ì˝Ω-2
+‰∂76‚	˝Ì˝Ì=ù-RM==Ìí˝ÌÌ‚ ¢ñbîÙıÙDT%TuıïÙU%$ı%3†¢W6W%ˆ◊6r≥“%∆Â∆Ì	Mç=›Ì-ç≠
+‰∂76¢"≤W' ¢vóBÊ÷W76vRÁ&W«ï˜FWáBáW6W%ˆ◊6rê¢&WGW&‡†¢2	˝ÌM˝ç≠}]]r
+‰∂76¢ñbFFÁ7F'G7vóFÇÇ&'WññÁc¢"ì†¢vóBÊÁ7vW"Çê¢Ú¬FñW"¬÷ˆÁFá2“FFÁ7∆óBÇ#¢"¬"ê¢÷ˆÁFá2“ñÁBÜ÷ˆÁFá2ê¢ñ∆ˆB¬÷˜VÁE˜'V"¬FóF∆R“˜∆Â˜ñ∆ˆEˆÊEˆ÷˜VÁBáFñW"¬÷ˆÁFá2ê¢FW62“b-	ÌMÌÕΩ]›çR˝ÌM˝ç≠Ç∑FñW"ÁWW"Çó“›∂÷ˆÁFá7“Õ]‚ ¢ˆ≤“vóB˜6VÊEˆñÁfˆñ6U˜'V"áFóF∆R¬FW62¬÷˜VÁE˜'V"¬ñ∆ˆB¬WFFRê¢ñbÊ˜Bˆ≥†¢vóBÊÁ7vW"Ç-	›R=MΩÌ¬-Ω--ç-¬}""¬6Ü˜uˆ∆W'C’G'VRê¢&WGW&‡†¢2	˝ÌM˝ç≠˝ç›ç]¬çr≠]Mç-›Ì=‚Ω› ¢ñbFFÁ7F'G7vóFÇÇ&'Wóv∆∆WC¢"ì†¢vóBÊÁ7vW"Çê¢Ú¬FñW"¬÷ˆÁFá2“FFÁ7∆óBÇ#¢"¬"ê¢÷ˆÁFá2“ñÁBÜ÷ˆÁFá2ê¢÷˜VÁE˜'V"“˜∆Â˜'V"áFñW"¬≥¢&÷ˆÁFÇ"¬3¢'V'FW""¬#¢'ñV"'’∂÷ˆÁFá5“ê¢ÊVVE˜W6B“ˆ7&VFóG5˜Fı˜W6BÜ÷˜VÁE˜'V"ê¢ñb˜v∆∆WE˜F˜F≈˜F∂RáWFFRÊVffV7FófU˜W6W"ÊñB¬ÊVVE˜W6Bì†¢VÁFñ¬“7FófFU˜7V'67&óFñˆÂ˜vóFÖ˜FñW"áWFFRÊVffV7FófU˜W6W"ÊñB¬FñW"¬÷ˆÁFá2ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢b.)»R	˝ÌM˝ç≠∑FñW"ÁWW"Çó“≠-ç-çÌ-›M‚∑VÁFñ¬Á7G&gFñ÷RÇrUí“V““VBró“Â∆‚ ¢b-
+˝ç›‚Ω›¢∂ñÁBá&˜VÊBÖ˜W6E˜Fıˆ7&VFóG2ÜÊVVE˜W6Bííó“≠‚ ¢ê¢V«6S†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢-	›]MÌ--Ì}›‚]M-"›]Mç›Ì¬Ω›RÂ∆Ì	˝Ì˝ÌΩ›ç-RΩ›Ç˝Ì--Ìç-R‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖµ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.)ÈR	˝Ì˝ÌΩ›ç-¬Ω›"¬6∆∆&6µˆFF“'F˜W"ï’“ê¢ê¢&WGW&‡†¢2	-ΩÌM-çm≠ ¢ñbFFÁ7F'G7vóFÇÇ&VÊvñÊS¢"ì†¢vóBÊÁ7vW"Çê¢VÊvñÊR“FFÁ7∆óBÇ#¢"¬ï≥–¢ñbVÊvñÊR”“&«V÷"ÊB≈T‘ıDT’ÙDï4$ƒTC†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ«V÷-]Õ]››‚Ì-≠ΩÌ}]›Ç≠Ω-çrÕ]›‚‚	MΩÚfñFVÚç˝ÌΩÕ}=ù-R6˜&"]rΩÌM]í¬∂∆ñÊrçΩÇ'VÁví‚"ê¢&WGW&‡¢ñbVÊvñÊR”“&÷ñF¶˜W&ÊWí#†¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆ÷ñF¶˜W&ÊWï˜&ˆ◊B%““G'VP¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢T‰tî‰UÙî‰dııDUÖE≤&÷ñF¶˜W&ÊWí%“∞¢b%∆Â∆Ì
+-ÌçÕÌ-¬ÌM›Ìí=]›]mçÉ¢µ˜&WFñ≈ˆ7&VFóG2Ñ‘îD§ıU$‰UïıT‰ïEÙ4ı5EıU4Bó“≠‚	›˝ççç-R˝ÌÕ˝"Ω]M=Ìùç¬ÌÌù]›ç]¬çΩÇç˝ÌΩÕ}=ù-Rˆ÷¢ÕÌ˝ç›çS‚‚ ¢ê¢&WGW&‡¢ñbVÊvñÊRñ‚T‰tî‰UÙî‰dııDUÖC†¢&ñ6U˜7VffóÇ“" ¢ñbVÊvñÊR”“&ñ÷vW2#†¢&ñ6U˜7VffóÇ“b%∆Â∆Ì
+m]›=]›]mçÉ¢µ˜&WFñ≈ˆ7&VFóG2Ñî‘uÙ4ı5EıU4Bó“≠‚ ¢V∆ñbVÊvñÊR”“''VÁví#†¢&ñ6U˜7VffóÇ“b%∆Â∆Ì
+m]›vV‚”B„S¢µ˜fñFVı˜&ñ6Uˆ7&VFóG2Çw'VÁvír¬Ró“≠‚}R]¢‚ ¢V∆ñbVÊvñÊR”“'6˜&#†¢&ñ6U˜7VffóÇ“b%∆Â∆Ì
+m]›6˜&#¢µ˜fñFVı˜&ñ6Uˆ7&VFóG2Çw6˜&r¬Ró“≠‚}R]¢‚ ¢V∆ñbVÊvñÊR”“&∂∆ñÊr#†¢&ñ6U˜7VffóÇ“b%∆Â∆Ì
+m]›∂∆ñÊs¢µ˜fñFVı˜&ñ6Uˆ7&VFóG2Çv∂∆ñÊrr¬Ró“≠‚}R]¢‚ ¢V∆ñbVÊvñÊR”“'7VÊÚ#†¢&ñ6U˜7VffóÇ“b%∆Â∆Ì
+m]›ÌM›Ìí=]›]mçÉ¢µ˜&WFñ≈ˆ7&VFóG2Ö5T‰ıÙ4ı5EıU4Bó“≠‚ ¢vóBÊ÷W76vRÁ&W«ï˜FWáBÑT‰tî‰UÙî‰dııDUÖE∂VÊvñÊU“≤&ñ6U˜7VffóÇ¬Fó6&∆U˜vV%˜vU˜&WfñWs’G'VRê¢&WGW&‡¢W6W&Ê÷R“áWFFRÊVffV7FófU˜W6W"ÁW6W&Ê÷R˜"""ê¢ñbVÊvñÊR”“''VÁví#†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R'VÁvíMÌ-=˝]“MΩÚ-çM]‚˝‚-]≠-2ÇMΩÚÌmç-Ω]›çÚMÌ-‚Â∆‚ ¢-	MΩÚÌmç-Ω]›çÚ}==}ç-RMÌ-Ì=Mç‚Ç›mÕç-R) Ç	Ìmç-ç-¬Ö'VÁvííçΩÇÌ-˝-Õ-RMÌ-‚˝ÌM˝çÕ„¢ ¢,*ΩÌmç-ÇMÌ-„¢Ω=≠Ú=ΩΩ≠¬M-çm]›çR≠Õ]≤¬R]≠=›B¬ì£l+≤Â∆Â∆‚ ¢-	MΩÚÌ}M›çÚ-çM]‚˝‚-]≠-2˝=ÌΩÌ2ç˝ÌΩÕ}=ù-R6˜&"]rΩÌM]í¬∂∆ñÊrçΩÇ'VÁví‚ ¢ê¢&WGW&‡¢ñbó5˜VÊ∆ñ÷óFVBáWFFRÊVffV7FófU˜W6W"ÊñB¬W6W&Ê÷Rì†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢b.)»R	M-çmÌ¢*∑∂VÊvñÊW‹+≤MÌ-=˝]“]rÌ=›ç}]›çíÂ∆‚ ¢b-	MΩÚFWáN(i'fñFVÚMÌ-=˝›≤6˜&"]rΩÌM]í¬∂∆ñÊrÇ'VÁví‚ ¢ê¢&WGW&‡†¢ñbVÊvñÊRñ‚Ç&wB"¬'7GE˜GG2"¬&÷ñF¶˜W&ÊWí"¬'6˜&"¬&∂∆ñÊr"ì†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢b.)»R	-Ω“*∑∂VÊvñÊW‹+≤‚	Ì-˝-Õ-R}˝Ì-]≠-Ì¬˝MÌ-‚‚ ¢b-	MΩÚ-çM]‚›˝ççç-S¢*ΩÌ}Mí-çM]‚(
+bR]≠=›Bc£ú+≤(	BÚ˝]MΩÌm26˜&"]rΩÌM]í¬∂∆ñÊrÇ'VÁví‚ ¢ê¢&WGW&‡†¢W7Eˆ6˜7B“î‘uÙ4ı5EıU4BñbVÊvñÊR”“&ñ÷vW2"V«6RÉ„CñbVÊvñÊR”“&«V÷"V«6R÷ÇÉ„¬%TÂtïıT‰ïEÙ4ı5EıU4Bíê¢÷ˆVÊvñÊR“≤&ñ÷vW2#¢&ñ÷r"¬&«V÷#¢&«V÷"¬''VÁví#¢''VÁví'’∂VÊvñÊU–¢ˆ≤¬ˆffW"“ˆ6Â˜7VÊEˆ˜%ˆˆffW"áWFFRÊVffV7FófU˜W6W"ÊñB¬W6W&Ê÷R¬÷ˆVÊvñÊR¬W7Eˆ6˜7Bê†¢ñbˆ≥†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R	MÌ-=˝›‚‚"∞¢Ç-	}˝=-ç-S¢ˆñ÷r≠Ì""Ì}≠R"ñbVÊvñÊR”“&ñ÷vW2 ¢V«6R-	MΩÚ-çM]‚˝‚-]≠-2MÌ-=˝›≤6˜&"]rΩÌM]í¬∂∆ñÊrÇ'VÁví‚"ê¢ê¢&WGW&‡†¢ñbˆffW"”“$4µı5T%45$î$R#†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢-	MΩÚ›-Ì=‚M-çm≠›=m›≠-ç-›Ú˝ÌM˝ç≠çΩÇ]Mç›ΩíΩ›‚	Ì-≠Ìù-R˜∆Á2çΩÇ˝Ì˝ÌΩ›ç-R*ø	˙{‚	Ω›+≤‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÄ¢µ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*Ÿ
+-çM≤"¬vV%ˆ’vV$ñÊfÚáW&√’D$îdeıU$¬íï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.)ÈR	˝Ì˝ÌΩ›ç-¬Ω›"¬6∆∆&6µˆFF“'F˜W"ï’–¢í¿¢ê¢&WGW&‡†¢G'ì†¢ÊVVE˜W6B“f∆ˆBÜˆffW"Á7∆óBÇ#¢"¬ï≤”“ê¢WÜ6WBWÜ6WFñˆ„†¢ÊVVE˜W6B“W7Eˆ6˜7@¢÷˜VÁE˜'V"“ˆ6∆5ˆˆÊVˆfe˜&ñ6U˜'V"Ü÷ˆVÊvñÊR¬ÊVVE˜W6Bê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢b-	-ÇM›]-›ÌíΩçÕç"˝‚*∑∂VÊvñÊW‹+≤ç}]˝“‚
+}Ì-Ú˝Ì≠=˝≠(òÇ∂÷˜VÁE˜'V'“(+“ ¢b-çΩÇ˝Ì˝ÌΩ›ç-RΩ›"*ø	˙{‚	Ω›+≤‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÄ¢∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*Ÿ
+-çM≤"¬vV%ˆ’vV$ñÊfÚáW&√’D$îdeıU$¬íï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.)ÈR	˝Ì˝ÌΩ›ç-¬Ω›"¬6∆∆&6µˆFF“'F˜W"ï“¿¢–¢í¿¢ê¢&WGW&‡†¢2
+]mçÕ≤Ú	M-çm≠Ä¢ñbFF”“&÷ˆFS¶VÊvñÊW2#†¢vóBÊÁ7vW"Çê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	M-çm≠É¢"¬&W«ïˆ÷&∑W÷VÊvñÊW5ˆ∂"Çíê¢&WGW&‡†¢ñbFFÁ7F'G7vóFÇÇ&÷ˆFSß6WC¢"ì†¢vóBÊÁ7vW"Çê¢÷ˆFR“FFÁ7∆óBÇ#¢"ï≤”–¢÷ˆFU˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬÷ˆFRê¢ñb÷ˆFR”“'7GVGí#†¢7GVGï˜7V%˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬&Wá∆ñ‚"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+]mç¬*Ω
+=}+≤-≠ΩÌ}“‚	-Ω]ç-R˝ÌM]mç√¢"¬&W«ïˆ÷&∑W◊7GVGïˆ∂"Çíê¢V∆ñb÷ˆFR”“'Ü˜FÚ#†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+]mç¬*Ω
+MÌ-Ï+≤-≠ΩÌ}“‚	˝ççΩç-Rç}Ìm]›çR(	B˝Ì˝-˝-ÚΩ-ΩR≠›Ì˝≠Ç‚"¬&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíê¢V∆ñb÷ˆFR”“&Fˆ72#†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+]mç¬*Ω	MÌ≠=Õ]›-º+≤‚	˝ççΩç-RDbÙDÙ5ÇÙUT"ıEÖB(	BM]Ω‚≠Ì›˝]≠"‚"ê¢V∆ñb÷ˆFR”“'fˆñ6R#†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+]mç¬*Ω	=ÌΩÌ+≤‚	Ì-˝-Õ-Rfˆñ6RˆVFñÚ‚	Ì}-=}≠Ì--]-Ì#¢˜fˆñ6Uˆˆ‚"ê¢V«6S†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb-
+]mç¬*∑∂÷ˆFW‹+≤≠-ç-çÌ-“‚"ê¢&WGW&‡†¢ñbFFÁ7F'G7vóFÇÇ'7GVGìß6WC¢"ì†¢vóBÊÁ7vW"Çê¢7V"“FFÁ7∆óBÇ#¢"ï≤”–¢7GVGï˜7V%˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬7V"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb-
+=}(i"∑7V'“‚	›˝ççç-R-]Õ2˝}M›çR‚"¬&W«ïˆ÷&∑W◊7GVGïˆ∂"Çíê¢&WGW&‡†¢2Ü˜FÚVFóG2&WVó&R66ÜVBñ÷vP¢ñbFFÁ7F'G7vóFÇÇ'VFóC¢"ì†¢vóBÊÁ7vW"Çê¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω˝ççΩç-RMÌ-‚¬}-]¬-Ω]ç-RM]ù--çR‚"¬&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíê¢&WGW&‡¢ñbFF”“'VFóC¶fF"#†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&fF%˜GG5˜fˆñ6R"ì†¢˜6WEˆfF%˜vóBÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢b/	˘z2	˝Ì-]"-Ω“‚	=ÌΩÌ=mR-Ω”¢µˆfF%˜GG5˜fˆñ6Uˆ∆&V¬ÖˆfF%˜GG5˜fˆñ6UˆvWBÜ6ˆÁFWáBíó“‚
+-]˝]¬˝ççΩç-R-]≠"¬fˆñ6RçΩÇ=MçÌMù≤’2ıtbÙ”DÙ2MΩÚ]}Ç--‚ ¢ê¢V«6S†¢˜6WEˆfF%˜fˆñ6Uˆ6Üˆñ6U˜vóBÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖˆfF%˜fˆñ6Uˆ6Üˆñ6U˜FWáBÇí¬&W«ïˆ÷&∑W’ˆfF%˜fˆñ6Uˆ6Üˆñ6Uˆ∂"Ç&7B"íê¢&WGW&‡¢ñbFF”“'VFóCßÜ˜Fˆ6∆ó#†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ/	¯ÎR
+MÌ-‚-Ω›‚‚	Ì˝ççç-R-çΩ¬-çM]Ì≠Ωç˝¢Õ=}Ω≠¬M-çm]›çR¬›-Ì]›çR¬MΩç-]ΩÕ›Ì-¬ÇMÌÕ"ì£bÛc£í‚"ê¢&WGW&‡¢ñbFF”“'VFóCßfˆ6∆6∆ó#†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'fˆ6∆6∆ó"ê¢˜6WE˜fˆ6≈ˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯ÍB	˝Ì-]"-Ω“MΩÚ≠Ωç˝-Ì≠ΩÌ¬‚
+-]˝]¬Ì˝ççç-R˝]›‚˝≠ΩçÛ¢-çΩ¬¬˝}Ω¢¬›-Ì]›çR¬˝ç˝]"¬MΩç-]ΩÕ›Ì-¬Â∆Â∆‚ ¢-	-m›„¢]mç¬}ç-“›ÌM›Ì=‚}]ΩÌ-]≠"≠MR‚ ¢ê¢&WGW&‡¢ñbFF”“'VFóC¶ó6V∆fñR#†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢˜6WEˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ/	˙K2
+MÌ-‚-Ω›‚‚	›˝ççç-Rm]›3¢≠≠Ìí}›Õ]›ç-Ì-Õ‚˝˝]Ì›m]¬¬=MR¬-çΩ¬¬MÌÕ"‚	›˝çÕ]¢*Ω]ΩMÇç}-]-›Ω¬≠-Ì¬›≠›ÌíMÌÌm≠R¬ïÜˆÊR6V∆fñR¬C£\+≤‚"ê¢&WGW&‡¢ñbFF”“'VFóCß&WF˜V6Ç#†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢˜6WE˜&WF˜V6Ö˜vóE˜FWáBÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢/	˙{“
+}-‚=-¬Ç=MR›]ÌMç-Ú›Ω]Õ]›#ı∆Â∆‚ ¢-	›˝çÕ]¢*Ω-ÌM˝›Ìí}›¢˝-›ç}<+≤¬*Ω›M˝ç¬˝‚m]›-<+≤¬*ΩΩÌ=Ì-çÚ"Ω]-Ì¬-]]›]¬==Ω<+≤Â∆‚ ¢-	Ì-˝-Ω˝Ú≠ÌÕ›M2¬-≤˝ÌM--]mM]-R¬}-‚›-‚-çRç}Ìm]›çRçΩÇ2-]-¬˝-‚]=‚]M≠-çÌ--¬‚ ¢ê¢&WGW&‡¢ñbFF”“'VFóC¶&6≤#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'Ü˜Fıˆf∆˜r"¬ÊˆÊRê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-
+MÌ-‚›Õ-]≠Û¢"¬&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíì≤&WGW&‡¢ñbFF”“'VFóCß&V÷˜fV&r#†¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬ñ÷rì≤&WGW&‡¢ñbFF”“'VFóCß&W∆6V&r#†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	-Ω]ç-R›Ì-ΩíMÌ“‚
+-]˝]¬}Õ]›Ì-]"""›-˝¢í≠≠=-›‚-Ω]}‚}]ΩÌ-]≠˝Ì≠]≠"¬"í˝ÌM--Ω˝‚›Ì-ΩíMÌ“]r˝]]çÌ-≠ÇÕÌ=‚}]ΩÌ-]≠‚	ÕÌm›‚-Ω-¬˝]]"çΩÇ›˝ç-¬-Ìí-ç›"‚"¬&W«ïˆ÷&∑W÷&6∂w&˜VÊE˜&W6WG5ˆ∂"Çíì≤&WGW&‡¢ñbFF”“'VFóC¶f6W7v#†¢vóB˜7F'Eˆf6W7vˆf∆˜ráWFFR¬6ˆÁFWáB¬ñ÷rì≤&WGW&‡¢ñbFFÁ7F'G7vóFÇÇ'VFóC¶&s¢"ì†¢∂ñÊB“FFÁ7∆óBÇ#¢"ï≤”–¢ñb∂ñÊB”“&7W7Fˆ“#†¢˜6WE˜&W∆6V&u˜vóE˜FWáBÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›˝ççç-R¬≠≠ÌíMÌ“˝Ì--ç-¬‚
+ÚÌ]›‚}]ΩÌ-]≠çrç]ÌM›Ì=‚MÌ-‚¬Ì-M]ΩÕ›‚˝ÌM]2˝=]›]ç=‚›Ì-ΩíMÌ“Ç}-]¬≠≠=-›‚Ì]2ç-Ì2‚	˝çÕ]≥¢*ΩMÌÌ=ÌíÌMç˝›ÌÕ›ΩÕÇÌ≠›Õå+≤¬*Ω˝Ω˝b
+Õ=Ç›}≠-\+≤¬*ΩΩÕ˝çù≠çR=Ì≤Ω]-ÌÃ+≤¬*Ω-]›]Ì≠›Ì}ÕÏ+≤‚"ê¢&WGW&‡¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬ñ÷r¬∂ñÊC÷∂ñÊBì≤&WGW&‡¢ñbFF”“'VFóC¶˜WGñÁB#†¢vóB˜VFóEˆ˜WGñÁBáWFFR¬6ˆÁFWáB¬ñ÷rì≤&WGW&‡¢ñbFF”“'VFóCß7F˜'í#†¢vóB˜VFóE˜7F˜'ñ&ˆ&BáWFFR¬6ˆÁFWáB¬ñ÷rì≤&WGW&‡¢ñbFF”“'VFóCß&WfófUˆ÷VÁR#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'&Wfóf≈ˆñFVÁFóGïˆ÷ˆFR"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B"¬ÊˆÊRê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	-Ω]ç-R¬≠¢Ìmç-ç-¬MÌ-„¢"¬&W«ïˆ÷&∑W◊Ü˜Fı˜&Wfóf≈ˆ7FñˆÁ5ˆ∂"Çíê¢&WGW&‡¢ñbFF”“'VFóCß&WfófUˆWFÚ#†¢6ˆÁFWáBÁW6W%ˆFF≤'&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B%““" ¢6ˆÁFWáBÁW6W%ˆFF≤'&Wfóf≈ˆñFVÁFóGïˆ÷ˆFR%““f«6P¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B"¬ÊˆÊRê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ.) Ç	]-]--]››ÌRÌmç-Ω]›çR-Ω›‚‚
+-]˝]¬-Ω]ç-RM-çmÌ£¢"¬&W«ïˆ÷&∑W◊Ü˜Fı˜&Wfóf≈ˆVÊvñÊW5ˆ∂"Çíê¢&WGW&‡¢ñbFF”“'VFóCß&WfófUˆñFVÁFóGí#†¢6ˆÁFWáBÁW6W%ˆFF≤'&Wfóf≈ˆñFVÁFóGïˆ÷ˆFR%““G'VP¢6ˆÁFWáBÁW6W%ˆFF≤'&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B%““Ä¢%&W6W'fRWfW'íW'6ˆ‚w2WÜ7BñFVÁFóGí¬f6ñ¬vVˆ÷WG'í¬vR¬Üó'7Gñ∆R¬6∂ñ‚FWáGW&RÊB&V6ˆvÊó¶&∆Rf6ñ¬fVGW&W2g&ˆ“FÜR6˜W&6RÜ˜FÚ‚ ¢$f6W2&V÷ñ‚7F&∆RÊB&V6ˆvÊó¶&∆RFá&˜VvÜ˜WB‚∂VWÜVB&˜FFñˆÁ26÷∆¬ÊB6ˆÁG&ˆ∆∆VC≤ÊGW&¬&∆ñÊ∂ñÊr¬7V'F∆R6÷ñ∆W2ÊBWñR÷˜fV÷VÁB&R∆∆˜vVB‚ ¢%FÜR&ˆFñW2÷í÷˜fR÷˜&Rg&VV«íÊBÊGW&∆«ì¢V˜∆R÷íGW&‚FÜVó"&ˆFñW2¬7FÊBW¬v∆≤vÜñ∆R∆ˆˆ∂ñÊrF˜v&BFÜR6÷W&¬áVrV6Ç˜FÜW"¬6∆FÜVó"ÜÊG2¬ ¢&˜"vófRV6Ç˜FÜW"ÜñvÇ÷fófRvÜV‚6ˆ◊˜6óFñˆ‚W&÷óG2‚÷ñÁFñ‚6˜'&V7BÊFˆ◊í¬ÜÊG2¬6∆˜FÜñÊrÊBW'6ˆ‚6˜VÁB‚ ¢$FÚÊ˜B&W∆6R¬÷˜'Ç¬&VWFñgí¬&VßWfVÊFR˜"&VFW6ñv‚f6W2‚fˆñB&ˆfñ∆RfñWw2¬WáG&V÷RÜVBGW&Á2¬f6Rˆ66«W6ñˆ‚ÊBñFVÁFóGíG&ñgB‚ ¢$ÊGW&¬&V∆ó7Fñ2÷˜Fñˆ‚¬Fˆ7V÷VÁF'íf÷ñ«í◊fñFVÚfVV∆ñÊr¬6÷ˆ˜FÇ6÷W&÷˜Fñˆ‚‚ ¢ê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B"¬ÊˆÊRê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢/	˘∫
+]mç¬Ì]›]›çÚΩçb-Ω“‚	ΩçmÇ›]ÌΩÕççRM-çm]›çÚ=ÌΩÌ-≤=M="Õ≠çÕΩÕ›‚-çΩÕ›ΩÕÇ¬ ¢-›‚-]Ω¬}]ç]›≤]-]--]››ΩRM]ù--çÚ(	B˝Ì-ÌÌ"¬---›çR¬ç=Ç¬Ì≠˝-çÚ¬]ΩÌ˝≠ÇÇ-}çÕÌM]ù--çR‚
+-]˝]¬-Ω]ç-RM-çmÌ£¢"¿¢&W«ïˆ÷&∑W◊Ü˜Fı˜&Wfóf≈ˆVÊvñÊW5ˆ∂"Çí¿¢ê¢&WGW&‡¢ñbFF”“'VFóCß&WfófUˆ7W7Fˆ“#†¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊu˜&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B%““G'VP¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢.)»ﬁ˚àÚ	Ì˝ççç-R¬}-‚MÌΩm›‚˝Ìç}Ìù-Ç"≠MR‚	›˝çÕ]¢*ΩΩ]-Ωí}]ΩÌ-]¢--"Ç˝Ì-Ì}ç-]-Ú¢≠Õ]R¬˝-Ωí=ΩΩ]-Ú¬Ì-ΩÕ›ΩRΩ]=≠M-ç=Ì-Ú]-]--]››Ï+≤‚	˝ÌΩR›-Ì=‚Ú˝]MΩÌm2-Ω-¬M-çmÌ¢‚ ¢ê¢&WGW&‡¢ñbFFñ‚Ç'VFóCß&WfófR"¬'VFóCß&WfófU˜'VÁví"¬'VFóCß&WfófUˆ«V÷"¬'VFóCß&WfófU˜6˜&"¬'VFóCß&WfófUˆ∂∆ñÊr"ì†¢VÊvñÊR“∞¢'VFóCß&WfófR#¢''VÁví"¿¢'VFóCß&WfófU˜'VÁví#¢''VÁví"¿¢'VFóCß&WfófUˆ«V÷#¢&«V÷"¿¢'VFóCß&WfófU˜6˜&#¢'6˜&"¿¢'VFóCß&WfófUˆ∂∆ñÊr#¢&∂∆ñÊr"¿¢“ÊvWBÜFF¬''VÁví"ê¢ñbVÊvñÊR”“&«V÷"ÊB≈T‘ıDT’ÙDï4$ƒTC†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ«V÷-]Õ]››‚Ì-≠ΩÌ}]›Ç≠Ω-çrÕ]›‚‚	ç˝ÌΩÕ}=ù-R'VÁví¬∂∆ñÊrçΩÇ6˜&"]rΩÌM]í‚"ê¢&WGW&‡¢2	-çMçÕΩí4≤}2˝ÌΩR≠Ωç≠‚
+-˝mΩÚ=]›]mçÚçM"˝ÌΩRΩ-Ì=‚Ì--]-FV∆Vw&“‡¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢6Ü˜vÂˆVÊvñÊR“%'VÁví--‚›]}]-Ì¬∂∆ñÊr"ñbVÊvñÊR”“''VÁví"V«6RVÊvñÊRÁWW"Çê¢7VffóÇ“"	]ΩÇÌ›Ì-›ÌíM-çmÌ¢›]MÌ-=˝]“¬˝]]≠ΩÌ}=¬›]}]-›Ωí‚"ñbVÊvñÊR”“''VÁví"V«6R"	M-çmÌ¢›R˝]]≠ΩÌ}‚‚ ¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb/	˘˙"	}˝=≠‚Ìmç-Ω]›çS¢∑6Ü˜vÂˆVÊvñÊW“Á∑7Vffóá“"ê¢G'ì†¢&Wfóf≈˜&ˆ◊B“Ü6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B"¬""í˜"""íÁ7G&óÇê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'&Wfóf≈ˆñFVÁFóGïˆ÷ˆFR"¬ÊˆÊRê¢vóB˜7F'E˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáB¬VÊvñÊS÷VÊvñÊR¬ñ÷uˆ'óFW3÷ñ÷r¬&ˆ◊C◊&Wfóf≈˜&ˆ◊Bê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'VFóB&WfófRfñ∆VC¢W2"¬Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ	›R=MΩÌ¬}˝=-ç-¬Ì›Ì-›ÌíM-çmÌ¢‚	Ì-≠Ìù-RÕ]›‚Ç˝Ì˝Ì=ù-R∂∆ñÊrçΩÇ˝Ì--Ìç-R˝Ì}mR‚"ê¢&WGW&‡†¢ñbFF”“'VFóC¶«V÷ñ÷r#†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬&«V÷ñ÷u˜vóE˜FWáB"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›˝ççç-RÌM›‚˝]MΩÌm]›çR(	B}-‚=]›]çÌ--¬‚
+ÚM]Ω‚≠-ç›≠2‚"ê¢&WGW&‡¢ñbFF”“'VFóCßfó6ñˆ‚#†¢#cB“&6ScBÊ#cFVÊ6ˆFRÜñ÷ríÊFV6ˆFRÇ&66ñí"ê¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷rê¢Á2“vóB6µˆ˜VÊï˜fó6ñˆ‚Ç-	Ì˝ççÇMÌ-‚Ç-]≠"››¬≠-≠‚‚"¬#cB¬÷ñ÷Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜÁ2˜"-	=Ì-Ì-‚‚"ê¢&WGW&‡†¢ñbFFÁ7F'G7vóFÇÇ&f6W7vßF&vWC¢"ì†¢vóBÊÁ7vW"Çê¢G'ì†¢ñGÇ“ñÁBÜFFÁ7∆óBÇ#¢"ï≤”“ê¢WÜ6WBWÜ6WFñˆ„†¢ñGÇ“ ¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@¢ˆf6W7v˜F&vWEˆf6UˆñÊFWÖˆ66ÜU∑W6W%ˆñE““÷ÇÉ¬ñGÇê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb.)»R	-Ω›‚m]Ω]-ÌRΩçm‚(Ig∂÷ÇÉ¬ñGÇí≤“‚
+-]˝]¬˝ççΩç-RMÌ-‚Ωçm¬≠Ì-ÌÌR›=m›‚---ç-¬‚"ê¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““&vóE˜6˜W&6R ¢&WGW&‡†¢ñbFFÁ7F'G7vóFÇÇ&f6W7vß6˜W&6S¢"ì†¢vóBÊÁ7vW"Çê¢G'ì†¢ñGÇ“ñÁBÜFFÁ7∆óBÇ#¢"ï≤”“ê¢WÜ6WBWÜ6WFñˆ„†¢ñGÇ“ ¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@¢ˆf6W7v˜6˜W&6Uˆf6UˆñÊFWÖˆ66ÜU∑W6W%ˆñE““÷ÇÉ¬ñGÇê¢6ˆÁFWáBÁW6W%ˆFF≤&f6W7vˆf∆˜r%““'&VGí ¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb.)»R	-Ω›‚Ωçm‚›ç-Ì}›ç¢(Ig∂÷ÇÉ¬ñGÇí≤“‚	-Ω]ç-R≠}]--‚}Õ]›≥¢"¬&W«ïˆ÷&∑W÷f6U˜7v˜V∆óGïˆ∂"Çíê¢&WGW&‡†¢ñbFFÁ7F'G7vóFÇÇ&f6W7vß'V„¢"ì†¢vóBÊÁ7vW"Çê¢V∆óGí“FFÁ7∆óBÇ#¢"ï≤”–¢vóBˆf6W7v˜&ˆ6W72áWFFR¬6ˆÁFWáB¬V∆óGì◊V∆óGíê¢&WGW&‡†¢ñbFFÁ7F'G7vóFÇÇ&6Üˆ˜6Vñ÷s¢"ì†¢vóBÊÁ7vW"Çê¢G'ì†¢Ú¬VÊvñÊR¬ñB“FFÁ7∆óBÇ#¢"¬"ê¢WÜ6WBWÜ6WFñˆ„†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬˝Ì}›-¬-ΩÌM-çm≠‚"ê¢&WGW&‡¢÷WF“˜VÊFñÊuˆ7FñˆÁ2Á˜ÜñB¬ÊˆÊRê¢ñbÊ˜B÷WF˜"÷WFÊvWBÇ&∂ñÊB"í“&ñ÷vUˆvVÊW&FR#†¢vóBÊÁ7vW"Ç-	}M}=-]Ω"¬6Ü˜uˆ∆W'C’G'VRê¢&WGW&‡¢&ˆ◊B“Ü÷WFÊvWBÇ'&ˆ◊B"í˜"""íÁ7G&óÇê¢ñbÊ˜B&ˆ◊C†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	˝ÌÕ˝"›R›ùM]“‚	}˝=-ç-R}˝Ì]ùr‚"ê¢&WGW&‡¢vóB˜'VÂ˜6V∆V7FVEˆñ÷vUˆvVÊW&Fñˆ‚áWFFR¬6ˆÁFWáB¬&ˆ◊B¬VÊvñÊRê¢&WGW&‡†¢2	˝ÌM--]mM]›çR-ΩÌM-çm≠MΩÚ-çM]‡¢ñbFFÁ7F'G7vóFÇÇ&6Üˆ˜6S¢"ì†¢vóBÊÁ7vW"Çê¢Ú¬VÊvñÊR¬ñB“FFÁ7∆óBÇ#¢"¬"ê¢ñbVÊvñÊR”“&«V÷"ÊB≈T‘ıDT’ÙDï4$ƒTC†¢˜VÊFñÊuˆ7FñˆÁ2Á˜ÜñB¬ÊˆÊRê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ«V÷-]Õ]››‚Ì-≠ΩÌ}]›‚	-Ω]ç-R6˜&"]rΩÌM]í¬∂∆ñÊrçΩÇ'VÁví‚"ê¢&WGW&‡¢÷WF“˜VÊFñÊuˆ7FñˆÁ2Á˜ÜñB¬ÊˆÊRê¢ñbÊ˜B÷WF†¢vóBÊÁ7vW"Ç-	}M}=-]Ω"¬6Ü˜uˆ∆W'C’G'VRì≤&WGW&‡¢&ˆ◊B¬GW&Fñˆ‚¬7V7B“÷WF≤'&ˆ◊B%“¬÷WF≤&GW&Fñˆ‚%“¬÷WF≤&7V7B%–¢VÊvñÊR“ÜVÊvñÊR˜"""íÊ∆˜vW"Çê¢ñbVÊvñÊRÊ˜Bñ‚Ç'6˜&"¬&∂∆ñÊr"¬''VÁví"ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	MÌ-=˝›≤6˜&"]rΩÌM]í¬∂∆ñÊrÇ'VÁví‚"ì≤&WGW&‡¢ñbVÊvñÊR”“''VÁví"ÊBÊ˜BDUÖEıdîDTıÙƒƒıuı%TÂtì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ'VÁví-]Õ]››‚Ì-≠ΩÌ}“›-Ìù≠ÌíDUÖEıdîDTıÙƒƒıuı%TÂtí‚"ì≤&WGW&‡¢ñbVÊvñÊR”“'6˜&"ÊB˜&ˆ◊Eˆ∆ñ∂V«ïˆÜ5˜V˜∆Rá&ˆ◊Bì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ6˜&"ç˝ÌΩÕ}=]-Ú-ÌΩÕ≠‚]rΩÌM]í‚	MΩÚ›-Ì=‚}˝Ì-Ω]ç-R∂∆ñÊrçΩÇ'VÁví‚"ì≤&WGW&‡¢&˜fñFW%ˆ6˜7B“˜fñFVı˜&˜fñFW%ˆ6˜7E˜W6BÜVÊvñÊR¬GW&Fñˆ‚ê†¢7ñÊ2FVb˜7F'E˜&V≈˜&VÊFW"Çì†¢ñbVÊvñÊR”“''VÁví#†¢&WGW&‚vóB˜'VÂ˜'VÁvï˜fñFVÚáWFFR¬6ˆÁFWáB¬&ˆ◊B¬GW&Fñˆ‚¬7V7Bê¢&WGW&‚vóB˜'VÂˆ6ˆ÷WE˜FWáE˜fñFVÚáWFFR¬6ˆÁFWáB¬VÊvñÊR¬&ˆ◊B¬GW&Fñˆ‚¬7V7Bê†¢vóB˜G'ï˜ï˜FÜVÂˆFÚÄ¢WFFR¬6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¿¢''VÁví"¬&˜fñFW%ˆ6˜7B¬˜7F'E˜&V≈˜&VÊFW"¿¢&V÷V÷&W%ˆ∂ñÊC÷b'fñFVı˜∂VÊvñÊW“"¿¢&V÷V÷&W%˜ñ∆ˆC◊≤'&ˆ◊B#¢&ˆ◊B¬&GW&Fñˆ‚#¢GW&Fñˆ‚¬&7V7B#¢7V7B¬&VÊvñÊR#¢VÊvñÊW“¿¢ê¢&WGW&‡†¢vóBÊÁ7vW"Ç-	›]ç}-]-›Ú≠ÌÕ›M"¬6Ü˜uˆ∆W'C’G'VRê†¢WÜ6WBWÜ6WFñˆ‚2S†¢◊6r“7G"ÜRê¢ñb'VW'íó2FˆÚˆ∆B"ñ‚◊6rÊ∆˜vW"Çí˜"'VW'íñBó2ñÁf∆ñB"ñ‚◊6rÊ∆˜vW"Çì†¢∆ˆrÁv&ÊñÊrÇ'7F∆R6∆∆&6≤ñvÊ˜&VC¢W2"¬◊6rê¢&WGW&‡¢∆ˆrÊWÜ6WFñˆ‚Ç&ˆÂˆ6"W'&˜#¢W2"¬Rê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ	≠›Ì˝≠=-]Ω‚	Ì-≠Ìù-RÕ]›‚}›Ì-‚Ç˝Ì--Ìç-RM]ù--çR‚"ê¢fñÊ∆«ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBÊÁ7vW"Çê††¢2)H)H)H)H)H)H)H)H)H5EB)H)H)H)H)H)H)H)H)H ¶FVbˆ÷ñ÷Uˆg&ˆ’ˆfñ∆VÊ÷RÜf„¢7G"í”‚7G#†¢fÊ¬“Üf‚˜"""íÊ∆˜vW"Çê¢ñbfÊ¬ÊVÊG7vóFÇÇÇ"Êˆvr"¬"Êˆv"íì¢&WGW&‚&VFñÚˆˆvr ¢ñbfÊ¬ÊVÊG7vóFÇÇ"Ê◊2"ì¢&WGW&‚&VFñÚˆ◊Vr ¢ñbfÊ¬ÊVÊG7vóFÇÇÇ"Ê”F"¬"Ê◊B"íì¢&WGW&‚&VFñÚˆ◊B ¢ñbfÊ¬ÊVÊG7vóFÇÇ"Ávb"ì¢&WGW&‚&VFñÚ˜vb ¢ñbfÊ¬ÊVÊG7vóFÇÇ"ÁvV&“"ì¢&WGW&‚&VFñÚ˜vV&“ ¢&WGW&‚&∆ñ6Fñˆ‚ˆˆ7FWB◊7G&V“ †¶7ñÊ2FVbG&Á67&ñ&UˆVFñÚÜ'Vc¢'óFW4îÚ¬fñ∆VÊ÷UˆÜñÁC¢7G"“&VFñÚÊˆvr"í”‚7G#†¢FF“'VbÊvWGf«VRÇê¢ñbDTUu$’ÙïÙ¥Uì†¢G'ì†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”c„í26∆ñVÁC†¢&◊2“≤&÷ˆFV¬#¢&Ê˜f”""¬&∆ÊwVvR#¢''R"¬'6÷'Eˆf˜&÷B#¢'G'VR"¬'VÊ7GVFR#¢'G'VR'–¢ÜVFW'2“≤$WFÜ˜&ó¶Fñˆ‚#¢b%Fˆ∂V‚¥DTUu$’ÙïÙ¥Uó“"¬$6ˆÁFVÁB’GóR#¢ˆ÷ñ÷Uˆg&ˆ’ˆfñ∆VÊ÷RÜfñ∆VÊ÷UˆÜñÁBó–¢"“vóB6∆ñVÁBÁ˜7BÇ&áGG3¢ÚˆíÊFVWw&“Ê6ˆ“˜cˆ∆ó7FV‚"¬&◊3◊&◊2¬ÜVFW'3÷ÜVFW'2¬6ˆÁFVÁC÷FFê¢"Á&ó6Uˆf˜%˜7FGW2Çê¢Fr“"Êß6ˆ‚Çê¢FWáB“ÜFrÊvWBÇ'&W7V«G2"¬∑“íÊvWBÇ&6ÜÊÊV«2"¬∑∑’“ï≥“ÊvWBÇ&«FW&ÊFófW2"¬∑∑’“ï≥“ÊvWBÇ'G&Á67&óB"¬""ííÁ7G&óÇê¢ñbFWáC¢&WGW&‚FWá@¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç$FVWw&“5EBW'&˜#¢W2"¬Rê¢ñbˆï˜7GC†¢G'ì†¢'Vc"“'óFW4îÚÜFFì≤'Vc"Á6VV≤Éì≤6WFGG"Ü'Vc"¬&Ê÷R"¬fñ∆VÊ÷UˆÜñÁBê¢G"“ˆï˜7GBÊVFñÚÁG&Á67&óFñˆÁ2Ê7&VFRÜ÷ˆFV√’E$Â45$î$UÙ‘ÙDT¬¬fñ∆S÷'Vc"ê¢&WGW&‚áG"ÁFWáB˜"""íÁ7G&óÇê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç%vÜó7W"5EBW'&˜#¢W2"¬Rê¢&WGW&‚" ††¢2)H)H)H)H)H)H)H)H)H	Mç=›Ì-ç≠M-çm≠Ì")H)H)H)H)H)H)H)H)H ¶7ñÊ2FVb6÷EˆFñu˜7GBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢∆ñÊW2“µ–¢∆ñÊW2ÊVÊBÇ/	˘H‚5EBMç=›Ì-ç≠¢"ê¢∆ñÊW2ÊVÊBÜb.(
+"˜V‰ívÜó7W#¢≤~)»R≠Ωç]›"≠-ç-]“rñbˆï˜7GBV«6R~)ÿ¬›]MÌ-=˝]“w“"ê¢∆ñÊW2ÊVÊBÜb.(
+"	ÕÌM]Ω¬vÜó7W#¢µE$Â45$î$UÙ‘ÙDT«“"ê¢∆ñÊW2ÊVÊBÇ.(
+"	˝ÌMM]m≠MÌÕ-Ì#¢ˆvrˆˆv¬◊2¬”Fˆ◊B¬vb¬vV&“"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2íê†¶7ñÊ2FVb6÷EˆFñuˆñ÷vW2áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢∂WïˆVÁb“˜2ÊVÁfó&ˆ‚ÊvWBÇ$ıT‰ïÙî‘tUÙ¥Uí"¬""íÁ7G&óÇê¢∂Wï˜W6VB“∂WïˆVÁb˜"ıT‰ïÙïÙ¥Uê¢&6R“î‘tU5Ù$4UıU$¿¢∆ñÊW2“∞¢/	˙z¢ñ÷vW2Ñ˜V‰ííMç=›Ì-ç≠¢"¿¢b.(
+"ıT‰ïÙî‘tUÙ¥Uì¢≤~)»R›ùM]“rñb∂Wï˜W6VBV«6R~)ÿ¬›]"w“"¿¢b.(
+"$4UıU$√¢∂&6W“"¿¢b.(
+"‘ÙDT√¢¥î‘tU5Ù‘ÙDT«“"¿¢–¢ñb&˜VÁ&˜WFW""ñ‚Ü&6R˜"""íÊ∆˜vW"Çì†¢∆ñÊW2ÊVÊBÇ.)™˚àÚ$4UıU$¬=≠}Ω-]"›˜VÂ&˜WFW"(	B-¬›]"wB÷ñ÷vR”‚"ê¢∆ñÊW2ÊVÊBÇ"
+=≠mÇáGG3¢ÚˆíÊ˜VÊíÊ6ˆ“˜cççΩÇ-Ìí˝Ì≠Çí"ıT‰ïÙî‘tUÙ$4UıU$¬‚"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2íê†¶7ñÊ2FVb6÷EˆFñu˜fñFVÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢∆ñÊW2“∞¢b/	¯Í¬	-çM]‚›M-çm≠ÇÚµD4ÖıdU%4îÙÁ”¢"¿¢b.(
+"«V÷∂Wì¢≤	˘™≤≠Ω-‚-]Õ]››‚rñb≈T‘ıDT’ÙDï4$ƒTBV«6RÇ~)»Rrñb&ˆˆ¬Ñ≈T‘ÙïÙ¥UííV«6R~)ÿ¬ró“&6S◊¥≈T‘Ù$4UıU$«“"¿¢b"7&VFS◊¥≈T‘Ù5$TDUıDá“7FGW3◊¥≈T‘ı5DEU5ıDá“÷ˆFV√◊¥≈T‘Ù‘ÙDT«“"¿¢b.(
+"'VÁvíˆffñ6ñ√¢VÊ&∆VC◊≤~)»Rrñb%TÂtïÙDï$T5EÙT‰$ƒTBV«6R~)ÿ¬w“∂Wì◊≤~)»Rrñb&ˆˆ¬Ö%TÂtïÙïÙ¥UííV«6R~)ÿ¬w“6˜W&6S◊µ%TÂtïÙ¥Uïı4ıU$4W“fñÊvW'&ñÁC◊∑'VÁvï˜6fUˆ∂WïˆfñÊvW'&ñÁBÖ%TÂtïÙïÙ¥Uíó“"¿¢b"&6S◊µ%TÂtïÙ$4UıU$«“fW'6ñˆ„◊µ%TÂtïÙïıdU%4îÙÁ“FWáC◊µ%TÂtïıDUÖEÙ5$TDUıDá“ì'c◊µ%TÂtïÙì%eıDá“"¿¢b"W∆ˆG3◊µ%TÂtïıUƒÙEıDá“˜&s◊µ%TÂtïÙı$t‰ï§DîÙÂıDá“F6∑3◊µ%TÂtïı5DEU5ıDá“"¿¢b"FWáEˆ÷ˆFV«3◊≤r¬rÊ¶ˆñ‚Ö˜'VÁvïˆFó&V7E˜FWáEˆ÷ˆFV≈ˆ6ÊFñFFW2Çíó“ì'eˆ÷ˆFV«3◊≤r¬rÊ¶ˆñ‚Ö˜'VÁvïˆFó&V7Eˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çíó“ˆ∆√◊µ%TÂtïÙDï$T5EıÙƒ≈ÙîÂDU%d≈ı3¢„g“◊µ%TÂtïÙDï$T5EıÙƒ≈Ù‘ÖÙîÂDU%d≈ı3¢„g◊2W∆ˆEˆGFV◊G3◊µ%TÂtïÙDï$T5EıUƒÙEÙEDT’E7“"¿¢b.(
+"6ˆ÷WB∂Wì¢≤~)»Rrñb&ˆˆ¬Ñ4Ù‘UEÙïÙ¥UííV«6R~)ÿ¬w“&6S◊¥4Ù‘UEÙ$4UıU$«“"¿¢b"'VÁvíÙ6ˆ÷WB7&VFS◊µ%TÂtïÙ4Ù‘UEÙ5$TDUıDá“7FGW3◊µ%TÂtïÙ4Ù‘UEı5DEU5ıDá“"¿¢b"'VÁvíì'bVÊ&∆VC◊≤~)»Rrñb%TÂtïÙî‘tS%dîDTıÙT‰$ƒTBV«6R~)ÿ¬w“÷ˆFV«3◊≤r¬rÊ¶ˆñ‚Ö˜'VÁvïˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çíó“6ˆˆ∆F˜v„◊µ˜&˜fñFW%ˆ6ˆˆ∆F˜vÂˆ∆VgBÇw'VÁvïˆì'bró◊2ÜñFUˆW'&˜'3◊≤~)»Rrñb%TÂtïÙÑîDUıDT4ÖÙU%$ı%2V«6R~(	Bw“"¿¢b.(
+"$r&V÷˜fS¢&˜fñFW#◊¥$uı$ıdîDU'“Ü˜F˜&ˆˆ”◊≤~)»Rrñb&ˆˆ¬ÖÑıDı$ÙÙ’ÙïÙ¥UííV«6R~)ÿ¬w“∆ˆ6≈˜&V÷&s◊≤~)»RrñbÑƒÙ4≈ı$T‘$uÙT‰$ƒTBÊB&V÷&u˜&V÷˜fRó2Ê˜BÊˆÊRíV«6R~)ÿ¬w“"¿¢b.(
+"6˜&∂Wì¢≤~)»Rrñb&ˆˆ¬Ö4ı$ÙïÙ¥UííV«6R~)ÿ¬w“÷ˆFV√◊µ4ı$Ù‘ÙDT«“7&VFS◊µ4ı$Ù5$TDUıDá“"¿¢b.(
+"∂∆ñÊr∂Wì¢≤~)»Rrñb&ˆˆ¬Ñ¥ƒî‰uÙïÙ¥UííV«6R~)ÿ¬w“÷ˆFV√◊¥¥ƒî‰uÙ‘ÙDT«“7&VFS◊¥¥ƒî‰uÙ5$TDUıDá“"¿¢b.(
+"∂∆ñÊrfF#¢7&VFS◊¥¥ƒî‰uÙdD%Ù5$TDUıDá“7FGW3◊¥¥ƒî‰uÙdD%ı5DEU5ıDá“÷ˆFS◊¥¥ƒî‰uÙdD%Ù‘ÙDW“fF%˜fˆñ6UˆFVfV«C◊¥dD%ıEE5ÙDTdT≈EıdÙî4W“6˜7C“G¥dD%ıT‰ïEÙ4ı5EıU4C¢„&g“"¿¢b.(
+"Ü˜F˛(i&6∆óóV∆ñÊS¢≤~)»Rˆ‚rñbÑıDıÙ4ƒïıïTƒî‰RV«6R~(	Bˆfbw“VÊvñÊS◊µÑıDıÙ4ƒïıdîDTıÙT‰tî‰W“ÊFófU˜6˜VÊC◊≤vˆ‚rñbÑıDıÙ4ƒïı4ıT‰BV«6Rvˆfbw“÷ˆFS◊µÑıDıÙ4ƒïÙ‘ÙDW“FVfV«C◊µÑıDıÙ4ƒïÙDTdT≈EÙEU$DîÙÂı7◊2÷É◊µÑıDıÙ4ƒïÙ‘ÖÙEU$DîÙÂı7◊2◊WÖˆVFñÛ◊≤~)»RrñbÑıDıÙ4ƒïÙ’UÖÙTDîÚV«6R~(	Bw“6˜7C“GµÑıDıÙ4ƒïıT‰ïEÙ4ı5EıU4C¢„&g“"¿¢b.(
+"ff◊Vr◊WÉ¢Fñ÷V˜WC◊¥dd’TuÙ’UÖıDî‘TıUEı7◊26˜ïˆfó'7C◊≤~)»Rrñbdd’TuÙ’UÖÙ4ıïÙdï%5BV«6R~(	Bw“&W6WC◊¥dd’TuÙ’UÖı$TT‰4ÙDUı$U4UG“7&c◊¥dd’TuÙ’UÖÙ5$g“66∆UˆÉ◊¥dd’TuÙ’UÖı44ƒUÙÑTîtÖG“g3◊¥dd’TuÙ’UÖÙe7“VFñÛ◊¥dd’TuÙ’UÖÙTDîıÙ$ïE$DW“÷É◊¥dd’TuÙ’UÖÙ‘ÖÙ‘'‘‘""¿¢b.(
+"7VÊÚf˜"Ü˜F˛(i&6∆ó¢≤~)»RWFÚrñb5T‰ıÙUDıÙdı%ıÑıDıÙ4ƒïV«6R~(	Bˆfbw“VÊ&∆VC◊≤~)»Rrñb5T‰ıÙT‰$ƒTBV«6R~(	Bw“∂Wì◊≤~)»Rrñb&ˆˆ¬Ö5T‰ıÙïÙ¥UííV«6R~)ÿ¬w“7&VFS◊µ5T‰ıÙ5$TDUıDá“÷ˆFV√◊µ5T‰ıÙ‘ÙDT«“"¿¢b.(
+"í6V∆fñS¢&˜fñFW#◊¥ïı4TƒdîUı$ıdîDU'“6ˆ÷WEˆ∂Wì◊≤vˆ‚rñb&ˆˆ¬Ñ4Ù‘UEÙïÙ¥UííV«6Rvˆfbw“÷ˆFV√◊¥4Ù‘UEÙî‘tUÙTDïEÙ‘ÙDT«“f∆∆&6∑3◊≤r¬rÊ¶ˆñ‚Ñ4Ù‘UEÙî‘tUÙTDïEÙdƒƒ$4µÙ‘ÙDT≈2ó“FÉ◊¥4Ù‘UEÙî‘tUÙTDïEıDá“Fñ÷V˜WC◊¥4Ù‘UEÙî‘tUÙTDïEıDî‘TıUEı7◊2÷Ö˜6ñFS◊¥ïı4TƒdîUÙ‘Öı4îDW“6ó¶S◊¥ïı4TƒdîUÙî‘tUı4ï§W“f7C◊¥ïı4TƒdîUÙd5EÙ‘ÙDW“6˜7C“G¥ïı4TƒdîUıT‰ïEÙ4ı5EıU4C¢„&g“"¿¢b.(
+"	›ÌÕΩç}mçÚGW&Fñˆ„¢∂∆ñÊrRÛ]£≤6˜&BÛÇÛ"]¢]rΩÌM]ì≤'VÁvíFWáN(i'fñFVÚÇñ÷v^(i'fñFVÛ≤«V÷-]Õ]››‚≠Ω-"¿¢b.(
+"	˝ÌΩΩç›2≠mMΩRµdîDTııÙƒ≈ÙDTƒïı3¢„g“2"¿¢–¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2íê†¶7ñÊ2FVb6÷EˆFñu˜'VÁvíáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢""%'VÁvíÙ6ˆ÷WBÜV«FÇFñvÊ˜7Fñ2‡†¢	]r==Õ]›-Ì"(	B]}Ì˝›ÚMç=›Ì-ç≠≠Ì›Mç==mçÇÇ6ó&7VóB'&V∂W"‡¢ˆFñu˜'VÁvíWFÇ(	B]}Ì˝›‚˝Ì-]˝]"ÌMçmçΩÕ›Ωí≠ΩÌrÇí›≠]Mç-≤‡¢ˆFñu˜'VÁví&W6WB(	BÌ6ˆˆ∆F˜v‚‡¢ˆFñu˜'VÁvíFW7B(	B˝Ì=]"]ΩÕ›=‚ì'b}M}2˝‚˝ÌΩ]M›]Õ2MÌ-‚‡¢"" ¢&w2“∑7G"ÜíÊ∆˜vW"Çíf˜"ñ‚Ü6ˆÁFWáBÊ&w2˜"µ“ï–¢ñb'&W6WB"ñ‚&w3†¢˜&˜fñFW%˜&W6WBÇ''VÁvïˆì'b"ê¢˜&˜fñFW%˜&W6WBÇ''VÁvï˜FWáEˆ6ˆ÷WB"ê¢˜&˜fñFW%˜&W6WBÇ''VÁvïˆFó&V7B"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)»R'VÁví&˜fñFW"6ˆˆ∆F˜v‚Ìç]“MΩÚFó&V7B¬ñ÷v^(i'fñFVÚÇFWáN(i'fñFVÚ‚"ê¢&WGW&‡†¢ñb&WFÇ"ñ‚&w3†¢ˆ≤¬FWFñ¬“vóB˜'VÁvïˆFó&V7Eˆ˜&uˆñÊfÚÇê¢&VfóÇ“.)»R	ÌMçmçΩÕ›Ωí'VÁvííMÌ-=˝]“"ñbˆ≤V«6R.)ÿ¬	ÌMçmçΩÕ›Ωí'VÁvíí›R=Ì-Ì" ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBá&VfóÇ≤%∆‚"≤FWFñ¬ê¢&WGW&‡†¢∆ñÊW2“∞¢b/	˙z¢'VÁvíÙ6ˆ÷WBMç=›Ì-ç≠ÚµD4ÖıdU%4îÙÁ“"¿¢b.(
+"VÊ&∆VC¢≤~)»Rrñb%TÂtïÙî‘tS%dîDTıÙT‰$ƒTBV«6R~)ÿ¬w“W6Uˆ6ˆ÷WC◊≤~)»Rrñb%TÂtïıU4UÙ4Ù‘UBV«6R~(	Bw“"¿¢b.(
+"6ˆ÷WEˆ∂Wì¢≤~)»Rrñb&ˆˆ¬Ñ4Ù‘UEÙïÙ¥UííV«6R~)ÿ¬w“&6S◊¥4Ù‘UEÙ$4UıU$«“"¿¢b.(
+"7&VFS◊µ%TÂtïÙ4Ù‘UEÙ5$TDUıDá“7FGW3◊µ%TÂtïÙ4Ù‘UEı5DEU5ıDá“"¿¢b.(
+"fW'6ñˆ„◊µ%TÂtïÙïıdU%4îÙ‚˜"s##B””bw“"¿¢b.(
+"÷ˆFV«3◊≤r¬rÊ¶ˆñ‚Ö˜'VÁvïˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çíó“"¿¢b.(
+"Fó&V7EˆVÊ&∆VC¢≤~)»Rrñb%TÂtïÙDï$T5EÙT‰$ƒTBV«6R~)ÿ¬w“Fó&V7Eˆ∂Wì¢≤~)»Rrñb&ˆˆ¬Ö%TÂtïÙïÙ¥UííV«6R~)ÿ¬w“Fó&V7Eˆfó'7C◊≤~)»Rrñb%TÂtïÙDï$T5EÙdï%5BV«6R~(	Bw“"¿¢b.(
+"∂Wï˜6˜W&6S◊µ%TÂtïÙ¥Uïı4ıU$4W“fñÊvW'&ñÁC◊∑'VÁvï˜6fUˆ∂WïˆfñÊvW'&ñÁBÖ%TÂtïÙïÙ¥Uíó“"¿¢b.(
+"ˆffñ6ñ≈ˆ&6S◊µ%TÂtïÙ$4UıU$«“fW'6ñˆ„◊µ%TÂtïÙïıdU%4îÙÁ“"¿¢b.(
+"ˆffñ6ñ≈ˆVÊGˆñÁG3¢FWáC◊µ%TÂtïıDUÖEÙ5$TDUıDá“ì'c◊µ%TÂtïÙì%eıDá“W∆ˆC◊µ%TÂtïıUƒÙEıDá“˜&s◊µ%TÂtïÙı$t‰ï§DîÙÂıDá“"¿¢b.(
+"Fó&V7BFWáB÷ˆFV«3◊≤r¬rÊ¶ˆñ‚Ö˜'VÁvïˆFó&V7E˜FWáEˆ÷ˆFV≈ˆ6ÊFñFFW2Çíó“ì'b÷ˆFV«3◊≤r¬rÊ¶ˆñ‚Ö˜'VÁvïˆFó&V7Eˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çíó“"¿¢b.(
+"ˆ∆∆ñÊs◊µ%TÂtïÙDï$T5EıÙƒ≈ÙîÂDU%d≈ı3¢„g“◊µ%TÂtïÙDï$T5EıÙƒ≈Ù‘ÖÙîÂDU%d≈ı3¢„g◊2&WG&ñW3◊µ%TÂtïÙDï$T5Eı$UE%ïÙEDT’E7“W∆ˆEˆGFV◊G3◊µ%TÂtïÙDï$T5EıUƒÙEÙEDT’E7“FF˜W&ïˆf∆∆&6≥◊≤~)»Rrñb%TÂtïÙDï$T5EÙDDıU$ïÙdƒƒ$4≤V«6R~(	Bw“"¿¢b.(
+"ÜñFU˜FV6ÖˆW'&˜'3◊≤~)»Rrñb%TÂtïÙÑîDUıDT4ÖÙU%$ı%2V«6R~(	Bw“f∆∆&6µˆ∂∆ñÊs◊≤~)»Rrñb%TÂtïıDUÖEÙdƒƒ$4µÙ¥ƒî‰rÊB%TÂtïÙUDıÙdƒƒ$4µÙ¥ƒî‰rV«6R~(	Bw“"¿¢b.(
+"ì'eˆ6ˆˆ∆F˜v„◊µ˜&˜fñFW%ˆ6ˆˆ∆F˜vÂˆ∆VgBÇw'VÁvïˆì'bró◊2FWáEˆ6ˆˆ∆F˜v„◊µ˜&˜fñFW%ˆ6ˆˆ∆F˜vÂˆ∆VgBÇw'VÁvï˜FWáEˆ6ˆ÷WBró◊2"¿¢–¢ñb˜&˜fñFW%ˆ∆7EˆW'&˜"ÊvWBÇ''VÁvïˆì'b"ì†¢∆ñÊW2ÊVÊBÇ.(
+"∆7EˆW'&˜#“"≤˜&˜fñFW%ˆ∆7EˆW'&˜"ÊvWBÇ''VÁvïˆì'b"¬""ï≥£s“ê†¢ñb'FW7B"Ê˜Bñ‚&w3†¢∆ñÊW2ÊVÊBÇ""ê¢∆ñÊW2ÊVÊBÇ-	˝Ì-]ç-¬ÌMçmçΩÕ›Ωí≠ΩÌrÇí›≠]Mç-≥¢ˆFñu˜'VÁvíWFÇ"ê¢∆ñÊW2ÊVÊBÇ-	MΩÚ]ΩÕ›Ì=‚-]-Ì-˝-Õ-R}ç-ÌRMÌ-‚¬}-]√¢ˆFñu˜'VÁvíFW7B"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2ï≥£3ì“ê¢&WGW&‡†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢∆ñÊW2ÊVÊBÇ.)ÿ¬	›]"˝ÌΩ]M›]=‚MÌ-‚‚
+›}ΩÌ-˝-Õ-RMÌ-‚"Ì"¬}-]¬ˆFñu˜'VÁvíFW7B"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2ï≥£3ì“ê¢&WGW&‡†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2ï≥£#S“≤%∆Â∆Ó)kn˚àÚ	}˝=≠‚]ΩÕ›Ωí≠ÌÌ-≠çí-]"ÌMçmçΩÕ›Ì=‚'VÁví‚
+›-‚˝çç]"í›≠]Mç-≤¬]ΩÇ}M}=M]"˝ç›˝-‚"ê¢ñbÊ˜B%TÂtïÙïÙ¥Uì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬%TÂtî‘≈Ùïı4T5$UB›R›ùM]“‚	MÌ-Õ-R≠ΩÌr"&VÊFW"6V7&WBfñ∆R'VÁvíÊVÁbçΩÇ"VÁfó&ˆÊ÷VÁB‚"ê¢&WGW&‡¢ˆ≤“vóB˜'VÂ˜'VÁvïˆFó&V7EˆÊñ÷FU˜Ü˜FÚÄ¢WFFR¬6ˆÁFWáB¬ñ÷r¿¢'7V'F∆R˜'G&óBÊñ÷Fñˆ‚¬∂VWñFVÁFóGí¬6÷∆¬ÊGW&¬÷˜Fñˆ‚"¿¢R¬#ì£b"¿¢ê¢ñbˆ≥†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)»Rˆffñ6ñ¬'VÁvíFW7C¢}M}Ì-Ì-Ω‚"ê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚˆffñ6ñ¬'VÁvíFW7B›R˝Ìç≤‚	-Ω˝ÌΩ›ç-RˆFñu˜'VÁvíWFÇÇ˝Ì-]Õ-Rí›≠]Mç-≤"FWfV∆˜W"˜'F¬‚"ê†¶7ñÊ2FVb6÷E˜&˜fñFW%˜7FGW2áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢""%6Ü˜'B&˜fñFW"ÜV«FÇF6Ü&ˆ&Bf˜"&ˆGV7Fñˆ‚6ÜV6∑2‚"" ¢&w2“∑7G"ÜíÊ∆˜vW"Çíf˜"ñ‚Ü6ˆÁFWáBÊ&w2˜"µ“ï–¢ñb'&W6WB"ñ‚&w3†¢f˜"Ê÷Rñ‚Ç''VÁvïˆì'b"¬ì†¢˜&˜fñFW%˜&W6WBÜÊ÷Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)»R&˜fñFW"6ˆˆ∆F˜v‚Ìç]“‚"ê¢&WGW&‡¢∆ñÊW2“∞¢b/	˘8¢&˜fñFW"7FGW2ÚµD4ÖıdU%4îÙÁ“"¿¢b.(
+"'VÁvíì'c¢≤~)»Rfñ∆&∆Rrñb˜&˜fñFW%ˆó5ˆfñ∆&∆RÇw'VÁvïˆì'bríV«6R	˘˙6ˆˆ∆F˜v‚w“Ú6ˆˆ∆F˜v„◊µ˜&˜fñFW%ˆ6ˆˆ∆F˜vÂˆ∆VgBÇw'VÁvïˆì'bró◊2Úfñ«3◊µ˜&˜fñFW%ˆfñ≈ˆ6˜VÁG2ÊvWBÇw'VÁvïˆì'br¬ó“"¿¢b.(
+"'VÁví÷ˆFV«3¢≤r¬rÊ¶ˆñ‚Ö˜'VÁvïˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çíó“"¿¢b.(
+"∂∆ñÊrf∆∆&6≥¢≤~)»RrñbÖ%TÂtïÙUDıÙdƒƒ$4µÙ¥ƒî‰rÊB&ˆˆ¬Ñ4Ù‘UEÙïÙ¥UíííV«6R~)ÿ¬w“ÚFÉ◊¥¥ƒî‰uÙ5$TDUıDá“"¿¢b.(
+"ÜñFRFV6ÇW'&˜'3¢≤~)»Rrñb%TÂtïÙÑîDUıDT4ÖÙU%$ı%2V«6R~)ÿ¬w“"¿¢b.(
+"ì%b&W&ˆ6W73¢≤~)»Rrñbì%eı$U$Ù4U55ÙT‰$ƒTBV«6R~)ÿ¬w“Ú÷Ö˜6ñFS◊¥ì%eÙ‘Öı4ıU$4Uı4îDW“"¿¢–¢ñb˜&˜fñFW%ˆ∆7EˆW'&˜"ÊvWBÇ''VÁvïˆì'b"ì†¢∆ñÊW2ÊVÊBÇ.(
+"'VÁví∆7EˆW'&˜#¢"≤˜&˜fñFW%ˆ∆7EˆW'&˜"ÊvWBÇ''VÁvïˆì'b"¬""ï≥£ì“ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2ï≥£3ì“ê††¢2)H)H)H)H)H)H)H)H)H‘î‘RMΩÚç}Ìm]›çí)H)H)H)H)H)H)H)H)H ¶FVb6Êñfeˆñ÷vUˆ÷ñ÷RÜFF¢'óFW2í”‚7G#†¢ñbÊ˜BFF˜"∆V‚ÜFFí¬#†¢&WGW&‚&∆ñ6Fñˆ‚ˆˆ7FWB◊7G&V“ ¢"“FF≥£%–¢ñb"Á7F'G7vóFÇÜ"%«ÉÉï‰u«%∆Â«É∆‚"ì†¢&WGW&‚&ñ÷vR˜Êr ¢ñb%≥£5“”“"%«Üfe«ÜCÖ«Üfb#†¢&WGW&‚&ñ÷vRˆßVr ¢ñb%≥£E“”“"%$îdb"ÊB%≥É£%“”“"%tT%#†¢&WGW&‚&ñ÷vR˜vV' ¢&WGW&‚&∆ñ6Fñˆ‚ˆˆ7FWB◊7G&V“ †¢2)H)H)H)H)H)H)H)H)H	˝Ì˝mçí-çM]‚)H)H)H)H)H)H)H)H)H •Ù5T5E2“≤#ì£b"¬#c£í"¬#£"¬#C£R"¬#3£B"¬#C£2'–†¶FVb'6U˜fñFVıˆ˜G2áFWáC¢7G"í”‚GW∆U∂ñÁB¬7G%”†¢F¬“áFWáB˜"""íÊ∆˜vW"Çê¢““&RÁ6V&6Çá""Ö∆B≤ï«2¢ÉÛ≠]ßÕï∆""¬F¬ê¢GW&Fñˆ‚“ñÁBÜ“Êw&˜WÉííñb“V«6R≈T‘ÙEU$DîÙÂı0¢GW&Fñˆ‚“÷ÇÉ2¬÷ñ‚É#¬GW&Fñˆ‚íê¢7“ÊˆÊP¢f˜"ñ‚Ù5T5E3†¢ñbñ‚F√†¢7“¢'&V∞¢7V7B“7˜"Ñ≈T‘Ù5T5Bñb≈T‘Ù5T5Bñ‚Ù5T5E2V«6R#c£í"ê¢&WGW&‚GW&Fñˆ‚¬7V7@††¢2)H)H)H)H)H)H)H)H)H«V÷fñFVÚ)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVb˜'VÂˆ«V÷˜fñFVÚÄ¢WFFS¢WFFR¿¢6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¿¢&ˆ◊C¢7G"¿¢GW&FñˆÂ˜3¢ñÁB¿¢7V7C¢7G"¿¢ì†¢vóB6ˆÁFWáBÊ&˜BÁ6VÊEˆ6ÜEˆ7Fñˆ‚áWFFRÊVffV7FófUˆ6ÜBÊñB¬6ÜD7Fñˆ‚Â$T4ı$EıdîDTÚê¢G'ì†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”c„í26∆ñVÁC†¢&6R“vóB˜ñ6µˆ«V÷ˆ&6RÜ6∆ñVÁBê¢7&VFU˜W&¬“b'∂&6W◊¥≈T‘Ù5$TDUıDá“ †¢ÜVFW'2“∞¢$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"¥≈T‘ÙïÙ¥Uó“"¿¢$66WB#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¿¢–¢ñ∆ˆB“∞¢&÷ˆFV¬#¢≈T‘Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢b'∂GW&FñˆÂ˜7◊2"¿¢&7V7E˜&FñÚ#¢7V7B¿¢–†¢2Ì}M¬}M}0¢"“vóB6∆ñVÁBÁ˜7BÜ7&VFU˜W&¬¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)™˚àÚ«V÷Ì-≠ΩÌ›çΩ}M}2á∑"Á7FGW5ˆ6ˆFW“í‚ ¢ê¢&WGW&‡†¢FF“"Êß6ˆ‚Çí˜"∑–¢&ñB“FFÊvWBÇ&ñB"í˜"FFÊvWBÇ&vVÊW&FñˆÂˆñB"ê¢ñbÊ˜B&ñC†¢∆ˆrÊW'&˜"Ç$«V÷¢ÊÚvVÊW&Fñˆ‚ñBñ‚&W7ˆÁ6S¢W2"¬FFê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ«V÷›R-]›=ΩñB=]›]mçÇ‚"ê¢&WGW&‡†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.(˚2«V÷]›M]ç.(
+b
+ÚÌÌù2¬≠Ì=M-çM]‚=M]"=Ì-Ì-‚‚ ¢ê†¢7FGW5˜W&¬“b'∂&6W◊¥≈T‘ı5DEU5ıDá“"Êf˜&÷BÜñC◊&ñBê¢7F'FVB“Fñ÷RÁFñ÷RÇê†¢vÜñ∆RG'VS†¢'2“vóB6∆ñVÁBÊvWBá7FGW5˜W&¬¬ÜVFW'3÷ÜVFW'2ê¢G'ì†¢ß2“'2Êß6ˆ‚Çí˜"∑–¢WÜ6WBWÜ6WFñˆ„†¢ß2“∑–†¢7B“Üß2ÊvWBÇ'7FFR"í˜"ß2ÊvWBÇ'7FGW2"í˜"""íÊ∆˜vW"Çê†¢ñb7Bñ‚Ç&6ˆ◊∆WFVB"¬'7V66VVFVB"¬&fñÊó6ÜVB"¬'&VGí"ì†¢2“““	›	Ì	-
+Ω	í›Mm›Ωí˝Ìç¢ΩΩ≠Ç›-çM]‚““–¢W&¬“ÊˆÊP¢76WG2“ß2ÊvWBÇ&76WG2"ê†¢FVbˆWáG&7E˜W&«5ˆg&ˆ’ˆ76WG2Üì†¢W&«2“µ–¢ñbó6ñÁ7FÊ6RÜ¬7G"ì†¢W&«2ÊVÊBÜê¢V∆ñbó6ñÁ7FÊ6RÜ¬Fñ7Bì†¢2-ç˝ç}›ΩíMÌÕ#¢≤'fñFVÚ#¢&áGG3¢ÚÚ‚‚‚'“çΩÇ≤'fñFVÚ#¢≤'W&¬#¢"‚‚‚'◊–¢f˜"bñ‚Áf«VW2Çì†¢W&«2ÊWáFVÊBÖˆWáG&7E˜W&«5ˆg&ˆ’ˆ76WG2ábíê¢V∆ñbó6ñÁ7FÊ6RÜ¬Ü∆ó7B¬GW∆Ríì†¢f˜"óFV“ñ‚†¢W&«2ÊWáFVÊBÖˆWáG&7E˜W&«5ˆg&ˆ’ˆ76WG2ÜóFV“íê¢&WGW&‚W&«0†¢ñb76WG2ó2Ê˜BÊˆÊS†¢f˜"Rñ‚ˆWáG&7E˜W&«5ˆg&ˆ’ˆ76WG2Ü76WG2ì†¢ñbó6ñÁ7FÊ6RáR¬7G"íÊBRÁ7F'G7vóFÇÇ&áGG"ì†¢W&¬“P¢'&V∞†¢2}˝›ΩR≠ΩÌ}Ç›-˝≠çíΩ=}ê¢ñbÊ˜BW&√†¢f˜"≤ñ‚Ç&˜WGWE˜W&¬"¬'fñFVı˜W&¬"¬'W&¬"ì†¢f¬“ß2ÊvWBÜ≤ê¢ñbó6ñÁ7FÊ6Ráf¬¬7G"íÊBf¬Á7F'G7vóFÇÇ&áGG"ì†¢W&¬“f¿¢'&V∞†¢ñbÊ˜BW&√†¢∆ˆrÊW'&˜"Ç$«V÷¢Ì--]"]rΩΩ≠Ç›-çM]„¢W2"¬ß2ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)ÿ¬«V÷¢Ì--]"˝çç≤]rΩΩ≠Ç›-çM]‚‚ ¢ê¢&WGW&‡†¢2
+≠}ç-]¬ÇÌ-˝-Ω˝]¬Mù≤≠¢-çM]‡¢G'ì†¢b“vóB6∆ñVÁBÊvWBáW&¬¬Fñ÷V˜WC”#„ê¢bÁ&ó6Uˆf˜%˜7FGW2Çê¢&ñÚ“'óFW4îÚábÊ6ˆÁFVÁBê¢&ñÚÊÊ÷R“&«V÷Ê◊B ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜fñFVÚÄ¢ñÁWDfñ∆RÜ&ñÚí¿¢6Fñˆ„“/	¯Í¬«V÷¢=Ì-Ì-‚)»R"¿¢ê¢WÜ6WBWÜ6WFñˆ„†¢2]ΩÇ›R˝ÌΩ=}çΩÌ¬≠}-¬(	B]Ì-Ú≤M¬˝˝Õ=‚ΩΩ≠0¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b/	¯Í¬«V÷¢=Ì-Ì-‚)»U∆Á∑W&«“ ¢ê¢&WGW&‡†¢ñb7Bñ‚Ç&fñ∆VB"¬&W'&˜""¬&6Ê6V∆VB"¬&6Ê6V∆∆VB"ì†¢∆ˆrÊW'&˜"Ç$«V÷&WGW&ÊVBW'&˜"7FFS¢W2"¬ß2ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬«V÷¢Ìçç≠]›M]‚"ê¢&WGW&‡†¢ñbFñ÷RÁFñ÷RÇí“7F'FVB‚≈T‘Ù‘ÖıtïEı3†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.(…≤«V÷¢-]ÕÚÌmçM›çÚ-ΩçΩ‚‚ ¢ê¢&WGW&‡†¢vóB7ñÊ6ñÚÁ6∆VWÖdîDTııÙƒ≈ÙDTƒïı2ê†¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç$«V÷W'&˜#¢W2"¬Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)ÿ¬«V÷¢›R=MΩÌ¬}˝=-ç-¬˝˝ÌΩ=}ç-¬-çM]‚‚ ¢ê¢2)H)H)H)H)H)H)H)H)H'VÁvífñFVÚ)H)H)H)H)H)H)H)H)H ¶FVbˆFVGWUˆ÷ˆFV«2Ç¶óFV◊3¢7G"í”‚∆ó7E∑7G%”†¢˜WC¢∆ó7E∑7G%““µ–¢f˜"“ñ‚óFV◊3†¢““Ü“˜"""íÁ7G&óÇê¢ñb“ÊB“Ê˜Bñ‚˜WC†¢˜WBÊVÊBÜ“ê¢&WGW&‚˜W@†¶FVb˜'VÁvïˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çí”‚∆ó7E∑7G%”†¢""-	ÕÌM]ΩÇ'VÁvíMΩÚÌmç-Ω]›çÚMÌ-‚ˆñ÷v^(i'fñFVÚ‡†¢css¢˝çÌ¢]-Úçr%TÂtïÙî‘tS%dîDTıÙ‘ÙDT≈2‚	˝]-Ω¬-Ìç"˝=Ωç}›Ωê¢Ωç6ˆ÷WB'VÁvñ÷¬÷ñ÷vR◊FÚ◊fñFVÚ¬}-]¬&6∂VÊB›Ωç≤‚vV„B„R›Õ]]››‡¢›R-≠ΩÌ}“"M]MÌΩ"¬˝Ì-ÌÕ2}-‚"ΩÌ=R}-‚Ì--]}≤÷ˆFV≈ˆÊ˜Eˆf˜VÊBˆÊÚfñ∆&∆R6ÜÊÊV¬‡¢"" ¢VÁeˆ÷ˆFV«2“∂“Á7G&óÇíf˜"“ñ‚Ö%TÂtïÙî‘tS%dîDTıÙ‘ÙDT≈5ÙTÂb˜"""íÁ7∆óBÇ"¬"íñb“Á7G&óÇï–¢&WGW&‚ˆFVGWUˆ÷ˆFV«2Ç¢ÜVÁeˆ÷ˆFV«2˜"≤''VÁvñ÷¬÷ñ÷vR◊FÚ◊fñFVÚ"¬&vV„E˜GW&&Ú"¬&vV„6˜GW&&Ú"¬'fVÛ2„ˆf7B"¬'fVÛ2„"¬'fVÛ2%“íê†¶FVb˜'VÁvïˆFó&V7E˜FWáEˆ÷ˆFV≈ˆ6ÊFñFFW2Çí”‚∆ó7E∑7G%”†¢""$ˆffñ6ñ¬'VÁvíFWáN(i'fñFVÚ6ÊFñFFW2‚vV‚”B„R7W˜'G2FWáB÷ˆÊ«íñÁWB‚"" ¢VÁeˆ÷ˆFV«2“∂“Á7G&óÇíf˜"“ñ‚Ö%TÂtïÙDï$T5EıDUÖEÙ‘ÙDT≈5ÙTÂb˜"""íÁ7∆óBÇ"¬"íñb“Á7G&óÇï–¢&WGW&‚ˆFVGWUˆ÷ˆFV«2Ç¢ÜVÁeˆ÷ˆFV«2˜"µ%TÂtïıDUÖEÙ‘ÙDT¬¬&vV„B„R%“íê††¶FVb˜'VÁvïˆFó&V7Eˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çí”‚∆ó7E∑7G%”†¢""$ˆffñ6ñ¬'VÁvíñ÷v^(i'fñFVÚ6ÊFñFFW2ˆÊ«ì≤ÊÚ6ˆ÷WB∆ñ6W2˜"fVÚ÷ˆFV«2‚"" ¢VÁeˆ÷ˆFV«2“∂“Á7G&óÇíf˜"“ñ‚Ö%TÂtïÙDï$T5EÙì%eÙ‘ÙDT≈5ÙTÂb˜"""íÁ7∆óBÇ"¬"íñb“Á7G&óÇï–¢&WGW&‚ˆFVGWUˆ÷ˆFV«2Ç¢ÜVÁeˆ÷ˆFV«2˜"≤&vV„B„R"¬&vV„E˜GW&&Ú%“íê††¶FVb˜'VÁvïˆ6ˆ÷WE˜FWáEˆ÷ˆFV≈ˆ6ÊFñFFW2Çí”‚∆ó7E∑7G%”†¢""%6÷∆¬fñ¬÷f7B6ˆ÷WB6ÊFñFFR∆ó7C≤ÊÚñ∆ˆBˆ÷ˆFV¬7F˜&“vÜV‚FÜR6ÜÊÊV¬ó2VÊfñ∆&∆R‚"" ¢VÁeˆ÷ˆFV«2“∂“Á7G&óÇíf˜"“ñ‚Ö%TÂtïÙ4Ù‘UEıDUÖEÙ‘ÙDT≈5ÙTÂb˜"""íÁ7∆óBÇ"¬"íñb“Á7G&óÇï–¢&WGW&‚ˆFVGWUˆ÷ˆFV«2Ç¢ÜVÁeˆ÷ˆFV«2˜"≤''VÁví◊fñFVÚ"¬&vV„B„R%“íê††¶FVb˜'VÁvïˆFó&V7Eˆ&6Uˆ6ÊFñFFW2Çí”‚∆ó7E∑7G%”†¢"" ¢Fó&V7B'VÁvíí]ù}Ì-]"}]]ráGG3¢ÚˆíÊFWbÁ'VÁvñ÷¬Ê6ˆ“˜cÚ‚‚‚‡¢	]ΩÇ"TÂbÌ-ΩÚ-Ωí&6U˜W&¬¬--›‚MÌ-Ω˝]¬ÌMçmçΩÕ›Ωí&6R≠¢f∆∆&6≤‡¢"" ¢&r“Ö%TÂtïÙ$4UıU$¬˜"""íÁ7G&óÇíÁ'7G&óÇ"Ú"ê¢˜WC¢∆ó7E∑7G%““µ–¢f˜"&6Rñ‚á&r¬&áGG3¢ÚˆíÊFWbÁ'VÁvñ÷¬Ê6ˆ“"ì†¢ñbÊ˜B&6S†¢6ˆÁFñÁVP¢ñb&6RÊVÊG7vóFÇÇ"˜c"ì†¢&6R“&6U≥¢”5“Á'7G&óÇ"Ú"ê¢ñb&6RÊB&6RÊ˜Bñ‚˜WC†¢˜WBÊVÊBÜ&6Rê¢&WGW&‚˜W@††¶FVb˜'VÁvïˆFó&V7EˆÜVFW'2Çí”‚Fñ7E∑7G"¬7G%”†¢&WGW&‚∞¢$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"µ%TÂtïÙïÙ¥Uó“"¿¢$66WB#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¿¢$6ˆÁFVÁB’GóR#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¿¢%Ç’'VÁví’fW'6ñˆ‚#¢%TÂtïÙïıdU%4îÙ‚˜"###B””b"¿¢–††¶FVb˜'VÁvïˆFó&V7E˜&FñÚÜ7V7C¢7G"í”‚7G#†¢""$7W'&VÁB'VÁvívV‚”B„RÙvV‚”BGW&&Ú∆ÊG66R˜"˜'G&óB&FñÚ‚"" ¢&WGW&‚#s#£#É"ñbÜ7V7B˜"""íÁ7G&óÇíñ‚≤#ì£b"¬#3£B"¬#C£R'“V«6R##É£s# ††¶FVb˜'VÁvïˆˆffñ6ñ≈ˆ6∆ñVÁBÇí”‚'VÁvîˆffñ6ñƒ6∆ñVÁC†¢&WGW&‚'VÁvîˆffñ6ñƒ6∆ñVÁBÄ¢%TÂtïÙïÙ¥Uí¿¢&6U˜W&√’%TÂtïÙ$4UıU$¬¿¢ï˜fW'6ñˆ„’%TÂtïÙïıdU%4îÙ‚˜"###B””b"¿¢&WG'ïˆGFV◊G3’%TÂtïÙDï$T5Eı$UE%ïÙEDT’E2¿¢&WG'ïˆ&6U˜3’%TÂtïÙDï$T5Eı$UE%ïÙ$4Uı2¿¢ˆ∆≈ˆñÁFW'f≈˜3’%TÂtïÙDï$T5EıÙƒ≈ÙîÂDU%d≈ı2¿¢ˆ∆≈ˆ÷ÖˆñÁFW'f≈˜3’%TÂtïÙDï$T5EıÙƒ≈Ù‘ÖÙîÂDU%d≈ı2¿¢W∆ˆEˆGFV◊G3’%TÂtïÙDï$T5EıUƒÙEÙEDT’E2¿¢FF˜W&ïˆf∆∆&6≥’%TÂtïÙDï$T5EÙDDıU$ïÙdƒƒ$4≤¿¢ê††¶FVb˜'VÁvï˜W6W%ˆW'&˜%˜FWáBÜWÜ3¢WÜ6WFñˆ‚í”‚7G#†¢ñbó6ñÁ7FÊ6RÜWÜ2¬'VÁvïF6µFñ÷V˜WBì†¢&WGW&‚.(…≤'VÁví›R}-]çç≤}M}2}Ì--]M››ÌR-]ÕÚ‚	≠]Mç-≤Ì-›R˝ç›≤‚ ¢ñbó6ñÁ7FÊ6RÜWÜ2¬'VÁvîîW'&˜"ì†¢6ˆFR“ÜWÜ2Êfñ«W&Uˆ6ˆFR˜"""íÁWW"Çê¢FWáB“7G"ÜWÜ2íÊ∆˜vW"Çê¢ñb6ˆFRÁ7F'G7vóFÇÇ%4dUEí"í˜"'6fWGí"ñ‚FWáB˜"&÷ˆFW&Fñˆ‚"ñ‚FWáC†¢&WGW&‚.)™˚àÚ'VÁvíÌ-≠ΩÌ›ç≤}˝Ì˝‚˝-çΩ¬]}Ì˝›Ì-Ç‚	ç}Õ]›ç-Rm]›2çΩÇMÌÕ=ΩçÌ-≠2(	B≠]Mç-≤›R˝ç›≤‚ ¢ñbWÜ2Á7FGW5ˆ6ˆFRñ‚≥C¬C7”†¢&WGW&‚.)ÿ¬'VÁví›R˝ç›˝≤í›≠ΩÌr‚	˝Ì-]Õ-R%TÂtî‘≈Ùïı4T5$UB"&VÊFW"VÁfó&ˆÊ÷VÁBçΩÇ6V7&WBfñ∆R'VÁvíÊVÁb‚ ¢ñbWÜ2Á7FGW5ˆ6ˆFR”“C"˜"&7&VFóB"ñ‚FWáBÊBÇ&ñÁ7Vffñ6ñVÁB"ñ‚FWáB˜"&Ê˜BVÊ˜VvÇ"ñ‚FWáBì†¢&WGW&‚.)ÿ¬	›í›Ω›R'VÁví›]MÌ--Ì}›‚≠]Mç-Ì"‚	˝Ì˝ÌΩ›ç-R&ñ∆∆ñÊr"'VÁvíFWfV∆˜W"˜'F¬‚ ¢ñbWÜ2Á7FGW5ˆ6ˆFR”“C#ì†¢&WGW&‚.)™˚àÚ	MÌ-ç=›="ΩçÕç"'VÁvíMΩÚ-]≠=ù]=‚í◊FñW"‚	}M}=M]"›˝-Ω]›"]}]-›ΩíM-çmÌ¢‚ ¢ñbWÜ2Á7FGW5ˆ6ˆFR”“C†¢&WGW&‚.)™˚àÚ'VÁví›R˝ç›˝≤˝Õ]-≤}M}Ç‚	˝Ì-]Õ-RMΩç-]ΩÕ›Ì-¬¬MÌÕ"ç}Ìm]›çÚÇ-]≠"}˝Ì‚ ¢&WGW&‚.)™˚àÚ	ÌMçmçΩÕ›Ωí'VÁví-]Õ]››‚›RÌ--]-ç≤‚	ç˝ÌΩÕ}=‚]}]-›ΩíÕç="‚ ††¶7ñÊ2FVb˜'VÁvï˜&WVW7E˜vóFÖ˜&WG&ñW2Ü6∆ñVÁC¢áGGÇ‰7ñÊ46∆ñVÁB¬÷WFÜˆC¢7G"¬W&√¢7G"¬¢¬ÜVFW'3¢Fñ7B¬ß6ˆÂˆ&ˆGì¢Fñ7B¬ÊˆÊR“ÊˆÊRì†¢""%&WG'íˆÊ«íG&Á6ñVÁB'VÁví&W7ˆÁ6W2vóFÇWáˆÊVÁFñ¬&6∂ˆfbÊB¶óGFW"‚"" ¢G&Á6ñVÁB“≥C#í¬S"¬S2¬SG–¢∆7B“ÊˆÊP¢f˜"GFV◊Bñ‚&ÊvRÖ%TÂtïÙDï$T5Eı$UE%ïÙEDT’E2ì†¢G'ì†¢"“vóB6∆ñVÁBÁ&WVW7BÜ÷WFÜˆB¬W&¬¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„÷ß6ˆÂˆ&ˆGíê¢∆7B“ ¢ñb"Á7FGW5ˆ6ˆFRÊ˜Bñ‚G&Á6ñVÁB˜"GFV◊B„“%TÂtïÙDï$T5Eı$UE%ïÙEDT’E2“†¢&WGW&‚ ¢FV∆í“%TÂtïÙDï$T5Eı$UE%ïÙ$4Uı2¢É"¢¢GFV◊Bê¢FV∆í≥“&ÊFˆ“ÁVÊñf˜&“É¬FV∆í¢„Rê¢∆ˆrÁv&ÊñÊrÇ%'VÁvíG&Á6ñVÁBÖEEW3≤&WG'íW2ÚW2ñ‚R„g2"¬"Á7FGW5ˆ6ˆFR¬GFV◊B≤¬%TÂtïÙDï$T5Eı$UE%ïÙEDT’E2¬FV∆íê¢vóB7ñÊ6ñÚÁ6∆VWÜFV∆íê¢WÜ6WBÜáGGÇÂFñ÷V˜WDWÜ6WFñˆ‚¬áGGÇÂG&Á7˜'DW'&˜"í2S†¢∆7B“P¢ñbGFV◊B„“%TÂtïÙDï$T5Eı$UE%ïÙEDT’E2“†¢&ó6P¢FV∆í“%TÂtïÙDï$T5Eı$UE%ïÙ$4Uı2¢É"¢¢GFV◊Bê¢FV∆í≥“&ÊFˆ“ÁVÊñf˜&“É¬FV∆í¢„Rê¢∆ˆrÁv&ÊñÊrÇ%'VÁvíG&Á7˜'BW'&˜#≤&WG'íW2ÚW2ñ‚R„g3¢W2"¬GFV◊B≤¬%TÂtïÙDï$T5Eı$UE%ïÙEDT’E2¬FV∆í¬Rê¢vóB7ñÊ6ñÚÁ6∆VWÜFV∆íê¢&WGW&‚∆7@††¶7ñÊ2FVb˜'VÁvïˆFó&V7Eˆ˜&uˆñÊfÚÇí”‚GW∆U∂&ˆˆ¬¬7G%”†¢""%&VB÷ˆÊ«íˆffñ6ñ¬'VÁvíWFÜVÁFñ6Fñˆ‚¬˜&vÊó¶Fñˆ‚ÊB7&VFóB6ÜV6≤‚"" ¢ñbÊ˜BÖ%TÂtïÙDï$T5EÙT‰$ƒTBÊB%TÂtïÙïÙ¥Uíì†¢&WGW&‚f«6R¬%%TÂtî‘≈Ùïı4T5$UB›R›ùM]“›Ç"&VÊFW"VÁfó&ˆÊ÷VÁB¬›Ç"6V7&WBfñ∆W2‚ ¢f˜&÷Eˆˆ≤¬f˜&÷EˆÊ˜FR“'VÁvïˆ∂Wïˆf˜&÷EˆÜñÁBÖ%TÂtïÙïÙ¥Uíê¢6˜W&6UˆÊ÷R“%TÂtïÙ¥Uïı4ıU$4P¢G'ì†¢7ñÊ2vóFÇ˜'VÁvïˆˆffñ6ñ≈ˆ6∆ñVÁBÇí2's†¢˜&r“vóB'rÊ˜&vÊó¶Fñˆ‚ÜVÊGˆñÁC’%TÂtïÙı$t‰ï§DîÙÂıDÇê¢ñ∆ˆB“˜&rÊvWBÇ&FF"íñbó6ñÁ7FÊ6RÜ˜&rÊvWBÇ&FF"í¬Fñ7BíV«6R˜&p¢7&VFóG2“ÊWáBÇáñ∆ˆBÊvWBÜ≤íf˜"≤ñ‚Ç&7&VFóD&∆Ê6R"¬&7&VFóG2"¬&&∆Ê6R"¬&fñ∆&∆T7&VFóG2"íñb≤ñ‚ñ∆ˆBí¬ÊˆÊRê¢FñW"“ÊWáBÇáñ∆ˆBÊvWBÜ≤íf˜"≤ñ‚Ç'FñW""¬'W6vUFñW""¬'&FT∆ñ÷óEFñW""íñb≤ñ‚ñ∆ˆBí¬ÊˆÊRê¢'G2“∞¢-≠ΩÌr˝ç›˝""¿¢b-˝]]Õ]››Û¢∑6˜W&6UˆÊ÷W“"¿¢b&fñÊvW'&ñÁC¢∑'VÁvï˜6fUˆ∂WïˆfñÊvW'&ñÁBÖ%TÂtïÙïÙ¥Uíó“"¿¢f˜&÷EˆÊ˜FR¿¢–¢ñb7&VFóG2ó2Ê˜BÊˆÊS†¢'G2ÊVÊBÜb$í›≠]Mç-≥¢∂7&VFóG7“"ê¢ñbFñW"ó2Ê˜BÊˆÊS†¢'G2ÊVÊBÜb'FñW#¢∑FñW'“"ê¢&WGW&‚G'VR¬%∆‚"Ê¶ˆñ‚á'G2ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ%'VÁví˜&vÊó¶Fñˆ‚WFÇfñ∆VC¢W2"¬Rê¢&WGW&‚f«6R¬˜'VÁvï˜W6W%ˆW'&˜%˜FWáBÜRí≤b%∆‰fñÊvW'&ñÁC¢∑'VÁvï˜6fUˆ∂WïˆfñÊvW'&ñÁBÖ%TÂtïÙïÙ¥Uíó“ †¢2csb&˜fñFW"6ó&7VóB'&V∂W"ÚÜV«FÇ66ÜP•˜&˜fñFW%ˆfñ≈ˆ6˜VÁG3¢Fñ7E∑7G"¬ñÁE““∑–•˜&˜fñFW%ˆ6ˆˆ∆F˜vÂ˜VÁFñ√¢Fñ7E∑7G"¬f∆ˆE““∑–•˜&˜fñFW%ˆ∆7EˆW'&˜#¢Fñ7E∑7G"¬7G%““∑–†¶FVb˜&˜fñFW%ˆó5ˆfñ∆&∆RÜÊ÷S¢7G"í”‚&ˆˆ√†¢&WGW&‚Fñ÷RÁFñ÷RÇí„“f∆ˆBÖ˜&˜fñFW%ˆ6ˆˆ∆F˜vÂ˜VÁFñ¬ÊvWBÜÊ÷R¬í˜"ê†¶FVb˜&˜fñFW%ˆ6ˆˆ∆F˜vÂˆ∆VgBÜÊ÷S¢7G"í”‚ñÁC†¢&WGW&‚÷ÇÉ¬ñÁBÜf∆ˆBÖ˜&˜fñFW%ˆ6ˆˆ∆F˜vÂ˜VÁFñ¬ÊvWBÜÊ÷R¬í˜"í“Fñ÷RÁFñ÷RÇííê†¶FVb˜&˜fñFW%ˆ÷&µ˜7V66W72ÜÊ÷S¢7G"í”‚ÊˆÊS†¢˜&˜fñFW%ˆfñ≈ˆ6˜VÁG5∂Ê÷U““ ¢˜&˜fñFW%ˆ6ˆˆ∆F˜vÂ˜VÁFñ¬Á˜ÜÊ÷R¬ÊˆÊRê¢˜&˜fñFW%ˆ∆7EˆW'&˜"Á˜ÜÊ÷R¬ÊˆÊRê†¶FVb˜&˜fñFW%ˆ÷&µˆfñ«W&RÜÊ÷S¢7G"¬&V6ˆ„¢7G"“""í”‚ÊˆÊS†¢˜&˜fñFW%ˆ∆7EˆW'&˜%∂Ê÷U““á&V6ˆ‚˜"""ï≥£s–¢‚“ñÁBÖ˜&˜fñFW%ˆfñ≈ˆ6˜VÁG2ÊvWBÜÊ÷R¬í˜"í≤¢˜&˜fñFW%ˆfñ≈ˆ6˜VÁG5∂Ê÷U““‡¢ñb‚„“÷ÇÉ¬%TÂtïı$ıdîDU%Ùdî≈ıDÖ$U4ÑÙƒBì†¢˜&˜fñFW%ˆ6ˆˆ∆F˜vÂ˜VÁFñ≈∂Ê÷U““Fñ÷RÁFñ÷RÇí≤÷ÇÉ3¬%TÂtïı$ıdîDU%Ù4ÙÙƒDıtÂı2ê†¶FVb˜&˜fñFW%˜&W6WBÜÊ÷S¢7G"í”‚ÊˆÊS†¢˜&˜fñFW%ˆfñ≈ˆ6˜VÁG2Á˜ÜÊ÷R¬ÊˆÊRê¢˜&˜fñFW%ˆ6ˆˆ∆F˜vÂ˜VÁFñ¬Á˜ÜÊ÷R¬ÊˆÊRê¢˜&˜fñFW%ˆ∆7EˆW'&˜"Á˜ÜÊ÷R¬ÊˆÊRê†¶FVbˆó5˜'VÁvï˜VÊfñ∆&∆U˜FWáBá3¢7G"í”‚&ˆˆ√†¢B“á2˜"""íÊ∆˜vW"Çê¢ÊVVF∆W2“Ä¢&÷ˆFV≈ˆÊ˜Eˆf˜VÊB"¬&ÊÚfñ∆&∆R6ÜÊÊV¬"¬&ñÁf∆ñBW&¬"¿¢.j⁄NjäYËæ[{.KàæiÎb"¬&÷ˆFV¬Ü2&VV‚&V÷˜fVB"¬&÷ˆFV¬ó2&V÷˜fVB"¿¢&Ê˜Bf˜VÊB"¬&6ÜÊÊV¬"¬&ñÁf∆ñE˜&WVW7EˆW'&˜" ¢ê¢&WGW&‚ÁíáÇñ‚Bf˜"Çñ‚ÊVVF∆W2ê†¶FVbˆ∆ˆˆ∑5ˆ∆ñ∂U˜67&VVÁ6Ü˜Eˆ˜%ˆ&Eˆì'e˜6˜W&6RÜñ÷uˆ'óFW3¢'óFW2í”‚7G#†¢""%6ˆgBÜWW&ó7Fñ2ˆÊ«ì¢v&‚W6W"ñbñÁWB∆ˆˆ∑2∆ñ∂RÜˆÊR67&VVÁ6Ü˜Bˆg&÷R‚"" ¢ñbñ÷vRó2ÊˆÊS†¢&WGW&‚" ¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2ííÊ6ˆÁfW'BÇ%$t""ê¢r¬Ç“ñ“Á6ó¶P¢2	Ì}]›¬-ΩÌ≠çí˝ççÌ≠çí≠M}ùR-]=‚˝-Ω˝]-Ú≠ç›çÌ-Ì¬-]Ω]MÌ›˝›≠›‡¢ñbÇ‚r¢„SR˜"r‚Ç¢„SS†¢&WGW&‚-
+MÌ-‚˝Ì]ÌmR›≠ç›çÌ"˝≠MÌΩÕççÕÇ˝ÌΩ˝ÕÇ‚	MΩÚΩ=}ç]=‚Ìmç-Ω]›çÚ}==}ç-R}ç-Ωí˝Ì-]"]rç›-]M]ù-]Ω]MÌ›Ç}›ΩRÕÌ¢‚ ¢2	ÌΩÕççR-Õ›ΩRÌΩ-Ç˝‚≠˝¬(	B}-Ωí˝ç}›¢MÌ-‚›≠›˝-çM]‚›˝Ω]]‡¢G'ì†¢6÷∆¬“ñ“Á&W6ó¶RÇÉcB¬cBíê¢Ç“∆ó7Bá6÷∆¬ÊvWFFFÇíê¢F&≤“7V“Éf˜""¬r¬"ñ‚Çñb÷Çá"¬r¬"í¬3"íÚ÷ÇÉ¬∆V‚áÇíê¢ñbF&≤‚„3S†¢&WGW&‚-	"≠MRÕ›Ì=‚}›ΩR˝ÌΩ]í˝›Ω]Õ]›-Ì"ç›-]M]ù‚	ÕÌM]Ω¬ÕÌm]"Ìmç-ç-¬Õ≠2çΩÇ›≠“-Õ]-‚}]ΩÌ-]≠‚	Ω=}çR}==}ç-¬}ç-ÌRMÌ-‚‚ ¢WÜ6WBWÜ6WFñˆ„†¢70¢WÜ6WBWÜ6WFñˆ„†¢&WGW&‚" ¢&WGW&‚" †¶FVb˜&W&Uˆì'e˜6˜W&6Uˆñ÷vRÜñ÷uˆ'óFW3¢'óFW2¬7V7C¢7G"“#ì£b"í”‚GW∆U∂'óFW2¬7G%”†¢"" ¢&ˆGV7Fñˆ‚◊6fR&W&Fñˆ‚f˜"ñ÷v^(i'fñFVÚ&˜fñFW'2‡¢	-Ì}-ù]"Ü'óFW2¬Ê˜FRí‚	›RM]Ω]"=]ç-›Ωíf6R÷7&˜¬}-Ì≤›Rç˝Ì-ç-¬MÌ-‚¿¢›‚=ç]"˝-›ΩR}›ΩRÕ≠ÇÇ›ÌÕΩç}=]"}Õ]˝MÌÕ"‡¢"" ¢ñbÊ˜Bì%eı$U$Ù4U55ÙT‰$ƒTB˜"ñ÷vRó2ÊˆÊS†¢&WGW&‚ñ÷uˆ'óFW2¬" ¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2ííÊ6ˆÁfW'BÇ%$t""ê¢r¬Ç“ñ“Á6ó¶P¢Ê˜FU˜'G2“µ–†¢2í
+=MΩ]›çR˝-›ΩR}›ΩRÕÌ¢‚	›R-Ì=]¬¬]ΩÇ7&˜Ωçç≠Ì¬Õ≤˝ç≠Ì-››Ωí‡¢ñbì%eÙUDÙ5$ıÙ$ƒ4µÙ$ı$DU%2ÊB÷ñ‚ár¬Çí„“#†¢w&í“ñ“Ê6ˆÁfW'BÇ$¬"ê¢2	˝ç≠]ΩÇ˝}R˝ÌÌ=}ç-]¬ÌM]mçÕΩ¬‡¢÷6≤“w&íÁˆñÁBÜ∆÷&F¢#SRñb‚#ÇV«6Rê¢&&˜Ç“÷6≤ÊvWF&&˜ÇÇê¢ñb&&˜É†¢É¬ì¬É"¬ì"“&&˜Ä¢'r¬&Ç“É"“É¬ì"“ì¢&V˜&FñÚ“Ü'r¢&ÇíÚ÷ÇÉ¬r¢Çê¢27&˜-ÌΩÕ≠‚]ΩÇÌ“}Õ]-›‚=ç]"≠Ú¬›‚›R˝]-ù]"≠-ç›≠2"≠Ìç]}›ΩíM=Õ]› ¢÷&vñÂ˜&V÷˜fVB“áÉ‚r¢„B˜"ì‚Ç¢„B˜"É"¬r¢„ìb˜"ì"¬Ç¢„ìbê¢ñb÷&vñÂ˜&V÷˜fVBÊB„#√“&V˜&FñÚ√“„ìc†¢B“ñÁBÜ÷ÇÜ'r¬&Çí¢„Bê¢É“÷ÇÉ¬É“Bì≤ì“÷ÇÉ¬ì“Bê¢É"“÷ñ‚ár¬É"≤Bì≤ì"“÷ñ‚ÜÇ¬ì"≤Bê¢ñ““ñ“Ê7&˜ÇáÉ¬ì¬É"¬ì"íê¢r¬Ç“ñ“Á6ó¶P¢Ê˜FU˜'G2ÊVÊBÇ-=≤Ωçç›çR-Õ›ΩR˝ÌΩÚ"ê†¢2"í	›ÌÕΩç}mçÚ}Õ]¬}-Ì≤›RÌ-˝-Ω˝-¬Ì=ÌÕ›ΩR≠ç›çÌ-≤˝Ì-ùM]¬‡¢÷Ö˜6ñFR“÷ÇÉS"¬ñÁBÑì%eÙ‘Öı4ıU$4Uı4îDR˜"#Éíê¢ñb÷Çár¬Çí‚÷Ö˜6ñFS†¢ñ“ÁFáV÷&Êñ¬ÇÜ÷Ö˜6ñFR¬÷Ö˜6ñFRí¬vWFGG"Ññ÷vR¬%&W6◊∆ñÊr"¬ñ÷vRí‰ƒ‰5§ı2ê¢Ê˜FU˜'G2ÊVÊBÜb-m≤ç]ÌM›ç¢M‚∂÷Ö˜6ñFW◊Ç"ê†¢˜WB“'óFW4îÚÇê¢ñ“Á6fRÜ˜WB¬f˜&÷C“$•Tr"¬V∆óGì”ì"¬˜Fñ÷ó¶S’G'VRê¢&WGW&‚˜WBÊvWGf«VRÇí¬"¬"Ê¶ˆñ‚ÜÊ˜FU˜'G2ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ&ì'b6˜W&6R&W&ˆ6W72fñ∆VC¢W2"¬Rê¢&WGW&‚ñ÷uˆ'óFW2¬" †¶7ñÊ2FVb˜'VÂ˜'VÁvï˜fñFVÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬&ˆ◊C¢7G"¬GW&FñˆÂ˜3¢ñÁB¬7V7C¢7G"ì†¢""%&ˆGV7Fñˆ‚'VÁvíFWáN(i'fñFVÛ¢ˆffñ6ñ¬ífó'7B¬6ˆ÷WB6V6ˆÊB¬∂∆ñÊrf∆∆&6≤‡†¢ˆffñ6ñ¬&˜WFRfˆ∆∆˜w27W'&VÁB'VÁvíFˆ7V÷VÁFFñˆ„†¢ı5B˜c˜FWáE˜Fı˜fñFVÚ”‚tUB˜c˜F6∑2˜∂ñG“‡¢f˜"&6∑v&G26ˆ◊Fñ&ñ∆óGíˆÊ«í¬CBÛCR6‚f∆¬&6≤F¢˜cˆñ÷vU˜Fı˜fñFVÚvóFÜ˜WB&ˆ◊Dñ÷vR‡¢"" ¢vóB6ˆÁFWáBÊ&˜BÁ6VÊEˆ6ÜEˆ7Fñˆ‚áWFFRÊVffV7FófUˆ6ÜBÊñB¬6ÜD7Fñˆ‚Â$T4ı$EıdîDTÚê¢&ˆ◊B“á&ˆ◊B˜"""íÁ7G&óÇê¢ñbÊ˜B&ˆ◊C†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬'VÁvì¢˝=-Ìí}˝ÌMΩÚ-çM]‚‚"ê¢&WGW&‚f«6P†¢GW&Fñˆ‚“÷ÇÉ"¬÷ñ‚É¬ñÁBÖˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ''VÁví"¬GW&FñˆÂ˜2íííê¢&FñÚ“˜'VÁvïˆFó&V7E˜&FñÚÜ7V7Bê¢W'&˜'3¢∆ó7E∑7G%““µ–¢Ü&E˜7F˜“f«6P†¢7ñÊ2FVbG'ïˆFó&V7BÇí”‚&ˆˆ√†¢ÊˆÊ∆ˆ6¬Ü&E˜7F˜ ¢ñbÊ˜BÖ%TÂtïÙDï$T5EÙT‰$ƒTBÊB%TÂtïÙïÙ¥Uíì†¢&WGW&‚f«6P¢G'ì†¢7ñÊ2vóFÇ˜'VÁvïˆˆffñ6ñ≈ˆ6∆ñVÁBÇí2's†¢F6µˆñB“vóB'rÊ7&VFU˜FWáE˜Fı˜fñFVÚÄ¢&ˆ◊E˜FWáC◊&ˆ◊B¿¢÷ˆFV√’˜'VÁvïˆFó&V7E˜FWáEˆ÷ˆFV≈ˆ6ÊFñFFW2Çï≥“¿¢&FñÛ◊&FñÚ¿¢GW&Fñˆ„÷GW&Fñˆ‚¿¢VÊGˆñÁC’%TÂtïıDUÖEÙ5$TDUıDÇ¿¢6ˆ◊Fñ&ñ∆óGïˆVÊGˆñÁC’%TÂtïıDUÖEÙ4Ù’EıDÇ¿¢ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.(˚2'VÁvívV‚”B„S¢}M}˝ç›˝-á∂GW&FñˆÁ“¬∂7V7G“í‚	ÌmçM‚]}=ΩÕ-.(
+b ¢ê¢&W7V«B“vóB'rÁvóEˆf˜%˜F6≤áF6µˆñB¬Fñ÷V˜WE˜3’%TÂtïÙ‘ÖıtïEı2ê†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”#C„¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí2F≈ˆ6∆ñVÁC†¢vóB˜&W«ï˜fñFVıˆg&ˆ’˜W&¬Ä¢WFFR¬F≈ˆ6∆ñVÁB¬&W7V«BÊfó'7Eˆ˜WGWB¿¢%'VÁvíFWáN(i'fñFVÚ)»R+r˜vW&VB'í'VÁví"¿¢F6µˆñC◊F6µˆñB¿¢ê¢˜&˜fñFW%ˆ÷&µ˜7V66W72Ç''VÁvïˆFó&V7B"ê¢&WGW&‚G'VP¢WÜ6WB'VÁvîîW'&˜"2S†¢W'&˜'2ÊVÊBá7G"ÜRíì≤˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆFó&V7B"¬7G"ÜRíê¢∆ˆrÁv&ÊñÊrÇ$ˆffñ6ñ¬'VÁvíFWáB◊FÚ◊fñFVÚfñ∆VC¢W2"¬Rê¢6ˆFR“ÜRÊfñ«W&Uˆ6ˆFR˜"""íÁWW"Çê¢ñb6ˆFRÁ7F'G7vóFÇÇ%4dUEí"í˜"RÁ7FGW5ˆ6ˆFRñ‚≥C¬C¬C2¬C'”†¢Ü&E˜7F˜“G'VP¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ˜'VÁvï˜W6W%ˆW'&˜%˜FWáBÜRíê¢&WGW&‚f«6P¢WÜ6WBWÜ6WFñˆ‚2S†¢W'&˜'2ÊVÊBá7G"ÜRíì≤˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆFó&V7B"¬7G"ÜRíê¢∆ˆrÊWÜ6WFñˆ‚Ç$ˆffñ6ñ¬'VÁvíFWáB&˜WFRfñ∆VC¢W2"¬Rê¢&WGW&‚f«6P†¢7ñÊ2FVbG'ïˆ6ˆ÷WBÇí”‚&ˆˆ√†¢&˜fñFW%ˆÊ÷R“''VÁvï˜FWáEˆ6ˆ÷WB ¢ñbÊ˜BÖ%TÂtïıU4UÙ4Ù‘UBÊB4Ù‘UEÙïÙ¥Uíì†¢&WGW&‚f«6P¢ñbÊ˜B˜&˜fñFW%ˆó5ˆfñ∆&∆Rá&˜fñFW%ˆÊ÷Rì†¢∆ˆrÁv&ÊñÊrÇ%'VÁvíFWáBÙ6ˆ÷WB6∂óVC¢6ˆˆ∆F˜v‚W72"¬˜&˜fñFW%ˆ6ˆˆ∆F˜vÂˆ∆VgBá&˜fñFW%ˆÊ÷Ríê¢&WGW&‚f«6P¢ÜVFW'2“∞¢$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"¥4Ù‘UEÙïÙ¥Uó“"¿¢$66WB#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¿¢$6ˆÁFVÁB’GóR#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¿¢%Ç’'VÁví’fW'6ñˆ‚#¢%TÂtïÙïıdU%4îÙ‚˜"###B””b"¿¢–¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”ì„í26∆ñVÁC†¢f˜"÷ˆFV¬ñ‚˜'VÁvïˆ6ˆ÷WE˜FWáEˆ÷ˆFV≈ˆ6ÊFñFFW2Çì†¢ñ∆ˆB“≤&÷ˆFV¬#¢÷ˆFV¬¬'&ˆ◊EFWáB#¢&ˆ◊B¬&GW&Fñˆ‚#¢GW&Fñˆ‚¬'&FñÚ#¢&Fñ˜–¢G'ì†¢"“vóB6∆ñVÁBÁ˜7BÜb'¥4Ù‘UEÙ$4UıU$«◊µ%TÂtïÙ4Ù‘UEÙ5$TDUıDá“"¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢ñb"Á7FGW5ˆ6ˆFR„“C†¢W'"“b$6ˆ÷WB'VÁví∑"Á7FGW5ˆ6ˆFW”¢µˆïˆW'&˜%˜&WfñWrá"ó“ ¢W'&˜'2ÊVÊBÜW'"ì≤∆ˆrÁv&ÊñÊrÜW'"ê¢ñbˆó5˜'VÁvï˜VÊfñ∆&∆U˜FWáBÜW'"í˜""Á7FGW5ˆ6ˆFR”“S3†¢˜&˜fñFW%ˆ÷&µˆfñ«W&Rá&˜fñFW%ˆÊ÷R¬W'"ê¢'&V∞¢6ˆÁFñÁVP¢ß2“"Êß6ˆ‚Çí˜"∑–¢&VGï˜W&¬“ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&˜WGWB"íí˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&FF"íí˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ê¢ñb&VGï˜W&√†¢˜&˜fñFW%ˆ÷&µ˜7V66W72á&˜fñFW%ˆÊ÷Rê¢vóB˜&W«ï˜fñFVıˆg&ˆ’˜W&¬áWFFR¬6∆ñVÁB¬&VGï˜W&¬¬%'VÁvíÙ6ˆ÷WBFWáN(i'fñFVÚ)»R+r˜vW&VB'í'VÁví"ê¢&WGW&‚G'VP¢F6µˆñB“7G"Üß2ÊvWBÇ&ñB"í˜"ß2ÊvWBÇ'F6µˆñB"í˜"ß2ÊvWBÇ&vVÊW&FñˆÂˆñB"í˜"ÇÜß2ÊvWBÇ&FF"í˜"∑“íÊvWBÇ&ñB"íñbó6ñÁ7FÊ6RÜß2ÊvWBÇ&FF"í¬Fñ7BíV«6R""í˜"""íÁ7G&óÇê¢ñbÊ˜BF6µˆñC†¢W'"“b$6ˆ÷WB'VÁvì¢ÊÚF6≤ñC¢∂ß6ˆ‚ÊGV◊2Üß2¬VÁ7W&Uˆ66ñì‘f«6Rï≥£S◊“ ¢W'&˜'2ÊVÊBÜW'"ì≤˜&˜fñFW%ˆ÷&µˆfñ«W&Rá&˜fñFW%ˆÊ÷R¬W'"ê¢6ˆÁFñÁVP¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.(˚2'VÁvíÙ6ˆ÷WC¢}M}˝ç›˝-¬ÌmçM‚]}=ΩÕ-.(
+b"ê¢ˆ≤“&ˆˆ¬ÜvóB˜ˆ∆≈˜fñFVı˜F6µˆvVÊW&ñ2Ä¢WFFR¬6∆ñVÁB¬ÜVFW'2¬4Ù‘UEÙ$4UıU$¬¿¢µ%TÂtïÙ4Ù‘UEı5DEU5ıDÇ¬"˜'VÁvñ÷¬˜c˜F6∑2˜∂ñG“"¬"˜c˜F6∑2˜∂ñG“%“¿¢F6µˆñB¬%'VÁvíÙ6ˆ÷WBFWáN(i'fñFVÚ+r˜vW&VB'í'VÁví"¬%TÂtïÙ‘ÖıtïEı2¿¢íê¢ñbˆ≥†¢˜&˜fñFW%ˆ÷&µ˜7V66W72á&˜fñFW%ˆÊ÷Rê¢V«6S†¢˜&˜fñFW%ˆ÷&µˆfñ«W&Rá&˜fñFW%ˆÊ÷R¬'ˆ∆∆ñÊrfñ∆VB"ê¢&WGW&‚ˆ∞¢WÜ6WBWÜ6WFñˆ‚2S†¢W'"“b$6ˆ÷WB'VÁvíWÜ6WFñˆ„¢∂W“ ¢W'&˜'2ÊVÊBÜW'"ì≤∆ˆrÁv&ÊñÊrÜW'"ì≤˜&˜fñFW%ˆ÷&µˆfñ«W&Rá&˜fñFW%ˆÊ÷R¬W'"ê¢&WGW&‚f«6P†¢&˜WFW2“áG'ïˆFó&V7B¬G'ïˆ6ˆ÷WBíñb%TÂtïÙDï$T5EÙdï%5BV«6RáG'ïˆ6ˆ÷WB¬G'ïˆFó&V7Bê¢f˜"&˜WFRñ‚&˜WFW3†¢ñbÜ&E˜7F˜†¢&WGW&‚f«6P¢G'ì†¢ñbvóB&˜WFRÇì†¢&WGW&‚G'VP¢WÜ6WBWÜ6WFñˆ‚2S†¢W'&˜'2ÊVÊBá7G"ÜRíì≤∆ˆrÊWÜ6WFñˆ‚Ç%'VÁvíFWáB&˜WFRfñ∆VC¢W2"¬Rê†¢ñbÜ&E˜7F˜†¢&WGW&‚f«6P†¢ñb%TÂtïıDUÖEÙdƒƒ$4µÙ¥ƒî‰rÊB%TÂtïÙUDıÙdƒƒ$4µÙ¥ƒî‰rÊB4Ù‘UEÙïÙ¥Uì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ%TÂtïıT$ƒî5Ùdƒƒ$4µıDUÖBê¢G'ì†¢&WGW&‚&ˆˆ¬ÜvóB˜'VÂˆ6ˆ÷WE˜FWáE˜fñFVÚáWFFR¬6ˆÁFWáB¬&∂∆ñÊr"¬&ˆ◊B¬GW&Fñˆ‚¬7V7Bíê¢WÜ6WBWÜ6WFñˆ‚2S†¢W'&˜'2ÊVÊBÜb$∂∆ñÊrf∆∆&6≥¢∂W“"ì≤∆ˆrÊWÜ6WFñˆ‚Ç%'VÁvû(i$∂∆ñÊrf∆∆&6≤fñ∆VC¢W2"¬Rê†¢ñb%TÂtïÙÑîDUıDT4ÖÙU%$ı%3†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)™˚àÚ'VÁví]ù}›R˝ç›˝≤}M}2‚	≠]Mç-≤}›]=˝]ç›=‚=]›]mç‚›R˝çΩ-Ì-Ú‚ ¢-	˝Ì-]Õ-RˆFñu˜'VÁvíWFÇçΩÇ-Ω]ç-R∂∆ñÊr‚ ¢ê¢V«6S†¢FWFñ«2“%∆‚"Ê¶ˆñ‚ÜW'&˜'5≤”3•“í˜"$í›R-]›=≤˝ÌMÌ›Ì-Ç‚ ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)ÿ¬'VÁvì¢}M}›R-Ω˝ÌΩ›]›Â∆Á∂FWFñ«5≥£c◊“"ê¢&WGW&‚f«6P†¢2)H)H)H)H)H)H)H)H)Hñ÷v^(i%fñFVÚÜV«W'2)H)H)H)H)H)H)H)H)H ¶FVbˆïˆW'&˜%˜&WfñWrá&W7¬∆ñ÷óC¢ñÁB“ìí”‚7G#†¢G'ì†¢&ˆGí“ß6ˆ‚ÊGV◊2á&W7Êß6ˆ‚Çí¬VÁ7W&Uˆ66ñì‘f«6Rê¢WÜ6WBWÜ6WFñˆ„†¢&ˆGí“vWFGG"á&W7¬'FWáB"¬""í˜"" ¢&ˆGí“&RÁ7V"á"%«2≤"¬""¬&ˆGííÁ7G&óÇê¢&WGW&‚&ˆGï≥¶∆ñ÷óE“ñb&ˆGíV«6R-]r-]ΩÌ--]- ††¶FVb˜6˜&˜V˜∆Uˆ÷ˆFW&FñˆÂ˜FWáBÇí”‚7G#†¢&WGW&‚Ä¢.)™˚àÚ6˜&"}ΩÌ≠çÌ-Ω›-‚ç}Ìm]›çR›ÕÌM]mçÇ¬˝Ì-ÌÕ2}-‚›MÌ-‚]-¬}]ΩÌ-]¢˝ΩÌMÇÂ∆Â∆‚ ¢-
+›-‚Ì=›ç}]›çR6˜&Ù6ˆ÷WB¬›RÌçç≠M]˝ΩÌÚÇ›RÌçç≠≠ΩÌ}Â∆Â∆‚ ¢-	MΩÚÌmç-Ω]›çÚMÌ-‚ΩÌMÕÕÇç˝ÌΩÕ}=ù-S•∆‚ ¢.(
+") Ç	Ìmç-ç-¬Ö'VÁvíï∆‚ ¢.(
+") Ç	Ìmç-ç-¬Ñ∂∆ñÊrï∆Â∆‚ ¢%6˜&"Ì--Ω]›MΩÚç}Ìm]›çí]rΩÌM]ì¢˝]MÕ]-≤¬mç-Ì-›ΩR¬}M›çÚ¬˝]ù}mÇ¬ç›-]Õ]‚ ¢ê††¶FVbó5˜6˜&˜V˜∆Uˆ÷ˆFW&FñˆÂˆW'&˜"ÜW'#¢ˆ&¶V7Bí”‚&ˆˆ√†¢G'ì†¢FWáB“ß6ˆ‚ÊGV◊2ÜW'"¬VÁ7W&Uˆ66ñì‘f«6RíÊ∆˜vW"Çê¢WÜ6WBWÜ6WFñˆ„†¢FWáB“7G"ÜW'"íÊ∆˜vW"Çê¢&WGW&‚Ä¢'V˜∆R÷ñ‚◊W6W"◊W∆ˆG2"ñ‚FWá@¢˜"&&∆ˆ6∂VB'í˜W"÷ˆFW&Fñˆ‚7ó7FV“"ñ‚FWá@¢˜"Ç&÷ˆFW&Fñˆ‚7ó7FV“"ñ‚FWáBÊB'6˜&"ñ‚FWáBê¢˜"Ç'&WVW7Bó2&∆ˆ6∂VB"ñ‚FWáBÊB'V˜∆R"ñ‚FWáBê¢ê†¶FVbˆWáG&7Eˆfó'7E˜W&¬Üˆ&¢í”‚7G"¬ÊˆÊS†¢ñbó6ñÁ7FÊ6RÜˆ&¢¬7G"ì†¢ñbˆ&¢Á7F'G7vóFÇÇ&áGG¢ÚÚ"í˜"ˆ&¢Á7F'G7vóFÇÇ&áGG3¢ÚÚ"ì†¢&WGW&‚ˆ&†¢&WGW&‚ÊˆÊP¢ñbó6ñÁ7FÊ6RÜˆ&¢¬Fñ7Bì†¢&VfW'&VB“Ç'fñFVÚ"¬'fñFVı˜W&¬"¬&˜WGWE˜W&¬"¬'W&¬"¬&F˜vÊ∆ˆE˜W&¬"¬&fñ∆R"¬&76WE˜W&¬"ê¢f˜"≤ñ‚&VfW'&VC†¢ñb≤ñ‚ˆ&£†¢f˜VÊB“ˆWáG&7Eˆfó'7E˜W&¬Üˆ&¢ÊvWBÜ≤íê¢ñbf˜VÊC†¢&WGW&‚f˜VÊ@¢f˜"bñ‚ˆ&¢Áf«VW2Çì†¢f˜VÊB“ˆWáG&7Eˆfó'7E˜W&¬ábê¢ñbf˜VÊC†¢&WGW&‚f˜VÊ@¢ñbó6ñÁ7FÊ6RÜˆ&¢¬Ü∆ó7B¬GW∆Ríì†¢f˜"óFV“ñ‚ˆ&£†¢f˜VÊB“ˆWáG&7Eˆfó'7E˜W&¬ÜóFV“ê¢ñbf˜VÊC†¢&WGW&‚f˜VÊ@¢&WGW&‚ÊˆÊP†††¶FVbˆ6∆VÁW˜6VÁE˜fñFVıˆ∂Wó2Çì†¢Ê˜r“Fñ÷RÁFñ÷RÇê¢7F∆R“∂≤f˜"≤¬G2ñ‚ı4TÂEıdîDTıÙ¥Uï2ÊóFV◊2ÇíñbÜÊ˜r“G2í‚dîDTıı$U5T≈EÙDTEUUıED≈ı5–¢f˜"≤ñ‚7F∆S†¢ı4TÂEıdîDTıÙ¥Uï2Á˜Ü≤¬ÊˆÊRê††¶FVbˆ÷&µ˜fñFVı˜6VÁEˆˆÊ6RÜ∂Wì¢7G"í”‚&ˆˆ√†¢ñbÊ˜B∂Wì†¢&WGW&‚f«6P¢ˆ6∆VÁW˜6VÁE˜fñFVıˆ∂Wó2Çê¢ñb∂Wíñ‚ı4TÂEıdîDTıÙ¥Uï3†¢&WGW&‚G'VP¢ı4TÂEıdîDTıÙ¥Uï5∂∂Wï““Fñ÷RÁFñ÷RÇê¢&WGW&‚f«6P††¶FVb˜fñFVı˜&W7V«Eˆ∂WíÜ6ÜEˆñC¢ñÁB¬7G"¬F6µˆñC¢7G"“""¬W&√¢7G"“""¬6ˆÁFVÁC¢'óFW2¬ÊˆÊR“ÊˆÊRí”‚7G#†¢&6R“b'∂6ÜEˆñG◊«∑F6µˆñB˜"rw◊«∑W&¬˜"rw“ ¢ñb6ˆÁFVÁC†¢G'ì†¢FñvW7B“Ü6Ü∆ñ"Á6ÜÜ6ˆÁFVÁBíÊÜWÜFñvW7BÇê¢WÜ6WBWÜ6WFñˆ„†¢FñvW7B“" ¢&6R≥“b'«∂FñvW7G“ ¢&WGW&‚&6P††¶FVbˆ6ˆ◊&W75˜fñFVıˆf˜%˜FV∆Vw&’˜7ñÊ2áfñFVıˆ'óFW3¢'óFW2¬÷Öˆ÷#¢ñÁB“CÇí”‚'óFW2¬ÊˆÊS†¢""%&R÷VÊ6ˆFR&˜fñFW"’BFÚFV∆Vw&“◊6fRFˆ7V÷VÁB˜fñFVÚ6ó¶R‡¢W6VBˆÊ«í2f∆∆&6≤vÜV‚FV∆Vw&“&V¶V7G2FÜR˜&ñvñÊ¬fñ∆R˜"óBó2FˆÚ∆&vR‡¢"" ¢ñbÊ˜BfñFVıˆ'óFW3†¢&WGW&‚ÊˆÊP¢÷Öˆ'óFW2“÷ÇÉR¬ñÁBÜ÷Öˆ÷"˜"CÇíí¢#B¢#@¢G'ì†¢ff◊Vr“ˆff◊VuˆWÜRÇê¢vóFÇFV◊fñ∆RÂFV◊˜&'îFó&V7F˜'íÇí2FC†¢7&2“˜2ÁFÇÊ¶ˆñ‚áFB¬&ñÁWBÊ◊B"ê¢˜WB“˜2ÁFÇÊ¶ˆñ‚áFB¬'Fu˜6fRÊ◊B"ê¢vóFÇ˜V‚á7&2¬'v""í2c†¢bÁw&óFRáfñFVıˆ'óFW2ê¢6÷B“∞¢ff◊Vr¬"◊í"¬"÷ÜñFUˆ&ÊÊW""¬"÷∆ˆv∆WfV¬"¬&W'&˜""¿¢"÷í"¬7&2¿¢"◊fb"¬'66∆S“v÷ñ‚És#∆órís¢”"∆g3”#B"¿¢"÷3ßb"¬&∆ñ'É#cB"¬"◊&W6WB"¬'V«G&f7B"¬"÷7&b"¬#3B"¬"◊óÖˆf◊B"¬'óWcC#"¿¢"÷3¶"¬&2"¬"÷#¶"¬#ìf≤"¿¢"÷÷˜ff∆w2"¬"∂f7G7F'B"¿¢˜WB¿¢–¢&W2“7V'&ˆ6W72Á'V‚Ü6÷B¬7FF˜WC◊7V'&ˆ6W72ÂïR¬7FFW'#◊7V'&ˆ6W72ÂïR¬Fñ÷V˜WC”Éê¢ñb&W2Á&WGW&Ê6ˆFR“†¢∆ˆrÁv&ÊñÊrÇ'FV∆Vw&“fñFVÚ6ˆ◊&W72fñ∆VB&3“W2W'#“W2"¬&W2Á&WGW&Ê6ˆFR¬&W2Á7FFW'"ÊFV6ˆFRÇ'WFb”Ç"¬&ñvÊ˜&R"ï≤”S•“ê¢&WGW&‚ÊˆÊP¢ñb˜2ÁFÇÊWÜó7G2Ü˜WBíÊB˜2ÁFÇÊvWG6ó¶RÜ˜WBí‚#C†¢vóFÇ˜V‚Ü˜WB¬'&""í2c†¢FF“bÁ&VBÇê¢ñb∆V‚ÜFFí√“÷Öˆ'óFW3†¢&WGW&‚FF¢∆ˆrÁv&ÊñÊrÇ'FV∆Vw&“fñFVÚ6ˆ◊&W72FˆÚ∆&vS¢W2‚W2"¬∆V‚ÜFFí¬÷Öˆ'óFW2ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'FV∆Vw&“fñFVÚ6ˆ◊&W72WÜ6WFñˆ„¢W2"¬Rê¢&WGW&‚ÊˆÊP†¶7ñÊ2FVbˆ6ˆ◊&W75˜fñFVıˆf˜%˜FV∆Vw&“áfñFVıˆ'óFW3¢'óFW2¬÷Öˆ÷#¢ñÁB“CÇí”‚'óFW2¬ÊˆÊS†¢&WGW&‚vóB7ñÊ6ñÚÁFı˜Fá&VBÖˆ6ˆ◊&W75˜fñFVıˆf˜%˜FV∆Vw&’˜7ñÊ2¬fñFVıˆ'óFW2¬÷Öˆ÷"ê†¶7ñÊ2FVb˜&W«ï˜fñFVıˆg&ˆ’˜W&¬áWFFS¢WFFR¬6∆ñVÁC¢áGGÇ‰7ñÊ46∆ñVÁB¬W&√¢7G"¬6Fñˆ„¢7G"¬F6µˆñC¢7G"“""ì†¢"" ¢	Ì-˝-Ω˝]"	Ì	M	ç	“]}=ΩÕ-""FV∆Vw&“‡¢	˝‚=ÕÌΩ}›ç‚(	B’B≠¢Fˆ7V÷VÁB¬}-Ì≤FV∆Vw&“›RÕ≠çÌ-≤≠ÌÌ-≠çíÌΩç¢≠¢tîb‡¢"" ¢ÜVFW'2“∞¢%W6W"‘vVÁB#¢$÷˜¶ñ∆∆ÛR„Ü6ˆ◊Fñ&∆S≤uCU&Ù&˜BÛ„í"¿¢$66WB#¢'fñFVÚˆ◊B«fñFVÚÚ¢¬¢Ú£∑”„Ç"¿¢–†¢F˜vÊ∆ˆFVC¢'óFW2¬ÊˆÊR“ÊˆÊP¢G'ì†¢"“vóB6∆ñVÁBÊvWBáW&¬¬ÜVFW'3÷ÜVFW'2¬Fñ÷V˜WC”#C„¬fˆ∆∆˜u˜&VFó&V7G3’G'VRê¢"Á&ó6Uˆf˜%˜7FGW2Çê¢6ˆÁFVÁE˜GóR“á"ÊÜVFW'2ÊvWBÇ&6ˆÁFVÁB◊GóR"í˜"""íÊ∆˜vW"Çê¢ñbÊ˜B"Ê6ˆÁFVÁB˜"∆V‚á"Ê6ˆÁFVÁBí¬S#†¢&ó6R'VÁFñ÷TW'&˜"Üb&V◊GífñFVÚ&W7ˆÁ6S¢∂∆V‚á"Ê6ˆÁFVÁBó“'óFW2"ê¢ñb'FWáBˆáF÷¬"ñ‚6ˆÁFVÁE˜GóR˜"&∆ñ6Fñˆ‚ˆß6ˆ‚"ñ‚6ˆÁFVÁE˜GóS†¢&ó6R'VÁFñ÷TW'&˜"Üb&Ê˜BfñFVÚ&W7ˆÁ6S¢∂6ˆÁFVÁE˜GóW”≤∑"ÁFWáE≥£3◊“"ê¢F˜vÊ∆ˆFVB“"Ê6ˆÁFVÁ@¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢∆ˆ6¬F˜vÊ∆ˆBfñ∆VC¢W2"¬Rê†¢6ÜEˆñB“vWFGG"ÜvWFGG"áWFFR¬&VffV7FófUˆ6ÜB"¬ÊˆÊRí¬&ñB"¬&Ê"ê¢FVGWUˆ∂Wí“˜fñFVı˜&W7V«Eˆ∂WíÜ6ÜEˆñB¬F6µˆñC◊F6µˆñB¬W&√◊W&¬¬6ˆÁFVÁC÷F˜vÊ∆ˆFVBê¢ñbˆ÷&µ˜fñFVı˜6VÁEˆˆÊ6RÜFVGWUˆ∂Wíì†¢∆ˆrÊñÊfÚÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢GW∆ñ6FR7W&W76VBF6µˆñC“W2"¬F6µˆñBê¢&WGW&‡†¢ñbF˜vÊ∆ˆFVC†¢2cs¢f˜"FV∆Vw&“&V¶V7Fñˆ‚˜6ó¶Ró77VW2¬G'í6ˆ◊7B’B&Vf˜&Rf∆∆ñÊr&6≤FÚ&r∆ñÊ≤‡¢ñbDTƒTu$’ıdîDTıÙ4Ù’$U55ÙÙÂÙdî¬ÊB∆V‚ÜF˜vÊ∆ˆFVBí‚÷ÇÉR¬ñÁBÖDTƒTu$’ı$U5T≈EÙ‘ÖÙ‘"˜"CÇíí¢#B¢#C†¢6ˆ◊7B“vóBˆ6ˆ◊&W75˜fñFVıˆf˜%˜FV∆Vw&“ÜF˜vÊ∆ˆFVB¬DTƒTu$’ı$U5T≈EÙ‘ÖÙ‘"ê¢ñb6ˆ◊7C†¢F˜vÊ∆ˆFVB“6ˆ◊7@¢ñbdîDTıı$U5T≈Eı4T‰EÙ5ÙDÙ5T‘TÂC†¢G'ì†¢&ñÚ“'óFW4îÚÜF˜vÊ∆ˆFVBê¢&ñÚÊÊ÷R“'&W7V«BÊ◊B ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆFˆ7V÷VÁBÜFˆ7V÷VÁC‘ñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6Fñˆ‚ê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢Fˆ7V÷VÁB6VÊBfñ∆VC¢W2"¬Rê¢G'ì†¢&ñÚ“'óFW4îÚÜF˜vÊ∆ˆFVBê¢&ñÚÊÊ÷R“'&W7V«BÊ◊B ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜fñFVÚáfñFVÛ‘ñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6Fñˆ‚¬7W˜'G5˜7G&V÷ñÊs’G'VRê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢fñFVÚ6VÊBfñ∆VC¢W2"¬Rê¢G'ì†¢&ñÚ“'óFW4îÚÜF˜vÊ∆ˆFVBê¢&ñÚÊÊ÷R“'&W7V«BÊ◊B ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆFˆ7V÷VÁBÜFˆ7V÷VÁC‘ñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6Fñˆ‚ê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢Fˆ7V÷VÁB6VÊBf∆∆&6≤fñ∆VC¢W2"¬Rê¢ñbDTƒTu$’ıdîDTıÙ4Ù’$U55ÙÙÂÙdî√†¢6ˆ◊7B“vóBˆ6ˆ◊&W75˜fñFVıˆf˜%˜FV∆Vw&“ÜF˜vÊ∆ˆFVB¬DTƒTu$’ı$U5T≈EÙ‘ÖÙ‘"ê¢ñb6ˆ◊7BÊB6ˆ◊7B“F˜vÊ∆ˆFVC†¢G'ì†¢&ñÚ“'óFW4îÚÜ6ˆ◊7Bê¢&ñÚÊÊ÷R“'&W7V«E˜Fu˜6fRÊ◊B ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆFˆ7V÷VÁBÜFˆ7V÷VÁC‘ñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6Fñˆ‚≤%∆Ô	˘:b	-çM]‚m-‚MΩÚÌ-˝-≠Ç"FV∆Vw&“‚"ê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢6ˆ◊&W76VBFˆ7V÷VÁB6VÊBfñ∆VC¢W2"¬Rê†¢ñbÊ˜BdîDTıı$U5T≈Eı4T‰EÙ5ÙDÙ5T‘TÂC†¢G'ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜fñFVÚáfñFVÛ◊W&¬¬6Fñˆ„÷6Fñˆ‚¬7W˜'G5˜7G&V÷ñÊs’G'VRê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢FV∆Vw&“U$¬fñFVÚ6VÊBfñ∆VC¢W2"¬Rê¢G'ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆFˆ7V÷VÁBÜFˆ7V÷VÁC◊W&¬¬6Fñˆ„÷6Fñˆ‚ê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ'&W«ï˜fñFVıˆg&ˆ’˜W&√¢FV∆Vw&“U$¬Fˆ7V÷VÁB6VÊBfñ∆VC¢W2"¬Rê†¢6fU˜W&¬“áW&¬˜"""ï≥£3S–¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b'∂6FñˆÁ’∆Ó)™˚àÚFV∆Vw&“›R˝ç›˝≤-çM]ÌMù≤›˝˝Õ=‚¬Ì--Ω˝‚ΩΩ≠3•∆Á∑6fU˜W&«“"¿¢Fó6&∆U˜vV%˜vU˜&WfñWs‘f«6R¿¢ê†¶7ñÊ2FVb˜&W«ï˜fñFVıˆ'óFW2áWFFS¢WFFR¬6ˆÁFVÁC¢'óFW2¬6Fñˆ„¢7G"¬F6µˆñC¢7G"“""ì†¢ñbÊ˜B6ˆÁFVÁB˜"∆V‚Ü6ˆÁFVÁBí¬S#†¢&ó6R'VÁFñ÷TW'&˜"Üb&V◊GífñFVÚ'óFW3¢∂∆V‚Ü6ˆÁFVÁB˜""rró“'óFW2"ê¢6ÜEˆñB“vWFGG"ÜvWFGG"áWFFR¬&VffV7FófUˆ6ÜB"¬ÊˆÊRí¬&ñB"¬&Ê"ê¢FVGWUˆ∂Wí“˜fñFVı˜&W7V«Eˆ∂WíÜ6ÜEˆñB¬F6µˆñC◊F6µˆñB¬6ˆÁFVÁC÷6ˆÁFVÁBê¢ñbˆ÷&µ˜fñFVı˜6VÁEˆˆÊ6RÜFVGWUˆ∂Wíì†¢∆ˆrÊñÊfÚÇ'&W«ï˜fñFVıˆ'óFW3¢GW∆ñ6FR7W&W76VBF6µˆñC“W2"¬F6µˆñBê¢&WGW&‡¢6VÁEˆˆ≤“f«6P¢G'ì†¢&ñÚ“'óFW4îÚÜ6ˆÁFVÁBê¢&ñÚÊÊ÷R“'&W7V«BÊ◊B ¢ñbdîDTıı$U5T≈Eı4T‰EÙ5ÙDÙ5T‘TÂC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆFˆ7V÷VÁBÄ¢Fˆ7V÷VÁC‘ñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6Fñˆ‚¿¢w&óFU˜Fñ÷V˜WC’dîDTıı4T‰Eıu$ïDUıDî‘TıUEı2¬&VE˜Fñ÷V˜WC”#¿¢ê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜fñFVÚÄ¢fñFVÛ‘ñÁWDfñ∆RÜ&ñÚí¬6Fñˆ„÷6Fñˆ‚¬7W˜'G5˜7G&V÷ñÊs’G'VR¿¢w&óFU˜Fñ÷V˜WC’dîDTıı4T‰Eıu$ïDUıDî‘TıUEı2¬&VE˜Fñ÷V˜WC”#¿¢ê¢6VÁEˆˆ≤“G'VP¢fñÊ∆«ì†¢ñbÊ˜B6VÁEˆˆ≥†¢2G&Á7˜'Bfñ«W&R◊W7BÊ˜BGW&‚&WG'íñÁFÚ7W&W76VBGW∆ñ6FR‡¢ı4TÂEıdîDTıÙ¥Uï2Á˜ÜFVGWUˆ∂Wí¬ÊˆÊRê†¶FVb˜&Fñıˆf˜%ˆ7V7BÜ7V7C¢7G"í”‚7G#†¢"" ¢	MΩÚ'VÁvíífW'6ñˆ‚##B””b&FñÚMÌΩm]“Ω-¬}]ç]›ç]¬¿¢›R-Ì≠Ìíì£bÚc£í‡¢"" ¢÷ñÊr“∞¢#ì£b#¢#scÉ£#É"¿¢#c£í#¢##É£scÇ"¿¢#£#¢#ìc£ìc"¿¢#C£R#¢#scÉ£ìc"¿¢#3£B#¢#scÉ£#B"¿¢#C£2#¢##C£scÇ"¿¢–¢&WGW&‚÷ñÊrÊvWBÇÜ7V7B˜"""íÁ7G&óÇí¬#scÉ£#É"ê†¶FVbˆGW&FñˆÂˆf˜%ˆVÊvñÊRÜVÊvñÊS¢7G"¬GW&FñˆÂ˜3¢ñÁBí”‚ñÁC†¢G'ì†¢B“ñÁBÜGW&FñˆÂ˜2˜"Rê¢WÜ6WBWÜ6WFñˆ„†¢B“P¢VÊvñÊR“ÜVÊvñÊR˜"""íÊ∆˜vW"Çê¢ñbVÊvñÊR”“''VÁví#†¢&WGW&‚÷ÇÉ"¬÷ñ‚É¬Bíê¢ñbVÊvñÊR”“&∂∆ñÊr#†¢&WGW&‚ñbB„“rV«6RP¢ñbVÊvñÊR”“'6˜&#†¢26˜&Ù6ˆ÷WB-çΩÕ›]R˝ç›çÕ]"6V6ˆÊG2“BÛÇÛ"‡¢2]≠=›BçrTí›ÌÕΩç}=]¬"Ωçmùççí˝ÌMM]mç-]ÕΩí-ç›"(	BÇ¿¢2MΩç››ΩR}˝Ì≤(	B"‡¢ñbB√“S†¢&WGW&‚@¢ñbB√“†¢&WGW&‚Ä¢&WGW&‚ ¢ñbVÊvñÊR”“&«V÷#†¢&WGW&‚íñbB„“rV«6RP¢&WGW&‚÷ÇÉR¬÷ñ‚ÉR¬Bíê†¶FVbˆwVW75ˆ7V7Eˆg&ˆ’ˆñ÷vRÜñ÷uˆ'óFW3¢'óFW2¬f∆∆&6≥¢7G"“#ì£b"í”‚7G#†¢ñbñ÷vRó2ÊˆÊS†¢&WGW&‚f∆∆&6∞¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢r¬Ç“ñ“Á6ó¶P¢ñbÇ‚r¢„#†¢&WGW&‚#ì£b ¢ñbr‚Ç¢„#†¢&WGW&‚#c£í ¢&WGW&‚#£ ¢WÜ6WBWÜ6WFñˆ„†¢&WGW&‚f∆∆&6∞†¶FVbˆñ÷vU˜&Vg5ˆf˜%ˆì'báWFFS¢WFFR¬ñ÷uˆ'óFW3¢'óFW2í”‚GW∆U∑7G"¬7G%”†¢"" ¢	-Ì}-ù]¬›}ΩFF˜W&¬¬˝Ì-Ì¬FV∆Vw&“U$¬‡¢	MΩÚ6ˆ÷WBÚ'VÁvíÚ∂∆ñÊr]}Ì˝›]R˝]-Ω¬˝ÌÌ--¬&6ScBFF◊W&¬¿¢˝Ì-ÌÕ2}-‚-›]ç›çRí}-‚›RÕÌ=="≠Ì]≠-›‚}-¬FV∆Vw&“fñ∆U˜FÇ‡¢"" ¢FF˜W&¬“Ä¢b&FFß∑6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2ó”∂&6ScB¬ ¢b'∂&6ScBÊ#cFVÊ6ˆFRÜñ÷uˆ'óFW2íÊFV6ˆFRÇv66ñíró“ ¢ê†¢Fu˜W&¬“" ¢G'ì†¢Fu˜W&¬“ˆvWEˆ66ÜVE˜Ü˜Fı˜W&¬áWFFRÊVffV7FófU˜W6W"ÊñBê¢WÜ6WBWÜ6WFñˆ„†¢Fu˜W&¬“" †¢&WGW&‚FF˜W&¬¬Fu˜W&¿†¶FVb˜6˜&˜6ó¶Uˆf˜%ˆ7V7BÜ7V7C¢7G"í”‚GW∆U∑7G"¬ñÁB¬ñÁE”†¢26˜&fñFV˜2í˝ç›çÕ]"›Rì£bÛc£í¬6ó¶R‡¢2	MΩÚ-›M-›Ì=‚6˜&”"-çΩÕ›ΩR}Õ]≥¢s#É#ÉçΩÇ#ÉÉs#‡¢“Ü7V7B˜"""íÁ7G&óÇê¢ñb”“#c£í#†¢&WGW&‚##ÉÉs#"¬#É¬s# ¢&WGW&‚#s#É#É"¬s#¬#É †¶FVb˜&W&U˜6˜&˜&VfW&VÊ6Uˆñ÷vRÜñ÷uˆ'óFW3¢'óFW2¬7V7C¢7G"í”‚GW∆U∂'óFW2¬7G"¬7G"¬7G%”†¢"" ¢	=Ì-Ì-ç"ç}Ìm]›çRMΩÚ6˜&ñ÷v^(i'fñFVÚ‡¢	-m›„¢ÌMçmçΩÕ›ΩífñFV˜2í-]=]"¬}-Ì≤&VfW&VÊ6Rñ÷vRÌ-˝M∞¢m]Ω]-Ω¬}Õ]Ì¬fñFVÚ6ó¶R‚	˝Ì›-ÌÕ2M]Ω]¬6VÁFW"÷7&˜≤&W6ó¶R‡¢	-Ì}-ù]#¢Ü'óFW2¬÷ñ÷R¬FF˜W&¬¬6ó¶Rí‡¢"" ¢6ó¶R¬Gr¬FÇ“˜6˜&˜6ó¶Uˆf˜%ˆ7V7BÜ7V7Bê†¢ñbñ÷vRó2ÊˆÊS†¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2ê¢FF˜W&¬“b&FFß∂÷ñ÷W”∂&6ScB«∂&6ScBÊ#cFVÊ6ˆFRÜñ÷uˆ'óFW2íÊFV6ˆFRÇv66ñíró“ ¢&WGW&‚ñ÷uˆ'óFW2¬÷ñ÷R¬FF˜W&¬¬6ó¶P†¢G'ì†¢ñ““ñ÷vRÊ˜V‚Ñ'óFW4îÚÜñ÷uˆ'óFW2íê¢G'ì†¢ñ““ñ÷vT˜2ÊWÜñe˜G&Á7˜6RÜñ“ê¢WÜ6WBWÜ6WFñˆ„†¢70¢ñ““ñ“Ê6ˆÁfW'BÇ%$t""ê¢r¬Ç“ñ“Á6ó¶P¢F&vWE˜&FñÚ“GrÚFÄ¢7W%˜&FñÚ“rÚ÷ÇÉ¬Çê†¢ñb7W%˜&FñÚ‚F&vWE˜&FñÛ†¢2
+Ωçç≠Ì¬ççÌ≠ÌR(	B]m]¬≠Ú‡¢ÊWu˜r“ñÁBÜÇ¢F&vWE˜&FñÚê¢∆VgB“÷ÇÉ¬ár“ÊWu˜ríÚÚ"ê¢ñ““ñ“Ê7&˜ÇÜ∆VgB¬¬∆VgB≤ÊWu˜r¬Çíê¢V∆ñb7W%˜&FñÚ¬F&vWE˜&FñÛ†¢2
+Ωçç≠Ì¬-ΩÌ≠ÌR(	B]m]¬-]R˝›çr‡¢ÊWuˆÇ“ñÁBárÚF&vWE˜&FñÚê¢F˜“÷ÇÉ¬ÜÇ“ÊWuˆÇíÚÚ"ê¢ñ““ñ“Ê7&˜ÇÉ¬F˜¬r¬F˜≤ÊWuˆÇíê†¢&W6◊∆R“vWFGG"Ññ÷vR¬%&W6◊∆ñÊr"¬ñ÷vRí‰ƒ‰5§ı0¢ñ““ñ“Á&W6ó¶RÇáGr¬FÇí¬&W6◊∆Rê¢˜WB“'óFW4îÚÇê¢ñ“Á6fRÜ˜WB¬f˜&÷C“$•Tr"¬V∆óGì”ì"¬˜Fñ÷ó¶S’G'VRê¢&W&VB“˜WBÊvWGf«VRÇê¢÷ñ÷R“&ñ÷vRˆßVr ¢FF˜W&¬“b&FFß∂÷ñ÷W”∂&6ScB«∂&6ScBÊ#cFVÊ6ˆFRá&W&VBíÊFV6ˆFRÇv66ñíró“ ¢&WGW&‚&W&VB¬÷ñ÷R¬FF˜W&¬¬6ó¶P¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ%6˜&ñ÷vR&W&Rfñ∆VB¬W6ñÊr˜&ñvñÊ¬'óFW3¢W2"¬Rê¢÷ñ÷R“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2ê¢FF˜W&¬“b&FFß∂÷ñ÷W”∂&6ScB«∂&6ScBÊ#cFVÊ6ˆFRÜñ÷uˆ'óFW2íÊFV6ˆFRÇv66ñíró“ ¢&WGW&‚ñ÷uˆ'óFW2¬÷ñ÷R¬FF˜W&¬¬6ó¶P†¶7ñÊ2FVb˜7F'E˜Ü˜Fı˜&Wfóf¬áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬VÊvñÊS¢7G"¬ñ÷uˆ'óFW3¢'óFW2¬&ˆ◊C¢7G"“""ì†¢VÊvñÊR“ÜVÊvñÊR˜"''VÁví"íÊ∆˜vW"ÇíÁ7G&óÇê¢ñbVÊvñÊR”“&«V÷"ÊB≈T‘ıDT’ÙDï4$ƒTC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ«V÷-]Õ]››‚Ì-≠ΩÌ}]›Ç≠Ω-çrÕ]›‚‚	ç˝ÌΩÕ}=ù-R'VÁví¬∂∆ñÊrçΩÇ6˜&"]rΩÌM]í‚"ê¢&WGW&‡¢&ˆ◊B“á&ˆ◊B˜"'7V'F∆R∆ñfV∆ñ∂RÊñ÷Fñˆ‚¬ÊGW&¬÷ñ7&Ú÷÷˜fV÷VÁG2¬6÷ˆ˜FÇ6ñÊV÷Fñ26÷W&÷˜Fñˆ‚"íÁ7G&óÇê¢GW"¬7“'6U˜fñFVıˆ˜G2á&ˆ◊Bê¢ñbÊ˜B&RÁ6V&6Çá""ÉÛ£ì£g√c£ó√£√C£W√3£G√C£2í"¬&ˆ◊B˜"""¬&R‰íì†¢7“ˆwVW75ˆ7V7Eˆg&ˆ’ˆñ÷vRÜñ÷uˆ'óFW2¬7ê¢GW"“ˆGW&FñˆÂˆf˜%ˆVÊvñÊRÜVÊvñÊR¬GW"ê†¢ïˆVÊvñÊR“''VÁví"ñbVÊvñÊRñ‚Ç''VÁví"¬&∂∆ñÊr"¬'6˜&"íV«6R&«V÷ ¢W7B“˜fñFVı˜&˜fñFW%ˆ6˜7E˜W6BÜVÊvñÊR¬GW"íñbVÊvñÊRñ‚Ç''VÁví"¬&∂∆ñÊr"¬'6˜&"íV«6R„C †¢7ñÊ2FVbˆvÚÇì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)»R	}˝=≠‚Ìmç-Ω]›çRMÌ-„¢∂VÊvñÊRÁWW"Çó“(
+"∂GW'“]¢(
+"∂7“‚ ¢ê¢ñbVÊvñÊR”“''VÁví#†¢&WGW&‚&ˆˆ¬ÜvóB˜'VÂ˜'VÁvïˆÊñ÷FU˜Ü˜FÚáWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2¬&ˆ◊C◊&ˆ◊B¬GW&FñˆÂ˜3÷GW"¬7V7C÷7íê¢ñbVÊvñÊR”“&«V÷#†¢&WGW&‚&ˆˆ¬ÜvóB˜'VÂˆ«V÷ˆÊñ÷FU˜Ü˜FÚáWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2¬&ˆ◊C◊&ˆ◊B¬GW&FñˆÂ˜3÷GW"¬7V7C÷7íê¢ñbVÊvñÊRñ‚Ç'6˜&"¬&∂∆ñÊr"ì†¢&WGW&‚&ˆˆ¬ÜvóB˜'VÂˆ6ˆ÷WEˆì'báWFFR¬6ˆÁFWáB¬VÊvñÊR¬ñ÷uˆ'óFW2¬&ˆ◊C◊&ˆ◊B¬GW&FñˆÂ˜3÷GW"¬7V7C÷7íê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	›]ç}-]-›ΩíM-çmÌ¢Ìmç-Ω]›çÚMÌ-‚‚"ê¢&WGW&‚f«6P†¢vóB˜G'ï˜ï˜FÜVÂˆFÚÄ¢WFFR¬6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¬ïˆVÊvñÊR¬W7B¬ˆvÚ¿¢&V÷V÷&W%ˆ∂ñÊC÷b'&WfófU˜Ü˜Fı˜∂VÊvñÊW“"¿¢&V÷V÷&W%˜ñ∆ˆC◊≤&VÊvñÊR#¢VÊvñÊR¬&GW&Fñˆ‚#¢GW"¬&7V7B#¢7¬'&ˆ◊B#¢&ˆ◊G“¿¢ê†¶7ñÊ2FVb˜ˆ∆≈˜fñFVı˜F6µˆvVÊW&ñ2Ä¢WFFS¢WFFR¿¢6∆ñVÁC¢áGGÇ‰7ñÊ46∆ñVÁB¿¢ÜVFW'3¢Fñ7B¿¢&6U˜W&√¢7G"¿¢7FGW5˜Fá3¢∆ó7E∑7G%“¿¢F6µˆñC¢7G"¿¢6Fñˆ„¢7G"¿¢÷Ö˜vóE˜3¢ñÁB“#¿¢F6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜3¢ñÁB“¿¢6ñ∆VÁE˜6ˆgEˆfñ√¢&ˆˆ¬“f«6R¿¢í”‚&ˆˆ√†¢"" ¢
+=›ç-]ΩÕ›Ωíˆ∆∆ñÊrMΩÚ7ñÊ2◊fñFVÚ}Mr‡†¢	-m›‚MΩÚ6ˆ÷WBı'VÁvì¢Ì--]"F6µˆÊ˜EˆWÜó7BÕÌm]"˝ç]ÌMç-¬›R≠¢Mç›ΩÕ›ÚÌçç≠¿¢≠¢-MçÚ˝]-ç}›Ìíç›çmçΩç}mçÇ}M}Ç‚	˝Ì›-ÌÕ2Õ≤›R}ç-]¬]=‚Õ=›Ì-]››Ω¿¢˝Ì-ΩÌ¬‚	›‚]ΩÇÌ“M]mç-ÚMÌΩÕçRF6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜2¬-Ì}-ù]¬f«6R¿¢}-Ì≤-]]›çí=Ì-]›¬ÕÌ2˝]]≠ΩÌ}ç-ÕÚ›M==ÌíM-çmÌ¢˝ÕÌM]Ω¬‡¢"" ¢7F'FVB“Fñ÷RÁFñ÷RÇê¢F6µˆÊ˜EˆWÜó7E˜6VVÂˆC¢f∆ˆB¬ÊˆÊR“ÊˆÊP¢ó5˜F∆∂ñÊuˆfF"“&∂∆ñÊrF∆∂ñÊrfF""ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"Çê¢fF%ˆÊ˜Fñ6UˆgFW%˜2“S ¢fF%ˆÊ˜Fñ6UˆWfW'ï˜2“É ¢ÊWáEˆfF%ˆÊ˜Fñ6U˜2“fF%ˆÊ˜Fñ6UˆgFW%˜0†¢vÜñ∆RG'VS†¢∆7Eˆ&ˆGí“" ¢6ˆgEˆÊ˜EˆWÜó7E˜6VVÂ˜FÜó5˜&˜VÊB“f«6P†¢f˜"FÇñ‚7FGW5˜Fá3†¢W&¬“b'∂&6U˜W&«◊∑Fá“"Êf˜&÷BÜñC◊F6µˆñBê¢G'ì†¢'2“vóB6∆ñVÁBÊvWBáW&¬¬ÜVFW'3÷ÜVFW'2¬Fñ÷V˜WC”c„ê¢&ˆGï˜&WfñWr“ˆïˆW'&˜%˜&WfñWrá'2ê†¢ñb'2Á7FGW5ˆ6ˆFR„“C†¢∆7Eˆ&ˆGí“b'∑'2Á7FGW5ˆ6ˆFW”¢∂&ˆGï˜&WfñWw“ †¢26ˆ÷WDíı'VÁví6ˆgB◊7FFS¢F6≤7&VFVB¬'WB7FGW27F˜&vRó2Ê˜B&VGíñWB‡¢ñb'F6µˆÊ˜EˆWÜó7B"ñ‚Ü&ˆGï˜&WfñWr˜"""íÊ∆˜vW"Çì†¢6ˆgEˆÊ˜EˆWÜó7E˜6VVÂ˜FÜó5˜&˜VÊB“G'VP¢ñbF6µˆÊ˜EˆWÜó7E˜6VVÂˆBó2ÊˆÊS†¢F6µˆÊ˜EˆWÜó7E˜6VVÂˆB“Fñ÷RÁFñ÷RÇê¢ñbF6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜2ÊBáFñ÷RÁFñ÷RÇí“F6µˆÊ˜EˆWÜó7E˜6VVÂˆBí„“F6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜3†¢∆ˆrÁv&ÊñÊrÄ¢"W3¢F6µˆÊ˜EˆWÜó7BW'6ó7FVBR„g2f˜"F6µˆñC“W3≤6ˆgBf∆∆&6≤"¿¢6Fñˆ‚¬Fñ÷RÁFñ÷RÇí“F6µˆÊ˜EˆWÜó7E˜6VVÂˆB¬F6µˆñB¿¢ê¢ñbÊ˜B6ñ∆VÁE˜6ˆgEˆfñ√†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)™˚àÚ∂6FñˆÁ”¢}M}Ωçç≠Ì¬MÌΩ=‚›R˝Ì˝-Ω˝]-Ú"6ˆ÷WBı'VÁví‚	˝]]≠ΩÌ}Ì¬›]}]-›Ωí˝=-¬‚ ¢ê¢&WGW&‚f«6P¢6ˆÁFñÁVP†¢6ˆÁFñÁVP†¢G'ì†¢ß2“'2Êß6ˆ‚Çí˜"∑–¢WÜ6WBWÜ6WFñˆ„†¢ß2“∑–†¢WÜ6WBWÜ6WFñˆ‚2S†¢∆7Eˆ&ˆGí“7G"ÜRê¢6ˆÁFñÁVP†¢7B“7G"Üß2ÊvWBÇ'7FGW2"í˜"ß2ÊvWBÇ'7FFR"í˜"ß2ÊvWBÇ'F6µ˜7FGW2"í˜"""íÊ∆˜vW"Çê†¢26ˆ÷WBı'VÁvíç›Ì=MÌ-M"F6µˆÊ˜EˆWÜó7B-›=-Ç•4Ù‚˝Ç#Ù≤‡¢ñb7B”“'F6µˆÊ˜EˆWÜó7B"˜"'F6µˆÊ˜EˆWÜó7B"ñ‚ß6ˆ‚ÊGV◊2Üß2¬VÁ7W&Uˆ66ñì‘f«6RíÊ∆˜vW"Çì†¢6ˆgEˆÊ˜EˆWÜó7E˜6VVÂ˜FÜó5˜&˜VÊB“G'VP¢∆7Eˆ&ˆGí“ß6ˆ‚ÊGV◊2Üß2¬VÁ7W&Uˆ66ñì‘f«6Rï≥£s–¢ñbF6µˆÊ˜EˆWÜó7E˜6VVÂˆBó2ÊˆÊS†¢F6µˆÊ˜EˆWÜó7E˜6VVÂˆB“Fñ÷RÁFñ÷RÇê¢ñbF6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜2ÊBáFñ÷RÁFñ÷RÇí“F6µˆÊ˜EˆWÜó7E˜6VVÂˆBí„“F6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜3†¢∆ˆrÁv&ÊñÊrÄ¢"W3¢F6µˆÊ˜EˆWÜó7B•4Ù‚W'6ó7FVBR„g2f˜"F6µˆñC“W3≤6ˆgBf∆∆&6≤"¿¢6Fñˆ‚¬Fñ÷RÁFñ÷RÇí“F6µˆÊ˜EˆWÜó7E˜6VVÂˆB¬F6µˆñB¿¢ê¢ñbÊ˜B6ñ∆VÁE˜6ˆgEˆfñ√†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)™˚àÚ∂6FñˆÁ”¢}M}Ωçç≠Ì¬MÌΩ=‚›R˝Ì˝-Ω˝]-Ú"6ˆ÷WBı'VÁví‚	˝]]≠ΩÌ}Ì¬›]}]-›Ωí˝=-¬‚ ¢ê¢&WGW&‚f«6P¢6ˆÁFñÁVP†¢W&¬“ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&˜WGWB"íí˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&76WG2"íí˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ê¢ñb7Bñ‚Ç&6ˆ◊∆WFVB"¬'7V66VVFVB"¬'7V66W72"¬&fñÊó6ÜVB"¬'&VGí"¬&FˆÊR"¬'7V66VVB"í˜"áW&¬ÊBÊ˜B7Bì†¢ñbÊ˜BW&√†¢2˜V‰íı6˜&fñFV˜2í}-‚-Ì}-ù]"6ˆ◊∆WFVB]rU$¬‡¢2
+Mç›ΩÕ›Ωí’B›M‚}-¬Ì-M]ΩÕ›Ω¬tUB˜c˜fñFV˜2˜∂ñG“ˆ6ˆÁFVÁB‡¢ñb'6˜&"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"Çí˜""˜c˜fñFV˜2"ñ‚""Ê¶ˆñ‚á7FGW5˜Fá2ì†¢G'ì†¢6ˆÁFVÁE˜W&¬“b'∂&6U˜W&¬Á'7G&óÇ"Ú"ó“˜c˜fñFV˜2˜∑F6µˆñG“ˆ6ˆÁFVÁB ¢7"“vóB6∆ñVÁBÊvWBÜ6ˆÁFVÁE˜W&¬¬ÜVFW'3÷ÜVFW'2¬Fñ÷V˜WC”#C„¬fˆ∆∆˜u˜&VFó&V7G3’G'VRê¢ñb7"Á7FGW5ˆ6ˆFR¬CÊB7"Ê6ˆÁFVÁBÊB&∆ñ6Fñˆ‚ˆß6ˆ‚"Ê˜Bñ‚Ü7"ÊÜVFW'2ÊvWBÇ&6ˆÁFVÁB◊GóR"í˜"""íÊ∆˜vW"Çì†¢vóB˜&W«ï˜fñFVıˆ'óFW2áWFFR¬7"Ê6ˆÁFVÁB¬b'∂6FñˆÁ“)»R"¬F6µˆñC◊F6µˆñBê¢&WGW&‚G'VP¢∆ˆrÁv&ÊñÊrÇ"W26ˆÁFVÁBF˜vÊ∆ˆBfñ∆VC¢W2W2"¬6Fñˆ‚¬7"Á7FGW5ˆ6ˆFR¬ˆïˆW'&˜%˜&WfñWrÜ7"íê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ"W26ˆÁFVÁBF˜vÊ∆ˆBWÜ6WFñˆ„¢W2"¬6Fñˆ‚¬Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)™˚àÚ∂6FñˆÁ”¢}M}=Ì-Ì-¬›‚ΩΩ≠Ù’B›-çM]‚›R›ùM]›≤‚"ê¢&WGW&‚G'VP¢vóB˜&W«ï˜fñFVıˆg&ˆ’˜W&¬áWFFR¬6∆ñVÁB¬W&¬¬b'∂6FñˆÁ“)»R"¬F6µˆñC◊F6µˆñBê¢ñb''VÁví"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"Çì†¢˜&˜fñFW%ˆ÷&µ˜7V66W72Ç''VÁvïˆì'b"ê¢&WGW&‚G'VP¢ñb7Bñ‚Ç&fñ∆VB"¬&fñ¬"¬&W'&˜""¬&6Ê6V∆VB"¬&6Ê6V∆∆VB"¬'&V¶V7FVB"ì†¢ñb'6˜&"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"ÇíÊBó5˜6˜&˜V˜∆Uˆ÷ˆFW&FñˆÂˆW'&˜"Üß2ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ˜6˜&˜V˜∆Uˆ÷ˆFW&FñˆÂ˜FWáBÇíê¢&WGW&‚G'VP¢ñb''VÁví"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"ÇíÊB%TÂtïÙÑîDUıDT4ÖÙU%$ı%3†¢˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆì'b"¬ß6ˆ‚ÊGV◊2Üß2¬VÁ7W&Uˆ66ñì‘f«6Rï≥£s“ê¢&WGW&‚f«6P¢&uˆfñ«W&R“ß6ˆ‚ÊGV◊2Üß2¬VÁ7W&Uˆ66ñì‘f«6Rê¢∆ˆrÁv&ÊñÊrÇ"W2FW&÷ñÊ¬&VÊFW"fñ«W&RF6µˆñC“W3¢W2"¬6Fñˆ‚¬F6µˆñB¬&uˆfñ«W&U≥£S“ê¢ñb&∂∆ñÊr"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"Çì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)ÿ¬∂∆ñÊr›RÕÌ2ÌÌ--¬›-‚MÌ-‚‚	M-çmÌ¢›R˝]]≠ΩÌ}ΩÚ‚	˝Ì˝Ì=ù-R]ùr‚ ¢ê¢&WGW&‚G'VP¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)ÿ¬∂6FñˆÁ”¢Ìçç≠]›M]‚"ê¢&WGW&‚G'VP†¢V∆6VE˜2“Fñ÷RÁFñ÷RÇí“7F'FV@¢ñbó5˜F∆∂ñÊuˆfF"ÊBV∆6VE˜2„“ÊWáEˆfF%ˆÊ˜Fñ6U˜3†¢V∆6VEˆ÷ñ‚“÷ÇÉ¬ñÁBÜV∆6VE˜2ÚÚcíê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.(˚2	---]ùÌ}M-Ú(	BÌ"›R}-ç¬∂∆ñÊr˝ÌMÌΩm]"ÌÌ-≠2‚ ¢b-	˝ÌçΩ‚Ì≠ÌΩ‚∂V∆6VEˆ÷ñÁ“Õç“‚	ÌΩ}›‚Ì}M›çR}›çÕ]"M‚Õç›="¬ ¢-ç›Ì=M›]Õ›Ì=‚MÌΩÕçR‚	˝ÌmΩ=ù-¬ÌmçMù-R(	B]}=ΩÕ-"˝çM"ÌM--ÌÕ-ç}]≠Ç‚ ¢ê¢ÊWáEˆfF%ˆÊ˜Fñ6U˜2≥“fF%ˆÊ˜Fñ6UˆWfW'ï˜0†¢ñbV∆6VE˜2‚÷Ö˜vóE˜3†¢2	MΩÚ'VÁvíÙ6ˆ÷WBFñ÷V˜WBMÌΩm]“M-¬ç›-]]›]Õ2f∆∆&6≤›=Ì-›‚‡¢ñbF6µˆÊ˜EˆWÜó7E˜6VVÂˆBó2Ê˜BÊˆÊRÊB6ñ∆VÁE˜6ˆgEˆfñ√†¢∆ˆrÁv&ÊñÊrÇ"W3¢Fñ÷V˜WBvóFÇF6µˆÊ˜EˆWÜó7Bf˜"F6µˆñC“W3≤6ˆgBf∆∆&6≤"¬6Fñˆ‚¬F6µˆñBê¢&WGW&‚f«6P¢ñb''VÁví"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"ÇíÊB%TÂtïÙÑîDUıDT4ÖÙU%$ı%3†¢˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆì'b"¬∆7Eˆ&ˆGï≥£s“ê¢&WGW&‚f«6P¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.(…≤∂6FñˆÁ”¢-]ÕÚÌmçM›çÚ-ΩçΩ‚‚	˝ÌΩ]M›çíÌ--]#¢∂∆7Eˆ&ˆGï≥£S◊“"ê¢&WGW&‚f«6P†¢2	]ΩÇ-R˝=-ÇMΩÇ-ÌΩÕ≠‚Õ˝=≠çíF6µˆÊ˜EˆWÜó7B(	B˝Ì-‚mM¬Ω]M=Ìùçímç≠≤‡¢vóB7ñÊ6ñÚÁ6∆VWÖdîDTııÙƒ≈ÙDTƒïı2ê†¶7ñÊ2FVbˆ7&VFUˆÊE˜ˆ∆≈ˆì'bÄ¢WFFS¢WFFR¿¢&6U˜W&√¢7G"¿¢ïˆ∂Wì¢7G"¿¢7&VFU˜ñ∆ˆG3¢∆ó7E∑GW∆U∑7G"¬Fñ7E’“¿¢7FGW5˜Fá3¢∆ó7E∑7G%“¿¢6Fñˆ„¢7G"¿¢F6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜3¢ñÁB“¿¢6ñ∆VÁE˜6ˆgEˆfñ√¢&ˆˆ¬“f«6R¿¢÷Ö˜vóE˜3¢ñÁB¬ÊˆÊR“ÊˆÊR¿¢í”‚&ˆˆ√†¢ñbÊ˜Bïˆ∂Wì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)ÿ¬∂6FñˆÁ”¢í›≠ΩÌr›R}M“"TÂb‚"ê¢&WGW&‚G'VP†¢WFÖˆÜVFW'2“∞¢$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"∂ïˆ∂Wó“"¿¢$66WB#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¿¢–†¢∆7EˆW'"“" ¢∆≈ˆW'&˜'3¢∆ó7E∑7G%““µ–†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”ì„í26∆ñVÁC†¢f˜"FÇ¬ñ∆ˆBñ‚7&VFU˜ñ∆ˆG3†¢G'ì†¢ÜVFW'2“Fñ7BÜWFÖˆÜVFW'2ê†¢2'VÁví}]]r6ˆ÷WB-]=]"-]ç‚í‡¢ñb7G"áFÇíÁ7F'G7vóFÇÇ"˜'VÁvñ÷¬Ú"ì†¢ÜVFW'5≤%Ç’'VÁví’fW'6ñˆ‚%““%TÂtïÙïıdU%4îÙ‚˜"###B””b †¢2
+˝]b›]mç¬MΩÚ6˜&Ù˜V‰ífñFV˜2ì¢ñÁWE˜&VfW&VÊ6R≠¢Mù∞¢2MÌΩm]“=]ÌMç-¬◊V«Fó'Bˆf˜&“÷FF¬›R•4Ù‚‚	"›-Ì¬]mçÕP¢26ˆÁFVÁB’GóR›R--ç¬-=}›=‚(	BáGGÇ¬MÌ-ç"&˜VÊF'í‡¢ñbó6ñÁ7FÊ6Ráñ∆ˆB¬Fñ7BíÊBñ∆ˆBÊvWBÇ%ıˆ◊V«Fó'B"ì†¢◊“ñ∆ˆBÊvWBÇ%ıˆ◊V«Fó'B"í˜"∑–¢FF“◊ÊvWBÇ&FF"í˜"∑–¢fñ∆W2“◊ÊvWBÇ&fñ∆W2"í˜"∑–¢"“vóB6∆ñVÁBÁ˜7BÜb'∂&6U˜W&«◊∑Fá“"¬ÜVFW'3÷ÜVFW'2¬FF÷FF¬fñ∆W3÷fñ∆W2ê¢V«6S†¢ÜVFW'5≤$6ˆÁFVÁB’GóR%““&∆ñ6Fñˆ‚ˆß6ˆ‚ ¢"“vóB6∆ñVÁBÁ˜7BÜb'∂&6U˜W&«◊∑Fá“"¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê†¢ñb"Á7FGW5ˆ6ˆFR„“C†¢÷ˆFR“&◊V«Fó'B"ñbó6ñÁ7FÊ6Ráñ∆ˆB¬Fñ7BíÊBñ∆ˆBÊvWBÇ%ıˆ◊V«Fó'B"íV«6R&ß6ˆ‚ ¢∆7EˆW'"“b%ı5B∑Fá“∑∂÷ˆFW’“(i"∑"Á7FGW5ˆ6ˆFW”¢µˆïˆW'&˜%˜&WfñWrá"ó“ ¢∆≈ˆW'&˜'2ÊVÊBÜ∆7EˆW'"ê¢∆ˆrÁv&ÊñÊrÇ"W27&VFRfñ∆VC¢W2"¬6Fñˆ‚¬∆7EˆW'"ê¢6ˆÁFñÁVP†¢G'ì†¢ß2“"Êß6ˆ‚Çí˜"∑–¢WÜ6WBWÜ6WFñˆ„†¢ß2“∑–†¢&VGï˜W&¬“Ä¢ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&˜WGWB"íê¢˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&˜WGWG2"íê¢˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&76WG2"íê¢˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ&FF"íê¢˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ'&W7V«B"íê¢˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ'&W7ˆÁ6R"íê¢˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ÊvWBÇ'ñ∆ˆB"íê¢˜"ˆWáG&7Eˆfó'7E˜W&¬Üß2ê¢ê†¢ñb&VGï˜W&√†¢vóB˜&W«ï˜fñFVıˆg&ˆ’˜W&¬áWFFR¬6∆ñVÁB¬&VGï˜W&¬¬b'∂6FñˆÁ“)»R"ê¢&WGW&‚G'VP†¢F6µˆñB“7G"Ä¢ß2ÊvWBÇ&ñB"ê¢˜"ß2ÊvWBÇ'F6µˆñB"ê¢˜"ß2ÊvWBÇ&vVÊW&FñˆÂˆñB"ê¢˜"ß2ÊvWBÇ'fñFVıˆñB"ê¢˜"ß2ÊvWBÇ'F6¥ñB"ê¢˜"ß2ÊvWBÇ'F6¥îB"ê¢˜"ß2ÊvWBÇ'&WVW7EˆñB"ê¢˜"ß2ÊvWBÇ'WVñB"ê¢˜"" ¢íÁ7G&óÇê†¢ñbÊ˜BF6µˆñBÊBó6ñÁ7FÊ6RÜß2ÊvWBÇ&FF"í¬Fñ7Bì†¢B“ß2ÊvWBÇ&FF"í˜"∑–¢F6µˆñB“7G"Ä¢BÊvWBÇ&ñB"ê¢˜"BÊvWBÇ'F6µˆñB"ê¢˜"BÊvWBÇ&vVÊW&FñˆÂˆñB"ê¢˜"BÊvWBÇ'fñFVıˆñB"ê¢˜"BÊvWBÇ'F6¥ñB"ê¢˜"BÊvWBÇ'F6¥îB"ê¢˜"BÊvWBÇ'&WVW7EˆñB"ê¢˜"BÊvWBÇ'WVñB"ê¢˜"" ¢íÁ7G&óÇê†¢ñbÊ˜BF6µˆñBÊBó6ñÁ7FÊ6RÜß2ÊvWBÇ'&W7V«B"í¬Fñ7Bì†¢B“ß2ÊvWBÇ'&W7V«B"í˜"∑–¢F6µˆñB“7G"Ä¢BÊvWBÇ&ñB"ê¢˜"BÊvWBÇ'F6µˆñB"ê¢˜"BÊvWBÇ&vVÊW&FñˆÂˆñB"ê¢˜"BÊvWBÇ'fñFVıˆñB"ê¢˜"BÊvWBÇ'F6¥ñB"ê¢˜"BÊvWBÇ'F6¥îB"ê¢˜"BÊvWBÇ'&WVW7EˆñB"ê¢˜"BÊvWBÇ'WVñB"ê¢˜"" ¢íÁ7G&óÇê†¢ñbÊ˜BF6µˆñC†¢∆7EˆW'"“b%ı5B∑Fá”¢›]"ñB}M}Ç"Ì--]-R∂ß6ˆ‚ÊGV◊2Üß2¬VÁ7W&Uˆ66ñì‘f«6Rï≥£s◊“ ¢∆≈ˆW'&˜'2ÊVÊBÜ∆7EˆW'"ê¢6ˆÁFñÁVP†¢ñb&∂∆ñÊrF∆∂ñÊrfF""ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"Çì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.(˚2∂∆ñÊrF∆∂ñÊrfF#¢}M}˝ç›˝-‚
+Ì}M›çRÌΩ}›‚}›çÕ]"M‚Õç›="¬ ¢-ç›Ì=M›]Õ›Ì=‚MÌΩÕçR‚	Ì"˝ÌMÌΩmç"Ì-2Ç˝ççΩ"-çM]‚--ÌÕ-ç}]≠Ç‚ ¢ê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.(˚2∂6FñˆÁ”¢}M}˝ç›˝-¬ÌmçM‚]}=ΩÕ-.(
+b"ê¢∆ˆrÊñÊfÚÇ"W266WFVC¢FÉ“W2F6µˆñC“W2&W7ˆÁ6S“W2"¬6Fñˆ‚¬FÇ¬F6µˆñB¬ß6ˆ‚ÊGV◊2Üß2¬VÁ7W&Uˆ66ñì‘f«6Rï≥£#“ê†¢&WGW&‚vóB˜ˆ∆≈˜fñFVı˜F6µˆvVÊW&ñ2Ä¢WFFR¿¢6∆ñVÁB¿¢ÜVFW'2¿¢&6U˜W&¬¿¢7FGW5˜Fá2¿¢F6µˆñB¿¢6Fñˆ‚¿¢÷Ö˜vóE˜3÷ñÁBÜ÷Ö˜vóE˜2˜"÷ÇÑ≈T‘Ù‘ÖıtïEı2¬%TÂtïÙ‘ÖıtïEı2íí¿¢F6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜3◊F6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜2¿¢6ñ∆VÁE˜6ˆgEˆfñ√◊6ñ∆VÁE˜6ˆgEˆfñ¬¿¢ê†¢WÜ6WBWÜ6WFñˆ‚2S†¢∆7EˆW'"“b%ı5B∑Fá”¢∂W“ ¢∆≈ˆW'&˜'2ÊVÊBÜ∆7EˆW'"ê¢∆ˆrÁv&ÊñÊrÇ"W27&VFRWÜ6WFñˆ„¢W2"¬6Fñˆ‚¬Rê¢6ˆÁFñÁVP†¢ñb∆≈ˆW'&˜'3†¢FWFñ«2“%∆‚"Ê¶ˆñ‚Ü∆≈ˆW'&˜'5≤”S•“ê¢V«6S†¢FWFñ«2“∆7EˆW' †¢ñb''VÁví"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"Çì†¢ñbˆó5˜'VÁvï˜VÊfñ∆&∆U˜FWáBÜFWFñ«2ì†¢˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆì'b"¬FWFñ«2ê¢ñb6ñ∆VÁE˜6ˆgEˆfñ¬˜"%TÂtïÙÑîDUıDT4ÖÙU%$ı%3†¢∆ˆrÁv&ÊñÊrÇ"W2ÜñFFV‚7&VFRfñ«W&S¢W2"¬6Fñˆ‚¬FWFñ«5≥£S“ê¢&WGW&‚f«6P†¢ñb'6˜&"ñ‚Ü6Fñˆ‚˜"""íÊ∆˜vW"ÇíÊBó5˜6˜&˜V˜∆Uˆ÷ˆFW&FñˆÂˆW'&˜"ÜFWFñ«2ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ˜6˜&˜V˜∆Uˆ÷ˆFW&FñˆÂ˜FWáBÇíê¢&WGW&‚f«6P¢ñb&ñÁf∆ñBí6ÜÊÊV«GóR"ñ‚ÜFWFñ«2˜"""íÊ∆˜vW"Çì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)™˚àÚ∂6FñˆÁ”¢2-]≠=ù]=‚˝Ì-ùM]˝≠›Ω6˜&]ù}›]MÌ-=˝›ÜñÁf∆ñBí6ÜÊÊV≈GóRí‚ ¢ê¢&WGW&‚f«6P¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)ÿ¬∂6FñˆÁ”¢›R=MΩÌ¬Ì}M-¬}M}2Â∆Á∂FWFñ«5≥£ì◊“"ê¢&WGW&‚f«6P†¶7ñÊ2FVb˜'VÂˆ«V÷ˆÊñ÷FU˜Ü˜FÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2¬&ˆ◊C¢7G"¬GW&FñˆÂ˜3¢ñÁB¬7V7C¢7G"ì†¢ñbÊ˜B≈T‘ÙïÙ¥Uì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬«V÷¢≈T‘ÙïÙ¥Uí›R}M“"TÂb‚"ê¢&WGW&‚f«6P¢FF˜W&¬¬Fu˜W&¬“ˆñ÷vU˜&Vg5ˆf˜%ˆì'báWFFR¬ñ÷uˆ'óFW2ê¢ñ÷vU˜&Vb“FF˜W&¬˜"Fu˜W&¿¢GW&FñˆÂ˜2“ˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ&«V÷"¬GW&FñˆÂ˜2ê¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”c„í26∆ñVÁC†¢&6R“vóB˜ñ6µˆ«V÷ˆ&6RÜ6∆ñVÁBê¢ñ∆ˆG2“∞¢Ñ≈T‘Ù5$TDUıDÇ¬∞¢&÷ˆFV¬#¢≈T‘Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢b'∂GW&FñˆÂ˜7◊2"¿¢&7V7E˜&FñÚ#¢7V7B¿¢&∂Wñg&÷W2#¢≤&g&÷S#¢≤'GóR#¢&ñ÷vR"¬'W&¬#¢ñ÷vU˜&Vg◊“¿¢“í¿¢Ñ≈T‘Ù5$TDUıDÇ¬∞¢&÷ˆFV¬#¢≈T‘Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢b'∂GW&FñˆÂ˜7◊2"¿¢&7V7E˜&FñÚ#¢7V7B¿¢&ñ÷vU˜&Vb#¢ñ÷vU˜&Vb¿¢“í¿¢–¢&WGW&‚&ˆˆ¬ÜvóBˆ7&VFUˆÊE˜ˆ∆≈ˆì'báWFFR¬&6R¬≈T‘ÙïÙ¥Uí¬ñ∆ˆG2¬¥≈T‘ı5DEU5ıDÖ“¬$«V÷ñ÷v^(i'fñFVÚ"íê†¶7ñÊ2FVb˜'VÂˆ6ˆ÷WEˆì'báWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬VÊvñÊS¢7G"¬ñ÷uˆ'óFW3¢'óFW2¬&ˆ◊C¢7G"¬GW&FñˆÂ˜3¢ñÁB¬7V7C¢7G"ì†¢VÊvñÊR“ÜVÊvñÊR˜"""íÊ∆˜vW"Çê†¢2	MΩÚ∂∆ñÊrı'VÁvíı6˜&›RÌ-˝-Ω˝]¬Ì=ÌÕ›ΩR≠ç›çÌ-≤≠¢]-√¢›ÌÕΩç}=]¬•TrÄ¢2Õ˝=≠‚=ç]¬}›ΩR˝ÌΩÚ¬]ΩÇ›-‚]}Ì˝›‚‡¢&W&VEˆÊ˜FR“" ¢ñbVÊvñÊRñ‚Ç&∂∆ñÊr"¬''VÁví"¬'6˜&"ì†¢ñ÷uˆ'óFW2¬&W&VEˆÊ˜FR“˜&W&Uˆì'e˜6˜W&6Uˆñ÷vRÜñ÷uˆ'óFW2¬7V7Bê¢ñb&W&VEˆÊ˜FS†¢∆ˆrÊñÊfÚÇ&ì'b6˜W&6R&W&VBf˜"W3¢W2"¬VÊvñÊR¬&W&VEˆÊ˜FRê†¢FF˜W&¬¬Fu˜W&¬“ˆñ÷vU˜&Vg5ˆf˜%ˆì'báWFFR¬ñ÷uˆ'óFW2ê¢&uˆ#cB“&6ScBÊ#cFVÊ6ˆFRÜñ÷uˆ'óFW2íÊFV6ˆFRÇ&66ñí"ê†¢ñbVÊvñÊR”“'6˜&#†¢B“ˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ'6˜&"¬GW&FñˆÂ˜2ê†¢2	˝‚M≠-2-ççR-]-Ì"6ˆ÷WBÙ˜V‰í˜c˜fñFV˜2	›	R˝ç›çÕ]#†¢2“F˜÷∆WfV¬ñ÷vU˜W&¬Úñ÷vU˜W&«0¢2“ñÁWEˆñ÷vP¢2“GW&Fñˆ‡¢2“7V7E˜&Fñ¢2	˝‚M≠-26ˆ÷WBÙ˜V‰í&˜áí"-ççRΩÌ=RÌmçM]"ñÁWE˜&VfW&VÊ6R≠¢
+
+-
+	Ì	≠
+2¿¢2›R≠¢Ì≠]≠"‚	˝Ì›-ÌÕ2˝Ì=]¬"˝]-=‚Ì}]]M¬7G&ñÊrFF◊W&¬¿¢2}-]¬7G&ñÊr]r6V6ˆÊG2¬}-]¬◊V«Fó'B›Mù≤≠¢}˝›Ìí-ç›"‡¢6˜&ˆ'óFW2¬6˜&ˆ÷ñ÷R¬6˜&ˆFF˜W&¬¬6ó¶R“˜&W&U˜6˜&˜&VfW&VÊ6Uˆñ÷vRÜñ÷uˆ'óFW2¬7V7Bê†¢ñ∆ˆG2“µ–†¢FVbˆFEˆß6ˆ‚áñ∆ˆC¢Fñ7Bì†¢f˜"&Bñ‚Ç&ñÁWEˆñ÷vR"¬&GW&Fñˆ‚"¬&7V7E˜&FñÚ"¬&ñ÷vU˜W&¬"¬&ñ÷vU˜W&«2"ì†¢ñ∆ˆBÁ˜Ü&B¬ÊˆÊRê¢ñ∆ˆG2ÊVÊBÇÖ4ı$Ù5$TDUıDÇ¬ñ∆ˆBíê†¢FVbˆFEˆ◊V«Fó'Bá6V6ˆÊG5˜f«VS¢7G"¬ÊˆÊR“ÊˆÊRì†¢FF“∞¢&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢'6ó¶R#¢6ó¶R¿¢–¢ñb6V6ˆÊG5˜f«VS†¢FF≤'6V6ˆÊG2%““6V6ˆÊG5˜f«VP¢fñ∆W2“∞¢&ñÁWE˜&VfW&VÊ6R#¢Ç'&VfW&VÊ6RÊßr"¬6˜&ˆ'óFW2¬6˜&ˆ÷ñ÷R˜"&ñ÷vRˆßVr"í¿¢–¢ñ∆ˆG2ÊVÊBÇÖ4ı$Ù5$TDUıDÇ¬≤%ıˆ◊V«Fó'B#¢≤&FF#¢FF¬&fñ∆W2#¢fñ∆W7◊“íê†¢2í	Ì›Ì-›Ìí-ç›#¢ñÁWE˜&VfW&VÊ6R≠¢7G&ñÊrÜFFU$¬í≤6V6ˆÊG2≤6ó¶R‡¢ˆFEˆß6ˆ‚á∞¢&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢&ñÁWE˜&VfW&VÊ6R#¢6˜&ˆFF˜W&¬¿¢'6V6ˆÊG2#¢7G"ÜBí¿¢'6ó¶R#¢6ó¶R¿¢“ê†¢2"í
+-‚mR]r6V6ˆÊG2(	B]ΩÇ≠›≤¬›ÌÕΩç}=]"MΩç-]ΩÕ›Ì-¬‡¢ˆFEˆß6ˆ‚á∞¢&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢&ñÁWE˜&VfW&VÊ6R#¢6˜&ˆFF˜W&¬¿¢'6ó¶R#¢6ó¶R¿¢“ê†¢22í	}˝›Ìí-ç›"}]]r˝=Ωç}›ΩíFV∆Vw&“U$¬¬]ΩÇ&˜áí›RΩÌç"FFU$¬‡¢ñbFu˜W&¬ÊBFu˜W&¬Á7F'G7vóFÇÇ&áGG3¢ÚÚ"ì†¢ˆFEˆß6ˆ‚á∞¢&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢&ñÁWE˜&VfW&VÊ6R#¢Fu˜W&¬¿¢'6V6ˆÊG2#¢7G"ÜBí¿¢'6ó¶R#¢6ó¶R¿¢“ê¢ˆFEˆß6ˆ‚á∞¢&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¿¢'&ˆ◊B#¢&ˆ◊B¿¢&ñÁWE˜&VfW&VÊ6R#¢Fu˜W&¬¿¢'6ó¶R#¢6ó¶R¿¢“ê†¢2Bí◊V«Fó'B›-ç›"≠¢}˝›Ìíf∆∆&6≤‡¢ˆFEˆ◊V«Fó'Bá7G"ÜBíê¢ˆFEˆ◊V«Fó'BÑÊˆÊRê†¢6˜&ˆˆ≤“vóBˆ7&VFUˆÊE˜ˆ∆≈ˆì'bÄ¢WFFR¿¢4Ù‘UEÙ$4UıU$¬¿¢4ı$ÙïÙ¥Uí¿¢ñ∆ˆG2¿¢µ4ı$ı5DEU5ıDÇ¬"˜c˜fñFV˜2˜∂ñG“"¬"˜c˜F6∑2˜∂ñG“%“¿¢%6˜&"ñ÷v^(i'fñFVÚç]rΩÌM]íí"¿¢ê¢ñbÜÊ˜B6˜&ˆˆ≤íÊB4ı$ÙUDıÙdƒƒ$4µÙ¥ƒî‰s†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.(jÆ˚àÚ6˜&]ù}›]MÌ-=˝›çΩÇ›RÌ}MΩ}M}2‚	˝]]≠ΩÌ}Ì¬›∂∆ñÊrñ÷v^(i'fñFVÚ≠¢]}]"‚ ¢ê¢&WGW&‚&ˆˆ¬ÜvóB˜'VÂˆ6ˆ÷WEˆì'báWFFR¬6ˆÁFWáB¬&∂∆ñÊr"¬ñ÷uˆ'óFW2¬&ˆ◊B¬GW&FñˆÂ˜2¬7V7Bíê¢&WGW&‚&ˆˆ¬á6˜&ˆˆ≤ê†¢ñbVÊvñÊR”“&∂∆ñÊr#†¢2∂∆ñÊrÙ6ˆ÷WB7W'&VÁF«íf∆ñFFW2&ñ÷vR"2U$¬‚6VÊFñÊr&r&6ScB6‚&P¢266WFVB'íFÜR7&VFRVÊGˆñÁB'WBFÜV‚fñ«27ñÊ6á&ˆÊ˜W6«ívóFÄ¢2ñÁf∆ñE&÷WFW%f«VRÂW&ƒñ∆∆Vv¬‚&VfW"FÜRV&∆ñ2FV∆Vw&“fñ∆RU$¬‡¢B“7G"ÖˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ&∂∆ñÊr"¬GW&FñˆÂ˜2íê¢6fU˜&ˆ◊B“á&ˆ◊B˜"""íÁ7G&óÇê¢ñbì%eÙ¥ƒî‰uı4dUı$Ù’Eı5TddïÇÊBì%eÙ¥ƒî‰uı4dUı$Ù’Eı5TddïÇÊ∆˜vW"ÇíÊ˜Bñ‚6fU˜&ˆ◊BÊ∆˜vW"Çì†¢6fU˜&ˆ◊B“á6fU˜&ˆ◊B≤#≤"≤ì%eÙ¥ƒî‰uı4dUı$Ù’Eı5TddïÇíÁ7G&óÇ#≤"ê†¢∂∆ñÊuˆñ÷vU˜&Vb“Fu˜W&¬ñbáFu˜W&¬ÊBFu˜W&¬Á7F'G7vóFÇÇ&áGG3¢ÚÚ"ííV«6RFF˜W&¿¢ñ∆ˆG2“∞¢Ä¢¥ƒî‰uÙ5$TDUıDÇ¿¢∞¢&÷ˆFV≈ˆÊ÷R#¢¥ƒî‰uÙ‘ÙDT¬¿¢'&ˆ◊B#¢6fU˜&ˆ◊B¿¢&ÊVvFófU˜&ˆ◊B#¢&&«W''í¬∆˜rV∆óGí¬Fó7F˜'FVBf6W2¬WáG&∆ñ÷'2¬vFW&÷&≤¬FWáB˜fW&∆í"¿¢&6fu˜66∆R#¢„R¿¢&ñ÷vR#¢∂∆ñÊuˆñ÷vU˜&Vb¿¢&GW&Fñˆ‚#¢B¿¢&7V7E˜&FñÚ#¢7V7B¿¢&÷ˆFR#¢'7FB"¿¢“¿¢í¿¢–†¢2Wá∆ñ6óB∂∆ñÊr7Fñˆ‚◊W7B&V÷ñ‚∂∆ñÊs¢ÊÚ'VÁvíı6˜&f∆∆&6≤‡¢&WGW&‚&ˆˆ¬ÜvóBˆ7&VFUˆÊE˜ˆ∆≈ˆì'bÄ¢WFFR¿¢4Ù‘UEÙ$4UıU$¬¿¢¥ƒî‰uÙïÙ¥Uí¿¢ñ∆ˆG2¿¢≤"ˆ∂∆ñÊr˜c˜fñFV˜2ˆñ÷vS'fñFVÚ˜∂ñG“"¬¥ƒî‰uı5DEU5ıDÇ¬"ˆ∂∆ñÊr˜c˜fñFV˜2˜∂ñG“"¬"˜c˜F6∑2˜∂ñG“"¬"˜c˜fñFV˜2˜∂ñG“%“¿¢$∂∆ñÊrñ÷v^(i'fñFVÚ"¿¢íê†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	›]ç}-]-›Ωí6ˆ÷WBñ÷v^(i'fñFVÚM-çmÌ¢‚"ê¢&WGW&‚f«6P††¶7ñÊ2FVb˜'VÂˆ6ˆ÷WE˜FWáE˜fñFVÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬VÊvñÊS¢7G"¬&ˆ◊C¢7G"¬GW&FñˆÂ˜3¢ñÁB¬7V7C¢7G"í”‚&ˆˆ√†¢""%FWáB◊FÚ◊fñFVÚFá&˜VvÇ6ˆ÷WDì¢6˜&"¬∂∆ñÊr¬˜"'VÁví‚"" ¢VÊvñÊR“ÜVÊvñÊR˜"""íÊ∆˜vW"ÇíÁ7G&óÇì≤&ˆ◊B“á&ˆ◊B˜"""íÁ7G&óÇê¢ñbÊ˜B&ˆ◊C†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	˝=-Ìí}˝ÌMΩÚ-çM]‚‚"ê¢&WGW&‚f«6P¢ñbVÊvñÊR”“'6˜&"ÊB˜&ˆ◊Eˆ∆ñ∂V«ïˆÜ5˜V˜∆Rá&ˆ◊Bì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ6˜&"MÌ-=˝›-ÌΩÕ≠‚MΩÚm]“]rΩÌM]í‚	ç˝ÌΩÕ}=ù-R∂∆ñÊrçΩÇ'VÁví‚"ê¢&WGW&‚f«6P¢vóB6ˆÁFWáBÊ&˜BÁ6VÊEˆ6ÜEˆ7Fñˆ‚áWFFRÊVffV7FófUˆ6ÜBÊñB¬6ÜD7Fñˆ‚Â$T4ı$EıdîDTÚê¢ñbVÊvñÊR”“''VÁví#†¢&WGW&‚&ˆˆ¬ÜvóB˜'VÂ˜'VÁvï˜fñFVÚáWFFR¬6ˆÁFWáB¬&ˆ◊B¬GW&FñˆÂ˜2¬7V7Bíê¢ñbVÊvñÊR”“'6˜&#†¢B“ˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ'6˜&"¬GW&FñˆÂ˜2ì≤6ó¶R¬Ú¬Ú“˜6˜&˜6ó¶Uˆf˜%ˆ7V7BÜ7V7Bê¢ñ∆ˆG2“∞¢Ö4ı$Ù5$TDUıDÇ¬≤&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¬'&ˆ◊B#¢&ˆ◊B¬'6V6ˆÊG2#¢7G"ÜBí¬'6ó¶R#¢6ó¶W“í¿¢Ö4ı$Ù5$TDUıDÇ¬≤&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¬'&ˆ◊B#¢&ˆ◊B¬'6V6ˆÊG2#¢B¬'6ó¶R#¢6ó¶W“í¿¢Ö4ı$Ù5$TDUıDÇ¬≤&÷ˆFV¬#¢4ı$Ù‘ÙDT¬¬'&ˆ◊B#¢&ˆ◊B¬'6ó¶R#¢6ó¶W“í¿¢–¢&WGW&‚&ˆˆ¬ÜvóBˆ7&VFUˆÊE˜ˆ∆≈ˆì'báWFFR¬4Ù‘UEÙ$4UıU$¬¬4ı$ÙïÙ¥Uí¬ñ∆ˆG2¬µ4ı$ı5DEU5ıDÇ¬"˜c˜fñFV˜2˜∂ñG“"¬"˜c˜F6∑2˜∂ñG“%“¬%6˜&"FWáN(i'fñFVÚ+r]rΩÌM]í"íê¢ñbVÊvñÊR”“&∂∆ñÊr#†¢B“7G"ÖˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ&∂∆ñÊr"¬GW&FñˆÂ˜2íê¢ñ∆ˆG2“∞¢Ñ¥ƒî‰uıDUÖEÙ5$TDUıDÇ¬≤&÷ˆFV¬#¢¥ƒî‰uÙ‘ÙDT¬¬'&ˆ◊B#¢&ˆ◊B¬&GW&Fñˆ‚#¢B¬&7V7E˜&FñÚ#¢7V7G“í¿¢Ç"ˆ∂∆ñÊr˜c˜fñFV˜2˜FWáC'fñFVÚ"¬≤&÷ˆFV¬#¢¥ƒî‰uÙ‘ÙDT¬¬'&ˆ◊B#¢&ˆ◊B¬&GW&Fñˆ‚#¢B¬&7V7E˜&FñÚ#¢7V7G“í¿¢Ñ¥ƒî‰uıDUÖEÙ5$TDUıDÇ¬≤'&ˆ◊B#¢&ˆ◊B¬&GW&Fñˆ‚#¢B¬&7V7E˜&FñÚ#¢7V7G“í¿¢–¢&WGW&‚&ˆˆ¬ÜvóBˆ7&VFUˆÊE˜ˆ∆≈ˆì'báWFFR¬4Ù‘UEÙ$4UıU$¬¬¥ƒî‰uÙïÙ¥Uí¬ñ∆ˆG2¬¥¥ƒî‰uıDUÖEı5DEU5ıDÇ¬"ˆ∂∆ñÊr˜c˜fñFV˜2˜FWáC'fñFVÚ˜∂ñG“"¬"ˆ∂∆ñÊr˜c˜fñFV˜2˜∂ñG“"¬"˜c˜F6∑2˜∂ñG“"¬"˜c˜fñFV˜2˜∂ñG“%“¬$∂∆ñÊrFWáN(i'fñFVÚ"íê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	›]ç}-]-›ΩíFWáN(i'fñFVÚM-çmÌ¢‚	MÌ-=˝›≤6˜&"]rΩÌM]í¬∂∆ñÊrÇ'VÁví‚"ê¢&WGW&‚f«6P†¶7ñÊ2FVb˜'VÂ˜'VÁvïˆ6ˆ÷WEˆÊñ÷FU˜Ü˜FÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2¬&ˆ◊C¢7G"¬GW&FñˆÂ˜3¢ñÁB¬7V7C¢7G"í”‚&ˆˆ√†¢ñbÊ˜BÖ%TÂtïÙî‘tS%dîDTıÙT‰$ƒTBÊB%TÂtïıU4UÙ4Ù‘UBÊB4Ù‘UEÙïÙ¥Uíì†¢&WGW&‚f«6P¢ñbÊ˜B˜&˜fñFW%ˆó5ˆfñ∆&∆RÇ''VÁvïˆì'b"ì†¢∆ˆrÁv&ÊñÊrÇ%'VÁvíÙ6ˆ÷WB6∂óVC¢6ˆˆ∆F˜v‚W72"¬˜&˜fñFW%ˆ6ˆˆ∆F˜vÂˆ∆VgBÇ''VÁvïˆì'b"íê¢&WGW&‚f«6P†¢ñ÷uˆ'óFW2¬&WˆÊ˜FR“˜&W&Uˆì'e˜6˜W&6Uˆñ÷vRÜñ÷uˆ'óFW2¬7V7Bê¢ñb&WˆÊ˜FS†¢∆ˆrÊñÊfÚÇ%'VÁvíì'b6˜W&6R&W&VC¢W2"¬&WˆÊ˜FRê¢FF˜W&¬¬Fu˜W&¬“ˆñ÷vU˜&Vg5ˆf˜%ˆì'báWFFR¬ñ÷uˆ'óFW2ê†¢GW&Fñˆ‚“ˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ''VÁví"¬GW&FñˆÂ˜2ê¢&FñÚ“˜&Fñıˆf˜%ˆ7V7BÜ7V7Bê†¢ñ∆ˆG2“µ–¢2	MΩÚñ÷v^(i'fñFVÚ›6ˆ÷WB›Rç˝ÌΩÕ}=]¬vV„B„R˝]-Ω√¢2-Ì“}-‚Ì--]}]"ÊÚfñ∆&∆R6ÜÊÊV¬‡¢2vV„E˜GW&&ÚˆvV„6˜GW&&Ú(	B›ÌÕΩÕ›ΩR≠›MçM-≤MΩÚÌmç-Ω]›çÚMÌ-‚‡¢f˜"÷ˆFV¬ñ‚˜'VÁvïˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çì†¢2	Ì›Ì-›ÌíMÌÕ"'VÁvíí##B””b‡¢ñ∆ˆG2ÊVÊBÇÖ%TÂtïÙ4Ù‘UEÙ5$TDUıDÇ¬∞¢&÷ˆFV¬#¢÷ˆFV¬¿¢'&ˆ◊Dñ÷vR#¢FF˜W&¬¿¢'&ˆ◊EFWáB#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢GW&Fñˆ‚¿¢'&FñÚ#¢&FñÚ¿¢'vFW&÷&≤#¢f«6R¿¢“íê¢2
+MÌÕ"&ˆ◊Dñ÷vR≠¢Õç"˜6óFñˆ„÷fó'7B(	B›≠-ç-Ω]›-]“7G&ñÊrÇ-çΩÕ›]R››]≠Ì-ÌΩR˝Ì≠Ç‡¢ñ∆ˆG2ÊVÊBÇÖ%TÂtïÙ4Ù‘UEÙ5$TDUıDÇ¬∞¢&÷ˆFV¬#¢÷ˆFV¬¿¢'&ˆ◊Dñ÷vR#¢∑≤'W&í#¢FF˜W&¬¬'˜6óFñˆ‚#¢&fó'7B'’“¿¢'&ˆ◊EFWáB#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢GW&Fñˆ‚¿¢'&FñÚ#¢&FñÚ¿¢'vFW&÷&≤#¢f«6R¿¢“íê¢26Ê∂Uˆ66Rf∆∆&6≤MΩÚÌ-Õ]-çÕÌ-Ç}›ΩÕÇ˝Ì≠Ç‡¢ñ∆ˆG2ÊVÊBÇÖ%TÂtïÙ4Ù‘UEÙ5$TDUıDÇ¬∞¢&÷ˆFV¬#¢÷ˆFV¬¿¢'&ˆ◊Eˆñ÷vR#¢FF˜W&¬¿¢'&ˆ◊E˜FWáB#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢GW&Fñˆ‚¿¢'&FñÚ#¢&FñÚ¿¢'vFW&÷&≤#¢f«6R¿¢“íê†¢2	}˝›Ìí-ç›"}]]rFV∆Vw&“U$¬¬]ΩÇ6ˆ÷WB›R˝çÕ]"FF◊W&í‡¢ñbFu˜W&¬ÊBFu˜W&¬Á7F'G7vóFÇÇ&áGG3¢ÚÚ"ì†¢f˜"÷ˆFV¬ñ‚˜'VÁvïˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çì†¢ñ∆ˆG2ÊVÊBÇÖ%TÂtïÙ4Ù‘UEÙ5$TDUıDÇ¬∞¢&÷ˆFV¬#¢÷ˆFV¬¿¢'&ˆ◊Dñ÷vR#¢Fu˜W&¬¿¢'&ˆ◊EFWáB#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢GW&Fñˆ‚¿¢'&FñÚ#¢&FñÚ¿¢'vFW&÷&≤#¢f«6R¿¢“íê†¢&WGW&‚vóBˆ7&VFUˆÊE˜ˆ∆≈ˆì'bÄ¢WFFR¿¢4Ù‘UEÙ$4UıU$¬¿¢4Ù‘UEÙïÙ¥Uí¿¢ñ∆ˆG2¿¢µ%TÂtïÙ4Ù‘UEı5DEU5ıDÇ¬"˜'VÁvñ÷¬˜c˜F6∑2˜∂ñG“"¬"˜c˜F6∑2˜∂ñG“%“¿¢%'VÁvíÙ6ˆ÷WBñ÷v^(i'fñFVÚ"¿¢F6µˆÊ˜EˆWÜó7E˜6ˆgEˆfñ≈˜3’%TÂtïıD4µÙ‰ıEÙUÑï5EÙdƒƒ$4µı2¿¢6ñ∆VÁE˜6ˆgEˆfñ√’G'VR¿¢ê†¢2)H)H)H)H)H)H)H)H)H'VÁvì¢›çÕmçÚ}==m]››Ì=‚MÌ-‚Üñ÷v^(i'fñFVÚí)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVb˜'VÂ˜'VÁvïˆFó&V7EˆÊñ÷FU˜Ü˜FÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2¬&ˆ◊C¢7G"¬GW&FñˆÂ˜3¢ñÁB¬7V7C¢7G"í”‚&ˆˆ√†¢""$ˆffñ6ñ¬'VÁvíñ÷v^(i'fñFVÚW6ñÊrWÜV÷W&¬W∆ˆB≤F6≤ˆ∆∆ñÊr‚"" ¢ñbÊ˜BÖ%TÂtïÙDï$T5EÙT‰$ƒTBÊB%TÂtïÙïÙ¥Uíì†¢&WGW&‚f«6P†¢ñ÷uˆ'óFW2¬&WˆÊ˜FR“˜&W&Uˆì'e˜6˜W&6Uˆñ÷vRÜñ÷uˆ'óFW2¬7V7Bê¢ñb&WˆÊ˜FS†¢∆ˆrÊñÊfÚÇ%'VÁvíFó&V7Bì'b6˜W&6R&W&VC¢W2"¬&WˆÊ˜FRê¢÷ñ÷U˜GóR“6Êñfeˆñ÷vUˆ÷ñ÷RÜñ÷uˆ'óFW2ê¢ñb÷ñ÷U˜GóRÊ˜Bñ‚≤&ñ÷vRˆßVr"¬&ñ÷vR˜Êr"¬&ñ÷vR˜vV''”†¢÷ñ÷U˜GóR“&ñ÷vRˆßVr ¢WáFVÁ6ñˆ‚“≤&ñ÷vRˆßVr#¢&ßr"¬&ñ÷vR˜Êr#¢'Êr"¬&ñ÷vR˜vV'#¢'vV''“ÊvWBÜ÷ñ÷U˜GóR¬&ßr"ê¢fñ∆VÊ÷R“b''VÁvïˆñÁWBÁ∂WáFVÁ6ñˆÁ“ ¢&FñÚ“˜'VÁvïˆFó&V7E˜&FñÚÜ7V7Bê¢GW&Fñˆ‚“÷ÇÉ"¬÷ñ‚É¬ñÁBÜGW&FñˆÂ˜2˜"Rííê¢∆7EˆW'"“" †¢f˜"÷ˆFV¬ñ‚˜'VÁvïˆFó&V7Eˆì'eˆ÷ˆFV≈ˆ6ÊFñFFW2Çì†¢G'ì†¢7ñÊ2vóFÇ˜'VÁvïˆˆffñ6ñ≈ˆ6∆ñVÁBÇí2's†¢F6µˆñB“vóB'rÊ7&VFUˆñ÷vU˜Fı˜fñFVÚÄ¢ñ÷vUˆ'óFW3÷ñ÷uˆ'óFW2¿¢fñ∆VÊ÷S÷fñ∆VÊ÷R¿¢÷ñ÷U˜GóS÷÷ñ÷U˜GóR¿¢&ˆ◊E˜FWáC◊&ˆ◊B¿¢÷ˆFV√÷÷ˆFV¬¿¢&FñÛ◊&FñÚ¿¢GW&Fñˆ„÷GW&Fñˆ‚¿¢VÊGˆñÁC’%TÂtïÙì%eıDÇ¿¢W∆ˆEˆVÊGˆñÁC’%TÂtïıUƒÙEıDÇ¿¢ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.(˚2'VÁví∂÷ˆFV«”¢ç}Ìm]›çR}==m]›‚¬}M}˝ç›˝-‚	ÌmçM‚]}=ΩÕ-.(
+b ¢ê¢&W7V«B“vóB'rÁvóEˆf˜%˜F6≤áF6µˆñB¬Fñ÷V˜WE˜3’%TÂtïÙ‘ÖıtïEı2ê†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”#C„¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí2F≈ˆ6∆ñVÁC†¢vóB˜&W«ï˜fñFVıˆg&ˆ’˜W&¬Ä¢WFFR¬F≈ˆ6∆ñVÁB¬&W7V«BÊfó'7Eˆ˜WGWB¿¢.) Ç	Ìmç-ç≤MÌ-‚)»R+r˜vW&VB'í'VÁví"¿¢F6µˆñC◊F6µˆñB¿¢ê¢˜&˜fñFW%ˆ÷&µ˜7V66W72Ç''VÁvïˆFó&V7B"ê¢&WGW&‚G'VP¢WÜ6WB'VÁvîîW'&˜"2S†¢∆7EˆW'"“7G"ÜRê¢∆ˆrÁv&ÊñÊrÇ%'VÁvíFó&V7Bì'b÷ˆFV√“W2fñ∆VC¢W2"¬÷ˆFV¬¬Rê¢2WFÜVÁFñ6Fñˆ‚¬&ñ∆∆ñÊr¬÷ˆFW&Fñˆ‚ÊBñÁf∆ñB÷ñÁWBW'&˜'2&RÊ˜BfóÜVB'í7vóF6ÜñÊr÷ˆFV«2‡¢6ˆFR“ÜRÊfñ«W&Uˆ6ˆFR˜"""íÁWW"Çê¢ñbRÁ7FGW5ˆ6ˆFRñ‚≥C¬C¬C"¬C7“˜"6ˆFRÁ7F'G7vóFÇÇ%4dUEí"ì†¢˜&˜fñFW%ˆ∆7EˆW'&˜%≤''VÁvïˆFó&V7B%““∆7EˆW'%≥£s–¢6ˆÁFWáBÁW6W%ˆFF≤%˜'VÁvïˆFó&V7EˆÜ&E˜7F˜%““G'VP¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ˜'VÁvï˜W6W%ˆW'&˜%˜FWáBÜRíê¢&WGW&‚f«6P¢6ˆÁFñÁVP¢WÜ6WBWÜ6WFñˆ‚2S†¢∆7EˆW'"“7G"ÜRê¢∆ˆrÁv&ÊñÊrÇ%'VÁvíFó&V7Bì'bWÜ6WFñˆ‚÷ˆFV√“W3¢W2"¬÷ˆFV¬¬Rê¢6ˆÁFñÁVP†¢ñb∆7EˆW'#†¢˜&˜fñFW%ˆ∆7EˆW'&˜%≤''VÁvïˆFó&V7B%““∆7EˆW'%≥£s–¢˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆFó&V7B"¬∆7EˆW'"ê¢&WGW&‚f«6P††¶7ñÊ2FVb˜'VÂ˜'VÁvïˆÊñ÷FU˜Ü˜FÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬ñ÷uˆ'óFW3¢'óFW2¬&ˆ◊C¢7G"¬GW&FñˆÂ˜3¢ñÁB¬7V7C¢7G"ì†¢vóB6ˆÁFWáBÊ&˜BÁ6VÊEˆ6ÜEˆ7Fñˆ‚áWFFRÊVffV7FófUˆ6ÜBÊñB¬6ÜD7Fñˆ‚Â$T4ı$EıdîDTÚê¢&ˆ◊B“á&ˆ◊B˜"&Êñ÷FRFÜRñÁWBÜ˜FÚvóFÇ7V'F∆R6÷W&÷˜Fñˆ‚¬∆ñfV∆ñ∂R÷ñ7&Ú÷÷˜fV÷VÁG3≤∂VWFÜR˜&ñvñÊ¬W'6ˆ‚¬FÚÊ˜BG&Á6f˜&“ñFVÁFóGí¬FÚÊ˜BFBÜˆÊRg&÷W2˜"Tí"íÁ7G&óÇê¢6V6ˆÊG2“ˆGW&FñˆÂˆf˜%ˆVÊvñÊRÇ''VÁví"¬GW&FñˆÂ˜2ê¢&FñÚ“˜&Fñıˆf˜%ˆ7V7BÜ7V7Bê¢&E˜7&5ˆÊ˜FR“ˆ∆ˆˆ∑5ˆ∆ñ∂U˜67&VVÁ6Ü˜Eˆ˜%ˆ&Eˆì'e˜6˜W&6RÜñ÷uˆ'óFW2ê¢ñb&E˜7&5ˆÊ˜FRÊBì%eıt$ÂÙ$Eı4ıU$4S†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ñbì%eÙ$Eı4ıU$4UıÙƒî5í”“&6µˆ6∆V‚#†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.(Kû˚àÚ"≤&E˜7&5ˆÊ˜FR≤%∆Â∆Ì	˝ççΩç-R}ç-ÌRMÌ-‚¬}-Ì≤˝ÌΩ=}ç-¬-çΩÕ›Ωí]}=ΩÕ-"‚"ê¢&WGW&‚f«6P¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.(Kû˚àÚ"≤&E˜7&5ˆÊ˜FR≤%∆Ì	˝ÌMÌΩm‚ÌÌ-≠2¬›‚≠}]--‚ÕÌm]"Ω-¬]=mR‚"ê†¢2cÉÉ¢ÌMçmçΩÕ›Ωí'VÁvíFWfV∆˜W"í(	BÌ›Ì-›ÌíÕç="‡¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç%˜'VÁvïˆFó&V7EˆÜ&E˜7F˜"¬ÊˆÊRê¢ñb%TÂtïÙDï$T5EÙdï%5BÊB%TÂtïÙDï$T5EÙT‰$ƒTBÊB%TÂtïÙïÙ¥Uì†¢G'ì†¢ñbvóB˜'VÂ˜'VÁvïˆFó&V7EˆÊñ÷FU˜Ü˜FÚáWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2¬&ˆ◊B¬6V6ˆÊG2¬7V7Bì†¢˜&˜fñFW%ˆ÷&µ˜7V66W72Ç''VÁvïˆFó&V7B"ê¢&WGW&‚G'VP¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç%˜'VÁvïˆFó&V7EˆÜ&E˜7F˜"¬f«6Rì†¢&WGW&‚f«6P¢˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆFó&V7B"¬˜&˜fñFW%ˆ∆7EˆW'&˜"ÊvWBÇ''VÁvïˆFó&V7B"¬&Fó&V7Bì'bfñ∆VB"íê¢WÜ6WBWÜ6WFñˆ‚2S†¢˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆFó&V7B"¬7G"ÜRíê¢∆ˆrÁv&ÊñÊrÇ%'VÁvíFó&V7Bì'bfñ∆VC≤G'ññÊr6ˆ÷WC¢W2"¬Rê†¢26ˆ÷WBó2ˆÊ«íf∆∆&6≥≤óG2'VÁvíFó7G&ñ'WF˜"6ÜÊÊV¬6‚Fó6V"ñÊFWVÊFVÁF«í‡¢G'ì†¢ñbvóB˜'VÂ˜'VÁvïˆ6ˆ÷WEˆÊñ÷FU˜Ü˜FÚáWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2¬&ˆ◊B¬6V6ˆÊG2¬7V7Bì†¢&WGW&‚G'VP¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ%'VÁví6ˆ÷WB&˜WFRfñ∆VC¢W2"¬Rê†¢ñbÜÊ˜B%TÂtïÙDï$T5EÙdï%5BíÊB%TÂtïÙDï$T5EÙT‰$ƒTBÊB%TÂtïÙïÙ¥Uì†¢G'ì†¢ñbvóB˜'VÂ˜'VÁvïˆFó&V7EˆÊñ÷FU˜Ü˜FÚáWFFR¬6ˆÁFWáB¬ñ÷uˆ'óFW2¬&ˆ◊B¬6V6ˆÊG2¬7V7Bì†¢˜&˜fñFW%ˆ÷&µ˜7V66W72Ç''VÁvïˆFó&V7B"ê¢&WGW&‚G'VP¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç%˜'VÁvïˆFó&V7EˆÜ&E˜7F˜"¬f«6Rì†¢&WGW&‚f«6P¢WÜ6WBWÜ6WFñˆ‚2S†¢˜&˜fñFW%ˆ÷&µˆfñ«W&RÇ''VÁvïˆFó&V7B"¬7G"ÜRíê¢∆ˆrÁv&ÊñÊrÇ%'VÁvíFó&V7Bf∆∆&6≤fñ∆VC¢W2"¬Rê†¢ñb%TÂtïÙUDıÙdƒƒ$4µÙ¥ƒî‰rÊB4Ù‘UEÙïÙ¥Uì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ%TÂtïıT$ƒî5Ùdƒƒ$4µıDUÖBê¢&WGW&‚&ˆˆ¬ÜvóB˜'VÂˆ6ˆ÷WEˆì'báWFFR¬6ˆÁFWáB¬&∂∆ñÊr"¬ñ÷uˆ'óFW2¬&ˆ◊B¬6V6ˆÊG2¬7V7Bíê†¢ñb%TÂtïÙïÙ¥Uì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ	ÌMçmçΩÕ›Ωí'VÁví›R˝ç›˝≤}M}2‚	˝Ì-]Õ-R%TÂtî‘≈Ùïı4T5$UBÑVÁfó&ˆÊ÷VÁBı6V7&WBfñ∆RíÇí›≠]Mç-≥¢ˆFñu˜'VÁvíWFÇ"ê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ	MΩÚ˝Ì-Ì˝››Ì=‚MÌ-=˝¢'VÁvíMÌ-Õ-R%TÂtî‘≈Ùïı4T5$UB"&VÊFW"6V7&WBfñ∆R'VÁvíÊVÁbçΩÇVÁfó&ˆÊ÷VÁB‚"ê¢&WGW&‚f«6P†¢2)H)H)H)H)H)H)H)H)H	˝Ì≠=˝≠Ç˝ç›-Ìù≤)H)H)H)H)H)H)H)H)H ¶FVb˜∆Â˜'V"áFñW#¢7G"¬FW&”¢7G"í”‚ñÁC†¢FñW"“áFñW"˜"'&Ú"íÊ∆˜vW"Çê¢FW&““áFW&“˜"&÷ˆÁFÇ"íÊ∆˜vW"Çê¢&WGW&‚ñÁBÖƒÂı$î4UıD$ƒRÊvWBáFñW"¬ƒÂı$î4UıD$ƒU≤'&Ú%“íÊvWBáFW&“¬ƒÂı$î4UıD$ƒU≤'&Ú%’≤&÷ˆÁFÇ%“íê†¶FVb˜∆Â˜ñ∆ˆEˆÊEˆ÷˜VÁBáFñW#¢7G"¬÷ˆÁFá3¢ñÁBí”‚GW∆U∑7G"¬ñÁB¬7G%”†¢FW&““≥¢&÷ˆÁFÇ"¬3¢'V'FW""¬#¢'ñV"'“ÊvWBÜ÷ˆÁFá2¬&÷ˆÁFÇ"ê¢÷˜VÁB“˜∆Â˜'V"áFñW"¬FW&“ê¢FóF∆R“b-	˝ÌM˝ç≠∑FñW"ÁWW"Çó“á∑FW&◊“í ¢ñ∆ˆB“b'7V#ß∑FñW'”ß∂÷ˆÁFá7“ ¢&WGW&‚ñ∆ˆB¬÷˜VÁB¬FóF∆P†¶7ñÊ2FVb˜6VÊEˆñÁfˆñ6U˜'V"áFóF∆S¢7G"¬FW63¢7G"¬÷˜VÁE˜'V#¢ñÁB¬ñ∆ˆC¢7G"¬WFFS¢WFFRí”‚&ˆˆ√†¢G'ì†¢2]¬-Ì≠]“Ç-ΩÌ-2çrM-=Rç-Ì}›ç≠Ì"ç-Ωí$ıdîDU%ıDÙ¥T‚	ç	Ω	Ç›Ì-ΩíîÙÙ¥54ı$ıdîDU%ıDÙ¥T‚ê¢Fˆ∂V‚“Ö$ıdîDU%ıDÙ¥T‚˜"îÙÙ¥54ı$ıdîDU%ıDÙ¥T‚ê¢7W'"“Ñ5U%$T‰5íñbÑ5U%$T‰5íÊB5U%$T‰5í“%%T""íV«6RîÙÙ¥54Ù5U%$T‰5íí˜"%%T" †¢ñbÊ˜BFˆ∂V„†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ
+‰∂76›R›-Ì]›ç›]"-Ì≠]›í‚"ê¢&WGW&‚f«6P†¢&ñ6W2“¥∆&V∆VE&ñ6RÜ∆&V√’ˆ66ñïˆ∆&V¬áFóF∆Rí¬÷˜VÁC÷ñÁBÜ÷˜VÁE˜'V"í¢ï–†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ïˆñÁfˆñ6RÄ¢FóF∆S◊FóF∆R¿¢FW67&óFñˆ„÷FW65≥£#SU“¿¢ñ∆ˆC◊ñ∆ˆB¿¢&˜fñFW%˜Fˆ∂V„◊Fˆ∂V‚¿¢7W'&VÊ7ì÷7W'"¿¢&ñ6W3◊&ñ6W2¿¢ÊVVEˆV÷ñ√‘f«6R¿¢ÊVVEˆÊ÷S‘f«6R¿¢ÊVVE˜ÜˆÊUˆÁV÷&W#‘f«6R¿¢ÊVVE˜6ÜóñÊuˆFG&W73‘f«6R¿¢ó5ˆf∆WÜñ&∆S‘f«6P¢ê¢&WGW&‚G'VP†¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'6VÊEˆñÁfˆñ6RW'&˜#¢W2"¬Rê¢G'ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬-Ω--ç-¬}"‚"ê¢WÜ6WBWÜ6WFñˆ„†¢70¢&WGW&‚f«6P†¶7ñÊ2FVbˆÂ˜&V6ÜV6∂˜WBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢G'ì†¢“WFFRÁ&Uˆ6ÜV6∂˜WE˜VW'ê¢vóBÊÁ7vW"Üˆ≥’G'VRê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'&V6ÜV6∂˜WBW'&˜#¢W2"¬Rê†¶7ñÊ2FVbˆÂ˜7V66W76gV≈˜ñ÷VÁBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢G'ì†¢7“WFFRÊ÷W76vRÁ7V66W76gV≈˜ñ÷VÁ@¢ñ∆ˆB“7ÊñÁfˆñ6U˜ñ∆ˆB˜"" ¢F˜F≈ˆ÷ñÊ˜"“7ÁF˜F≈ˆ÷˜VÁB˜" ¢'V"“F˜F≈ˆ÷ñÊ˜"Ú„ ¢VñB“WFFRÊVffV7FófU˜W6W"Êñ@†¢ñbñ∆ˆBÁ7F'G7vóFÇÇ'7V#¢"ì†¢Ú¬FñW"¬÷ˆÁFá2“ñ∆ˆBÁ7∆óBÇ#¢"¬"ê¢÷ˆÁFá2“ñÁBÜ÷ˆÁFá2ê¢VÁFñ¬“7FófFU˜7V'67&óFñˆÂ˜vóFÖ˜FñW"áVñB¬FñW"¬÷ˆÁFá2ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)»R	˝ÌM˝ç≠∑FñW"ÁWW"Çó“≠-ç-çÌ-›M‚∑VÁFñ¬Á7G&gFñ÷RÇrUí“V““VBró“Â∆Ô	˙©í	≠]Mç-≤›}çΩ]›≥¢µ5T%45$ïDîÙÂÙ5$TDïE2ÊvWBÇáFñW"˜"""íÊ∆˜vW"Çí¬í¢ñÁBÜ÷ˆÁFá2ó“≠‚"ê¢&WGW&‡†¢ñbñ∆ˆBÁ7F'G7vóFÇÇ'F˜W¢"ì†¢G'ì†¢Ú¬7&VFóG5˜2¬'V%˜2“ñ∆ˆBÁ7∆óBÇ#¢"¬"ê¢&W6ˆ«fVB“ˆ7&VFóE˜6µ˜&W6ˆ«fRÜñÁBÜ7&VFóG5˜2í¬ñÁBá'V%˜2íê¢ñb&W6ˆ«fVC†¢7&VFóG2¬WáV7FVE˜'V"“&W6ˆ«fV@¢˜v∆∆WE˜F˜F≈ˆFBáVñB¬ˆ7&VFóG5˜Fı˜W6BÜ7&VFóG2íê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)»R	Ì˝Ω-˝ÌçΩ=˝]ç›‚‚	›}çΩ]›„¢∂7&VFóG7“≠]Mç-Ì"}∂WáV7FVE˜'V'“(+“‚ ¢ê¢&WGW&‡¢WÜ6WBWÜ6WFñˆ„†¢∆ˆrÊWÜ6WFñˆ‚Ç$fñ∆VBFÚ'6RF˜Wñ∆ˆC¢W2"¬ñ∆ˆBê†¢2	ΩÌÌRç›ÌRñ∆ˆB(	B˝Ì˝ÌΩ›]›çR]Mç›Ì=‚≠Ìç]ΩÕ≠ ¢W6B“ˆ7&VFóG5˜Fı˜W6Bá'V"ê¢˜v∆∆WE˜F˜F≈ˆFBáVñB¬W6Bê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb/	˘+2	˝Ì˝ÌΩ›]›çS¢∑'V#¢„g“(+“‚	›}çΩ]›„¢µˆ7&VFóG5ˆf◊Eˆg&ˆ’˜W6BáW6Bó“‚"ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'7V66W76gV≈˜ñ÷VÁBÜÊF∆W"W'&˜#¢W2"¬Rê††¢2)H)H)H)H)H)H)H)H)H7'óFÙ&˜B)H)H)H)H)H)H)H)H)H §5%ïDııïÙïıDÙ¥T‚“˜2ÊVÁfó&ˆ‚ÊvWBÇ$5%ïDııïÙïıDÙ¥T‚"¬""íÁ7G&óÇê§5%ïDıÙ$4R“&áGG3¢Ú˜íÊ7'óBÊ&˜Bˆí •DÙÂıU4Eı$DR“f∆ˆBÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ%DÙÂıU4Eı$DR"¬#R„"í˜"#R„"í2}˝›Ìí≠=†¶7ñÊ2FVbˆ7'óFıˆ7&VFUˆñÁfˆñ6RáW6Eˆ÷˜VÁC¢f∆ˆB¬76WC¢7G"“%U4EB"¬FW67&óFñˆ„¢7G"“""í”‚GW∆U∑7G'ƒÊˆÊR¬7G'ƒÊˆÊR¬f∆ˆB¬7G%”†¢ñbÊ˜B5%ïDııïÙïıDÙ¥T„†¢&WGW&‚ÊˆÊR¬ÊˆÊR¬„¬76W@¢G'ì†¢ñ∆ˆB“≤&76WB#¢76WB¬&÷˜VÁB#¢&˜VÊBÜf∆ˆBáW6Eˆ÷˜VÁBí¬"í¬&FW67&óFñˆ‚#¢FW67&óFñˆ‚˜"%F˜◊W'–¢ÜVFW'2“≤$7'óFÚ’í‘í’Fˆ∂V‚#¢5%ïDııïÙïıDÙ¥TÁ–¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”3„í26∆ñVÁC†¢"“vóB6∆ñVÁBÁ˜7BÜb'¥5%ïDıÙ$4W“ˆ7&VFTñÁfˆñ6R"¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢¢“"Êß6ˆ‚Çê¢ˆ≤“¢ÊvWBÇ&ˆ≤"íó2G'VP¢ñbÊ˜Bˆ≥†¢&WGW&‚ÊˆÊR¬ÊˆÊR¬„¬76W@¢&W2“¢ÊvWBÇ'&W7V«B"¬∑“ê¢&WGW&‚7G"á&W2ÊvWBÇ&ñÁfˆñ6UˆñB"íí¬&W2ÊvWBÇ'ï˜W&¬"í¬f∆ˆBá&W2ÊvWBÇ&÷˜VÁB"¬W6Eˆ÷˜VÁBíí¬&W2ÊvWBÇ&76WB"í˜"76W@¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&7'óFÚ7&VFRW'&˜#¢W2"¬Rê¢&WGW&‚ÊˆÊR¬ÊˆÊR¬„¬76W@†¶7ñÊ2FVbˆ7'óFıˆvWEˆñÁfˆñ6RÜñÁfˆñ6UˆñC¢7G"í”‚Fñ7B¬ÊˆÊS†¢ñbÊ˜B5%ïDııïÙïıDÙ¥T„†¢&WGW&‚ÊˆÊP¢G'ì†¢ÜVFW'2“≤$7'óFÚ’í‘í’Fˆ∂V‚#¢5%ïDııïÙïıDÙ¥TÁ–¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC”#„í26∆ñVÁC†¢"“vóB6∆ñVÁBÊvWBÜb'¥5%ïDıÙ$4W“ˆvWDñÁfˆñ6W3ˆñÁfˆñ6UˆñG3◊∂ñÁfˆñ6UˆñG“"¬ÜVFW'3÷ÜVFW'2ê¢¢“"Êß6ˆ‚Çê¢ñbÊ˜B¢ÊvWBÇ&ˆ≤"ì†¢&WGW&‚ÊˆÊP¢óFV◊2“Ü¢ÊvWBÇ'&W7V«B"¬∑“í˜"∑“íÊvWBÇ&óFV◊2"¬µ“ê¢&WGW&‚óFV◊5≥“ñbóFV◊2V«6RÊˆÊP¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&7'óFÚvWBW'&˜#¢W2"¬Rê¢&WGW&‚ÊˆÊP†¶7ñÊ2FVb˜ˆ∆≈ˆ7'óFıˆñÁfˆñ6RÜ6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬6ÜEˆñC¢ñÁB¬÷W76vUˆñC¢ñÁB¬W6W%ˆñC¢ñÁB¬ñÁfˆñ6UˆñC¢7G"¬W6Eˆ÷˜VÁC¢f∆ˆBì†¢G'ì†¢f˜"Úñ‚&ÊvRÉ#ì¢2„"Õç›="˝Çm}M]m≠P¢ñÁb“vóBˆ7'óFıˆvWEˆñÁfˆñ6RÜñÁfˆñ6UˆñBê¢7B“ÜñÁb˜"∑“íÊvWBÇ'7FGW2"¬""íÊ∆˜vW"ÇíñbñÁbV«6R" ¢ñb7B”“'ñB#†¢˜v∆∆WE˜F˜F≈ˆFBáW6W%ˆñB¬f∆ˆBáW6Eˆ÷˜VÁBíê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóB6ˆÁFWáBÊ&˜BÊVFóEˆ÷W76vU˜FWáBÜ6ÜEˆñC÷6ÜEˆñB¬÷W76vUˆñC÷÷W76vUˆñB¿¢FWáC÷b.)»R7'óFÙ&˜C¢˝Ω-b˝ÌM--]mM“‚	›}çΩ]›„¢µˆ7&VFóG5ˆf◊Eˆg&ˆ’˜W6BÜf∆ˆBáW6Eˆ÷˜VÁBíó“‚"ê¢&WGW&‡¢ñb7Bñ‚Ç&Wáó&VB"¬&6Ê6V∆∆VB"¬&6Ê6V∆VB"¬&fñ∆VB"ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóB6ˆÁFWáBÊ&˜BÊVFóEˆ÷W76vU˜FWáBÜ6ÜEˆñC÷6ÜEˆñB¬÷W76vUˆñC÷÷W76vUˆñB¿¢FWáC÷b.)ÿ¬7'óFÙ&˜C¢˝Ω-b›R}-]ç“ç--=¢∑7G“í‚"ê¢&WGW&‡¢vóB7ñÊ6ñÚÁ6∆VWÉb„ê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóB6ˆÁFWáBÊ&˜BÊVFóEˆ÷W76vU˜FWáBÜ6ÜEˆñC÷6ÜEˆñB¬÷W76vUˆñC÷÷W76vUˆñB¿¢FWáC“.(…≤7'óFÙ&˜C¢-]ÕÚÌmçM›çÚ-ΩçΩ‚‚	›mÕç-R*ø	˘H‚	˝Ì-]ç-Ã+≤˝Ì}mR‚"ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&7'óFÚˆ∆¬W'&˜#¢W2"¬Rê†¶7ñÊ2FVb˜ˆ∆≈ˆ7'óFı˜7V%ˆñÁfˆñ6RÄ¢6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¿¢6ÜEˆñC¢ñÁB¿¢÷W76vUˆñC¢ñÁB¿¢W6W%ˆñC¢ñÁB¿¢ñÁfˆñ6UˆñC¢7G"¿¢FñW#¢7G"¿¢÷ˆÁFá3¢ñÁ@¢ì†¢G'ì†¢f˜"Úñ‚&ÊvRÉ#ì¢2„"Õç›="˝Ç}M]m≠Rm¢ñÁb“vóBˆ7'óFıˆvWEˆñÁfˆñ6RÜñÁfˆñ6UˆñBê¢7B“ÜñÁb˜"∑“íÊvWBÇ'7FGW2"¬""íÊ∆˜vW"ÇíñbñÁbV«6R" ¢ñb7B”“'ñB#†¢VÁFñ¬“7FófFU˜7V'67&óFñˆÂ˜vóFÖ˜FñW"áW6W%ˆñB¬FñW"¬÷ˆÁFá2ê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóB6ˆÁFWáBÊ&˜BÊVFóEˆ÷W76vU˜FWáBÄ¢6ÜEˆñC÷6ÜEˆñB¬÷W76vUˆñC÷÷W76vUˆñB¿¢FWáC÷b.)»R7'óFÙ&˜C¢˝Ω-b˝ÌM--]mM“Â∆‚ ¢b-	˝ÌM˝ç≠∑FñW"ÁWW"Çó“≠-ç-›M‚∑VÁFñ¬Á7G&gFñ÷RÇrUí“V““VBró“Â∆Ô	˙©í	≠]Mç-≤›}çΩ]›≥¢µ5T%45$ïDîÙÂÙ5$TDïE2ÊvWBÇáFñW"˜"""íÊ∆˜vW"Çí¬í¢ñÁBÜ÷ˆÁFá2ó“≠‚ ¢ê¢&WGW&‡¢ñb7Bñ‚Ç&Wáó&VB"¬&6Ê6V∆∆VB"¬&6Ê6V∆VB"¬&fñ∆VB"ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóB6ˆÁFWáBÊ&˜BÊVFóEˆ÷W76vU˜FWáBÄ¢6ÜEˆñC÷6ÜEˆñB¬÷W76vUˆñC÷÷W76vUˆñB¿¢FWáC÷b.)ÿ¬7'óFÙ&˜C¢Ì˝Ω-›R}-]ç]›ç--=¢∑7G“í‚ ¢ê¢&WGW&‡¢vóB7ñÊ6ñÚÁ6∆VWÉb„ê†¢2
+-ùÕ= ¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóB6ˆÁFWáBÊ&˜BÊVFóEˆ÷W76vU˜FWáBÄ¢6ÜEˆñC÷6ÜEˆñB¬÷W76vUˆñC÷÷W76vUˆñB¿¢FWáC“.(…≤7'óFÙ&˜C¢-]ÕÚÌmçM›çÚ-ΩçΩ‚‚	›mÕç-R*ø	˘H‚	˝Ì-]ç-Ã+≤çΩÇÌ˝Ω-ç-R}›Ì-‚‚ ¢ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&7'óFÚˆ∆¬á7V'67&óFñˆ‚íW'&˜#¢W2"¬Rê††¢2)H)H)H)H)H)H)H)H)H	˝]MΩÌm]›çR˝Ì˝ÌΩ›]›çÚ)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVb˜6VÊE˜F˜Wˆ÷VÁRáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢2cÉ3¢˝ÌΩÕ}Ì--]Ω‚˝Ì≠}Ω-]¬≠]Mç-≤¬-›=-Ç∆Vv7í›Ω›]›ç-Ú"-]]›ç}]≠Ì¬›≠-ç-Ω]›-R‡¢6÷∆≈ˆ7"“ñÁBÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ$5$TDïEı4µı4‘ƒ≈Ù5$TDïE2"¬#"í˜"ê¢÷ñEˆ7"“ñÁBÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ$5$TDïEı4µÙ‘îEÙ5$TDïE2"¬#3"í˜"3ê¢&ñuˆ7"“ñÁBÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ$5$TDïEı4µÙ$îuÙ5$TDïE2"¬#s"í˜"sê¢6÷∆≈˜'V"“ñÁBÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ$5$TDïEı4µı4‘ƒ≈ı%T""¬#ìì"í˜"ììê¢÷ñE˜'V"“ñÁBÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ$5$TDïEı4µÙ‘îEı%T""¬##sì"í˜"#sìê¢&ñu˜'V"“ñÁBÜ˜2ÊVÁfó&ˆ‚ÊvWBÇ$5$TDïEı4µÙ$îuı%T""¬#c#ì"í˜"c#ìê¢∂"“ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∑6÷∆≈ˆ7'“≠‚(
+"∑6÷∆≈˜'V'“(+“"¬6∆∆&6µˆFF÷b'F˜Wß'V#ß∑6÷∆≈˜'V'“"í¿¢ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂÷ñEˆ7'“≠‚(
+"∂÷ñE˜'V'“(+“"¬6∆∆&6µˆFF÷b'F˜Wß'V#ß∂÷ñE˜'V'“"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb'∂&ñuˆ7'“≠‚(
+"∂&ñu˜'V'“(+“"¬6∆∆&6µˆFF÷b'F˜Wß'V#ß∂&ñu˜'V'“"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb$7'óFÚÁ∑6÷∆≈ˆ7'“≠‚"¬6∆∆&6µˆFF÷b'F˜W¶7'óFÛßµˆ7&VFóG5˜Fı˜W6Bá6÷∆≈ˆ7"ì¢„&g“"í¿¢ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb$7'óFÚÁ∂÷ñEˆ7'“≠‚"¬6∆∆&6µˆFF÷b'F˜W¶7'óFÛßµˆ7&VFóG5˜Fı˜W6BÜ÷ñEˆ7"ì¢„&g“"ï“¿¢“ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	˙©í	≠]Mç-≤ç˝ÌΩÕ}=Ì-ÚMΩÚ-˝mΩΩRM=›≠mçì¢-çM]‚¬Õ=}Ω≠¬í›MÌ-‚¬f6U7v¬=Ì-Ì˝ùçí--Ç˝]Õç=¬›]›M]≤Â∆‚ ¢#≠]Mç"“(+“‚	-Ω]ç-R˝≠]#¢"¿¢&W«ïˆ÷&∑W÷∂"¿¢ê††¢2)H)H)H)H)H)H)H)H)H	˝ÌÕ‚›≠-Ì-≤˝‚M=›≠mç˝¬)H)H)H)H)H)H)H)H)H ¶FVb˜&ˆ÷ıˆfVGW&Uˆ∂WíÜVÊvñÊS¢7G"¬&V÷V÷&W%ˆ∂ñÊC¢7G"“""í”‚7G#†¢&≤“á&V÷V÷&W%ˆ∂ñÊB˜"""íÁ7G&óÇíÊ∆˜vW"Çê¢VÊr“ÜVÊvñÊR˜"""íÁ7G&óÇíÊ∆˜vW"Çê¢ñb'fˆ6¬"ñ‚&≤ÊBÇ&6∆ó"ñ‚&≤˜"&∆ó7ñÊ2"ñ‚&≤ì†¢&WGW&‚'fˆ6≈ˆ∆ó7ñÊ5ˆ6∆ó ¢ñb'Ü˜Fıˆ◊W6ñ5ˆ6∆ó"ñ‚&≤˜"'Ü˜Fıˆ6∆ó"ñ‚&≥†¢&WGW&‚'Ü˜Fıˆ◊W6ñ5ˆ6∆ó ¢ñb'F∆∂ñÊuˆfF""ñ‚&≤˜"&fF""ñ‚&≥†¢&WGW&‚'F∆∂ñÊuˆfF" ¢ñb&≤Á7F'G7vóFÇÇ'FWáE˜fñFVÚ"í˜"&≤Á7F'G7vóFÇÇ'fñFVıÚ"ì†¢&WGW&‚&∞¢ñb'&WfófU˜Ü˜FÚ"ñ‚&≥†¢&WGW&‚&∞¢ñb'7VÊÚ"ñ‚&≥†¢&WGW&‚'7VÊıˆ◊W6ñ2 ¢ñb&'W6ñÊW75ˆ∆ˆvÚ"ñ‚&≤˜"&∆ˆvÚ"ñ‚&≥†¢&WGW&‚&'W6ñÊW75ˆ∆ˆvÚ ¢ñb&f6W7v"ñ‚&≤˜"&f6U˜7v"ñ‚&≥†¢&WGW&‚&f6W7v ¢ñb&ï˜6V∆fñR"ñ‚&≥†¢&WGW&‚&ï˜6V∆fñR ¢ñb'&V÷˜fV&r"ñ‚&≤˜"'&V÷˜fUˆ&6∂w&˜VÊB"ñ‚&≥†¢&WGW&‚'&V÷˜fUˆ&6∂w&˜VÊB ¢ñb'&W∆6V&r"ñ‚&≤˜"'&W∆6Uˆ&6∂w&˜VÊB"ñ‚&≥†¢&WGW&‚'&W∆6Uˆ&6∂w&˜VÊB ¢ñb&˜WGñÁB"ñ‚&≥†¢&WGW&‚&˜WGñÁB ¢ñb&ñ÷vU˜&WF˜V6Ç"ñ‚&≤˜"'&WF˜V6Ç"ñ‚&≥†¢&WGW&‚&ñ÷vU˜&WF˜V6Ç ¢ñb&ñ÷uˆvVÊW&FR"ñ‚&≤˜"&ñ÷vUˆvVÊW&FR"ñ‚&≤˜"VÊr”“&ñ÷r#†¢&WGW&‚&ñ÷vUˆvVÊW&Fñˆ‚ ¢&WGW&‚&≤˜"VÊr˜"&gVÊ7Fñˆ‚ †¶FVb˜&ˆ÷ı˜V˜Fˆ∑eˆ∂WíáW6W%ˆñC¢ñÁB¬fVGW&S¢7G"¬ñ÷C¢7G"¬ÊˆÊR“ÊˆÊRí”‚7G#†¢6fR“&RÁ7V"á"%µÊ◊£”ïı¬’“≤"¬%Ú"¬ÜfVGW&R˜"&gVÊ7Fñˆ‚"íÊ∆˜vW"Çíï≥£É–¢&WGW&‚b'&ˆ÷ÛSß∑W6W%ˆñG”ß∑ñ÷B˜"˜FˆFï˜ñ÷BÇó”ß∑6fW“ †¶FVb˜G'ïˆ6ˆÁ7V÷U˜&ˆ÷ıˆFñ«ìU˜V˜FáW6W%ˆñC¢ñÁB¬W6W&Ê÷S¢7G"¬ÊˆÊR¬VÊvñÊS¢7G"¬&V÷V÷&W%ˆ∂ñÊC¢7G"“""í”‚GW∆U∂&ˆˆ¬¬ñÁB¬ñÁB¬7G%”†¢ñbÊ˜Bó5˜&ˆ÷ıˆFñ«ìU˜W6W"áW6W%ˆñB¬W6W&Ê÷Rì†¢&WGW&‚f«6R¬¬$Ù‘ıÙDî≈ìUıU%ÙeT‰5DîÙÂÙƒî‘ïB¬" ¢fVGW&R“˜&ˆ÷ıˆfVGW&Uˆ∂WíÜVÊvñÊR¬&V÷V÷&W%ˆ∂ñÊBê¢∆ñ÷óB“÷ÇÉ¬ñÁBÖ$Ù‘ıÙDî≈ìUıU%ÙeT‰5DîÙÂÙƒî‘ïBíê¢ñb∆ñ÷óB√“†¢&WGW&‚f«6R¬¬∆ñ÷óB¬fVGW&P¢∂Wí“˜&ˆ÷ı˜V˜Fˆ∑eˆ∂WíáW6W%ˆñB¬fVGW&Rê¢W6VB“ñÁBÜ∑eˆvWBÜ∂Wí¬#"í˜"#"ê¢ñbW6VB„“∆ñ÷óC†¢&WGW&‚f«6R¬¬∆ñ÷óB¬fVGW&P¢∑e˜6WBÜ∂Wí¬7G"áW6VB≤íê¢&WGW&‚G'VR¬÷ÇÉ¬∆ñ÷óB“W6VB“í¬∆ñ÷óB¬fVGW&P††¢2)H)H)H)H)H)H)H)H)H	˝Ì˝Ω-≠Ì˝Ω-ç-¬(i"-Ω˝ÌΩ›ç-¬)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVb˜G'ï˜ï˜FÜVÂˆFÚÄ¢WFFS¢WFFR¿¢6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¿¢W6W%ˆñC¢ñÁB¿¢VÊvñÊS¢7G"¿¢W7Eˆ6˜7E˜W6C¢f∆ˆB¿¢6˜&ıˆgVÊ2¿¢&V÷V÷&W%ˆ∂ñÊC¢7G"“""¿¢&V÷V÷&W%˜ñ∆ˆC¢Fñ7B¬ÊˆÊR“ÊˆÊR¿¢6ñ∆VÁEˆfñ«W&S¢&ˆˆ¬“f«6R¿¢ì†¢""%&W6W'fR66óGí¬'V‚&˜fñFW"¬ÊB6Ü&vRˆÊ«ígFW"FÜR7Fñˆ‚Wá∆ñ6óF«í&WGW&Á2G'VR‚"" ¢W6W&Ê÷R“áWFFRÊVffV7FófU˜W6W"ÁW6W&Ê÷R˜"""ê†¢&ˆ÷ıˆˆ≤¬&ˆ÷ıˆ∆VgB¬&ˆ÷ıˆ∆ñ÷óB¬&ˆ÷ıˆfVGW&R“˜G'ïˆ6ˆÁ7V÷U˜&ˆ÷ıˆFñ«ìU˜V˜FáW6W%ˆñB¬W6W&Ê÷R¬VÊvñÊR¬&V÷V÷&W%ˆ∂ñÊBê¢ñb&ˆ÷ıˆˆ≥†¢G'ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb/	¯Ë	˝ÌÕ‚›MÌ-=Û¢M=›≠mçÚ*∑∑&ˆ÷ıˆfVGW&W‹+≤‚	Ì-ΩÌ¬]=ÌM›Û¢∑&ˆ÷ıˆ∆VgG“˜∑&ˆ÷ıˆ∆ñ÷óG“‚"ê¢&W7V«B“vóB6˜&ıˆgVÊ2Çê¢ñb&W7V«Bó2f«6S†¢&ó6R'VÁFñ÷TW'&˜"Ç'&˜fñFW"&WGW&ÊVBVÁ7V66W76gV¬&W7V«B"ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'&ˆ÷ÚFñ«ìR7Fñˆ‚fñ∆VC¢W2"¬Rê¢ñbÊ˜B6ñ∆VÁEˆfñ«W&S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	}M}›R-Ω˝ÌΩ›]›‚	˝ÌÕ‚›≠]Mç-≤›R˝çΩ-Ì-Ú‚"ê¢&WGW&‡¢ñbó5˜&ˆ÷ıˆFñ«ìU˜W6W"áW6W%ˆñB¬W6W&Ê÷RíÊB&ˆ÷ıˆfVGW&S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb-	˝ÌÕ‚›ΩçÕç"›M=›≠mç‚*∑∑&ˆ÷ıˆfVGW&W‹+≤]=ÌM›Úç}]˝”¢∑&ˆ÷ıˆ∆ñ÷óG“˜∑&ˆ÷ıˆ∆ñ÷óG“‚uB›}"Ì--Ú]}ΩçÕç-›Ω¬‚"ê¢&WGW&‡†¢g&VUˆ∂ñÊB“ˆg&VU˜V˜Fˆ6FVv˜'íÜVÊvñÊR¬&V÷V÷&W%ˆ∂ñÊBê¢ñbg&VUˆ∂ñÊBÊBvWE˜7V'67&óFñˆÂ˜FñW"áW6W%ˆñBí”“&g&VR"ÊBÊ˜Bó5˜VÊ∆ñ÷óFVBáW6W%ˆñB¬W6W&Ê÷Rì†¢ˆˆ≤¬ˆ∆VgB¬ˆ∆ñ÷óB“˜G'ïˆ6ˆÁ7V÷Uˆg&VUˆFñ«ï˜V˜FáW6W%ˆñB¬W6W&Ê÷R¬g&VUˆ∂ñÊBê¢ñbˆˆ≥†¢G'ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb/	¯Ë	]˝Ω-›ÌRM]ù--çS¢µˆg&VU˜V˜Fˆ∆&V¬Üg&VUˆ∂ñÊBó“‚	Ì-ΩÌ¬]=ÌM›Û¢∑ˆ∆VgG“˜∑ˆ∆ñ÷óG“‚"ê¢&W7V«B“vóB6˜&ıˆgVÊ2Çê¢ñb&W7V«Bó2f«6S¢&ó6R'VÁFñ÷TW'&˜"Ç'&˜fñFW"&WGW&ÊVBVÁ7V66W76gV¬&W7V«B"ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&g&VR7Fñˆ‚fñ∆VC¢W2"¬Rê¢ñbÊ˜B6ñ∆VÁEˆfñ«W&S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	}M}›R-Ω˝ÌΩ›]›‚	M]›]m›Ì=‚˝ç›çÚ›RΩΩ‚‚"ê¢&WGW&‡¢vóB˜6VÊEˆg&VU˜V˜FˆWÜÜW7FVBáWFFR¬6ˆÁFWáB¬g&VUˆ∂ñÊBì≤&WGW&‡†¢ñbó5˜VÊ∆ñ÷óFVBáW6W%ˆñB¬W6W&Ê÷Rì†¢G'ì†¢&W7V«B“vóB6˜&ıˆgVÊ2Çê¢ñb&W7V«Bó2f«6S¢&ó6R'VÁFñ÷TW'&˜"Ç'&˜fñFW"&WGW&ÊVBVÁ7V66W76gV¬&W7V«B"ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç'VÊ∆ñ÷óFVB7Fñˆ‚fñ∆VC¢W2"¬Rê¢ñbÊ˜B6ñ∆VÁEˆfñ«W&S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	}M}›R-Ω˝ÌΩ›]›‚	˝Ì˝Ì=ù-R˝Ì}mR‚"ê¢&WGW&‡†¢&˜fñFW%ˆ6˜7B“÷ÇÉ„¬f∆ˆBÜW7Eˆ6˜7E˜W6B˜"„íê¢&WFñ≈˜W6B“˜&WFñ≈˜W6Bá&˜fñFW%ˆ6˜7Bê¢&ñ6Uˆ7&VFóG2“˜&WFñ≈ˆ7&VFóG2á&˜fñFW%ˆ6˜7Bê¢GÖˆñB“ÊˆÊP¢G'ì†¢GÖˆñB¬fñ∆&∆Uˆ&Vf˜&R“ˆ7&VFóE˜&W6W'fRáW6W%ˆñB¬VÊvñÊR¬&V÷V÷&W%ˆ∂ñÊB˜"VÊvñÊR¬&˜fñFW%ˆ6˜7B¬&WFñ≈˜W6B¬&V÷V÷&W%˜ñ∆ˆBê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&7&VFóB&W6W'fRfñ∆VC¢W2"¬Rê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	›R=MΩÌ¬˝Ì-]ç-¬≠]Mç-›ΩíΩ›‚	˝Ì˝Ì=ù-R]ùr‚"ê¢&WGW&‡†¢ñbÊ˜BGÖˆñC†¢fñ∆&∆Uˆ7"“ñÁBá&˜VÊBÖ˜W6E˜Fıˆ7&VFóG2Üfñ∆&∆Uˆ&Vf˜&Rííê¢÷ó76ñÊuˆ7"“÷ÇÉ¬&ñ6Uˆ7&VFóG2“fñ∆&∆Uˆ7"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b-	›]MÌ--Ì}›‚≠]Mç-Ì"‚
+-ÌçÕÌ-√¢∑&ñ6Uˆ7&VFóG7“≠‚	MÌ-=˝›„¢∂fñ∆&∆Uˆ7'“≠‚	›R]--]#¢∂÷ó76ñÊuˆ7'“≠‚"¿¢&W«ïˆ÷&∑W‘ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖµ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*Ÿ
+-çM≤"¬vV%ˆ’vV$ñÊfÚáW&√’D$îdeıU$¬íï“≈¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.)ÈR	˝Ì˝ÌΩ›ç-¬Ω›"¬6∆∆&6µˆFF“'F˜W"ï’“ê¢ê¢&WGW&‡†¢gFW%ˆ7"“÷ÇÉ¬ñÁBá&˜VÊBÖ˜W6E˜Fıˆ7&VFóG2Üfñ∆&∆Uˆ&Vf˜&R“&WFñ≈˜W6Bíííê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb/	˙©í
+-ÌçÕÌ-√¢∑&ñ6Uˆ7&VFóG7“≠‚
+˝ç›çR˝Ìç}ÌùM"-ÌΩÕ≠‚˝ÌΩR=˝]ç›Ì=‚]}=ΩÕ--‚	˝ÌΩR-Ω˝ÌΩ›]›çÚÌ-›]-Û¢∂gFW%ˆ7'“≠‚"ê†¢G'ì†¢&W7V«B“vóB6˜&ıˆgVÊ2Çê¢ñb&W7V«Bó2Ê˜BG'VS†¢ˆ7&VFóE˜&V∆V6RáGÖˆñB¬'&V∆V6VB"ê¢ñbÊ˜B6ñ∆VÁEˆfñ«W&S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.(jû˚àÚ	=]›]mçÚ›R}-]ççΩ¬(	B≠]Mç-≤›R˝ç›≤‚"ê¢&WGW&‡¢ñbÊ˜Bˆ7&VFóEˆ6ˆ÷÷óBáGÖˆñBì†¢ˆ7&VFóE˜&V∆V6RáGÖˆñB¬'&V∆V6VB"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)™˚àÚ
+]}=ΩÕ-"˝ÌΩ=}]“¬›‚˝ç›çR›R}Mç≠çÌ-›‚‚	Ì-ç-]¬"˝ÌMM]m≠2¬˝Ì--Ì›‚}˝=≠-¬Ì˝Ω-2›R›=m›‚‚"ê¢&WGW&‡¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)»R
+˝ç›„¢∑&ñ6Uˆ7&VFóG7“≠‚"ê¢WÜ6WBWÜ6WFñˆ‚2S†¢ˆ7&VFóE˜&V∆V6RáGÖˆñB¬'&V∆V6VB"ê¢∆ˆrÊWÜ6WFñˆ‚Ç'ñB7Fñˆ‚fñ∆VC¢W2"¬Rê¢ñbÊ˜B6ñ∆VÁEˆfñ«W&S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬	}M}›R-Ω˝ÌΩ›]›‚	≠]Mç-≤›R˝ç›≤‚"ê††¶7ñÊ2FVb6÷EˆFñuˆ66W72áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢W6W"“WFFRÊVffV7FófU˜W6W ¢W6W%ˆñB“W6W"ÊñBñbW6W"V«6R ¢W6W&Ê÷R“W6W"ÁW6W&Ê÷RñbW6W"V«6R" ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	˘I66W72FñvÊ˜7Fñ5∆‚ ¢b'W6W%ˆñC¢∑W6W%ˆñG’∆‚ ¢b'W6W&Ê÷S¢∑W6W&Ê÷R˜"r“w’∆‚ ¢b'VÊ∆ñ÷óFVC¢∂ó5˜VÊ∆ñ÷óFVBáW6W%ˆñB¬W6W&Ê÷Ró’∆‚ ¢b'&ˆ÷ı˜VÊ∆ñ’ˆwC¢∂ó5˜&ˆ÷ı˜VÊ∆ñ’ˆwBáW6W%ˆñB¬W6W&Ê÷Ró’∆‚ ¢b'&ˆ÷ıˆFñ«ìS¢∂ó5˜&ˆ÷ıˆFñ«ìU˜W6W"áW6W%ˆñB¬W6W&Ê÷Ró’∆‚ ¢b'&ˆ÷ıˆ∆ñ÷óE˜W%ˆgVÊ7Fñˆ„¢µ$Ù‘ıÙDî≈ìUıU%ÙeT‰5DîÙÂÙƒî‘ïG“ ¢ê†¢2)H)H)H)H)H)H)H)H)H˜∆Á2)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVb6÷E˜∆Á2áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢∆ñÊW2“≤.*Ÿ
+-çM≤Ç≠]Mç-≥¢"¬-	˝ÌM˝ç≠Ì-≠Ω-]"MÌ-=Ú¬≠]Mç-≤]ÌM=Ì-Ú›-˝mΩΩR=]›]mçÇ‚%–¢f˜"FñW"¬FW&◊2ñ‚ƒÂı$î4UıD$ƒRÊóFV◊2Çì†¢∆ñÊW2ÊVÊBÜb.(	B∑FñW"ÁWW"Çó”¢ ¢b'∑FW&◊5≤v÷ˆÁFÇu◊ﬁ(+“˝Õ](
+"∑FW&◊5≤wV'FW"u◊ﬁ(+“˝≠--≤(
+"∑FW&◊5≤wñV"u◊ﬁ(+“˝=ÌB(
+"µ5T%45$ïDîÙÂÙ5$TDïE2ÊvWBáFñW"√ó“≠‚˝Õ]"ê¢∂"“ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÖ∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç%5D%BÕ]"¬6∆∆&6µˆFF“&'Wìß7F'C£"í¿¢ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç%$ÚÕ]"¬6∆∆&6µˆFF“&'Wìß&Û£"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç%T≈Dî‘DRÕ]"¬6∆∆&6µˆFF“&'WìßV«Fñ÷FS£"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç-	Õç›Ç›-ç-ç›"¬vV%ˆ’vV$ñÊfÚáW&√’D$îdeıU$¬íï–¢“ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2í¬&W«ïˆ÷&∑W÷∂"ê††¢2)H)H)H)H)H)H)H)H)H	Ì-≠MΩÚ˝]]M}Ç˝Ìç}-ÌΩÕ›Ì=‚-]≠-ç›˝‚çr5EBí)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÂ˜FWáE˜vóFÖ˜FWáBÄ¢WFFS¢WFFR¿¢6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¿¢FWáC¢7G"¿¢ì†¢"" ¢	Ì-≠MΩÚ˝]]M}Ç-]≠-ç›˝çÕ]¬˝ÌΩR5EBí"ˆÂ˜FWáB¿¢]r˝Ì˝Ω-Ì¢ç}Õ]›ç-¬WFFRÊ÷W76vRá&VB÷ˆÊ«íí‡¢"" ¢FWáB“áFWáB˜"""íÁ7G&óÇê¢ñbÊ˜BFWáC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬˝Ì}›-¬-]≠"‚"ê¢&WGW&‡†¢vóBˆÂ˜FWáBáWFFR¬6ˆÁFWáB¬÷ÁV≈˜FWáC◊FWáBê††¢2)H)H)H)H)H)H)H)H)H
+-]≠-Ì-Ωí-]ÌB)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÂ˜FWáBÄ¢WFFS¢WFFR¿¢6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¿¢÷ÁV≈˜FWáC¢7G"¬ÊˆÊR“ÊˆÊR¿¢ì†¢2	]ΩÇ-]≠"˝]]M“ç}-›R(i"ç˝ÌΩÕ}=]¬]=‡¢2ç›}R(	BÌΩ}›Ωí-]≠"ÌÌù]›ç¢ñb÷ÁV≈˜FWáBó2Ê˜BÊˆÊS†¢FWáB“÷ÁV≈˜FWáBÁ7G&óÇê¢V«6S†¢FWáB“áWFFRÊ÷W76vRÁFWáB˜"""íÁ7G&óÇê†¢2ñFV◊˜FVÊ7íwV&C¢FÜR&ñ˜&óGí&W6VÁFFñˆ‚7GVFñÚÜÊF∆W"÷í«&VGí˜v‚FÜó2WFFR‡¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ñb6ˆÁFWáBÊ6ÜEˆFFÊvWBÇ%˜&W6VÁFFñˆÂˆ∆7E˜WFFU˜Fˆ∂V‚"í”“˜&W6VÁFFñˆÂ˜WFFU˜Fˆ∂V‚áWFFRì†¢&WGW&‡†¢2&VÊ÷Rfó'GV¬6ÜB&Vf˜&R&˜WFñÊrFÜR÷W76vRFÚuB‡¢&VÊ÷Uˆ6ñB“6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆ6ÜE˜&VÊ÷R"¬ÊˆÊRê¢ñb&VÊ÷Uˆ6ñC†¢ñbˆ6ÜE˜&VÊ÷RáWFFRÊVffV7FófU˜W6W"ÊñB¬WFFRÊVffV7FófUˆ6ÜBÊñB¬ñÁBá&VÊ÷Uˆ6ñBí¬FWáBì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)»R	›}-›çR}-Ì›Ì-Ω]›‚‚"¬&W«ïˆ÷&∑W’ˆ6ÜEˆ∆ó7Eˆ∂"áWFFRÊVffV7FófU˜W6W"ÊñB¬WFFRÊVffV7FófUˆ6ÜBÊñBíê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬˝]]çÕ]›Ì--¬}"‚"ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆ÷ñF¶˜W&ÊWï˜&ˆ◊B"¬ÊˆÊRì†¢vóB˜7F'Eˆ÷ñF¶˜W&ÊWïˆñ÷vRáWFFR¬6ˆÁFWáB¬FWáBê¢&WGW&‡†¢27FófR&W6VÁFFñˆ‚ˆ6F∆ˆr&ˆ¶V7BÜ2'6ˆ«WFR&ñ˜&óGí˜fW"vVÊW&ñ2uBˆ∆ófR◊6V&6Ç&˜WFñÊr‡¢˜7GVFñÚ“˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇê¢ñbvóB˜7GVFñÚÊÜÊF∆U˜FWáBáWFFR¬6ˆÁFWáB¬FWáBì†¢&WGW&‡¢2vÜV‚&ˆ¶V7Bó27FófR'WBFÜR7W'&VÁB7FvRWáV7G2'WGFˆ‚˜W∆ˆB&FÜW"FÜ‚g&VRFWáB¿¢2ÊWfW"72FÜR6÷R÷W76vRFÚvVÊW&ñ2uB˜"∆ófR◊6V&6Ç‡¢ˆ7FófU˜&W6VÁFFñˆ‚“˜7GVFñÚÂˆ7FófU˜&ˆ¶V7BáWFFRÊVffV7FófU˜W6W"ÊñB¬WFFRÊVffV7FófUˆ6ÜBÊñBê¢ñbˆ7FófU˜&W6VÁFFñˆ„†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	˝Ì]≠"˝]}]›-mçÇ≠-ç-]“‚	››-Ì¬›-˝Rç˝ÌΩÕ}=ù-R≠›Ì˝≠ÇÕ-]çΩÇ›mÕç-R*Ω	˝ÌMÌΩmç-Ã+≤‚ ¢ê¢&WGW&‡†¢2∂VW◊W6ñ2◊fñFVÚ&Wfó6ñˆÁ2ñ‚FÜR6÷R÷ˆFS≤ÊWfW"6VÊBG&gBFÚvVÊW&ñ26ÜB‡¢G&gB“6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&◊W6ñ5˜fñFVıˆG&gB"ê¢ñbG&gC†¢VFóB“6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&◊W6ñ5˜fñFVıˆG&gEˆVFóB"ê¢ñbVFóBñ‚Ç&Vv÷VÁB"¬'&Ww&óFR"¬'fˆñ6U˜&Ww&óFR"ì†¢7W'&VÁEˆGW&Fñˆ‚“ñÁBÜG&gBÊvWBÇ&GW&Fñˆ‚"í˜"˜Ü˜Fıˆ6∆ó˜F&vWEˆGW&Fñˆ‚ÜG&gE≤'fñFVıˆ'&ñVb%“íê¢6V∆V7FVEˆGW&Fñˆ‚“7W'&VÁEˆGW&Fñˆ‚ñbG&gBÊvWBÇ&GW&FñˆÂˆ∆ˆ6∂VB"íV«6RÊˆÊP¢ñbVFóB”“&Vv÷VÁB#†¢&ˆ◊B“ˆ÷W&vUˆ◊W6ñ5˜fñFVı˜&ˆ◊BÜG&gE≤'&ˆ◊B%“¬FWáBê¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBÄ¢WFFR¬6ˆÁFWáB¬&ˆ◊B¬6V∆V7FVEˆGW&FñˆÂ˜3◊6V∆V7FVEˆGW&Fñˆ‡¢ê¢V∆ñbVFóB”“'&Ww&óFR#†¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBÄ¢WFFR¬6ˆÁFWáB¬FWáB¬6V∆V7FVEˆGW&FñˆÂ˜3◊6V∆V7FVEˆGW&Fñˆ‡¢ê¢V«6S†¢vVÊW&FVB“vóB6µˆ˜VÊï˜FWáBÄ¢-	˝]Ì}=í=ÌΩÌÌ-ÌRÌ˝ç›çR˝ÌΩÕ}Ì--]ΩÚ"M-˝ÌM]çÌ›ΩÕ›ΩR˝ÌÕ˝-‚
+Ì]›Ç]=‚}ÕΩ]≤‚ ¢b-	-çM]‚Ì-›‚∂7W'&VÁEˆGW&FñˆÁ“]≠=›C≤dîDTıÙ%$îTb}]í˝‚]≠=›B6ˆÁFñÁVóGíÇ5D%BÙT‰B7FFW2‚ ¢$’U4î5Ù%$îTbÌ˝-çÕç}ç=íMΩÚ7VÊÚ‚	-]›Ç-Ì=‚¥’U4î5Ù%$îTe“}-]¬µdîDTıÙ%$îTe“Â∆Â∆Ì	Ì˝ç›çS¢"≤FWáB¿¢W6W%ˆñC◊WFFRÊVffV7FófU˜W6W"ÊñB¬6ÜEˆñC◊WFFRÊVffV7FófUˆ6ÜBÊñB¿¢WáG&˜7ó7FV”“-
+-≤&ˆ◊B÷Fó&V7F˜"í◊W6ñ2fñFVÚ‚	›R-ΩM=ÕΩ-íÌm]-›ΩRM≠-≤-]R=ÌΩÌÌ-Ì=‚Ì˝ç›çÚ‚ ¢ê¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBÄ¢WFFR¬6ˆÁFWáB¬vVÊW&FVB¬6V∆V7FVEˆGW&FñˆÂ˜3◊6V∆V7FVEˆGW&Fñˆ‡¢ê¢ ¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-
+m]›çíÌmçM]"]ç]›çÚ‚	›mÕç-R*Ω
+=--]mMÏ+≤¬*Ω	MÌ˝ÌΩ›ç-Ã+≤çΩÇ*Ω	›˝ç-¬}›Ì-Ï+≤‚"¿¢&W«ïˆ÷&∑W’ˆ◊W6ñ5˜fñFVıˆ&˜f≈ˆ∂"ÜG&gE≤'Fˆ∂V‚%“í¿¢ê¢&WGW&‡†¢2	-Ì˝Ì≤‚f6U7vMÌΩm›≤Ì--]}-¬Ì˝ç›ç]¬M=›≠mçÇ¬›R}2}˝=≠-¬]mç¬‡¢ñb&RÁ6V&6Çá""çÕÌbç]ç«Õ]-WÕ›‚óÕ=ÕRç]ç«Õ]-RóÕ˝ÌÌ]◊Õ˝ÌMM]mç-]ç«ÕM]Ω]ç«ÕÕÌm]%«2ΩΩÇí"¬FWáB˜"""¬&R‰ííÊB&RÁ6V&6Çá""çΩçgÕΩçmÕΩçmÁ∆f6W∆f6W7ví"¬FWáB˜"""¬&R‰íì†¢6ˆV&«í“6&ñ∆óGïˆÁ7vW"áFWáBê¢ñb6ˆV&«ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜ6ˆV&«í¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ6ÜEˆ÷V÷˜'ïˆFBáWFFRÊVffV7FófU˜W6W"ÊñB¬WFFRÊVffV7FófUˆ6ÜBÊñB¬'W6W""¬FWáBê¢ˆ6ÜEˆ÷V÷˜'ïˆFBáWFFRÊVffV7FófU˜W6W"ÊñB¬WFFRÊVffV7FófUˆ6ÜBÊñB¬&76ó7FÁB"¬6ˆV&«íê¢&WGW&‡†¢2	}Õ]›Ωçm¢Ì-M]ΩÕ›ΩíM-=]ç=Ì-Ωí]mç¬‡¢ñbˆó5ˆf6U˜7v˜&WVW7BáFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜7F'Eˆf6W7vˆf∆˜ráWFFR¬6ˆÁFWáB¬ÊˆÊR¬W6Uˆ66ÜVC‘f«6Rê¢&WGW&‡†¢2
+=MΩ]›çR˝}Õ]›MÌ›¢]ΩÇ˝ÌΩÕ}Ì--]Ω¬=mR}==}ç≤MÌ-‚çΩÇÌ"mM"=-Ì}›]›çR‡¢ñbˆó5˜&W∆6V&u˜vóE˜FWáBÜ6ˆÁFWáBì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢ˆ6∆V%˜&W∆6V&u˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω˝ççΩç-RMÌ-‚¬}-]¬-Ω]ç-R}Õ]›2MÌ›‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢∂ñÊB¬&ˆ◊B“ˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBáFWáBê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&W∆6V&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬ñ÷r¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢ñbˆó5˜&V÷˜fUˆ&u˜&WVW7BáFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbñ÷s†¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬ñ÷rê¢&WGW&‡¢˜6WE˜vóFñÊu˜&V÷˜fV&rÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	˝ççΩç-RMÌ-‚(	B=MΩ‚MÌ“Ç-]›2‰r˝Ì}}›Ìí˝ÌMΩÌm≠Ìí‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡†¢ñbˆó5˜&W∆6Uˆ&u˜&WVW7BáFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢∂ñÊB¬&ˆ◊B“ˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBáFWáBê¢ñbñ÷s†¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬ñ÷r¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡¢˜6WE˜vóFñÊu˜&W∆6V&rÜ6ˆÁFWáB¬&ˆ◊C◊FWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	˝ççΩç-RMÌ-‚(	B-Ω]m2Ì≠]≠"Ç}Õ]›‚-ÌΩÕ≠‚MÌ“‚	MΩÚ˝]]-Ì"Ç-]≠-Ì-Ì=‚Ì˝ç›çÚ˝Ì-Ì¬M]Ω-¬]}=ΩÕ-"≠¢›-Ì˝ù]R]ΩMÇ‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡†¢2
+]-=ç¬Ì--]››Ì=‚ç}Ìm]›çÛ¢]ΩÇMÌ-‚=mR}==m]›‚ÇÌ"mM"=-Ì}›]›çR‡¢ñbˆó5˜&WF˜V6Ö˜vóE˜FWáBÜ6ˆÁFWáBì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢ˆ6∆V%ˆñ÷vU˜&WF˜V6Ö˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ˜&WF˜V6Ö˜W6W%ˆÜñÁE˜FWáBÇí¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢ñÁ7G'V7Fñˆ‚“FWáB˜"6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'&WF˜V6Ö˜&ˆ◊B"í˜"-=-¬Ωçç›Ì‚›M˝ç¬˝-ÌM˝›Ìí}›¢ ¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%ˆñ÷vU˜&WF˜V6Ö˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜7F'Eˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬ñ÷r¬ñÁ7G'V7Fñˆ‚ê¢&WGW&‡†¢2í›]ΩMÉ¢MÌ-‚=mR}==m]›‚¬mM¬m]›2˝}›Õ]›ç-Ì-¬˝˝]Ì›m‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆï˜6V∆fñU˜&ˆ◊B"ì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢ˆ6∆V%ˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω}==}ç-R-Ì]ΩMÇ¬}-]¬›mÕç-R	˙K2í›]ΩMÇ‚}-]}MÌí‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢&W6WB“Ü6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&ï˜6V∆fñU˜&W6WE˜&ˆ◊B"¬""í˜"""íÁ7G&óÇê¢ˆ6∆V%ˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢vóB˜7F'Eˆï˜6V∆fñRáWFFR¬6ˆÁFWáB¬ñ÷r¬FWáB¬&W6WBê¢&WGW&‡†¢2	=Ì-Ì˝ùçí--¢˝Ì-]"=mR}==m]“¬›‚˝]]B-]≠-Ì¬-]=]-Ú-Ω-¬=ÌΩÌ‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆfF%˜fˆñ6Uˆ6Üˆñ6R"ì†¢F¬“áFWáB˜"""íÁ7G&óÇíÊ∆˜vW"Çê¢fˆñ6Uˆ∆ñ6W2“∞¢&Ê˜f#¢&Ê˜f"¬-›Ì-#¢&Ê˜f"¿¢&ˆÁóÇ#¢&ˆÁóÇ"¬-Ì›ç≠#¢&ˆÁóÇ"¿¢&∆∆˜í#¢&∆∆˜í"¬-ΩΩÌí#¢&∆∆˜í"¿¢'6Üñ÷÷W"#¢'6Üñ÷÷W""¬-ççÕÕ]#¢'6Üñ÷÷W""¿¢&f&∆R#¢&f&∆R"¬-M]ù≤#¢&f&∆R"¿¢–¢ñbF¬ñ‚fˆñ6Uˆ∆ñ6W3†¢6Ü˜6V‚“fˆñ6Uˆ∆ñ6W5∑F≈–¢6ˆÁFWáBÁW6W%ˆFF≤&fF%˜GG5˜fˆñ6R%““6Ü˜6V‡¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆfF%˜fˆñ6Uˆ6Üˆñ6R"¬ÊˆÊRê¢VÊFñÊu˜67&óB“Ü6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&fF%˜VÊFñÊu˜67&óB"í˜"""íÁ7G&óÇê¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbVÊFñÊu˜67&óBÊBñ÷s†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&fF%˜VÊFñÊu˜67&óB"¬ÊˆÊRê¢ˆ6∆V%ˆfF%˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)»R	MΩÚ---Ω“=ÌΩÌ¢µˆfF%˜GG5˜fˆñ6Uˆ∆&V¬Ü6Ü˜6V‚ó“‚
+-]≠"=mR˝ÌΩ=}]“(	B}˝=≠‚=Ì-Ì˝ùçí--‚"ê¢vóB˜7F'E˜F∆∂ñÊuˆfF"áWFFR¬6ˆÁFWáB¬ñ÷r¬67&óE˜FWáC◊VÊFñÊu˜67&óBê¢&WGW&‡¢˜6WEˆfF%˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb.)»R	MΩÚ---Ω“=ÌΩÌ¢µˆfF%˜GG5˜fˆñ6Uˆ∆&V¬Ü6Ü˜6V‚ó“‚
+-]˝]¬˝ççΩç-R-]≠"¬≠Ì-ÌΩíMÌΩm]“˝Ìç}›]-Ç--‚"ê¢&WGW&‡¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖˆfF%˜fˆñ6Uˆ6Üˆñ6U˜FWáBÇí¬&W«ïˆ÷&∑W’ˆfF%˜fˆñ6Uˆ6Üˆñ6Uˆ∂"Ç&7B"íê¢&WGW&‡†¢2	=Ì-Ì˝ùçí--¢MÌ-‚=mR}==m]›‚¬mM¬-]≠"˝=ÌΩÌMΩÚ]}Ç‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆfF%˜67&óB"ì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢ˆ6∆V%ˆfF%˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω}==}ç-R˝Ì-]"}]ΩÌ-]≠¬}-]¬›mÕç-R	˘z2	=Ì-Ì˝ùçí--‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢ˆ6∆V%ˆfF%˜vóBÜ6ˆÁFWáBê¢vóB˜7F'E˜F∆∂ñÊuˆfF"áWFFR¬6ˆÁFWáB¬ñ÷r¬67&óE˜FWáC◊FWáBê¢&WGW&‡†¢2í›-çM]Ì≠ΩçÛ¢M-›]}-ççÕΩR-Ì˝Ì(	B›}Ω˝]›Ú¬}-]¬]mç=-çM]‚‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜fˆ6≈ˆ6∆ó˜&ˆ◊B"ì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢ˆ6∆V%˜fˆ6≈ˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω}==}ç-R˝Ì-]"ÌM›Ì=‚}]ΩÌ-]≠¬}-]¬›mÕç-R	¯ÍB	≠ΩçÚ-Ì≠ΩÌ¬‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜fˆ6≈ˆ6∆ó˜&ˆ◊B"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFF≤&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVb%““FWáBÁ7G&óÇê¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆ◊W6ñ5˜fñFVı˜fñFVıˆ'&ñVb%““G'VP¢2W'6ó7BFÜRdîDTÚ7FvR2vV∆¬2FÜR6ˆÊr'&ñVb‚FV∆Vw&“WFFW26‡¢2∆ÊBˆ‚g&W6Çv˜&∂W"˜&ˆ6W72¬6ÚW6W%ˆFF∆ˆÊRó2Ê˜BWFÜ˜&óFFófR‡¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢∑e˜6WBÜb&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVcß∑WFFRÊVffV7FófU˜W6W"ÊñG“"¬FWáBÁ7G&óÇíê¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬&◊W6ñ7fñFVÛßfñFVÚ"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯ÍR
+-]˝]¬Ì-M]ΩÕ›‚Ì˝ççç-R	-	ç	M	]	„¢}-‚˝Ìç]ÌMç""≠MR¬M]ù--çÚ=]ÌÚ¬≠=MÌ“çM"¬≠¢M-çm]-Ú≠Õ]¬Ì≠=m]›çR¬-]"ÇMç›ΩÕ›Ωí≠MÂ∆Â∆‚ ¢-	›˝çÕ]¢M-]ÇΩçM-Ì-≠Ω-Ì-Ú(i"Ú-Ω]Ìm2(i"≠Õ]Ì]ÌMç"Õ]›ÚÇ˝]]]ÌMç"}˝ç›2(i"Ω]M=]"}MÇ(i"Ú-Ω]Ìm2›ÌΩ›]}›=‚=Ωçm2¢Ì›m]-ÌÕ2∆÷&˜&vÜñÊíW'W2‚ ¢ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆ◊W6ñ5˜fñFVı˜fñFVıˆ'&ñVb"ì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢◊W6ñ5ˆ'&ñVb“Ü6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVb"í˜"""íÁ7G&óÇê¢ñbÊ˜Bñ÷r˜"Ê˜B◊W6ñ5ˆ'&ñVc†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆ◊W6ñ5˜fñFVı˜fñFVıˆ'&ñVb"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVb"¬ÊˆÊRê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+}]›Ì-ç¢≠Ωç˝˝Ì-]˝≤ç]ÌM›ΩRM››ΩR‚	›}›ç-R]mç¬í›-çM]Ì≠Ωç˝]ùr‚"ê¢&WGW&‡¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBáWFFR¬6ˆÁFWáB¬◊W6ñ5ˆ'&ñVc÷◊W6ñ5ˆ'&ñVb¬fñFVıˆ'&ñVc◊FWáBê¢&WGW&‡†¢2	Ìmç-Ω]›çRMÌ-‚˝‚˝ÌΩÕ}Ì--]ΩÕ≠ÌÕ2m]›ç„¢MÌ-‚=mR}==m]›‚¿¢2mM¬≠ÌÌ-≠çí÷˜Fñˆ‚&ˆ◊B¬}-]¬˝]MΩ=]¬-Ω-¬M-çmÌ¢‡¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B"¬ÊˆÊRì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B"¬ÊˆÊRê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω}==}ç-RMÌ-‚Ç›Ì-Ì-≠Ìù-R*Ω	Ìmç-ç-¬MÌ-Ï+≤‚"ê¢&WGW&‡¢6ˆÁFWáBÁW6W%ˆFF≤'&Wfóf≈ˆ7W7Fˆ’˜&ˆ◊B%““FWáBÁ7G&óÇê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R
+m]›çíÌ]›“‚
+-]˝]¬-Ω]ç-RM-çmÌ£¢"¿¢&W«ïˆ÷&∑W◊Ü˜Fı˜&Wfóf≈ˆVÊvñÊW5ˆ∂"Çí¿¢ê¢&WGW&‡†¢2	-çM]‚˝‚-]≠-2˝=ÌΩÌ3¢mM¬&ˆ◊B˝ÌΩR-ΩÌM-çm≠‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜FWáE˜fñFVı˜&ˆ◊B"ì†¢ˆ6∆V%˜FWáE˜fñFVı˜vóBÜ6ˆÁFWáBê¢vóB˜7F'E˜FWáE˜fñFVÚáWFFR¬6ˆÁFWáB¬FWáBê¢&WGW&‡†¢2
+MÌ-Ó(i--çM]Ì≠ΩçÛ¢˝]-Ωí-]≠"˝ÌΩRMÌ-‚(	B-ÌΩÕ≠‚Õ=}Ω≠ΩÕ›ΩíçB‡¢2	›R˝]]M¬]=‚≠¢∆Vv7í6ˆ÷&ñÊVB&ˆ◊B¬ç›}RÌ“M=Ωç=]-Ú"dîDTıÙ%$îTb‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆ6∆ó˜&ˆ◊B"ì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢ˆ6∆V%˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω}==}ç-RMÌ-‚}]ΩÌ-]≠¬}-]¬›mÕç-R	¯ÎR
+MÌ-‚(i"-çM]Ì≠ΩçÚ‚"¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜Ü˜Fıˆ6∆ó˜&ˆ◊B"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFF≤&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVb%““FWáBÁ7G&óÇê¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆ◊W6ñ5˜fñFVı˜fñFVıˆ'&ñVb%““G'VP¢2W'6ó7BFÜRdîDTÚ7FvR2vV∆¬2FÜR6ˆÊr'&ñVb‚FÜó2&WfVÁG2FÜP¢2ÊWáB÷W76vRg&ˆ“f∆∆ñÊrFá&˜VvÇFÚvVÊW&ñ2uBı7VÊÚ6&ñ∆óGíFWáB‡¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢∑e˜6WBÜb&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVcß∑WFFRÊVffV7FófU˜W6W"ÊñG“"¬FWáBÁ7G&óÇíê¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬&◊W6ñ7fñFVÛßfñFVÚ"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯Í¬
+-]˝]¬Ì-M]ΩÕ›‚Ì˝ççç-R	-	ç	M	]	„¢}-‚˝Ìç]ÌMç""≠MR¬M]ù--çÚ=]ÌÚ¬≠=MÌ“çM"¬≠¢M-çm]-Ú≠Õ]¬Ì≠=m]›çR¬-]"ÇMç›ΩÕ›Ωí≠MÂ∆Â∆‚ ¢-	›˝çÕ]¢M-]ÇΩçM-Ì-≠Ω-Ì-Ú(i"Ú-Ω]Ìm2(i"≠Õ]˝Ω-›‚Ì]ÌMç"Õ]›ÚÇ˝]]]ÌMç"}˝ç›2(i"Ω]M=]"}MÇ˝‚≠ÌçMÌ2(i"Ú-Ω]Ìm2›ÌΩ›]}›=‚=Ωçm2¢Ì›m]-ÌÕ2∆÷&˜&vÜñÊíW'W2Â∆Â∆‚ ¢-
+›-}-¬›R=M]"Ì-˝-Ω˝-ÕÚ"7VÊÚ‚ ¢ê¢&WGW&‡†¢2
+-]≠-Ì-Ωí˝=ÌΩÌÌ-Ìí}˝Ì›]-=ç¬M‚}==}≠ÇMÌ-‚‡¢2
+›-‚Ω-]"Õ]Mçmç›2Ç˝]]-ÌMç"Ω]M=Ìù]Rç}Ìm]›çR"ñ÷vR÷VFóB‡¢ñbˆó5ˆñ÷vU˜&WF˜V6Ö˜&WVW7BáFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbñ÷rÊBˆÜ5ˆ˜vÂˆñ÷vUˆ6ˆÊfó&÷Fñˆ‚áFWáBì†¢vóB˜7F'Eˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬ñ÷r¬FWáBê¢&WGW&‡¢˜6WE˜vóFñÊuˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬FWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ˜&WF˜V6Ö˜W6W%ˆÜñÁE˜FWáBÇí¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡†¢ñbˆó5ˆï˜6V∆fñUˆñÁFVÁBáFWáBì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢&ˆ◊B“ˆ6∆VÂˆï˜6V∆fñU˜&ˆ◊BáFWáBê¢ñbñ÷rÊB&ˆ◊C†¢vóB˜7F'Eˆï˜6V∆fñRáWFFR¬6ˆÁFWáB¬ñ÷r¬&ˆ◊Bê¢&WGW&‡¢˜6WEˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	M¬M]Ω‚í›]ΩMÉ¢}==}ç-R-ÌMÌ-‚¬}-]¬›˝ççç-R¬≠]¬˝=MRM]Ω-¬m]›2‚	›˝çÕ]¢*Ω]ΩMÇç}-]-›Ω¬≠-Ì¬›≠›ÌíMÌÌm≠R¬ïÜˆÊR6V∆fñR¬C£\+≤‚"¿¢&W«ïˆ÷&∑W÷÷ñÂˆ∂"¿¢ê¢&WGW&‡†¢ñbˆó5ˆfF%ˆñÁFVÁBáFWáBì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢67&óB“ˆ6∆VÂˆfF%˜67&óBáFWáBê¢ñbñ÷s†¢ñb67&óBÊB∆V‚á67&óBí‚É†¢6ˆÁFWáBÁW6W%ˆFF≤&fF%˜VÊFñÊu˜67&óB%““67&ó@¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&fF%˜GG5˜fˆñ6R"ì†¢VÊFñÊu˜67&óB“Ü6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&fF%˜VÊFñÊu˜67&óB"í˜"""íÁ7G&óÇê¢ñbVÊFñÊu˜67&óC†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&fF%˜VÊFñÊu˜67&óB"¬ÊˆÊRê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)»R	˝Ì-]"›ùM]“‚	=ÌΩÌ=mR-Ω”¢µˆfF%˜GG5˜fˆñ6Uˆ∆&V¬ÖˆfF%˜GG5˜fˆñ6UˆvWBÜ6ˆÁFWáBíó“‚
+-]≠"=mR˝ÌΩ=}]“(	B}˝=≠‚=Ì-Ì˝ùçí--‚ ¢ê¢vóB˜7F'E˜F∆∂ñÊuˆfF"áWFFR¬6ˆÁFWáB¬ñ÷r¬67&óE˜FWáC◊VÊFñÊu˜67&óBê¢V«6S†¢˜6WEˆfF%˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b.)»R	˝Ì-]"›ùM]“‚	=ÌΩÌ=mR-Ω”¢µˆfF%˜GG5˜fˆñ6Uˆ∆&V¬ÖˆfF%˜GG5˜fˆñ6UˆvWBÜ6ˆÁFWáBíó“‚
+-]˝]¬˝ççΩç-R-]≠"¬fˆñ6RçΩÇ=MçÌMù≤.(	3c]≠=›B‚ ¢ê¢V«6S†¢˜6WEˆfF%˜fˆñ6Uˆ6Üˆñ6U˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖˆfF%˜fˆñ6Uˆ6Üˆñ6U˜FWáBÇí¬&W«ïˆ÷&∑W’ˆfF%˜fˆñ6Uˆ6Üˆñ6Uˆ∂"Ç&7B"íê¢V«6S†¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆfF%˜Ü˜FÚ%““G'VP¢ñb67&óBÊB∆V‚á67&óBí‚É†¢6ˆÁFWáBÁW6W%ˆFF≤&fF%˜VÊFñÊu˜67&óB%““67&ó@¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	M¬M]Ω‚=Ì-Ì˝ùçí--‚
+›}Ω}==}ç-R˝Ì-]"}]ΩÌ-]≠‚	˝ÌΩR}==}≠ÇÚÌ˝}-]ΩÕ›‚˝]MΩÌm2-Ω-¬=ÌΩÌ¬}-]¬ç˝ÌΩÕ}=‚-Ç-]≠"¬fˆñ6RçΩÇ=MçÌMù≤.(	3c]≠=›B‚"¿¢&W«ïˆ÷&∑W÷÷ñÂˆ∂"¿¢ê¢&WGW&‡†¢ñbˆó5˜Ü˜Fıˆ6∆óˆñÁFVÁBáFWáBì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢&ˆ◊B“ˆ6∆VÂ˜Ü˜Fıˆ6∆ó˜&ˆ◊BáFWáBê¢ñbñ÷rÊB&ˆ◊C†¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBáWFFR¬6ˆÁFWáB¬&ˆ◊Bê¢&WGW&‡¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	M¬M]Ω‚-çM]Ì≠ΩçÚçrMÌ-‚‚	}==}ç-RMÌ-‚}]ΩÌ-]≠¬}-]¬Ì˝ççç-R-çΩ¬≠Ωç˝˝Õ=}Ω≠Ç¬MΩç-]ΩÕ›Ì-¬ÇMÌÕ"‚"¿¢&W«ïˆ÷&∑W÷÷ñÂˆ∂"¿¢ê¢&WGW&‡†¢2	-Ì˝Ì˝≠ÌÕ›M˝‚Ìmç-Ω]›çRMÌ-‚MÌΩm›≤Ω--¬Õ]Mçmç›≠=‚-]-≠2‡¢2	ç›}R˝ÌΩR≠›Ì˝≠Ç*Ω	Õ]Mçmç›+≤Ω]M=Ìù]RÌΩ}›ÌRMÌ-‚ÌççÌ}›‚=]ÌMç""Õ]B‚›Ωçr‡¢ñbˆó5˜Ü˜Fı˜&Wfóf≈˜VW7Fñˆ‚áFWáBí˜"ˆó5˜Ü˜Fı˜&Wfóf≈ˆñÁFVÁBáFWáBì†¢˜6WE˜vóFñÊu˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖ˜Ü˜Fı˜&Wfóf≈ˆ6&ñ∆óGï˜FWáBÇí¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡†¢2∆Vv7í&W6VÁFFñˆ‚f∆w2g&ˆ“ˆ∆FW"FW∆˜ñ÷VÁG2&R÷ñw&FVBñÁFÚFÜRcÉb7GVFñÚ‡¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜v˜&µ˜&W6VÁFFñˆÂˆ'&ñVb"¬ÊˆÊRì†¢vóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÁ7F'BáWFFR¬6ˆÁFWáB¬'&W6VÁFFñˆ‚"ê¢ñbvóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÊÜÊF∆U˜FWáBáWFFR¬6ˆÁFWáB¬FWáBì†¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜v˜&µˆ6F∆ˆuˆ'&ñVb"¬ÊˆÊRì†¢vóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÁ7F'BáWFFR¬6ˆÁFWáB¬&6F∆ˆr"ê¢ñbvóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÊÜÊF∆U˜FWáBáWFFR¬6ˆÁFWáB¬FWáBì†¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜v˜&µˆ∆ˆvıˆ'&ñVb"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜v˜&µˆ∆ˆvıˆ'&ñVb"¬ÊˆÊRê¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬'v˜&µˆ∆ˆvÚ"ê¢vóBˆvVÊW&FUˆ'W6ñÊW75ˆ∆ˆvÚáWFFR¬6ˆÁFWáB¬FWáBê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆ◊W6ñ5˜fñFVıˆVFñı˜&ˆ◊EˆVFóB"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆ◊W6ñ5˜fñFVıˆVFñı˜&ˆ◊EˆVFóB"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'fˆ6≈˜6˜W&6U˜Fˆ∂V‚"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&◊W6ñ5˜fñFVı˜VÊFñÊuˆVFñı˜Fˆ∂V‚"¬ÊˆÊRê¢ÊWuˆ'&ñVb“FWáBÁ7G&óÇê¢ñbÊ˜BÊWuˆ'&ñVc†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	˝ÌÕ˝"˝=-Ìí‚	›mÕç-R*æ)»˛˚àÚ	ç}Õ]›ç-¬˝ÌÕ˝"=MçÏ+≤]ùr‚"ê¢&WGW&‡¢6ˆÁFWáBÁW6W%ˆFF≤&◊W6ñ5˜fñFVı˜VÊFñÊuˆ◊W6ñ5ˆ'&ñVb%““ÊWuˆ'&ñV`¢VÊFñÊu˜&ˆ◊B“Ü6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&◊W6ñ5˜fñFVı˜VÊFñÊu˜&ˆ◊B"í˜"""íÁ7G&óÇê¢ñbVÊFñÊu˜&ˆ◊C†¢Ú¬VÊFñÊu˜fñFVÚ“ˆ◊W6ñ5˜fñFVı˜7∆óEˆ'&ñVg2áVÊFñÊu˜&ˆ◊Bê¢6ˆÁFWáBÁW6W%ˆFF≤&◊W6ñ5˜fñFVı˜VÊFñÊu˜&ˆ◊B%““ˆ◊W6ñ5˜fñFVıˆ¶ˆñÂˆ'&ñVg2ÜÊWuˆ'&ñVb¬VÊFñÊu˜fñFVÚê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)»˛˚àÚ	˝ÌÕ˝"Ì›Ì-Ω“‚	=]›]ç=‚›Ì-Ωí-ç›"7VÊÛ≤-çM]‚˝Ì≠›R}˝=≠‚‚"ê¢g&W6Ç“vóB˜'VÂ˜7VÊıˆ◊W6ñ5˜&W7V«Eˆ'óFW2áWFFR¬ÊWuˆ'&ñVbê¢ñbÊ˜Bg&W6É†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬7VÊÚ›R-]›=≤›Ì-Ωí-ç›"‚	˝Ì˝Ì=ù-Rç}Õ]›ç-¬˝ÌÕ˝"]ùr‚"ê¢&WGW&‡¢ÊWu˜Fˆ∂V‚“WVñBÁWVñCBÇíÊÜWÖ≥£%–¢6ˆÁFWáBÁW6W%ˆFF≤&◊W6ñ5˜fñFVı˜VÊFñÊuˆVFñı˜Fˆ∂V‚%““ÊWu˜Fˆ∂V‡¢vóB7ñÊ6ñÚÁFı˜Fá&VBÖ˜6fU˜fˆ6≈ˆ'Fñf7B¬WFFRÊVffV7FófU˜W6W"ÊñB¬ÊWu˜Fˆ∂V‚¬&VFñÚ"¬g&W6Çê¢vóB˜6VÊE˜fˆ6≈˜6ˆÊuˆfñ∆RáWFFRÊVffV7FófUˆ÷W76vR¬g&W6Ç¬ÊWu˜Fˆ∂V‚ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯Ír	˝Ì-]Õ-R›Ì-Ωí-ç›"‚"¬&W«ïˆ÷&∑W’˜fˆ6≈˜6ˆÊuˆ∂"ÜÊWu˜Fˆ∂V‚¬VÊFñÊs’G'VRíê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜7VÊıˆ'&ñVb"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜7VÊıˆ'&ñVb"¬ÊˆÊRê¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬'7VÊıˆ◊W6ñ2"ê¢7VÊıˆ'&ñVb“˜&W&U˜7VÊıˆ'&ñVeˆg&ˆ’ˆ6ˆÁFWáBÜ6ˆÁFWáB¬FWáBê¢vóB˜'VÂ˜7VÊıˆ◊W6ñ2áWFFR¬6ˆÁFWáB¬7VÊıˆ'&ñVbê¢&WGW&‡†¢2	]ΩÇ˝ÌΩÕ}Ì--]Ω¬-Ω≤&VV«2˝MçΩÕ¬"Õ]›‚Ç-]˝]¬˝çç]"--ÌM›ΩR(	@¢2›}ΩM¬-=≠-=çÌ-››Ωím]››ΩíÌ--]"¬›RÌùçí}"‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜&VV«5ˆ÷FW&ñ¬"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜&VV«5ˆ÷FW&ñ¬"¬ÊˆÊRê¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬&gVÂ˜&VV«2"ê¢&ˆ◊B“Ä¢-
+-≤˝ÌMÌ]≠ÌÌ-≠çR&VV«2ı6Ü˜'G2‚	›=≠Ì¬˝ÌM=Ì-Ì-√¢í]=¢¬"ím]›çí˝‚]≠=›M¬¬ ¢#2í-]≠"››≠›R¬Bífˆñ6R÷˜fW"¬Rí5D¬bí˝ÌÕ˝-≤MΩÚ6˜&Ù∂∆ñÊr¬ ¢#ríÕÌ›-m›ΩR˝ÌM≠}≠Ç‚	}˝Ì˝ÌΩÕ}Ì--]ΩÛ•∆‚"≤FWá@¢ê¢&W«í“vóB6µˆ˜VÊï˜FWáBá&ˆ◊Bê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBá&W«ï≥£3ì“¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢ñb∆V‚á&W«íí‚3ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBá&W«ï≥3ì£sÉ“ê¢vóB÷ñ&U˜GG5˜&W«íáWFFR¬6ˆÁFWáB¬&W«ï≥•EE5Ù‘ÖÙ4Ñ%5“ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆfñ∆’ˆ÷FW&ñ¬"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆfñ∆’ˆ÷FW&ñ¬"¬ÊˆÊRê¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬&gVÂˆfñ∆“"ê¢&ˆ◊B“Ä¢-
+-≤]mçÇ˝ÌÕ˝"›ç›m]›]í›-çM]‚‚	›=≠Ì¬˝ÌM=Ì-Ì-¬Õç›Ç›MçΩÕ√¢ ¢#íΩÌ=Ωù“¬"í-=≠-=m]“¬2í≠MÌ-≠¬Bí˝ÌÕ˝-≤MΩÚ≠ÌÌ-≠çR≠Ωç˝Ì"R”]¢ ¢-}]]r6˜&"]rΩÌM]í¬∂∆ñÊrçΩÇ'VÁví¬RíÕÌ›-b˝}-=¢˝-ç-≤¬bí˝Ω“Ì≠Ç‚	}˝Ì˝ÌΩÕ}Ì--]ΩÛ•∆‚"≤FWá@¢ê¢&W«í“vóB6µˆ˜VÊï˜FWáBá&ˆ◊Bê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBá&W«ï≥£3ì“¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢ñb∆V‚á&W«íí‚3ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBá&W«ï≥3ì£sÉ“ê¢vóB÷ñ&U˜GG5˜&W«íáWFFR¬6ˆÁFWáB¬&W«ï≥•EE5Ù‘ÖÙ4Ñ%5“ê¢&WGW&‡†¢2	-Ì˝Ì≤‚-Ì}ÕÌm›Ì-˝R‡¢2	]ΩÇ-Ì˝Ì›RÕ]Mçmç›≠çí¬Ω-]¬}-çççíÕ]B‚]mç¬¿¢2}-Ì≤Ω]M=ÌùçRMÌ-‚˝MÌ≠=Õ]›-≤›R=]ÌMçΩÇÌççÌ}›‚"Õ]Mçmç›2‡¢6“6&ñ∆óGïˆÁ7vW"áFWáBê¢ñb6†¢ñbÊ˜Bˆó5ˆ÷VFñ6≈ˆ6&ñ∆óGï˜VW7Fñˆ‚áFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜ6¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡†¢2	›Õ¢›Õ=}Ω≠2Ú˝]›‚}]]r7VÊ¢ñb&RÁ6V&6Çá""ÉÛ≠Ì}MΩùÖ◊ÕM]ΩΩùÖ◊Õ=]›]ç5ΩùÖ◊Õ›˝ççáÕ}˝=-ÇíÁ≥√É“çÕ=}ΩßÕ˝]◊Õ-]ßÕMmç›=∑ÕÕç›=Ì-ß«7VÊÚí"¬FWáB¬&R‰íì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬'7VÊıˆ◊W6ñ2"ê¢vóB˜'VÂ˜7VÊıˆ◊W6ñ2áWFFR¬6ˆÁFWáB¬FWáBê¢&WGW&‡†¢2	›Õ¢›=]›]mç‚-çM]ÌÌΩç≠ ¢◊GóR¬&W7B“FWFV7Eˆ÷VFñˆñÁFVÁBáFWáBê¢ñb◊GóR”“'fñFVÚ#†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢GW&Fñˆ‚¬7V7B“'6U˜fñFVıˆ˜G2áFWáBê¢&ˆ◊B“&W7B˜"&RÁ7V"Ä¢"%∆"Ö∆Bµ«2¢ÉÛ≠]ßÕï∆'¬ÉÛ£ì£g√c£ó√£√C£W√3£G√C£2íí"¿¢""¿¢FWáB¿¢f∆w3◊&R‰í¿¢íÁ7G&óÇ"¬‚"ê†¢ñbÊ˜B&ˆ◊C†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	Ì˝ççç-R¬}-‚çÕ]››‚›˝-¬¬›˝„¢*Ω]-‚›--‚›]]=2¬}≠,+≤‚ ¢ê¢&WGW&‡†¢ñB“ˆÊWuˆñBÇê¢˜VÊFñÊuˆ7FñˆÁ5∂ñE““∞¢'&ˆ◊B#¢&ˆ◊B¿¢&GW&Fñˆ‚#¢GW&Fñˆ‚¿¢&7V7B#¢7V7B¿¢–†¢V˜∆U˜&W6VÁB“˜&ˆ◊Eˆ∆ñ∂V«ïˆÜ5˜V˜∆Rá&ˆ◊Bê¢'WGFˆÁ2“µ–¢ñbÊ˜BV˜∆U˜&W6VÁC†¢'WGFˆÁ2ÊVÊBÖ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb/	¯È‚6˜&"+r]rΩÌM]í+rµ˜fñFVı˜&ñ6Uˆ7&VFóG2Çw6˜&r¬GW&Fñˆ‚ó“≠‚"¬6∆∆&6µˆFF÷b&6Üˆ˜6Sß6˜&ß∂ñG“"ï“ê¢'WGFˆÁ2ÊVÊBÖ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb/	¯Í¬∂∆ñÊr+rµ˜fñFVı˜&ñ6Uˆ7&VFóG2Çv∂∆ñÊrr¬GW&Fñˆ‚ó“≠‚"¬6∆∆&6µˆFF÷b&6Üˆ˜6S¶∂∆ñÊsß∂ñG“"ï“ê¢ñbDUÖEıdîDTıÙƒƒıuı%TÂtì†¢'WGFˆÁ2ÊVÊBÖ¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Üb/	¯ÍR'VÁví+rµ˜fñFVı˜&ñ6Uˆ7&VFóG2Çw'VÁvír¬GW&Fñˆ‚ó“≠‚"¬6∆∆&6µˆFF÷b&6Üˆ˜6Sß'VÁvìß∂ñG“"ï“ê¢∂"“ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑WÜ'WGFˆÁ2ê¢6˜&ˆÊ˜FR“-	"}˝ÌRÌ›=m]“}]ΩÌ-]¢(	B6˜&"≠Ω-‚"ñbV˜∆U˜&W6VÁBV«6R%6˜&"MÌ-=˝›-ÌΩÕ≠‚MΩÚm]“]rΩÌM]í‚ ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢b-
+}-‚ç˝ÌΩÕ}Ì--√ı∆Ì	MΩç-]ΩÕ›Ì-√¢∂GW&FñˆÁ“2(
+"	˝]≠#¢∂7V7G’∆Ì	}˝Ì¢*∑∑&ˆ◊G‹+µ∆Â∆Á∑6˜&ˆÊ˜FW’∆Ì
+-ÌçÕÌ-¬=mR-≠ΩÌ}]"Õm2Ì-Ç=M]"˝ç›-ÌΩÕ≠‚˝ÌΩR=˝]ç›Ì=‚]}=ΩÕ--‚"¿¢&W«ïˆ÷&∑W÷∂"¿¢ê¢&WGW&‡†††¢2	›Õ¢›≠-ç›≠0¢ñb◊GóR”“&ñ÷vR#†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢&ˆ◊B“&W7B˜"&RÁ7V"Ä¢"%‚Üñ÷w∆ñ÷vW«ñ7GW&Rï«2•≥•¬’’«2¢"¿¢""¿¢FWáB¿¢f∆w3◊&R‰í¿¢íÁ7G&óÇê†¢ñbÊ˜B&ˆ◊C†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-
+MÌÕ#¢ˆñ÷rÕÌ˝ç›çRç}Ìm]›çÛ‚ ¢ê¢&WGW&‡†¢vóBˆ6µˆñ÷vUˆVÊvñÊUˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬&ˆ◊Bê¢&WGW&‡†¢2∆ófR›}˝Ì≥¢≠=≤¬›Ì-Ì-Ç¬}≠Ì›≤¬˝Ì=ÌM¬]Ωç}≤ÇΩÌΩR≠-=ΩÕ›ΩRM››ΩR‡¢2	=ÌΩÌÌ-ΩR}˝Ì≤˝Ì˝MÌ"ÌM}]]rˆÂ˜FWáE˜vóFÖ˜FWáB˝ÌΩR5EB‡¢ñbÊ˜BÙ‘TDî4≈ıDU$’5ı$RÁ6V&6ÇáFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢ñbvóB÷ñ&UˆÜÊF∆Uˆ∆ófU˜VW'íáWFFR¬6ˆÁFWáB¬FWáBì†¢&WGW&‡†¢2	ÌΩ}›Ωí-]≠"(i"u@¢ˆ≤¬Ú¬Ú“6ÜV6µ˜FWáEˆÊEˆñÊ2Ä¢WFFRÊVffV7FófU˜W6W"ÊñB¿¢WFFRÊVffV7FófU˜W6W"ÁW6W&Ê÷R˜"""¿¢ê†¢ñbÊ˜Bˆ≥†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	ΩçÕç"-]≠-Ì-ΩR}˝ÌÌ"›]=ÌM›Úç}]˝“‚ ¢-	ÌMÌÕç-R*Ÿ˝ÌM˝ç≠2çΩÇ˝Ì˝Ì=ù-R}--‚ ¢ê¢&WGW&‡†¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@†¢2
+]mçÕ∞¢G'ì†¢÷ˆFR“ˆ÷ˆFUˆvWBáW6W%ˆñBê¢G&6≤“ˆ÷ˆFU˜G&6µˆvWBáW6W%ˆñBê¢WÜ6WBÊ÷TW'&˜#†¢÷ˆFR¬G&6≤“&ÊˆÊR"¬" †¢ñb÷ˆFRÊB÷ˆFR“&ÊˆÊR#†¢FWáEˆf˜%ˆ∆∆““b%Ω
+]mç√¢∂÷ˆFW”≤	˝ÌM]mç√¢∑G&6≤˜"r“w’’∆Á∑FWáG“ ¢V«6S†¢FWáEˆf˜%ˆ∆∆““FWá@†¢ñbÙ‘TDî4≈ıDU$’5ı$RÁ6V&6ÇáFWáBì†¢2
+˝-›ΩíÕ]Mçmç›≠çí-Ì˝Ì˝-]≠"(	B}ç]¬≠¢Õ]B‚Õ-]ç≤‡¢vóBˆ÷VFñ6≈ˆÊ«ó¶U˜FWáBáWFFR¬6ˆÁFWáB¬FWáBê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢&WGW&‡†¢2	]ΩÇ˝ÌΩÕ}Ì--]Ω¬›ÕçR›m≤Õ]B‚˝ÌMÕ]›‚¬›‚-]˝]¬˝çç-]"˝‚Db¬≠›ç=Ç¬MÌ-‚¿¢2-çM]‚¬›Ì-Ì-Ç¬≠=%D2Ç"ÌÚ‚¬›RM]mç¬]=‚"Õ]Mçmç›≠Ìí-]-≠R‡¢ñbáG&6≤˜"""íÁ7F'G7vóFÇÇ&÷VEÚ"íÊBÊ˜B6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&÷VFñ6ñÊU˜vóFñÊuˆf˜%ˆ÷FW&ñ¬"ì†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê†¢ñb÷ˆFR”“-
+=}"ÊBG&6≥†¢vóB7GVGï˜&ˆ6W75˜FWáBáWFFR¬6ˆÁFWáB¬FWáBê¢&WGW&‡†¢6ÜEˆñB“WFFRÊVffV7FófUˆ6ÜBÊñBñbWFFRÊVffV7FófUˆ6ÜBV«6R ¢2	]ΩÇ›-‚≠ÌÌ-≠çíÌ--]"›˝]MΩM=ùçí=-Ì}›˝Ìùçí-Ì˝Ì¬çç˝]¬}˝Ì≠Ì›-]≠-Ì¬‡¢∆∆’ˆñÁWB“ˆ6ÜEˆ÷V÷˜'ïˆfˆ∆∆˜wW˜VW'íáW6W%ˆñB¬6ÜEˆñB¬FWáEˆf˜%ˆ∆∆“ê¢&W«í“vóB6µˆ˜VÊï˜FWáBÜ∆∆’ˆñÁWB¬W6W%ˆñC◊W6W%ˆñB¬6ÜEˆñC÷6ÜEˆñBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBá&W«íê¢ˆ6ÜEˆ÷V÷˜'ïˆFBáW6W%ˆñB¬6ÜEˆñB¬'W6W""¬FWáBê¢ˆ6ÜEˆ÷V÷˜'ïˆFBáW6W%ˆñB¬6ÜEˆñB¬&76ó7FÁB"¬&W«íê¢vóB÷ñ&U˜GG5˜&W«íáWFFR¬6ˆÁFWáB¬&W«ï≥•EE5Ù‘ÖÙ4Ñ%5“ê†¢2)H)H)H)H)H)H)H)H)H
+MÌ-‚Ú	MÌ≠=Õ]›-≤Ú	=ÌΩÌ)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÂ˜Ü˜FÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢G'ì†¢Ç“WFFRÊ÷W76vRÁÜ˜Fı≤”–¢b“vóBÇÊvWEˆfñ∆RÇê¢FF“vóBbÊF˜vÊ∆ˆEˆ5ˆ'óFV'&íÇê¢ñ÷r“'óFW2ÜFFê¢ˆ66ÜU˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñB¬ñ÷r¬vWFGG"Üb¬&fñ∆U˜FÇ"¬""í˜"""ê†¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@¢6Fñˆ‚“áWFFRÊ÷W76vRÊ6Fñˆ‚˜"""íÁ7G&óÇê†¢2ÜñvÇ÷fñFV∆óGí◊W6ñ2◊fñFVÚ6≤˜vÁ2FÜW6Rf˜W"W∆ˆG2&Vf˜&RWfW'ívVÊW&ñ2Ü˜FÚf∆˜r‡¢ñFVÁFóGï˜6∆˜B“ˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜vóE˜6∆˜BÜ6ˆÁFWáBê¢2FVfVÁ6ófR&V6˜fW'ì¢FV∆Vw&“˜W6W%ˆFFó2&ˆ6W72÷∆ˆ6¬ÊB6‚&R∆˜7Bˆ‚¢2FW∆˜í˜&W7F'B‚vÜñ∆RFÜRW6W"ó27Fñ∆¬ñ‚FÜRÜ˜Fˆ6∆óG&6≤¬‚ñÊ6ˆ◊∆WFP¢2ñFVÁFóGí6≤÷VÁ2FÜRÊWáBVÊ6∆ñ÷VBÜ˜FÚ&V∆ˆÊw2FÚFÜRfó'7B÷ó76ñÊr6∆˜B¿¢2Ê˜BFÚFÜRvVÊW&ñ2Ü˜FÚ÷VÁR‡¢ñbÊ˜BñFVÁFóGï˜6∆˜C†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ñbˆ÷ˆFU˜G&6µˆvWBáW6W%ˆñBí”“'Ü˜Fˆ6∆ó"ÊBÊ˜Bˆ◊W6ñ5˜fñFVıˆñFVÁFóGïˆ6ˆ◊∆WFRáW6W%ˆñBì†¢&Vg2“ˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜6≤áW6W%ˆñBê¢ñFVÁFóGï˜6∆˜B“ÊWáBÄ¢á6∆˜Bf˜"6∆˜Bñ‚Ç&f6Uˆg&ˆÁB"¬&f6UÛ7"¬&&ˆGïˆgV∆¬"¬'66VÊU˜&VfW&VÊ6R"íñbÊ˜B&Vg2ÊvWBá6∆˜Bíí¿¢""¿¢ê¢ñbñFVÁFóGï˜6∆˜C†¢˜6WEˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜vóBÜ6ˆÁFWáB¬ñFVÁFóGï˜6∆˜Bê¢ñbñFVÁFóGï˜6∆˜C†¢ˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜WBáW6W%ˆñB¬ñFVÁFóGï˜6∆˜B¬ñ÷rê¢ñbñFVÁFóGï˜6∆˜B”“&f6Uˆg&ˆÁB#†¢˜6WEˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜vóBÜ6ˆÁFWáB¬&f6UÛ7"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)»RÛ2(	BΩçm‚›MÌ]›]›‚Ì-M]ΩÕ›‚Â∆Â∆‚ ¢#"Û2(	B}==}ç-RΩçm‚˝Ì-ÌÌ-Ì¬˝çÕ]›‚3(	3C\+‚ ¢ê¢V∆ñbñFVÁFóGï˜6∆˜B”“&f6UÛ7#†¢˜6WEˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜vóBÜ6ˆÁFWáB¬&&ˆGïˆgV∆¬"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R"Û2(	B≠=3(	3C\+Ì]›“Ì-M]ΩÕ›‚Â∆Â∆‚ ¢#2Û2(	B}==}ç-RMÌ-‚	"	˝	Ì	Ω	›
+Ω	í
+	Ì
+
+"¬Ì"=ÌΩÌ-≤M‚›Ì2‚ ¢ê¢V∆ñbñFVÁFóGï˜6∆˜B”“&&ˆGïˆgV∆¬#†¢˜6WEˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜vóBÜ6ˆÁFWáB¬'66VÊU˜&VfW&VÊ6R"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R6Ü&7FW"ñFVÁFóGí6≤Ì”¢d4UÙe$ÙÂB≤d4UÛ5≤$ÙEïÙeTƒ¬Â∆Â∆‚ ¢-
+-]˝]¬}==}ç-R44T‰Uı$TdU$T‰4R(	B--Ì-Ωí≠MÌ≠=m]›çÚ˝˝Ì}≤‚ ¢-	Ì“}M"m]›2Ç≠ÌÕ˝Ì}çmç‚¬›‚	›	R}Õ]›˝]"MÌ-Ì=MçÇΩç}›Ì-Ç‚ ¢ê¢V«6S†¢˜6WEˆ◊W6ñ5˜fñFVıˆñFVÁFóGï˜vóBÜ6ˆÁFWáB¬'66VÊU˜&VfW&VÊ6R"ê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&◊W6ñ5˜fñFVı˜66VÊU˜&VfW&VÊ6R"¬ÊˆÊRê¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R44T‰Uı$TdU$T‰4RÌ]›“Ì-M]ΩÕ›‚‚	-RB&VfW&VÊ6R=Ì-Ì-≤Â∆Â∆‚ ¢/	¯ÎR
+-]˝]¬Ì-M]ΩÕ›‚Ì˝ççç-R	˝	]
+	›
+„¢m›¬›-Ì]›çR¬˝}Ω¢¬-]Õ2-]≠-¬ ¢-›=m]“ΩÇ-Ì≠≤Ç≠≠ç¬=ÌΩÌÌ¬‚	˝ÌΩR›-Ì=‚ÚÌ-M]ΩÕ›‚˝Ìç2	-	ç	M	]	‚‚ ¢ê¢&WGW&‡†¢2&W6VÁFFñˆ‚7GVFñÛ¢∆ˆvÚ˜&ˆGV7BÜ˜FÚ'V∆≤W∆ˆB‡¢ñbvóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÊÜÊF∆U˜Ü˜FÚáWFFR¬6ˆÁFWáB¬ñ÷r¬÷ñ÷S“&ñ÷vRˆßVr"¬6Fñˆ„÷6Fñˆ‚ì†¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&◊W6ñ5˜fñFVıˆG&gB"¬ÊˆÊRì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&◊W6ñ5˜fñFVıˆG&gEˆVFóB"¬ÊˆÊRê¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	˘;Ç
+MÌ-‚MΩÚ≠Ωç˝Ì›Ì-Ω]›‚‚	Ì˝ççç-Rm]›çí]ùr¬}-Ì≤=--]Mç-¬]=‚MΩÚ›-Ì=‚MÌ-‚‚ ¢ê¢&WGW&‡†¢2í	}Õ]›Ωçm¢M-=]ç=Ì-Ωí]mç¬MÌΩm]“-Ω--¬›ÕçRÌ-ΩÕ›ΩRMÌ-‚›-]-Ì¢‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&f6W7vˆf∆˜r"í”“&vóE˜F&vWB#†¢vóBˆ÷ñ&Uˆ6Üˆ˜6U˜F&vWEˆf6RáWFFR¬6ˆÁFWáB¬W6W%ˆñB¬ñ÷rê¢&WGW&‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&f6W7vˆf∆˜r"í”“&vóE˜6˜W&6R#†¢vóBˆ÷ñ&Uˆ6Üˆ˜6U˜6˜W&6Uˆf6RáWFFR¬6ˆÁFWáB¬W6W%ˆñB¬ñ÷rê¢&WGW&‡¢ñb6Fñˆ‚ÊBˆó5ˆf6U˜7v˜&WVW7BÜ6Fñˆ‚ì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢vóB˜7F'Eˆf6W7vˆf∆˜ráWFFR¬6ˆÁFWáB¬ñ÷rê¢&WGW&‡†¢2„Rí	=Ì-Ì˝ùçí--ÚMÌ-Ó(i--çM]Ì≠ΩçÚçr˝ÌM˝çÇ¢MÌ-‚‡¢ñb6Fñˆ‚ÊBˆó5ˆfF%ˆñÁFVÁBÜ6Fñˆ‚ì†¢67&óB“ˆ6∆VÂˆfF%˜67&óBÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ñb67&óBÊB∆V‚á67&óBí‚É†¢6ˆÁFWáBÁW6W%ˆFF≤&fF%˜VÊFñÊu˜67&óB%““67&ó@¢˜6WEˆfF%˜fˆñ6Uˆ6Üˆñ6U˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	˝Ì-]"˝ÌΩ=}]“‚
+-]˝]¬-Ω]ç-R=ÌΩÌMΩÚ-]≠-Ì-ÌíÌ}-=}≠ÇçΩÇ˝ççΩç-R-Ìífˆñ6RˆVFñÚ‚"¬&W«ïˆ÷&∑W’ˆfF%˜fˆñ6Uˆ6Üˆñ6Uˆ∂"Ç&7B"íê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5˜Ü˜Fıˆ6∆óˆñÁFVÁBÜ6Fñˆ‚ì†¢&ˆ◊B“ˆ6∆VÂ˜Ü˜Fıˆ6∆ó˜&ˆ◊BÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ñb&ˆ◊C†¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBáWFFR¬6ˆÁFWáB¬&ˆ◊Bê¢V«6S†¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯ÎR
+MÌ-‚˝ÌΩ=}]›‚‚
+›}ΩÌ-M]ΩÕ›‚Ì˝ççç-R	˝	]
+	›
+„¢m›¬›-Ì]›çR¬˝}Ω¢¬-]Õ2-]≠-¬›=m]“ΩÇ-Ì≠≤Ç≠≠ç¬=ÌΩÌÌ¬‚	˝ÌΩR›-Ì=‚ÚÌ-M]ΩÕ›‚˝Ìç2	-	ç	M	]	‚‚"ê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5ˆï˜6V∆fñUˆñÁFVÁBÜ6Fñˆ‚ì†¢&ˆ◊B“ˆ6∆VÂˆï˜6V∆fñU˜&ˆ◊BÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ñb&ˆ◊C†¢vóB˜7F'Eˆï˜6V∆fñRáWFFR¬6ˆÁFWáB¬ñ÷r¬&ˆ◊Bê¢V«6S†¢˜6WEˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+]ΩMÇ˝ÌΩ=}]›‚‚
+-]˝]¬›˝ççç-R¬≠]¬˝=MRM]Ω-¬í›MÌ-„¢}›Õ]›ç-Ì-¬¬˝]Ì›b¬˝]ÕÕ]¬]≠ΩÕ¬G&fV¬ˆ«WáW'í‚"ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆï˜6V∆fñU˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆï˜6V∆fñU˜Ü˜FÚ"¬ÊˆÊRê¢&W6WB“Ü6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&ï˜6V∆fñU˜&W6WE˜&ˆ◊B"¬""í˜"""íÁ7G&óÇê¢˜6WEˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢ñb&W6WC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	˙K2
+]ΩMÇ˝ÌΩ=}]›‚‚	˝]]"-Ω“‚
+-]˝]¬›˝ççç-RçÕÚ}›Õ]›ç-Ì-Ç˝˝]Ì›mÇM]-ΩÇm]›≤‚"ê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	˙K2
+]ΩMÇ˝ÌΩ=}]›‚‚
+-]˝]¬›˝ççç-R¬≠]¬˝=MRM]Ω-¬í›MÌ-„¢}›Õ]›ç-Ì-¬¬˝]Ì›b¬˝]ÕÕ]¬]≠ΩÕ¬G&fV¬ˆ«WáW'í‚"ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆfF%˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆfF%˜Ü˜FÚ"¬ÊˆÊRê¢2W∆ˆBf∆˜ró2FWFW&÷ñÊó7Fñ3¢ÊWv«íW∆ˆFVB˜'G&óB«vó2GfÊ6W2FÚ7FW"‡¢2FÚÊ˜B6ñ∆VÁF«í6∂ófˆñ6R6V∆V7Fñˆ‚&V6W6R7F∆Rfˆñ6R&V÷ñÊVBg&ˆ“‚V&∆ñW"fF"6W76ñˆ‚‡¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&fF%˜GG5˜fˆñ6R"¬ÊˆÊRê¢˜6WEˆfF%˜fˆñ6Uˆ6Üˆñ6U˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R	˝Ì-]"˝ÌΩ=}]“‚
+ç2"Û3¢-Ω]ç-R=ÌΩÌMΩÚ-]≠-Ì-ÌíÌ}-=}≠ÇçΩÇ˝ççΩç-R-Ìífˆñ6RˆVFñÚ‚"¿¢&W«ïˆ÷&∑W’ˆfF%˜fˆñ6Uˆ6Üˆñ6Uˆ∂"Ç&7B"í¿¢ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜fˆ6≈ˆ6∆ó˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜fˆ6≈ˆ6∆ó˜Ü˜FÚ"¬ÊˆÊRê¢˜6WE˜fˆ6≈ˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯ÍB	˝Ì-]"˝ÌΩ=}]“‚	Ì˝ççç-R˝]›‚¬-Ì≠≤¬M-çm]›çR¬MΩç-]ΩÕ›Ì-¬ÇMÌÕ"(	B˝Ì≠m2m]›çíMΩÚ=--]mM]›çÚ‚ ¢ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆ6∆ó˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜Ü˜Fıˆ6∆ó˜Ü˜FÚ"¬ÊˆÊRê¢&W6WE˜&ˆ◊B“Ü6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'Ü˜Fıˆ6∆ó˜&W6WE˜&ˆ◊B"¬""í˜"""íÁ7G&óÇê¢ñb&W6WE˜&ˆ◊C†¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBáWFFR¬6ˆÁFWáB¬&W6WE˜&ˆ◊Bê¢V«6S†¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯ÎR
+MÌ-‚˝ÌΩ=}]›‚‚
+›}ΩÌ-M]ΩÕ›‚Ì˝ççç-R	˝	]
+	›
+„¢m›¬›-Ì]›çR¬˝}Ω¢¬-]Õ2-]≠-¬›=m]“ΩÇ-Ì≠≤Ç≠≠ç¬=ÌΩÌÌ¬‚	˝ÌΩR›-Ì=‚ÚÌ-M]ΩÕ›‚˝Ìç2	-	ç	M	]	‚‚"ê¢&WGW&‡†¢2í
+MÌ-‚˝ççΩ‚˝ÌΩR-]ÌMçrÕ]›‚*Ω
+}-Ω]}]›çÚ(i"	}Õ]›ç-¬MÌ‹+≤‡¢2	›R}˝=≠]¬}Õ]›2}2¬˝Ì≠}Ω-]¬-ç›-≤MÌ›‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'Ü˜Fıˆf∆˜r"í”“'&W∆6V&uˆ÷VÁR#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'Ü˜Fıˆf∆˜r"¬ÊˆÊRê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	˘k¬
+MÌ-‚˝ÌΩ=}]›‚‚	-Ω]ç-R›Ì-ΩíMÌ“çΩÇ›˝ççç-R-Ìí-ç›"-]≠-Ì√¢"¿¢&W«ïˆ÷&∑W÷&6∂w&˜VÊE˜&W6WG5ˆ∂"Çí¿¢ê¢&WGW&‡†¢2í
+=MΩ]›çR˝}Õ]›MÌ›MÌΩm›≤˝]]ç--¬Õ]Mçmç›≠çí≠Ì›-]≠"‡¢ñb6Fñˆ‚ÊBˆó5˜&V÷˜fUˆ&u˜&WVW7BÜ6Fñˆ‚ì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&V÷˜fV&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬ñ÷rê¢&WGW&‡†¢ñbˆó5˜vóFñÊu˜&V÷˜fV&rÜ6ˆÁFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&V÷˜fV&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬ñ÷rê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5˜&W∆6Uˆ&u˜&WVW7BÜ6Fñˆ‚ì†¢∂ñÊB¬&ˆ◊B“ˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&W∆6V&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬ñ÷r¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢ñbˆó5˜vóFñÊu˜&W∆6V&rÜ6ˆÁFWáBì†¢&ˆ◊B“6Fñˆ‚˜"6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'&W∆6V&u˜&ˆ◊B"í˜"-}ÕΩ-ΩíMÌ“ ¢∂ñÊB¬&ˆ◊B“ˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBá&ˆ◊Bê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&W∆6V&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬ñ÷r¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢2í
+]-=ç¬Ì--]››Ì=‚ç}Ìm]›çÚÚ=MΩ]›çRΩçç›]í›M˝çÇÚvFW&÷&≤‡¢2
+›-‚MÌΩm›‚˝]]ç--¬Õ]Mçmç›≠çí≠Ì›-]≠"¬]ΩÇ˝ÌΩÕ}Ì--]Ω¬˝-›‚˝Ìç"]-=ç¬‡¢ñb6Fñˆ‚ÊBˆó5ˆñ÷vU˜&WF˜V6Ö˜&WVW7BÜ6Fñˆ‚ì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%ˆñ÷vU˜&WF˜V6Ö˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢vóB˜7F'Eˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬ñ÷r¬6Fñˆ‚ê¢&WGW&‡†¢ñbˆó5˜vóFñÊuˆñ÷vU˜&WF˜V6ÇÜ6ˆÁFWáBì†¢ñÁ7G'V7Fñˆ‚“6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'&WF˜V6Ö˜&ˆ◊B"í˜"6Fñˆ‚˜"-=-¬Ωçç›Ì‚›M˝ç¬˝-ÌM˝›Ìí}›¢ ¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%ˆñ÷vU˜&WF˜V6Ö˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢vóB˜7F'Eˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬ñ÷r¬ñÁ7G'V7Fñˆ‚ê¢&WGW&‡†¢2í
+ÕΩí-ΩÌ≠çí˝çÌç-]#¢˝-›Ú≠ÌÕ›MÌmç-ç-¬˝›çÕçÌ--¬MÌ-‚"˝ÌM˝çÇ‡¢2
+›-‚MÌΩm›‚˝]]ç--¬MmR›]RÌ-≠Ω-Ωí}M]≤*Ω	Õ]Mçmç›+≤‡¢ñb6Fñˆ‚ÊBˆó5˜Ü˜Fı˜&Wfóf≈ˆñÁFVÁBÜ6Fñˆ‚ì†¢˜6WE˜vóFñÊu˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáBê¢VÊvñÊR“˜&Wfóf≈ˆVÊvñÊUˆg&ˆ’˜FWáBÜ6Fñˆ‚¬FVfV«C“''VÁví"ê¢&ˆ◊B“ˆ6∆VÂ˜&Wfóf≈˜&ˆ◊BÜ6Fñˆ‚ê¢ˆ6∆V%˜Ü˜Fı˜&Wfóf≈˜vóBÜ6ˆÁFWáBê¢vóB˜7F'E˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáB¬VÊvñÊS÷VÊvñÊR¬ñ÷uˆ'óFW3÷ñ÷r¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢2"í	]ΩÇ˝]]BMÌ-‚˝ÌΩÕ}Ì--]Ω¬=ÌΩÌÌ¬˝-]≠-Ì¬˝Ìç≤˝‚Ìmç-Ω]›çRMÌ-‚(	@¢2˝Ì≠}Ω-]¬MÌ-‚›Õ-]≠=‚¬›RÕ]Mçmç›≠çí›Ωçr‡¢ñbˆó5˜vóFñÊu˜Ü˜Fı˜&Wfóf¬Ü6ˆÁFWáBì†¢ˆ6∆V%˜Ü˜Fı˜&Wfóf≈˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-
+MÌ-‚˝ÌΩ=}]›‚‚	-Ω]ç-Rm]›çíÌmç-Ω]›çÛ¢"¿¢&W«ïˆ÷&∑W◊Ü˜Fı˜&Wfóf≈ˆ7FñˆÁ5ˆ∂"Çí¿¢ê¢&WGW&‡†¢22í	Õ]Mçmç›≠Ú-]-≠(	B-ÌΩÕ≠‚˝-›ΩíÕ]B‚˝ÌM]mç¬˝ÌmçM›çRçΩÇÕ]B‚ΩÌ-"˝ÌM˝çÇ‡¢ñb˜6Ü˜V∆E˜&˜WFUˆ÷VFñ6¬Ü6ˆÁFWáB¬W6W%ˆñB¬6Fñˆ‚¬'Ü˜FÚ"ì†¢vóBˆ÷VFñ6≈ˆÊ«ó¶Uˆñ÷vRáWFFR¬6ˆÁFWáB¬ñ÷r¬vˆ√÷6Fñˆ‚˜"ÊˆÊRê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáW6W%ˆñB¬""ê¢&WGW&‡†¢ñb6Fñˆ„†¢F¬“6Fñˆ‚Ê∆˜vW"Çê¢2Ìmç-ç-¬MÌ-‚(i"-Ω››ΩíM-çmÌ¢çr˝ÌM˝çÇçΩÇ'VÁví˝‚=ÕÌΩ}›ç‡¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-Ìmç-Ç"¬-Ìmç-ç-¬"¬-›çÕç2"¬-›çÕçÌ--¬"¬-M]Ωí-çM]‚"¬'&WfófR"¬&Êñ÷FR"¬&ñ÷vRFÚfñFVÚ"¬&ì'b"íì†¢VÊvñÊR“˜&Wfóf≈ˆVÊvñÊUˆg&ˆ’˜FWáBÜ6Fñˆ‚¬FVfV«C“''VÁví"ê¢&ˆ◊B“ˆ6∆VÂ˜&Wfóf≈˜&ˆ◊BÜ6Fñˆ‚ê¢vóB˜7F'E˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáB¬VÊvñÊS÷VÊvñÊR¬ñ÷uˆ'óFW3÷ñ÷r¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢2]-=ç¬Ú=-¬-ÌM˝›Ìí}›¢ÚΩçç›Ì‚›M˝ç¿¢ñbˆó5ˆñ÷vU˜&WF˜V6Ö˜&WVW7BÜ6Fñˆ‚ì†¢vóB˜7F'Eˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬ñ÷r¬6Fñˆ‚ì≤&WGW&‡†¢2=MΩç-¬MÌ–¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-=MΩÇMÌ“"¬'&V÷˜fV&r"¬-=-¬MÌ“"íì†¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬ñ÷rì≤&WGW&‡†¢2}Õ]›ç-¬MÌ–¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-}Õ]›ÇMÌ“"¬'&W∆6V&r"¬-}ÕΩ-ΩíMÌ“"¬&&«W""íì†¢∂ñÊB¬&ˆ◊B“ˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBÜ6Fñˆ‚ê¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬ñ÷r¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bì≤&WGW&‡†¢2˜WGñÁ@¢ñb&˜WGñÁB"ñ‚F¬˜"-çç"ñ‚F√†¢vóB˜VFóEˆ˜WGñÁBáWFFR¬6ˆÁFWáB¬ñ÷rì≤&WGW&‡†¢2≠MÌ-≠ ¢ñb-≠MÌ""ñ‚F¬˜"'7F˜'ñ&ˆ&B"ñ‚F√†¢vóB˜VFóE˜7F˜'ñ&ˆ&BáWFFR¬6ˆÁFWáB¬ñ÷rì≤&WGW&‡†¢2≠-ç›≠˝‚Ì˝ç›ç‚Ñ«V÷ÚMÌΩ›¢˜V‰íê¢ñbÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-≠-ç“"¬-ç}Ìm]“"¬&ñ÷vR"¬&ñ÷r"ííÊBÁíÜ≤ñ‚F¬f˜"≤ñ‚Ç-=]›]ç2"¬-Ì}M"¬-M]Ωí"íì†¢vóB˜7F'Eˆ«V÷ˆñ÷ráWFFR¬6ˆÁFWáB¬6Fñˆ‚ì≤&WGW&‡†¢2]ΩÇ˝-›Ìí≠ÌÕ›M≤"˝ÌM˝çÇ›]"(	B˝Ì≠}Ω-]¬Ω-ΩR≠›Ì˝≠Ä¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+MÌ-‚˝ÌΩ=}]›‚‚
+}-‚M]Ω-√Ú"¿¢&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&ˆÂ˜Ü˜FÚW'&˜#¢W2"¬Rê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬
+MÌ-‚›R˝Ì}››‚¬˝Ì˝Ì=ù-R]ùr‚"ê†¶7ñÊ2FVbˆÂˆFˆ2áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢G'ì†¢ñbÊ˜BWFFRÊ÷W76vR˜"Ê˜BWFFRÊ÷W76vRÊFˆ7V÷VÁC†¢&WGW&‡¢Fˆ2“WFFRÊ÷W76vRÊFˆ7V÷VÁ@¢◊B“ÜFˆ2Ê÷ñ÷U˜GóR˜"""íÊ∆˜vW"Çê¢Fuˆfñ∆R“vóBFˆ2ÊvWEˆfñ∆RÇê¢FF“vóBFuˆfñ∆RÊF˜vÊ∆ˆEˆ5ˆ'óFV'&íÇê¢&r“'óFW2ÜFFê†¢6Fñˆ‚“áWFFRÊ÷W76vRÊ6Fñˆ‚˜"""íÁ7G&óÇê†¢2&W6VÁFFñˆ‚7GVFñÚ66WG2ñ÷vRFˆ7V÷VÁG2ÊB§ï&6ÜófW2vóFÇ÷ÁíÜ˜F˜2‡¢ñbvóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÊÜÊF∆UˆFˆ7V÷VÁBÄ¢WFFR¬6ˆÁFWáB¬&r¬Fˆ2Êfñ∆UˆÊ÷R˜"&fñ∆R"¬◊B¬6Fñˆ„÷6Fñˆ‡¢ì†¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆfF%˜67&óB"íÊBÜ◊BÁ7F'G7vóFÇÇ&VFñÚÚ"í˜"ÜFˆ2Êfñ∆UˆÊ÷R˜"""íÊ∆˜vW"ÇíÊVÊG7vóFÇÇÇ"Ê◊2"¬"Ávb"¬"Ê”F"¬"Ê2"¬"Êˆvr"ííì†¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñBê¢ñbÊ˜Bñ÷s†¢ˆ6∆V%ˆfF%˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+›}Ω}==}ç-R˝Ì-]"}]ΩÌ-]≠¬}-]¬›mÕç-R	˘z2	=Ì-Ì˝ùçí--‚"ê¢&WGW&‡¢ˆ6∆V%ˆfF%˜vóBÜ6ˆÁFWáBê¢vóB˜7F'E˜F∆∂ñÊuˆfF"Ä¢WFFR¬6ˆÁFWáB¬ñ÷r¿¢67&óE˜FWáC÷6Fñˆ‚ñb6Fñˆ‚ÊBÊ˜Bˆó5ˆfF%ˆñÁFVÁBÜ6Fñˆ‚íV«6Rˆ6∆VÂˆfF%˜67&óBÜ6Fñˆ‚í¿¢VFñıˆ'óFW3◊&r¿¢VFñıˆfñ∆VÊ÷S÷Fˆ2Êfñ∆UˆÊ÷R˜"&VFñÚ"¿¢VFñıˆfñ∆U˜W&√÷vWFGG"áFuˆfñ∆R¬&fñ∆U˜FÇ"¬""í˜"""¿¢VFñıˆ÷ñ÷S÷◊B¿¢ê¢&WGW&‡†¢ñb◊BÁ7F'G7vóFÇÇ&ñ÷vRÚ"ì†¢ˆ66ÜU˜Ü˜FÚáWFFRÊVffV7FófU˜W6W"ÊñB¬&r¬vWFGG"áFuˆfñ∆R¬&fñ∆U˜FÇ"¬""í˜"""ê†¢ñb6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&◊W6ñ5˜fñFVıˆG&gB"¬ÊˆÊRì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&◊W6ñ5˜fñFVıˆG&gEˆVFóB"¬ÊˆÊRê¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	˘;Ç
+MÌ-‚MΩÚ≠Ωç˝Ì›Ì-Ω]›‚‚	Ì˝ççç-Rm]›çí]ùr¬}-Ì≤=--]Mç-¬]=‚MΩÚ›-Ì=‚MÌ-‚‚ ¢ê¢&WGW&‡†¢2cs¢]ΩÇ˝ÌΩÕ}Ì--]Ω¬=mR-Ω≤]mç¬*Ω	≠ΩçÚ-Ì≠ΩÌÃ+≤¿¢2Ω]M=ÌùÚMÌ-Ì=MçÚMÌΩm›˝ÌMÌΩm-¬›-Ì"m]›çí¬›RÌ-≠Ω--¿¢2Ìù]RÕ]›‚*Ω
+MÌ-‚˝ÌΩ=}]›‚‚
+}-‚M]Ω-√¸+≤‚
+›-‚-]=]"Ω=}Ç¿¢2≠Ì=MFV∆Vw&“˝≠Ωç]›"˝Ì-]˝≤G&Á6ñVÁBf∆r¬›‚÷ˆFU˜G&6≤Ì]›çΩÚ‡¢G'ì†¢˜G&6µˆÊ˜r“ˆ÷ˆFU˜G&6µˆvWBáWFFRÊVffV7FófU˜W6W"ÊñBê¢WÜ6WBWÜ6WFñˆ„†¢˜G&6µˆÊ˜r“" ¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜fˆ6≈ˆ6∆ó˜Ü˜FÚ"í˜"˜G&6µˆÊ˜r”“'fˆ6∆6∆ó#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜fˆ6≈ˆ6∆ó˜Ü˜FÚ"¬ÊˆÊRê¢˜6WEˆ÷ˆFUˆ6∆V‚áWFFRÊVffV7FófU˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'fˆ6∆6∆ó"ê¢˜6WE˜fˆ6≈ˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯ÎR	˝Ì-]"˝ÌΩ=}]“‚
+›}ΩÌ-M]ΩÕ›‚Ì˝ççç-R	˝	]
+	›
+„¢m›¬›-Ì]›çR¬˝}Ω¢¬-]Õ2-]≠-¬-Ì≠≤Çm]Ω]Õ=‚MΩç-]ΩÕ›Ì-¬Â∆Â∆‚ ¢-
+Ω]M=Ìùç¬ÌÌù]›ç]¬ÚÌ-M]ΩÕ›‚˝Ìç2m]›çí-çM]‚‚ ¢ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&f6W7vˆf∆˜r"í”“&vóE˜F&vWB#†¢vóBˆ÷ñ&Uˆ6Üˆ˜6U˜F&vWEˆf6RáWFFR¬6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¬&rê¢&WGW&‡¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&f6W7vˆf∆˜r"í”“&vóE˜6˜W&6R#†¢vóBˆ÷ñ&Uˆ6Üˆ˜6U˜6˜W&6Uˆf6RáWFFR¬6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¬&rê¢&WGW&‡¢ñb6Fñˆ‚ÊBˆó5ˆf6U˜7v˜&WVW7BÜ6Fñˆ‚ì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜7F'Eˆf6W7vˆf∆˜ráWFFR¬6ˆÁFWáB¬&rê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5ˆfF%ˆñÁFVÁBÜ6Fñˆ‚ì†¢67&óB“ˆ6∆VÂˆfF%˜67&óBÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ñb67&óBÊB∆V‚á67&óBí‚É†¢6ˆÁFWáBÁW6W%ˆFF≤&fF%˜VÊFñÊu˜67&óB%““67&ó@¢˜6WEˆfF%˜fˆñ6Uˆ6Üˆñ6U˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	˝Ì-]"˝ÌΩ=}]“‚
+-]˝]¬-Ω]ç-R=ÌΩÌMΩÚ-]≠-Ì-ÌíÌ}-=}≠ÇçΩÇ˝ççΩç-R-Ìífˆñ6RˆVFñÚ‚"¬&W«ïˆ÷&∑W’ˆfF%˜fˆñ6Uˆ6Üˆñ6Uˆ∂"Ç&7B"íê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5˜Ü˜Fıˆ6∆óˆñÁFVÁBÜ6Fñˆ‚ì†¢&ˆ◊B“ˆ6∆VÂ˜Ü˜Fıˆ6∆ó˜&ˆ◊BÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ñb&ˆ◊C†¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBáWFFR¬6ˆÁFWáB¬&ˆ◊Bê¢V«6S†¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯ÎR
+MÌ-‚˝ÌΩ=}]›‚‚
+›}ΩÌ-M]ΩÕ›‚Ì˝ççç-R	˝	]
+	›
+„¢m›¬›-Ì]›çR¬˝}Ω¢¬-]Õ2-]≠-¬›=m]“ΩÇ-Ì≠≤Ç≠≠ç¬=ÌΩÌÌ¬‚	˝ÌΩR›-Ì=‚ÚÌ-M]ΩÕ›‚˝Ìç2	-	ç	M	]	‚‚"ê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5ˆï˜6V∆fñUˆñÁFVÁBÜ6Fñˆ‚ì†¢&ˆ◊B“ˆ6∆VÂˆï˜6V∆fñU˜&ˆ◊BÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ñb&ˆ◊C†¢vóB˜7F'Eˆï˜6V∆fñRáWFFR¬6ˆÁFWáB¬&r¬&ˆ◊Bê¢V«6S†¢˜6WEˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+]ΩMÇ˝ÌΩ=}]›‚‚
+-]˝]¬›˝ççç-R¬≠]¬˝=MRM]Ω-¬í›MÌ-„¢}›Õ]›ç-Ì-¬¬˝]Ì›b¬˝]ÕÕ]¬]≠ΩÕ¬G&fV¬ˆ«WáW'í‚"ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆï˜6V∆fñU˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆï˜6V∆fñU˜Ü˜FÚ"¬ÊˆÊRê¢&W6WB“Ü6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&ï˜6V∆fñU˜&W6WE˜&ˆ◊B"¬""í˜"""íÁ7G&óÇê¢˜6WEˆï˜6V∆fñU˜vóBÜ6ˆÁFWáBê¢ñb&W6WC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	˙K2
+]ΩMÇ˝ÌΩ=}]›‚‚	˝]]"-Ω“‚
+-]˝]¬›˝ççç-RçÕÚ}›Õ]›ç-Ì-Ç˝˝]Ì›mÇM]-ΩÇm]›≤‚"ê¢V«6S†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	˙K2
+]ΩMÇ˝ÌΩ=}]›‚‚
+-]˝]¬›˝ççç-R¬≠]¬˝=MRM]Ω-¬í›MÌ-„¢}›Õ]›ç-Ì-¬¬˝]Ì›b¬˝]ÕÕ]¬]≠ΩÕ¬G&fV¬ˆ«WáW'í‚"ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜fˆ6≈ˆ6∆ó˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜fˆ6≈ˆ6∆ó˜Ü˜FÚ"¬ÊˆÊRê¢˜6WE˜fˆ6≈ˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	¯ÍB	˝Ì-]"˝ÌΩ=}]“‚
+-]˝]¬Ì˝ççç-R˝]›‚˝≠ΩçÛ¢-çΩ¬¬˝}Ω¢¬›-Ì]›çR¬˝ç˝]"¬MΩç-]ΩÕ›Ì-¬Â∆Â∆Ì	-m›„¢]mç¬}ç-“›ÌM›Ì=‚}]ΩÌ-]≠"≠MR‚ ¢ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆfF%˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆfF%˜Ü˜FÚ"¬ÊˆÊRê¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&fF%˜GG5˜fˆñ6R"¬ÊˆÊRê¢˜6WEˆfF%˜fˆñ6Uˆ6Üˆñ6U˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)»R	˝Ì-]"˝ÌΩ=}]“‚
+ç2"Û3¢-Ω]ç-R=ÌΩÌMΩÚ-]≠-Ì-ÌíÌ}-=}≠ÇçΩÇ˝ççΩç-R-Ìífˆñ6RˆVFñÚ‚"¿¢&W«ïˆ÷&∑W’ˆfF%˜fˆñ6Uˆ6Üˆñ6Uˆ∂"Ç&7B"í¿¢ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆ6∆ó˜Ü˜FÚ"ì†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊu˜Ü˜Fıˆ6∆ó˜Ü˜FÚ"¬ÊˆÊRê¢&W6WE˜&ˆ◊B“Ü6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'Ü˜Fıˆ6∆ó˜&W6WE˜&ˆ◊B"¬""í˜"""íÁ7G&óÇê¢ñb&W6WE˜&ˆ◊C†¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBáWFFR¬6ˆÁFWáB¬&W6WE˜&ˆ◊Bê¢V«6S†¢˜6WE˜Ü˜Fıˆ6∆ó˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯ÎR
+MÌ-‚˝ÌΩ=}]›‚‚
+›}ΩÌ-M]ΩÕ›‚Ì˝ççç-R	˝	]
+	›
+„¢m›¬›-Ì]›çR¬˝}Ω¢¬-]Õ2-]≠-¬›=m]“ΩÇ-Ì≠≤Ç≠≠ç¬=ÌΩÌÌ¬‚	˝ÌΩR›-Ì=‚ÚÌ-M]ΩÕ›‚˝Ìç2	-	ç	M	]	‚‚"ê¢&WGW&‡†¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'Ü˜Fıˆf∆˜r"í”“'&W∆6V&uˆ÷VÁR#†¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç'Ü˜Fıˆf∆˜r"¬ÊˆÊRê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢/	˘k¬	ç}Ìm]›çR˝ÌΩ=}]›‚‚	-Ω]ç-R›Ì-ΩíMÌ“‚	}Õ]›-Ω˝ÌΩ›˝]-Ú""›-˝¢-Ω]}‚}]ΩÌ-]≠¬}-]¬˝ÌM--Ω˝‚›Ì-ΩíMÌ“]r˝]]çÌ-≠ÇΩçmÇÌM]mM≤‚"¿¢&W«ïˆ÷&∑W÷&6∂w&˜VÊE˜&W6WG5ˆ∂"Çí¿¢ê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5˜&V÷˜fUˆ&u˜&WVW7BÜ6Fñˆ‚ì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&V÷˜fV&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬&rê¢&WGW&‡†¢ñbˆó5˜vóFñÊu˜&V÷˜fV&rÜ6ˆÁFWáBì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&V÷˜fV&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬&rê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5˜&W∆6Uˆ&u˜&WVW7BÜ6Fñˆ‚ì†¢∂ñÊB¬&ˆ◊B“ˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBÜ6Fñˆ‚ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&W∆6V&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬&r¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢ñbˆó5˜vóFñÊu˜&W∆6V&rÜ6ˆÁFWáBì†¢&ˆ◊B“6Fñˆ‚˜"6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'&W∆6V&u˜&ˆ◊B"í˜"-}ÕΩ-ΩíMÌ“ ¢∂ñÊB¬&ˆ◊B“ˆ&uˆ∂ñÊEˆg&ˆ’˜FWáBá&ˆ◊Bê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%˜&W∆6V&u˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜VFóE˜&W∆6V&ráWFFR¬6ˆÁFWáB¬&r¬∂ñÊC÷∂ñÊB¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5ˆñ÷vU˜&WF˜V6Ö˜&WVW7BÜ6Fñˆ‚ì†¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%ˆñ÷vU˜&WF˜V6Ö˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜7F'Eˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬&r¬6Fñˆ‚ê¢&WGW&‡†¢ñbˆó5˜vóFñÊuˆñ÷vU˜&WF˜V6ÇÜ6ˆÁFWáBì†¢ñÁ7G'V7Fñˆ‚“6ˆÁFWáBÁW6W%ˆFFÊvWBÇ'&WF˜V6Ö˜&ˆ◊B"í˜"6Fñˆ‚˜"-=-¬Ωçç›Ì‚›M˝ç¬˝-ÌM˝›Ìí}›¢ ¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢ˆ6∆V%ˆñ÷vU˜&WF˜V6Ö˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢vóB˜7F'Eˆñ÷vU˜&WF˜V6ÇáWFFR¬6ˆÁFWáB¬&r¬ñÁ7G'V7Fñˆ‚ê¢&WGW&‡†¢ñb6Fñˆ‚ÊBˆó5˜Ü˜Fı˜&Wfóf≈ˆñÁFVÁBÜ6Fñˆ‚ì†¢˜6WE˜vóFñÊu˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáBê¢VÊvñÊR“˜&Wfóf≈ˆVÊvñÊUˆg&ˆ’˜FWáBÜ6Fñˆ‚¬FVfV«C“''VÁví"ê¢&ˆ◊B“ˆ6∆VÂ˜&Wfóf≈˜&ˆ◊BÜ6Fñˆ‚ê¢ˆ6∆V%˜Ü˜Fı˜&Wfóf≈˜vóBÜ6ˆÁFWáBê¢vóB˜7F'E˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáB¬VÊvñÊS÷VÊvñÊR¬ñ÷uˆ'óFW3◊&r¬&ˆ◊C◊&ˆ◊Bê¢&WGW&‡†¢ñbˆó5˜vóFñÊu˜Ü˜Fı˜&Wfóf¬Ü6ˆÁFWáBì†¢ˆ6∆V%˜Ü˜Fı˜&Wfóf≈˜vóBÜ6ˆÁFWáBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	ç}Ìm]›çR˝ÌΩ=}]›‚≠¢MÌ≠=Õ]›"‚	-Ω]ç-RMÌ-=˝›ΩíM-çmÌ¢MΩÚÌmç-Ω]›çÛ¢"¬&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíê¢&WGW&‡†¢ñb˜6Ü˜V∆E˜&˜WFUˆ÷VFñ6¬Ü6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¬6Fñˆ‚¬Fˆ2Êfñ∆UˆÊ÷R˜"&ñ÷vR"ì†¢vóBˆ÷VFñ6≈ˆÊ«ó¶Uˆñ÷vRáWFFR¬6ˆÁFWáB¬&r¬vˆ√÷6Fñˆ‚˜"ÊˆÊRê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢&WGW&‡¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	ç}Ìm]›çR˝ÌΩ=}]›‚≠¢MÌ≠=Õ]›"‚
+}-‚M]Ω-√Ú"¬&W«ïˆ÷&∑W◊Ü˜Fı˜Vñ6µˆ7FñˆÁ5ˆ∂"Çíê¢&WGW&‡†¢FWáB¬∂ñÊB“WáG&7E˜FWáEˆg&ˆ’ˆFˆ7V÷VÁBá&r¬Fˆ2Êfñ∆UˆÊ÷R˜"&fñ∆R"ê¢ñbÊ˜BáFWáB˜"""íÁ7G&óÇì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb-	›R=MΩÌ¬ç}-Ω]}¬-]≠"çr∂∂ñÊG“‚"ê¢&WGW&‡†¢2FWáBFˆ7V÷VÁB6‚6W'fR2FÜR'&ñVb˜"&Wfó6ñˆ‚f˜"‚7FófR&W6VÁFFñˆ‚&ˆ¶V7B‡¢ñbvóB˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇíÊÜÊF∆U˜FWáBáWFFR¬6ˆÁFWáB¬FWáBì†¢&WGW&‡†¢vˆ¬“áWFFRÊ÷W76vRÊ6Fñˆ‚˜"""íÁ7G&óÇí˜"ÊˆÊP¢ñb˜6Ü˜V∆E˜&˜WFUˆ÷VFñ6¬Ü6ˆÁFWáB¬WFFRÊVffV7FófU˜W6W"ÊñB¬6Fñˆ‚¬Fˆ2Êfñ∆UˆÊ÷R˜"&fñ∆R"ì†¢vóBˆ÷VFñ6≈ˆÊ«ó¶U˜FWáBáWFFR¬6ˆÁFWáB¬FWáB¬vˆ√÷vˆ¬ê¢ˆ6∆V%ˆ÷VFñ6ñÊU˜vóBÜ6ˆÁFWáBê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ÷ˆFU˜G&6µ˜6WBáWFFRÊVffV7FófU˜W6W"ÊñB¬""ê¢&WGW&‡†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜb/	˘8B	ç}-Ω]≠‚-]≠"á∂∂ñÊG“í¬=Ì-Ì-Ω‚≠Ì›˝]≠.(
+b"ê¢7V÷÷'í“vóB7V÷÷&ó¶Uˆ∆ˆÊu˜FWáBáFWáB¬VW'ì÷vˆ¬ê¢7V÷÷'í“7V÷÷'í˜"-	=Ì-Ì-‚‚ ¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBá7V÷÷'íê¢vóB÷ñ&U˜GG5˜&W«íáWFFR¬6ˆÁFWáB¬7V÷÷'ï≥•EE5Ù‘ÖÙ4Ñ%5“ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&ˆÂˆFˆ2W'&˜#¢W2"¬Rê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ.)ÿ¬
+MÌ-‚˝MÌ≠=Õ]›"›R˝Ì}›“¬˝Ì˝Ì=ù-R]ùr‚"ê†¶7ñÊ2FVbˆÂ˜fˆñ6RáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢G'ì†¢ñbÊ˜BWFFRÊ÷W76vR˜"Ê˜BWFFRÊ÷W76vRÁfˆñ6S†¢&WGW&‡¢fb“vóBWFFRÊ÷W76vRÁfˆñ6RÊvWEˆfñ∆RÇê¢&ñÚ“'óFW4îÚÜvóBfbÊF˜vÊ∆ˆEˆ5ˆ'óFV'&íÇíê¢&ñÚÁ6VV≤Éê¢6WFGG"Ü&ñÚ¬&Ê÷R"¬b'fˆñ6RÊˆvr"ê¢vóB6ˆÁFWáBÊ&˜BÁ6VÊEˆ6ÜEˆ7Fñˆ‚áWFFRÊVffV7FófUˆ6ÜBÊñB¬6ÜD7Fñˆ‚ÂEïî‰rê¢FWáB“vóBG&Á67&ñ&UˆVFñÚÜ&ñÚ¬'fˆñ6RÊˆvr"ê¢ñbÊ˜BFWáC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬˝Ì}›-¬]}¬‚"ê¢&WGW&‡¢vóBˆÂ˜FWáBáWFFR¬6ˆÁFWáB¬÷ÁV≈˜FWáC◊FWáBê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&ˆÂ˜fˆñ6RW'&˜#¢W2"¬Rê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	Ìçç≠˝ÇÌÌ-≠Rfˆñ6R‚"ê†¶7ñÊ2FVbˆÂˆVFñÚáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢G'ì†¢ñbÊ˜BWFFRÊ÷W76vR˜"Ê˜BWFFRÊ÷W76vRÊVFñÛ†¢&WGW&‡¢b“vóBWFFRÊ÷W76vRÊVFñÚÊvWEˆfñ∆RÇê¢fñ∆VÊ÷R“WFFRÊ÷W76vRÊVFñÚÊfñ∆UˆÊ÷R˜"&VFñÚÊ◊2 ¢&ñÚ“'óFW4îÚÜvóBbÊF˜vÊ∆ˆEˆ5ˆ'óFV'&íÇíê¢&ñÚÁ6VV≤Éê¢6WFGG"Ü&ñÚ¬&Ê÷R"¬fñ∆VÊ÷Rê¢vóB6ˆÁFWáBÊ&˜BÁ6VÊEˆ6ÜEˆ7Fñˆ‚áWFFRÊVffV7FófUˆ6ÜBÊñB¬6ÜD7Fñˆ‚ÂEïî‰rê¢FWáB“vóBG&Á67&ñ&UˆVFñÚÜ&ñÚ¬fñ∆VÊ÷Rê¢ñbÊ˜BFWáC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	›R=MΩÌ¬˝Ì}›-¬]}¬çr=Mç‚‚"ê¢&WGW&‡¢vóBˆÂ˜FWáBáWFFR¬6ˆÁFWáB¬÷ÁV≈˜FWáC◊FWáBê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÊWÜ6WFñˆ‚Ç&ˆÂˆVFñÚW'&˜#¢W2"¬Rê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-	Ìçç≠˝ÇÌÌ-≠R=Mç‚‚"ê††¢2)H)H)H)H)H)H)H)H)H	ÌÌ-}ç¢ÌççÌ¢D")H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÂˆW'&˜"áWFFS¢ˆ&¶V7B¬6ˆÁFWáEÛ¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢∆ˆrÊWÜ6WFñˆ‚Ç%VÊÜÊF∆VBW'&˜#¢W2"¬6ˆÁFWáEÚÊW'&˜"ê¢G'ì†¢ñbó6ñÁ7FÊ6RáWFFR¬WFFRì†¢6%ˆFF“ÜvWFGG"ÜvWFGG"áWFFR¬&6∆∆&6µ˜VW'í"¬ÊˆÊRí¬&FF"¬""í˜"""íÁ7G&óÇê¢&W6VÁFFñˆÂˆ7FófR“&ˆˆ¬ÜvWFGG"Ü6ˆÁFWáEÚ¬'W6W%ˆFF"¬∑“íÊvWBÇ'&W6VÁFFñˆÂ˜7GVFñıˆ7FófR"íê¢2FÜR&W6VÁFFñˆ‚vó¶&BÜÊF∆W2ÊB&W˜'G2óG2˜v‚W'&˜'2gFW"6fñÊr7FFR‡¢27W&W72FÜR÷ó6∆VFñÊr6V6ˆÊB÷W76vR*Ω
+=˝¬˝Ìç}ÌçΩÌçç≠+≤‡¢ñb6%ˆFFÁ7F'G7vóFÇÇ'3¢"í˜"&W6VÁFFñˆÂˆ7FófS†¢&WGW&‡¢ñbWFFRÊVffV7FófUˆ÷W76vS†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ-
+=˝¬˝Ìç}ÌçΩÌçç≠‚
+Ú=mR}çÌ¬‚"ê¢WÜ6WBWÜ6WFñˆ„†¢70††¢2)H)H)H)H)H)H)H)H)H
+Ì=-]≤MΩÚ-]≠-Ì-ΩR≠›Ì˝Ì¢˝]mçÕÌ")H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÂˆ'FÂˆVÊvñÊW2áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢&WGW&‚vóB6÷EˆVÊvñÊW2áWFFR¬6ˆÁFWáBê†¶7ñÊ2FVbˆÂˆ'FÂˆ&∆Ê6RáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢&WGW&‚vóB6÷Eˆ&∆Ê6RáWFFR¬6ˆÁFWáBê†¶7ñÊ2FVbˆÂˆ'FÂ˜∆Á2áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢W6W%ˆñB“WFFRÊVffV7FófU˜W6W"Êñ@¢FWáB“˜∆Á5ˆ˜fW'fñWu˜FWáBáW6W%ˆñBê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBáFWáB¬&W«ïˆ÷&∑W◊∆Á5˜&ˆ˜Eˆ∂"Çíê†¶7ñÊ2FVbˆÂˆ÷ˆFU˜66Üˆˆ≈˜FWáBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢GáB“Ä¢/	¯È2≠
+=}•∆‚ ¢-	˝ÌÕÌ=3¢≠Ì›˝]≠-≤çrDbÙUT"ÙDÙ5ÇıEÖB¬}Ì}Mr˝Ìç=Ì-‚¬›R˝]M]-≤¬Õç›Ç›≠-ç}≤Â∆Â∆‚ ¢%˝	Ω-ΩRM]ù--çÛ•ı∆‚ ¢.(
+"
+}Ì-¬Db(i"≠Ì›˝]≠%∆‚ ¢.(
+"
+Ì≠-ç-¬"ç˝=Ω≠5∆‚ ¢.(
+"	Ì≠˝›ç-¬-]Õ2˝çÕ]ÕÖ∆‚ ¢.(
+"	˝Ω“Ì--]-Ú˝]}]›-mçÇ ¢ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBáGáB¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"ê†¶7ñÊ2FVbˆÂˆ÷ˆFU˜v˜&µ˜FWáBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢GáB“Ä¢/	˘+¬≠
+Ì-˝	ç}›]•∆‚ ¢-	˝çÕÕ¬	≠	Ú¬MÌ=Ì-Ì›ΩR}]›Ì-ç≠Ç¬›Ωç-ç≠¬˝Ω›≤¬çM≤¬˝]}]›-mçÇ¬Db›≠-ΩÌ=Ç¬ΩÌ=Ì-ç˝≤Ç]-=ç¬ç}›]›MÌ-‚Â∆Â∆‚ ¢%˝	Ω-ΩRM]ù--çÛ•ı∆‚ ¢.(
+"	˘8B	˝çÕÕ‚ÚMÌ≠=Õ]›%∆‚ ¢.(
+"	˘8¢
+Ì}M-¬˝]}]›-mçÂ∆‚ ¢.(
+"	˘9R
+Ì}M-¬Db›≠-ΩÌ5∆‚ ¢.(
+"	¯ÍÇ
+Ì}M-¬ΩÌ=Ì-çı∆‚ ¢.(
+"	˙{“
+=MΩç-¬-ÌM˝›Ìí}›¢Ú›M˝ç¬MÌ-‚ ¢ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBáGáB¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆ÷ˆFUˆ∂"Ç'v˜&≤"íê†¶7ñÊ2FVbˆÂˆ÷ˆFUˆgVÂ˜FWáBáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢GáB“Ä¢/	˘JR≠
+}-Ω]}]›çÚ•∆‚ ¢-	}M]¬Ω-ΩR--Ì}]≠çRm]›çÉ¢Ìmç-ç-¬MÌ-Ì=Mç‚¬M]Ω-¬=Ì-Ì˝ùçí--¬Ì}M-¬MÌ-Ó(i--çM]Ì≠ΩçÚÕ=}Ω≠Ìí¬≠ΩçÚ-Ì≠ΩÌ¬MΩÚ}]ΩÌ-]≠¬-çM]‚˝‚-]≠-2˝=ÌΩÌ2¬ ¢-}Õ]›ç-¬Ωçm‚¬=MΩç-¬çΩÇ}Õ]›ç-¬MÌ“¬M]Ω-¬&VV«2ı6Ü˜'G2¬Ì}M-¬Õç›Ç›MçΩÕ¬¬˝çM=Õ-¬çM]Ç¬m]›çí¬ç=2çΩÇ≠-çrÂ∆Â∆‚ ¢-	-Ω]ÇM]ù--çR›çmRçΩÇ›˝ççÇ-ÌÌM›Ωí}˝Ì‚ ¢ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBáGáB¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê†¢2)H)H)H)H)H	≠Ω-ç-=*Ω
+}-Ω]}]›ç¸+≤›Ì-ΩÕÇ≠›Ì˝≠ÕÇ)H)H)H)H)H ¶FVbˆgVÂ˜Vñ6µˆ∂"Çí”‚ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑W†¢&˜w2“∞¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˙®B	Ìmç-ç-¬MÌ-‚"¬6∆∆&6µˆFF“&gV„ß&WfófR"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘z2	=Ì-Ì˝ùçí--"¬6∆∆&6µˆFF“&gV„¶fF""ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯ÍBí›-çM]Ì≠ΩçÚÚ˝]›Ú"¬6∆∆&6µˆFF“&gV„ßÜ˜Fˆ6∆ó"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯Í¬	-çM]‚˝‚-]≠-2˝=ÌΩÌ2"¬6∆∆&6µˆFF“&gV„ßFWáGfñFVÚ"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˙K2í›]ΩMÇ‚}-]}MÌí"¬6∆∆&6µˆFF“&gV„¶ó6V∆fñR"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯Í“	}Õ]›Ωçm›MÌ-‚"¬6∆∆&6µˆFF“&gV„¶f6W7v"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˙{¬
+=MΩç-¬MÌ“›MÌ-‚"¬6∆∆&6µˆFF“&gV„ß&V÷˜fV&r"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘k¬	}Õ]›ç-¬MÌ“›MÌ-‚"¬6∆∆&6µˆFF“&gV„ß&W∆6V&r"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘;&VV«2Ú6Ü˜'G2"¬6∆∆&6µˆFF“&gV„ß&VV«2"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯È‚
+Ì}M-¬Õç›Ç›MçΩÕ¬"¬6∆∆&6µˆFF“&gV„¶fñ∆“"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯Í¬
+m]›çíÚ≠M≤"¬6∆∆&6µˆFF“&gV„ß7F˜'ñ&ˆ&B"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯ÎR	Õ=}Ω≠Ú˝]›Ú"¬6∆∆&6µˆFF“&gV„¶◊W6ñ2"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯Í‚	ç=≤Ú≠-çr"¬6∆∆&6µˆFF“&gV„ßVó¢"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	¯Í“	çM]ÇMΩÚMÌ=="¬6∆∆&6µˆFF“&gV„¶ñFV2"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç/	˘9“
+-ÌÌM›Ωí}˝Ì"¬6∆∆&6µˆFF“&gV„¶g&VR"ï“¿¢¥ñÊ∆ñÊT∂Wñ&ˆ&D'WGFˆ‚Ç.*»^˚àÚ	›}B"¬6∆∆&6µˆFF“&gV„¶&6≤"ï“¿¢–¢&WGW&‚ñÊ∆ñÊT∂Wñ&ˆ&D÷&∑Wá&˜w2ê†¢2)H)H)H)H)H	ÌÌ-}ç¢Ω-ΩRM]ù--çí*Ω
+}-Ω]}]›ç¸+≤Üf∆∆&6≤÷g&ñVÊF«íí)H)H)H)H)H ¶7ñÊ2FVbˆÂˆ6%ˆgV‚áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢“WFFRÊ6∆∆&6µ˜VW'ê¢FF“áÊFF˜"""íÁ7G&óÇê¢7Fñˆ‚“FFÁ7∆óBÇ#¢"¬ï≥“ñb#¢"ñ‚FFV«6R" †¢7ñÊ2FVb˜G'ïˆ6∆¬Ç¶fÂˆÊ÷W2¬¢¶∑v&w2ì†¢f‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ¶fÂˆÊ÷W2ê¢ñb6∆∆&∆RÜf‚ì†¢&WGW&‚vóBf‚áWFFR¬6ˆÁFWáB¬¢¶∑v&w2ê¢&WGW&‚ÊˆÊP†¢ñb7Fñˆ‚”“&fF"#†¢vóBÊÁ7vW"Ç-	=Ì-Ì˝ùçí--"ê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬&fF""ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖˆfF%ˆ÷VÁU˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆfF%ˆ7FñˆÂˆ∂"Ç&gV‚"íê¢&WGW&‡†¢ñb7Fñˆ‚Á7F'G7vóFÇÇ&e˜fˆñ6UÚ"ì†¢fˆñ6R“7Fñˆ‚Á'7∆óBÇ%Ú"¬ï≤”“Á7G&óÇê¢6ˆÁFWáBÁW6W%ˆFF≤&fF%˜GG5˜fˆñ6R%““fˆñ6P¢6ˆÁFWáBÁW6W%ˆFFÁ˜Ç&vóFñÊuˆfF%˜fˆñ6Uˆ6Üˆñ6R"¬ÊˆÊRê¢ñbˆvWEˆ66ÜVE˜Ü˜FÚáÊg&ˆ’˜W6W"ÊñBì†¢˜6WEˆfF%˜vóBÜ6ˆÁFWáBê¢vóBÊÁ7vW"Üb-	=ÌΩÌ¢∑fˆñ6W“"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb.)»R	MΩÚ---Ω“=ÌΩÌ¢µˆfF%˜GG5˜fˆñ6Uˆ∆&V¬áfˆñ6Ró“‚
+ç22Û3¢˝ççΩç-R-]≠"¬≠Ì-ÌΩíMÌΩm]“˝Ìç}›]-Ç--‚"ê¢V«6S†¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆfF%˜Ü˜FÚ%““G'VP¢vóBÊÁ7vW"Üb-	=ÌΩÌ¢∑fˆñ6W“"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÜb.)»R	=ÌΩÌ-Ω”¢µˆfF%˜GG5˜fˆñ6Uˆ∆&V¬áfˆñ6Ró“‚
+-]˝]¬˝ççΩç-R˝Ì-]"}]ΩÌ-]≠‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“&fF%˜W∆ˆB#†¢vóBÊÁ7vW"Ç-	}==}ç-R˝Ì-]""ê¢vóBˆÜÊF∆UˆfF%˜W∆ˆEˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚ñ‚≤&fF%ˆ∆7B"¬&fF%˜FWáB'”†¢vóBˆÜÊF∆UˆfF%˜67&óEˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"¬fˆñ6Uˆ÷ˆFS‘f«6Rê¢&WGW&‡†¢ñb7Fñˆ‚”“&fF%˜fˆñ6R#†¢vóBˆÜÊF∆UˆfF%˜67&óEˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"¬fˆñ6Uˆ÷ˆFS’G'VRê¢&WGW&‡†¢ñb7Fñˆ‚”“'fˆ6∆6∆ó#†¢vóBÊÁ7vW"Ç-	≠ΩçÚ-Ì≠ΩÌ¬"ê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'fˆ6∆6∆ó"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖ˜fˆ6≈ˆ6∆óˆ÷VÁU˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’˜fˆ6≈ˆ6∆óˆ7FñˆÂˆ∂"Ç&gV‚"íê¢&WGW&‡†¢ñb7Fñˆ‚”“'fˆ6∆6∆ó˜W∆ˆB#†¢vóBÊÁ7vW"Ç-	}==}ç-R˝Ì-]""ê¢vóBˆÜÊF∆U˜fˆ6∆6∆ó˜W∆ˆEˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚ñ‚≤'fˆ6∆6∆óˆ∆7B"¬'fˆ6∆6∆ó˜&ˆ◊B'”†¢vóBˆÜÊF∆U˜fˆ6∆6∆ó˜&ˆ◊Eˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“'FWáGfñFVÚ#†¢vóBÊÁ7vW"Ç-	-çM]‚˝‚-]≠-2˝=ÌΩÌ2"ê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'FWáGfñFVÚ"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖ˜FWáGfñFVıˆ÷VÁU˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’˜FWáGfñFVıˆ7FñˆÂˆ∂"Ç&gV‚"íê¢&WGW&‡†¢ñb7Fñˆ‚”“'GeˆVÊvñÊU˜6˜&#†¢vóBˆÜÊF∆U˜FWáGfñFVıˆVÊvñÊUˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬'6˜&"¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“'GeˆVÊvñÊUˆ∂∆ñÊr#†¢vóBˆÜÊF∆U˜FWáGfñFVıˆVÊvñÊUˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&∂∆ñÊr"¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“'GeˆVÊvñÊU˜'VÁví#†¢vóBˆÜÊF∆U˜FWáGfñFVıˆVÊvñÊUˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬''VÁví"¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“'Ge˜&ˆ◊B#†¢vóBˆÜÊF∆U˜FWáGfñFVı˜&ˆ◊Eˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“'Ü˜Fˆ6∆ó#†¢vóBÊÁ7vW"Ç-
+MÌ-‚(i"-çM]Ì≠ΩçÚ"ê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'Ü˜Fˆ6∆ó"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖ˜Ü˜Fˆ6∆óˆ÷VÁU˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’˜Ü˜Fˆ6∆óˆ7FñˆÂˆ∂"Ç&gV‚"íê¢&WGW&‡†¢ñb7Fñˆ‚”“'Ü˜Fˆ6∆ó˜W∆ˆB#†¢vóBÊÁ7vW"Ç-	}==}ç-RMÌ-‚"ê¢vóBˆÜÊF∆U˜Ü˜Fˆ6∆ó˜W∆ˆEˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“'Ü˜Fˆ6∆óˆ∆7B#†¢vóBˆÜÊF∆U˜Ü˜Fˆ6∆ó˜&ˆ◊Eˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“'Ü˜Fˆ6∆óˆ7W7Fˆ“#†¢ñbˆ◊W6ñ5˜fñFVıˆñFVÁFóGïˆ6ˆ◊∆WFRáÊg&ˆ’˜W6W"ÊñBì†¢vóBˆÜÊF∆U˜Ü˜Fˆ6∆ó˜&ˆ◊Eˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢V«6S†¢vóBÊÁ7vW"Ç-
+›}ΩÌ]¬6Ü&7FW"ñFVÁFóGí6≤"ê¢vóBˆÜÊF∆U˜Ü˜Fˆ6∆ó˜W∆ˆEˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚Á7F'G7vóFÇÇ'5˜&W6WEÚ"ì†¢∂ñÊB“7Fñˆ‚Á'7∆óBÇ%Ú"¬ï≤”–¢vóBˆÜÊF∆U˜Ü˜Fˆ6∆ó˜&W6WEˆ6Üˆñ6RáWFFR¬6ˆÁFWáB¬¬∂ñÊB¬&VfóÉ“&gV‚"ê¢&WGW&‡†¢ñb7Fñˆ‚”“&f6W7v#†¢vóBÊÁ7vW"Ç-	}Õ]›Ωçm"ê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬&f6W7v"ê¢vóB˜7F'Eˆf6W7vˆf∆˜ráWFFR¬6ˆÁFWáB¬ÊˆÊR¬W6Uˆ66ÜVC‘f«6Rê¢&WGW&‡†¢ñb7Fñˆ‚”“'&V÷˜fV&r#†¢vóBÊÁ7vW"Ç-
+=MΩ]›çRMÌ›"ê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'&V÷˜fV&r"ê¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáÊg&ˆ’˜W6W"ÊñBê¢ñbñ÷s†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ/	˙{¬	ç˝ÌΩÕ}=‚˝ÌΩ]M›]R}==m]››ÌRMÌ-‚Ç=MΩ˝‚MÌ“‚"ê¢vóB˜VFóE˜&V÷˜fV&ráWFFR¬6ˆÁFWáB¬ñ÷rê¢V«6S†¢˜6WE˜vóFñÊu˜&V÷˜fV&rÜ6ˆÁFWáBê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ/	˙{¬	˝ççΩç-RMÌ-‚(	B=MΩ‚MÌ“Ç-]›2‰r˝Ì}}›Ìí˝ÌMΩÌm≠Ìí‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚”“'&W∆6V&r#†¢vóBÊÁ7vW"Ç-	}Õ]›MÌ›"ê¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'&W∆6V&r"ê¢ñ÷r“ˆvWEˆ66ÜVE˜Ü˜FÚáÊg&ˆ’˜W6W"ÊñBê¢ñbñ÷s†¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ/	˘k¬	-Ω]ç-R›Ì-ΩíMÌ“MΩÚ˝ÌΩ]M›]=‚}==m]››Ì=‚MÌ-„¢"¬&W«ïˆ÷&∑W÷&6∂w&˜VÊE˜&W6WG5ˆ∂"Çíê¢V«6S†¢6ˆÁFWáBÁW6W%ˆFF≤'Ü˜Fıˆf∆˜r%““'&W∆6V&uˆ÷VÁR ¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ/	˘k¬	˝ççΩç-RMÌ-‚‚	˝ÌΩR}==}≠ÇÚ˝Ì≠m2-ç›-≤MÌ›¢˝Ω˝b¬=Ì≤¬˝çÌM¬=ÌÌBçΩÇ-Ìí-]≠"‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚”“'&WfófR#†¢ñbvóB˜G'ïˆ6∆¬Ç'&WfófUˆˆ∆E˜Ü˜Fıˆf∆˜r"¬&Fı˜&WfófU˜Ü˜FÚ"ì†¢&WGW&‡¢˜6WE˜vóFñÊu˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáBê¢vóBÊÁ7vW"Ç-	Ìmç-Ω]›çRMÌ-‚"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖˆgVÂ˜&WfófUˆÜV«˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚ñ‚≤'6÷'G&VV«2"¬'&VV«2'”†¢ñbvóB˜G'ïˆ6∆¬Ç'6÷'E˜&VV«5ˆg&ˆ’˜fñFVÚ"¬'fñFVı˜6VÁ6U˜&VV«2"ì†¢&WGW&‡¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬&gVÂ˜&VV«2"ê¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊu˜&VV«5ˆ÷FW&ñ¬%““G'VP¢vóBÊÁ7vW"Ç%&VV«2Ú6Ü˜'G2"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖˆgVÂ˜&VV«5ˆÜV«˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚”“&fñ∆“#†¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬&gVÂˆfñ∆“"ê¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆfñ∆’ˆ÷FW&ñ¬%““G'VP¢vóBÊÁ7vW"Ç-
+Ì}M-¬MçΩÕ¬"ê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖˆgVÂˆfñ∆’ˆÜV«˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚”“&6∆ó#†¢ñbvóB˜G'ïˆ6∆¬Ç'7F'E˜'VÁvïˆf∆˜r"¬&«V÷ˆ÷∂Uˆ6∆ó"¬''VÁvïˆ÷∂Uˆ6∆ó"ì†¢&WGW&‡¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬&gVÂ˜&VV«2"ê¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊu˜&VV«5ˆ÷FW&ñ¬%““G'VP¢vóBÊÁ7vW"Çê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÖˆgVÂ˜&VV«5ˆÜV«˜FWáBÇí¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚”“&ñ÷r#†¢ñbvóB˜G'ïˆ6∆¬Ç&6÷Eˆñ÷r"¬&÷ñF¶˜W&ÊWïˆf∆˜r"¬&ñ÷vW5ˆ÷∂R"ì†¢&WGW&‡¢vóBÊÁ7vW"Çê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	--]MÇˆñ÷rÇ-]Õ2≠-ç›≠Ç¬çΩÇ˝ççΩÇ]M≤‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚”“'7F˜'ñ&ˆ&B#†¢ñbvóB˜G'ïˆ6∆¬Ç'7F'E˜7F˜'ñ&ˆ&B"¬'7F˜'ñ&ˆ&Eˆ÷∂R"ì†¢&WGW&‡¢vóBÊÁ7vW"Çê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÇ-	›˝ççÇ-]Õ2çÌ-(	B›≠çM‚-=≠-=2Ç≠MÌ-≠2‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê¢&WGW&‡†¢ñb7Fñˆ‚”“&◊W6ñ2#†¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áÊg&ˆ’˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬'7VÊıˆ◊W6ñ2"ê¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊu˜7VÊıˆ'&ñVb%““G'VP¢vóBÊÁ7vW"Ç-	Õ=}Ω≠Ú7VÊÚ"ê¢vóB˜6Ü˜u˜7VÊıˆÜV«ˆg&ˆ’ˆ6∆∆&6≤á¬6ˆÁFWáB¬&W«ïˆ÷&∑W’˜7VÊıˆ÷VÁUˆ∂"Çí¬7V&÷VÁS’G'VRê¢&WGW&‡†¢ñb7Fñˆ‚ñ‚≤&ñFV2"¬'Vó¢"¬'7VV6Ç"¬&g&VR"¬&&6≤'”†¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢vóBÊÁ7vW"Çê¢vóBÊ÷W76vRÁ&W«ï˜FWáBÄ¢-	=Ì-Ì"	›˝ççÇ}M}2çΩÇ-Ω]Ç≠›Ì˝≠2-ΩçR‚"¿¢&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çê¢ê¢&WGW&‡†¢vóBÊÁ7vW"Çê†¢2)H)H)H)H)H)H)H)H)H
+Ì=-]≤›≠›Ì˝≠Ç]mçÕÌ"ç]Mç›Ú-Ì}≠-]ÌMí)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVbˆÂˆ'FÂ˜7GVGíáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áWFFRÊVffV7FófU˜W6W"ÊñB¬-
+=}"¬""ê¢f‚“v∆ˆ&«2ÇíÊvWBÇ%˜6VÊEˆ÷ˆFUˆ÷VÁR"ê¢ñb6∆∆&∆RÜf‚ì†¢&WGW&‚vóBf‚áWFFR¬6ˆÁFWáB¬'7GVGí"ê¢&WGW&‚vóBˆÂˆ÷ˆFU˜66Üˆˆ≈˜FWáBáWFFR¬6ˆÁFWáBê†¶7ñÊ2FVbˆÂˆ'FÂ˜v˜&≤áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áWFFRÊVffV7FófU˜W6W"ÊñB¬-
+Ì-˝	ç}›]"¬""ê¢f‚“v∆ˆ&«2ÇíÊvWBÇ%˜6VÊEˆ÷ˆFUˆ÷VÁR"ê¢ñb6∆∆&∆RÜf‚ì†¢&WGW&‚vóBf‚áWFFR¬6ˆÁFWáB¬'v˜&≤"ê¢&WGW&‚vóBˆÂˆ÷ˆFU˜v˜&µ˜FWáBáWFFR¬6ˆÁFWáBê†¶7ñÊ2FVbˆÂˆ'FÂˆgV‚áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢ˆ6∆V%˜G&Á6ñVÁEˆf∆˜w2Ü6ˆÁFWáBê¢˜6WEˆ÷ˆFUˆ6∆V‚áWFFRÊVffV7FófU˜W6W"ÊñB¬-
+}-Ω]}]›çÚ"¬""ê¢f‚“v∆ˆ&«2ÇíÊvWBÇ%˜6VÊEˆ÷ˆFUˆ÷VÁR"ê¢ñb6∆∆&∆RÜf‚ì†¢&WGW&‚vóBf‚áWFFR¬6ˆÁFWáB¬&gV‚"ê¢&WGW&‚vóBˆÂˆ÷ˆFUˆgVÂ˜FWáBáWFFR¬6ˆÁFWáBê†¶7ñÊ2FVbˆÂˆ'FÂˆ÷VFñ6ñÊRáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢˜6WEˆ÷VFñ6≈˜vóFñÊráWFFR¬6ˆÁFWáB¬""ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÖˆ÷VFñ6≈ˆ÷VÁU˜FWáBÇí¬&W«ïˆ÷&∑W÷÷VFñ6ñÊUˆ∂"Çíê†¢2)H)H)H)H)H)H)H)H)H	˝çÌç-]-›ΩíÌ=-]í›-çM]Ì≠Ωç˝)H)H)H)H)H)H)H)H)H ¶FVbˆ◊W6ñ5˜fñFVı˜FWáE˜7FFRÜ6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïR¬W6W%ˆñC¢ñÁB¬ÊˆÊR“ÊˆÊRí”‚7G#†¢""-	≠-ç-›Ωí›-ÚÑıDÚ”‚4Ù‰r”‚dîDTÚ‚	Ì“-]=M-ΩçRvVÊW&ñ2÷VFñˆ6&ñ∆óGíñÁFVÁG2‚"" ¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊuˆ◊W6ñ5˜fñFVı˜fñFVıˆ'&ñVb"ì†¢&WGW&‚'fñFVÚ ¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜Ü˜Fıˆ6∆ó˜&ˆ◊B"í˜"6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&vóFñÊu˜fˆ6≈ˆ6∆ó˜&ˆ◊B"ì†¢&WGW&‚&◊W6ñ2 ¢ñb6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&◊W6ñ5˜fñFVıˆG&gEˆVFóB"ì†¢&WGW&‚&G&gEˆVFóB ¢ñbW6W%ˆñC†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢G&6≤“Öˆ÷ˆFU˜G&6µˆvWBáW6W%ˆñBí˜"""íÁ7G&óÇíÊ∆˜vW"Çê¢ñbG&6≤”“&◊W6ñ7fñFVÛßfñFVÚ#†¢&WGW&‚'fñFVÚ ¢ñbG&6≤”“&◊W6ñ7fñFVÛ¶◊W6ñ2#†¢&WGW&‚&◊W6ñ2 ¢&WGW&‚" ††¶7ñÊ2FVbˆÂˆ◊W6ñ5˜fñFVı˜FWáE˜&ñ˜&óGíáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢""-	]Mç›--]››Ωí-ΩM]Ω]b-]≠-¬˝Ì≠≠-ç-]“Õ-]í›-çM]Ì≠Ωç˝‚"" ¢VñB“WFFRÊVffV7FófU˜W6W"ÊñBñbWFFRÊVffV7FófU˜W6W"V«6R ¢7FvR“ˆ◊W6ñ5˜fñFVı˜FWáE˜7FFRÜ6ˆÁFWáB¬VñBê¢ñbÊ˜B7FvS†¢&WGW&‡†¢ñbVñBÊBÊ˜BˆvWEˆ66ÜVE˜Ü˜FÚáVñBì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢.)™˚àÚ
+]mç¬í›-çM]Ì≠Ωç˝≠-ç-]“¬›‚ç]ÌM›ÌRMÌ-‚˝Ì-]˝›‚‚	˝ççΩç-R-‚mRMÌ-‚Ç›}›ç-R≠ΩçÚ›Ì-‚ ¢ê¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ †¢2dîDTıÙ%$îTb6ˆÁ7V÷W2ÜW&RÊBÊWfW"&R÷VÁFW'2vVÊW&ñ2ˆÂ˜FWáBñÁFVÁB&˜WFñÊr‡¢ñb7FvR”“'fñFVÚ#†¢◊W6ñ5ˆ'&ñVb“Ü6ˆÁFWáBÁW6W%ˆFFÊvWBÇ&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVb"í˜"""íÁ7G&óÇê¢ñbÊ˜B◊W6ñ5ˆ'&ñVbÊBVñC†¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢◊W6ñ5ˆ'&ñVb“Ü∑eˆvWBÜb&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVcß∑VñG“"¬""í˜"""íÁ7G&óÇê¢ñbÊ˜B◊W6ñ5ˆ'&ñVc†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-
+}]›Ì-ç¢≠Ωç˝˝Ì-]˝≤Ì˝ç›çR˝]›Ç‚	›}›ç-R]mç¬í›-çM]Ì≠Ωç˝]ùr‚ ¢ê¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ ¢6ˆÁFWáBÁW6W%ˆFF≤&◊W6ñ5˜fñFVıˆ◊W6ñ5ˆ'&ñVb%““◊W6ñ5ˆ'&ñV`¢6ˆÁFWáBÁW6W%ˆFF≤&vóFñÊuˆ◊W6ñ5˜fñFVı˜fñFVıˆ'&ñVb%““G'VP¢fñFVıˆ'&ñVb“ÜvWFGG"áWFFRÊVffV7FófUˆ÷W76vR¬'FWáB"¬""í˜"""íÁ7G&óÇê¢vóB˜7FvUˆ◊W6ñ5˜fñFVıˆG&gBÄ¢WFFR¬6ˆÁFWáB¬◊W6ñ5ˆ'&ñVc÷◊W6ñ5ˆ'&ñVb¬fñFVıˆ'&ñVc◊fñFVıˆ'&ñV`¢ê¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ †¢vóBˆÂ˜FWáBáWFFR¬6ˆÁFWáBê¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ †¢2)H)H)H)H)H)H)H)H)H	˝Ì}ç-ç-›Ωí--‚›Ì--]"˝‚-Ì}ÕÌm›Ì-Çç-]≠"˝=ÌΩÌí)H)H)H)H)H)H)H)H)H •Ù45ıEDU$‚“&RÊ6ˆ◊ñ∆RÄ¢""ç=Õ]]ç«ÕÕÌm]ç«ÕM]Ω]ç«Õ›Ωç}ç=]ç«ÕÌ-]ç«Õ˝ÌMM]mç-]ç«Õ=Õ]]%«2ΩΩáÕÕÌm]%«2ΩΩáÕÕÌm›Â«2ΩΩÇí ¢""Á≥√c“ ¢""áFg∆WV'∆f#'∆Fˆ7á«GáGÕ≠›ç7Õ≠›ç=Õç}Ìm]◊ÕMÌ-ÁÕMÌ-Ì=GÕ≠-ç◊ÕÌmç'Õ›çÕç¬ ¢"&ñ÷vW∆ßVw«Êw«fñFV˜Õ-çM]Á∆◊G∆÷˜gÕ=MçÁ∆VFñ˜∆◊7«vg¬ ¢"-Õ]Mçmç◊ÕÕ]M≠'Õ-Ω˝çßÕ›Õ›]wÕ›ΩçwÕ›çÕÌßÕÕ'Õ≠'Õ}≠ΩÌ}]›áÕ-}]◊ÕMç=›ÌwÕ=}áÕ]›-=]◊ÕΩçmÁÕΩçmÕΩçg∆f6W7v∆f6U«2ß7vÕÕ=}ΩßÕ˝]◊Õ-]ß«7VÊÚí"¿¢&R‰í¬&RÂ2¿¢ê†¶7ñÊ2FVbˆÂˆ6&ñ∆óFñW5˜áWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢ñÊ6ˆ÷ñÊu˜FWáB“ÜvWFGG"áWFFRÊVffV7FófUˆ÷W76vR¬'FWáB"¬""í˜"""íÁ7G&óÇê¢27FFVgV¬◊W6ñ2◊fñFVÚ&ˆ◊G2ÜfR&ñ˜&óGí˜fW"FÜRvVÊW&ñ26&ñ∆óGí÷F6ÜW"‡¢2ñ‚'Fñ7V∆"¬v˜&G27V6Ç2-MÌ-Ì]Ωç}¬"≤-M-çm]›çR"ñÁ6ñFRdîDTıÙ%$îT`¢2◊W7BÊWfW"&W6WBFÜRf∆˜rFÚ˜&FñÊ'íÜ˜FÚ&Wfóf¬‡¢ñbÁíÜ6ˆÁFWáBÁW6W%ˆFFÊvWBÜ∂Wííf˜"∂Wíñ‚Ä¢&vóFñÊu˜Ü˜Fıˆ6∆ó˜&ˆ◊B"¿¢&vóFñÊu˜fˆ6≈ˆ6∆ó˜&ˆ◊B"¿¢&vóFñÊuˆ◊W6ñ5˜fñFVı˜fñFVıˆ'&ñVb"¿¢&◊W6ñ5˜fñFVıˆG&gEˆVFóB"¿¢íì†¢2FÜó2ÜÊF∆W"'VÁ2ñ‚‚V&∆ñW"D"w&˜WFÜ‚FÜRvVÊW&¬FWáBÜÊF∆W"‡¢2Fó7F6ÇFÜR7FófR7FFVgV¬f∆˜rÜW&RÊB7F˜&˜vFñˆ‚6Ú÷F6ÜñÊp¢26&ñ∆óGíá&6R6‚ÊWfW"Á7vW"ñÁ7FVBˆb6ˆÁ7V÷ñÊr4Ù‰rıdîDTÚñÁWB‡¢vóBˆÂ˜FWáBáWFFR¬6ˆÁFWáBê¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ ¢2ÊWfW"ñÁFW'&WB&W6VÁFFñˆ‚'&ñVb2vVÊW&ñ26&ñ∆óGíˆ∆ófR÷FFVW7Fñˆ‚‡¢7GVFñÚ“˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇê¢ñbWFFRÊVffV7FófU˜W6W"ÊBWFFRÊVffV7FófUˆ6ÜBÊB7GVFñÚÂˆ7FófU˜&ˆ¶V7BáWFFRÊVffV7FófU˜W6W"ÊñB¬WFFRÊVffV7FófUˆ6ÜBÊñBì†¢ñbvóB7GVFñÚÊÜÊF∆U˜FWáBáWFFR¬6ˆÁFWáB¬ñÊ6ˆ÷ñÊu˜FWáBì†¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ ¢&WGW&‡¢ñbˆó5˜Ü˜Fı˜&Wfóf≈˜VW7Fñˆ‚ÜñÊ6ˆ÷ñÊu˜FWáBí˜"ˆó5˜Ü˜Fı˜&Wfóf≈ˆñÁFVÁBÜñÊ6ˆ÷ñÊu˜FWáBì†¢˜6WE˜vóFñÊu˜Ü˜Fı˜&Wfóf¬áWFFR¬6ˆÁFWáBê¢6“6&ñ∆óGïˆÁ7vW"ÜñÊ6ˆ÷ñÊu˜FWáBê¢ñb6†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜ6¬&W«ïˆ÷&∑W÷÷ñÂˆ∂"ê¢&WGW&‡†¢◊6r“Ä¢-	M¬=Õ]‚Ì--¬MùΩÕÇ¬Õ]MçÇÕ]Mçmç›≠çÕÇÕ-]çΩÕÉ•∆‚ ¢.(
+"	˘8B	MÌ≠=Õ]›-≥¢DbÙUT"Ùd#"ÙDÙ5ÇıEÖB(	B≠Ì›˝]≠"¬]}ÌÕR¬ç}-Ω]}]›çR-Ωçb¬˝Ì-]≠M≠-Ì"Â∆‚ ¢.(
+"	˘k¬	ç}Ìm]›çÛ¢›Ωçr˝Ì˝ç›çR¬=MΩ]›çRÇ}Õ]›MÌ›¬}Õ]›Ωçm¬]-=ç¬¬˜WGñÁBÂ∆‚ ¢.(
+") Ç	Ìmç-Ω]›çRMÌ-„¢}==}ÇMÌ-‚(	BÕÌm›‚-Ω-¬'VÁví¬∂∆ñÊrçΩÇ6˜&"-ÌΩÕ≠‚MΩÚ≠MÌ"]rΩÌM]íÂ∆‚ ¢.(
+"	¯È‚	-çM]„¢}ÌÕΩΩ¬-ùÕ≠ÌM≤¬•&VV«2çrMΩç››Ì=‚-çM]‚¢¬çM]Ç˝≠ç˝"¬=-ç-≤Â∆‚ ¢.(
+"	¯Ír	=Mç‚˝≠›ç=É¢-›≠ç˝mçÚ¬-]}ç≤¬˝Ω“Â∆‚ ¢.(
+"	˙õ¢	Õ]Mçmç›¢-Ω˝ç≠Ç¬›Õ›]r¬}≠ΩÌ}]›çÚ¬›Ωç}≤¬›çÕ≠Ç¬	Õ
+
+"˝	≠
+"(	B˝-Ì}›Ωí}ÌÇ-Ì˝Ì≤-}2Â∆Â∆‚ ¢%˝	˝ÌM≠}≠É•Ú˝Ì-‚}==}ç-RMù≤çΩÇ˝ççΩç-RΩΩ≠2≤≠ÌÌ-≠ÌR
+-	r‚ ¢-	MΩÚMÌ-‚(	BÕÌm›‚›m-¬*æ) Ç	Ìmç-ç-Ã+≤¬MΩÚ-çM]‚(	B*ø	¯Í¬&VV«2çrMΩç››Ì=‚-çM]Ï+≤‚ ¢ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÜ◊6r¬'6Uˆ÷ˆFS“$÷&∂F˜v‚"¬&W«ïˆ÷&∑W’ˆgVÂ˜Vñ6µˆ∂"Çíê††¢2)H)H)H)H)H)H)H)H)HcìÇƒïdR4T$4ÇDît‰ı5Dî52Ú$ıdîDU"Ñ$DT‰î‰r)H)H)H)H)H)H)H)H)H ¢2Ffñ«íó2FÜR&ñ÷'í&WG&ñWf¬&˜fñFW"‚˜V‰í&W7ˆÁ6W2vV%˜6V&6Çó2FÜP¢2f∆∆&6≤ˆÊ«ívÜV‚ıT‰ïÙïÙ¥Uíó2‚ˆffñ6ñ¬˜V‰í∂WíÜÊ˜B6≤÷˜"“¢í‡•ÙƒïdUı4T$4ÖÙƒ5Eı5DEU3¢Fñ7E∑7G"¬Fñ7E““∞¢'Ffñ«í#¢≤'7FFR#¢&Ê˜E˜FW7FVB"¬&FWFñ¬#¢"'“¿¢&˜VÊí#¢≤'7FFR#¢&Ê˜E˜FW7FVB"¬&FWFñ¬#¢"'“¿¢'7V÷÷'í#¢≤'7FFR#¢&Ê˜E˜FW7FVB"¬&FWFñ¬#¢"'“¿ß–††¶FVbˆ÷6∂VEˆ∂Wï˜7FFRáf«VS¢7G"í”‚7G#†¢f«VR“áf«VR˜"""íÁ7G&óÇê¢ñbÊ˜Bf«VS†¢&WGW&‚&ˆfb ¢&WGW&‚b&ˆ‚á∑f«VU≥£E◊ﬁ(
+g∑f«VU≤”C•◊“¬∆V„◊∂∆V‚áf«VRó“í ††¶FVbˆˆffñ6ñ≈ˆ˜VÊï˜vV%ˆ∂Wïˆfñ∆&∆RÇí”‚&ˆˆ√†¢∂Wí“ÑıT‰ïÙïÙ¥Uí˜"""íÁ7G&óÇê¢&WGW&‚&ˆˆ¬Ü∂WíÊBÊ˜B∂WíÁ7F'G7vóFÇÇ'6≤÷˜"“"íê††¶FVbˆ∆ófU˜6V&6Öˆfñ«W&Uˆ÷W76vRÇí”‚7G#†¢Ffñ«ï˜7FFR“ÙƒïdUı4T$4ÖÙƒ5Eı5DEU2ÊvWBÇ'Ffñ«í"¬∑“íÊvWBÇ'7FFR"¬&Ê˜E˜FW7FVB"ê¢˜VÊï˜7FFR“ÙƒïdUı4T$4ÖÙƒ5Eı5DEU2ÊvWBÇ&˜VÊí"¬∑“íÊvWBÇ'7FFR"¬&Ê˜E˜FW7FVB"ê¢ñbÊ˜BDdî≈ïÙïÙ¥UíÊBÊ˜Bˆˆffñ6ñ≈ˆ˜VÊï˜vV%ˆ∂Wïˆfñ∆&∆RÇì†¢&WGW&‚Ä¢.)™˚àÚ∆ófR›˝Ìç¢]ù}›R›-Ì]”¢Ì-=---=]"Ddî≈ïÙïÙ¥Uí¬ıT‰ïÙïÙ¥Uí ¢-›R˝-Ω˝]-ÚÌMçmçΩÕ›Ω¬≠ΩÌ}Ì¬˜V‰íMΩÚ]}]-›Ì=‚vV"◊6V&6Ç‚ ¢-	ÌΩ}›ΩíuB›}"˝ÌMÌΩm]"Ì--¬‚	MÕç›ç--Ì3¢-Ω˝ÌΩ›ç-RˆFñuˆ∆ófU˜6V&6Ç‚ ¢ê¢ñbFfñ«ï˜7FFRñ‚≤'VÊWFÜ˜&ó¶VB"¬'V˜F"¬&áGGˆW'&˜""¬&ÊWGv˜&µˆW'&˜"'”†¢&WGW&‚Ä¢.)™˚àÚ	›R=MΩÌ¬˝ÌΩ=}ç-¬-]mçRM››ΩR}]]rFfñ«í‚	ÌΩ}›ΩíuB›}"˝ÌMÌΩm]"Ì--¬‚ ¢-	≠ΩÌrÕÌm]"Ω-¬›]M]ù--ç-]ΩÕ›Ω¬¬ç}]˝“ΩçÕç"çΩÇ˝Ì-ùM]-]Õ]››‚›]MÌ-=˝]“‚ ¢-	MÕç›ç--Ì3¢-Ω˝ÌΩ›ç-RˆFñuˆ∆ófU˜6V&6ÇÇ˜FW7Eˆ∆ófU˜6V&6Ç‚ ¢ê¢ñb˜VÊï˜7FFRñ‚≤'VÊWFÜ˜&ó¶VB"¬'V˜F"¬&áGGˆW'&˜""¬&ÊWGv˜&µˆW'&˜"'”†¢&WGW&‚Ä¢.)™˚àÚ	Ì›Ì-›Ìí∆ófR›˝Ìç¢›R-]›=≤]}=ΩÕ-"¬]}]-›ΩívV"◊6V&6Ç˜V‰í-≠mR›]MÌ-=˝]“‚ ¢-	ÌΩ}›ΩíuB›}"˝ÌMÌΩm]"Ì--¬‚	MÕç›ç--Ì3¢-Ω˝ÌΩ›ç-RˆFñuˆ∆ófU˜6V&6Ç‚ ¢ê¢&WGW&‚Ä¢.)™˚àÚ
+]ù}›R=MΩÌ¬˝ÌΩ=}ç-¬-]mçRM››ΩRçrç›-]›]-‚	ÌΩ}›ΩíuB›}"˝ÌMÌΩm]"Ì--¬‚ ¢-	˝Ì˝Ì=ù-R˝Ì--Ìç-¬}˝Ì≤MÕç›ç--Ì2MÌ-=˝›˝Ì-]≠˜FW7Eˆ∆ófU˜6V&6Ç‚ ¢ê††¶7ñÊ2FVb˜Ffñ«ïˆ∆ófU˜6V&6Öˆ6ˆÁFWáBáVW'ì¢7G"í”‚7G"¬ÊˆÊS†¢""$7W'&VÁBFfñ«í6V&6Çì¢&V&W"WFÜVÁFñ6Fñˆ‚«W27G'V7GW&VB7FGW2‚"" ¢ñbÊ˜BDdî≈ïÙïÙ¥Uì†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤'Ffñ«í%““≤'7FFR#¢&÷ó76ñÊuˆ∂Wí"¬&FWFñ¬#¢%Ddî≈ïÙïÙ¥Uíó2V◊Gí'–¢&WGW&‚ÊˆÊP¢˜&ñvñÊ≈˜VW'í“áVW'í˜"""íÁ7G&óÇê¢6V&6Ö˜VW'í“ˆ∆ófU˜6V&6Ö˜VW'ï˜vóFÖˆFFRÜ˜&ñvñÊ≈˜VW'íê¢ó5ˆÊWw2“ˆó5ˆÊWw5ˆñÁFVÁBÜ˜&ñvñÊ≈˜VW'íê¢Ü5˜&V∆FófUˆFFR“&ˆˆ¬Öı$TƒDïdUÙDDUı$RÁ6V&6ÇÜ˜&ñvñÊ≈˜VW'ííê¢ñ∆ˆB“∞¢'VW'í#¢6V&6Ö˜VW'í¿¢'6V&6ÖˆFWFÇ#¢&GfÊ6VB"ñbÜó5ˆÊWw2˜"Ü5˜&V∆FófUˆFFRíV«6R&&6ñ2"¿¢'F˜ñ2#¢&ÊWw2"ñbó5ˆÊWw2V«6R&vVÊW&¬"¿¢&ñÊ6«VFUˆÁ7vW"#¢f«6R¿¢&ñÊ6«VFU˜&uˆ6ˆÁFVÁB#¢f«6R¿¢&÷Ö˜&W7V«G2#¢ƒïdUı4T$4ÖÙ‰Uu5Ù‘Öı$U5T≈E2ñbó5ˆÊWw2V«6RR¿¢–¢ñbó5ˆÊWw2˜"Ü5˜&V∆FófUˆFFS†¢ñ∆ˆE≤'Fñ÷U˜&ÊvR%““ƒïdUı4T$4ÖıDÙDïıDî‘Uı$‰tRñbÜ5˜&V∆FófUˆFFRV«6RƒïdUı4T$4Öı$T4TÂEıDî‘Uı$‰tP¢ÜVFW'2“∞¢$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"µDdî≈ïÙïÙ¥Uó“"¿¢$6ˆÁFVÁB’GóR#¢&∆ñ6Fñˆ‚ˆß6ˆ‚"¿¢–¢G'ì†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC‘ƒïdUı4T$4ÖıDî‘TıUEı2¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢"“vóB6∆ñVÁBÁ˜7BÇ&áGG3¢ÚˆíÁFfñ«íÊ6ˆ“˜6V&6Ç"¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢ñb"Á7FGW5ˆ6ˆFRñ‚ÉC¬C2ì†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤'Ffñ«í%““≤'7FFR#¢'VÊWFÜ˜&ó¶VB"¬&FWFñ¬#¢b$ÖEE∑"Á7FGW5ˆ6ˆFW”¢∑"ÁFWáE≥£#C◊“'–¢∆ˆrÁv&ÊñÊrÇ%Ffñ«íWFÜ˜&ó¶Fñˆ‚fñ∆VBÖEEW3¢W2"¬"Á7FGW5ˆ6ˆFR¬"ÁFWáE≥£3“ê¢&WGW&‚ÊˆÊP¢ñb"Á7FGW5ˆ6ˆFR”“C#ì†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤'Ffñ«í%““≤'7FFR#¢'V˜F"¬&FWFñ¬#¢b$ÖEEC#ì¢∑"ÁFWáE≥£#C◊“'–¢∆ˆrÁv&ÊñÊrÇ%Ffñ«íV˜F˜&FR∆ñ÷óC¢W2"¬"ÁFWáE≥£3“ê¢&WGW&‚ÊˆÊP¢ñb"Á7FGW5ˆ6ˆFRÚÚ“#†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤'Ffñ«í%““≤'7FFR#¢&áGGˆW'&˜""¬&FWFñ¬#¢b$ÖEE∑"Á7FGW5ˆ6ˆFW”¢∑"ÁFWáE≥£#C◊“'–¢∆ˆrÁv&ÊñÊrÇ%Ffñ«íÖEEW3¢W2"¬"Á7FGW5ˆ6ˆFR¬"ÁFWáE≥£3“ê¢&WGW&‚ÊˆÊP¢ß2“"Êß6ˆ‚Çí˜"∑–¢&W7V«G2“ß2ÊvWBÇ'&W7V«G2"í˜"µ–¢'G2“µ–¢f˜"ñGÇ¬óFV“ñ‚VÁV÷W&FRá&W7V«G2¬ì†¢ñbÊ˜Bó6ñÁ7FÊ6RÜóFV“¬Fñ7Bì†¢6ˆÁFñÁVP¢FóF∆R“ÜóFV“ÊvWBÇ'FóF∆R"í˜"-	]r›}-›çÚ"íÁ7G&óÇê¢W&¬“ÜóFV“ÊvWBÇ'W&¬"í˜"""íÁ7G&óÇê¢6ˆÁFVÁB“ÜóFV“ÊvWBÇ&6ˆÁFVÁB"í˜"""íÁ7G&óÇê¢V&∆ó6ÜVB“óFV“ÊvWBÇ'V&∆ó6ÜVEˆFFR"í˜"óFV“ÊvWBÇ'V&∆ó6ÜVDFFR"í˜"óFV“ÊvWBÇ&FFR"í˜"-M-›R=≠}› ¢ñbW&¬˜"6ˆÁFVÁC†¢'G2ÊVÊBÄ¢b%∑∂ñGá’“∑FóF∆W’∆Ì	M-˝=Ωç≠mçÇ˝Ì›Ì-Ω]›çÛ¢∑V&∆ó6ÜVG’∆ÂU$√¢∑W&«’∆Ì
+M=Õ]›#¢∂6ˆÁFVÁE≥£◊“ ¢ê¢ñbÊ˜B'G3†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤'Ffñ«í%““≤'7FFR#¢&V◊Gí"¬&FWFñ¬#¢$ÖEE#¬&W7V«G2V◊Gí'–¢&WGW&‚ÊˆÊP¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤'Ffñ«í%““≤'7FFR#¢&ˆ≤"¬&FWFñ¬#¢b$ÖEE#¬&W7V«G3◊∂∆V‚á'G2ó“'–¢&WGW&‚%∆Â∆‚"Ê¶ˆñ‚á'G2ê¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤'Ffñ«í%““≤'7FFR#¢&ÊWGv˜&µˆW'&˜""¬&FWFñ¬#¢&W"ÜWÜ2ï≥£#C◊–¢∆ˆrÁv&ÊñÊrÇ%Ffñ«í∆ófR6V&6Çfñ∆VC¢W2"¬WÜ2ê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVb˜VÊïˆ∆ófU˜vV%˜6V&6ÇáW6W%˜FWáC¢7G"í”‚7G"¬ÊˆÊS†¢""$ˆffñ6ñ¬˜V‰í&W7ˆÁ6W2í≤Ü˜7FVBvV%˜6V&6ÇFˆˆ¬‚"" ¢ïˆ∂Wí“ÑıT‰ïÙïÙ¥Uí˜"""íÁ7G&óÇê¢ñbÊ˜Bïˆ∂Wì†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢&÷ó76ñÊuˆ∂Wí"¬&FWFñ¬#¢$ıT‰ïÙïÙ¥Uíó2V◊Gí'–¢&WGW&‚ÊˆÊP¢ñbïˆ∂WíÁ7F'G7vóFÇÇ'6≤÷˜"“"ì†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢&ñÊV∆ñvñ&∆Uˆ∂Wí"¬&FWFñ¬#¢$˜VÂ&˜WFW"∂Wí6ÊÊ˜B6∆¬íÊ˜VÊíÊ6ˆ“'–¢&WGW&‚ÊˆÊP¢ñbÊ˜BƒïdUı4T$4ÖÙT‰$ƒTC†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢&Fó6&∆VB"¬&FWFñ¬#¢$ƒïdUı4T$4ÖÙT‰$ƒTC”'–¢&WGW&‚ÊˆÊP¢7ó7FV’˜FWáB“Ä¢-
+-≤∆ófR›˝Ìç≠Ì-Ωí˝ÌÕÌù›ç¢-›=-ÇFV∆Vw&“›Ì-ÊWó&Ú‘&˜BuBR7GVFñÚ‚ ¢≤ˆ7W'&VÁEˆFFU˜7ó7FV’˜FWáBÇí≤" ¢-	Ì--]}í˝‚›=≠Ç¬≠-≠‚Ç˝‚M]Ω2‚	ç˝ÌΩÕ}=í-]›˝Ìç¢MΩÚ-]mçRM››ΩR‚ ¢-	›R›}Ω-í-ΩRÌΩ-çÚ]=ÌM›˝ç›çÕÇ‚	"≠Ì›mRMíç-Ì}›ç≠Ç‚ ¢ê¢ñ∆ˆB“∞¢&÷ˆFV¬#¢ıT‰ïıtT%ı4T$4ÖÙ‘ÙDT¬¿¢&ñÁWB#¢∞¢≤'&ˆ∆R#¢'7ó7FV“"¬&6ˆÁFVÁB#¢7ó7FV’˜FWáG“¿¢≤'&ˆ∆R#¢'W6W""¬&6ˆÁFVÁB#¢ˆ∆ófU˜6V&6Ö˜VW'ï˜vóFÖˆFFRáW6W%˜FWáBó“¿¢“¿¢'Fˆˆ«2#¢∑≤'GóR#¢'vV%˜6V&6Ç"¬'6V&6Öˆ6ˆÁFWáE˜6ó¶R#¢&∆˜r'’“¿¢'Fˆˆ≈ˆ6Üˆñ6R#¢&WFÚ"¿¢–¢ÜVFW'2“≤$WFÜ˜&ó¶Fñˆ‚#¢b$&V&W"∂ïˆ∂Wó“"¬$6ˆÁFVÁB’GóR#¢&∆ñ6Fñˆ‚ˆß6ˆ‚'–¢G'ì†¢7ñÊ2vóFÇáGGÇ‰7ñÊ46∆ñVÁBáFñ÷V˜WC÷÷ÇÉ3„¬ƒïdUı4T$4ÖıDî‘TıUEı2í¬fˆ∆∆˜u˜&VFó&V7G3’G'VRí26∆ñVÁC†¢"“vóB6∆ñVÁBÁ˜7BÇ&áGG3¢ÚˆíÊ˜VÊíÊ6ˆ“˜c˜&W7ˆÁ6W2"¬ÜVFW'3÷ÜVFW'2¬ß6ˆ„◊ñ∆ˆBê¢ñb"Á7FGW5ˆ6ˆFRñ‚ÉC¬C2ì†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢'VÊWFÜ˜&ó¶VB"¬&FWFñ¬#¢b$ÖEE∑"Á7FGW5ˆ6ˆFW”¢∑"ÁFWáE≥£#C◊“'–¢∆ˆrÁv&ÊñÊrÇ$˜V‰í∆ófR6V&6ÇWFÇÖEEW3¢W2"¬"Á7FGW5ˆ6ˆFR¬"ÁFWáE≥£3“ê¢&WGW&‚ÊˆÊP¢ñb"Á7FGW5ˆ6ˆFR”“C#ì†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢'V˜F"¬&FWFñ¬#¢b$ÖEEC#ì¢∑"ÁFWáE≥£#C◊“'–¢∆ˆrÁv&ÊñÊrÇ$˜V‰í∆ófR6V&6ÇV˜F¢W2"¬"ÁFWáE≥£3“ê¢&WGW&‚ÊˆÊP¢ñb"Á7FGW5ˆ6ˆFRÚÚ“#†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢&áGGˆW'&˜""¬&FWFñ¬#¢b$ÖEE∑"Á7FGW5ˆ6ˆFW”¢∑"ÁFWáE≥£#C◊“'–¢∆ˆrÁv&ÊñÊrÇ$˜V‰í∆ófR6V&6ÇÖEEW3¢W2"¬"Á7FGW5ˆ6ˆFR¬"ÁFWáE≥£3“ê¢&WGW&‚ÊˆÊP¢GáB“ˆWáG&7Eˆ˜VÊï˜&W7ˆÁ6U˜FWáBá"Êß6ˆ‚Çíê¢ñbÊ˜BGáC†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢&V◊Gí"¬&FWFñ¬#¢$ÖEE#¬˜WGWBFWáBV◊Gí'–¢&WGW&‚ÊˆÊP¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢&ˆ≤"¬&FWFñ¬#¢b$ÖEE#¬6Ü'3◊∂∆V‚áGáBó“'–¢&WGW&‚GáE≥£3ì–¢WÜ6WBWÜ6WFñˆ‚2WÜ3†¢ÙƒïdUı4T$4ÖÙƒ5Eı5DEU5≤&˜VÊí%““≤'7FFR#¢&ÊWGv˜&µˆW'&˜""¬&FWFñ¬#¢&W"ÜWÜ2ï≥£#C◊–¢∆ˆrÁv&ÊñÊrÇ$˜V‰í∆ófR6V&6Çfñ∆VC¢W2"¬WÜ2ê¢&WGW&‚ÊˆÊP††¶7ñÊ2FVb6÷EˆFñuˆ∆ófU˜6V&6ÇáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢ˆffñ6ñ≈ˆ˜VÊí“ˆˆffñ6ñ≈ˆ˜VÊï˜vV%ˆ∂Wïˆfñ∆&∆RÇê¢∆ñÊW2“∞¢b/	¯…∆ófR6V&6ÇFñvÊ˜7Fñ2ÚµD4ÖıdU%4îÙÁ“"¿¢b&VÊ&∆VC◊¥ƒïdUı4T$4ÖÙT‰$ƒTG“"¿¢b'Fñ÷W¶ˆÊS◊¥ıDî‘U§Ù‰W“"¿¢b'Fñ÷V˜WE˜3◊¥ƒïdUı4T$4ÖıDî‘TıUEı7“"¿¢b'Ffñ«ïˆ∂Wì◊µˆ÷6∂VEˆ∂Wï˜7FFRÖDdî≈ïÙïÙ¥Uíó“"¿¢b&˜VÊïˆ∂Wì◊µˆ÷6∂VEˆ∂Wï˜7FFRÑıT‰ïÙïÙ¥Uíó“"¿¢b&˜VÊïˆˆffñ6ñ≈˜vV%ˆV∆ñvñ&∆S◊∂ˆffñ6ñ≈ˆ˜VÊó“"¿¢b&˜VÊï˜vV%ˆ÷ˆFV√◊¥ıT‰ïıtT%ı4T$4ÖÙ‘ÙDT«“"¿¢b'Ffñ«ïˆ∆7C◊µÙƒïdUı4T$4ÖÙƒ5Eı5DEU2ÊvWBÇwFfñ«író“"¿¢b&˜VÊïˆ∆7C◊µÙƒïdUı4T$4ÖÙƒ5Eı5DEU2ÊvWBÇv˜VÊíró“"¿¢-	˝Ì-]≠]-ÇÇ≠ΩÌ}]ì¢˜FW7Eˆ∆ófU˜6V&6Ç"¿¢–¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2íê††¶7ñÊ2FVb6÷E˜FW7Eˆ∆ófU˜6V&6ÇáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ/	¯…	˝Ì-]˝‚Ffñ«íÇ]}]-›ΩívV"◊6V&6Ç˜V‰û(
+b"ê¢VW'í“-	≠≠çRÌMçmçΩÕ›ΩR›Ì-Ì-Ç˜V‰íÌ˝=Ωç≠Ì-›≤}˝ÌΩ]M›çRrM›]ìÚ ¢Ffñ«ïˆ7GÇ“vóB˜Ffñ«ïˆ∆ófU˜6V&6Öˆ6ˆÁFWáBáVW'íê¢Ffñ«ï˜7FGW2“ÙƒïdUı4T$4ÖÙƒ5Eı5DEU2ÊvWBÇ'Ffñ«í"¬∑“ê¢˜VÊïˆÁ7vW"“ÊˆÊP¢2FW7B˜V‰íf∆∆&6≤ñÊFWVÊFVÁF«íˆÊ«ívÜV‚óBó27GV∆«í6ˆÊfñwW&VB‡¢ñbˆˆffñ6ñ≈ˆ˜VÊï˜vV%ˆ∂Wïˆfñ∆&∆RÇì†¢˜VÊïˆÁ7vW"“vóB˜VÊïˆ∆ófU˜vV%˜6V&6ÇÇ-	›}Ì-ÇÌM›2≠-=ΩÕ›=‚ÌMçmçΩÕ›=‚›Ì-Ì-¬˜V‰í}˝ÌΩ]M›çRrM›]íÇç-Ì}›ç¢‚"ê¢˜VÊï˜7FGW2“ÙƒïdUı4T$4ÖÙƒ5Eı5DEU2ÊvWBÇ&˜VÊí"¬∑“ê¢∆ñÊW2“∞¢-
+]}=ΩÕ-"˝Ì-]≠Ç∆ófR›˝Ìç≠¢"¿¢b%Ffñ«ì¢∑Ffñ«ï˜7FGW2ÊvWBÇw7FFRró“(	B∑Ffñ«ï˜7FGW2ÊvWBÇvFWFñ¬r¬rró“"¿¢b$˜V‰ívV"f∆∆&6≥¢∂˜VÊï˜7FGW2ÊvWBÇw7FFRró“(	B∂˜VÊï˜7FGW2ÊvWBÇvFWFñ¬r¬rró“"¿¢–¢ñbFfñ«ïˆ7GÉ†¢∆ñÊW2ÊVÊBÇ.)»R	Ì›Ì-›Ìí∆ófR›˝Ìç¢Ffñ«íÌ-]"‚"ê¢V∆ñb˜VÊïˆÁ7vW#†¢∆ñÊW2ÊVÊBÇ.)»R
+]}]-›Ωí∆ófR›˝Ìç¢˜V‰íÌ-]#≤Ffñ«í-]=]"˝Ì-]≠Ç‚"ê¢V«6S†¢∆ñÊW2ÊVÊBÇ.)ÿ¬	›ÇÌMç“∆ófR›˝Ì-ùM]›R˝Ìç≤-]"‚	˝Ì-]Õ-R≠ΩÌ}Ç˝ΩçÕç-≤"&VÊFW"‚"ê¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÇ%∆‚"Ê¶ˆñ‚Ü∆ñÊW2ï≥£3ì“ê††¶FVb˜&W6VÁFFñˆÂ˜WFFU˜Fˆ∂V‚áWFFS¢WFFRí”‚7G#†¢""%7F&∆RFˆ∂V‚&WfVÁFñÊrˆÊRFV∆Vw&“WFFRg&ˆ“&VñÊr&˜WFVBGvñ6R‚"" ¢WFFUˆñB“vWFGG"áWFFR¬'WFFUˆñB"¬ÊˆÊRê¢÷W76vR“vWFGG"áWFFR¬&VffV7FófUˆ÷W76vR"¬ÊˆÊRê¢÷W76vUˆñB“vWFGG"Ü÷W76vR¬&÷W76vUˆñB"¬ÊˆÊRê¢6ÜB“vWFGG"áWFFR¬&VffV7FófUˆ6ÜB"¬ÊˆÊRê¢6ÜEˆñB“vWFGG"Ü6ÜB¬&ñB"¬ÊˆÊRê¢&WGW&‚b'∑WFFUˆñG”ß∂6ÜEˆñG”ß∂÷W76vUˆñG“ ††¶7ñÊ2FVbˆÂ˜&W6VÁFFñˆÂ˜FWáE˜&ñ˜&óGíáWFFS¢WFFR¬6ˆÁFWáC¢6ˆÁFWáEGóW2‰DTdT≈EıEïRì†¢""$Ü&B◊7F˜∆¬vVÊW&ñ2FWáBÜÊF∆W'2vÜñ∆R&W6VÁFFñˆ‚7GVFñÚ˜vÁ2FÜR6ÜB‚"" ¢ñbÊ˜BWFFRÊVffV7FófU˜W6W"˜"Ê˜BWFFRÊVffV7FófUˆ6ÜB˜"Ê˜BWFFRÊVffV7FófUˆ÷W76vS†¢&WGW&‡¢FWáB“ÜvWFGG"áWFFRÊVffV7FófUˆ÷W76vR¬'FWáB"¬""í˜"""íÁ7G&óÇê¢ñbÊ˜BFWáC†¢&WGW&‡¢Fˆ∂V‚“˜&W6VÁFFñˆÂ˜WFFU˜Fˆ∂V‚áWFFRê¢ñb6ˆÁFWáBÊ6ÜEˆFFÊvWBÇ%˜&W6VÁFFñˆÂˆ∆7E˜WFFU˜Fˆ∂V‚"í”“Fˆ∂V„†¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ ¢7GVFñÚ“˜&W6VÁFFñˆÂ˜7GVFñıˆvWBÇê¢&ˆ¶V7B“7GVFñÚÂˆ7FófU˜&ˆ¶V7BáWFFRÊVffV7FófU˜W6W"ÊñB¬WFFRÊVffV7FófUˆ6ÜBÊñBê¢ñbÊ˜B&ˆ¶V7C†¢&WGW&‡¢2÷&≤&Vf˜&RíÙÚ6Ú6V6ˆÊBÜÊF∆W"ñ‚FÜó2&ˆ6W726ÊÊ˜B&WVBFÜR&W«í‡¢6ˆÁFWáBÊ6ÜEˆFF≤%˜&W6VÁFFñˆÂˆ∆7E˜WFFU˜Fˆ∂V‚%““Fˆ∂V‡¢ÜÊF∆VB“vóB7GVFñÚÊÜÊF∆U˜FWáBáWFFR¬6ˆÁFWáB¬FWáBê¢ñbÊ˜BÜÊF∆VC†¢vóBWFFRÊVffV7FófUˆ÷W76vRÁ&W«ï˜FWáBÄ¢-	˝Ì]≠"˝]}]›-mçÇ≠-ç-]“‚	››-Ì¬›-˝Rç˝ÌΩÕ}=ù-R≠›Ì˝≠ÇÕ-]çΩÇ›mÕç-R*Ω	˝ÌMÌΩmç-Ã+≤‚ ¢ê¢&ó6R∆ñ6Fñˆ‰ÜÊF∆W%7F˜ ††¢2)H)H)H)H)H)H)H)H)H	-˝ÌÕÌ=-]ΩÕ›ÌS¢-}˝-¬˝]-=‚Ì≠˝-Ω]››=‚M=›≠mç‚˝‚çÕ]›Ç)H)H)H)H)H)H)H)H)H ¶FVb˜ñ6µˆfó'7EˆFVfñÊVBÇ¶Ê÷W2ì†¢f˜"‚ñ‚Ê÷W3†¢f‚“v∆ˆ&«2ÇíÊvWBÜ‚ê¢ñb6∆∆&∆RÜf‚ì†¢&WGW&‚f‡¢&WGW&‚ÊˆÊP†¢2)H)H)H)H)H)H)H)H)HFV∆Vw&“&ˆfñ∆R6WGW)H)H)H)H)H)H)H)H)H ¶7ñÊ2FVb˜˜7EˆñÊóEˆ&˜E˜&ˆfñ∆RÜì†¢""-	Ì›Ì-Ω˝]"˝ÌMçΩ¬Çç-]Õ›=‚≠›Ì˝≠2Õ]›‚FV∆Vw&“˝ÌΩR}˝=≠‚"" ¢ñbUDıı4UEÙ$ıEı$ÙdîƒS†¢G'ì†¢ñb$ıEıT$ƒî5Ù‰‘S†¢vóBÊ&˜BÁ6WEˆ◊ïˆÊ÷RÜÊ÷S‘$ıEıT$ƒî5Ù‰‘Rê¢ñb$ıEı4Ñı%EÙDU45$ïDîÙ„†¢vóBÊ&˜BÁ6WEˆ◊ï˜6Ü˜'EˆFW67&óFñˆ‚á6Ü˜'EˆFW67&óFñˆ„‘$ıEı4Ñı%EÙDU45$ïDîÙ‚ê¢ñb$ıEÙDU45$ïDîÙ„†¢vóBÊ&˜BÁ6WEˆ◊ïˆFW67&óFñˆ‚ÜFW67&óFñˆ„‘$ıEÙDU45$ïDîÙ‚ê¢∆ˆrÊñÊfÚÇ%FV∆Vw&“&˜B&ˆfñ∆RWFFVC¢W2"¬$ıEıT$ƒî5Ù‰‘Rê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ%FV∆Vw&“&˜B&ˆfñ∆RWFFR6∂óVC¢W2"¬Rê†¢ñbUDıı4UEÙ$ıEÙ‘TÂS†¢G'ì†¢vóBÊ&˜BÁ6WEˆ6ÜEˆ÷VÁUˆ'WGFˆ‚Ä¢÷VÁUˆ'WGFˆ„‘÷VÁT'WGFˆÂvV$Ä¢FWáC‘$ıEÙ‘TÂUıDUÖB¿¢vV%ˆ’vV$ñÊfÚáW&√’D$îdeıU$¬í¿¢ê¢ê¢∆ˆrÊñÊfÚÇ%FV∆Vw&“÷VÁR'WGFˆ‚WFFVC¢W2”‚W2"¬$ıEÙ‘TÂUıDUÖB¬D$îdeıU$¬ê¢WÜ6WBWÜ6WFñˆ‚2S†¢∆ˆrÁv&ÊñÊrÇ%FV∆Vw&“÷VÁR'WGFˆ‚WFFR6∂óVC¢W2"¬Rê††¢2)H)H)H)H)H)H)H)H)H
+]=ç-mçÚ]]›MΩ]Ì"Ç}˝=¢)H)H)H)H)H)H)H)H)H ¶FVb'Vñ∆Eˆ∆ñ6Fñˆ‚Çí”‚$∆ñ6Fñˆ‚#†¢ñbÊ˜B$ıEıDÙ¥T„†¢&ó6R'VÁFñ÷TW'&˜"Ç-	›R}M“$ıEıDÙ¥T‚"˝]]Õ]››ΩRÌ≠=m]›çÚ‚"ê†¢'Vñ∆FW"“∆ñ6Fñˆ‰'Vñ∆FW"ÇíÁFˆ∂V‚Ñ$ıEıDÙ¥T‚ê¢ñbUDıı4UEÙ$ıEı$ÙdîƒR˜"UDıı4UEÙ$ıEÙ‘TÂS†¢'Vñ∆FW"“'Vñ∆FW"Á˜7EˆñÊóBÖ˜˜7EˆñÊóEˆ&˜E˜&ˆfñ∆Rê¢“'Vñ∆FW"Ê'Vñ∆BÇê†¢2	≠ÌÕ›M∞¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'7F'B"¬6÷E˜7F'Bíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&ÜV«"¬6÷EˆÜV«íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&WÜ◊∆W2"¬6÷EˆWÜ◊∆W2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'fW'6ñˆ‚"¬6÷E˜fW'6ñˆ‚íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&VÊvñÊW2"¬6÷EˆVÊvñÊW2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'∆Á2"¬6÷E˜∆Á2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&&∆Ê6R"¬6÷Eˆ&∆Ê6Ríê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'&ñ6W2"¬6÷E˜&ñ6W2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'6WE˜vV∆6ˆ÷R"¬6÷E˜6WE˜vV∆6ˆ÷Ríê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'6Ü˜u˜vV∆6ˆ÷R"¬6÷E˜6Ü˜u˜vV∆6ˆ÷Ríê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñuˆ∆ñ÷óG2"¬6÷EˆFñuˆ∆ñ÷óG2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñuˆ66W72"¬6÷EˆFñuˆ66W72íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñu˜7GB"¬6÷EˆFñu˜7GBíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñuˆñ÷vW2"¬6÷EˆFñuˆñ÷vW2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñu˜fñFVÚ"¬6÷EˆFñu˜fñFVÚíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñu˜'VÁví"¬6÷EˆFñu˜'VÁvííê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñu˜ñˆˆ∂76"¬6÷EˆFñu˜ñˆˆ∂76íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'&˜fñFW%˜7FGW2"¬6÷E˜&˜fñFW%˜7FGW2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñuˆ&r"¬6÷EˆFñuˆ&ríê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñuˆf6R"¬6÷EˆFñuˆf6Ríê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñu˜7VÊÚ"¬6÷EˆFñu˜7VÊÚíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&ñ÷r"¬6÷Eˆñ÷ríê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&÷¢"¬6÷Eˆ÷ñF¶˜W&ÊWííê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&÷ñF¶˜W&ÊWí"¬6÷Eˆ÷ñF¶˜W&ÊWííê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'&W6VÁFFñˆ‚"¬6÷E˜&W6VÁFFñˆ‚íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&6F∆ˆr"¬6÷Eˆ6F∆ˆríê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñu˜&W6VÁFFñˆ‚"¬6÷EˆFñu˜&W6VÁFFñˆ‚íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&Fñuˆ∆ófU˜6V&6Ç"¬6÷EˆFñuˆ∆ófU˜6V&6Çíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'FW7Eˆ∆ófU˜6V&6Ç"¬6÷E˜FW7Eˆ∆ófU˜6V&6Çíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&6ÜG2"¬6÷Eˆ6ÜG2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&ÊWv6ÜB"¬6÷EˆÊWv6ÜBíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&◊W6ñ2"¬6÷Eˆ◊W6ñ2íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'fˆñ6Uˆˆ‚"¬6÷E˜fˆñ6Uˆˆ‚íê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç'fˆñ6Uˆˆfb"¬6÷E˜fˆñ6Uˆˆfbíê¢ÊFEˆÜÊF∆W"Ñ6ˆ÷÷ÊDÜÊF∆W"Ç&÷VFñ6ñÊR"¬6÷Eˆ÷ˆFUˆ÷VFñ6ñÊRíê†¢2	˝Ω-]mÄ¢ÊFEˆÜÊF∆W"Ö&T6ÜV6∂˜WEVW'îÜÊF∆W"ÜˆÂ˜&V6ÜV6∂˜WBíê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â5T44U54eT≈ıî‘TÂB¬ˆÂ˜7V66W76gV≈˜ñ÷VÁBíê†¢2„„‚D4Ç5D%B(	BÜÊF∆W'2vó&ñÊrÖvV$≤6∆∆&6∑2≤÷VFñ≤FWáBí„„‡†¢2	M››ΩRçrÕç›Ç›˝çΩÌm]›çÚÖvV$ê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â7FGW5WFFRÂtT%ÙÙDD¬ˆÂ˜vV&ˆFFíê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ñbÜ6GG"Üfñ«FW'2¬%tT%ÙÙDD"ì†¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2ÂtT%ÙÙDD¬ˆÂ˜vV&ˆFFíê†¢2””“	˝	
+-
+rC¢	˝Ì˝MÌ¢6∆∆&6≤›]]›MΩ]Ì"ç=}≠çR(i"ÌùçRí””–¢2í	˝ÌM˝ç≠˝Ì˝Ω-∞¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÜˆÂˆ6%˜∆Á2¬GFW&„◊"%‚ÉÛß∆„ß«ì¢íG≈‚ÉÛß∆„ß«ì¢í‚≤"íê†¢2"í	›Ì-ΩR]mçÕ≤˝˝ÌMÕ]›„¢÷ˆFS¢¢Ç7C¢¢ç
+=}˝
+Ì-˝
+}-Ω]}]›çÚ˝	Õ]Mçmç›ê¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÜˆÂˆ÷ˆFUˆ6"¬GFW&„◊"%‚ÉÛ¶÷ˆFSß∆7C¢í"í¬w&˜W”ê†¢2◊W6ñ2◊fñFVÚG&gB&˜f√¢6ˆÁ7V÷VBˆÊ6R&Vf˜&RFÜRvVÊW&ñ26∆∆&6≤&˜WFW"‡¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÖˆˆÂˆ◊W6ñ5˜fñFVıˆG&gEˆ6∆∆&6≤¬GFW&„◊"%Ê◊c¢ÉÛ¶&˜fW∆Vv÷VÁG«&Ww&óFW∆WF˜«fˆñ6W∆GW#∆GW#3∆GW#c∆GW#ìì•≥”ñ÷e◊≥'“B"í¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÖˆˆÂ˜fˆ6≈ˆ'Fñf7Eˆ6∆∆&6≤¬GFW&„◊"%Ê◊ffñ∆S¢ÉÛ¶VFñ˜«W6W«fñFV˜∆&˜fVVFñ˜«&VvVÊVFñ˜∆VFóFVFñÚì•≥”ñ÷e◊≥'“B"í¬w&˜W”ê†¢2&"í
+-ΩR66Üˆˆ√¢˜v˜&≥¢6∆∆&6∑2¬]ΩÇ-≠çR≠›Ì˝≠Ç]ù=MR›-‚ç˝ÌΩÕ}=Ì-¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÜˆÂˆ6%ˆ÷ˆFR¬GFW&„◊"%‚ÉÛß66Üˆˆ√ß«v˜&≥¢í"í¬w&˜W”ê†¢22í	Ω-ΩR}-Ω]}]›çÚçΩÌΩRgV„¢‚‚‚ê¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÜˆÂˆ6%ˆgV‚¬GFW&„◊"%ÊgV„•∂◊•ı“≤B"íê†¢26"í	˝ÌMÕ]›‚7VÊÛ¢-ÌÌM›Ωí}˝ÌÇ˝]]-∞¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÜˆÂˆ6%˜7VÊÚ¬GFW&„◊"%Á7VÊÛ¢"í¬w&˜W”ê†¢2Bí	Ì-ΩÕ›Ìí6F6Ç÷∆¬áVFóB˜F˜WˆVÊvñÊRˆ'WíÇ"ÌÚ‚ê¢2
+}Õ]ù]¬"˝çÌç-]-›Ìí==˝˝R¬}-Ì≤≠ÌΩ›≠ÇÌ-Ω-Ωç¬}0¢ÊFEˆÜÊF∆W"Ñ6∆∆&6µVW'îÜÊF∆W"ÜˆÂˆ6"í¬w&˜W”ê†¢27FófRí◊fñFVˆ6∆ó7FFR˜vÁ2FWáB&Vf˜&R&W6VÁFFñˆ‚ˆ6&ñ∆óGíˆvVÊW&ñ2÷VFñ&˜WFñÊr‡¢ÊFEˆÜÊF∆W"Ä¢÷W76vTÜÊF∆W"Üfñ«FW'2ÂDUÖBbÊfñ«FW'2‰4Ù‘‘‰B¬ˆÂˆ◊W6ñ5˜fñFVı˜FWáE˜&ñ˜&óGíí¿¢w&˜W“”"¿¢ê†¢2&W6VÁFFñˆ‚7GVFñÚ˜vÁ27FófR&W6VÁFFñˆ‚ˆ6F∆ˆr6ÜG2&Vf˜&RWfW'í˜FÜW"FWáBÜÊF∆W"‡¢ÊFEˆÜÊF∆W"Ä¢÷W76vTÜÊF∆W"Üfñ«FW'2ÂDUÖBbÊfñ«FW'2‰4Ù‘‘‰B¬ˆÂ˜&W6VÁFFñˆÂ˜FWáE˜&ñ˜&óGíí¿¢w&˜W“”¿¢ê†¢2	=ÌΩÌ˝=Mç‚(	BÌ-›Ìç¬¢Õ]Mç==˝˝RççM"›ÕçRÌù]=‚-]≠-Ì-Ì=‚]]›MΩ]ê¢fˆñ6Uˆf‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ&ÜÊF∆U˜fˆñ6R"¬&ˆÂ˜fˆñ6R"¬'fˆñ6UˆÜÊF∆W""ê¢ñbfˆñ6Uˆf„†¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2ÂdÙî4R¬fñ«FW'2‰TDîÚ¬fˆñ6Uˆf‚í¬w&˜W”ê†¢2
+-]≠-Ì-ΩR≠›Ì˝≠Ç˝˝ΩΩ≠ÇçÌ-ΩÕ›ΩRí(	B
+}	ç
+
+-	‚]rM=Ω]ê¢ñ◊˜'B&P†¢2
+-Ì=çR˝--]›≥¢ÌM›‚›}-›çR“ÌMç“]]›MΩ]ç›ÕÌM}ÇMÌ˝=≠]¬¬Ωçç›çR˝Ì]Ω≤(	B-ÌmRê¢%DÂÙT‰tî‰U2“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛØ	˙z«2¢ì˝	M-çm≠Ö«2¢B"ê¢%DÂÙ$ƒ‰4R“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛØ	˘+7œ	˙{‚ìı«2≠	Ω›«2¢B"ê¢%DÂıƒÂ2“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛÆ*Ÿ«2¢ì˝	˝ÌM˝ç≠ÉÛ•«2•º+~(
+%’«2≠	˝ÌÕÌù¬ìı«2¢B"ê¢%DÂı5ETEí“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛØ	¯È5«2¢ì˝
+=uΩ]›«2¢B"ê¢%DÂıtı$≤“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛØ	˘+≈«2¢ìÚÉÛ≠
+Ì-ÉÛ•«2¢ı«2≠	ç}›]ì˜Õ	ç}›]ï«2¢B"ê¢%DÂÙeT‚“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛØ	˘JU«2¢ì˝
+}-Ω]}]›çı«2¢B"ê¢%DÂÙ‘TB“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛØ	˙õßŒ)©^˚àÚìı«2≠	Õ]Mçmç›«2¢B"ê¢%DÂÙ4ÑE2“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛØ	˘*≈«2¢ì˝	ÕÌÇ}-µ«2¢B"¬&R‰íê¢%DÂÙ‰Ut4ÑB“&RÊ6ˆ◊ñ∆Rá"%Â«2¢ÉÛÆ)ÈU«2¢ì˝	›Ì-Ωí}%«2¢B"¬&R‰íê†¢2	≠›Ì˝≠Ç"˝çÌç-]-›Ìí==˝˝RÉí¬}-Ì≤Ì›Ç-Ω-ΩÇ›ÕçRΩÌΩRÌùçRÌÌ-}ç≠Ì ¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂÙT‰tî‰U2í¬ˆÂˆ'FÂˆVÊvñÊW2í¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂÙ$ƒ‰4Rí¬ˆÂˆ'FÂˆ&∆Ê6Rí¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂıƒÂ2í¬ˆÂˆ'FÂ˜∆Á2í¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂı5ETEíí¬ˆÂˆ'FÂ˜7GVGíí¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂıtı$≤í¬ˆÂˆ'FÂ˜v˜&≤í¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂÙeT‚í¬ˆÂˆ'FÂˆgV‚í¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂÙ‘TBí¬ˆÂˆ'FÂˆ÷VFñ6ñÊRí¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂÙ4ÑE2í¬6÷Eˆ6ÜG2í¬w&˜W”ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÑ%DÂÙ‰Ut4ÑBí¬6÷EˆÊWv6ÜBí¬w&˜W”ê†¢2vVÊW&ñ2Ü˜FÚ◊&Wfóf¬&VvWÇñÁFW&6WF˜"&V÷˜fVC¢Wá∆ñ6óB&Wfóf¬6ˆ÷÷ÊG2&R&˜WFVBˆÊ«í'íˆÂ˜FWáBÂ∆‚2)ÈR	˝Ì}ç-ç-›Ωí--‚›Ì--]"›*Ω=Õ]]ç¬Ωé(
+l+≤(	BM‚Ìù]=‚-]≠-çÌ-M]ΩÕ›Ú==˝˝¬›çmR≠›Ì˝Ì¢ê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2Â&VvWÇÖÙ45ıEDU$‚í¬ˆÂˆ6&ñ∆óFñW5˜í¬w&˜W”ê†¢2	Õ]MççMÌ-‚˝MÌ≠Ç˝-çM]‚˝=çBí(	B-ÌmR˝]]BÌùç¬-]≠-Ì¿¢Ü˜Fıˆf‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ&ÜÊF∆U˜Ü˜FÚ"¬&ˆÂ˜Ü˜FÚ"¬'Ü˜FıˆÜÊF∆W""¬&ÜÊF∆Uˆñ÷vUˆ÷W76vR"ê¢ñbÜ˜Fıˆf„†¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2ÂÑıDÚ¬Ü˜Fıˆf‚í¬w&˜W”ê†¢Fˆ5ˆf‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ&ÜÊF∆UˆFˆ2"¬&ˆÂˆFˆ2"¬&ˆÂˆFˆ7V÷VÁB"¬&ÜÊF∆UˆFˆ7V÷VÁB"¬&Fˆ5ˆÜÊF∆W""ê¢ñbFˆ5ˆf„†¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2‰Fˆ7V÷VÁB‰ƒ¬¬Fˆ5ˆf‚í¬w&˜W”ê†¢fñFVıˆf‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ&ÜÊF∆U˜fñFVÚ"¬&ˆÂ˜fñFVÚ"¬'fñFVıˆÜÊF∆W""ê¢ñbfñFVıˆf„†¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2ÂdîDTÚ¬fñFVıˆf‚í¬w&˜W”ê†¢vñeˆf‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ&ÜÊF∆Uˆvñb"¬&ˆÂˆvñb"¬&Êñ÷FñˆÂˆÜÊF∆W""ê¢ñbvñeˆf„†¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2‰‰î‘DîÙ‚¬vñeˆf‚í¬w&˜W”ê†¢2„„‚D4ÇT‰B√√¿†¢2	Ìùçí-]≠"(	B
+		Õ
+Ω	í˝ÌΩ]M›çíç›çmR-]R}-›ΩR≠]ùÌ"ê¢FWáEˆf‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ&ÜÊF∆U˜FWáB"¬&ˆÂ˜FWáB"¬'FWáEˆÜÊF∆W""¬&FVfV«E˜FWáEˆÜÊF∆W""ê¢ñbFWáEˆf„†¢'FÂˆfñ«FW'2“Üfñ«FW'2Â&VvWÇÑ%DÂÙT‰tî‰U2í¬fñ«FW'2Â&VvWÇÑ%DÂÙ$ƒ‰4Rí¿¢fñ«FW'2Â&VvWÇÑ%DÂıƒÂ2í¬fñ«FW'2Â&VvWÇÑ%DÂı5ETEíí¿¢fñ«FW'2Â&VvWÇÑ%DÂıtı$≤í¬fñ«FW'2Â&VvWÇÑ%DÂÙeT‚í¿¢fñ«FW'2Â&VvWÇÑ%DÂÙ‘TBí¬fñ«FW'2Â&VvWÇÑ%DÂÙ4ÑE2í¿¢fñ«FW'2Â&VvWÇÑ%DÂÙ‰Ut4ÑBíê¢ÊFEˆÜÊF∆W"Ñ÷W76vTÜÊF∆W"Üfñ«FW'2ÂDUÖBbÊfñ«FW'2‰4Ù‘‘‰BbÊ'FÂˆfñ«FW'2¬FWáEˆf‚í¬w&˜W”"ê†¢2	Ìçç≠Ä¢W'%ˆf‚“˜ñ6µˆfó'7EˆFVfñÊVBÇ&ˆÂˆW'&˜""¬&ÜÊF∆UˆW'&˜""ê¢ñbW'%ˆf„†¢ÊFEˆW'&˜%ˆÜÊF∆W"ÜW'%ˆf‚ê†¢&WGW&‚ ††¢2””“÷ñ‚Çí]}Ì˝›Ìíç›çmçΩç}mç]í		Bç]rç}Õ]›]›çí˝‚=-Çí””–¶FVb÷ñ‚Çì†¢∆ˆrÊñÊfÚÇ%7F'FñÊr&˜BF6ÇfW'6ñˆ„¢W2"¬D4ÖıdU%4îÙ‚ê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢F%ˆñÊóBÇê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢F%ˆñÊóE˜W6vRÇê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆ6ÜEˆ÷V÷˜'ïˆñÊóBÇê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢ˆF%ˆñÊóE˜&Vg2Çê†¢“'Vñ∆Eˆ∆ñ6Fñˆ‚Çê†¢ñbU4UıtT$ÑÙÙ≥†¢ˆñÁ7F∆≈˜vV&ˆ6ÜV6∂˜WEˆ'&ñFvRÜê¢∆ˆrÊñÊfÚÇ/	˘®tT$ÑÙÙ≤÷ˆFR‚V&∆ñ2U$√¢W2FÉ¢W2˜'C¢W2"¬T$ƒî5ıU$¬¬tT$ÑÙÙµıDÇ¬ı%Bê¢Á'VÂ˜vV&Üˆˆ≤Ä¢∆ó7FV„“#„„„"¿¢˜'C’ı%B¿¢W&≈˜FÉ’tT$ÑÙÙµıDÇÊ«7G&óÇ"Ú"í¿¢vV&Üˆˆµ˜W&√÷b'µT$ƒî5ıU$¬Á'7G&óÇrÚró◊µtT$ÑÙÙµıDá“"¿¢6V7&WE˜Fˆ∂V„“ÖtT$ÑÙÙµı4T5$UB˜"ÊˆÊRí¿¢∆∆˜vVE˜WFFW3’WFFR‰ƒ≈ıEïU2¿¢ê¢V«6S†¢∆ˆrÊñÊfÚÇ/	˘®Ùƒƒî‰r÷ˆFR‚"ê¢vóFÇ6ˆÁFWáF∆ñ"Á7W&W72ÑWÜ6WFñˆ‚ì†¢7ñÊ6ñÚÊvWEˆWfVÁEˆ∆ˆ˜ÇíÁ'VÂ˜VÁFñ≈ˆ6ˆ◊∆WFRÄ¢Ê&˜BÊFV∆WFU˜vV&Üˆˆ≤ÜG&˜˜VÊFñÊu˜WFFW3’G'VRê¢ê¢Á'VÂ˜ˆ∆∆ñÊrÄ¢6∆˜6Uˆ∆ˆ˜‘f«6R¿¢∆∆˜vVE˜WFFW3’WFFR‰ƒ≈ıEïU2¿¢G&˜˜VÊFñÊu˜WFFW3‘f«6R¿¢ê††¶ñbıˆÊ÷UıÚ”“%ıˆ÷ñÂıÚ#†¢÷ñ‚Çê¢2””“T‰BD4Ç””–†

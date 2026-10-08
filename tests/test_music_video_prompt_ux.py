@@ -1,36 +1,44 @@
 from pathlib import Path
+import unittest
+
 
 TEXT = Path("main.py").read_text(encoding="utf-8")
 
-def test_duration_callbacks_are_registered():
-    assert "dur10|dur30|dur60|dur90" in TEXT
 
-def test_duration_callback_is_authoritative_and_edits_same_message():
-    start = TEXT.index('if action in ("dur10", "dur30", "dur60", "dur90")')
-    block = TEXT[start:start + 1900]
-    assert 'draft["duration"] = seconds' in block
-    assert "_music_video_replace_duration_field(video_brief, seconds)" in block
-    assert "edit_text" in block
-    assert "reply_text(_music_video_review_text" not in block
+class MusicVideoPromptUXSourceTests(unittest.TestCase):
+    def test_duration_callbacks_are_registered(self):
+        self.assertIn("dur10|dur30|dur60|dur90", TEXT)
 
-def test_approval_canonicalizes_selected_duration():
-    start = TEXT.index('if action != "approve"')
-    block = TEXT[start:start + 3800]
-    assert 'seconds = int(draft.get("duration")' in block
-    assert 'Длительность клипа: {seconds} секунд' in block
+    def test_duration_callback_is_authoritative_and_edits_same_message(self):
+        start = TEXT.index('if action in ("dur10", "dur30", "dur60", "dur90")')
+        block = TEXT[start:start + 2200]
+        self.assertIn('draft["duration"] = seconds', block)
+        self.assertIn('draft["duration_locked"] = True', block)
+        self.assertIn("_music_video_replace_duration_field(video_brief, seconds)", block)
+        self.assertIn("edit_text", block)
+        self.assertNotIn("reply_text(_music_video_review_text", block)
 
-def test_prompt_assistant_buttons_exist():
-    assert "✨ Сделать промпт автоматически" in TEXT
-    assert "🎙 По голосовому описанию" in TEXT
-    assert 'action == "auto"' in TEXT
-    assert 'action == "voice"' in TEXT
-    assert '"voice_rewrite"' in TEXT
+    def test_approval_passes_selected_duration_to_provider(self):
+        start = TEXT.index('if action != "approve"')
+        block = TEXT[start:start + 5200]
+        self.assertIn('seconds = int(draft.get("duration")', block)
+        self.assertIn("target_duration_s=seconds", block)
 
-def test_duration_replacement_preserves_scene_timings_and_handles_minutes():
-    assert "def _music_video_replace_duration_field" in TEXT
-    helper = TEXT[TEXT.index("def _music_video_replace_duration_field"):TEXT.index("async def _stage_music_video_draft")]
-    assert "(?im)^" in helper
-    assert "minutes?" in helper
-    assert "мин\\w*" in helper
-    # Regression: arbitrary action timings must not be globally stripped.
-    assert 're.sub(r"\\b' not in helper
+    def test_prompt_assistant_buttons_exist(self):
+        self.assertIn("✨ Сделать промпт автоматически", TEXT)
+        self.assertIn("🎙 По голосовому описанию", TEXT)
+        self.assertIn('action == "auto"', TEXT)
+        self.assertIn('action == "voice"', TEXT)
+        self.assertIn('"voice_rewrite"', TEXT)
+
+    def test_duration_replacement_is_line_scoped(self):
+        start = TEXT.index("def _music_video_replace_duration_field")
+        helper = TEXT[start:TEXT.index("async def _stage_music_video_draft", start)]
+        self.assertIn('r"(?im)^\\s*', helper)
+        self.assertIn("minutes?", helper)
+        self.assertIn("мин\\w*", helper)
+        self.assertNotIn('re.sub(r"\\b', helper)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -52,17 +52,143 @@ def fake_update(messages, callback_data=None):
     async def reply_text(message, **kwargs):
         messages.append((message, kwargs.get("reply_markup")))
 
+    async def edit_text(message, **kwargs):
+        messages.append((message, kwargs.get("reply_markup"), "edit"))
+
     async def answer(*_args, **_kwargs):
         pass
 
-    msg = SimpleNamespace(reply_text=reply_text)
+    msg = SimpleNamespace(reply_text=reply_text, edit_text=edit_text, chat_id=42)
     return SimpleNamespace(
-        effective_user=SimpleNamespace(id=42), effective_message=msg,
+        effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(id=42), effective_message=msg,
         callback_query=SimpleNamespace(data=callback_data, from_user=SimpleNamespace(id=42), message=msg, answer=answer),
     )
 
 
 class MusicVideoApprovalTests(unittest.TestCase):
+    def test_duration_replacement_removes_only_explicit_field_and_uses_real_newline(self):
+        env = load_flow()
+        replace = env["_music_video_replace_duration_field"]
+        original = (
+            "Длительность клипа: 10 секунд.\n"
+            "0–10 секунд: герой выходит из лифта.\n"
+            "10–20 секунд: герой идёт к машине."
+        )
+
+        result = replace(original, 30)
+
+        self.assertEqual(1, result.count("Длительность клипа:"))
+        self.assertTrue(result.startswith("Длительность клипа: 30 секунд.\n"))
+        self.assertNotIn("\\n", result)
+        self.assertIn("0–10 секунд: герой выходит из лифта.", result)
+        self.assertIn("10–20 секунд: герой идёт к машине.", result)
+
+    def test_selected_duration_is_authoritative_at_provider_boundary(self):
+        env = load_flow()
+        messages, started = [], []
+
+        async def start_vocal(*args, **kwargs):
+            started.append((args, kwargs))
+
+        env["_start_vocal_clip"] = start_vocal
+        ctx = SimpleNamespace(user_data={})
+        prompt = (
+            "[MUSIC_BRIEF]\n10 секунд инструментального вступления, затем мужской вокал.\n\n"
+            "[VIDEO_BRIEF]\nДлительность клипа: 10 секунд.\n"
+            "0–10 секунд: герой выходит из лифта.\n"
+            "10–20 секунд: герой идёт к машине.\n"
+            "20–30 секунд: герой садится за руль."
+        )
+        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, prompt))
+        token = ctx.user_data["music_video_draft"]["token"]
+
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:dur30:{token}"), ctx))
+        self.assertEqual(30, ctx.user_data["music_video_draft"]["duration"])
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
+
+        self.assertEqual(1, len(started))
+        self.assertEqual(30, started[0][1].get("target_duration_s"))
+        approved_prompt = started[0][0][3]
+        self.assertIn("0–10 секунд: герой выходит из лифта.", approved_prompt)
+        self.assertIn("10–20 секунд: герой идёт к машине.", approved_prompt)
+        self.assertIn("20–30 секунд: герой садится за руль.", approved_prompt)
+
+    def test_auto_prompt_keeps_selected_duration_even_when_music_mentions_ten_seconds(self):
+        env = load_flow()
+        messages = []
+
+        async def generate(*_args, **_kwargs):
+            return (
+                "[MUSIC_BRIEF]\n10 секунд инструментального вступления, затем вокал.\n\n"
+                "[VIDEO_BRIEF]\n0–10 секунд: лифт.\n10–20 секунд: улица.\n20–30 секунд: машина."
+            )
+
+        env["ask_openai_text"] = generate
+        ctx = SimpleNamespace(user_data={})
+        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, "Я пою, клип 10 секунд"))
+        token = ctx.user_data["music_video_draft"]["token"]
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:dur30:{token}"), ctx))
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:auto:{token}"), ctx))
+
+        draft = ctx.user_data["music_video_draft"]
+        self.assertEqual(30, draft["duration"])
+        self.assertEqual(30, env["_photo_clip_target_duration"](draft["video_brief"]))
+        self.assertEqual(1, draft["video_brief"].count("Длительность клипа:"))
+
+    def test_duration_button_edits_the_existing_approval_message_once(self):
+        env = load_flow()
+        messages = []
+        ctx = SimpleNamespace(user_data={})
+        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, "Я пою, клип 10 секунд"))
+        token = ctx.user_data["music_video_draft"]["token"]
+        before = len(messages)
+
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:dur30:{token}"), ctx))
+
+        changed = messages[before:]
+        self.assertEqual(1, len(changed))
+        self.assertEqual("edit", changed[0][2])
+        self.assertIn("30 секунд · 3 сцен", changed[0][0])
+
+    def test_voice_rewrite_keeps_button_selected_duration(self):
+        env = load_flow()
+        messages = []
+
+        async def no_studio_text(*_args):
+            return False
+
+        async def generate(*_args, **_kwargs):
+            return (
+                "[MUSIC_BRIEF]\n10 секунд вступления, затем мужской вокал.\n\n"
+                "[VIDEO_BRIEF]\n0–10 секунд: лифт.\n10–20 секунд: улица.\n20–30 секунд: машина."
+            )
+
+        env.update({
+            "ask_openai_text": generate,
+            "_presentation_update_token": lambda _: "current",
+            "_presentation_studio_get": lambda: SimpleNamespace(
+                handle_text=no_studio_text, _active_project=lambda *_: None,
+            ),
+            "_is_face_swap_request": lambda _: False,
+            "_is_replacebg_wait_text": lambda _: False,
+            "_is_remove_bg_request": lambda _: False,
+            "_is_replace_bg_request": lambda _: False,
+            "_is_retouch_wait_text": lambda _: False,
+        })
+        ctx = SimpleNamespace(user_data={}, chat_data={})
+        update = fake_update(messages)
+        asyncio.run(env["_stage_music_video_draft"](update, ctx, "Я пою, клип 10 секунд"))
+        token = ctx.user_data["music_video_draft"]["token"]
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:dur30:{token}"), ctx))
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:voice:{token}"), ctx))
+
+        asyncio.run(env["on_text"](update, ctx, manual_text="Лифт, улица, машина"))
+
+        draft = ctx.user_data["music_video_draft"]
+        self.assertEqual(30, draft["duration"])
+        self.assertTrue(draft["duration_locked"])
+        self.assertEqual(1, draft["video_brief"].count("Длительность клипа:"))
+
     def test_real_text_handler_keeps_request_and_revision_in_music_video_mode(self):
         env = load_flow()
         messages, started = [], []
@@ -70,8 +196,8 @@ class MusicVideoApprovalTests(unittest.TestCase):
         async def no_studio_text(*_args):
             return False
 
-        async def start_vocal(*args):
-            started.append(args)
+        async def start_vocal(*args, **kwargs):
+            started.append((args, kwargs))
 
         env.update({
             "_presentation_update_token": lambda _: "current",
@@ -106,7 +232,7 @@ class MusicVideoApprovalTests(unittest.TestCase):
         asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:augment:{token}"), ctx))
         update.message.text = "Длительность 10 секунд, светомузыка ярче"
         asyncio.run(env["on_text"](update, ctx))
-        self.assertEqual(10, env["_photo_clip_target_duration"](ctx.user_data["music_video_draft"]["prompt"]))
+        self.assertEqual(10, ctx.user_data["music_video_draft"]["duration"])
         token = ctx.user_data["music_video_draft"]["token"]
         asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
         self.assertEqual(1, len(started))
@@ -135,8 +261,8 @@ class MusicVideoApprovalTests(unittest.TestCase):
         env = load_flow()
         messages, started = [], []
 
-        async def start_vocal(*args):
-            started.append(args)
+        async def start_vocal(*args, **kwargs):
+            started.append((args, kwargs))
 
         env["_start_vocal_clip"] = start_vocal
         ctx = SimpleNamespace(user_data={})
@@ -152,8 +278,8 @@ class MusicVideoApprovalTests(unittest.TestCase):
         env = load_flow()
         messages, started = [], []
 
-        async def start_photo(*args):
-            started.append(args)
+        async def start_photo(*args, **kwargs):
+            started.append((args, kwargs))
 
         env["_start_photo_music_clip"] = start_photo
         ctx = SimpleNamespace(user_data={})
