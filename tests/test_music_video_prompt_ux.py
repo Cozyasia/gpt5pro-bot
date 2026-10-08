@@ -3,11 +3,18 @@ import unittest
 
 
 TEXT = Path("main.py").read_text(encoding="utf-8")
+RENDER_BLUEPRINT = Path("render.yaml").read_text(encoding="utf-8")
 
 
 class MusicVideoPromptUXSourceTests(unittest.TestCase):
     def test_duration_callbacks_are_registered(self):
         self.assertIn("dur10|dur30|dur60|dur90", TEXT)
+
+    def test_render_duration_cap_covers_every_offered_button(self):
+        self.assertRegex(
+            RENDER_BLUEPRINT,
+            r"(?s)- key: PHOTO_CLIP_MAX_DURATION_S\s+value: ['\"]?90['\"]?",
+        )
 
     def test_duration_callback_is_authoritative_and_edits_same_message(self):
         start = TEXT.index('if action in ("dur10", "dur30", "dur60", "dur90")')
