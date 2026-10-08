@@ -3754,15 +3754,24 @@ def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
 
 
 def _merge_music_video_prompt(original: str, addition: str) -> str:
-    """Replace earlier duration/aspect when the user amends either setting."""
+    """Append a revision without deleting scene-local timing instructions."""
     original, addition = (original or "").strip(), (addition or "").strip()
-    duration_pattern = r"\b\d{1,3}(?:[.,]\d+)?\s*(?:сек\w*|s|seconds?|мин\w*|minutes?|min)\b"
     aspect_pattern = r"(?<!\d)(?:9|16|1|4|3)\s*[:/]\s*(?:16|9|1|5|4|3)(?!\d)"
-    if re.search(duration_pattern, addition, re.I):
-        original = re.sub(duration_pattern, "", original, flags=re.I)
+    duration_match = re.search(
+        r"(?i)(?:длительность(?:\s+(?:клипа|видео))?|(?:clip|video)\s+duration)\s*[:—-]?\s*"
+        r"(\d+(?:[.,]\d+)?)\s*(сек\w*|seconds?|s|мин\w*|minutes?|min)",
+        addition,
+    )
+    music_brief, video_brief = _music_video_split_briefs(original)
+    if duration_match:
+        selected = _photo_clip_target_duration(duration_match.group(0))
+        video_brief = _music_video_replace_duration_field(video_brief, selected)
+        addition = (addition[:duration_match.start()] + addition[duration_match.end():]).strip(" ,;.")
     if re.search(aspect_pattern, addition):
-        original = re.sub(aspect_pattern, "", original)
-    return f"{original.strip(' ,;')}\nДополнение: {addition}".strip()
+        video_brief = re.sub(aspect_pattern, "", video_brief).strip(" ,;")
+    if addition:
+        video_brief = f"{video_brief.strip()}\nДополнение: {addition}".strip()
+    return _music_video_join_briefs(music_brief, video_brief)
 
 
 def _music_video_split_briefs(prompt: str) -> tuple[str, str]:
@@ -3813,9 +3822,12 @@ def _music_video_director_plan(video_brief: str, duration: int, scenes: int) -> 
     return "\n".join(lines)
 
 
-def _music_video_review_text(prompt: str) -> str:
+def _music_video_review_text(prompt: str, duration_s: int | None = None) -> str:
     music_brief, video_brief = _music_video_split_briefs(prompt)
-    duration = _photo_clip_target_duration(prompt)
+    duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(duration_s)))
+        if duration_s is not None else _photo_clip_target_duration(video_brief)
+    )
     scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
     scenes = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_s - 1) // scene_s))
     vocal = _clip_wants_vocals(music_brief)
@@ -3837,15 +3849,23 @@ def _music_video_replace_duration_field(video_brief: str, seconds: int) -> str:
     """Replace only the explicit clip-duration field; preserve scene/action timings."""
     text = (video_brief or "").strip()
     text = re.sub(
-        r"(?im)^\\s*(?:длительность\\s+(?:клипа|видео)|(?:clip|video)\\s+duration)\\s*[:—-]?\\s*"
-        r"\\d+(?:[.,]\\d+)?\\s*(?:сек\\w*|seconds?|s|мин\\w*|minutes?|min)\\s*[.!]?\\s*$",
+        r"(?im)^\s*(?:длительность\s+(?:клипа|видео)|(?:clip|video)\s+duration)\s*[:—-]?\s*"
+        r"\d+(?:[.,]\d+)?\s*(?:сек\w*|seconds?|s|мин\w*|minutes?|min)\s*[.!]?\s*$",
         "",
         text,
     ).strip()
-    return f"Длительность клипа: {int(seconds)} секунд.\\n{text}".strip()
+    return f"Длительность клипа: {int(seconds)} секунд.\n{text}".strip()
 
 
-async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = "", *, music_brief: str | None = None, video_brief: str | None = None) -> bool:
+async def _stage_music_video_draft(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str = "",
+    *,
+    music_brief: str | None = None,
+    video_brief: str | None = None,
+    selected_duration_s: int | None = None,
+) -> bool:
     """Stage a structured draft. Music and video instructions are deliberately isolated."""
     if music_brief is None or video_brief is None:
         parsed_music, parsed_video = _music_video_split_briefs(prompt)
@@ -3863,6 +3883,12 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
             "Эта часть не будет отправляться в Suno."
         )
         return False
+    duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(selected_duration_s)))
+        if selected_duration_s is not None else _photo_clip_target_duration(video_brief)
+    )
+    if selected_duration_s is not None:
+        video_brief = _music_video_replace_duration_field(video_brief, duration)
     combined = _music_video_join_briefs(music_brief, video_brief)
     # A new draft is a new audio review transaction. Never inherit an approved token
     # from a previous clip/test; explicit saved-song selection happens through its own action.
@@ -3893,7 +3919,8 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         "prompt": combined, "music_brief": music_brief, "video_brief": video_brief,
         "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
         "identity_digests": {k: hashlib.sha256(v).hexdigest() for k, v in refs.items()} if refs else {},
-        "duration": _photo_clip_target_duration(combined),
+        "duration": duration,
+        "duration_locked": selected_duration_s is not None,
     }
     with contextlib.suppress(Exception):
         _mode_track_set(update.effective_user.id, "")
@@ -3905,7 +3932,7 @@ async def _stage_music_video_draft(update: Update, context: ContextTypes.DEFAULT
         and _load_vocal_artifact(update.effective_user.id, source_token, "audio") else ""
     )
     await update.effective_message.reply_text(
-        (_music_video_review_text(combined) + source_note)[:4096],
+        (_music_video_review_text(combined, duration) + source_note)[:4096],
         reply_markup=_music_video_approval_kb(token)
     )
     return True
@@ -3925,11 +3952,14 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         # real regex (the previous raw string was double-escaped and silently failed).
         video_brief = _music_video_replace_duration_field(video_brief, seconds)
         draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+        draft["music_brief"] = music_brief
+        draft["video_brief"] = video_brief
         draft["duration"] = seconds
+        draft["duration_locked"] = True
         context.user_data["music_video_draft"] = draft
         await q.answer(f"Выбрано: {seconds} секунд")
         with contextlib.suppress(Exception):
-            await q.message.edit_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+            await q.message.edit_text(_music_video_review_text(draft["prompt"], seconds)[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
         return
     if action == "voice":
         context.user_data["music_video_draft_edit"] = "voice_rewrite"
@@ -3949,10 +3979,14 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
             extra_system="Ты prompt-director для AI music video. Не меняй идентичность, роли, реквизит и последовательность действий пользователя."
         )
         if "[MUSIC_BRIEF]" in generated and "[VIDEO_BRIEF]" in generated:
-            draft["prompt"] = generated.strip()
+            music_brief, video_brief = _music_video_split_briefs(generated)
+            video_brief = _music_video_replace_duration_field(video_brief, seconds)
+            draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+            draft["music_brief"] = music_brief
+            draft["video_brief"] = video_brief
             draft["duration"] = seconds
             context.user_data["music_video_draft"] = draft
-            await q.message.edit_text(_music_video_review_text(draft["prompt"])[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+            await q.message.edit_text(_music_video_review_text(draft["prompt"], seconds)[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
         else:
             await q.message.reply_text("Не удалось безопасно структурировать промпт. Исходный черновик сохранён.")
         return
@@ -3998,9 +4032,9 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     await q.message.reply_text("✅ Сценарий утверждён. Передаю его в режим AI-видеоклипа.")
     try:
         if _clip_wants_vocals(prompt):
-            await _start_vocal_clip(update, context, img, prompt)
+            await _start_vocal_clip(update, context, img, prompt, target_duration_s=seconds)
         else:
-            await _start_photo_music_clip(update, context, img, prompt)
+            await _start_photo_music_clip(update, context, img, prompt, target_duration_s=seconds)
     except Exception:
         log.exception("music video draft approval failed")
         await q.message.reply_text("❌ Не удалось запустить клип. Кредиты за незавершённую генерацию не списаны. Попробуйте снова.")
@@ -8857,7 +8891,14 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
             )
 
 
-async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
+async def _start_vocal_clip(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    user_prompt: str,
+    *,
+    target_duration_s: int | None = None,
+):
     """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
     prompt = (user_prompt or "").strip()
     if not prompt:
@@ -8868,7 +8909,10 @@ async def _start_vocal_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     except Exception:
         faces = []
     performer_count = max(1, len(faces))
-    target_duration = _photo_clip_target_duration(prompt)
+    target_duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
+        if target_duration_s is not None else _photo_clip_target_duration(prompt)
+    )
     scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
     scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
     role_plan = _vocal_clip_role_plan(prompt, performer_count)
@@ -9197,13 +9241,23 @@ async def _run_kling_photo_clip(update: Update, context: ContextTypes.DEFAULT_TY
         return False
 
 
-async def _start_photo_music_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str):
+async def _start_photo_music_clip(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    user_prompt: str,
+    *,
+    target_duration_s: int | None = None,
+):
     _, aspect = parse_video_opts(user_prompt or "")
     if not any(a in (user_prompt or "") for a in _ASPECTS):
         aspect = "9:16"
     elif aspect not in _ASPECTS:
         aspect = "9:16"
-    target_duration = _photo_clip_target_duration(user_prompt or "")
+    target_duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
+        if target_duration_s is not None else _photo_clip_target_duration(user_prompt or "")
+    )
     base_duration = min(10, target_duration)
     user_id = update.effective_user.id
 
@@ -15000,21 +15054,28 @@ async def on_text(
     if draft:
         edit = context.user_data.get("music_video_draft_edit")
         if edit in ("augment", "rewrite", "voice_rewrite"):
+            current_duration = int(draft.get("duration") or _photo_clip_target_duration(draft["video_brief"]))
+            selected_duration = current_duration if draft.get("duration_locked") else None
             if edit == "augment":
                 prompt = _merge_music_video_prompt(draft["prompt"], text)
-                await _stage_music_video_draft(update, context, prompt)
+                await _stage_music_video_draft(
+                    update, context, prompt, selected_duration_s=selected_duration
+                )
             elif edit == "rewrite":
-                await _stage_music_video_draft(update, context, text)
+                await _stage_music_video_draft(
+                    update, context, text, selected_duration_s=selected_duration
+                )
             else:
-                seconds = int(draft.get("duration") or _photo_clip_target_duration(draft["prompt"]))
                 generated = await ask_openai_text(
                     "Преобразуй голосовое описание пользователя в два профессиональных промпта. Сохрани его замысел. "
-                    f"Видео ровно {seconds} секунд; VIDEO_BRIEF разбей по 10 секунд с continuity и START/END states. "
+                    f"Видео ровно {current_duration} секунд; VIDEO_BRIEF разбей по 10 секунд с continuity и START/END states. "
                     "MUSIC_BRIEF оптимизируй для Suno. Верни строго [MUSIC_BRIEF] затем [VIDEO_BRIEF].\n\nОписание: " + text,
                     user_id=update.effective_user.id, chat_id=update.effective_chat.id,
                     extra_system="Ты prompt-director AI music video. Не выдумывай сюжетные факты сверх голосового описания."
                 )
-                await _stage_music_video_draft(update, context, generated)
+                await _stage_music_video_draft(
+                    update, context, generated, selected_duration_s=selected_duration
+                )
         
         else:
             await update.effective_message.reply_text(
