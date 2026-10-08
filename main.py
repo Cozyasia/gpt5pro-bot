@@ -597,6 +597,9 @@ FFMPEG_MUX_MAX_MB = int(os.environ.get("FFMPEG_MUX_MAX_MB", "45") or 45)
 FFMPEG_MUX_CRF = os.environ.get("FFMPEG_MUX_CRF", "32").strip() or "32"
 FFMPEG_MUX_SCALE_HEIGHT = int(os.environ.get("FFMPEG_MUX_SCALE_HEIGHT", "720") or 720)
 FFMPEG_MUX_FPS = int(os.environ.get("FFMPEG_MUX_FPS", "24") or 24)
+FFMPEG_MUX_MAX_LONG_EDGE = max(720, min(3840, int(os.environ.get("FFMPEG_MUX_MAX_LONG_EDGE", "2160") or 2160)))
+FFMPEG_MUX_THREADS = max(1, min(4, int(os.environ.get("FFMPEG_MUX_THREADS", "1") or 1)))
+MUSIC_VIDEO_FINALIZE_CONCURRENCY = max(1, min(2, int(os.environ.get("MUSIC_VIDEO_FINALIZE_CONCURRENCY", "1") or 1)))
 
 # Audited provider cost estimates. Retail price is calculated centrally with the
 # service multiplier. Canonical mode protects the commercial margin from stale ENV.
@@ -626,6 +629,7 @@ TEXT_VIDEO_ALLOW_RUNWAY = os.environ.get("TEXT_VIDEO_ALLOW_RUNWAY", "1").strip()
 
 _photo_clip_background_jobs: set[str] = set()
 _vocal_clip_background_jobs: set[str] = set()
+_music_video_finalize_semaphore = asyncio.Semaphore(MUSIC_VIDEO_FINALIZE_CONCURRENCY)
 
 # AI selfie / Nano Banana style multi-image editor routed through CometAPI.
 # Expected path is OpenAI-compatible image edit endpoint on Comet.
@@ -8083,6 +8087,40 @@ def _extract_last_video_frame_sync(video_bytes: bytes) -> bytes | None:
     return None
 
 
+def _extract_last_video_frame_file_sync(video_path: str) -> bytes | None:
+    """Extract a JPEG continuation frame while keeping the MP4 on disk."""
+    if not video_path or not os.path.isfile(video_path) or os.path.getsize(video_path) < 512:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    try:
+        with tempfile.TemporaryDirectory(prefix="neyro_continuity_frame_") as td:
+            out = os.path.join(td, "last.jpg")
+            cmd = [
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-sseof", "-0.08", "-i", video_path,
+                "-frames:v", "1", "-q:v", "2", out,
+            ]
+            with tempfile.TemporaryFile(mode="w+b") as err_fh:
+                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=err_fh, timeout=60)
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                with open(out, "rb") as fh:
+                    return fh.read()
+    except Exception as exc:
+        log.warning("continuation frame file extraction failed: %s", exc)
+    return None
+
+
+def _write_video_segment_file(directory: str, index: int, content: bytes) -> str:
+    """Persist one provider scene immediately so prior scenes never accumulate in RAM."""
+    if not content or len(content) < 512:
+        raise RuntimeError("video segment is empty")
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"scene_{int(index):02d}.mp4")
+    with open(path, "wb") as fh:
+        fh.write(content)
+    return path
+
+
 def _concat_video_segments_sync(segments: list[bytes], target_duration: int) -> bytes | None:
     if not segments:
         return None
@@ -8384,12 +8422,18 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
     attempts = []
     if FFMPEG_MUX_COPY_FIRST and source_size <= max_bytes:
         attempts.append(("copy-first", [], "copy"))
-    # Keep 4K delivery dimensions; meet Telegram upload ceiling with bitrate, not 720p downscaling.
+    # Preserve provider resolution. Never upscale a 1136x1820 source to fake 4K: that
+    # multiplies decoder/filter/encoder buffers and caused the 512 MiB Render OOM.
+    # Only true oversized inputs are reduced to a bounded long edge.
     audio_bps = 128000
     target_video_bps = max(1800000, int((max_bytes * 8 * 0.90) / max(5, target_duration_s) - audio_bps))
     target_video_k = max(1800, target_video_bps // 1000)
-    scale_4k = r"scale=if(gt(a\,1)\,3840\,-2):if(gt(a\,1)\,-2\,3840),fps=24"
-    attempts.extend([("delivery-4k", [scale_4k], "4k")])
+    max_edge = int(FFMPEG_MUX_MAX_LONG_EDGE or 2160)
+    native_safe = (
+        rf"scale=w='min(iw\,{max_edge})':h='min(ih\,{max_edge})':"
+        rf"force_original_aspect_ratio=decrease:force_divisible_by=2,fps={int(FFMPEG_MUX_FPS or 24)}"
+    )
+    attempts.extend([("native-safe", [native_safe], "encode")])
     for name, vf, mode in attempts:
         tmp_out = output_path + "." + name + ".mp4"
         cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
@@ -8397,10 +8441,12 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
                "-map", "0:v:0", "-map", "1:a:0"]
         if mode == "copy":
             cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
-        elif mode == "4k":
+        elif mode == "encode":
             cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
                     "-b:v", f"{target_video_k}k", "-maxrate", f"{target_video_k}k", "-bufsize", f"{target_video_k * 2}k",
-                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+                    "-pix_fmt", "yuv420p", "-threads", str(FFMPEG_MUX_THREADS),
+                    "-filter_threads", str(FFMPEG_MUX_THREADS),
+                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
         else:
             raise RuntimeError(f"unknown mux mode: {mode}")
         cmd += ["-shortest", "-movflags", "+faststart", tmp_out]
@@ -8757,11 +8803,43 @@ def _save_vocal_artifact(user_id: int, token: str, kind: str, data: bytes) -> No
     _prune_vocal_artifacts(os.path.dirname(path))
 
 
-def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
+def _save_vocal_artifact_file(user_id: int, token: str, kind: str, source_path: str) -> str:
+    """Atomically persist an artifact with file-to-file copying and bounded size."""
+    path = _vocal_artifact_path(user_id, token, kind)
+    try:
+        size = os.path.getsize(source_path)
+    except OSError as exc:
+        raise RuntimeError("vocal artifact source missing") from exc
+    if size < 512 or size > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        shutil.copyfile(source_path, temporary)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+    return path
+
+
+def _load_vocal_artifact_path(user_id: int, token: str, kind: str) -> str | None:
     try:
         path = _vocal_artifact_path(user_id, token, kind)
         st = os.stat(path)
         if st.st_size < 512 or st.st_size > 50 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400:
+            return None
+        return path
+    except (OSError, ValueError):
+        return None
+
+
+def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
+    try:
+        path = _load_vocal_artifact_path(user_id, token, kind)
+        if not path:
             return None
         with open(path, "rb") as file:
             return file.read()
@@ -8799,8 +8877,9 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         await q.answer("Неизвестное действие")
         return
     kind, token, user_id = parts[1], parts[2], q.from_user.id
-    data = _load_vocal_artifact(user_id, token, "video" if kind == "video" else "audio")
-    if not data:
+    video_path = _load_vocal_artifact_path(user_id, token, "video") if kind == "video" else None
+    data = None if kind == "video" else _load_vocal_artifact(user_id, token, "audio")
+    if not (video_path or data):
         await q.answer("Файл больше недоступен")
         await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
         return
@@ -8881,7 +8960,7 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         with contextlib.suppress(BadRequest):
             await q.answer("Повторно отправляю готовый клип")
         try:
-            await _reply_video_bytes(update, data, "Готовый AI-видеоклип с вокалом ✅")
+            await _reply_video_file(update, video_path, "Готовый AI-видеоклип ✅")
             with contextlib.suppress(OSError):
                 os.unlink(_vocal_artifact_path(user_id, token, "video"))
         except Exception:
@@ -9037,132 +9116,125 @@ async def _start_vocal_clip(
                 # Review is not a completed clip: do not charge the full video operation yet.
                 return False
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
-            segments: list[bytes] = []
-            if high_fidelity:
-                # Fail-safe: vocal_start is not reliably detected yet. Never apply Avatar to an entire
-                # action/orbit/rear-follow scene. Selective lip-sync requires a real face-visible +
-                # vocal-active detector; until then production uses cinematic I2V + untouched Suno master.
-                await update.effective_message.reply_text(
-                    "🎵 Песня готова. Вокальный старт автоматически не угадываю: action-сцену рендерю cinematic, "
-                    "без принудительного lip-sync на весь ролик."
-                )
-                aspect = _music_video_aspect(prompt)
-                continuation_bytes, continuation_url = img_bytes, keyframe_url
-                for idx in range(1, scene_count + 1):
-                    dur_s = min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
-                    await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
-                    scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
-                    scene_prompt += (
-                        " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
-                        "The continuation frame controls pose/action continuity but must never redefine identity."
-                    )
-                    scene_video = await _run_kling_photo_clip_result(
-                        continuation_bytes, scene_prompt, dur_s, aspect, continuation_url
-                    )
-                    if not scene_video:
-                        raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
-                    segments.append(scene_video)
-                    if idx < scene_count:
-                        last_frame = await asyncio.to_thread(_extract_last_video_frame_sync, scene_video)
-                        if not last_frame:
-                            raise RuntimeError(f"Не удалось получить continuation frame после сцены {idx}.")
-                        # Re-anchor every scene to the real Character Identity Pack while retaining
-                        # the previous frame only as world/action continuity. This prevents synthetic
-                        # generation loss and stops a supporting character from hijacking the next scene.
-                        next_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx + 1, scene_count)
-                        reanchored = await synth_fn(
-                            refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"],
-                            next_prompt, continuity_frame=last_frame,
-                        )
-                        continuation_bytes = reanchored or last_frame
-                        continuation_url = await _upload_bytes_to_telegram_file_url(
-                            update, context, continuation_bytes, f"music_video_continuation_{idx:02d}.jpg",
-                            f"🧬 Identity + continuity re-anchor {idx}/{scene_count - 1} подготовлен.",
-                        )
-                        if not continuation_url.startswith("https://"):
-                            raise RuntimeError(f"Не удалось получить HTTPS continuation frame после сцены {idx}.")
-            else:
-                # Compatibility only for isolated legacy unit-test harnesses that intentionally execute
-                # _start_vocal_clip without the new identity helpers.
-                await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
-                for idx in range(1, scene_count + 1):
-                    start_s = (idx - 1) * scene_s
-                    dur_s = min(scene_s, max(2, target_duration - start_s))
-                    audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
-                    if not audio_part:
-                        raise RuntimeError(f"Не удалось подготовить аудио для сцены {idx}.")
-                    audio_url = await _upload_bytes_to_telegram_file_url(
-                        update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
-                    )
-                    scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
-                    scene_video = await _run_kling_avatar_result_bytes(
-                        img_bytes, audio_file_url=audio_url, audio_filename=f"vocal_scene_{idx:02d}.mp3",
-                        audio_mime="audio/mpeg", avatar_prompt=scene_prompt, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
-                    )
-                    if not scene_video:
-                        raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
-                    segments.append(scene_video)
-
-            await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")
-            # Long clips must not exist simultaneously as scene bytes + joined bytes + mux bytes.
-            # Spill scenes/audio to disk, release scene buffers, and let ffmpeg stream file->file.
             finalize_td = tempfile.TemporaryDirectory(prefix="neyro_vocal_finalize_")
             try:
-                segment_paths = []
-                for i, data in enumerate(segments):
-                    p = os.path.join(finalize_td.name, f"scene_{i:02d}.mp4")
-                    with open(p, "wb") as fh:
-                        fh.write(data)
-                    segment_paths.append(p)
-                segments.clear()
-                # enumerate() and the generation loop otherwise keep the last large scene
-                # alive even after list.clear(). Drop those references before ffmpeg starts.
-                with contextlib.suppress(UnboundLocalError):
-                    del data
-                with contextlib.suppress(UnboundLocalError):
-                    del scene_video
-                joined_path = os.path.join(finalize_td.name, "joined.mp4")
-                joined_path = await asyncio.to_thread(
-                    _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
-                )
-                if not joined_path:
-                    raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
-                audio_path = os.path.join(finalize_td.name, "suno.mp3")
-                with open(audio_path, "wb") as fh:
-                    fh.write(safe_audio)
-                await update.effective_message.reply_text("📦 Подготавливаю видео для Telegram и добавляю исходный трек Suno…")
-                final_path = os.path.join(finalize_td.name, "final.mp4")
-                final_path = await asyncio.wait_for(
-                    asyncio.to_thread(_mux_video_audio_files_sync, joined_path, audio_path, target_duration, final_path),
-                    timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
-                )
-                if not final_path:
-                    raise RuntimeError("Не удалось собрать финальный MP4 с вокалом.")
-                # Only the Telegram-sized final artifact is materialized in RAM.
-                with open(final_path, "rb") as fh:
-                    final_bytes = fh.read()
+                segment_paths: list[str] = []
+                if high_fidelity:
+                    # Fail-safe: vocal_start is not reliably detected yet. Never apply Avatar to an entire
+                    # action/orbit/rear-follow scene. Selective lip-sync requires a real face-visible +
+                    # vocal-active detector; until then production uses cinematic I2V + untouched Suno master.
+                    await update.effective_message.reply_text(
+                        "🎵 Песня готова. Вокальный старт автоматически не угадываю: action-сцену рендерю cinematic, "
+                        "без принудительного lip-sync на весь ролик."
+                    )
+                    aspect = _music_video_aspect(prompt)
+                    continuation_bytes, continuation_url = img_bytes, keyframe_url
+                    for idx in range(1, scene_count + 1):
+                        dur_s = min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
+                        await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
+                        scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
+                        scene_prompt += (
+                            " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
+                            "The continuation frame controls pose/action continuity but must never redefine identity."
+                        )
+                        scene_video = await _run_kling_photo_clip_result(
+                            continuation_bytes, scene_prompt, dur_s, aspect, continuation_url
+                        )
+                        if not scene_video:
+                            raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
+                        scene_path = await asyncio.to_thread(
+                            _write_video_segment_file, finalize_td.name, idx, scene_video
+                        )
+                        segment_paths.append(scene_path)
+                        del scene_video
+                        if idx < scene_count:
+                            last_frame = await asyncio.to_thread(_extract_last_video_frame_file_sync, scene_path)
+                            if not last_frame:
+                                raise RuntimeError(f"Не удалось получить continuation frame после сцены {idx}.")
+                            # Re-anchor every scene to the real Character Identity Pack while retaining
+                            # the previous frame only as world/action continuity.
+                            next_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx + 1, scene_count)
+                            reanchored = await synth_fn(
+                                refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"],
+                                next_prompt, continuity_frame=last_frame,
+                            )
+                            continuation_bytes = reanchored or last_frame
+                            continuation_url = await _upload_bytes_to_telegram_file_url(
+                                update, context, continuation_bytes, f"music_video_continuation_{idx:02d}.jpg",
+                                f"🧬 Identity + continuity re-anchor {idx}/{scene_count - 1} подготовлен.",
+                            )
+                            if not continuation_url.startswith("https://"):
+                                raise RuntimeError(f"Не удалось получить HTTPS continuation frame после сцены {idx}.")
+                else:
+                    # Compatibility only for isolated legacy unit-test harnesses that intentionally execute
+                    # _start_vocal_clip without the new identity helpers.
+                    await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
+                    for idx in range(1, scene_count + 1):
+                        start_s = (idx - 1) * scene_s
+                        dur_s = min(scene_s, max(2, target_duration - start_s))
+                        audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
+                        if not audio_part:
+                            raise RuntimeError(f"Не удалось подготовить аудио для сцены {idx}.")
+                        audio_url = await _upload_bytes_to_telegram_file_url(
+                            update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
+                        )
+                        scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
+                        scene_video = await _run_kling_avatar_result_bytes(
+                            img_bytes, audio_file_url=audio_url, audio_filename=f"vocal_scene_{idx:02d}.mp3",
+                            audio_mime="audio/mpeg", avatar_prompt=scene_prompt, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+                        )
+                        if not scene_video:
+                            raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
+                        segment_paths.append(await asyncio.to_thread(
+                            _write_video_segment_file, finalize_td.name, idx, scene_video
+                        ))
+                        del scene_video
+
+                await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")
+                async with _music_video_finalize_semaphore:
+                    joined_path = os.path.join(finalize_td.name, "joined.mp4")
+                    joined_path = await asyncio.to_thread(
+                        _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
+                    )
+                    if not joined_path:
+                        raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
+                    audio_path = os.path.join(finalize_td.name, "suno.mp3")
+                    with open(audio_path, "wb") as fh:
+                        fh.write(safe_audio)
+                    safe_audio = b""
+                    audio_bytes = b""
+                    await update.effective_message.reply_text("📦 Подготавливаю видео для Telegram и добавляю исходный трек Suno…")
+                    final_path = os.path.join(finalize_td.name, "final.mp4")
+                    final_path = await asyncio.wait_for(
+                        asyncio.to_thread(_mux_video_audio_files_sync, joined_path, audio_path, target_duration, final_path),
+                        timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
+                    )
+                    if not final_path:
+                        raise RuntimeError("Не удалось собрать финальный MP4 с вокалом.")
+                    persistent_path = await asyncio.to_thread(
+                        _save_vocal_artifact_file, user_id, video_token, "video", final_path
+                    )
+                    final_saved = True
+                try:
+                    await _reply_video_file(
+                        update, persistent_path,
+                        f"AI-видеоклип с вокалом ✅ Один MP4 · ~{target_duration} сек · {scene_count} сцен"
+                    )
+                except Exception:
+                    log.exception("completed vocal MP4 delivery failed; saved for retry")
+                    await update.effective_message.reply_text(
+                        "⚠️ Клип уже готов и сохранён, но Telegram прервал отправку файла. "
+                        "Нажмите «Повторить отправку»: Suno и Kling повторно не запускаются. Кредиты не списаны.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("📥 Повторить отправку клипа", callback_data=f"mvfile:video:{video_token}")],
+                            [InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{song_token}")],
+                        ]),
+                    )
+                    return False
+                with contextlib.suppress(OSError):
+                    os.unlink(persistent_path)
             finally:
                 finalize_td.cleanup()
-            await asyncio.to_thread(_save_vocal_artifact, user_id, video_token, "video", final_bytes)
-            final_saved = True
-            try:
-                await _reply_video_bytes(
-                    update, final_bytes,
-                    f"AI-видеоклип с вокалом ✅ Один MP4 · ~{target_duration} сек · {scene_count} сцен"
-                )
-            except Exception:
-                log.exception("completed vocal MP4 delivery failed; saved for retry")
-                await update.effective_message.reply_text(
-                    "⚠️ Клип уже готов и сохранён, но Telegram прервал отправку файла. "
-                    "Нажмите «Повторить отправку»: Suno и Kling повторно не запускаются. Кредиты не списаны.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📥 Повторить отправку клипа", callback_data=f"mvfile:video:{video_token}")],
-                        [InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{song_token}")],
-                    ]),
-                )
-                return False
-            with contextlib.suppress(OSError):
-                os.unlink(_vocal_artifact_path(user_id, video_token, "video"))
             if source_token:
                 context.user_data.pop("vocal_source_token", None)
             return True
@@ -9270,6 +9342,9 @@ async def _start_photo_music_clip(
 
     async def _photo_clip_job():
         _photo_clip_background_jobs.add(job_key)
+        video_token = uuid.uuid4().hex[:12]
+        final_saved = False
+        finalize_td = tempfile.TemporaryDirectory(prefix="neyro_photo_finalize_")
         try:
             if not (PHOTO_CLIP_MUX_AUDIO and SUNO_AUTO_FOR_PHOTO_CLIP and SUNO_ENABLED and SUNO_API_KEY):
                 raise RuntimeError("Для полного клипа с музыкой включите SUNO_ENABLED=1, SUNO_AUTO_FOR_PHOTO_CLIP=1 и задайте SUNO_API_KEY (или COMET_API_KEY).")
@@ -9289,7 +9364,7 @@ async def _start_photo_music_clip(
                 kling_image_url = _get_cached_photo_url(user_id) or ""
             scene_prompts = _music_video_scene_prompts(user_prompt, target_duration)
             async def _render_video_scenes():
-                segments = []
+                segment_paths: list[str] = []
                 for scene_idx, scene_prompt in enumerate(scene_prompts, start=1):
                     if len(scene_prompts) > 1:
                         await update.effective_message.reply_text(
@@ -9300,13 +9375,20 @@ async def _start_photo_music_clip(
                     )
                     if not seg:
                         raise RuntimeError(f"Kling не вернул сцену {scene_idx}/{len(scene_prompts)}")
-                    segments.append(seg)
-                if len(segments) == 1:
-                    return segments[0]
-                joined = await asyncio.to_thread(_concat_video_segments_sync, segments, target_duration)
-                if not joined:
+                    segment_paths.append(await asyncio.to_thread(
+                        _write_video_segment_file, finalize_td.name, scene_idx, seg
+                    ))
+                    del seg
+                if len(segment_paths) == 1:
+                    return segment_paths[0]
+                joined_path = os.path.join(finalize_td.name, "joined.mp4")
+                async with _music_video_finalize_semaphore:
+                    joined_path = await asyncio.to_thread(
+                        _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
+                    )
+                if not joined_path:
                     raise RuntimeError("Не удалось собрать сцены Kling в единый видеоряд")
-                return joined
+                return joined_path
 
             video_task = asyncio.create_task(_render_video_scenes())
             audio_task = asyncio.create_task(_run_suno_music_result_bytes(update, user_prompt))
@@ -9314,13 +9396,13 @@ async def _start_photo_music_clip(
             # Long provider renders need visible progress. Do not leave the user with
             # a silent chat for 10–20 minutes.
             progress_marks = (150, 330, 510, 690, 870, 1050)
-            video_bytes = None
+            video_path = None
             try:
                 for mark in progress_marks:
                     remaining = mark - int(time.time() - started_at)
                     if remaining > 0:
                         try:
-                            video_bytes = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
+                            video_path = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
                             break
                         except asyncio.TimeoutError:
                             pass
@@ -9329,14 +9411,18 @@ async def _start_photo_music_clip(
                         f"⏳ Клип всё ещё создаётся — прошло около {elapsed_min} мин. "
                         "Бот не завис: Kling продолжает рендер, Suno готовит музыку. Пожалуйста, ожидайте."
                     )
-                if video_bytes is None:
+                if video_path is None:
                     remaining = max(1, PHOTO_CLIP_TOTAL_USER_WAIT_S - int(time.time() - started_at))
-                    video_bytes = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
+                    video_path = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
             except asyncio.TimeoutError:
                 video_task.cancel()
                 audio_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await video_task
+                with contextlib.suppress(asyncio.CancelledError):
+                    await audio_task
                 raise RuntimeError(f"Kling не вернул видео за {PHOTO_CLIP_TOTAL_USER_WAIT_S} сек. Генерация остановлена по тайм-ауту; попробуйте повторить позже.")
-            if not video_bytes:
+            if not video_path:
                 audio_task.cancel()
                 raise RuntimeError("Kling не вернул видео")
 
@@ -9363,23 +9449,56 @@ async def _start_photo_music_clip(
 
             await update.effective_message.reply_text(f"🎧 Музыка получена. Склеиваю и сжимаю MP4 локально через ffmpeg, лимит ~{FFMPEG_MUX_TIMEOUT_S} сек, размер до ~{FFMPEG_MUX_MAX_MB}MB…")
 
-            final_bytes = None
-            if PHOTO_CLIP_PIPELINE:
-                final_bytes = await asyncio.wait_for(asyncio.to_thread(_mux_video_audio_sync, video_bytes, audio_bytes, target_duration), timeout=max(60, FFMPEG_MUX_TIMEOUT_S + 30))
-            if not final_bytes and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
-                final_bytes = video_bytes
-            if not final_bytes:
+            final_path = None
+            async with _music_video_finalize_semaphore:
+                audio_path = os.path.join(finalize_td.name, "suno.mp3")
+                with open(audio_path, "wb") as fh:
+                    fh.write(audio_bytes)
+                audio_bytes = b""
+                if PHOTO_CLIP_PIPELINE:
+                    output_path = os.path.join(finalize_td.name, "final.mp4")
+                    final_path = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            _mux_video_audio_files_sync, video_path, audio_path, target_duration, output_path
+                        ),
+                        timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
+                    )
+                if not final_path and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
+                    final_path = video_path
+                if final_path:
+                    persistent_path = await asyncio.to_thread(
+                        _save_vocal_artifact_file, user_id, video_token, "video", final_path
+                    )
+                    final_saved = True
+            if not final_path:
                 raise RuntimeError("ffmpeg не успел или не смог собрать итоговый MP4 с музыкой. Проверьте Render CPU/логи ffmpeg или увеличьте FFMPEG_MUX_TIMEOUT_S.")
 
             caption = f"Фото→видеоклип с музыкой ✅ Один MP4 · ~{target_duration} сек"
-            await _reply_video_bytes(update, final_bytes, caption)
+            try:
+                await _reply_video_file(update, persistent_path, caption)
+            except Exception:
+                log.exception("completed photo music MP4 delivery failed; saved for retry")
+                await update.effective_message.reply_text(
+                    "⚠️ Клип уже готов и сохранён, но Telegram прервал отправку. "
+                    "Нажмите «Повторить отправку»: Suno и Kling повторно не запускаются. Кредиты не списаны.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📥 Повторить отправку клипа", callback_data=f"mvfile:video:{video_token}")],
+                    ]),
+                )
+                return False
+            with contextlib.suppress(OSError):
+                os.unlink(persistent_path)
             return True
         except Exception as e:
             log.exception("photo music clip background pipeline failed: %s", e)
             with contextlib.suppress(Exception):
-                await update.effective_message.reply_text(f"❌ Фото→видеоклип не получился. Причина: {str(e)[:900]}")
+                await update.effective_message.reply_text(
+                    f"❌ Фото→видеоклип не получился. Причина: {str(e)[:700]}"
+                    + (" Готовый MP4 сохранён — используйте кнопку повторной отправки выше." if final_saved else "")
+                )
             return False
         finally:
+            finalize_td.cleanup()
             _photo_clip_background_jobs.discard(job_key)
 
     async def _go():
@@ -12821,7 +12940,7 @@ async def cmd_diag_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Kling key: {'✅' if bool(KLING_API_KEY) else '❌'}  model={KLING_MODEL}  create={KLING_CREATE_PATH}",
         f"• Kling Avatar: create={KLING_AVATAR_CREATE_PATH}  status={KLING_AVATAR_STATUS_PATH}  mode={KLING_AVATAR_MODE}  avatar_voice_default={AVATAR_TTS_DEFAULT_VOICE} cost=${AVATAR_UNIT_COST_USD:.2f}",
         f"• Photo→clip pipeline: {'✅ on' if PHOTO_CLIP_PIPELINE else '— off'}  engine={PHOTO_CLIP_VIDEO_ENGINE}  native_sound={'on' if PHOTO_CLIP_SOUND else 'off'}  mode={PHOTO_CLIP_MODE}  default={PHOTO_CLIP_DEFAULT_DURATION_S}s max={PHOTO_CLIP_MAX_DURATION_S}s mux_audio={'✅' if PHOTO_CLIP_MUX_AUDIO else '—'} cost=${PHOTO_CLIP_UNIT_COST_USD:.2f}",
-        f"• ffmpeg mux: timeout={FFMPEG_MUX_TIMEOUT_S}s copy_first={'✅' if FFMPEG_MUX_COPY_FIRST else '—'} preset={FFMPEG_MUX_REENCODE_PRESET} crf={FFMPEG_MUX_CRF} scale_h={FFMPEG_MUX_SCALE_HEIGHT} fps={FFMPEG_MUX_FPS} audio={FFMPEG_MUX_AUDIO_BITRATE} max={FFMPEG_MUX_MAX_MB}MB",
+        f"• ffmpeg mux: timeout={FFMPEG_MUX_TIMEOUT_S}s copy_first={'✅' if FFMPEG_MUX_COPY_FIRST else '—'} preset={FFMPEG_MUX_REENCODE_PRESET} crf={FFMPEG_MUX_CRF} max_edge={FFMPEG_MUX_MAX_LONG_EDGE} threads={FFMPEG_MUX_THREADS} finalize_concurrency={MUSIC_VIDEO_FINALIZE_CONCURRENCY} fps={FFMPEG_MUX_FPS} audio={FFMPEG_MUX_AUDIO_BITRATE} max={FFMPEG_MUX_MAX_MB}MB",
         f"• Suno for photo→clip: {'✅ auto' if SUNO_AUTO_FOR_PHOTO_CLIP else '— off'}  enabled={'✅' if SUNO_ENABLED else '—'} key={'✅' if bool(SUNO_API_KEY) else '❌'} create={SUNO_CREATE_PATH} model={SUNO_MODEL}",
         f"• AI selfie: provider={AI_SELFIE_PROVIDER} comet_key={'on' if bool(COMET_API_KEY) else 'off'} model={COMET_IMAGE_EDIT_MODEL} fallbacks={','.join(COMET_IMAGE_EDIT_FALLBACK_MODELS)} path={COMET_IMAGE_EDIT_PATH} timeout={COMET_IMAGE_EDIT_TIMEOUT_S}s max_side={AI_SELFIE_MAX_SIDE} size={AI_SELFIE_IMAGE_SIZE} fast={AI_SELFIE_FAST_MODE} cost=${AI_SELFIE_UNIT_COST_USD:.2f}",
         f"• Нормализация duration: Kling 5/10 сек; Sora 4/8/12 сек без людей; Runway text→video и image→video; Luma временно скрыта",
@@ -13716,6 +13835,42 @@ async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_
     finally:
         if not sent_ok:
             # A transport failure must not turn a retry into a suppressed duplicate.
+            _SENT_VIDEO_KEYS.pop(dedupe_key, None)
+
+
+async def _reply_video_file(update: Update, path: str, caption: str, task_id: str = ""):
+    """Stream a local MP4 to Telegram without copying it into a Python bytes object."""
+    try:
+        stat = os.stat(path)
+    except OSError as exc:
+        raise RuntimeError("video file is unavailable") from exc
+    if stat.st_size < 512 or stat.st_size > 50 * 1024 * 1024:
+        raise RuntimeError(f"video file size invalid: {stat.st_size}")
+    chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
+    file_identity = f"local:{os.path.abspath(path)}:{stat.st_size}:{stat.st_mtime_ns}"
+    dedupe_key = _video_result_key(chat_id, task_id=task_id, url=file_identity)
+    if _mark_video_sent_once(dedupe_key):
+        log.info("reply_video_file: duplicate suppressed task_id=%s", task_id)
+        return
+    sent_ok = False
+    try:
+        with open(path, "rb") as file_obj:
+            # python-telegram-bot otherwise reads file handles eagerly in InputFile.__init__.
+            # Keeping read_file_handle=False lets httpx stream the persistent file.
+            media = InputFile(file_obj, filename="result.mp4", read_file_handle=False)
+            if VIDEO_RESULT_SEND_AS_DOCUMENT:
+                await update.effective_message.reply_document(
+                    document=media, caption=caption,
+                    write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+                )
+            else:
+                await update.effective_message.reply_video(
+                    video=media, caption=caption, supports_streaming=True,
+                    write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+                )
+        sent_ok = True
+    finally:
+        if not sent_ok:
             _SENT_VIDEO_KEYS.pop(dedupe_key, None)
 
 def _ratio_for_aspect(aspect: str) -> str:

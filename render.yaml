@@ -284,6 +284,12 @@ services:
     value: '720'
   - key: FFMPEG_MUX_FPS
     value: '24'
+  - key: FFMPEG_MUX_MAX_LONG_EDGE
+    value: '2160'
+  - key: FFMPEG_MUX_THREADS
+    value: '1'
+  - key: MUSIC_VIDEO_FINALIZE_CONCURRENCY
+    value: '1'
   - key: VOCAL_CLIP_UNIT_COST_USD
     value: '1.50'
   - key: TEXT_VIDEO_DEFAULT_ENGINE
