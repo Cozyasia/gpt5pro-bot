@@ -28,6 +28,7 @@ PRICES = {
 }
 
 _MODEL_CACHE: dict[str, Any] = {"at": 0.0, "models": [], "error": ""}
+_MODEL_DENIAL_CACHE: dict[str, float] = {}
 _LAST_ROUTE: dict[str, Any] = {}
 
 _COMPLEX_RE = re.compile(
@@ -193,6 +194,11 @@ async def _resolve_models(mod: Any, primary: str) -> list[str]:
     return candidates
 
 
+def _gpt5_verification_denied(mod: Any) -> bool:
+    denied_at = float(_MODEL_DENIAL_CACHE.get(_fingerprint(mod)) or 0)
+    return bool(denied_at and time.monotonic() - denied_at < 3600)
+
+
 def _usage_cost(model: str, data: dict) -> tuple[int, int, float]:
     usage = data.get("usage") or {}
     input_tokens = int(usage.get("input_tokens") or 0)
@@ -216,6 +222,8 @@ async def _responses_call(
     resolved = await _resolve_models(mod, primary_model)
 
     for model in resolved:
+        if model.startswith("gpt-5") and _gpt5_verification_denied(mod):
+            continue
         variants: list[tuple[str, dict[str, Any]]] = []
         body: dict[str, Any] = {
             "model": model,
@@ -242,11 +250,16 @@ async def _responses_call(
                     )
                 request_id = response.headers.get("x-request-id", "")
                 if response.status_code >= 400:
+                    verification_denied = response.status_code == 404 and "organization must be verified" in response.text.lower()
                     _log(
                         mod, "warning",
                         "general Responses API HTTP %s model=%s variant=%s request_id=%s: %s",
                         response.status_code, model, variant_name, request_id, response.text[:700],
                     )
+                    if verification_denied:
+                        _MODEL_DENIAL_CACHE[_fingerprint(mod)] = time.monotonic()
+                        last_error = RuntimeError("organization verification required for GPT-5")
+                        break
                     if response.status_code == 400 and variant_index < len(variants) - 1:
                         continue
                     response.raise_for_status()

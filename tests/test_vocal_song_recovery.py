@@ -112,7 +112,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
             async def try_pay(*args, **kwargs):
                 billed.append(await args[5]())
 
-            async def suno(*_args):
+            async def suno(*_args, **_kwargs):
                 provider_calls.append("suno")
                 return None
 
@@ -164,7 +164,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
             async def reply_text(message, **kwargs):
                 messages.append((message, kwargs))
 
-            async def suno(*_args):
+            async def suno(*_args, **_kwargs):
                 events.append("suno")
                 return full_song
 
