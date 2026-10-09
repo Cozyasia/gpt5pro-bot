@@ -106,7 +106,7 @@ class VocalClipStagingTests(unittest.TestCase):
         async def send_chat_action(*_args):
             pass
 
-        async def fail_suno(*_args):
+        async def fail_suno(*_args, **_kwargs):
             raise RuntimeError('{"provider_secret":"private detail"}')
 
         async def try_pay(*args, **kwargs):

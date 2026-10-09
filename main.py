@@ -562,8 +562,13 @@ KLING_TEXT_STATUS_PATH = os.environ.get("KLING_TEXT_STATUS_PATH", "/kling/v1/vid
 KLING_AVATAR_CREATE_PATH = os.environ.get("KLING_AVATAR_CREATE_PATH", "/kling/v1/videos/avatar/image2video").strip() or "/kling/v1/videos/avatar/image2video"
 KLING_AVATAR_STATUS_PATH = os.environ.get("KLING_AVATAR_STATUS_PATH", "/kling/v1/videos/avatar/image2video/{id}").strip() or "/kling/v1/videos/avatar/image2video/{id}"
 KLING_LIPSYNC_ENABLED = os.environ.get("KLING_LIPSYNC_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
-KLING_LIPSYNC_CREATE_PATH = os.environ.get("KLING_LIPSYNC_CREATE_PATH", "/kling/v1/videos/lip-sync").strip() or "/kling/v1/videos/lip-sync"
+KLING_IDENTIFY_FACE_PATH = os.environ.get("KLING_IDENTIFY_FACE_PATH", "/kling/v1/videos/identify-face").strip() or "/kling/v1/videos/identify-face"
+KLING_LIPSYNC_CREATE_PATH = os.environ.get("KLING_LIPSYNC_CREATE_PATH", "/kling/v1/videos/advanced-lip-sync").strip() or "/kling/v1/videos/advanced-lip-sync"
+if KLING_LIPSYNC_CREATE_PATH.rstrip("/") == "/kling/v1/videos/lip-sync":
+    KLING_LIPSYNC_CREATE_PATH = "/kling/v1/videos/advanced-lip-sync"
 KLING_LIPSYNC_STATUS_PATH = os.environ.get("KLING_LIPSYNC_STATUS_PATH", "/kling/v1/videos/lip-sync/{id}").strip() or "/kling/v1/videos/lip-sync/{id}"
+KLING_LIPSYNC_RETRY_ATTEMPTS = max(1, int(os.environ.get("KLING_LIPSYNC_RETRY_ATTEMPTS", "3") or 3))
+KLING_LIPSYNC_RETRY_BASE_S = max(0.0, float(os.environ.get("KLING_LIPSYNC_RETRY_BASE_S", "1.5") or 1.5))
 KLING_AVATAR_MODE = os.environ.get("KLING_AVATAR_MODE", "std").strip().lower() or "std"
 if KLING_AVATAR_MODE not in ("std", "pro"):
     KLING_AVATAR_MODE = "std"
@@ -7991,6 +7996,19 @@ def _avatar_tts_voice_label(voice: str) -> str:
     return labels.get((voice or "").strip().lower(), (voice or "alloy").strip())
 
 
+async def _telegram_media_get_file_with_retry(media, *, label: str = "media"):
+    last_error = None
+    for attempt in range(3):
+        try:
+            return await media.get_file()
+        except TimedOut as exc:
+            last_error = exc
+            log.warning("telegram incoming get_file timeout label=%s attempt=%s/3", label, attempt + 1)
+            if attempt < 2:
+                await asyncio.sleep(1.5 * (attempt + 1))
+    raise last_error or RuntimeError(f"Telegram get_file failed: {label}")
+
+
 async def _upload_bytes_to_telegram_file_url(update: Update, context: ContextTypes.DEFAULT_TYPE, raw: bytes, filename: str, caption: str = "") -> str:
     if not raw:
         return ""
@@ -8290,35 +8308,79 @@ async def _run_kling_avatar_result_bytes(
     return scene_bytes
 
 
+def _provider_data_object(payload: dict) -> dict:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    return data if isinstance(data, dict) else (payload if isinstance(payload, dict) else {})
+
+
+def _provider_task_id(payload: dict) -> str:
+    data = _provider_data_object(payload)
+    return str(data.get("task_id") or data.get("taskId") or data.get("id") or payload.get("task_id") or payload.get("id") or "").strip()
+
+
+async def _kling_post_json_with_retry(client, path: str, headers: dict, payload: dict, caption: str) -> dict:
+    last_error = ""
+    for attempt in range(KLING_LIPSYNC_RETRY_ATTEMPTS):
+        try:
+            response = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, json=payload)
+            if response.status_code < 400:
+                body = response.json() or {}
+                if not isinstance(body, dict):
+                    raise RuntimeError(f"{caption}: invalid response object")
+                return body
+            preview = _api_error_preview(response)
+            last_error = f"POST {path} → {response.status_code}: {preview}"
+            if response.status_code == 404:
+                raise RuntimeError(f"{caption}: unsupported endpoint (404): {path}; {preview}")
+            if response.status_code not in (408, 409, 425, 429) and response.status_code < 500:
+                raise RuntimeError(f"{caption}: {last_error}")
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            last_error = f"POST {path}: {exc}"
+        if attempt + 1 < KLING_LIPSYNC_RETRY_ATTEMPTS:
+            await asyncio.sleep(KLING_LIPSYNC_RETRY_BASE_S * (2 ** attempt))
+    raise RuntimeError(f"{caption}: {last_error or 'provider request failed'}")
+
+
 async def _run_kling_lipsync_result_bytes(
     video_url: str,
     audio_url: str,
     *,
+    duration_ms: int,
     max_wait_s: int | None = None,
+    on_provider_state=None,
 ) -> bytes:
-    """Apply Kling's audio2video lip-sync to one approved 2–10 second interval."""
+    """Documented Comet/Kling identify-face -> advanced-lip-sync transport."""
     if not KLING_LIPSYNC_ENABLED:
         raise RuntimeError("Kling lip-sync is disabled")
     if not (KLING_API_KEY or COMET_API_KEY):
         raise RuntimeError("Kling lip-sync: API key missing")
     if not str(video_url or "").startswith("https://") or not str(audio_url or "").startswith("https://"):
         raise RuntimeError("Kling lip-sync requires public HTTPS video and audio URLs")
-    payload = {
-        "input": {
-            "video_url": video_url,
-            "mode": "audio2video",
-            "audio_type": "url",
-            "audio_url": audio_url,
-        }
-    }
-    result = await _create_and_poll_i2v_bytes(
-        COMET_BASE_URL,
-        KLING_API_KEY or COMET_API_KEY,
-        [(KLING_LIPSYNC_CREATE_PATH, payload)],
-        [KLING_LIPSYNC_STATUS_PATH, "/kling/v1/videos/lip-sync/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
-        "Kling lip-sync",
-        max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S),
-    )
+    duration_ms = int(duration_ms)
+    if not 2000 <= duration_ms <= 10000:
+        raise ValueError("Kling lip-sync duration must be between 2000 and 10000 ms")
+    headers = {"Authorization": f"Bearer {KLING_API_KEY or COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        identified = await _kling_post_json_with_retry(client, KLING_IDENTIFY_FACE_PATH, headers, {"video_url": video_url}, "Kling identify-face")
+        data = _provider_data_object(identified)
+        session_id = str(data.get("session_id") or identified.get("session_id") or "").strip()
+        faces = data.get("face_data") or data.get("faces") or []
+        face_id = str(faces[0].get("face_id") or faces[0].get("id") or "").strip() if isinstance(faces, list) and faces and isinstance(faces[0], dict) else ""
+        if not session_id or not face_id:
+            raise RuntimeError(f"Kling identify-face: missing session/face in {json.dumps(identified, ensure_ascii=False)[:700]}")
+        if callable(on_provider_state): on_provider_state("identify_session_id", session_id)
+        payload = {"session_id": session_id, "external_task_id": f"mv-lipsync-{uuid.uuid4().hex[:24]}", "face_choose": [{
+            "face_id": face_id, "sound_file": audio_url, "sound_start_time": 0, "sound_end_time": duration_ms,
+            "sound_insert_time": 0, "sound_volume": 1.0, "original_sound_volume": 0.0,
+        }]}
+        created = await _kling_post_json_with_retry(client, KLING_LIPSYNC_CREATE_PATH, headers, payload, "Kling advanced lip-sync")
+        task_id = _provider_task_id(created)
+        if not task_id:
+            raise RuntimeError(f"Kling advanced lip-sync: no task id in {json.dumps(created, ensure_ascii=False)[:700]}")
+        if callable(on_provider_state): on_provider_state("lip_sync_task_id", task_id)
+        result = await _poll_video_task_for_bytes(client, headers, COMET_BASE_URL, [KLING_LIPSYNC_STATUS_PATH, "/kling/v1/videos/lip-sync/{id}"], task_id, "Kling lip-sync", max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S))
     if not result or len(result) < 512 or result[4:8] != b"ftyp":
         raise RuntimeError("Kling lip-sync result is not an MP4 video")
     log.info("Kling lip-sync downloaded: %d bytes", len(result))
@@ -8650,7 +8712,8 @@ async def _poll_video_task_for_bytes(
                     js = rs.json() or {}
                 except Exception:
                     js = {}
-                st = str(js.get("status") or js.get("state") or js.get("task_status") or "").lower()
+                task_data = js.get("data") if isinstance(js.get("data"), dict) else {}
+                st = str(js.get("status") or js.get("state") or js.get("task_status") or task_data.get("status") or task_data.get("state") or task_data.get("task_status") or "").lower()
                 ready_url = _extract_first_url(js.get("output")) or _extract_first_url(js.get("outputs")) or _extract_first_url(js.get("assets")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
                 if ready_url and (st in ("", "completed", "succeeded", "success", "finished", "ready", "done", "succeed") or not st):
                     content = await _download_binary_from_url(client, ready_url, accept="video/mp4,video/*,*/*;q=0.8", timeout_s=300.0)
@@ -8681,6 +8744,7 @@ async def _create_and_poll_i2v_bytes(
     status_paths: list[str],
     caption: str,
     max_wait_s: int = 1200,
+    on_task_id=None,
 ) -> bytes | None:
     if not api_key:
         raise RuntimeError(f"{caption}: API key missing")
@@ -8720,6 +8784,7 @@ async def _create_and_poll_i2v_bytes(
                 if not task_id:
                     last_err = f"POST {path}: no task id in {json.dumps(js, ensure_ascii=False)[:700]}"
                     continue
+                if callable(on_task_id): on_task_id(task_id)
                 log.info("%s accepted task_id=%s", caption, task_id)
                 return await _poll_video_task_for_bytes(client, headers, base_url, status_paths, task_id, caption, max_wait_s=max_wait_s)
             except Exception as e:
@@ -8729,7 +8794,7 @@ async def _create_and_poll_i2v_bytes(
     raise RuntimeError(last_err or f"{caption}: no result")
 
 
-async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s: int, aspect: str, image_url: str = "") -> bytes | None:
+async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s: int, aspect: str, image_url: str = "", *, on_task_id=None) -> bytes | None:
     if not (KLING_API_KEY or COMET_API_KEY):
         raise RuntimeError("Kling photo→clip: COMET_API_KEY/KLING_API_KEY не задан")
     # Keep the photo→clip route consistent with the working explicit Kling I2V route:
@@ -8762,10 +8827,33 @@ async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s
         ["/kling/v1/videos/image2video/{id}", KLING_STATUS_PATH, "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
         "Kling photo→music clip",
         max_wait_s=max(LUMA_MAX_WAIT_S, RUNWAY_MAX_WAIT_S),
+        on_task_id=on_task_id,
     )
 
 
-async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | None:
+def _find_suno_clip_id(payload: object) -> str:
+    if isinstance(payload, list):
+        return next((found for item in payload if (found := _find_suno_clip_id(item))), "")
+    if not isinstance(payload, dict): return ""
+    for key in ("clip_id", "clipId", "song_id", "songId"):
+        if payload.get(key): return str(payload[key]).strip()
+    if any(payload.get(key) for key in ("audio_url", "audioUrl", "stream_audio_url")) and payload.get("id"):
+        return str(payload["id"]).strip()
+    return next((found for value in payload.values() if (found := _find_suno_clip_id(value))), "")
+
+
+async def _fetch_suno_vocal_intervals(client, headers: dict, clip_id: str, duration_s: int) -> list[tuple[float, float]]:
+    if not clip_id: return []
+    try:
+        response = await client.get(f"{SUNO_BASE_URL}/suno/act/timing/{urllib.parse.quote(clip_id, safe='')}", headers=headers, timeout=60.0)
+        if response.status_code >= 400: return []
+        return _extract_vocal_intervals(response.json() or {}, duration_s)
+    except Exception as exc:
+        log.warning("Suno timing failed clip_id=%s: %s", clip_id, exc)
+        return []
+
+
+async def _run_suno_music_result_bytes(update: Update, brief: str, *, target_duration_s: int = 90, on_provider_state=None) -> bytes | None:
     brief = (brief or "").strip() or "dynamic catchy music video song, cinematic, social media ready"
     if not (SUNO_AUTO_FOR_PHOTO_CLIP and SUNO_ENABLED and SUNO_API_KEY):
         return None
@@ -8812,6 +8900,7 @@ async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | No
                     d = data_obj or {}
                     task_id = str(d.get("id") or d.get("task_id") or d.get("taskId") or d.get("request_id") or "").strip()
                 if task_id:
+                    if callable(on_provider_state): on_provider_state("suno_task_id", task_id)
                     started = time.time()
                     while time.time() - started < max(30, min(SUNO_TIMEOUT_S, PHOTO_CLIP_SUNO_FAST_TIMEOUT_S)):
                         for sp in status_paths:
@@ -8830,6 +8919,11 @@ async def _run_suno_music_result_bytes(update: Update, brief: str) -> bytes | No
                                 if url and (st in ("", "completed", "succeeded", "success", "finished", "done", "ready") or not st):
                                     audio = await _download_binary_from_url(client, url, accept="audio/mpeg,audio/*,*/*;q=0.8", timeout_s=300.0)
                                     if audio:
+                                        clip_id = _find_suno_clip_id(sj)
+                                        intervals = await _fetch_suno_vocal_intervals(client, headers, clip_id, target_duration_s)
+                                        if callable(on_provider_state):
+                                            if clip_id: on_provider_state("suno_clip_id", clip_id)
+                                            on_provider_state("vocal_intervals", intervals)
                                         return audio
                                 if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
                                     raise RuntimeError(json.dumps(sj, ensure_ascii=False)[:900])
@@ -9280,6 +9374,7 @@ async def _apply_kling_lipsync_to_scene_file(
     scene_path: str,
     contract,
     directory: str,
+    on_provider_state=None,
 ) -> str:
     """Replace only one ScenePlan vocal interval and fail closed on any transport/provider error."""
     if not contract.has_lip_sync:
@@ -9322,7 +9417,9 @@ async def _apply_kling_lipsync_to_scene_file(
     synced_bytes = await _run_kling_lipsync_result_bytes(
         video_url,
         audio_url,
+        duration_ms=int(round(duration * 1000)),
         max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+        on_provider_state=on_provider_state,
     )
     synced_path = _write_video_segment_file(directory, 1000 + contract.index, synced_bytes)
     del synced_bytes
@@ -9353,6 +9450,94 @@ def _vocal_artifact_path(user_id: int, token: str, kind: str) -> str:
         raise ValueError("invalid vocal artifact reference")
     suffix = "mp3" if kind == "audio" else "mp4"
     return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{kind}.{suffix}")
+
+
+def _vocal_job_path(user_id: int, token: str, name: str, extension: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or not re.fullmatch(r"[a-z0-9_]{1,48}", name or "") or extension not in ("json", "mp4", "bin"):
+        raise ValueError("invalid vocal job artifact reference")
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{name}.{extension}")
+
+
+def _save_vocal_job_manifest(user_id: int, token: str, manifest: dict) -> None:
+    path = _vocal_job_path(user_id, token, "job", "json"); os.makedirs(os.path.dirname(path), exist_ok=True)
+    raw = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    if len(raw) > 2 * 1024 * 1024: raise RuntimeError("vocal job manifest too large")
+    tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(raw)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+
+
+def _load_vocal_job_manifest(user_id: int, token: str) -> dict | None:
+    try:
+        path = _vocal_job_path(user_id, token, "job", "json"); st = os.stat(path)
+        if st.st_size > 2 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400: return None
+        with open(path, encoding="utf-8") as fh: value = json.load(fh)
+        return value if isinstance(value, dict) and value.get("schema") == 1 else None
+    except (OSError, ValueError, json.JSONDecodeError): return None
+
+
+def _save_vocal_job_file(user_id: int, token: str, name: str, extension: str, data: bytes) -> str:
+    path = _vocal_job_path(user_id, token, name, extension)
+    if not data or len(data) > 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(data)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _save_vocal_job_file_from_path(user_id: int, token: str, name: str, extension: str, source: str) -> str:
+    path = _vocal_job_path(user_id, token, name, extension); size = os.path.getsize(source)
+    if not 1 <= size <= 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try: shutil.copyfile(source, tmp); os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _load_vocal_job_file_path(user_id: int, token: str, name: str, extension: str) -> str | None:
+    try:
+        path = _vocal_job_path(user_id, token, name, extension); st = os.stat(path)
+        return path if 1 <= st.st_size <= 50 * 1024 * 1024 and time.time() - st.st_mtime <= 7 * 86400 else None
+    except (OSError, ValueError): return None
+
+
+def _extract_vocal_intervals(payload: object, duration_s: float) -> list[tuple[float, float]]:
+    raw = []
+    def walk(value):
+        if isinstance(value, list):
+            for item in value: walk(item)
+        elif isinstance(value, dict):
+            def number(*keys):
+                for key in keys:
+                    try:
+                        if value.get(key) is not None: return float(value[key])
+                    except (TypeError, ValueError): pass
+            start, end = number("startS", "start_s", "start", "startTime"), number("endS", "end_s", "end", "endTime")
+            text = value.get("word") or value.get("text") or value.get("lyric")
+            if start is not None and end is not None and str(text or "").strip():
+                if max(start, end) > max(100, duration_s * 10): start, end = start / 1000, end / 1000
+                if min(duration_s, end) > max(0, start): raw.append((max(0, start), min(duration_s, end)))
+            else:
+                for item in value.values(): walk(item)
+    walk(payload); merged = []
+    for start, end in sorted(set(raw)):
+        if merged and start - merged[-1][1] <= .5: merged[-1][1] = max(merged[-1][1], end)
+        else: merged.append([start, end])
+    return [(round(a, 3), round(b, 3)) for a, b in merged if b - a >= 2]
+
+
+def _verified_lipsync_window(contract, intervals) -> tuple[float, float] | None:
+    if contract.lip_sync_start_s is None or contract.lip_sync_end_s is None: return None
+    candidates = [(max(float(contract.lip_sync_start_s), a), min(float(contract.lip_sync_end_s), b)) for a, b in intervals or []]
+    candidates = [item for item in candidates if item[1] - item[0] >= 2]
+    return max(candidates, key=lambda item: item[1] - item[0]) if candidates else None
 
 
 def _prune_vocal_artifacts(user_dir: str) -> None:
@@ -9441,7 +9626,7 @@ def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
         return None
 
 
-def _vocal_song_kb(token: str, *, pending: bool = False) -> InlineKeyboardMarkup:
+def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")]]
     if pending:
         rows.extend([
@@ -9450,6 +9635,7 @@ def _vocal_song_kb(token: str, *, pending: bool = False) -> InlineKeyboardMarkup
             [InlineKeyboardButton("✏️ Изменить промпт аудио", callback_data=f"mvfile:editaudio:{token}")],
         ])
     else:
+        if resume: rows.append([InlineKeyboardButton("▶️ Продолжить генерацию", callback_data=f"mvfile:resume:{token}")])
         rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
     return InlineKeyboardMarkup(rows)
 
@@ -9467,7 +9653,7 @@ async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
 async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     parts = (q.data or "").split(":")
-    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio"):
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio", "resume"):
         await q.answer("Неизвестное действие")
         return
     kind, token, user_id = parts[1], parts[2], q.from_user.id
@@ -9477,9 +9663,10 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         await q.answer("Файл больше недоступен")
         await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
         return
-    if kind == "approveaudio":
+    if kind in ("approveaudio", "resume"):
         pending_token = context.user_data.get("music_video_pending_audio_token")
-        if pending_token != token:
+        manifest = _load_vocal_job_manifest(user_id, token)
+        if pending_token != token and not manifest:
             with contextlib.suppress(BadRequest):
                 await q.answer("Это не текущий вариант")
             await q.message.reply_text("⚠️ Этот вариант уже не является текущим. Подтвердите последнее сгенерированное аудио.")
@@ -9490,9 +9677,25 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
         keyframe = context.user_data.get("music_video_pending_keyframe")
         scene_plan = context.user_data.get("music_video_pending_scene_plan")
+        if manifest:
+            prompt = prompt or str(manifest.get("prompt") or "")
+            keyframe_path = _load_vocal_job_file_path(user_id, token, "keyframe", "bin")
+            if not keyframe and keyframe_path:
+                with open(keyframe_path, "rb") as fh: keyframe = fh.read()
+            raw_plan = manifest.get("scene_plan")
+            if not isinstance(scene_plan, ScenePlan) and isinstance(raw_plan, dict):
+                scene_plan = scene_plan_from_dict(raw_plan, expected_duration_s=int(manifest["target_duration_s"]), expected_aspect=str(manifest["aspect"]), require_lip_sync=raw_plan.get("vocal_start_s") is not None)
         if not prompt or not keyframe or not isinstance(scene_plan, ScenePlan):
             await q.message.reply_text("✅ Аудио подтверждено. Состояние клипа устарело — утвердите сценарий ещё раз.")
             return
+        # Rehydrate the process-local review state from the durable checkpoint.
+        # _start_vocal_clip will republish this saved keyframe to an HTTPS URL, but
+        # must not pay Gemini/Comet to synthesize it again after a restart.
+        context.user_data["music_video_pending_prompt"] = prompt
+        context.user_data["music_video_pending_audio_token"] = token
+        context.user_data["music_video_pending_scene_plan"] = scene_plan
+        context.user_data["music_video_pending_keyframe"] = keyframe
+        context.user_data.pop("music_video_pending_keyframe_url", None)
         await q.message.reply_text("✅ Аудио подтверждено. Продолжаю этот же клип — запускаю видеогенерацию.")
         await _start_vocal_clip(
             update,
@@ -9638,6 +9841,41 @@ async def _start_vocal_clip(
         video_token = uuid.uuid4().hex[:12]
         final_saved = False
         heartbeat_stop = asyncio.Event()
+        # Some legacy callers load this function in isolation.  Keep checkpointing
+        # optional there, while the production module always provides every helper.
+        load_manifest = globals().get("_load_vocal_job_manifest", lambda *_: None)
+        save_manifest = globals().get("_save_vocal_job_manifest", lambda *_: None)
+        save_job_file = globals().get("_save_vocal_job_file", lambda *_: "")
+        load_job_file_path = globals().get("_load_vocal_job_file_path", lambda *_: None)
+        save_job_path = globals().get(
+            "_save_vocal_job_file_from_path", lambda _u, _t, _n, _e, path: path
+        )
+        verified_lipsync = globals().get("_verified_lipsync_window", lambda *_: None)
+        aspect_fn = globals().get("_music_video_aspect", lambda _: "9:16")
+        now_fn = globals().get("time")
+        now_s = int(now_fn.time()) if now_fn is not None else 0
+        manifest = load_manifest(user_id, song_token) or {
+            "schema": 1,
+            "created_at": now_s,
+            "prompt": prompt,
+            "target_duration_s": target_duration,
+            "aspect": scene_plan.aspect if scene_plan else aspect_fn(prompt),
+            "scene_plan": scene_plan.as_dict() if scene_plan else None,
+            "scene_plan_fingerprint": scene_plan.fingerprint if scene_plan else "",
+            "provider_tasks": {},
+            "completed_stages": [],
+            "vocal_intervals": [],
+            "last_error": "",
+        }
+        def checkpoint(stage="", **changes):
+            if stage and stage not in manifest["completed_stages"]: manifest["completed_stages"].append(stage)
+            manifest.update(changes)
+            manifest["updated_at"] = int(now_fn.time()) if now_fn is not None else 0
+            save_manifest(user_id, song_token, manifest)
+        def provider_state(key, value):
+            if key == "vocal_intervals": manifest[key] = value
+            else: manifest["provider_tasks"][key] = value
+            checkpoint()
 
         async def _progress_heartbeat():
             # Long provider renders can legitimately be quiet for several minutes.
@@ -9687,6 +9925,13 @@ async def _start_vocal_clip(
             # Load it before either branch so refs is always defined for multi-scene runs.
             refs = pack_fn(user_id) if high_fidelity else {}
             if high_fidelity and not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
+                restored = {}
+                for name in ("face_front", "face_3q", "body_full", "scene_reference"):
+                    path = load_job_file_path(user_id, song_token, f"ref_{name}", "bin")
+                    if path:
+                        with open(path, "rb") as fh: restored[name] = fh.read()
+                refs = restored or refs
+            if high_fidelity and not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
                 raise RuntimeError("Character Identity Pack incomplete")
             if high_fidelity and pending_keyframe:
                 img_bytes = pending_keyframe
@@ -9715,11 +9960,17 @@ async def _start_vocal_clip(
                 )
                 if not keyframe_url.startswith("https://"):
                     raise RuntimeError("Не удалось получить публичный HTTPS URL identity keyframe для Kling.")
-            audio_bytes = saved_source or await _run_suno_music_result_bytes(update, music_brief)
+            if high_fidelity:
+                await asyncio.to_thread(save_job_file, user_id, song_token, "keyframe", "bin", img_bytes)
+                for name in ("face_front", "face_3q", "body_full", "scene_reference"):
+                    await asyncio.to_thread(save_job_file, user_id, song_token, f"ref_{name}", "bin", refs[name])
+                checkpoint("identity_pack", music_brief=music_brief)
+            audio_bytes = saved_source or await _run_suno_music_result_bytes(update, music_brief, target_duration_s=target_duration, on_provider_state=provider_state)
             if not audio_bytes:
                 raise RuntimeError("Suno не вернул вокал/музыку.")
             if not saved_source:
                 await asyncio.to_thread(_save_vocal_artifact, user_id, song_token, "audio", audio_bytes)
+                checkpoint("song")
                 try:
                     await _send_vocal_song_file(update.effective_message, audio_bytes, song_token)
                 except Exception:
@@ -9761,36 +10012,50 @@ async def _start_vocal_clip(
                             int(round(scene_plan.scenes[idx - 1].duration_s))
                             if scene_plan is not None else min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
                         )
-                        await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
-                        scene_prompt = _scene_role_prompt(idx)
-                        scene_prompt += (
-                            " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
-                            "The continuation frame controls pose/action continuity but must never redefine identity."
-                        )
-                        scene_video = await _run_kling_photo_clip_result(
-                            continuation_bytes, scene_prompt, dur_s, aspect, continuation_url
-                        )
-                        if not scene_video:
-                            raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
-                        scene_path = await asyncio.to_thread(
-                            _write_video_segment_file, finalize_td.name, idx, scene_video
-                        )
+                        ready_name, base_name = f"scene_{idx:02d}_ready", f"scene_{idx:02d}_base"
+                        ready_path = load_job_file_path(user_id, song_token, ready_name, "mp4")
+                        base_path = load_job_file_path(user_id, song_token, base_name, "mp4")
+                        if ready_path:
+                            scene_path = ready_path
+                            await update.effective_message.reply_text(f"♻️ Сцена {idx}/{scene_count}: использую готовый checkpoint.")
+                        elif base_path:
+                            scene_path = base_path
+                            await update.effective_message.reply_text(f"♻️ Сцена {idx}/{scene_count}: Kling I2V уже готов, продолжаю с lip-sync.")
+                        else:
+                            await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
+                            scene_prompt = _scene_role_prompt(idx)
+                            scene_prompt += (
+                                " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
+                                "The continuation frame controls pose/action continuity but must never redefine identity."
+                            )
+                            scene_video = await _run_kling_photo_clip_result(continuation_bytes, scene_prompt, dur_s, aspect, continuation_url, on_task_id=lambda task_id, i=idx: provider_state(f"scene_{i}_task_id", task_id))
+                            if not scene_video: raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
+                            scene_path = await asyncio.to_thread(_write_video_segment_file, finalize_td.name, idx, scene_video)
+                            scene_path = await asyncio.to_thread(save_job_path, user_id, song_token, base_name, "mp4", scene_path)
+                            checkpoint(f"scene_{idx}_base")
                         if scene_plan is not None:
                             contract = scene_plan.scenes[idx - 1]
-                            if contract.has_lip_sync:
+                            window = verified_lipsync(contract, manifest.get("vocal_intervals") or [])
+                            if contract.has_lip_sync and window and not ready_path:
                                 await update.effective_message.reply_text(
                                     f"🎭 Сцена {idx}/{scene_count}: применяю обязательный Kling lip-sync…"
                                 )
+                                effective_contract = types.SimpleNamespace(index=contract.index, start_s=contract.start_s, end_s=contract.end_s, duration_s=contract.duration_s, has_lip_sync=True, lip_sync_start_s=window[0], lip_sync_end_s=window[1])
                                 scene_path = await _apply_kling_lipsync_to_scene_file(
                                     update,
                                     context,
                                     safe_audio,
                                     scene_path,
-                                    contract,
+                                    effective_contract,
                                     finalize_td.name,
+                                    on_provider_state=lambda key, value, i=idx: provider_state(f"scene_{i}_{key}", value),
                                 )
+                            elif contract.has_lip_sync and not window:
+                                await update.effective_message.reply_text(f"🔇 Сцена {idx}/{scene_count}: подтверждённого вокала нет — lip-sync пропущен.")
+                            if not ready_path:
+                                scene_path = await asyncio.to_thread(save_job_path, user_id, song_token, ready_name, "mp4", scene_path)
+                                checkpoint(f"scene_{idx}_ready")
                         segment_paths.append(scene_path)
-                        del scene_video
                         if idx < scene_count:
                             last_frame = await asyncio.to_thread(_extract_last_video_frame_file_sync, scene_path)
                             if not last_frame:
@@ -9884,12 +10149,13 @@ async def _start_vocal_clip(
             return True
         except Exception as e:
             log.exception("vocal clip failed: %s", e)
+            with contextlib.suppress(Exception): checkpoint(last_error=str(e)[:1000])
             with contextlib.suppress(Exception):
                 await update.effective_message.reply_text(
                     "❌ AI-видеоклип с вокалом не получился. Кредиты не списаны. "
                     + ("Готовый MP4 сохранён: повторите отправку кнопкой выше." if final_saved
                        else "Полная песня сохранена, если Suno успел её создать. Попробуйте позже."),
-                    reply_markup=_vocal_song_kb(song_token)
+                    reply_markup=_vocal_song_kb(song_token, resume=not final_saved)
                     if _load_vocal_artifact(user_id, song_token, "audio") else None,
                 )
             return False
@@ -16423,7 +16689,7 @@ async def on_text(
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ph = update.message.photo[-1]
-        f = await ph.get_file()
+        f = await _telegram_media_get_file_with_retry(ph, label="incoming photo")
         data = await f.download_as_bytearray()
         img = bytes(data)
         _cache_photo(update.effective_user.id, img, getattr(f, "file_path", "") or "")
@@ -17786,7 +18052,7 @@ def build_application() -> "Application":
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
-    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio|editaudio):[0-9a-f]{12}$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio|editaudio|resume):[0-9a-f]{12}$"), group=0)
 
     # 2b) Старые school:/work: callbacks, если такие кнопки ещё где-то используются
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)
