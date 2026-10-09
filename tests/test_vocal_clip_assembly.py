@@ -33,6 +33,21 @@ def load_video_pipeline():
     return env
 
 
+def load_lipsync_splicer():
+    tree = ast.parse(MAIN.read_text(encoding="utf-8"))
+    names = {"_extract_video_interval_file_sync", "_replace_video_interval_file_sync"}
+    nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+    env = {
+        "os": os, "shutil": shutil, "subprocess": subprocess, "tempfile": tempfile,
+        "FFMPEG_MUX_REENCODE_PRESET": "ultrafast", "FFMPEG_MUX_CRF": 23,
+        "FFMPEG_MUX_THREADS": 1, "FFMPEG_MUX_TIMEOUT_S": 180,
+        "_ffmpeg_exe": lambda: shutil.which("ffmpeg"),
+        "log": SimpleNamespace(info=lambda *a: None, warning=lambda *a: None),
+    }
+    exec(compile(ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[])), str(MAIN), "exec"), env)
+    return env
+
+
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg/ffprobe required")
 class VocalClipAssemblyTests(unittest.TestCase):
     def test_two_scenes_join_and_original_audio_yield_one_playable_mp4(self):
@@ -68,6 +83,45 @@ class VocalClipAssemblyTests(unittest.TestCase):
             self.assertEqual({"video", "audio"}, {s["codec_type"] for s in info["streams"]})
             self.assertAlmostEqual(10, float(info["format"]["duration"]), delta=0.5)
             self.assertLess(len(result), 45 * 1024 * 1024)
+
+    def test_partial_lipsync_replaces_only_selected_interval_and_keeps_duration(self):
+        env = load_lipsync_splicer()
+        ffmpeg = shutil.which("ffmpeg")
+        ffprobe = shutil.which("ffprobe")
+        with tempfile.TemporaryDirectory() as td:
+            original = Path(td) / "original.mp4"
+            replacement_source = Path(td) / "replacement_source.mp4"
+            replacement = Path(td) / "replacement.mp4"
+            output = Path(td) / "spliced.mp4"
+            subprocess.run([
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                "color=c=red:s=160x90:r=12", "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(original),
+            ], check=True)
+            subprocess.run([
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                "color=c=blue:s=160x90:r=12", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(replacement_source),
+            ], check=True)
+            self.assertEqual(str(replacement), env["_extract_video_interval_file_sync"](
+                str(replacement_source), 0.0, 2.0, str(replacement),
+            ))
+            self.assertEqual(str(output), env["_replace_video_interval_file_sync"](
+                str(original), str(replacement), 2.0, 4.0, 6.0, str(output),
+            ))
+
+            duration = float(subprocess.check_output([
+                ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(output),
+            ], text=True).strip())
+            self.assertAlmostEqual(6.0, duration, delta=0.25)
+
+            def pixel(at_s):
+                return subprocess.check_output([
+                    ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", str(at_s), "-i", str(output),
+                    "-frames:v", "1", "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+                ])
+
+            before, during = pixel(1.0), pixel(3.0)
+            self.assertGreater(before[0], before[2])
+            self.assertGreater(during[2], during[0])
 
 
 if __name__ == "__main__":

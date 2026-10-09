@@ -163,6 +163,19 @@ class MusicVideoMemorySafetyTests(unittest.TestCase):
         self.assertIn("_reply_video_file", block)
         self.assertNotIn("final_bytes = fh.read()", block)
 
+    def test_vocal_pipeline_requires_postprocess_lipsync_for_planned_intervals(self):
+        source = MAIN.read_text(encoding="utf-8")
+        start = source.index("async def _start_vocal_clip")
+        block = source[start:source.index("\nasync def ", start + 40)]
+        helper_start = source.index("async def _apply_kling_lipsync_to_scene_file")
+        helper = source[helper_start:source.index("\nasync def ", helper_start + 40)]
+        self.assertIn("_apply_kling_lipsync_to_scene_file", block)
+        self.assertIn("_run_kling_lipsync_result_bytes", helper)
+        self.assertIn("_replace_video_interval_file_sync", helper)
+        self.assertIn("contract.lip_sync_start_s", helper)
+        self.assertIn("contract.lip_sync_end_s", helper)
+        self.assertNotIn("без принудительного lip-sync", block)
+
     def test_instrumental_pipeline_uses_the_same_file_safe_finalization(self):
         source = MAIN.read_text(encoding="utf-8")
         start = source.index("async def _start_photo_music_clip")

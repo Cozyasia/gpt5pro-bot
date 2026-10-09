@@ -16,13 +16,14 @@ class MusicVideoPromptUXSourceTests(unittest.TestCase):
             r"(?s)- key: PHOTO_CLIP_MAX_DURATION_S\s+value: ['\"]?90['\"]?",
         )
 
-    def test_duration_callback_is_authoritative_and_edits_same_message(self):
+    def test_duration_callback_is_authoritative_and_supersedes_old_review(self):
         start = TEXT.index('if action in ("dur10", "dur30", "dur60", "dur90")')
         block = TEXT[start:start + 2200]
         self.assertIn('draft["duration"] = seconds', block)
         self.assertIn('draft["duration_locked"] = True', block)
         self.assertIn("_music_video_replace_duration_field(video_brief, seconds)", block)
-        self.assertIn("edit_text", block)
+        self.assertIn("_compile_music_video_scene_plan", block)
+        self.assertIn("_send_music_video_review(q.message, draft, supersede=True)", block)
         self.assertNotIn("reply_text(_music_video_review_text", block)
 
     def test_approval_passes_selected_duration_to_provider(self):
