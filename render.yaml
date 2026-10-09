@@ -211,6 +211,12 @@ services:
     value: /kling/v1/videos/avatar/image2video
   - key: KLING_AVATAR_STATUS_PATH
     value: /kling/v1/videos/avatar/image2video/{id}
+  - key: KLING_LIPSYNC_ENABLED
+    value: '1'
+  - key: KLING_LIPSYNC_CREATE_PATH
+    value: /kling/v1/videos/lip-sync
+  - key: KLING_LIPSYNC_STATUS_PATH
+    value: /kling/v1/videos/lip-sync/{id}
   - key: KLING_AVATAR_MODE
     value: std
   - key: KLING_AVATAR_PROMPT

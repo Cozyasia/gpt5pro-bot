@@ -23,6 +23,14 @@ import subprocess
 import contextlib
 import random
 
+from music_video_scene_plan import (
+    ScenePlan,
+    chunk_review_messages,
+    render_scene_plan_review,
+    scene_plan_from_dict,
+    scene_plan_from_explicit_timeline,
+)
+
 # ───────── Render Secret Files bootstrap ─────────
 # Must run before any API keys are read from os.environ.
 from secret_loader import bootstrap_secret_environment, get_secret
@@ -553,6 +561,9 @@ KLING_TEXT_STATUS_PATH = os.environ.get("KLING_TEXT_STATUS_PATH", "/kling/v1/vid
 # Kling Avatar / talking head / photo→music-video
 KLING_AVATAR_CREATE_PATH = os.environ.get("KLING_AVATAR_CREATE_PATH", "/kling/v1/videos/avatar/image2video").strip() or "/kling/v1/videos/avatar/image2video"
 KLING_AVATAR_STATUS_PATH = os.environ.get("KLING_AVATAR_STATUS_PATH", "/kling/v1/videos/avatar/image2video/{id}").strip() or "/kling/v1/videos/avatar/image2video/{id}"
+KLING_LIPSYNC_ENABLED = os.environ.get("KLING_LIPSYNC_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
+KLING_LIPSYNC_CREATE_PATH = os.environ.get("KLING_LIPSYNC_CREATE_PATH", "/kling/v1/videos/lip-sync").strip() or "/kling/v1/videos/lip-sync"
+KLING_LIPSYNC_STATUS_PATH = os.environ.get("KLING_LIPSYNC_STATUS_PATH", "/kling/v1/videos/lip-sync/{id}").strip() or "/kling/v1/videos/lip-sync/{id}"
 KLING_AVATAR_MODE = os.environ.get("KLING_AVATAR_MODE", "std").strip().lower() or "std"
 if KLING_AVATAR_MODE not in ("std", "pro"):
     KLING_AVATAR_MODE = "std"
@@ -3723,7 +3734,7 @@ def _photoclip_menu_text() -> str:
         "В описании укажите, кто поёт: например «женщина — женский вокал, мужчина — мужской вокал; припев поют вместе». "
         "Также можно задать движения, взаимодействие героев, стиль, язык, длительность и формат.\n\n"
         "Длинный инструментальный клип собирается из коротких сцен. "
-        "Вокальный lip-sync пока доступен для одного фрагмента до 10 секунд: сборка длинных вокальных клипов проходит проверку. "
+        "Для вокального клипа ScenePlan отмечает face-visible интервалы по 2–10 секунд; Kling синхронизирует только их. "
         "Рекомендуемый формат — 9:16."
     )
 
@@ -3795,59 +3806,223 @@ def _music_video_join_briefs(music_brief: str, video_brief: str) -> str:
 
 
 def _music_video_director_plan(video_brief: str, duration: int, scenes: int) -> str:
-    """Preserve the user's video direction instead of replacing it with generic shot names."""
+    """Compatibility renderer for already timestamped briefs.
+
+    Production compiles one immutable ScenePlan asynchronously before review. This
+    synchronous helper remains for callers/tests that only need a display skeleton.
+    """
     brief = (video_brief or "").strip()
     if not brief:
         return "Сценарий видео ещё не задан."
-    if scenes <= 1:
-        # One short scene: show an explicit timing skeleton while preserving the brief verbatim.
-        if duration <= 10:
-            cuts = [(0, min(2, duration)), (min(2, duration), min(4, duration)),
-                    (min(4, duration), min(6, duration)), (min(6, duration), duration)]
-            labels = [
-                "начало действия из описания пользователя",
-                "продолжение действия; камера следует логике описания",
-                "переход/движение камеры без самовольной смены места",
-                "завершение сцены согласно описанию пользователя",
-            ]
-            lines = []
-            for (a, b), label in zip(cuts, labels):
-                if b > a:
-                    lines.append(f"0:{a:02d}–0:{b:02d} — {label}.")
-            return "\n".join(lines) + f"\n\nТочное задание режиссёру: {brief}"
-        return f"0:00–0:{duration:02d} — {brief}"
-    scene_s = max(1, (duration + scenes - 1) // scenes)
-    lines = []
-    for i in range(scenes):
-        a, b = i * scene_s, min(duration, (i + 1) * scene_s)
-        if a >= duration:
-            break
-        lines.append(f"{a//60}:{a%60:02d}–{b//60}:{b%60:02d} — продолжение единого действия: {brief}")
-    return "\n".join(lines)
+    try:
+        plan = scene_plan_from_explicit_timeline(
+            brief,
+            duration_s=int(duration),
+            aspect=_music_video_aspect(brief),
+            wants_vocals=False,
+            vocal_start_s=None,
+        )
+        return "\n".join(
+            f"{int(scene.start_s)//60}:{int(scene.start_s)%60:02d}–"
+            f"{int(scene.end_s)//60}:{int(scene.end_s)%60:02d} — {scene.action}"
+            for scene in plan.scenes
+        )
+    except ValueError:
+        if int(scenes) <= 1:
+            return f"0:00–0:{int(duration):02d} — {brief}"
+        return "Сцены компилируются один раз перед утверждением; повторная эвристическая нарезка запрещена."
 
 
-def _music_video_review_text(prompt: str, duration_s: int | None = None) -> str:
+def _music_video_vocal_start_hint(music_brief: str) -> float:
+    """Extract an explicit intro length; a user-requested 'short intro' means 2s."""
+    text = (music_brief or "").lower().replace("ё", "е")
+    patterns = (
+        r"(?:вступлен\w*|интро|intro)\D{0,30}(\d+(?:[.,]\d+)?)\s*(?:сек|seconds?|s)\b",
+        r"(\d+(?:[.,]\d+)?)\s*(?:сек|seconds?|s)\D{0,30}(?:вступлен\w*|интро|intro)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            return max(0.0, float(match.group(1).replace(",", ".")))
+    if re.search(r"(?:коротк\w*\s+)?(?:инструментальн\w*\s+)?(?:вступлен\w*|интро|intro).{0,100}(?:без вокал|без голос|no vocals?)", text, re.I | re.S):
+        return 2.0
+    return 0.0
+
+
+def _music_video_extract_json_object(raw: str) -> dict:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+        text = re.sub(r"\s*```$", "", text)
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("ScenePlan compiler returned no JSON object")
+    payload = json.loads(text[start:end + 1])
+    if not isinstance(payload, dict):
+        raise ValueError("ScenePlan compiler JSON must be an object")
+    return payload
+
+
+def _music_video_single_scene_plan(
+    music_brief: str,
+    video_brief: str,
+    duration: int,
+    aspect: str,
+) -> ScenePlan:
+    wants_vocals = _clip_wants_vocals(music_brief)
+    hinted_vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    vocal_start = (
+        float(hinted_vocal_start)
+        if hinted_vocal_start is not None and float(hinted_vocal_start) < duration
+        else None
+    )
+    lip_sync_required = bool(wants_vocals and vocal_start is not None and duration - vocal_start >= 2)
+    lip_start = vocal_start if wants_vocals and vocal_start is not None and duration - vocal_start >= 2 else None
+    payload = {
+        "duration_s": int(duration),
+        "aspect": aspect,
+        "vocal_start_s": vocal_start,
+        "scenes": [{
+            "index": 1,
+            "start_s": 0,
+            "end_s": int(duration),
+            "action": (video_brief or "").strip(),
+            "start_state": "Use the supplied starting keyframe as the exact physical start.",
+            "end_state": "Finish at the last physically implied state in the approved action.",
+            "world_state": ["single chronological scene", "identity and visible props persist"],
+            "completed_actions": [],
+            "future_count": 0,
+            "lip_sync_start_s": lip_start,
+            "lip_sync_end_s": int(duration) if lip_start is not None else None,
+        }],
+    }
+    return scene_plan_from_dict(
+        payload,
+        expected_duration_s=int(duration),
+        expected_aspect=aspect,
+        require_lip_sync=lip_sync_required,
+    )
+
+
+async def _compile_music_video_scene_plan(
+    music_brief: str,
+    video_brief: str,
+    duration: int,
+    aspect: str,
+    *,
+    user_id: int = 0,
+    chat_id: int = 0,
+) -> ScenePlan:
+    """Compile exactly once; validation rejects incomplete or stale model output."""
+    duration = int(duration)
+    wants_vocals = _clip_wants_vocals(music_brief)
+    vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    lip_sync_required = bool(wants_vocals and vocal_start is not None and duration - vocal_start >= 2)
+    try:
+        explicit = scene_plan_from_explicit_timeline(
+            video_brief,
+            duration_s=duration,
+            aspect=aspect,
+            wants_vocals=wants_vocals,
+            vocal_start_s=vocal_start,
+        )
+        return scene_plan_from_dict(
+            explicit.as_dict(),
+            expected_duration_s=duration,
+            expected_aspect=aspect,
+            require_lip_sync=lip_sync_required,
+        )
+    except ValueError:
+        pass
+    if duration <= 10:
+        return _music_video_single_scene_plan(music_brief, video_brief, duration, aspect)
+
+    scene_seconds = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
+    scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_seconds - 1) // scene_seconds))
+    compiler_prompt = (
+        "Compile the supplied Russian/English music-video briefs into strict JSON only. "
+        "Preserve every user fact and chronological action; invent nothing. The lead Character Identity Pack protagonist is the singer "
+        "when the music brief specifies a solo vocal and no different singer. Future people, props, vehicles, locations and seat assignments "
+        "must not appear early. Completed actions never restart. Each scene is contiguous and at most 10 seconds. "
+        "For every scene return exact action, physical start_state, physical end_state, persistent world_state strings, completed_actions, "
+        "future_count, and one optional absolute lip_sync_start_s/lip_sync_end_s interval. Lip-sync intervals are only where the singer's face "
+        "is visible and vocals are active, each 2-10 seconds. A vocal plan must contain at least one interval. "
+        f"Approved duration: {duration}. Approved aspect: {aspect}. Required scenes: {scene_count}. "
+        f"Vocal start hint: {vocal_start if vocal_start is not None else 'none'}. "
+        "Schema: {duration_s:int, aspect:str, vocal_start_s:number|null, scenes:[{index:int,start_s:number,end_s:number,"
+        "action:str,start_state:str,end_state:str,world_state:[str],completed_actions:[str],future_count:int,"
+        "lip_sync_start_s:number|null,lip_sync_end_s:number|null}]}.\n\n"
+        f"MUSIC_BRIEF:\n{(music_brief or '').strip()}\n\nVIDEO_BRIEF:\n{(video_brief or '').strip()}"
+    )
+    raw = await ask_openai_text(
+        compiler_prompt,
+        user_id=user_id,
+        chat_id=chat_id,
+        extra_system="You are a deterministic film continuity compiler. Return one JSON object and no prose.",
+    )
+    try:
+        return scene_plan_from_dict(
+            _music_video_extract_json_object(raw),
+            expected_duration_s=duration,
+            expected_aspect=aspect,
+            require_lip_sync=lip_sync_required,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"ScenePlan compiler produced an invalid plan: {exc}") from exc
+
+
+def _music_video_review_text(
+    prompt: str,
+    duration_s: int | None = None,
+    scene_plan: "ScenePlan | None" = None,
+) -> str:
     music_brief, video_brief = _music_video_split_briefs(prompt)
     duration = (
         max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(duration_s)))
         if duration_s is not None else _photo_clip_target_duration(video_brief)
     )
-    scene_s = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
-    scenes = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_s - 1) // scene_s))
-    vocal = _clip_wants_vocals(music_brief)
-    plan = _music_video_director_plan(video_brief, duration, scenes)
-    note = (
-        f"\n\n🎞 Длинный клип будет собран из {scenes} последовательных cinematic-сцен по ~{scene_s} секунд "
-        "с единым Character Identity Pack и continuity между сценами."
-        if scenes > 1 else "\n\nГенерация начнётся только после утверждения сценария."
+    if scene_plan is None:
+        try:
+            scene_plan = scene_plan_from_explicit_timeline(
+                video_brief,
+                duration_s=duration,
+                aspect=_music_video_aspect(prompt),
+                wants_vocals=False,
+                vocal_start_s=None,
+            )
+        except ValueError:
+            if duration <= 10:
+                scene_plan = _music_video_single_scene_plan(music_brief, video_brief, duration, _music_video_aspect(prompt))
+            else:
+                raise ValueError("A compiled ScenePlan is required for a multi-scene review")
+    return render_scene_plan_review(scene_plan, music_brief, video_brief)
+
+
+def _music_video_review_messages(
+    prompt: str,
+    duration_s: int,
+    scene_plan: ScenePlan,
+    source_note: str = "",
+) -> list[str]:
+    full = _music_video_review_text(prompt, duration_s, scene_plan) + (source_note or "")
+    return chunk_review_messages(full, limit=3900)
+
+
+async def _send_music_video_review(message, draft: dict, *, supersede: bool = False) -> None:
+    if supersede:
+        with contextlib.suppress(Exception):
+            await message.edit_text("♻️ Эта версия сценария заменена. Актуальный полный ScenePlan опубликован ниже.")
+    chunks = _music_video_review_messages(
+        draft["prompt"],
+        int(draft["duration"]),
+        draft["scene_plan"],
+        draft.get("source_note", ""),
     )
-    return (
-        "🎬 Сценарий AI-видеоклипа на утверждение\n\n"
-        f"🎵 ПЕСНЯ\n{music_brief[:1400]}\n\n"
-        f"🎥 КЛИП\n{video_brief[:1400]}\n\n"
-        f"Параметры: {duration} секунд · {scenes} сцен · формат {_music_video_aspect(prompt)}.\n\n"
-        f"🎞 РЕЖИССЁРСКАЯ РАЗБИВКА\n{plan}{note}"
-    )[:4000]
+    for index, chunk in enumerate(chunks):
+        await message.reply_text(
+            chunk,
+            reply_markup=_music_video_approval_kb(draft["token"]) if index == len(chunks) - 1 else None,
+        )
 
 def _music_video_replace_duration_field(video_brief: str, seconds: int) -> str:
     """Replace only the explicit clip-duration field; preserve scene/action timings."""
@@ -3915,6 +4090,21 @@ async def _stage_music_video_draft(
         if not img:
             await update.effective_message.reply_text("Сначала загрузите фото для AI-видеоклипа.")
             return False
+    try:
+        scene_plan = await _compile_music_video_scene_plan(
+            music_brief,
+            video_brief,
+            duration,
+            _music_video_aspect(combined),
+            user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+        )
+    except Exception:
+        log.exception("music video ScenePlan compilation failed")
+        await update.effective_message.reply_text(
+            "❌ Не удалось безопасно собрать полный ScenePlan. Генерация не запущена; уточните хронологию сцен."
+        )
+        return False
     token = uuid.uuid4().hex[:12]
     for key in ("awaiting_photo_clip_prompt", "awaiting_vocal_clip_prompt", "awaiting_music_video_video_brief",
                 "music_video_music_brief", "music_video_draft_edit"):
@@ -3925,6 +4115,8 @@ async def _stage_music_video_draft(
         "identity_digests": {k: hashlib.sha256(v).hexdigest() for k, v in refs.items()} if refs else {},
         "duration": duration,
         "duration_locked": selected_duration_s is not None,
+        "scene_plan": scene_plan,
+        "scene_plan_fingerprint": scene_plan.fingerprint,
     }
     with contextlib.suppress(Exception):
         _mode_track_set(update.effective_user.id, "")
@@ -3935,10 +4127,8 @@ async def _stage_music_video_draft(
         if _clip_wants_vocals(music_brief) and source_token
         and _load_vocal_artifact(update.effective_user.id, source_token, "audio") else ""
     )
-    await update.effective_message.reply_text(
-        (_music_video_review_text(combined, duration) + source_note)[:4096],
-        reply_markup=_music_video_approval_kb(token)
-    )
+    context.user_data["music_video_draft"]["source_note"] = source_note
+    await _send_music_video_review(update.effective_message, context.user_data["music_video_draft"])
     return True
 
 async def _on_music_video_draft_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3955,15 +4145,33 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         # Duration buttons are authoritative. Strip old duration declarations with a
         # real regex (the previous raw string was double-escaped and silently failed).
         video_brief = _music_video_replace_duration_field(video_brief, seconds)
-        draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+        combined = _music_video_join_briefs(music_brief, video_brief)
+        try:
+            scene_plan = await _compile_music_video_scene_plan(
+                music_brief,
+                video_brief,
+                seconds,
+                _music_video_aspect(combined),
+                user_id=q.from_user.id,
+                chat_id=q.message.chat_id,
+            )
+        except Exception:
+            log.exception("music video ScenePlan recompilation failed")
+            await q.answer("Не удалось обновить ScenePlan")
+            await q.message.reply_text(
+                "❌ Новый ScenePlan не прошёл проверку. Предыдущая утверждаемая версия сохранена."
+            )
+            return
+        draft["prompt"] = combined
         draft["music_brief"] = music_brief
         draft["video_brief"] = video_brief
         draft["duration"] = seconds
         draft["duration_locked"] = True
+        draft["scene_plan"] = scene_plan
+        draft["scene_plan_fingerprint"] = scene_plan.fingerprint
         context.user_data["music_video_draft"] = draft
         await q.answer(f"Выбрано: {seconds} секунд")
-        with contextlib.suppress(Exception):
-            await q.message.edit_text(_music_video_review_text(draft["prompt"], seconds)[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+        await _send_music_video_review(q.message, draft, supersede=True)
         return
     if action == "voice":
         context.user_data["music_video_draft_edit"] = "voice_rewrite"
@@ -3985,12 +4193,30 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         if "[MUSIC_BRIEF]" in generated and "[VIDEO_BRIEF]" in generated:
             music_brief, video_brief = _music_video_split_briefs(generated)
             video_brief = _music_video_replace_duration_field(video_brief, seconds)
-            draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)
+            combined = _music_video_join_briefs(music_brief, video_brief)
+            try:
+                scene_plan = await _compile_music_video_scene_plan(
+                    music_brief,
+                    video_brief,
+                    seconds,
+                    _music_video_aspect(combined),
+                    user_id=q.from_user.id,
+                    chat_id=q.message.chat_id,
+                )
+            except Exception:
+                log.exception("automatic music video ScenePlan compilation failed")
+                await q.message.reply_text(
+                    "Не удалось безопасно проверить автоматический ScenePlan. Исходный черновик сохранён."
+                )
+                return
+            draft["prompt"] = combined
             draft["music_brief"] = music_brief
             draft["video_brief"] = video_brief
             draft["duration"] = seconds
+            draft["scene_plan"] = scene_plan
+            draft["scene_plan_fingerprint"] = scene_plan.fingerprint
             context.user_data["music_video_draft"] = draft
-            await q.message.edit_text(_music_video_review_text(draft["prompt"], seconds)[:4096], reply_markup=_music_video_approval_kb(draft["token"]))
+            await _send_music_video_review(q.message, draft, supersede=True)
         else:
             await q.message.reply_text("Не удалось безопасно структурировать промпт. Исходный черновик сохранён.")
         return
@@ -4026,6 +4252,19 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
         return
     prompt = draft["prompt"]
     seconds = int(draft.get("duration") or _photo_clip_target_duration(prompt))
+    scene_plan = draft.get("scene_plan")
+    if (
+        not isinstance(scene_plan, ScenePlan)
+        or scene_plan.duration_s != seconds
+        or scene_plan.fingerprint != draft.get("scene_plan_fingerprint")
+    ):
+        context.user_data.pop("music_video_draft", None)
+        context.user_data.pop("music_video_draft_edit", None)
+        await q.answer("ScenePlan устарел")
+        await q.message.reply_text(
+            "ScenePlan изменился или устарел. Создайте сценарий заново; генерация не запущена."
+        )
+        return
     music_brief, video_brief = _music_video_split_briefs(prompt)
     video_brief = _music_video_replace_duration_field(video_brief, seconds)
     prompt = _music_video_join_briefs(music_brief, video_brief)
@@ -4036,9 +4275,23 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     await q.message.reply_text("✅ Сценарий утверждён. Передаю его в режим AI-видеоклипа.")
     try:
         if _clip_wants_vocals(prompt):
-            await _start_vocal_clip(update, context, img, prompt, target_duration_s=seconds)
+            await _start_vocal_clip(
+                update,
+                context,
+                img,
+                prompt,
+                target_duration_s=seconds,
+                scene_plan=scene_plan,
+            )
         else:
-            await _start_photo_music_clip(update, context, img, prompt, target_duration_s=seconds)
+            await _start_photo_music_clip(
+                update,
+                context,
+                img,
+                prompt,
+                target_duration_s=seconds,
+                scene_plan=scene_plan,
+            )
     except Exception:
         log.exception("music video draft approval failed")
         await q.message.reply_text("❌ Не удалось запустить клип. Кредиты за незавершённую генерацию не списаны. Попробуйте снова.")
@@ -5771,7 +6024,7 @@ def _pricing_catalog_text() -> str:
         f"• Suno музыка — {_retail_credits(SUNO_COST_USD)} кр.",
         f"• Говорящий аватар — {_retail_credits(AVATAR_UNIT_COST_USD)} кр.",
         f"• Фото → видеоклип с музыкой — {_retail_credits(PHOTO_CLIP_UNIT_COST_USD)} кр.",
-        f"• Клип с вокалом / lip-sync, до 10 сек (1 сцена) — {_retail_credits(VOCAL_CLIP_UNIT_COST_USD)} кр.",
+        f"• Клип с вокалом / selective lip-sync — от {_retail_credits(VOCAL_CLIP_UNIT_COST_USD)} кр. (по числу сцен)",
         "",
         "🎭 Бизнес и фото",
         f"• FaceSwap быстро — {_retail_credits(FACESWAP_FAST_COST_USD)} кр.; премиум — {_retail_credits(FACESWAP_PREMIUM_COST_USD)} кр.",
@@ -7798,6 +8051,59 @@ async def _upload_bytes_to_telegram_file_url(update: Update, context: ContextTyp
     return _telegram_file_public_url(getattr(tg_file, "file_path", "") or "")
 
 
+async def _upload_file_to_telegram_file_url(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    path: str,
+    filename: str,
+    caption: str = "",
+) -> str:
+    """Stream a local provider input to Telegram and return its public HTTPS URL."""
+    if not path or not os.path.isfile(path) or os.path.getsize(path) < 512:
+        return ""
+    sent = None
+    last_exc = None
+    for attempt in range(3):
+        try:
+            with open(path, "rb") as file_obj:
+                media = InputFile(file_obj, filename=filename, read_file_handle=False)
+                sent = await update.effective_message.reply_document(
+                    document=media,
+                    caption=caption or "Фрагмент подготовлен для lip-sync.",
+                    read_timeout=120,
+                    write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S,
+                    connect_timeout=20,
+                    pool_timeout=20,
+                )
+            break
+        except TimedOut as exc:
+            last_exc = exc
+            log.warning("telegram file upload timeout filename=%s attempt=%s/3", filename, attempt + 1)
+            if attempt < 2:
+                await asyncio.sleep(2.0 * (attempt + 1))
+    if sent is None:
+        if last_exc:
+            raise last_exc
+        return ""
+    media = getattr(sent, "document", None) or getattr(sent, "video", None)
+    if not media:
+        return ""
+    tg_file = None
+    for attempt in range(3):
+        try:
+            tg_file = await context.bot.get_file(media.file_id)
+            break
+        except TimedOut as exc:
+            last_exc = exc
+            if attempt < 2:
+                await asyncio.sleep(1.5 * (attempt + 1))
+    if tg_file is None:
+        if last_exc:
+            raise last_exc
+        return ""
+    return _telegram_file_public_url(getattr(tg_file, "file_path", "") or "")
+
+
 async def _text_to_public_mp3_url(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> str:
     text = (text or "").strip()
     if not text or not OPENAI_TTS_KEY:
@@ -7984,6 +8290,41 @@ async def _run_kling_avatar_result_bytes(
     return scene_bytes
 
 
+async def _run_kling_lipsync_result_bytes(
+    video_url: str,
+    audio_url: str,
+    *,
+    max_wait_s: int | None = None,
+) -> bytes:
+    """Apply Kling's audio2video lip-sync to one approved 2–10 second interval."""
+    if not KLING_LIPSYNC_ENABLED:
+        raise RuntimeError("Kling lip-sync is disabled")
+    if not (KLING_API_KEY or COMET_API_KEY):
+        raise RuntimeError("Kling lip-sync: API key missing")
+    if not str(video_url or "").startswith("https://") or not str(audio_url or "").startswith("https://"):
+        raise RuntimeError("Kling lip-sync requires public HTTPS video and audio URLs")
+    payload = {
+        "input": {
+            "video_url": video_url,
+            "mode": "audio2video",
+            "audio_type": "url",
+            "audio_url": audio_url,
+        }
+    }
+    result = await _create_and_poll_i2v_bytes(
+        COMET_BASE_URL,
+        KLING_API_KEY or COMET_API_KEY,
+        [(KLING_LIPSYNC_CREATE_PATH, payload)],
+        [KLING_LIPSYNC_STATUS_PATH, "/kling/v1/videos/lip-sync/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
+        "Kling lip-sync",
+        max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S),
+    )
+    if not result or len(result) < 512 or result[4:8] != b"ftyp":
+        raise RuntimeError("Kling lip-sync result is not an MP4 video")
+    log.info("Kling lip-sync downloaded: %d bytes", len(result))
+    return result
+
+
 async def _start_talking_avatar(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -8119,6 +8460,102 @@ def _write_video_segment_file(directory: str, index: int, content: bytes) -> str
     with open(path, "wb") as fh:
         fh.write(content)
     return path
+
+
+def _extract_video_interval_file_sync(
+    source_path: str,
+    start_s: float,
+    duration_s: float,
+    output_path: str,
+) -> str | None:
+    """Create a normalized silent MP4 accepted by Kling lip-sync without buffering it."""
+    duration_s = float(duration_s)
+    if duration_s < 2.0 or duration_s > 10.000001:
+        raise ValueError("lip-sync video interval must be 2 to 10 seconds")
+    cmd = [
+        _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", f"{max(0.0, float(start_s)):.3f}", "-i", source_path,
+        "-t", f"{duration_s:.3f}", "-map", "0:v:0", "-an",
+        "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+        "-crf", str(FFMPEG_MUX_CRF), "-pix_fmt", "yuv420p",
+        "-threads", str(FFMPEG_MUX_THREADS), "-movflags", "+faststart", output_path,
+    ]
+    with tempfile.TemporaryFile(mode="w+b") as err_fh:
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
+            timeout=max(90, FFMPEG_MUX_TIMEOUT_S),
+        )
+    if result.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 512:
+        return output_path
+    return None
+
+
+def _replace_video_interval_file_sync(
+    original_path: str,
+    replacement_path: str,
+    start_s: float,
+    end_s: float,
+    total_duration_s: float,
+    output_path: str,
+) -> str | None:
+    """Replace only the approved interval, preserving chronological prefix and suffix."""
+    start_s, end_s, total_duration_s = float(start_s), float(end_s), float(total_duration_s)
+    if start_s < 0 or end_s <= start_s or end_s > total_duration_s + 0.001:
+        raise ValueError("invalid lip-sync replacement interval")
+    if start_s <= 0.001 and end_s >= total_duration_s - 0.001:
+        shutil.copyfile(replacement_path, output_path)
+        return output_path if os.path.getsize(output_path) > 512 else None
+
+    ffprobe = shutil.which("ffprobe") or "ffprobe"
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+         "-of", "csv=p=0:s=x", original_path],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30,
+    )
+    try:
+        width, height = (int(part) for part in probe.stdout.strip().split("x", 1))
+    except Exception as exc:
+        raise RuntimeError("could not inspect cinematic scene dimensions") from exc
+
+    labels: list[str] = []
+    filters: list[str] = []
+    normalize = f"fps=24,scale={width}:{height},setsar=1"
+    if start_s > 0.001:
+        filters.append(f"[0:v]trim=start=0:end={start_s:.3f},setpts=PTS-STARTPTS,{normalize}[prefix]")
+        labels.append("[prefix]")
+    replacement_duration = end_s - start_s
+    filters.append(
+        f"[1:v]trim=start=0:duration={replacement_duration:.3f},setpts=PTS-STARTPTS,{normalize}[synced]"
+    )
+    labels.append("[synced]")
+    if end_s < total_duration_s - 0.001:
+        filters.append(
+            f"[0:v]trim=start={end_s:.3f}:end={total_duration_s:.3f},setpts=PTS-STARTPTS,{normalize}[suffix]"
+        )
+        labels.append("[suffix]")
+    filters.append("".join(labels) + f"concat=n={len(labels)}:v=1:a=0[outv]")
+    cmd = [
+        _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+        "-i", original_path, "-i", replacement_path,
+        "-filter_complex", ";".join(filters), "-map", "[outv]", "-an",
+        "-t", f"{total_duration_s:.3f}", "-c:v", "libx264",
+        "-preset", FFMPEG_MUX_REENCODE_PRESET, "-crf", str(FFMPEG_MUX_CRF),
+        "-pix_fmt", "yuv420p", "-threads", str(FFMPEG_MUX_THREADS),
+        "-movflags", "+faststart", output_path,
+    ]
+    with tempfile.TemporaryFile(mode="w+b") as err_fh:
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
+            timeout=max(120, FFMPEG_MUX_TIMEOUT_S),
+        )
+        if result.returncode != 0:
+            err_fh.seek(0, os.SEEK_END)
+            size = err_fh.tell()
+            err_fh.seek(max(0, size - 1200))
+            log.warning("lip-sync interval splice failed: %s", err_fh.read().decode("utf-8", "ignore"))
+    if result.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 512:
+        return output_path
+    return None
 
 
 def _concat_video_segments_sync(segments: list[bytes], target_duration: int) -> bytes | None:
@@ -8753,36 +9190,69 @@ def _music_video_world_state_ledger(base_prompt: str, scene_idx: int, scene_coun
     }
 
 
-def _vocal_scene_role_prompt(base_prompt: str, role_plan: dict, scene_idx: int, scene_count: int) -> str:
+def _vocal_scene_role_prompt(
+    base_prompt: str,
+    role_plan: dict,
+    scene_idx: int,
+    scene_count: int,
+    *,
+    scene_plan: "ScenePlan | None" = None,
+) -> str:
     """Build a strict persistent world-state contract for one chronological scene."""
     mode = role_plan.get("mode")
     role = "single lead protagonist" if mode == "solo" else "preserve only performer roles explicitly requested by the user"
-    ledger = _music_video_world_state_ledger(base_prompt, scene_idx, scene_count)
+    if scene_plan is not None:
+        if scene_count != len(scene_plan.scenes) or not 1 <= scene_idx <= len(scene_plan.scenes):
+            raise ValueError("ScenePlan/provider scene selection mismatch")
+        contract = scene_plan.scenes[scene_idx - 1]
+        ledger = {
+            "current": contract.action,
+            "completed": " | ".join(contract.completed_actions) or "none — begin from the supplied starting keyframe",
+            "future_count": contract.future_count,
+            "is_first": scene_idx == 1,
+            "is_last": scene_idx == len(scene_plan.scenes),
+            "start_state": contract.start_state,
+            "end_state": contract.end_state,
+            "world_state": " | ".join(contract.world_state),
+        }
+    else:
+        # Compatibility for legacy non-approved callers only. Production always
+        # passes the exact immutable plan reviewed by the user.
+        ledger = _music_video_world_state_ledger(base_prompt, scene_idx, scene_count)
+        ledger.update({
+            "start_state": (
+                "use the supplied starting keyframe as the physical start"
+                if ledger["is_first"] else "use the continuation frame as the exact physical end state of the preceding scene"
+            ),
+            "end_state": "finish at the last physically implied state of the current action",
+            "world_state": "preserve every established person, prop, location, vehicle and spatial relation",
+        })
     start = (
-        "use the supplied starting keyframe as the physical start"
-        if ledger["is_first"]
-        else "use the continuation frame as the exact physical end state of the preceding scene"
+        f"{ledger['start_state']}; use the supplied starting keyframe as the physical start"
+        if ledger["is_first"] else
+        f"{ledger['start_state']}; use the continuation frame as the exact physical end state of the preceding scene"
     )
     return (
-        f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist; camera narrative priority stays on this person. "
-        "AUTHORITATIVE PERSISTENT WORLD-STATE LEDGER. "
-        f"CURRENT ACTION — execute only the chronological action in this scene: {ledger['current']} "
-        f"START STATE: {start}; do not restart the story, re-enter a completed location or replay a completed action. "
+        "MANDATORY USER VIDEO DIRECTION. "
+        f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist. "
+        f"REQUIRED ACTION CONTRACT FOR THIS SCENE ONLY — CURRENT ACTION: {ledger['current']} "
+        f"START STATE: {start}. "
+        f"END STATE: {ledger['end_state']}. "
+        f"WORLD STATE: {ledger['world_state']}. "
         f"COMPLETED ACTIONS (history only; never replay): {ledger['completed']}. "
-        f"UNOPENED FUTURE: {ledger['future_count']} later block(s). Do not introduce any person, prop, vehicle, location, "
-        "seat occupancy or action that first appears in a future block. Future content is intentionally withheld. "
-        "END STATE: perform the current action exactly once, finish at its last physically implied state, and keep that state for the next scene. "
-        "WORLD LOCKS: Preserve spatial direction, handedness, wardrobe, vehicle geometry, door state, seat assignments, prop ownership and prop position. "
-        "Once introduced, a person or object persists; once an action is completed, it cannot reset or repeat. "
-        "FORBIDDEN: no teleportation, jumps, duplicates, body splits, extra limbs, geometry warping, role/seat swaps, disappearing objects, "
-        "or a supporting character becoming protagonist. A seated person stays in the stated seat unless CURRENT ACTION changes it. "
+        f"UNOPENED FUTURE: {ledger['future_count']} block(s); do not introduce future people, props, vehicles, locations or actions, "
+        "and do not execute actions belonging to later scenes. Perform the current action once; do not restart the story or replay history. "
+        "WORLD LOCKS: Preserve spatial direction, wardrobe, doors, seat assignments, prop ownership/position and every established person/object. "
+        "FORBIDDEN TRANSITIONS: no teleportation, duplicates, extra limbs, geometry warping, role/seat swaps, disappearing objects, "
+        "or a supporting character become the protagonist. "
         f"ROLE: {role}. IDENTITY: FACE_FRONT=frontal face, FACE_3Q=turned-face geometry, BODY_FULL=body. "
-        "Continuation controls world/pose only, never identity. Preserve age, face, hair, body and wardrobe. "
-        "Physically plausible premium photorealistic motion; neutral mouth unless lip-sync is active; no text overlays."
+        "Continuation controls world/pose, never identity. Preserve age, face, hair and body. "
+        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT unless the exact action says otherwise. "
+        "Photorealistic motion; neutral mouth unless lip-sync is active; no text."
     )
 
 
-async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: int, duration_s: int) -> bytes:
+async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: float, duration_s: float) -> bytes:
     def _cut() -> bytes:
         ffmpeg = _ffmpeg_exe()
         try:
@@ -8801,6 +9271,74 @@ async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: int, duratio
             log.warning("vocal scene audio cut failed: %s", e)
         return b""
     return await asyncio.to_thread(_cut)
+
+
+async def _apply_kling_lipsync_to_scene_file(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    audio_bytes: bytes,
+    scene_path: str,
+    contract,
+    directory: str,
+) -> str:
+    """Replace only one ScenePlan vocal interval and fail closed on any transport/provider error."""
+    if not contract.has_lip_sync:
+        return scene_path
+    absolute_start = float(contract.lip_sync_start_s)
+    absolute_end = float(contract.lip_sync_end_s)
+    relative_start = absolute_start - float(contract.start_s)
+    relative_end = absolute_end - float(contract.start_s)
+    duration = absolute_end - absolute_start
+    interval_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsync_input.mp4")
+    interval_path = await asyncio.to_thread(
+        _extract_video_interval_file_sync,
+        scene_path,
+        relative_start,
+        duration,
+        interval_path,
+    )
+    if not interval_path:
+        raise RuntimeError(f"Не удалось подготовить video interval для lip-sync сцены {contract.index}.")
+    video_url = await _upload_file_to_telegram_file_url(
+        update,
+        context,
+        interval_path,
+        f"scene_{contract.index:02d}_lipsync.mp4",
+        f"🎭 Video interval сцены {contract.index} подготовлен для lip-sync.",
+    )
+    audio_part = await _extract_audio_segment_bytes(audio_bytes, absolute_start, duration)
+    if not audio_part:
+        raise RuntimeError(f"Не удалось извлечь точный audio interval для lip-sync сцены {contract.index}.")
+    audio_url = await _upload_bytes_to_telegram_file_url(
+        update,
+        context,
+        audio_part,
+        f"scene_{contract.index:02d}_lipsync.mp3",
+        f"🎧 Audio interval сцены {contract.index} подготовлен для lip-sync.",
+    )
+    del audio_part
+    if not video_url.startswith("https://") or not audio_url.startswith("https://"):
+        raise RuntimeError(f"Не удалось получить HTTPS inputs для lip-sync сцены {contract.index}.")
+    synced_bytes = await _run_kling_lipsync_result_bytes(
+        video_url,
+        audio_url,
+        max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+    )
+    synced_path = _write_video_segment_file(directory, 1000 + contract.index, synced_bytes)
+    del synced_bytes
+    output_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsynced.mp4")
+    output_path = await asyncio.to_thread(
+        _replace_video_interval_file_sync,
+        scene_path,
+        synced_path,
+        relative_start,
+        relative_end,
+        float(contract.duration_s),
+        output_path,
+    )
+    if not output_path:
+        raise RuntimeError(f"Не удалось встроить lip-sync interval в сцену {contract.index}.")
+    return output_path
 
 
 def _vocal_clip_provider_cost_usd(scene_count: int) -> float:
@@ -8951,11 +9489,19 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
             await q.answer("Аудио подтверждено")
         prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
         keyframe = context.user_data.get("music_video_pending_keyframe")
-        if not prompt or not keyframe:
+        scene_plan = context.user_data.get("music_video_pending_scene_plan")
+        if not prompt or not keyframe or not isinstance(scene_plan, ScenePlan):
             await q.message.reply_text("✅ Аудио подтверждено. Состояние клипа устарело — утвердите сценарий ещё раз.")
             return
         await q.message.reply_text("✅ Аудио подтверждено. Продолжаю этот же клип — запускаю видеогенерацию.")
-        await _start_vocal_clip(update, context, keyframe, prompt)
+        await _start_vocal_clip(
+            update,
+            context,
+            keyframe,
+            prompt,
+            target_duration_s=scene_plan.duration_s,
+            scene_plan=scene_plan,
+        )
         return
     if kind == "editaudio":
         pending_token = context.user_data.get("music_video_pending_audio_token")
@@ -9033,6 +9579,7 @@ async def _start_vocal_clip(
     user_prompt: str,
     *,
     target_duration_s: int | None = None,
+    scene_plan: "ScenePlan | None" = None,
 ):
     """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
     prompt = (user_prompt or "").strip()
@@ -9048,8 +9595,26 @@ async def _start_vocal_clip(
         max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
         if target_duration_s is not None else _photo_clip_target_duration(prompt)
     )
-    scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
-    scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
+    if scene_plan is not None:
+        if scene_plan.duration_s != target_duration or scene_plan.aspect != _music_video_aspect(prompt):
+            raise ValueError("approved ScenePlan no longer matches provider parameters")
+        scene_count = len(scene_plan.scenes)
+        scene_s = max(1, int(max(scene.duration_s for scene in scene_plan.scenes)))
+        planned_lipsync = tuple(scene for scene in scene_plan.scenes if scene.has_lip_sync)
+        if scene_plan.vocal_start_s is not None and not planned_lipsync:
+            await update.effective_message.reply_text(
+                "❌ В утверждённом вокальном ScenePlan нет face-visible lip-sync интервала. Видео не запускаю."
+            )
+            return False
+        if planned_lipsync and (not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY)):
+            await update.effective_message.reply_text(
+                "❌ Kling lip-sync сейчас недоступен. Несинхронизированный вокальный клип не отправляю."
+            )
+            return False
+    else:
+        scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
+        scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
+        planned_lipsync = ()
     role_plan = _vocal_clip_role_plan(prompt, performer_count)
     user_id = update.effective_user.id
     source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
@@ -9100,10 +9665,18 @@ async def _start_vocal_clip(
             await update.effective_message.reply_text(
                 f"🎤 AI-видеоклип принят: ~{target_duration} сек, {scene_count} сцен, героев: {performer_count}. "
                 f"{role_note} {'Использую выбранную песню Suno' if saved_source else 'Сначала Suno создаёт единый трек'}, "
-                "затем Kling делает cinematic I2V; полный Avatar/lip-sync не применяется без надёжного определения вокального face-visible сегмента."
+                f"затем Kling делает cinematic I2V и обязательный lip-sync в {len(planned_lipsync)} утверждённых face-visible интервалах."
             )
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
             music_brief, video_brief = _music_video_split_briefs(prompt)
+
+            def _scene_role_prompt(index: int) -> str:
+                if scene_plan is None:
+                    return _vocal_scene_role_prompt(video_brief, role_plan, index, scene_count)
+                return _vocal_scene_role_prompt(
+                    video_brief, role_plan, index, scene_count, scene_plan=scene_plan
+                )
+
             pack_fn = globals().get("_music_video_identity_pack")
             synth_fn = globals().get("_run_comet_music_video_identity_keyframe")
             high_fidelity = callable(pack_fn) and callable(synth_fn)
@@ -9124,7 +9697,8 @@ async def _start_vocal_clip(
             elif high_fidelity:
                 await update.effective_message.reply_text("🧬 Собираю identity-preserving стартовый keyframe из 4 reference через Gemini/Comet…")
                 keyframe = await synth_fn(
-                    refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"], video_brief
+                    refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"],
+                    _scene_role_prompt(1),
                 )
                 if not keyframe:
                     raise RuntimeError("Не удалось синтезировать identity-preserving keyframe")
@@ -9162,6 +9736,7 @@ async def _start_vocal_clip(
                 context.user_data["music_video_pending_prompt"] = prompt
                 context.user_data["music_video_pending_music_brief"] = music_brief
                 context.user_data["music_video_pending_audio_token"] = song_token
+                context.user_data["music_video_pending_scene_plan"] = scene_plan
                 context.user_data["music_video_pending_keyframe"] = img_bytes
                 context.user_data["music_video_pending_keyframe_url"] = locals().get("keyframe_url", "")
                 await update.effective_message.reply_text(
@@ -9176,19 +9751,18 @@ async def _start_vocal_clip(
             try:
                 segment_paths: list[str] = []
                 if high_fidelity:
-                    # Fail-safe: vocal_start is not reliably detected yet. Never apply Avatar to an entire
-                    # action/orbit/rear-follow scene. Selective lip-sync requires a real face-visible +
-                    # vocal-active detector; until then production uses cinematic I2V + untouched Suno master.
                     await update.effective_message.reply_text(
-                        "🎵 Песня готова. Вокальный старт автоматически не угадываю: action-сцену рендерю cinematic, "
-                        "без принудительного lip-sync на весь ролик."
+                        "🎵 Песня готова. Рендерю cinematic-сцены и применяю lip-sync только к утверждённым вокальным интервалам."
                     )
                     aspect = _music_video_aspect(prompt)
                     continuation_bytes, continuation_url = img_bytes, keyframe_url
                     for idx in range(1, scene_count + 1):
-                        dur_s = min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
+                        dur_s = (
+                            int(round(scene_plan.scenes[idx - 1].duration_s))
+                            if scene_plan is not None else min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
+                        )
                         await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
-                        scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
+                        scene_prompt = _scene_role_prompt(idx)
                         scene_prompt += (
                             " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
                             "The continuation frame controls pose/action continuity but must never redefine identity."
@@ -9201,6 +9775,20 @@ async def _start_vocal_clip(
                         scene_path = await asyncio.to_thread(
                             _write_video_segment_file, finalize_td.name, idx, scene_video
                         )
+                        if scene_plan is not None:
+                            contract = scene_plan.scenes[idx - 1]
+                            if contract.has_lip_sync:
+                                await update.effective_message.reply_text(
+                                    f"🎭 Сцена {idx}/{scene_count}: применяю обязательный Kling lip-sync…"
+                                )
+                                scene_path = await _apply_kling_lipsync_to_scene_file(
+                                    update,
+                                    context,
+                                    safe_audio,
+                                    scene_path,
+                                    contract,
+                                    finalize_td.name,
+                                )
                         segment_paths.append(scene_path)
                         del scene_video
                         if idx < scene_count:
@@ -9209,9 +9797,9 @@ async def _start_vocal_clip(
                                 raise RuntimeError(f"Не удалось получить continuation frame после сцены {idx}.")
                             # Re-anchor every scene to the real Character Identity Pack while retaining
                             # the previous frame only as world/action continuity.
-                            next_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx + 1, scene_count)
+                            next_prompt = _scene_role_prompt(idx + 1)
                             reanchored = await synth_fn(
-                                refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"],
+                                refs["face_front"], refs["face_3q"], refs["body_full"], None,
                                 next_prompt, continuity_frame=last_frame,
                             )
                             continuation_bytes = reanchored or last_frame
@@ -9234,7 +9822,7 @@ async def _start_vocal_clip(
                         audio_url = await _upload_bytes_to_telegram_file_url(
                             update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
                         )
-                        scene_prompt = _vocal_scene_role_prompt(video_brief, role_plan, idx, scene_count)
+                        scene_prompt = _scene_role_prompt(idx)
                         scene_video = await _run_kling_avatar_result_bytes(
                             img_bytes, audio_file_url=audio_url, audio_filename=f"vocal_scene_{idx:02d}.mp3",
                             audio_mime="audio/mpeg", avatar_prompt=scene_prompt, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
@@ -9376,6 +9964,7 @@ async def _start_photo_music_clip(
     user_prompt: str,
     *,
     target_duration_s: int | None = None,
+    scene_plan: "ScenePlan | None" = None,
 ):
     _, aspect = parse_video_opts(user_prompt or "")
     if not any(a in (user_prompt or "") for a in _ASPECTS):
@@ -9386,6 +9975,10 @@ async def _start_photo_music_clip(
         max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
         if target_duration_s is not None else _photo_clip_target_duration(user_prompt or "")
     )
+    if scene_plan is not None and (
+        scene_plan.duration_s != target_duration or scene_plan.aspect != aspect
+    ):
+        raise ValueError("approved ScenePlan no longer matches instrumental provider parameters")
     base_duration = min(10, target_duration)
     user_id = update.effective_user.id
 
@@ -9408,7 +10001,8 @@ async def _start_photo_music_clip(
             await update.effective_message.reply_text(
                 f"🎬 AI-видеоклип принят. Делаю ОДИН итоговый MP4. "
                 f"Видео: Kling; музыка/песня: Suno; длина: ~{target_duration} сек; "
-                f"сцен: {len(_music_video_scene_prompts(user_prompt, target_duration))}. Для длинного клипа ожидание может быть больше 15 минут."
+                f"сцен: {len(scene_plan.scenes) if scene_plan is not None else len(_music_video_scene_prompts(user_prompt, target_duration))}. "
+                "Для длинного клипа ожидание может быть больше 15 минут."
             )
             await update.effective_message.reply_text("🎵 Генерирую музыку/песню через Suno…")
             await update.effective_message.reply_text("🎞️ Генерирую видеоряд через Kling…")
@@ -9418,7 +10012,22 @@ async def _start_photo_music_clip(
             kling_image_url = ""
             with contextlib.suppress(Exception):
                 kling_image_url = _get_cached_photo_url(user_id) or ""
-            scene_prompts = _music_video_scene_prompts(user_prompt, target_duration)
+            if scene_plan is not None:
+                _, video_brief = _music_video_split_briefs(user_prompt)
+                scene_prompts = [
+                    _vocal_scene_role_prompt(
+                        video_brief,
+                        {"mode": "solo"},
+                        scene.index,
+                        len(scene_plan.scenes),
+                        scene_plan=scene_plan,
+                    )
+                    for scene in scene_plan.scenes
+                ]
+                scene_durations = [int(round(scene.duration_s)) for scene in scene_plan.scenes]
+            else:
+                scene_prompts = _music_video_scene_prompts(user_prompt, target_duration)
+                scene_durations = [min(PHOTO_CLIP_SCENE_SECONDS, target_duration)] * len(scene_prompts)
             async def _render_video_scenes():
                 segment_paths: list[str] = []
                 for scene_idx, scene_prompt in enumerate(scene_prompts, start=1):
@@ -9427,7 +10036,7 @@ async def _start_photo_music_clip(
                             f"🎞️ Сцена {scene_idx}/{len(scene_prompts)}: рендер через Kling…"
                         )
                     seg = await _run_kling_photo_clip_result(
-                        img_bytes, scene_prompt, min(PHOTO_CLIP_SCENE_SECONDS, target_duration), aspect, kling_image_url
+                        img_bytes, scene_prompt, scene_durations[scene_idx - 1], aspect, kling_image_url
                     )
                     if not seg:
                         raise RuntimeError(f"Kling не вернул сцену {scene_idx}/{len(scene_prompts)}")
@@ -9640,35 +10249,42 @@ def _extract_image_b64_from_gemini(obj) -> str:
 
 
 async def _run_comet_music_video_identity_keyframe(
-    face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes, video_brief: str,
+    face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes | None, video_brief: str,
     continuity_frame: bytes | None = None,
 ) -> bytes | None:
-    """Synthesize one scene keyframe from four real image parts; no fake multi-reference UX."""
+    """Synthesize an initial keyframe or minimally identity-correct a continuation frame."""
     if not COMET_API_KEY:
         return None
     refs = [
         ("FACE_FRONT", face_front),
         ("FACE_3Q", face_3q),
         ("BODY_FULL", body_full),
-        ("SCENE_REFERENCE", scene_reference),
     ]
+    if scene_reference:
+        refs.append(("SCENE_REFERENCE", scene_reference))
     if continuity_frame:
         refs.append(("CONTINUITY_FRAME", continuity_frame))
+    reference_contract = (
+        "SCENE_REFERENCE is an OLDER photo and defines ONLY the initial environment, composition, pose, clothing/accessories and visible tattoos; "
+        "its older face/body shape is NOT an identity reference. The scene image and identity images show the SAME PERSON at different times. "
+        if scene_reference else
+        "CONTINUATION_FRAME is the sole authority for composition, camera viewpoint, environment, pose, world state and completed actions. "
+        "The original SCENE_REFERENCE is intentionally absent and must not be reconstructed or used to reset the setting. "
+    )
     parts = [{"text": (
-        "Create ONE photorealistic starting scene keyframe. The first three identity images and the scene image show the SAME PERSON at different times. "
+        "Create ONE photorealistic scene keyframe. "
         "FACE_FRONT and FACE_3Q are CURRENT photos and are the ABSOLUTE authority for the person's CURRENT FACE and hair. "
-        "Never average, blend, interpolate or revert the current face toward the older face visible in SCENE_REFERENCE. "
-        "BODY_FULL defines current body proportions when visible. SCENE_REFERENCE is an OLDER photo and defines ONLY environment, "
-        "composition, pose, clothing/accessories and visible tattoos; its older face/body shape is NOT an identity reference. "
+        "Never average, blend, interpolate or revert the current face toward an older face. "
+        f"BODY_FULL defines current body proportions when visible. {reference_contract}"
         "Render the body slightly fuller when needed to be consistent with the current portrait references, while preserving scene clothing and tattoos. "
         "Preserve current age, face shape, eyes, nose, lips, chin, hairline and hairstyle exactly from FACE_FRONT/FACE_3Q. "
         "No beautification, no face redesign, no identity blending, no text, no watermark. "
-        "CRITICAL ACTION PRIMING: SCENE_REFERENCE is not a pose lock. Infer the FIRST ACTIONABLE STATE from the user's director brief "
+        "CRITICAL ACTION PRIMING: an initial SCENE_REFERENCE is not a pose lock. Use the FIRST ACTIONABLE STATE from the exact scene contract "
         "and build the keyframe at the beginning of that state. Preserve reference appearance/environment only where it does not conflict with the requested action. "
         "Any pose, held object, gaze direction, body orientation, door/object state, or composition from SCENE_REFERENCE that conflicts with the first requested action "
         "must transition toward the user's requested state rather than being frozen merely because it appears in the reference. "
         "Do not invent scenario-specific actions or props that the user did not request. "
-        "If CONTINUITY_FRAME is present, use it as the immutable geometric base and make only a minimal protagonist identity correction. Never collage references, paste a floating head/body, duplicate the protagonist, detach limbs, or move/replace/recompose the vehicle, architecture, supporting characters or persistent props. Preserve its exact camera viewpoint and completed-action state. If clean identity correction would damage geometry, preserve CONTINUITY_FRAME geometry rather than inventing a composite. "
+        "If CONTINUITY_FRAME is present, use it as the immutable geometric base and repair identity from FACE_FRONT/FACE_3Q with only a minimal protagonist identity correction. Never collage references, paste a floating head/body, duplicate the protagonist, detach limbs, or move/replace/recompose the vehicle, architecture, supporting characters or persistent props. Preserve its exact camera viewpoint and completed-action state. If clean identity correction would damage geometry, preserve CONTINUITY_FRAME geometry rather than inventing a composite. "
         "Build the exact START STATE for the next scene contract; supporting characters must remain in their explicitly stated position and role. "
         f"Director brief — execute literally: {(video_brief or '')[:1800]}"
     )}]
@@ -9688,7 +10304,7 @@ async def _run_comet_music_video_identity_keyframe(
         out = await _image_bytes_from_response(r, client)
         if not out:
             raise RuntimeError("Identity keyframe synthesis returned no image")
-        log.info("Music-video identity keyframe synthesized refs=4 bytes=%d", len(out))
+        log.info("Music-video identity keyframe synthesized refs=%d bytes=%d", len(refs), len(out))
         return out
 
 

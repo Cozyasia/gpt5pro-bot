@@ -3,13 +3,47 @@ import asyncio
 import contextlib
 import hashlib
 import itertools
+import json
 from pathlib import Path
 import re
 from types import SimpleNamespace
 import unittest
 
+from music_video_scene_plan import (
+    ScenePlan,
+    chunk_review_messages,
+    render_scene_plan_review,
+    scene_plan_from_dict,
+    scene_plan_from_explicit_timeline,
+)
+
 
 MAIN = Path(__file__).resolve().parents[1] / "main.py"
+
+
+def compiled_plan_json(duration: int, *, aspect: str = "9:16") -> str:
+    scenes = []
+    for index, start in enumerate(range(0, duration, 10), 1):
+        end = min(duration, start + 10)
+        scenes.append({
+            "index": index,
+            "start_s": start,
+            "end_s": end,
+            "action": f"scene {index}",
+            "start_state": "approved continuation state",
+            "end_state": f"end state {index}",
+            "world_state": ["identity persists"],
+            "completed_actions": [f"scene {n}" for n in range(1, index)],
+            "future_count": max(0, (duration + 9) // 10 - index),
+            "lip_sync_start_s": start,
+            "lip_sync_end_s": end,
+        })
+    return json.dumps({
+        "duration_s": duration,
+        "aspect": aspect,
+        "vocal_start_s": 0,
+        "scenes": scenes,
+    })
 
 
 class Button:
@@ -26,14 +60,46 @@ def load_flow():
     tokens = itertools.count(1)
     tree = ast.parse(MAIN.read_text(encoding="utf-8"))
     names = {
-        "_music_video_aspect", "_music_video_split_briefs", "_music_video_join_briefs", "_music_video_director_plan", "_music_video_review_text", "_music_video_approval_kb", "_music_video_replace_duration_field",
+        "_music_video_aspect", "_music_video_split_briefs", "_music_video_join_briefs", "_music_video_director_plan", "_music_video_review_text", "_music_video_review_messages", "_send_music_video_review", "_music_video_approval_kb", "_music_video_replace_duration_field",
+        "_music_video_vocal_start_hint", "_music_video_extract_json_object", "_music_video_single_scene_plan", "_compile_music_video_scene_plan",
         "_merge_music_video_prompt", "_stage_music_video_draft", "_on_music_video_draft_callback",
         "_photo_clip_target_duration", "_clip_wants_vocals",
+        "_music_video_story_beats", "_music_video_world_state_ledger", "_vocal_scene_role_prompt",
         "on_text",
     }
     nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
+    async def default_scene_compiler(prompt, **_kwargs):
+        duration_match = re.search(r"approved duration: (\d+)", prompt, re.I)
+        duration = int(duration_match.group(1)) if duration_match else 60
+        scene_count = max(1, (duration + 9) // 10)
+        scenes = []
+        completed = []
+        for index in range(scene_count):
+            start, end = index * 10, min(duration, (index + 1) * 10)
+            scenes.append({
+                "index": index + 1,
+                "start_s": start,
+                "end_s": end,
+                "action": f"chronological action {index + 1}",
+                "start_state": "supplied keyframe" if index == 0 else f"end state {index}",
+                "end_state": f"end state {index + 1}",
+                "world_state": [f"scene={index + 1}"],
+                "completed_actions": list(completed),
+                "future_count": scene_count - index - 1,
+                "lip_sync_start_s": start if end - start >= 2 else None,
+                "lip_sync_end_s": end if end - start >= 2 else None,
+            })
+            completed.append(f"chronological action {index + 1}")
+        return json.dumps({
+            "duration_s": duration,
+            "aspect": "9:16",
+            "vocal_start_s": 0,
+            "scenes": scenes,
+        }, ensure_ascii=False)
+
     env = {
         "re": re, "hashlib": hashlib,
+        "json": json,
         "contextlib": contextlib,
         "uuid": SimpleNamespace(uuid4=lambda: SimpleNamespace(hex=f"{next(tokens):012x}")),
         "InlineKeyboardButton": Button, "InlineKeyboardMarkup": Markup,
@@ -43,6 +109,12 @@ def load_flow():
         "_get_cached_photo": lambda _: b"photo",
         "_mode_track_set": lambda *_: None,
         "log": SimpleNamespace(exception=lambda *a: None),
+        "ScenePlan": ScenePlan,
+        "chunk_review_messages": chunk_review_messages,
+        "render_scene_plan_review": render_scene_plan_review,
+        "scene_plan_from_dict": scene_plan_from_dict,
+        "scene_plan_from_explicit_timeline": scene_plan_from_explicit_timeline,
+        "ask_openai_text": default_scene_compiler,
     }
     exec(compile(ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[])), str(MAIN), "exec"), env)
     return env
@@ -66,6 +138,85 @@ def fake_update(messages, callback_data=None):
 
 
 class MusicVideoApprovalTests(unittest.TestCase):
+    def test_long_review_is_sent_losslessly_in_chunks_with_controls_only_on_last(self):
+        env = load_flow()
+        messages = []
+        ctx = SimpleNamespace(user_data={})
+        tail = "ФИНАЛЬНЫЙ ХВОСТ " + ("реквизит сохраняется; " * 300)
+        prompt = (
+            "[MUSIC_BRIEF]\nМужской рэп с вокалом.\n\n"
+            "[VIDEO_BRIEF]\nДлительность клипа: 30 секунд.\n"
+            "0–10 секунд: лицо героя в лифте.\n"
+            "10–20 секунд: герой выходит на улицу.\n"
+            f"20–30 секунд: герой садится в машину. {tail}"
+        )
+
+        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, prompt))
+
+        self.assertGreater(len(messages), 1)
+        self.assertTrue(all(len(item[0]) <= 3900 for item in messages))
+        self.assertIn(tail.strip(), "".join(item[0] for item in messages))
+        self.assertTrue(all(item[1] is None for item in messages[:-1]))
+        self.assertIsNotNone(messages[-1][1])
+
+    def test_approved_provider_receives_the_exact_reviewed_scene_plan(self):
+        env = load_flow()
+        messages, started = [], []
+
+        async def start_vocal(*args, **kwargs):
+            started.append((args, kwargs))
+
+        env["_start_vocal_clip"] = start_vocal
+        ctx = SimpleNamespace(user_data={})
+        prompt = (
+            "[MUSIC_BRIEF]\nМужской рэп с вокалом.\n\n"
+            "[VIDEO_BRIEF]\nДлительность клипа: 30 секунд.\n"
+            "0–10 секунд: лицо героя в лифте.\n"
+            "10–20 секунд: герой выходит на улицу.\n"
+            "20–30 секунд: герой садится в машину."
+        )
+        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, prompt))
+        reviewed_plan = ctx.user_data["music_video_draft"]["scene_plan"]
+        token = ctx.user_data["music_video_draft"]["token"]
+
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
+
+        self.assertEqual(1, len(started))
+        self.assertIs(reviewed_plan, started[0][1]["scene_plan"])
+        self.assertEqual(reviewed_plan.fingerprint, started[0][1]["scene_plan"].fingerprint)
+
+    def test_duration_change_recompiles_and_replaces_the_scene_plan(self):
+        env = load_flow()
+        messages = []
+        ctx = SimpleNamespace(user_data={})
+        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, "Я пою, клип 10 секунд"))
+        old_plan = ctx.user_data["music_video_draft"]["scene_plan"]
+        token = ctx.user_data["music_video_draft"]["token"]
+
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:dur30:{token}"), ctx))
+
+        new_plan = ctx.user_data["music_video_draft"]["scene_plan"]
+        self.assertIsNot(old_plan, new_plan)
+        self.assertEqual(30, new_plan.duration_s)
+        self.assertNotEqual(old_plan.fingerprint, new_plan.fingerprint)
+
+    def test_provider_prompt_uses_exact_scene_contract_without_reconstructing_story(self):
+        env = load_flow()
+        plan = scene_plan_from_dict(json.loads(compiled_plan_json(30)), expected_duration_s=30, expected_aspect="9:16")
+
+        prompt = env["_vocal_scene_role_prompt"](
+            "this fallback brief must never be split",
+            {"mode": "solo"},
+            2,
+            3,
+            scene_plan=plan,
+        )
+
+        self.assertIn("scene 2", prompt)
+        self.assertIn("end state 2", prompt)
+        self.assertIn("identity persists", prompt)
+        self.assertNotIn("this fallback brief", prompt)
+
     def test_duration_replacement_removes_only_explicit_field_and_uses_real_newline(self):
         env = load_flow()
         replace = env["_music_video_replace_duration_field"]
@@ -117,7 +268,10 @@ class MusicVideoApprovalTests(unittest.TestCase):
         env = load_flow()
         messages = []
 
-        async def generate(*_args, **_kwargs):
+        async def generate(prompt, **_kwargs):
+            match = re.search(r"Approved duration: (\d+)", prompt)
+            if match:
+                return compiled_plan_json(int(match.group(1)))
             return (
                 "[MUSIC_BRIEF]\n10 секунд инструментального вступления, затем вокал.\n\n"
                 "[VIDEO_BRIEF]\n0–10 секунд: лифт.\n10–20 секунд: улица.\n20–30 секунд: машина."
@@ -135,7 +289,7 @@ class MusicVideoApprovalTests(unittest.TestCase):
         self.assertEqual(30, env["_photo_clip_target_duration"](draft["video_brief"]))
         self.assertEqual(1, draft["video_brief"].count("Длительность клипа:"))
 
-    def test_duration_button_edits_the_existing_approval_message_once(self):
+    def test_duration_button_supersedes_old_review_and_sends_new_plan(self):
         env = load_flow()
         messages = []
         ctx = SimpleNamespace(user_data={})
@@ -146,9 +300,11 @@ class MusicVideoApprovalTests(unittest.TestCase):
         asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:dur30:{token}"), ctx))
 
         changed = messages[before:]
-        self.assertEqual(1, len(changed))
+        self.assertEqual(2, len(changed))
         self.assertEqual("edit", changed[0][2])
-        self.assertIn("30 секунд · 3 сцен", changed[0][0])
+        self.assertIn("заменена", changed[0][0])
+        self.assertIn("30 секунд · 3 сцен", changed[1][0])
+        self.assertIsNotNone(changed[1][1])
 
     def test_voice_rewrite_keeps_button_selected_duration(self):
         env = load_flow()
@@ -157,7 +313,10 @@ class MusicVideoApprovalTests(unittest.TestCase):
         async def no_studio_text(*_args):
             return False
 
-        async def generate(*_args, **_kwargs):
+        async def generate(prompt, **_kwargs):
+            match = re.search(r"Approved duration: (\d+)", prompt)
+            if match:
+                return compiled_plan_json(int(match.group(1)))
             return (
                 "[MUSIC_BRIEF]\n10 секунд вступления, затем мужской вокал.\n\n"
                 "[VIDEO_BRIEF]\n0–10 секунд: лифт.\n10–20 секунд: улица.\n20–30 секунд: машина."
