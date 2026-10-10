@@ -8045,23 +8045,29 @@ async def _upload_bytes_to_telegram_file_url(update: Update, context: ContextTyp
     media = getattr(sent, "document", None) or getattr(sent, "audio", None) or getattr(sent, "voice", None)
     if not media:
         return ""
-    # Telegram getFile can transiently time out even after reply_document succeeded.
-    # Retry this non-billable transport step so a prepared identity keyframe does not
-    # abort the whole music-video pipeline before Suno/Kling are called.
+    # Telegram getFile can transiently time out or omit file_path even after
+    # reply_document succeeded. Retry this non-billable transport step so a prepared
+    # identity keyframe does not abort the pipeline before Suno/Kling are called.
     tg_file = None
     last_exc = None
     for attempt in range(3):
         try:
-            tg_file = await context.bot.get_file(media.file_id)
-            break
+            candidate = await context.bot.get_file(media.file_id)
+            if _telegram_file_public_url(getattr(candidate, "file_path", "") or ""):
+                tg_file = candidate
+                break
+            log.warning(
+                "telegram get_file returned no path filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
         except TimedOut as exc:
             last_exc = exc
             log.warning(
                 "telegram get_file timeout filename=%s attempt=%s/3",
                 filename, attempt + 1,
             )
-            if attempt < 2:
-                await asyncio.sleep(1.5 * (attempt + 1))
+        if attempt < 2:
+            await asyncio.sleep(1.5 * (attempt + 1))
     if tg_file is None:
         if last_exc:
             raise last_exc
@@ -8109,12 +8115,22 @@ async def _upload_file_to_telegram_file_url(
     tg_file = None
     for attempt in range(3):
         try:
-            tg_file = await context.bot.get_file(media.file_id)
-            break
+            candidate = await context.bot.get_file(media.file_id)
+            if _telegram_file_public_url(getattr(candidate, "file_path", "") or ""):
+                tg_file = candidate
+                break
+            log.warning(
+                "telegram get_file returned no path filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
         except TimedOut as exc:
             last_exc = exc
-            if attempt < 2:
-                await asyncio.sleep(1.5 * (attempt + 1))
+            log.warning(
+                "telegram get_file timeout filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
+        if attempt < 2:
+            await asyncio.sleep(1.5 * (attempt + 1))
     if tg_file is None:
         if last_exc:
             raise last_exc
