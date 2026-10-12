@@ -5551,28 +5551,39 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await q.message.reply_text("Пришли фото или опиши идею ролика — верну раскадровку под Reels с тайм-кодами.")
 
 # ───────── Старт / Движки / Помощь ─────────
-def _claim_start_update(update_id: int) -> bool:
-    """Atomically suppress webhook retries of the same /start update."""
+def _claim_start_update(update: Update) -> bool:
+    """Deduplicate /start by Telegram message identity, even across webhook update IDs."""
+    message = update.effective_message
+    chat = update.effective_chat
+    if message is None or chat is None:
+        log.error("Refusing /start without stable Telegram message identity")
+        return False
     try:
-        with sqlite3.connect(DB_PATH, timeout=10) as con:
+        with sqlite3.connect(DB_PATH, timeout=20) as con:
             con.execute("BEGIN IMMEDIATE")
-            con.execute("CREATE TABLE IF NOT EXISTS processed_start_updates "
-                        "(update_id INTEGER PRIMARY KEY, created_at INTEGER NOT NULL)")
+            con.execute("CREATE TABLE IF NOT EXISTS processed_start_messages "
+                        "(chat_id INTEGER NOT NULL, message_id INTEGER NOT NULL, "
+                        "created_at INTEGER NOT NULL, PRIMARY KEY(chat_id, message_id))")
             now = int(time.time())
-            con.execute("DELETE FROM processed_start_updates WHERE created_at < ?",
+            con.execute("DELETE FROM processed_start_messages WHERE created_at < ?",
                         (now - 7 * 86400,))
             cur = con.execute(
-                "INSERT OR IGNORE INTO processed_start_updates(update_id, created_at) VALUES (?, ?)",
-                (int(update_id), now),
+                "INSERT OR IGNORE INTO processed_start_messages(chat_id, message_id, created_at) "
+                "VALUES (?, ?, ?)",
+                (int(chat.id), int(message.message_id), now),
             )
-            return cur.rowcount == 1
+            claimed = cur.rowcount == 1
+        log.info("START_CLAIM update_id=%s chat_id=%s message_id=%s claimed=%s",
+                 update.update_id, chat.id, message.message_id, claimed)
+        return claimed
     except Exception:
-        log.exception("Start update deduplication failed for update_id=%s", update_id)
-        return True
+        log.exception("Start message deduplication failed for update_id=%s", update.update_id)
+        # Fail closed: never send duplicate welcome when the durable guard is unavailable.
+        return False
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.update_id is not None and not _claim_start_update(update.update_id):
+    if not _claim_start_update(update):
         log.warning("Suppressed duplicate /start update_id=%s", update.update_id)
         return
     if await _handle_payment_start_payload(update, context):
