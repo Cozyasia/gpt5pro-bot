@@ -18221,6 +18221,51 @@ def build_application() -> "Application":
         builder = builder.post_init(_post_init_bot_profile)
     app = builder.build()
 
+    # Telegram local/cloud migration can deliver the SAME message with different
+    # update_id values. Deduplicate by stable Telegram object identity instead.
+    # This handler runs before all business handlers, across all update types.
+    from telegram.ext import TypeHandler
+
+    async def _claim_incoming_telegram_event(update, context):
+        q = getattr(update, "callback_query", None)
+        m = getattr(update, "message", None)
+        if m is None:
+            m = getattr(update, "edited_message", None)
+        if m is None:
+            m = getattr(update, "channel_post", None)
+        if m is None:
+            m = getattr(update, "edited_channel_post", None)
+        if q is not None:
+            identity = "callback:" + str(q.id)
+        elif m is not None and getattr(m, "chat_id", None) is not None:
+            kind = "edited" if getattr(update, "edited_message", None) is not None or getattr(update, "edited_channel_post", None) is not None else "message"
+            edit_ts = getattr(m, "edit_date", None)
+            identity = f"{kind}:{m.chat_id}:{m.message_id}" + (f":{edit_ts.isoformat()}" if edit_ts else "")
+        else:
+            # Other Telegram update classes: preserve normal handling.
+            return
+        try:
+            with sqlite3.connect(DB_PATH, timeout=20) as con:
+                con.execute("BEGIN IMMEDIATE")
+                con.execute("CREATE TABLE IF NOT EXISTS processed_telegram_events (identity TEXT PRIMARY KEY, created_at INTEGER NOT NULL)")
+                now = int(time.time())
+                con.execute("DELETE FROM processed_telegram_events WHERE created_at < ?", (now - 7 * 86400,))
+                inserted = con.execute(
+                    "INSERT OR IGNORE INTO processed_telegram_events(identity, created_at) VALUES (?, ?)",
+                    (identity, now),
+                ).rowcount == 1
+            if not inserted:
+                log.warning("TELEGRAM_EVENT_DUPLICATE identity=%s update_id=%s", identity, update.update_id)
+                raise ApplicationHandlerStop
+        except ApplicationHandlerStop:
+            raise
+        except Exception:
+            log.exception("Telegram event dedupe DB unavailable, update_id=%s", update.update_id)
+            # Avoid taking down the bot if the dedupe database is unavailable.
+            return
+
+    app.add_handler(TypeHandler(Update, _claim_incoming_telegram_event), group=-100)
+
     # Команды
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
