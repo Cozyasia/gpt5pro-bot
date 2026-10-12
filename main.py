@@ -10311,7 +10311,16 @@ async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_T
         path = os.path.join(td, "shorts.mp4")
         with open(path, "wb") as fh:
             fh.write(result)
-        await _reply_video_file(update, path, f"📱 Kling Shorts · {duration} сек · 9:16")
+        try:
+            send_path = await asyncio.to_thread(_compress_telegram_video_sync, path, os.path.join(td, "shorts_telegram.mp4"))
+            await _reply_video_file(update, send_path, f"📱 Kling Shorts · {duration} сек · 9:16")
+        except Exception as exc:
+            log.exception("Kling Shorts delivery failed after successful rendering")
+            await update.effective_message.reply_text(
+                "⚠️ Все сцены созданы, но отправить итоговый MP4 не удалось: "
+                + str(exc)[:250] + ". Повторную платную генерацию не запускайте."
+            )
+            return False
     return True
 
 
@@ -14920,6 +14929,22 @@ async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_
         if not sent_ok:
             # A transport failure must not turn a retry into a suppressed duplicate.
             _SENT_VIDEO_KEYS.pop(dedupe_key, None)
+
+
+def _compress_telegram_video_sync(source: str, target: str, max_bytes: int = 48 * 1024 * 1024) -> str:
+    """Compress already-rendered video without another provider generation."""
+    if os.path.getsize(source) <= max_bytes:
+        return source
+    ffmpeg = _ffmpeg_exe()
+    for crf in (27, 30, 33, 36):
+        cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", source,
+               "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264",
+               "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
+               "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", target]
+        res = subprocess.run(cmd, capture_output=True, timeout=360)
+        if res.returncode == 0 and os.path.exists(target) and 512 < os.path.getsize(target) <= max_bytes:
+            return target
+    raise RuntimeError("Не удалось сжать готовый MP4 до размера Telegram")
 
 
 async def _reply_video_file(update: Update, path: str, caption: str, task_id: str = ""):
