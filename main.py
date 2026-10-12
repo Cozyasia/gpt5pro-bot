@@ -10312,7 +10312,7 @@ async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_T
         with open(path, "wb") as fh:
             fh.write(result)
         try:
-            send_path = await asyncio.to_thread(_compress_telegram_video_sync, path, os.path.join(td, "shorts_telegram.mp4"))
+            send_path = path if os.path.getsize(path) <= 300 * 1024 * 1024 else await asyncio.to_thread(_compress_telegram_video_sync, path, os.path.join(td, "shorts_telegram.mp4"), 290 * 1024 * 1024)
             await _reply_video_file(update, send_path, f"📱 Kling Shorts · {duration} сек · 9:16")
         except Exception as exc:
             log.exception("Kling Shorts delivery failed after successful rendering")
@@ -14953,7 +14953,7 @@ async def _reply_video_file(update: Update, path: str, caption: str, task_id: st
         stat = os.stat(path)
     except OSError as exc:
         raise RuntimeError("video file is unavailable") from exc
-    if stat.st_size < 512 or stat.st_size > 50 * 1024 * 1024:
+    if stat.st_size < 512 or stat.st_size > 300 * 1024 * 1024:
         raise RuntimeError(f"video file size invalid: {stat.st_size}")
     chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
     file_identity = f"local:{os.path.abspath(path)}:{stat.st_size}:{stat.st_mtime_ns}"
