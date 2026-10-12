@@ -15538,10 +15538,16 @@ async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TY
         return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, SORA_API_KEY, payloads, [SORA_STATUS_PATH, "/v1/videos/{id}", "/v1/tasks/{id}"], "Sora 2 text→video · без людей"))
     if engine == "kling":
         d = str(_duration_for_engine("kling", duration_s))
+        # Kling API expects model_name (not model), as in its image2video endpoint.
+        # Keep a single canonical payload; alternate shapes are only for creation failures.
         payloads = [
-            (KLING_TEXT_CREATE_PATH, {"model": KLING_MODEL, "prompt": prompt, "duration": d, "aspect_ratio": aspect}),
-            ("/kling/v1/videos/text2video", {"model": KLING_MODEL, "prompt": prompt, "duration": d, "aspect_ratio": aspect}),
-            (KLING_TEXT_CREATE_PATH, {"prompt": prompt, "duration": d, "aspect_ratio": aspect}),
+            (KLING_TEXT_CREATE_PATH, {
+                "model_name": KLING_MODEL,
+                "prompt": prompt,
+                "duration": d,
+                "aspect_ratio": aspect,
+                "mode": "std",
+            }),
         ]
         return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, KLING_API_KEY, payloads, [KLING_TEXT_STATUS_PATH, "/kling/v1/videos/text2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"], "Kling text→video"))
     await update.effective_message.reply_text("❌ Неизвестный text→video движок. Доступны Sora 2 без людей, Kling и Runway.")
