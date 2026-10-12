@@ -4511,6 +4511,35 @@ async def _handle_vocalclip_prompt_choice(update: Update, context: ContextTypes.
         )
 
 
+def _kling_video_options_keyboard(context):
+    duration = int(context.user_data.get("kling_text_duration", 5))
+    sound = bool(context.user_data.get("kling_text_sound", False))
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(("✅ " if duration == 5 else "") + "5 секунд", callback_data="tvopt:dur:5"),
+         InlineKeyboardButton(("✅ " if duration == 10 else "") + "10 секунд", callback_data="tvopt:dur:10")],
+        [InlineKeyboardButton(("✅ " if not sound else "") + "🔇 Без звука", callback_data="tvopt:sound:off"),
+         InlineKeyboardButton(("✅ " if sound else "") + "🔊 Со звуком", callback_data="tvopt:sound:on")],
+    ])
+
+
+async def _on_kling_video_option(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = q.data or ""
+    if not context.user_data.get("awaiting_text_video_prompt") or context.user_data.get("text_video_engine") != "kling":
+        await q.answer("Сначала выберите Kling в меню видео.", show_alert=True)
+        return
+    _, kind, value = data.split(":", 2)
+    if kind == "dur" and value in ("5", "10"):
+        context.user_data["kling_text_duration"] = int(value)
+    elif kind == "sound" and value in ("on", "off"):
+        context.user_data["kling_text_sound"] = value == "on"
+    else:
+        await q.answer("Неизвестная настройка", show_alert=True)
+        return
+    await q.answer("Настройки сохранены")
+    await q.message.edit_reply_markup(reply_markup=_kling_video_options_keyboard(context))
+
+
 async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, engine: str, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "textvideo")
@@ -4520,12 +4549,17 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
     if engine not in ("sora", "kling", "runway"):
         engine = "kling"
     _set_text_video_wait(context, engine)
+    if engine == "kling":
+        context.user_data.setdefault("kling_text_duration", 5)
+        context.user_data.setdefault("kling_text_sound", False)
     labels = {"sora": "Sora 2 — только без людей", "kling": "Kling", "runway": "Runway"}
     await q.answer(labels[engine][:180])
     warning = "\n⚠️ В промпте не должно быть людей, лиц или персонажей." if engine == "sora" else ""
     await q.message.reply_text(
         f"✅ Выбран движок: {labels[engine]}.{warning}\n"
-        "Теперь напишите промпт или отправьте voice. Укажите сцену, стиль, длительность и формат: например `10 секунд, 16:9`."
+        "Теперь напишите промпт или отправьте voice. Для Kling выберите 5/10 секунд и звук кнопками ниже. "
+        "Для речи добавьте в промпт: «Персонаж произносит: ...». Голосовое сообщение будет распознано как текст."
+        , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else None
     )
 
 
@@ -10237,6 +10271,10 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         engine = "kling"
     if engine not in ("sora", "runway", "kling"):
         engine = "kling"
+    if engine == "kling":
+        duration = int(context.user_data.get("kling_text_duration", 5))
+        if context.user_data.get("kling_text_sound"):
+            prompt += "\\nGenerate synchronized native audio, dialogue and ambient sound matching the scene."
     if engine == "sora" and _prompt_likely_has_people(prompt):
         await update.effective_message.reply_text(
             "⚠️ Sora 2 в боте используется только для сцен без людей. В запросе обнаружен человек/персонаж. Выберите Kling или Runway.",
@@ -15546,7 +15584,8 @@ async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TY
                 "prompt": prompt,
                 "duration": d,
                 "aspect_ratio": aspect,
-                "mode": "std",
+                "mode": "pro",
+                "sound": "on" if context.user_data.get("kling_text_sound", False) else "off",
             }),
         ]
         return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, KLING_API_KEY, payloads, [KLING_TEXT_STATUS_PATH, "/kling/v1/videos/text2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"], "Kling text→video"))
@@ -18115,6 +18154,7 @@ def build_application() -> "Application":
 
     # 2) Новые режимы/подменю: mode:* и act:* (Учёба/Работа/Развлечения/Медицина)
     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10)|sound:(?:on|off))$"), group=0)
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
