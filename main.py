@@ -18176,6 +18176,13 @@ def build_application() -> "Application":
         raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
 
     builder = ApplicationBuilder().token(BOT_TOKEN)
+    # Opt-in only: do not redirect production until a local Bot API server is healthy.
+    local_api_url = (os.environ.get("TELEGRAM_LOCAL_API_URL") or "").strip().rstrip("/")
+    if local_api_url:
+        if not local_api_url.startswith(("http://", "https://")):
+            raise RuntimeError("TELEGRAM_LOCAL_API_URL must be an HTTP(S) URL")
+        builder = builder.base_url(local_api_url + "/bot").base_file_url(local_api_url + "/file/bot").local_mode(True)
+        log.info("Telegram local Bot API enabled (endpoint configured)")
     if AUTO_SET_BOT_PROFILE or AUTO_SET_BOT_MENU:
         builder = builder.post_init(_post_init_bot_profile)
     app = builder.build()
