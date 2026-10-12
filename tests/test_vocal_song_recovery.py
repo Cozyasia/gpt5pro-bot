@@ -214,7 +214,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 bot=SimpleNamespace(send_chat_action=lambda *_: asyncio.sleep(0)),
             )
             asyncio.run(env["_start_vocal_clip"](update, context, b"photo", "Я пою, 10 секунд"))
-            self.assertEqual([False], billed, "audio review is not a completed video operation")
+            self.assertEqual([None], billed, "audio review is pending, not a completed or failed video operation")
             self.assertEqual(["suno", "full-song"], events)
             audio_files = list((Path(root) / "42").glob("*_audio.mp3"))
             video_files = list((Path(root) / "42").glob("*_video.mp4"))

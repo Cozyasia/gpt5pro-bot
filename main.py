@@ -10011,8 +10011,10 @@ async def _start_vocal_clip(
                     "Выберите: подтвердить это аудио или сгенерировать другое.",
                     reply_markup=_vocal_song_kb(song_token, pending=True),
                 )
-                # Review is not a completed clip: do not charge the full video operation yet.
-                return False
+                # Audio review is a pending user decision, not a provider failure.
+                # None keeps paid billing uncommitted while avoiding a false error
+                # in the unlimited-access wrapper (which treats False as failure).
+                return None
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
             finalize_td = tempfile.TemporaryDirectory(prefix="neyro_vocal_finalize_")
             try:
