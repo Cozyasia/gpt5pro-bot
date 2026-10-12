@@ -3648,9 +3648,9 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="act:fun:faceswap")],
             [InlineKeyboardButton("🧼 Удалить фон на фото", callback_data="act:fun:removebg")],
             [InlineKeyboardButton("🖼 Заменить фон на фото", callback_data="act:fun:replacebg")],
-            [InlineKeyboardButton("📱 Reels / Shorts", callback_data="act:fun:reels")],
+            [InlineKeyboardButton("📱 Видео / Reels / Shorts", callback_data="act:fun:reels")],
             [InlineKeyboardButton("🎞 Создать мини-фильм", callback_data="act:fun:film")],
-            [InlineKeyboardButton("🎬 Сценарий шорта", callback_data="act:fun:shorts")],
+            [InlineKeyboardButton("🎬 Видео по тексту / голосу", callback_data="act:fun:shorts")],
             [InlineKeyboardButton("🎵 Музыка / песня", callback_data="act:fun:music")],
             [InlineKeyboardButton("🎮 Игры / квиз", callback_data="act:fun:games")],
             [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="act:fun:ideas")],
@@ -4992,11 +4992,11 @@ async def on_mode_cb(update, context):
         )
         return
     if data == "act:fun:shorts":
+        # Shorts and Reels are one entry point to the same text/voice video studio.
         await q.answer()
-        await q.message.reply_text(
-            "🎬 Тема, длительность (15–30 сек), стиль — сделаю сценарий шорта + подсказки для озвучки.",
-            reply_markup=_mode_kb("fun"),
-        )
+        _clear_transient_flows(context)
+        _set_mode_clean(uid, "Развлечения", "textvideo")
+        await q.message.reply_text(_textvideo_menu_text(), parse_mode="Markdown", reply_markup=_textvideo_action_kb("act"))
         return
     if data == "act:fun:games":
         await q.answer()
@@ -5049,15 +5049,11 @@ async def on_mode_cb(update, context):
         return
 
     if data == "act:fun:reels":
+        # Reuse video studio rather than a competing script-only flow.
         await q.answer()
         _clear_transient_flows(context)
-        _set_mode_clean(uid, "Развлечения", "fun_reels")
-        context.user_data["awaiting_reels_material"] = True
-        await q.message.reply_text(
-            _fun_reels_help_text(),
-            parse_mode="Markdown",
-            reply_markup=_mode_kb("fun"),
-        )
+        _set_mode_clean(uid, "Развлечения", "textvideo")
+        await q.message.reply_text(_textvideo_menu_text(), parse_mode="Markdown", reply_markup=_textvideo_action_kb("act"))
         return
 
     if data == "act:fun:film":
