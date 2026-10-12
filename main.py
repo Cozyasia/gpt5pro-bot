@@ -10379,6 +10379,8 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         engine = "kling"
     if engine not in ("sora", "runway", "kling", "veo"):
         engine = "kling"
+    if engine == "veo":
+        duration, aspect = 8, "9:16"
     if engine == "kling":
         duration = int(context.user_data.get("kling_text_duration", 5))
         if context.user_data.get("kling_text_sound"):
@@ -15695,12 +15697,16 @@ async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TY
     if engine == "runway":
         return bool(await _run_runway_video(update, context, prompt, duration_s, aspect))
     if engine == "veo":
+        # CometAPI documents POST /v1/videos as multipart fields model, prompt, size.
+        # Do not invent unsupported resolution/audio flags or retry a billed task.
         veo_prompt = (prompt + "\n\nGenerate native synchronized dialogue and ambient audio. "
                       "Any spoken dialogue must be in Russian (ru-RU), never English. "
                       "Pronounce quoted Russian dialogue verbatim, with accurate lip synchronization. "
                       "No English narration or translation.").strip()
-        payload = {"__multipart": {"data": {"model": VEO_FAST_MODEL, "prompt": veo_prompt, "size": "9:16"}, "files": {}}}
-        return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, COMET_API_KEY,
+        payload = {"__multipart": {"data": {"model": VEO_FAST_MODEL, "prompt": veo_prompt,
+                                           "size": "9:16"}, "files": {}}}
+        return bool(await _create_and_poll_i2v(
+            update, COMET_BASE_URL, COMET_API_KEY,
             [("/v1/videos", payload)], ["/v1/videos/{id}", "/v1/tasks/{id}"],
             "Google Veo 3.1 Fast · native audio", max_wait_s=1200))
     if engine == "sora":
