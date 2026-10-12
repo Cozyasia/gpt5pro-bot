@@ -5551,7 +5551,30 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await q.message.reply_text("Пришли фото или опиши идею ролика — верну раскадровку под Reels с тайм-кодами.")
 
 # ───────── Старт / Движки / Помощь ─────────
+def _claim_start_update(update_id: int) -> bool:
+    """Atomically suppress webhook retries of the same /start update."""
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as con:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("CREATE TABLE IF NOT EXISTS processed_start_updates "
+                        "(update_id INTEGER PRIMARY KEY, created_at INTEGER NOT NULL)")
+            now = int(time.time())
+            con.execute("DELETE FROM processed_start_updates WHERE created_at < ?",
+                        (now - 7 * 86400,))
+            cur = con.execute(
+                "INSERT OR IGNORE INTO processed_start_updates(update_id, created_at) VALUES (?, ?)",
+                (int(update_id), now),
+            )
+            return cur.rowcount == 1
+    except Exception:
+        log.exception("Start update deduplication failed for update_id=%s", update_id)
+        return True
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.update_id is not None and not _claim_start_update(update.update_id):
+        log.warning("Suppressed duplicate /start update_id=%s", update.update_id)
+        return
     if await _handle_payment_start_payload(update, context):
         return
     with contextlib.suppress(Exception):
