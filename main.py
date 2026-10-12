@@ -3973,7 +3973,40 @@ async def _compile_music_video_scene_plan(
             require_lip_sync=lip_sync_required,
         )
     except Exception as exc:
-        raise RuntimeError(f"ScenePlan compiler produced an invalid plan: {exc}") from exc
+        # The LLM sometimes writes a scene longer than Kling's hard 10s limit.
+        # Retry the *compiler only* with the exact validation failure, before
+        # refusing the draft. Never run Suno/Kling or silently stretch scenes.
+        first_error = str(exc)
+        repair_prompt = (
+            compiler_prompt
+            + "\n\nPREVIOUS COMPILER OUTPUT (INVALID):\n"
+            + str(raw)[:12000]
+            + "\nVALIDATION ERROR: " + first_error
+            + "\nReturn corrected JSON only. Preserve all user actions and their order, "
+              "duration, aspect, people, scene start/end continuity and completed actions. "
+              "Each scene MUST be contiguous, positive duration, <=10 seconds; "
+              "scene indices sequential; future_count must equal remaining scenes. "
+              "Split oversized scenes without dropping any action. "
+              "Every lip-sync interval must fit its scene and last 2-10 seconds."
+        )
+        try:
+            repaired_raw = await ask_openai_text(
+                repair_prompt,
+                user_id=user_id,
+                chat_id=chat_id,
+                extra_system="Repair an invalid ScenePlan JSON. Preserve the user's complete narrative. Return JSON only.",
+            )
+            return scene_plan_from_dict(
+                _music_video_extract_json_object(repaired_raw),
+                expected_duration_s=duration,
+                expected_aspect=aspect,
+                require_lip_sync=lip_sync_required,
+            )
+        except Exception as repair_exc:
+            raise RuntimeError(
+                f"ScenePlan compiler failed validation ({first_error}); "
+                f"repair also failed ({repair_exc})"
+            ) from repair_exc
 
 
 def _music_video_review_text(
