@@ -2053,7 +2053,7 @@ def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
         per_s = SORA_PRO_COST_PER_SECOND_USD if "pro" in (SORA_MODEL or "").lower() else SORA_COST_PER_SECOND_USD
         return round(max(1, d) * per_s, 4)
     if engine == "kling":
-        return round(KLING_5S_COST_USD * (2 if d >= 10 else 1), 4)
+        return round(KLING_5S_COST_USD * (max(1, (int(duration_s or 5) + 4) // 5) if int(duration_s or 5) > 10 else (2 if d >= 10 else 1)), 4)
     if engine == "runway":
         return round(max(2, d) * RUNWAY_COST_PER_SECOND_USD, 4)
     return max(0.0, float(TEXT_VIDEO_UNIT_COST_USD or 0.0))
@@ -4517,6 +4517,9 @@ def _kling_video_options_keyboard(context):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(("✅ " if duration == 5 else "") + "5 секунд", callback_data="tvopt:dur:5"),
          InlineKeyboardButton(("✅ " if duration == 10 else "") + "10 секунд", callback_data="tvopt:dur:10")],
+        [InlineKeyboardButton(("✅ " if duration == 15 else "") + "15 сек", callback_data="tvopt:dur:15"),
+         InlineKeyboardButton(("✅ " if duration == 30 else "") + "30 сек", callback_data="tvopt:dur:30"),
+         InlineKeyboardButton(("✅ " if duration == 60 else "") + "60 сек", callback_data="tvopt:dur:60")],
         [InlineKeyboardButton(("✅ " if not sound else "") + "🔇 Без звука", callback_data="tvopt:sound:off"),
          InlineKeyboardButton(("✅ " if sound else "") + "🔊 Со звуком", callback_data="tvopt:sound:on")],
     ])
@@ -4529,7 +4532,7 @@ async def _on_kling_video_option(update: Update, context: ContextTypes.DEFAULT_T
         await q.answer("Сначала выберите Kling в меню видео.", show_alert=True)
         return
     _, kind, value = data.split(":", 2)
-    if kind == "dur" and value in ("5", "10"):
+    if kind == "dur" and value in ("5", "10", "15", "30", "60"):
         context.user_data["kling_text_duration"] = int(value)
     elif kind == "sound" and value in ("on", "off"):
         context.user_data["kling_text_sound"] = value == "on"
@@ -10256,6 +10259,62 @@ async def _start_vocal_clip(
     )
 
 
+async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, aspect: str) -> bool:
+    """Sequential paid Kling scenes, delivered as a single vertical MP4.
+    Never resubmit a failed scene automatically: an accepted task may be billed.
+    """
+    if duration not in (15, 30, 60):
+        raise ValueError("Unsupported Shorts duration")
+    sound = bool(context.user_data.get("kling_text_sound", False))
+    scene_lengths = [10] * (duration // 10) + ([5] if duration % 10 else [])
+    await update.effective_message.reply_text(
+        f"📱 Shorts {duration} сек: {len(scene_lengths)} сцен. Создаю последовательно; "
+        "повторная отправка не запускается автоматически."
+    )
+    segments = []
+    for index, seconds in enumerate(scene_lengths, 1):
+        scene_prompt = (
+            f"{prompt[:1900]}\\nThis is scene {index} of {len(scene_lengths)} of one continuous vertical short. "
+            f"Maintain consistent characters, outfits, setting and visual style. "
+            f"Depict the {'opening' if index == 1 else 'finale' if index == len(scene_lengths) else 'next'} "
+            f"part of the story, not a repeated shot."
+        )
+        payload = {
+            "model_name": KLING_MODEL, "prompt": scene_prompt[:2450],
+            "duration": str(seconds), "aspect_ratio": "9:16",
+            "mode": "pro", "sound": "on" if sound else "off",
+        }
+        await update.effective_message.reply_text(f"🎬 Сцена {index}/{len(scene_lengths)} · {seconds} сек")
+        try:
+            segment = await _create_and_poll_i2v_bytes(
+                COMET_BASE_URL, KLING_API_KEY,
+                [(KLING_TEXT_CREATE_PATH, payload)],
+                [KLING_TEXT_STATUS_PATH, "/kling/v1/videos/text2video/{id}", "/v1/tasks/{id}"],
+                f"Kling Shorts scene {index}", max_wait_s=1200,
+            )
+        except Exception:
+            log.exception("Kling Shorts scene %s/%s failed", index, len(scene_lengths))
+            await update.effective_message.reply_text(
+                f"⚠️ Сцена {index}/{len(scene_lengths)} не получилась. "
+                "Останавливаю генерацию, чтобы не создавать дополнительные платные задачи."
+            )
+            return False
+        if not segment:
+            await update.effective_message.reply_text(f"⚠️ Сцена {index} не готова. Дальнейшие задачи не запускаю.")
+            return False
+        segments.append(segment)
+    result = await asyncio.to_thread(_concat_video_segments_sync, segments, duration)
+    if not result:
+        await update.effective_message.reply_text("⚠️ Сцены готовы, но монтаж MP4 не удался. Новые генерации не запускаю.")
+        return False
+    with tempfile.TemporaryDirectory(prefix="kling_shorts_") as td:
+        path = os.path.join(td, "shorts.mp4")
+        with open(path, "wb") as fh:
+            fh.write(result)
+        await _reply_video_file(update, path, f"📱 Kling Shorts · {duration} сек · 9:16")
+    return True
+
+
 async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     prompt = (prompt or "").strip()
     if not prompt:
@@ -10282,6 +10341,8 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     async def _go():
         await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}.")
+        if engine == "kling" and duration > 10:
+            return await _run_kling_text_shorts(update, context, prompt, duration, "9:16")
         if engine == "runway":
             return await _run_runway_video(update, context, prompt, duration, aspect)
         return await _run_comet_text_video(update, context, engine, prompt, duration, aspect)
@@ -18150,7 +18211,7 @@ def build_application() -> "Application":
 
     # 2) Новые режимы/подменю: mode:* и act:* (Учёба/Работа/Развлечения/Медицина)
     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
-    app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10)|sound:(?:on|off))$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10|15|30|60)|sound:(?:on|off))$"), group=0)
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
