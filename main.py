@@ -642,7 +642,7 @@ VOCAL_CLIP_KLING_MAX_WAIT_S = int(os.environ.get("VOCAL_CLIP_KLING_MAX_WAIT_S", 
 TEXT_VIDEO_UNIT_COST_USD = _env_float("TEXT_VIDEO_UNIT_COST_USD", KLING_UNIT_COST_USD)
 TEXT_VIDEO_DEFAULT_ENGINE = os.environ.get("TEXT_VIDEO_DEFAULT_ENGINE", "kling").strip().lower() or "kling"
 VEO_FAST_MODEL = os.environ.get("VEO_FAST_MODEL", "veo3.1-fast")
-VEO_FAST_COST_PER_SECOND_USD = _env_float("VEO_FAST_COST_PER_SECOND_USD", 0.08)
+VEO_FAST_COST_PER_SECOND_USD = _env_float("VEO_FAST_COST_PER_SECOND_USD", 0.096)
 TEXT_VIDEO_ALLOW_RUNWAY = os.environ.get("TEXT_VIDEO_ALLOW_RUNWAY", "1").strip().lower() not in ("0", "false", "no", "off")
 
 _photo_clip_background_jobs: set[str] = set()
