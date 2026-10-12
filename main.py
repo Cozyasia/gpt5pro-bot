@@ -641,6 +641,8 @@ VOCAL_CLIP_MIN_AUDIO_S = int(os.environ.get("VOCAL_CLIP_MIN_AUDIO_S", "12") or 1
 VOCAL_CLIP_KLING_MAX_WAIT_S = int(os.environ.get("VOCAL_CLIP_KLING_MAX_WAIT_S", "1800") or 1800)
 TEXT_VIDEO_UNIT_COST_USD = _env_float("TEXT_VIDEO_UNIT_COST_USD", KLING_UNIT_COST_USD)
 TEXT_VIDEO_DEFAULT_ENGINE = os.environ.get("TEXT_VIDEO_DEFAULT_ENGINE", "kling").strip().lower() or "kling"
+VEO_FAST_MODEL = os.environ.get("VEO_FAST_MODEL", "veo3.1-fast")
+VEO_FAST_COST_PER_SECOND_USD = _env_float("VEO_FAST_COST_PER_SECOND_USD", 0.096)
 TEXT_VIDEO_ALLOW_RUNWAY = os.environ.get("TEXT_VIDEO_ALLOW_RUNWAY", "1").strip().lower() not in ("0", "false", "no", "off")
 
 _photo_clip_background_jobs: set[str] = set()
@@ -2049,6 +2051,8 @@ def _retail_usd(provider_cost_usd: float) -> float:
 def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
     engine = (engine or "").strip().lower()
     d = _duration_for_engine(engine, duration_s) if "_duration_for_engine" in globals() else max(5, int(duration_s or 5))
+    if engine == "veo":
+        return round(8 * VEO_FAST_COST_PER_SECOND_USD, 4)
     if engine == "sora":
         per_s = SORA_PRO_COST_PER_SECOND_USD if "pro" in (SORA_MODEL or "").lower() else SORA_COST_PER_SECOND_USD
         return round(max(1, d) * per_s, 4)
@@ -4380,6 +4384,7 @@ def _textvideo_menu_text() -> str:
         "Движки:\n"
         "• *Sora 2 — только без людей* — предметы, животные, здания, пейзажи, интерьер.\n"
         "• *Kling* — люди, динамика, Reels/Shorts и универсальные сцены.\n"
+        "• *Google Veo 3.1 Fast* — 8 секунд, 9:16, нативный звук (русская речь экспериментальная).\n"
         "• *Runway* — люди и кинематографичные сцены; официальный Runway API используется первым, Comet и Kling — резерв.\n\n"
         "Стоимость показывается в кредитах и списывается только после успешного результата."
     )
@@ -4390,6 +4395,7 @@ def _textvideo_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(f"🎞 Sora 2 · без людей · {_video_price_credits('sora', 5)} кр.", callback_data=f"{base}:tv_engine_sora")],
         [InlineKeyboardButton(f"🎬 Kling · {_video_price_credits('kling', 5)} кр.", callback_data=f"{base}:tv_engine_kling")],
+        [InlineKeyboardButton(f"🇷🇺 Veo 3.1 Fast · 8 сек · {_video_price_credits('veo', 8)} кр.", callback_data=f"{base}:tv_engine_veo")],
     ]
     if TEXT_VIDEO_ALLOW_RUNWAY:
         rows.append([InlineKeyboardButton(f"🎥 Runway · {_video_price_credits('runway', 5)} кр.", callback_data=f"{base}:tv_engine_runway")])
@@ -4549,13 +4555,13 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
     engine = (engine or TEXT_VIDEO_DEFAULT_ENGINE or "kling").strip().lower()
     if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
         engine = "kling"
-    if engine not in ("sora", "kling", "runway"):
+    if engine not in ("sora", "kling", "runway", "veo"):
         engine = "kling"
     _set_text_video_wait(context, engine)
     if engine == "kling":
         context.user_data.setdefault("kling_text_duration", 5)
         context.user_data.setdefault("kling_text_sound", False)
-    labels = {"sora": "Sora 2 — только без людей", "kling": "Kling", "runway": "Runway"}
+    labels = {"sora": "Sora 2 — только без людей", "kling": "Kling", "runway": "Runway", "veo": "Google Veo 3.1 Fast · русский звук (эксперимент)"}
     await q.answer(labels[engine][:180])
     warning = "\n⚠️ В промпте не должно быть людей, лиц или персонажей." if engine == "sora" else ""
     await q.message.reply_text(
@@ -4896,6 +4902,10 @@ async def on_mode_cb(update, context):
 
     if data == "act:fun:tv_engine_sora":
         await _handle_textvideo_engine_choice(update, context, q, "sora", prefix="act")
+        return
+
+    if data == "act:fun:tv_engine_veo":
+        await _handle_textvideo_engine_choice(update, context, q, "veo", prefix="act")
         return
 
     if data == "act:fun:tv_engine_kling":
@@ -10367,8 +10377,10 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     engine = (context.user_data.get("text_video_engine") or TEXT_VIDEO_DEFAULT_ENGINE or "kling").strip().lower()
     if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
         engine = "kling"
-    if engine not in ("sora", "runway", "kling"):
+    if engine not in ("sora", "runway", "kling", "veo"):
         engine = "kling"
+    if engine == "veo":
+        duration, aspect = 8, "9:16"
     if engine == "kling":
         duration = int(context.user_data.get("kling_text_duration", 5))
         if context.user_data.get("kling_text_sound"):
@@ -10380,7 +10392,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         )
         return False
     provider_cost = _video_provider_cost_usd(engine, duration)
-    label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling"}[engine]
+    label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
 
     async def _go():
         await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}.")
@@ -15037,6 +15049,8 @@ def _duration_for_engine(engine: str, duration_s: int) -> int:
     except Exception:
         d = 5
     engine = (engine or "").lower()
+    if engine == "veo":
+        return 8
     if engine == "runway":
         return max(2, min(10, d))
     if engine == "kling":
@@ -15682,6 +15696,19 @@ async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TY
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
     if engine == "runway":
         return bool(await _run_runway_video(update, context, prompt, duration_s, aspect))
+    if engine == "veo":
+        # CometAPI documents POST /v1/videos as multipart fields model, prompt, size.
+        # Do not invent unsupported resolution/audio flags or retry a billed task.
+        veo_prompt = (prompt + "\n\nGenerate native synchronized dialogue and ambient audio. "
+                      "Any spoken dialogue must be in Russian (ru-RU), never English. "
+                      "Pronounce quoted Russian dialogue verbatim, with accurate lip synchronization. "
+                      "No English narration or translation.").strip()
+        payload = {"__multipart": {"data": {"model": VEO_FAST_MODEL, "prompt": veo_prompt,
+                                           "size": "9:16"}, "files": {}}}
+        return bool(await _create_and_poll_i2v(
+            update, COMET_BASE_URL, COMET_API_KEY,
+            [("/v1/videos", payload)], ["/v1/videos/{id}", "/v1/tasks/{id}"],
+            "Google Veo 3.1 Fast · native audio", max_wait_s=1200))
     if engine == "sora":
         d = _duration_for_engine("sora", duration_s); size, _, _ = _sora_size_for_aspect(aspect)
         payloads = [
@@ -17646,6 +17673,10 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == "tv_engine_sora":
         await _handle_textvideo_engine_choice(update, context, q, "sora", prefix="fun")
+        return
+
+    if action == "tv_engine_veo":
+        await _handle_textvideo_engine_choice(update, context, q, "veo", prefix="fun")
         return
 
     if action == "tv_engine_kling":
