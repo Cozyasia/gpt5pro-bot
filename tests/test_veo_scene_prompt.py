@@ -8,7 +8,7 @@ class ScenePromptTests(unittest.TestCase):
         prompt = scene_prompt(scene, "Presenter in fintech studio", presenter="Dark suit")
         self.assertIn("ru-RU", prompt)
         self.assertIn("No English translation", prompt)
-        self.assertIn("Do not generate background text", prompt)
+        self.assertIn("Preserve requested physical signage", prompt)
         self.assertIn(scene.spoken_text, prompt)
         self.assertIn("Dark suit", prompt)
 
