@@ -15143,9 +15143,18 @@ async def _poll_video_task_generic(
                 raw_failure = json.dumps(js, ensure_ascii=False)
                 log.warning("%s terminal render failure task_id=%s: %s", caption, task_id, raw_failure[:1500])
                 if "kling" in (caption or "").lower():
-                    await update.effective_message.reply_text(
-                        "❌ Kling не смог обработать это фото. Движок не переключался. Попробуйте ещё раз."
-                    )
+                    mode = "text→video" if "text" in (caption or "").lower() else "image→video"
+                    detail = (js.get("data") or {}).get("task_status_msg", "") if isinstance(js.get("data"), dict) else ""
+                    if "FailedOperation.InnerError" in str(detail):
+                        await update.effective_message.reply_text(
+                            f"⚠️ Kling {mode}: внутренняя ошибка сервиса Kling. Задача была принята, "
+                            f"но рендер завершился сбоем. ID: {task_id}. "
+                            "Попробуйте позже; повторный запуск может тарифицироваться отдельно."
+                        )
+                    else:
+                        await update.effective_message.reply_text(
+                            f"❌ Kling {mode}: ошибка генерации. ID: {task_id}. Попробуйте ещё раз."
+                        )
                     return True
                 await update.effective_message.reply_text(f"❌ {caption}: ошибка рендера.")
                 return True
