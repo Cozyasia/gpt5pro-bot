@@ -18,7 +18,7 @@ class VeoRoutingTests(unittest.TestCase):
             self.assertIn(token, SOURCE)
 
     def test_no_automatic_paid_fallback(self):
-        start = SOURCE.index('    if engine == "veo":\n        veo_prompt')
+        start = SOURCE.index('    if engine == "veo":\n        # CometAPI documents')
         end = SOURCE.index('    if engine == "sora":', start)
         block = SOURCE[start:end]
         self.assertEqual(block.count('("/v1/videos", payload)'), 1)
