@@ -12,7 +12,7 @@ from typing import Awaitable, Callable
 from .veo_multiscene import plan_video
 from .veo_scene_prompt import scene_prompt
 from .veo_scene_runner import run_journaled_scene, ReconciliationRequired
-from .veo_scene_artifacts import load_scene, save_scene, list_complete_scenes
+from .veo_scene_artifacts import save_scene, list_complete_scenes
 from .veo_task_journal import read_job
 from .veo_assembler import assemble_vertical_video
 
@@ -41,11 +41,14 @@ async def resume_veo_job(
     for scene in scenes:
         prior = read_job(journal)["scenes"].get(str(scene.index), {})
         if prior.get("state") == "completed":
-            load_scene(directory, scene.index)
+            # Avoid loading paid MP4 bytes into RAM on 512 MiB Render.
+            completed = list_complete_scenes(directory, scene.index)
+            if len(completed) < scene.index:
+                raise FileNotFoundError("Completed Veo scene artifact missing; do not resubmit")
             continue
         prompt = scene_prompt(scene, visual_brief, presenter=presenter)
         if reference_image is not None:
-            prompt += "\\nUse the attached input_reference image as the fixed presenter identity across every scene."
+            prompt += "\nUse the attached input_reference image as the fixed presenter identity across every scene."
         async def submit_this(prompt=prompt, index=scene.index):
             return await submit(prompt, index)
         async def save_this(index, payload):
