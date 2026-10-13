@@ -18,8 +18,8 @@ async def submit_veo_task(base_url: str, api_key: str, model: str, prompt: str) 
             response = await client.post(
                 base_url.rstrip("/") + "/v1/videos",
                 headers={"Authorization": "Bearer " + api_key, "Accept": "application/json"},
-                data={"model": model, "prompt": prompt, "size": "9:16"},
-                files={},
+                files=[("model", (None, model)), ("prompt", (None, prompt)),
+                       ("size", (None, "9:16"))],
             )
         except httpx.RequestError as exc:
             raise UncertainVeoSubmission("Veo POST outcome unknown; do not resubmit") from exc
