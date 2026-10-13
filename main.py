@@ -10510,6 +10510,13 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             prompt, re.I | re.S,
         )
         if not speech_match:
+            # Accept a unified storyboard with a separate narrator/TTS section.
+            section = re.search(r"(?:ТЕКСТ ДИКТОРА|ТЕКСТ ОЗВУЧКИ|VOICEOVER SCRIPT)\s*[:：]\s*(.*?)(?=\n\s*(?:АУДИО И МОНТАЖ|СУБТИТРЫ|ОГРАНИЧЕНИЯ|РЕЗУЛЬТАТ|ВАЖНО)\s*[:：]|\Z)", prompt, re.I | re.S)
+            if section:
+                spoken = section.group(1).strip().strip("«»\\\"“”")
+                if spoken:
+                    speech_match = re.match(r"(?s)(.*)", spoken)
+        if not speech_match:
             await update.effective_message.reply_text(
                 "⚠️ Для многосценного Veo нужен отдельный текст озвучки. "
                 "Иначе каждая сцена самостоятельно придумывает и повторяет реплику.\n\n"
