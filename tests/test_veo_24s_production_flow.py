@@ -55,6 +55,14 @@ class Veo24SecondProductionFlowTests(unittest.TestCase):
             self.assertIn(required, workflow)
         self.assertIn("assemble=False", workflow)
 
+    def test_24s_billing_includes_veo_tts_and_three_lipsync_jobs(self):
+        source = (ROOT / "main.py").read_text(encoding="utf-8")
+        self.assertIn("VEO_24S_KLING_LIPSYNC_COST_USD", source)
+        self.assertIn("VEO_24S_TTS_COST_PER_MINUTE_USD", source)
+        self.assertIn("def _veo_24s_provider_cost_usd", source)
+        self.assertIn("3 * VEO_24S_KLING_LIPSYNC_COST_USD", source)
+        self.assertIn("provider_cost = _veo_24s_provider_cost_usd() if engine == \"veo\" and duration == 24", source)
+
 
 if __name__ == "__main__":
     unittest.main()
