@@ -37,11 +37,12 @@ class VeoContinuityTests(unittest.TestCase):
                 if other.index != scene.index:
                     self.assertNotIn('The presenter says exactly in Russian: "' + other.spoken_text + '"', prompt)
 
-    def test_ffmpeg_uses_low_memory_fades_and_720p_default(self):
+    def test_ffmpeg_uses_low_memory_seamless_720p_default(self):
         source = (ROOT / "neyrobot_prod/veo_assembler.py").read_text(encoding="utf-8")
-        for expected in ("width: int = 720", "height: int = 1280",
-                         "fade=t=in", "afade=t=in", '"-threads:v", "1"'):
+        for expected in ("width: int = 720", "height: int = 1280", '"-threads:v", "1"'):
             self.assertIn(expected, source)
+        self.assertNotIn("fade=t=in", source)
+        self.assertNotIn("afade=t=in", source)
 
     def test_preflight_before_charge(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
