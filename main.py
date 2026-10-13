@@ -8873,6 +8873,11 @@ async def _poll_video_task_for_bytes(
                     if content:
                         return content
                     last_body = f"ready_url download failed: {ready_url[:200]}"
+                if "veo" in caption.lower() and st in ("completed", "succeeded", "success", "finished", "ready", "done", "succeed") and not ready_url:
+                    content_url = f"{base_url.rstrip('/')}/v1/videos/{task_id}/content"
+                    cr = await client.get(content_url, headers=headers, timeout=240.0, follow_redirects=True)
+                    if cr.status_code < 400 and cr.content and "application/json" not in (cr.headers.get("content-type") or "").lower():
+                        return bytes(cr.content)
                 if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
                     # Terminal provider state must escape immediately. Previously this
                     # RuntimeError was swallowed by the broad polling exception handler,
