@@ -44,8 +44,9 @@ class Veo24SecondTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             source = Path(d) / "master.wav"
             source.write_bytes(b"offline-test")
-            with patch("neyrobot_prod.veo_tts_timeline.subprocess.run") as run:
-                paths = split_tts_master(source, Path(d) / "slices")
+            with patch("neyrobot_prod.veo_tts_timeline.require_24_second_voice", return_value=24.0):
+                with patch("neyrobot_prod.veo_tts_timeline.subprocess.run") as run:
+                    paths = split_tts_master(source, Path(d) / "slices")
             self.assertEqual(len(paths), 3)
             self.assertEqual(run.call_count, 3)
             self.assertEqual([c.args[0][c.args[0].index("-ss") + 1] for c in run.call_args_list],
