@@ -10513,37 +10513,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             context.user_data.get("veo_use_presenter_reference", False)
         )
         import re
-        # Multi-scene native dialogue is billed per scene. Require an explicit
-        # speech track to avoid generating four independent opening speeches.
-        speech_match = re.search(
-            r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]',
-            prompt, re.I | re.S,
-        )
-        if not speech_match:
-            # Accept a unified storyboard with a separate narrator/TTS section.
-            section = re.search(r"(?:ТЕКСТ ДИКТОРА|ТЕКСТ ОЗВУЧКИ|VOICEOVER SCRIPT)\s*[:：]\s*(.*?)(?=\n\s*(?:АУДИО И МОНТАЖ|СУБТИТРЫ|ОГРАНИЧЕНИЯ|РЕЗУЛЬТАТ|ВАЖНО)\s*[:：]|\Z)", prompt, re.I | re.S)
-            if section:
-                spoken = section.group(1).strip().strip("«»\\\"“”")
-                if spoken:
-                    speech_match = re.match(r"(?s)(.*)", spoken)
-        if not speech_match:
-            await update.effective_message.reply_text(
-                "⚠️ Для многосценного Veo нужен отдельный текст озвучки. "
-                "Иначе каждая сцена самостоятельно придумывает и повторяет реплику.\n\n"
-                "Добавьте к описанию строку:\n"
-                'Говорит: «Ваш точный русский текст рекламы, '
-                'разделяемый по сценам без повторов».\n\n'
-                "Генерация и списание кредитов не запущены."
-            )
-            return False
-        from neyrobot_prod.veo_multiscene import plan_video
-        try:
-            plan_video(duration, speech_match.group(1))
-        except ValueError as exc:
-            await update.effective_message.reply_text(
-                f"⚠️ Текст озвучки не подходит: {exc}. Кредиты не списаны."
-            )
-            return False
+        # Native Veo audio: a single visual prompt is sufficient.
     provider_cost = _video_provider_cost_usd(engine, duration)
     label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
     if engine == "veo" and duration > 8:
