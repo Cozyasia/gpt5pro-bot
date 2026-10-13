@@ -6919,7 +6919,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             until = activate_subscription_with_tier(uid, tier, months)
             await update.effective_message.reply_text(
                 f"🎉 Оплата прошла успешно!\n"
-                f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} кр."
+                f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр."
             )
             return
 
