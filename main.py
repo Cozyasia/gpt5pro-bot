@@ -15747,17 +15747,22 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/{(duration + 7) // 8}")
             return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt)
         async def poll(task_id):
+            log.info("VEO_SCENE_POLL_START job=%s task_id=%s", job_hash, task_id)
             async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-                return await _poll_video_task_for_bytes(
+                result = await _poll_video_task_for_bytes(
                     client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
                     COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"],
                     task_id, "Veo Multi-Scene", max_wait_s=1200,
                 )
+            log.info("VEO_SCENE_POLL_DONE job=%s task_id=%s bytes=%s", job_hash, task_id, len(result or b""))
+            return result
         try:
             result = await resume_veo_job(
                 job_directory=directory, duration_seconds=duration,
                 spoken_script=script, visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else prompt, submit=submit, poll=poll)
+            log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
             await _reply_video_file(update, str(result), f"🎬 Veo 3.1 Fast · {duration} сек · 9:16")
+            log.info("VEO_DELIVERY_DONE job=%s", job_hash)
             return True
         except Exception as exc:
             log.exception("Veo multiscene job failed job=%s", job_hash)
