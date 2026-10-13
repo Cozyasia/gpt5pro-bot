@@ -4593,8 +4593,9 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
     warning = "\n⚠️ В промпте не должно быть людей, лиц или персонажей." if engine == "sora" else ""
     await q.message.reply_text(
         f"✅ Выбран движок: {labels[engine]}.{warning}\n"
-        "Теперь напишите промпт или отправьте voice. Для Kling выберите 5/10 секунд и звук кнопками ниже. "
-        "Для речи добавьте в промпт: «Персонаж произносит: ...». Голосовое сообщение будет распознано как текст."
+        "Теперь напишите промпт или отправьте voice. "
+        + ("Для Veo выберите 8/15/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
+        + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
         , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else None
     )
 
