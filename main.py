@@ -15932,6 +15932,10 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
     match = re.search(r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]', prompt, re.I | re.S)
     script = match.group(1).strip() if match else ""
     if not script:
+        narrator = re.search(r"ТЕКСТ ДИКТОРА\s*:\s*(.*?)(?=\n\s*АУДИО И МОНТАЖ\s*:|\Z)", prompt, re.I | re.S)
+        if narrator:
+            script = narrator.group(1).strip().strip("«»")
+    if not script:
         await update.effective_message.reply_text("⚠️ Для 24-секундного ролика нужен точный русский текст после «Говорит:». Генерация не запущена.")
         return False
     if not OPENAI_TTS_KEY:
