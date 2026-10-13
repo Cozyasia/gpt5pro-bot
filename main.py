@@ -10426,6 +10426,32 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             reply_markup=_textvideo_action_kb("act"),
         )
         return False
+    if engine == "veo" and duration > 8:
+        import re
+        # Multi-scene native dialogue is billed per scene. Require an explicit
+        # speech track to avoid generating four independent opening speeches.
+        speech_match = re.search(
+            r'(?:произносит|говорит|says)\\s*[:：]\\s*[«"“](.+?)[»"”]',
+            prompt, re.I | re.S,
+        )
+        if not speech_match:
+            await update.effective_message.reply_text(
+                "⚠️ Для многосценного Veo нужен отдельный текст озвучки. "
+                "Иначе каждая сцена самостоятельно придумывает и повторяет реплику.\\n\\n"
+                "Добавьте к описанию строку:\\n"
+                'Говорит: «Ваш точный русский текст рекламы, '
+                'разделяемый по сценам без повторов».\\n\\n'
+                "Генерация и списание кредитов не запущены."
+            )
+            return False
+        from neyrobot_prod.veo_multiscene import plan_video
+        try:
+            plan_video(duration, speech_match.group(1))
+        except ValueError as exc:
+            await update.effective_message.reply_text(
+                f"⚠️ Текст озвучки не подходит: {exc}. Кредиты не списаны."
+            )
+            return False
     provider_cost = _video_provider_cost_usd(engine, duration)
     label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
 
