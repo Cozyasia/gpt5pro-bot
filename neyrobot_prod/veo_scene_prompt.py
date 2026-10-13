@@ -16,7 +16,8 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
     if not visual_brief.strip():
         raise ValueError("Visual brief required")
     if not scene.spoken_text.strip():
-        dialogue = "No spoken dialogue; natural ambient sound only."
+        dialogue = ("If the visual brief calls for spoken narration, speak naturally in Russian only; "
+                    "otherwise use natural ambient sound without speech.")
     else:
         dialogue = (
             'The presenter says exactly in Russian: "'
