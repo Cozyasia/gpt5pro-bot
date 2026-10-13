@@ -15,6 +15,9 @@ class VeoAdapterTests(unittest.IsolatedAsyncioTestCase):
             task = await submit_veo_task("https://example.invalid", "key", "veo3.1-fast", "Russian speech")
         self.assertEqual(task, "task-1")
         client.post.assert_awaited_once()
+        args = client.post.await_args.kwargs
+        self.assertEqual(args["files"][0], ("model", (None, "veo3.1-fast")))
+        self.assertEqual(args["files"][2], ("size", (None, "9:16")))
 
     async def test_missing_task_id_is_uncertain(self):
         response = MagicMock()
