@@ -4521,7 +4521,7 @@ def _veo_video_options_keyboard(context):
     selected = int(context.user_data.get("veo_text_duration", 8))
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (8, 15)],
-        [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (30, 60)],
+        [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (24, 30, 60)],
         [InlineKeyboardButton(("✅ " if context.user_data.get("veo_use_presenter_reference") else "") + "👤 Ведущий с фото", callback_data="veoopt:ref:on"),
          InlineKeyboardButton(("✅ " if not context.user_data.get("veo_use_presenter_reference") else "") + "🎞️ Без ведущего", callback_data="veoopt:ref:off")],
     ])
@@ -4545,7 +4545,7 @@ async def _on_veo_video_option(update: Update, context: ContextTypes.DEFAULT_TYP
         duration = int(data.rsplit(":", 1)[-1])
     except ValueError:
         duration = 0
-    if duration not in (8, 15, 30, 60):
+    if duration not in (8, 15, 24, 30, 60):
         await q.answer("Недопустимая длительность", show_alert=True)
         return
     context.user_data["veo_text_duration"] = duration
@@ -4606,7 +4606,7 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
     await q.message.reply_text(
         f"✅ Выбран движок: {labels[engine]}.{warning}\n"
         "Теперь напишите промпт или отправьте voice. "
-        + ("Для Veo выберите 8/15/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
+        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
         + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
         , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else None
     )
@@ -10426,7 +10426,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         engine = "kling"
     if engine == "veo":
         duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
-        if duration not in (8, 15, 30, 60):
+        if duration not in (8, 15, 24, 30, 60):
             duration = 8
     if engine == "kling":
         duration = int(context.user_data.get("kling_text_duration", 5))
