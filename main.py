@@ -15811,8 +15811,83 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
     return False
 
 
+async def _run_veo_extend_15(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
+    """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
+    import fcntl
+    import hashlib
+    import re
+    from neyrobot_prod.veo_comet_adapter import submit_veo_task
+    from neyrobot_prod.veo_extend_15_pipeline import create_extended_15
+
+    root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
+    directory = os.path.join(root, job_hash)
+    os.makedirs(directory, exist_ok=True)
+    # Persist the presenter snapshot inside the job, not in volatile user cache.
+    reference_path = None
+    if context.user_data.get("veo_use_presenter_reference"):
+        from pathlib import Path
+        import tempfile
+        photo_bytes = _get_cached_photo(update.effective_user.id)
+        if not photo_bytes:
+            await update.effective_message.reply_text("⚠️ Референс ведущего не найден. Сначала отправьте фотографию, затем повторите запрос. Кредиты за Veo не списывались на этом этапе.")
+            return False
+        reference_path = str(Path(directory) / "presenter_reference.jpg")
+        if not os.path.exists(reference_path):
+            fd, tmp = tempfile.mkstemp(prefix=".presenter_", dir=directory)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(photo_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, reference_path)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+    lock_path = os.path.join(directory, ".lock")
+    with open(lock_path, "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("⏳ Этот ролик уже создаётся. Дождитесь завершения.")
+            return False
+        async def submit(scene_prompt, index):
+            await update.effective_message.reply_text("🎬 Veo: начальная генерация 8 секунд")
+            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt, reference_image=reference_path)
+        async def poll(task_id):
+            log.info("VEO_SCENE_POLL_START job=%s task_id=%s", job_hash, task_id)
+            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                result = await _poll_video_task_for_bytes(
+                    client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                    COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"],
+                    task_id, "Veo Multi-Scene", max_wait_s=1200,
+                )
+            log.info("VEO_SCENE_POLL_DONE job=%s task_id=%s bytes=%s", job_hash, task_id, len(result or b""))
+            return result
+        try:
+            result = await create_extended_15(
+                directory=directory, prompt=prompt, base_url=COMET_BASE_URL,
+                api_key=COMET_API_KEY, fast_model=VEO_FAST_MODEL,
+                poll=poll, reference_image=reference_path,
+                progress=lambda message: update.effective_message.reply_text("🎬 " + message))
+            log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
+            await _reply_video_file(update, str(result), "🎬 Veo 3.1 · 15 сек · native Veo Extend · 9:16")
+            log.info("VEO_DELIVERY_DONE job=%s", job_hash)
+            return True
+        except Exception as exc:
+            log.exception("Veo multiscene job failed job=%s", job_hash)
+            await update.effective_message.reply_text(
+                "⚠️ Veo: генерация остановлена. Оплаченные сцены не будут отправлены повторно автоматически. "
+                + str(exc)[:220])
+            return False
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
     """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
+    if duration == 15:
+        return await _run_veo_extend_15(update, context, prompt, duration)
     import fcntl
     import hashlib
     import re
