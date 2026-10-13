@@ -10431,16 +10431,16 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         # Multi-scene native dialogue is billed per scene. Require an explicit
         # speech track to avoid generating four independent opening speeches.
         speech_match = re.search(
-            r'(?:произносит|говорит|says)\\s*[:：]\\s*[«"“](.+?)[»"”]',
+            r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]',
             prompt, re.I | re.S,
         )
         if not speech_match:
             await update.effective_message.reply_text(
                 "⚠️ Для многосценного Veo нужен отдельный текст озвучки. "
-                "Иначе каждая сцена самостоятельно придумывает и повторяет реплику.\\n\\n"
-                "Добавьте к описанию строку:\\n"
+                "Иначе каждая сцена самостоятельно придумывает и повторяет реплику.\n\n"
+                "Добавьте к описанию строку:\n"
                 'Говорит: «Ваш точный русский текст рекламы, '
-                'разделяемый по сценам без повторов».\\n\\n'
+                'разделяемый по сценам без повторов».\n\n'
                 "Генерация и списание кредитов не запущены."
             )
             return False
