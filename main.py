@@ -15852,8 +15852,6 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
 
 async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
     """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
-    if duration == 24:
-        return await _run_veo_24s_lipsync(update, context, prompt)
     import fcntl
     import hashlib
     import re
