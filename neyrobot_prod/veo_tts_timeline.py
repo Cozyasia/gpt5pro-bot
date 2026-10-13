@@ -57,7 +57,7 @@ def require_24_second_voice(path: str | Path, *, tolerance: float = 0.35) -> flo
 
 
 def fit_tts_master_to_24_seconds(source: str | Path, output: str | Path,
-                                 *, max_change: float = 0.10) -> Path:
+                                 *, max_change: float = 0.20) -> Path:
     """Normalize one TTS recording to exactly 24 seconds within a safe tempo band."""
     source_path, output_path = Path(source).resolve(), Path(output).resolve()
     if not source_path.is_file():
