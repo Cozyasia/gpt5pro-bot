@@ -15769,6 +15769,83 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
+async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner-only recovery: poll existing paid IDs; never submit a new scene."""
+    import fcntl
+    import asyncio
+    from pathlib import Path
+    from neyrobot_prod.veo_task_journal import read_job, mark_scene
+    from neyrobot_prod.veo_scene_artifacts import save_scene, load_scene, list_complete_scenes
+    from neyrobot_prod.veo_assembler import assemble_vertical_video
+
+    if not OWNER_ID or update.effective_user.id != OWNER_ID:
+        await update.effective_message.reply_text("Команда доступна только владельцу бота.")
+        return
+    root = Path(os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs"))
+    jobs = sorted(root.glob("*/journal.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not jobs:
+        await update.effective_message.reply_text("На постоянном диске не найдено журналов Veo.")
+        return
+    if context.args:
+        wanted = context.args[0].strip()
+        jobs = [p for p in jobs if p.parent.name == wanted]
+        if not jobs:
+            await update.effective_message.reply_text("Задание с таким идентификатором не найдено.")
+            return
+    else:
+        jobs = [p for p in jobs if len(read_job(p).get("scenes", {})) == 4]
+        if not jobs:
+            await update.effective_message.reply_text("Журнал четырёхсценного видео не найден. Проверьте /data/veo_jobs.")
+            return
+    journal = jobs[0]
+    directory = journal.parent
+    duration = 30 if len(read_job(journal)["scenes"]) == 4 else None
+    if duration is None:
+        await update.effective_message.reply_text("Автовосстановление поддерживает только 30-секундное видео; новые платные задачи не создаются.")
+        return
+    with open(directory / ".lock", "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("Задание сейчас обрабатывается другим процессом.")
+            return
+        try:
+            states = read_job(journal)["scenes"]
+            await update.effective_message.reply_text(
+                "Восстановление Veo " + directory.name + ": " +
+                ", ".join(str(i) + "=" + states.get(str(i), {}).get("state", "missing") for i in range(1, 5)))
+            for i in range(1, 5):
+                item = read_job(journal)["scenes"].get(str(i), {})
+                state, task_id = item.get("state"), item.get("task_id")
+                if state == "completed":
+                    load_scene(directory, i)
+                    continue
+                if not task_id:
+                    await update.effective_message.reply_text(
+                        f"Сцена {i}: нет подтверждённого ID CometAPI. Повторная платная отправка заблокирована. "
+                        "Требуется сверка с провайдером.")
+                    return
+                async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                    payload = await _poll_video_task_for_bytes(
+                        client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                        COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"],
+                        task_id, "Veo Multi-Scene", max_wait_s=1200)
+                if not payload:
+                    await update.effective_message.reply_text(
+                        f"Сцена {i}: видео пока не получено; ID задачи сохранён, повторной оплаты нет.")
+                    return
+                await asyncio.to_thread(save_scene, directory, i, payload)
+                mark_scene(journal, i, "completed", task_id)
+            clips = list_complete_scenes(directory, 4)
+            result = await asyncio.to_thread(assemble_vertical_video, clips, directory / "final.mp4", duration)
+            await _reply_video_file(update, str(result), "🎬 Veo 3.1 Fast · восстановлено · 30 сек · 9:16")
+        except Exception as exc:
+            log.exception("Veo recovery failed job=%s", directory.name)
+            await update.effective_message.reply_text("Восстановление Veo остановлено: " + str(exc)[:300])
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, prompt: str, duration_s: int, aspect: str) -> bool:
     """Text-to-video through CometAPI: Sora 2, Kling, or Runway."""
     engine = (engine or "").lower().strip(); prompt = (prompt or "").strip()
@@ -18383,6 +18460,7 @@ def build_application() -> "Application":
     app.add_handler(TypeHandler(Update, _claim_incoming_telegram_event), group=-100)
 
     # Команды
+    app.add_handler(CommandHandler("veo_recover", cmd_veo_recover))
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
