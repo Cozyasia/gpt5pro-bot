@@ -2624,9 +2624,19 @@ def _tts_bytes_sync(text: str, audio_format: str = "opus", voice: str | None = N
             "Authorization": f"Bearer {OPENAI_TTS_KEY}",
             "Content-Type": "application/json"
         }
-        r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
-        r.raise_for_status()
-        data = r.content if r.content else None
+        r = None
+        for attempt in range(3):
+            try:
+                with httpx.Client(timeout=httpx.Timeout(connect=15.0, read=180.0, write=30.0, pool=15.0)) as client:
+                    r = client.post(url, headers=headers, json=payload)
+                r.raise_for_status()
+                break
+            except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError) as exc:
+                log.warning("TTS transient transport failure attempt %s/3: %s", attempt + 1, type(exc).__name__)
+                if attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
+        data = r.content if r is not None and r.content else None
         if data:
             log.info("TTS bytes: %s bytes", len(data))
         return data
@@ -16003,7 +16013,7 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
 
             clips = await resume_veo_job(
                 job_directory=directory, duration_seconds=24, spoken_script=script,
-                visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip(),
+                visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else re.sub(r"ТЕКСТ ДИКТОРА\s*:\s*.*?(?=\n\s*АУДИО И МОНТАЖ\s*:|\Z)", "", prompt, flags=re.I | re.S).strip(),
                 submit=submit, poll=poll, reference_image=reference_path, assemble=False,
             )
             if not isinstance(clips, list):
