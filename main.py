@@ -15318,7 +15318,7 @@ async def _poll_video_task_generic(
                     # Финальный MP4 надо забрать отдельным GET /v1/videos/{id}/content.
                     if "sora" in (caption or "").lower() or "/v1/videos" in " ".join(status_paths):
                         try:
-                            content_url = f"{base_url.rstrip("/")}/v1/videos/{task_id}/content"
+                            content_url = f"{base_url.rstrip('/')}/v1/videos/{task_id}/content"
                             cr = await client.get(content_url, headers=headers, timeout=240.0, follow_redirects=True)
                             if cr.status_code < 400 and cr.content and "application/json" not in (cr.headers.get("content-type") or "").lower():
                                 await _reply_video_bytes(update, cr.content, f"{caption} ✅", task_id=task_id)
