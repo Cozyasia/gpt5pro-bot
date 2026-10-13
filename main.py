@@ -4522,6 +4522,8 @@ def _veo_video_options_keyboard(context):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (8, 15)],
         [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (30, 60)],
+        [InlineKeyboardButton(("✅ " if context.user_data.get("veo_use_presenter_reference") else "") + "👤 Ведущий с фото", callback_data="veoopt:ref:on"),
+         InlineKeyboardButton(("✅ " if not context.user_data.get("veo_use_presenter_reference") else "") + "🎞️ Без ведущего", callback_data="veoopt:ref:off")],
     ])
 
 
@@ -4530,8 +4532,17 @@ async def _on_veo_video_option(update: Update, context: ContextTypes.DEFAULT_TYP
     if not context.user_data.get("awaiting_text_video_prompt") or context.user_data.get("text_video_engine") != "veo":
         await q.answer("Сначала выберите Veo.", show_alert=True)
         return
+    data = q.data or ""
+    if data in ("veoopt:ref:on", "veoopt:ref:off"):
+        if data.endswith(":on") and not _get_cached_photo(q.from_user.id):
+            await q.answer("Сначала отправьте фотографию ведущего в этот чат.", show_alert=True)
+            return
+        context.user_data["veo_use_presenter_reference"] = data.endswith(":on")
+        await q.answer("Референс ведущего включён" if data.endswith(":on") else "Режим без референса")
+        await q.message.edit_reply_markup(reply_markup=_veo_video_options_keyboard(context))
+        return
     try:
-        duration = int((q.data or "").rsplit(":", 1)[-1])
+        duration = int(data.rsplit(":", 1)[-1])
     except ValueError:
         duration = 0
     if duration not in (8, 15, 30, 60):
@@ -4588,6 +4599,7 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
         context.user_data.setdefault("kling_text_sound", False)
     if engine == "veo":
         context.user_data.setdefault("veo_text_duration", 8)
+        context.user_data["veo_use_presenter_reference"] = False
     labels = {"sora": "Sora 2 — только без людей", "kling": "Kling", "runway": "Runway", "veo": "Google Veo 3.1 Fast · русский звук (эксперимент)"}
     await q.answer(labels[engine][:180])
     warning = "\n⚠️ В промпте не должно быть людей, лиц или персонажей." if engine == "sora" else ""
