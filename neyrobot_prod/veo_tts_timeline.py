@@ -8,6 +8,34 @@ import subprocess
 from pathlib import Path
 
 
+def probe_audio_seconds(path: str | Path) -> float:
+    """Read the actual TTS duration before cutting; never silently truncate speech."""
+    import json
+    source = Path(path).resolve()
+    if not source.is_file():
+        raise FileNotFoundError("TTS master audio not found")
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "json", str(source)],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    seconds = float(json.loads(result.stdout)["format"]["duration"])
+    if not 0 < seconds < 3600:
+        raise ValueError("Invalid TTS duration")
+    return seconds
+
+
+def require_24_second_voice(path: str | Path, *, tolerance: float = 0.35) -> float:
+    """Reject speech longer or shorter than the video instead of clipping words."""
+    duration = probe_audio_seconds(path)
+    if abs(duration - 24.0) > tolerance:
+        raise ValueError(
+            f"TTS master lasts {duration:.2f}s, expected 24.00s. "
+            "Adjust narration before any paid lip-sync."
+        )
+    return duration
+
+
 def split_tts_master(master: str | Path, output_directory: str | Path, *, seconds: int = 24) -> list[Path]:
     """Cut one continuous voice track into exact 8-second WAV slices.
 
@@ -18,6 +46,7 @@ def split_tts_master(master: str | Path, output_directory: str | Path, *, second
     source = Path(master).resolve()
     if not source.is_file():
         raise FileNotFoundError("TTS master audio not found")
+    require_24_second_voice(source)
     destination = Path(output_directory).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
