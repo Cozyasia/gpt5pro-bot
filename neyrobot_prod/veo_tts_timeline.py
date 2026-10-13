@@ -8,6 +8,26 @@ import subprocess
 from pathlib import Path
 
 
+def required_atempo_factor(source_seconds: float, *, target_seconds: float = 24.0,
+                           max_change: float = 0.10) -> float:
+    """Return the FFmpeg atempo factor needed for a safe exact 24-second voice.
+
+    atempo values above 1 speed the recording up; values below 1 slow it down.
+    The workflow deliberately refuses larger changes so narration remains natural
+    and users can shorten or expand their copy before Veo/Kling are charged.
+    """
+    source_seconds = float(source_seconds)
+    if source_seconds <= 0 or target_seconds <= 0:
+        raise ValueError("Invalid TTS duration")
+    factor = source_seconds / target_seconds
+    if abs(factor - 1.0) > max_change:
+        raise ValueError(
+            f"TTS duration requires a tempo change greater than {int(max_change * 100)}%; "
+            "adjust narration before paid video generation"
+        )
+    return factor
+
+
 def probe_audio_seconds(path: str | Path) -> float:
     """Read the actual TTS duration before cutting; never silently truncate speech."""
     import json
@@ -34,6 +54,26 @@ def require_24_second_voice(path: str | Path, *, tolerance: float = 0.35) -> flo
             "Adjust narration before any paid lip-sync."
         )
     return duration
+
+
+def fit_tts_master_to_24_seconds(source: str | Path, output: str | Path,
+                                 *, max_change: float = 0.10) -> Path:
+    """Normalize one TTS recording to exactly 24 seconds within a safe tempo band."""
+    source_path, output_path = Path(source).resolve(), Path(output).resolve()
+    if not source_path.is_file():
+        raise FileNotFoundError("TTS master audio not found")
+    if output_path == source_path:
+        raise ValueError("Fitted TTS output must not overwrite the source")
+    factor = required_atempo_factor(probe_audio_seconds(source_path), max_change=max_change)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(source_path),
+         "-af", f"atempo={factor:.8f},aresample=48000,apad=whole_dur=24,atrim=duration=24",
+         "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(output_path)],
+        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180,
+    )
+    require_24_second_voice(output_path)
+    return output_path
 
 
 def split_tts_master(master: str | Path, output_directory: str | Path, *, seconds: int = 24) -> list[Path]:
