@@ -15762,6 +15762,27 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
     job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
     directory = os.path.join(root, job_hash)
     os.makedirs(directory, exist_ok=True)
+    # Persist the presenter snapshot inside the job, not in volatile user cache.
+    reference_path = None
+    if context.user_data.get("veo_use_presenter_reference"):
+        from pathlib import Path
+        import tempfile
+        photo_bytes = _get_cached_photo(update.effective_user.id)
+        if not photo_bytes:
+            await update.effective_message.reply_text("⚠️ Референс ведущего не найден. Сначала отправьте фотографию, затем повторите запрос. Кредиты за Veo не списывались на этом этапе.")
+            return False
+        reference_path = str(Path(directory) / "presenter_reference.jpg")
+        if not os.path.exists(reference_path):
+            fd, tmp = tempfile.mkstemp(prefix=".presenter_", dir=directory)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(photo_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, reference_path)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
     lock_path = os.path.join(directory, ".lock")
     with open(lock_path, "a+b") as lock:
         try:
@@ -15771,7 +15792,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
             return False
         async def submit(scene_prompt, index):
             await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/{(duration + 7) // 8}")
-            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt)
+            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt, reference_image=reference_path)
         async def poll(task_id):
             log.info("VEO_SCENE_POLL_START job=%s task_id=%s", job_hash, task_id)
             async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
@@ -15785,7 +15806,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             result = await resume_veo_job(
                 job_directory=directory, duration_seconds=duration,
-                spoken_script=script, visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else prompt, submit=submit, poll=poll)
+                spoken_script=script, visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else prompt, submit=submit, poll=poll, reference_image=reference_path)
             log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
             await _reply_video_file(update, str(result), f"🎬 Veo 3.1 Fast · {duration} сек · 9:16")
             log.info("VEO_DELIVERY_DONE job=%s", job_hash)
