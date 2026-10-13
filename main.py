@@ -16061,6 +16061,51 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
+async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Explicit one-step Veo native-audio extension. Never resubmit paid POST."""
+    import json
+    import os
+    import hashlib
+    from pathlib import Path
+    from neyrobot_prod.veo_extend_comet import extend_veo
+    if not OWNER_ID or update.effective_user.id != OWNER_ID:
+        await update.effective_message.reply_text("Команда Veo Extend доступна владельцу.")
+        return
+    raw = " ".join(context.args).strip()
+    if " | " not in raw:
+        await update.effective_message.reply_text(
+            "Формат: /veo_extend https://provider.example/video.mp4 | Продолжи сцену, сохрани того же ведущего, речь на русском.\\n"
+            "Одна команда = одно платное продление на 7 секунд. Исходное видео должно быть создано Veo и доступно провайдеру.")
+        return
+    video_uri, continuation = [x.strip() for x in raw.split(" | ", 1)]
+    if not video_uri.startswith("https://") or not continuation:
+        await update.effective_message.reply_text("Нужны HTTPS-ссылка на Veo-видео и текст продолжения.")
+        return
+    if not COMET_API_KEY:
+        await update.effective_message.reply_text("COMET_API_KEY не настроен. Никаких списаний.")
+        return
+    model = os.getenv("VEO_EXTEND_MODEL", "veo-3.1")
+    root = Path(os.getenv("VEO_JOBS_DIR", "/data/veo_jobs")) / "extensions"
+    root.mkdir(parents=True, exist_ok=True)
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_message.message_id) + "|" + raw).encode()).hexdigest()[:24]
+    journal = root / (job_hash + ".json")
+    if journal.exists():
+        await update.effective_message.reply_text("Эта команда уже зарегистрирована; повторный платный вызов запрещён. Журнал: " + job_hash)
+        return
+    journal.write_text(json.dumps({"status": "submitting", "source": video_uri, "prompt": continuation, "model": model}, ensure_ascii=False))
+    await update.effective_message.reply_text("🎞️ Veo Extend: отправляю одно продление +7 секунд с native audio. Новые вызовы автоматически не повторяются.")
+    try:
+        result_uri, payload = await extend_veo(COMET_BASE_URL, COMET_API_KEY, video_uri, continuation, model=model)
+        journal.write_text(json.dumps({"status": "accepted", "source": video_uri, "prompt": continuation, "model": model, "response": payload}, ensure_ascii=False, default=str))
+        if result_uri:
+            await update.effective_message.reply_text("✅ CometAPI вернул ссылку на продлённое видео: " + result_uri)
+        else:
+            await update.effective_message.reply_text("⏳ CometAPI принял запрос, но не вернул прямую ссылку на видео. Ответ сохранён в журнале " + job_hash + ". Не запускайте повторно — нужна проверка статуса задачи.")
+    except Exception as exc:
+        journal.write_text(json.dumps({"status": "uncertain_or_failed", "source": video_uri, "error": str(exc)}, ensure_ascii=False))
+        await update.effective_message.reply_text("⚠️ Veo Extend: " + str(exc)[:350] + ". Повтор автоматически запрещён.")
+
+
 async def cmd_heygen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Create a single Russian-speaking HeyGen presenter clip from /heygen text."""
     import os
@@ -18800,6 +18845,7 @@ def build_application() -> "Application":
     # Команды
     app.add_handler(CommandHandler("veo_recover", cmd_veo_recover))
     app.add_handler(CommandHandler("heygen", cmd_heygen))
+    app.add_handler(CommandHandler("veo_extend", cmd_veo_extend))
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
