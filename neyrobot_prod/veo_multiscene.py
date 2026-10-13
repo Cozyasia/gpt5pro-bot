@@ -6,7 +6,7 @@ until orchestration, accounting and FFmpeg integration pass end-to-end tests.
 from dataclasses import dataclass
 from math import ceil
 
-ALLOWED_DURATIONS = (8, 15, 30, 60)
+ALLOWED_DURATIONS = (8, 15, 24, 30, 60)
 VEO_SCENE_SECONDS = 8
 MAX_SPOKEN_WORDS_PER_SCENE = 16
 
