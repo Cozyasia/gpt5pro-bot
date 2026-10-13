@@ -24,7 +24,7 @@ def split_spoken_text(script: str, scene_count: int) -> list[str]:
     """Distribute words across scenes, never truncate or silently drop words."""
     words = script.strip().split()
     if not words:
-        raise ValueError("Script cannot be empty")
+        return [""] * scene_count
     if len(words) > scene_count * MAX_SPOKEN_WORDS_PER_SCENE:
         raise ValueError(
             f"Script is too long for natural speech: max "
