@@ -23,7 +23,7 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install httpx
       - name: Compile edited modules
-        run: python -m compileall -q main.py neyrobot_prod/veo_multiscene.py neyrobot_prod/veo_scene_prompt.py neyrobot_prod/veo_assembler.py neyrobot_prod/veo_orchestrator.py neyrobot_prod/veo_task_journal.py neyrobot_prod/veo_scene_runner.py neyrobot_prod/veo_scene_artifacts.py neyrobot_prod/veo_resumable_pipeline.py neyrobot_prod/veo_comet_adapter.py
+        run: python -m compileall -q main.py neyrobot_prod/veo_multiscene.py neyrobot_prod/veo_scene_prompt.py neyrobot_prod/veo_assembler.py neyrobot_prod/veo_orchestrator.py neyrobot_prod/veo_task_journal.py neyrobot_prod/veo_scene_runner.py neyrobot_prod/veo_scene_artifacts.py neyrobot_prod/veo_resumable_pipeline.py neyrobot_prod/veo_comet_adapter.py neyrobot_prod/veo_tts_timeline.py neyrobot_prod/veo_voice_preflight.py neyrobot_prod/veo_24s_state.py
       - name: Run Veo unit tests
         run: python -m unittest discover -s tests -p 'test_veo_*.py' -v
       - name: Run overlay layout tests
