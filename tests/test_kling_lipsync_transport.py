@@ -119,6 +119,15 @@ class KlingLipSyncTransportTests(unittest.TestCase):
         self.assertEqual("face-1", client.posts[1][1]["face_choose"][0]["face_id"])
         self.assertEqual(6000, client.posts[1][1]["face_choose"][0]["sound_end_time"])
 
+    def test_existing_task_resumes_poll_without_a_new_post(self):
+        env = load_transport()
+        result = asyncio.run(env["_run_kling_lipsync_result_bytes"](
+            "https://media.test/video.mp4", "https://media.test/audio.mp3", duration_ms=8000,
+            max_wait_s=30, existing_task_id="lip-1",
+        ))
+        self.assertEqual(FAKE_MP4, result)
+        self.assertEqual([], FakeClient.instances[0].posts)
+
     def test_404_is_terminal_and_not_retried(self):
         FakeClient.create_status = 404
         env = load_transport()
@@ -140,23 +149,23 @@ class KlingLipSyncTransportTests(unittest.TestCase):
                 "https://media.test/video.mp4", "https://media.test/audio.mp3", duration_ms=6000, max_wait_s=30,
             ))
 
-    def test_retries_429_and_5xx_then_succeeds(self):
-        FakeClient.create_events = [429, 503, 200]
+    def test_advanced_lipsync_429_is_not_retried(self):
+        FakeClient.create_events = [429, 200]
         env = load_transport()
-        result = asyncio.run(env["_run_kling_lipsync_result_bytes"](
-            "https://media.test/video.mp4", "https://media.test/audio.mp3", duration_ms=6000, max_wait_s=30,
-        ))
-        self.assertEqual(FAKE_MP4, result)
-        self.assertEqual(4, len(FakeClient.instances[0].posts))
+        with self.assertRaisesRegex(RuntimeError, "429"):
+            asyncio.run(env["_run_kling_lipsync_result_bytes"](
+                "https://media.test/video.mp4", "https://media.test/audio.mp3", duration_ms=6000, max_wait_s=30,
+            ))
+        self.assertEqual(2, len(FakeClient.instances[0].posts))
 
-    def test_retries_transport_timeout_then_succeeds(self):
+    def test_advanced_lipsync_timeout_is_not_retried(self):
         FakeClient.create_events = [TimeoutError("provider timeout"), 200]
         env = load_transport()
-        result = asyncio.run(env["_run_kling_lipsync_result_bytes"](
-            "https://media.test/video.mp4", "https://media.test/audio.mp3", duration_ms=6000, max_wait_s=30,
-        ))
-        self.assertEqual(FAKE_MP4, result)
-        self.assertEqual(3, len(FakeClient.instances[0].posts))
+        with self.assertRaisesRegex(RuntimeError, "timeout"):
+            asyncio.run(env["_run_kling_lipsync_result_bytes"](
+                "https://media.test/video.mp4", "https://media.test/audio.mp3", duration_ms=6000, max_wait_s=30,
+            ))
+        self.assertEqual(2, len(FakeClient.instances[0].posts))
 
     def test_terminal_provider_failure_is_not_treated_as_processing(self):
         FakeClient.poll_payload = {"data": {"task_status": "failed", "message": "invalid face"}}
