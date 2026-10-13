@@ -16061,6 +16061,34 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
+async def cmd_heygen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Create a single Russian-speaking HeyGen presenter clip from /heygen text."""
+    import os
+    from neyrobot_prod.heygen_adapter import create_presenter_video, poll_presenter_video
+    script = " ".join(context.args).strip()
+    if not script:
+        await update.effective_message.reply_text("Использование: /heygen Ваш русский текст ведущего. До запуска проверьте стоимость HeyGen.")
+        return
+    key = os.getenv("HEYGEN_API_KEY", "")
+    avatar = os.getenv("HEYGEN_AVATAR_ID", "")
+    voice = os.getenv("HEYGEN_VOICE_ID", "")
+    if not (key and avatar and voice):
+        await update.effective_message.reply_text("HeyGen пока не настроен: нужны HEYGEN_API_KEY, HEYGEN_AVATAR_ID и HEYGEN_VOICE_ID в Render. Генерация не запускалась.")
+        return
+    if len(script) > 5000:
+        await update.effective_message.reply_text("Текст слишком длинный: максимум 5000 символов.")
+        return
+    await update.effective_message.reply_text("🎬 HeyGen: создаю видео с одним ведущим и русской речью.")
+    try:
+        video_id = await create_presenter_video(key, avatar, voice, script)
+        await update.effective_message.reply_text("HeyGen video ID: " + video_id + ". Ожидаю готовности.")
+        video_url = await poll_presenter_video(key, video_id)
+        await update.effective_message.reply_video(video=video_url, caption="🎬 HeyGen · AI-ведущий · русская речь")
+    except Exception as exc:
+        log.exception("HeyGen generation failed")
+        await update.effective_message.reply_text("⚠️ HeyGen: " + str(exc)[:350] + ". Не запускайте повторно без проверки статуса оплаченной задачи.")
+
+
 async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Owner-only recovery: poll existing paid IDs; never submit a new scene."""
     import fcntl
@@ -18771,6 +18799,7 @@ def build_application() -> "Application":
 
     # Команды
     app.add_handler(CommandHandler("veo_recover", cmd_veo_recover))
+    app.add_handler(CommandHandler("heygen", cmd_heygen))
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
