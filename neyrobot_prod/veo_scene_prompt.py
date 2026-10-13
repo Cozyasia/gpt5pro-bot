@@ -16,14 +16,14 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
     if not visual_brief.strip():
         raise ValueError("Visual brief required")
     if not scene.spoken_text.strip():
-        dialogue = ("No dialogue, no narration, no spoken words in this scene. "
-                    "Only subtle ambient sound. Do not repeat speech from any other scene.")
+        dialogue = ("Follow the user brief for any Russian dialogue; generate speech "
+                    "natively within Veo, synchronized with the visible speaker. "
+                    "Do not invent repeated introductions or unrelated narration.")
     else:
         dialogue = (
             'The presenter says exactly in Russian: "'
             + scene.spoken_text.replace('"', "'")
-            + '". Speak these words ONCE only. No introductions, repetitions, paraphrases, '
-              'extra commentary or dialogue from other scenes. Do not restart the advertisement.'
+            + '". Speak these words ONCE only. No introductions, repetitions, paraphrases.'
         )
     continuity = (
         "Keep the same presenter appearance, outfit, lighting, and studio "
@@ -31,7 +31,7 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
         if presenter.strip() else ""
     )
     audio_guard = (
-        "The dialogue above is the ONLY speech permitted in this scene. "
+        "Use native Veo audio, not an external TTS track. "
         "No additional voiceover, narration, repeated opening, or unrelated words. "
         "Keep music and ambience quiet under speech; end at the scene boundary."
     )
