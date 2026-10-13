@@ -10438,6 +10438,14 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             reply_markup=_textvideo_action_kb("act"),
         )
         return False
+    if engine == "veo" and duration > 8 and context.user_data.get("veo_use_presenter_reference"):
+        image = _get_cached_photo(update.effective_user.id)
+        if not image:
+            await update.effective_message.reply_text("⚠️ Фотография ведущего не найдена. Отправьте фото и повторите запрос. Генерация не запущена.")
+            return False
+        if len(image) > 10 * 1024 * 1024 or image[:3] != b"\\xff\\xd8\\xff":
+            await update.effective_message.reply_text("⚠️ Для референса Veo отправьте JPEG-фото размером до 10 МБ. Генерация не запущена.")
+            return False
     if engine == "veo" and duration > 8:
         # Opt-in only: a previously sent Telegram photo may be used as presenter reference.
         # Do not enable this for ordinary text-to-video requests.
