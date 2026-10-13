@@ -4562,7 +4562,11 @@ async def _on_veo_video_option(update: Update, context: ContextTypes.DEFAULT_TYP
             return
         context.user_data["veo_use_presenter_reference"] = data.endswith(":on")
         await q.answer("Референс ведущего включён" if data.endswith(":on") else "Режим без референса")
-        await q.message.edit_reply_markup(reply_markup=_veo_video_options_keyboard(context))
+        try:
+            await q.message.edit_reply_markup(reply_markup=_veo_video_options_keyboard(context))
+        except BadRequest as exc:
+            if "Message is not modified" not in str(exc):
+                raise
         return
     try:
         duration = int(data.rsplit(":", 1)[-1])
@@ -4573,7 +4577,11 @@ async def _on_veo_video_option(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     context.user_data["veo_text_duration"] = duration
     await q.answer("Длительность сохранена")
-    await q.message.edit_reply_markup(reply_markup=_veo_video_options_keyboard(context))
+    try:
+        await q.message.edit_reply_markup(reply_markup=_veo_video_options_keyboard(context))
+    except BadRequest as exc:
+        if "Message is not modified" not in str(exc):
+            raise
 
 
 def _kling_video_options_keyboard(context):
@@ -18819,6 +18827,20 @@ def build_application() -> "Application":
     # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
     # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
     app.add_handler(CallbackQueryHandler(on_cb), group=0)
+
+    # Selected text-to-video engine owns the next prompt before generic AI routing.
+    async def _route_selected_text_video(update, context):
+        if not context.user_data.get("awaiting_text_video_prompt"):
+            return
+        incoming = (getattr(update.effective_message, "text", "") or "").strip()
+        if not incoming:
+            return
+        # Preserve the selection until _start_text_video has inspected it.
+        await _start_text_video(update, context, incoming)
+        _clear_text_video_wait(context)
+        raise ApplicationHandlerStop
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _route_selected_text_video), group=-3)
 
     # Active AI-videoclip state owns text before presentation/capability/generic media routing.
     app.add_handler(
