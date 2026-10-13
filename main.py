@@ -10524,7 +10524,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         if engine == "kling" and duration > 10:
             return await _run_kling_text_shorts(update, context, prompt, duration, "9:16")
         if engine == "veo" and duration > 8:
-            return await _run_veo_multiscene(update, context, prompt, duration)
+            return await _run_veo_extend_chain(update, context, prompt, duration)
         if engine == "runway":
             return await _run_runway_video(update, context, prompt, duration, aspect)
         return await _run_comet_text_video(update, context, engine, prompt, duration, aspect)
@@ -15811,13 +15811,13 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
     return False
 
 
-async def _run_veo_extend_15(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
+async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
     """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
     import fcntl
     import hashlib
     import re
     from neyrobot_prod.veo_comet_adapter import submit_veo_task
-    from neyrobot_prod.veo_extend_15_pipeline import create_extended_15
+    from neyrobot_prod.veo_extend_15_pipeline import create_extended_video
 
     root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
     job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
@@ -15865,13 +15865,13 @@ async def _run_veo_extend_15(update: Update, context: ContextTypes.DEFAULT_TYPE,
             log.info("VEO_SCENE_POLL_DONE job=%s task_id=%s bytes=%s", job_hash, task_id, len(result or b""))
             return result
         try:
-            result = await create_extended_15(
-                directory=directory, prompt=prompt, base_url=COMET_BASE_URL,
+            result = await create_extended_video(
+                directory=directory, prompt=prompt, duration_seconds=duration, base_url=COMET_BASE_URL,
                 api_key=COMET_API_KEY, fast_model=VEO_FAST_MODEL,
                 poll=poll, reference_image=reference_path,
                 progress=lambda message: update.effective_message.reply_text("🎬 " + message))
             log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
-            await _reply_video_file(update, str(result), "🎬 Veo 3.1 · 15 сек · native Veo Extend · 9:16")
+            await _reply_video_file(update, str(result), f"🎬 Veo 3.1 · {duration} сек · native Veo Extend · 9:16")
             log.info("VEO_DELIVERY_DONE job=%s", job_hash)
             return True
         except Exception as exc:
@@ -15886,8 +15886,8 @@ async def _run_veo_extend_15(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
     """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
-    if duration == 15:
-        return await _run_veo_extend_15(update, context, prompt, duration)
+    if 8 < duration <= 148:
+        return await _run_veo_extend_chain(update, context, prompt, duration)
     import fcntl
     import hashlib
     import re
