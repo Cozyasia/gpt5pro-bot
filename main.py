@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 261382)
-Total output lines: 18945
-
 import hashlib
 import hmac
 # -*- coding: utf-8 -*-
@@ -7048,7 +7045,4596 @@ async def _generate_business_presentation(update: Update, context: ContextTypes.
             lines = [re.sub(r"^[#\s]*", "", x).strip(" -•\t") for x in ch.splitlines() if x.strip()]
             if not lines:
                 continue
-            if s…61382 tokens truncated…one", "no smartphone", "no screen", "no mirror", "no selfie stick",
+            if slide_count >= 12:
+                break
+            ttl = lines[0][:90] or f"Слайд {slide_count+1}"
+            body_lines = [x for x in lines[1:8] if x][:6]
+            sl = prs.slides.add_slide(prs.slide_layouts[1])
+            sl.shapes.title.text = ttl
+            tf = sl.placeholders[1].text_frame
+            tf.clear()
+            if not body_lines:
+                body_lines = [ttl]
+            for j, line in enumerate(body_lines):
+                p = tf.paragraphs[0] if j == 0 else tf.add_paragraph()
+                p.text = line[:240]
+                p.level = 0
+                with contextlib.suppress(Exception):
+                    p.font.size = Pt(20)
+            slide_count += 1
+        if slide_count == 0:
+            sl = prs.slides.add_slide(prs.slide_layouts[1])
+            sl.shapes.title.text = "Структура"
+            sl.placeholders[1].text = reply[:1500]
+        bio = BytesIO()
+        prs.save(bio)
+        bio.seek(0)
+        bio.name = _safe_filename("presentation", "pptx")
+        await update.effective_message.reply_document(InputFile(bio), caption="📊 Презентация PPTX готова.")
+    except Exception as e:
+        log.exception("pptx generation failed: %s", e)
+        bio = BytesIO(reply.encode("utf-8")); bio.name = _safe_filename("presentation_outline", "txt")
+        await update.effective_message.reply_document(InputFile(bio), caption="⚠️ PPTX не собрался на сервере, отправляю структуру TXT.")
+
+async def _generate_business_catalog_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE, brief: str):
+    prompt = (
+        "Ты маркетолог и редактор коммерческих каталогов. На русском подготовь текст PDF-каталога по ТЗ пользователя. "
+        "Структура: обложка, краткое УТП, блоки объектов/товаров/услуг, характеристики, преимущества, условия, CTA, контакты. "
+        "Если данных не хватает — сделай аккуратный шаблон с местами для заполнения. ТЗ:\n" + (brief or "")
+    )
+    reply = await ask_openai_text(prompt, user_id=update.effective_user.id, chat_id=update.effective_chat.id)
+    await _reply_long_text(update, "📕 Черновик PDF-каталога готов. Ниже текст, отдельно прикрепляю PDF-файл.\n\n" + reply)
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.units import mm
+        # Пытаемся подключить DejaVu для кириллицы, если он есть в окружении Render.
+        font_name = "Helvetica"
+        for fp in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf"):
+            if os.path.exists(fp):
+                pdfmetrics.registerFont(TTFont("DejaVuSans", fp))
+                font_name = "DejaVuSans"
+                break
+        bio = BytesIO()
+        c = canvas.Canvas(bio, pagesize=A4)
+        width, height = A4
+        x, y = 18*mm, height - 20*mm
+        c.setFont(font_name, 16)
+        c.drawString(x, y, "PDF-каталог")
+        y -= 12*mm
+        c.setFont(font_name, 10)
+        for raw in reply.splitlines():
+            line = raw.strip()
+            if not line:
+                y -= 5*mm
+                continue
+            # Простая переноска строк.
+            while line:
+                part = line[:105]
+                line = line[105:]
+                if y < 18*mm:
+                    c.showPage(); c.setFont(font_name, 10); y = height - 20*mm
+                c.drawString(x, y, part)
+                y -= 5.2*mm
+        c.save()
+        bio.seek(0); bio.name = _safe_filename("catalog", "pdf")
+        await update.effective_message.reply_document(InputFile(bio), caption="📕 PDF-каталог готов.")
+    except Exception as e:
+        log.exception("pdf catalog generation failed: %s", e)
+        bio = BytesIO(reply.encode("utf-8")); bio.name = _safe_filename("catalog_text", "txt")
+        await update.effective_message.reply_document(InputFile(bio), caption="⚠️ PDF не собрался на сервере, отправляю текст каталога TXT.")
+
+def _extract_logo_brand_name(brief: str) -> str:
+    s = (brief or "").strip()
+    patterns = [
+        r"(?:название|бренд|компан(?:ия|ии)|проект)\s*[:—-]\s*['\"«]?([^'\"»\n,.;]{2,40})",
+        r"['\"«]([^'\"»]{2,40})['\"»]",
+        r"(?:логотип|лого)\s+(?:для|бренда|компании)?\s*['\"«]?([^'\"»\n,.;]{2,40})",
+    ]
+    for pat in patterns:
+        m = re.search(pat, s, flags=re.I)
+        if m:
+            name = re.sub(r"\s+", " ", m.group(1)).strip(" -—:;,.«»\"'")
+            if 2 <= len(name) <= 40:
+                return name
+    words = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+", s)
+    stop = {"создай", "сделай", "логотип", "лого", "для", "бренд", "бренда", "компании", "нейро", "мультимодальный", "бот", "стиль", "цвет", "цвета"}
+    picked = [w for w in words[:8] if w.lower() not in stop]
+    return " ".join(picked[:2])[:32] or "Brand"
+
+
+def _logo_initials(name: str) -> str:
+    parts = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+", name or "Brand")
+    if not parts:
+        return "B"
+    return "".join(p[0].upper() for p in parts[:2])[:3]
+
+
+def _load_logo_font(size: int, bold: bool = True):
+    if ImageFont is None:
+        return None
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    ]
+    for fp in candidates:
+        if fp and os.path.exists(fp):
+            with contextlib.suppress(Exception):
+                return ImageFont.truetype(fp, size)
+    return ImageFont.load_default()
+
+
+def _draw_centered_text(draw, xy, text_value, font, fill):
+    x, y = xy
+    try:
+        bbox = draw.textbbox((0, 0), text_value, font=font)
+        w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    except Exception:
+        w, h = draw.textlength(text_value, font=font), 40
+    draw.text((x - w / 2, y - h / 2), text_value, font=font, fill=fill)
+
+
+def _make_local_logo_png(brief: str) -> bytes | None:
+    if not (LOGO_LOCAL_FALLBACK and Image and ImageDraw):
+        return None
+    try:
+        brand = _extract_logo_brand_name(brief)
+        initials = _logo_initials(brand)
+        W, H = 1024, 1024
+        img = Image.new("RGB", (W, H), (12, 18, 33))
+        draw = ImageDraw.Draw(img)
+        # simple premium gradient
+        for y in range(H):
+            r = int(12 + 18 * y / H)
+            g = int(18 + 30 * y / H)
+            b = int(33 + 55 * y / H)
+            draw.line([(0, y), (W, y)], fill=(r, g, b))
+        # soft glow circles
+        for radius, alpha_color, cx, cy in [(360, (47, 128, 255), 240, 180), (300, (124, 224, 255), 840, 820)]:
+            overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            od = ImageDraw.Draw(overlay)
+            for i in range(radius, 0, -8):
+                a = int(55 * (i / radius) ** 2)
+                c = alpha_color + (a,)
+                od.ellipse((cx-i, cy-i, cx+i, cy+i), fill=c)
+            img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+            draw = ImageDraw.Draw(img)
+        # emblem
+        draw.rounded_rectangle((248, 168, 776, 696), radius=120, outline=(124, 224, 255), width=10, fill=(17, 28, 51))
+        draw.ellipse((332, 246, 692, 606), outline=(47, 128, 255), width=18)
+        f_big = _load_logo_font(170, True)
+        f_brand = _load_logo_font(58, True)
+        f_sub = _load_logo_font(30, False)
+        _draw_centered_text(draw, (512, 430), initials, f_big, (248, 251, 255))
+        _draw_centered_text(draw, (512, 790), brand[:32], f_brand, (248, 251, 255))
+        tagline = "AI • BRAND • PRODUCT" if re.search(r"ai|ии|нейро|бот|tech|digital", brief or "", re.I) else "PREMIUM BRAND IDENTITY"
+        _draw_centered_text(draw, (512, 854), tagline, f_sub, (199, 215, 235))
+        out = BytesIO()
+        img.save(out, format="PNG", optimize=True)
+        return out.getvalue()
+    except Exception as e:
+        log.exception("local logo fallback failed: %s", e)
+        return None
+
+
+async def _download_image_url_bytes(url: str, timeout_s: float = 180.0) -> bytes | None:
+    if not url:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s, follow_redirects=True) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            ct = (r.headers.get("content-type") or "").lower()
+            if r.content and len(r.content) > 1000 and ("image" in ct or url.lower().split("?")[0].endswith((".png", ".jpg", ".jpeg", ".webp"))):
+                return bytes(r.content)
+    except Exception as e:
+        log.warning("download image url failed: %s", e)
+    return None
+
+
+async def _comet_generate_image_bytes(prompt: str) -> bytes | None:
+    if not (COMET_API_KEY and COMET_BASE_URL and COMET_IMAGE_GEN_PATH):
+        return None
+    url = f"{COMET_BASE_URL}{COMET_IMAGE_GEN_PATH}"
+    headers = {"Authorization": f"Bearer {COMET_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
+    payloads = [
+        {"model": COMET_IMAGE_GEN_MODEL, "prompt": prompt, "size": "1024x1024", "n": 1},
+        {"model": COMET_IMAGE_GEN_MODEL, "prompt": prompt, "response_format": "b64_json", "size": "1024x1024", "n": 1},
+    ]
+    try:
+        async with httpx.AsyncClient(timeout=float(COMET_IMAGE_GEN_TIMEOUT_S), follow_redirects=True) as client:
+            last_body = ""
+            for payload in payloads:
+                r = await client.post(url, headers=headers, json=payload)
+                last_body = r.text[:500]
+                if r.status_code >= 400:
+                    log.warning("Comet image gen HTTP %s: %s", r.status_code, last_body)
+                    continue
+                j = r.json() or {}
+                candidates = []
+                if isinstance(j.get("data"), list):
+                    candidates.extend(j.get("data") or [])
+                if isinstance(j.get("images"), list):
+                    candidates.extend(j.get("images") or [])
+                if isinstance(j.get("output"), list):
+                    candidates.extend(j.get("output") or [])
+                candidates.append(j)
+                for item in candidates:
+                    if not isinstance(item, dict):
+                        continue
+                    b64 = item.get("b64_json") or item.get("image_base64") or item.get("base64")
+                    if b64:
+                        if "," in b64 and b64.strip().startswith("data:"):
+                            b64 = b64.split(",", 1)[1]
+                        with contextlib.suppress(Exception):
+                            return base64.b64decode(b64)
+                    url2 = item.get("url") or item.get("image_url")
+                    if isinstance(url2, dict):
+                        url2 = url2.get("url")
+                    if url2:
+                        got = await _download_image_url_bytes(str(url2), timeout_s=float(COMET_IMAGE_GEN_TIMEOUT_S))
+                        if got:
+                            return got
+            log.warning("Comet image generation did not return image. Last body: %s", last_body)
+    except Exception as e:
+        log.exception("Comet image generation failed: %s", e)
+    return None
+
+
+async def _generate_logo_image_bytes(prompt: str, brief: str) -> bytes | None:
+    # 1) OpenAI/Luma route from older builds
+    img = await _luma_generate_image_bytes(prompt)
+    if img:
+        return img
+    # 2) Comet OpenAI-compatible image generation route
+    img = await _comet_generate_image_bytes(prompt)
+    if img:
+        return img
+    # 3) Guaranteed local fallback, so the user does not get a dead end
+    return await asyncio.to_thread(_make_local_logo_png, brief)
+
+
+async def _generate_business_logo(update: Update, context: ContextTypes.DEFAULT_TYPE, brief: str):
+    prompt = (
+        "Professional logo design, clean vector style, high-end brand identity, flat vector mark, no mockup, no watermark. "
+        "Create a modern logo based on this Russian brief. Keep brand name readable if provided. "
+        "Avoid small unreadable text. Square composition, transparent-background style if possible. Brief: " + (brief or "")
+    )
+    await update.effective_message.reply_text(
+        "🎨 Запускаю создание логотипа. Пробую image-провайдер, а если он недоступен — соберу аккуратный локальный PNG-логотип, чтобы функция не падала."
+    )
+
+    async def _go():
+        img = await _generate_logo_image_bytes(prompt, brief)
+        if not img:
+            await update.effective_message.reply_text("Не удалось создать изображение. Проверьте OPENAI_IMAGE_KEY или COMET_API_KEY.")
+            return False
+        try:
+            await update.effective_message.reply_photo(photo=img, caption="🎨 Логотип готов ✅")
+        except Exception:
+            bio = BytesIO(img); bio.name = _safe_filename("logo", "png")
+            await update.effective_message.reply_document(InputFile(bio), caption="🎨 Логотип готов ✅")
+        return True
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        "img", IMG_COST_USD, _go,
+        remember_kind="business_logo",
+        remember_payload={"brief": brief},
+    )
+
+
+
+# ───────── Presentation / Catalog Studio v86 integration ─────────
+_PRESENTATION_STUDIO_INSTANCE = None
+
+
+async def _presentation_llm_call(update: Update, prompt: str) -> str:
+    return await ask_openai_text(
+        prompt,
+        user_id=update.effective_user.id if update.effective_user else None,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        extra_system=(
+            "Ты работаешь внутри мастера презентаций. Возвращай структурированные данные точно в запрошенном формате. "
+            "Главный бриф пользователя является единственным источником фактов: сохраняй точное название бренда, продукты, "
+            "цены, контакты, ограничения и количество слайдов. Никогда не используй служебные слова «бренд», «бренда», "
+            "«компания», «товар» или «услуга» как название. Не добавляй вымышленные отзывы, статистику, кейсы, "
+            "сертификаты, телефоны, цены или награды. Если название не определено однозначно, не угадывай его."
+        ),
+    )
+
+
+def _presentation_local_visual(prompt: str, index: int = 0) -> bytes:
+    """Guaranteed local visual fallback so a long presentation workflow never ends with an empty asset."""
+    try:
+        if Image is None or ImageDraw is None:
+            return b""
+        palettes = [
+            ((12, 18, 32), (58, 125, 255), (124, 224, 255)),
+            ((28, 25, 22), (205, 168, 83), (245, 236, 210)),
+            ((233, 239, 235), (74, 122, 101), (199, 184, 145)),
+            ((245, 247, 251), (47, 105, 235), (150, 192, 255)),
+        ]
+        bg, accent, accent2 = palettes[index % len(palettes)]
+        w, h = 1536, 1024
+        im = Image.new("RGB", (w, h), bg)
+        d = ImageDraw.Draw(im)
+        for y in range(h):
+            ratio = y / max(1, h - 1)
+            fill = tuple(int(bg[i] * (1 - ratio * 0.25) + accent[i] * ratio * 0.25) for i in range(3))
+            d.line((0, y, w, y), fill=fill)
+        d.ellipse((850, -220, 1630, 560), fill=accent)
+        d.ellipse((-320, 480, 520, 1320), fill=accent2)
+        d.rounded_rectangle((150, 150, 910, 820), radius=80, outline=(255, 255, 255), width=5)
+        d.line((220, 705, 760, 705), fill=(255, 255, 255), width=8)
+        # Keep the fallback intentionally text-free: the renderer adds approved copy itself.
+        out = BytesIO(); im.save(out, format="JPEG", quality=92, optimize=True)
+        return out.getvalue()
+    except Exception:
+        return b""
+
+
+async def _presentation_paid_runner(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    engine: str,
+    feature: str,
+    provider_cost_usd: float,
+    action,
+):
+    """Run a presentation subtask and return its result.
+
+    Logo concepts are included in the presentation workflow and use a silent provider attempt;
+    deterministic local concepts are supplied by presentation_studio.py when the provider is unavailable.
+    This prevents partial logo cards followed by a misleading global error message.
+    """
+    if feature == "presentation_logo_variants":
+        try:
+            return await action()
+        except Exception as e:
+            log.exception("Presentation logo provider attempt failed silently: %s", e)
+            return None
+
+    box = {"result": None, "error": None}
+
+    async def _go():
+        try:
+            result = await action()
+            box["result"] = result
+            return bool(result)
+        except Exception as exc:
+            box["error"] = exc
+            raise
+
+    await _try_pay_then_do(
+        update,
+        context,
+        update.effective_user.id,
+        engine if engine in ("luma", "runway", "img") else "img",
+        max(0.0, float(provider_cost_usd or 0.0)),
+        _go,
+        remember_kind=feature,
+        remember_payload={"presentation_studio": True, "feature": feature},
+        silent_failure=(feature == "presentation_render"),
+    )
+    if box.get("error") is not None:
+        raise box["error"]
+    return box.get("result")
+
+
+async def _generate_openai_presentation_image_bytes(prompt: str) -> bytes | None:
+    """Landscape-first image generation for slide visuals.
+
+    gpt-image supports landscape sizes on the official API. Some compatible
+    proxies only accept 1024x1024, so the function falls back safely.
+    """
+    sizes = []
+    for value in (PRESENTATION_IMAGE_SIZE, "1536x1024", "1024x1024"):
+        if value and value not in sizes:
+            sizes.append(value)
+    for size in sizes:
+        try:
+            try:
+                resp = oai_img.images.generate(
+                    model=IMAGES_MODEL, prompt=prompt, size=size,
+                    quality=OPENAI_IMAGE_QUALITY, n=1,
+                )
+            except Exception:
+                resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size=size, n=1)
+            item = resp.data[0]
+            b64 = getattr(item, "b64_json", None)
+            if b64:
+                return base64.b64decode(b64)
+            url = getattr(item, "url", None)
+            if url:
+                async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+                    r = await client.get(url)
+                    r.raise_for_status()
+                    if r.content:
+                        return r.content
+        except Exception as e:
+            log.warning("Presentation OpenAI image size=%s failed: %s", size, e)
+    return None
+
+
+async def _presentation_image_batch(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompts: list[str],
+    engine: str,
+    feature: str,
+) -> list[bytes] | None:
+    prompts = [re.sub(r"\s+", " ", (p or "").strip())[:1800] for p in prompts if (p or "").strip()]
+    if not prompts:
+        return []
+
+    resolved_engines: list[str] = []
+    text_sensitive_re = re.compile(
+        r"(label|etiket|packag|bottle|box|poster|menu|sign|screen|document|book|magazine|logo|brand|"
+        r"этикет|упаков|бутыл|короб|плакат|меню|вывеск|экран|документ|книг|журнал|логотип|бренд)", re.I
+    )
+    safe_prompts: list[str] = []
+    for prompt in prompts:
+        text_sensitive = bool(text_sensitive_re.search(prompt))
+        safe_prompt = prompt
+        if PRESENTATION_TEXT_SAFE_VISUALS and text_sensitive:
+            safe_prompt += (
+                " STRICT TYPOGRAPHY SAFETY: all labels, packaging, signs and printed areas must be completely blank and unprinted; "
+                "no letters, pseudo-letters, glyphs, numbers or fake brand marks. Exact approved copy will be overlaid later by the renderer."
+            )
+        safe_prompts.append(safe_prompt)
+        if PRESENTATION_FORCE_OPENAI_FOR_TEXT and text_sensitive:
+            # Midjourney is excellent for atmosphere but unreliable for exact lettering.
+            resolved_engines.append("openai")
+        elif engine == "auto":
+            # Production-safe auto route: one clean landscape image per slide.
+            # Midjourney remains available when the user selects it explicitly.
+            resolved_engines.append("openai")
+        else:
+            resolved_engines.append(engine)
+
+    provider_cost = 0.0
+    for e in resolved_engines:
+        provider_cost += MIDJOURNEY_UNIT_COST_USD if e == "midjourney" else IMG_COST_USD
+
+    async def _action():
+        result: list[bytes] = []
+        for idx, (prompt, selected_engine) in enumerate(zip(safe_prompts, resolved_engines)):
+            img = None
+            try:
+                if selected_engine == "midjourney":
+                    img, _task = await _midjourney_generate_image_bytes(prompt)
+                    if not img:
+                        img = await _luma_generate_image_bytes(prompt)
+                else:
+                    img = await _generate_openai_presentation_image_bytes(prompt)
+                    if not img:
+                        img = await _comet_generate_image_bytes(prompt)
+                    # Never switch a failed slide to Midjourney silently: that can return a
+                    # four-image grid and break visual consistency. The user can select
+                    # Midjourney explicitly in the presentation wizard.
+            except Exception as e:
+                log.warning("Presentation image %s/%s failed: %s", idx + 1, len(prompts), e)
+            # Do not insert generic abstract placeholders. A failed visual remains empty and
+            # the renderer switches that slide to a clean text-first layout. Preserve list
+            # positions so a failed middle image cannot be assigned to the wrong slide.
+            result.append(img or b"")
+        return result if any(result) else None
+
+    return await _presentation_paid_runner(update, context, "img", feature, provider_cost, _action)
+
+
+def _presentation_studio_get() -> PresentationStudio:
+    global _PRESENTATION_STUDIO_INSTANCE
+    if _PRESENTATION_STUDIO_INSTANCE is None:
+        _PRESENTATION_STUDIO_INSTANCE = PresentationStudio(
+            StudioConfig(
+                db_path=DB_PATH,
+                data_dir=PRESENTATION_DATA_DIR,
+                max_uploads=max(5, PRESENTATION_MAX_UPLOADS),
+                max_generated_images=max(1, PRESENTATION_MAX_GENERATED_IMAGES),
+                render_cost_usd=max(0.0, PRESENTATION_RENDER_COST_USD),
+            ),
+            llm_call=_presentation_llm_call,
+            image_batch_call=_presentation_image_batch,
+            paid_runner=_presentation_paid_runner,
+        )
+    return _PRESENTATION_STUDIO_INSTANCE
+
+
+async def cmd_presentation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _clear_transient_flows(context)
+    await _presentation_studio_get().start(update, context, "presentation")
+
+
+async def cmd_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _clear_transient_flows(context)
+    await _presentation_studio_get().start(update, context, "catalog")
+
+
+async def cmd_diag_presentation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    studio = _presentation_studio_get()
+    project = studio._active_project(update.effective_user.id, update.effective_chat.id)
+    lines = [
+        f"🧪 Presentation Studio / {PATCH_VERSION}",
+        f"data_dir={studio.data_dir}",
+        f"db_path={DB_PATH}",
+        f"max_uploads={PRESENTATION_MAX_UPLOADS}",
+        f"max_generated_images={PRESENTATION_MAX_GENERATED_IMAGES}",
+        f"render_cost_usd={PRESENTATION_RENDER_COST_USD}",
+        f"text_safe_visuals={PRESENTATION_TEXT_SAFE_VISUALS}",
+        f"force_openai_for_text={PRESENTATION_FORCE_OPENAI_FOR_TEXT}",
+        f"pptx={'on' if shutil.which('python') or True else 'off'}",
+        f"active_project={project.get('id') if project else '-'}",
+        f"state={project.get('state') if project else '-'}",
+        f"last_build_step={project.get('last_build_step') if project else '-'}",
+        f"last_build_errors={project.get('last_build_errors') if project else '-'}",
+        f"build_warnings={project.get('build_warnings') if project else '-'}",
+        f"pdf_path={project.get('pdf_path') if project else '-'}",
+        f"pptx_path={project.get('pptx_path') if project else '-'}",
+    ]
+    await update.effective_message.reply_text("\n".join(lines))
+
+
+async def _reply_audio_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str):
+    try:
+        r = await client.get(url, timeout=240.0, follow_redirects=True)
+        r.raise_for_status()
+        if r.content and len(r.content) > 1024 and "json" not in (r.headers.get("content-type") or "").lower():
+            bio = BytesIO(r.content)
+            bio.name = "suno_track.mp3"
+            try:
+                await update.effective_message.reply_audio(audio=InputFile(bio), caption=caption)
+                return
+            except Exception:
+                bio.seek(0)
+                await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
+                return
+    except Exception as e:
+        log.warning("audio download failed: %s", e)
+    await update.effective_message.reply_text(f"{caption}\nСсылка на результат: {url}", disable_web_page_preview=False)
+
+async def _poll_suno_task(update: Update, client: httpx.AsyncClient, headers: dict, task_id: str):
+    started = time.time()
+    status_paths = [
+        SUNO_STATUS_PATH,
+        "/suno/fetch/{id}",
+        "/suno/v1/music/{id}",
+        "/api/v1/task/{id}",
+        "/v1/tasks/{id}",
+    ]
+    last = ""
+    while time.time() - started < SUNO_TIMEOUT_S:
+        for path in status_paths:
+            try:
+                rs = await client.get(f"{SUNO_BASE_URL}{path}".format(id=task_id), headers=headers, timeout=60.0)
+                if rs.status_code >= 400:
+                    last = f"{rs.status_code}: {_api_error_preview(rs)}"
+                    continue
+                js = rs.json() or {}
+                data_obj = js.get("data")
+                nested = data_obj if isinstance(data_obj, dict) else {}
+                nested_data = nested.get("data") if isinstance(nested, dict) else None
+                url = (
+                    _extract_first_url(js.get("audio_url"))
+                    or _extract_first_url(js.get("audio"))
+                    or _extract_first_url(js.get("output"))
+                    or _extract_first_url(data_obj)
+                    or _extract_first_url(nested_data)
+                    or _extract_first_url(js)
+                )
+                st = str(js.get("status") or js.get("state") or js.get("task_status") or nested.get("status") or "").lower()
+                if url and (st in ("", "completed", "succeeded", "success", "finished", "done", "ready") or not st):
+                    await _reply_audio_from_url(update, client, url, "🎵 Музыка Suno готова ✅")
+                    return True
+                if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
+                    await update.effective_message.reply_text(f"❌ Suno: ошибка генерации.\n{json.dumps(js, ensure_ascii=False)[:1200]}")
+                    return True
+                last = json.dumps(js, ensure_ascii=False)[:700]
+            except Exception as e:
+                last = str(e)
+        await asyncio.sleep(SUNO_POLL_DELAY_S)
+    await update.effective_message.reply_text(f"⌛ Suno: время ожидания вышло. Последний ответ: {last[:700]}")
+    return False
+
+async def _run_suno_music(update: Update, context: ContextTypes.DEFAULT_TYPE, brief: str):
+    brief = (brief or "").strip()
+    if not brief:
+        context.user_data["awaiting_suno_brief"] = True
+        await update.effective_message.reply_text(_suno_submenu_text(), reply_markup=_suno_menu_kb())
+        return
+    if not SUNO_ENABLED:
+        await update.effective_message.reply_text("⚠️ Режим Suno отключён в ENV: SUNO_ENABLED=0.")
+        return
+    if not SUNO_API_KEY:
+        await update.effective_message.reply_text("❌ Для музыки нужен SUNO_API_KEY или COMET_API_KEY в Environment.")
+        return
+
+    async def _go():
+        await update.effective_message.reply_text("🎵 Запускаю Suno. Обычно трек готовится 1–5 минут…")
+        headers = {"Authorization": f"Bearer {SUNO_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
+        instrumental = bool(re.search(r"инструментал|instrumental|без вокала|без голоса|минусов|background music|фонова", brief, re.I))
+        # Documented CometAPI Suno endpoint: /suno/submit/music.
+        # For free-form user prompts we use Inspiration Mode; for instrumental prompts
+        # we add make_instrumental=True and empty prompt, as Comet expects.
+        base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": brief}
+        if instrumental:
+            base_payload.update({"prompt": "", "make_instrumental": True})
+        payloads = [
+            (SUNO_CREATE_PATH, base_payload),
+            ("/suno/submit/music", base_payload),
+        ]
+        last_err = ""
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            for path, payload in payloads:
+                try:
+                    r = await client.post(f"{SUNO_BASE_URL}{path}", headers=headers, json=payload)
+                    if r.status_code >= 400:
+                        last_err = f"POST {path} → {r.status_code}: {_api_error_preview(r)}"
+                        log.warning("Suno create failed: %s", last_err)
+                        continue
+                    js = r.json() or {}
+                    url = _extract_first_url(js.get("audio_url")) or _extract_first_url(js.get("audio")) or _extract_first_url(js.get("output")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
+                    if url:
+                        await _reply_audio_from_url(update, client, url, "🎵 Музыка Suno готова ✅")
+                        return True
+                    task_id = str(js.get("id") or js.get("task_id") or js.get("taskId") or js.get("request_id") or "").strip()
+                    data_obj = js.get("data")
+                    if not task_id and isinstance(data_obj, str):
+                        # Comet returns {"code":"success","data":"<task_id>"} for /suno/submit/music.
+                        if re.fullmatch(r"[A-Za-z0-9_.:-]{8,}", data_obj.strip()):
+                            task_id = data_obj.strip()
+                    if not task_id and isinstance(data_obj, dict):
+                        d = data_obj or {}
+                        task_id = str(d.get("id") or d.get("task_id") or d.get("taskId") or d.get("request_id") or "").strip()
+                    if task_id:
+                        await update.effective_message.reply_text(f"⏳ Suno: задача принята, id={task_id}. Жду результат…")
+                        return bool(await _poll_suno_task(update, client, headers, task_id))
+                    last_err = f"POST {path}: нет audio_url/id в ответе {json.dumps(js, ensure_ascii=False)[:700]}"
+                except Exception as e:
+                    last_err = f"POST {path}: {e}"
+                    log.warning("Suno create exception: %s", e)
+            await update.effective_message.reply_text(f"❌ Suno: не удалось создать задачу.\n{last_err[:1500]}")
+            return False
+    await _try_pay_then_do(update, context, update.effective_user.id, SUNO_BILLING_ENGINE, SUNO_COST_USD, _go, remember_kind="suno_music", remember_payload={"prompt": brief})
+
+
+async def cmd_diag_yookassa(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Безопасная диагностика ЮKassa: не показывает секреты, только наличие настроек."""
+    def mask(v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            return "нет"
+        if len(v) <= 8:
+            return "есть"
+        return v[:5] + "…" + v[-4:]
+
+    source = []
+    for _p in ("/etc/secrets/yookassa.env", "/etc/secrets/yookassa.txt", "/etc/secrets/yk.env", "/etc/secrets/yk.txt"):
+        try:
+            if os.path.exists(_p):
+                source.append(_p)
+        except Exception:
+            pass
+    provider_ok = bool(YOOKASSA_PROVIDER_TOKEN)
+    provider_hint = "есть" if provider_ok else "нет"
+    if YOOKASSA_PROVIDER_TOKEN and not (":" in YOOKASSA_PROVIDER_TOKEN and "LIVE" in YOOKASSA_PROVIDER_TOKEN.upper()):
+        provider_hint = "есть, но формат не похож на Telegram provider token"
+
+    lines = [
+        f"🧾 YooKassa diagnostic / {PATCH_VERSION}",
+        f"Direct API enabled: {YOO_DIRECT_ENABLED}",
+        f"ShopID: {mask(YOO_SHOP_ID)}",
+        f"API Secret: {mask(YOO_SECRET_KEY)}",
+        f"Secret files found: {', '.join(source) if source else 'нет'}",
+        f"Telegram provider token: {provider_hint}",
+        f"Return URL: {YOO_PAYMENT_RETURN_URL}",
+        "",
+        f"СБП/QR: {YOO_SBP_ENABLED}",
+        f"SberPay: {YOO_SBERPAY_ENABLED}",
+        f"T-Pay: {YOO_TPAY_ENABLED}",
+        f"Mir Pay: {YOO_MIRPAY_ENABLED}",
+        f"Telegram card: {YOO_CARD_ENABLED}",
+    ]
+    if _yoo_direct_configured():
+        lines.append("✅ Direct API ЮKassa настроен. Можно тестировать СБП/QR.")
+    else:
+        lines.append("❌ Direct API ЮKassa не настроен: нужен yookassa.env с YK_ID и YK_KEY.")
+    await update.effective_message.reply_text("\n".join(lines))
+
+async def cmd_diag_suno(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lines = [
+        f"🧪 Suno diagnostic / {PATCH_VERSION}",
+        f"SUNO_ENABLED={SUNO_ENABLED}",
+        f"SUNO_API_KEY={'on' if bool(SUNO_API_KEY) else 'off'}",
+        f"SUNO_BASE_URL={SUNO_BASE_URL}",
+        f"SUNO_MODEL/mv={SUNO_MODEL}",
+        f"SUNO_CREATE_PATH={SUNO_CREATE_PATH}",
+        f"SUNO_STATUS_PATH={SUNO_STATUS_PATH}",
+        f"SUNO_TIMEOUT_S={SUNO_TIMEOUT_S} poll={SUNO_POLL_DELAY_S}",
+        "Expected Comet endpoints: POST /suno/submit/music, GET /suno/fetch/{task_id}",
+    ]
+    await update.effective_message.reply_text("\n".join(lines)[:3900])
+
+
+def _suno_submenu_text() -> str:
+    # Plain text intentionally: Telegram Markdown is fragile in callback-edited messages.
+    return (
+        "🎵 Музыка / песни — Suno\n"
+        "Можно создавать готовые песни с вокалом, рекламные джинглы, интро/аутро для Reels, "
+        "фоновую музыку, минусовки, демо-треки и короткие бренд-аудио.\n\n"
+        "Как запускать:\n"
+        "1) нажмите пресет ниже;\n"
+        "2) напишите детали: тема, бренд/ниша, стиль, язык, голос, длительность;\n"
+        "3) я соберу правильный Suno-промпт и отправлю задачу.\n\n"
+        "Можно выбрать «Свободный запрос» и написать всё одним сообщением. Обычно готовность 1–5 минут."
+    )
+
+
+def _suno_menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✍️ Свободный запрос", callback_data="suno:free")],
+        [InlineKeyboardButton("🏢 Джингл для бизнеса", callback_data="suno:preset:jingle")],
+        [InlineKeyboardButton("📱 Интро для Reels", callback_data="suno:preset:reels_intro")],
+        [InlineKeyboardButton("🎬 Фоновая музыка", callback_data="suno:preset:background")],
+        [InlineKeyboardButton("🎤 Песня с вокалом", callback_data="suno:preset:vocal_song")],
+        [InlineKeyboardButton("🎧 Минусовка / instrumental", callback_data="suno:preset:instrumental")],
+        [InlineKeyboardButton("🏝 Luxury tropical", callback_data="suno:preset:tropical_luxury")],
+        [InlineKeyboardButton("⬅️ Назад к развлечениям", callback_data="suno:back_fun")],
+    ])
+
+
+def _suno_preset_instruction(kind: str) -> str:
+    presets = {
+        "jingle": (
+            "🏢 Джингл для бизнеса\n"
+            "Напишите: ниша/бренд, город или география, настроение, язык, нужен ли вокал, длительность.\n\n"
+            "Пример: агентство недвижимости на Самуи, 20 секунд, tropical house, luxury, без вокала, запоминающийся брендовый звук."
+        ),
+        "reels_intro": (
+            "📱 Интро / аутро для Reels\n"
+            "Напишите тему Reels, настроение, длительность 5–20 сек, нужен ли голос/вокал.\n\n"
+            "Пример: интро 12 секунд для рилсов про виллы на Самуи, luxury tropical, энергично, без вокала, современный бит."
+        ),
+        "background": (
+            "🎬 Фоновая музыка\n"
+            "Напишите для чего фон: видео, презентация, сторис, шоурум, ресторан, недвижимость. Укажите настроение и длительность.\n\n"
+            "Пример: фоновая музыка 60 секунд для презентации премиальной виллы, cinematic tropical, спокойная, без вокала."
+        ),
+        "vocal_song": (
+            "🎤 Песня с вокалом\n"
+            "Напишите тему песни, язык, мужской/женский вокал, жанр, настроение, можно добавить текст припева или куплета.\n\n"
+            "Пример: песня на русском про жизнь у моря, мужской вокал, pop house, припев должен быть запоминающимся."
+        ),
+        "instrumental": (
+            "🎧 Минусовка / instrumental\n"
+            "Напишите жанр, настроение, темп и где будет использоваться трек.\n\n"
+            "Пример: инструментал 90 секунд, deep house, luxury, атмосферно, для видео тура по вилле, без вокала."
+        ),
+        "tropical_luxury": (
+            "🏝 Luxury tropical\n"
+            "Пресет под недвижимость, виллы, путешествия, пляжный премиум-контент. Напишите объект/бренд и длительность.\n\n"
+            "Пример: 30 секунд для агентства Cozy Asia, Самуи, premium tropical house, дорогой мягкий звук, без вокала."
+        ),
+    }
+    return presets.get(kind, _suno_submenu_text())
+
+
+def _suno_preset_prefix(kind: str) -> str:
+    prefixes = {
+        "jingle": "Create a polished business advertising jingle. Duration 15-30 seconds unless user specifies otherwise. Catchy, brand-friendly, high production value.",
+        "reels_intro": "Create a short intro/outro music bed for Reels/Shorts. Duration 5-20 seconds unless user specifies otherwise. Modern, hooky, social-media ready.",
+        "background": "Create background music for video/presentation. Instrumental unless user explicitly asks for vocals. Smooth mix, no harsh lead vocal.",
+        "vocal_song": "Create a full song with vocals. Follow requested language, vocal gender, genre, lyrics/theme and mood.",
+        "instrumental": "Create an instrumental track, no vocals. Follow requested genre, tempo, mood, and use-case.",
+        "tropical_luxury": "Create luxury tropical house / premium island real-estate music. Warm, expensive, elegant, suitable for villa and travel content. Instrumental unless user asks for vocals.",
+    }
+    return prefixes.get(kind, "")
+
+
+def _prepare_suno_brief_from_context(context: ContextTypes.DEFAULT_TYPE, user_text: str) -> str:
+    kind = ""
+    with contextlib.suppress(Exception):
+        kind = context.user_data.pop("suno_preset_kind", "") or ""
+    user_text = (user_text or "").strip()
+    prefix = _suno_preset_prefix(kind)
+    if prefix:
+        return f"{prefix}\nUser details: {user_text}".strip()
+    return user_text
+
+def _suno_help_text() -> str:
+    # Plain text intentionally: Telegram legacy Markdown can crash callback editing
+    # on slash/backtick-heavy help texts on some clients.
+    return (
+        "🎵 Музыка / Suno\n"
+        "Можно создавать: песни с вокалом, джинглы, интро/аутро для Reels, фоновую музыку, минусовки и демо-треки.\n\n"
+        "Что написать:\n"
+        "• жанр: pop, rap, house, cinematic, acoustic;\n"
+        "• настроение: luxury, энергично, драматично, романтично;\n"
+        "• язык и вокал: русский мужской вокал / английский женский вокал / instrumental;\n"
+        "• текст куплета/припева или тему песни;\n"
+        "• длительность/формат: intro 15 сек, jingle, full song.\n\n"
+        "Пример: сделай джингл 20 сек для агентства недвижимости на Самуи, tropical house, luxury, без вокала.\n\n"
+        "После этого я отправлю задачу в Suno. Обычно готовность 1–5 минут."
+    )
+
+async def _show_suno_help_from_callback(q, context, reply_markup=None, submenu: bool = False):
+    """Show Suno instructions safely from any callback.
+
+    Callback buttons should never fall into the global error handler only because
+    Telegram refused to edit an old/unchanged message or parse markdown.
+    """
+    context.user_data["awaiting_suno_brief"] = True
+    text = _suno_submenu_text() if submenu else _suno_help_text()
+    kb = reply_markup or (_suno_menu_kb() if submenu else _mode_kb("fun"))
+    try:
+        await q.message.reply_text(text, reply_markup=kb)
+    except Exception as e:
+        log.warning("Suno menu edit failed, fallback to reply: %s", e)
+        with contextlib.suppress(Exception):
+            await q.message.reply_text(text, reply_markup=kb)
+
+
+async def _safe_suno_callback_reply(q, text: str, reply_markup=None, *, edit: bool = True):
+    """Безопасный вывод Suno-меню.
+
+    На части аккаунтов Telegram может отказать в edit_message_text для старого/кэшированного
+    сообщения или при повторном нажатии inline-кнопки. Раньше это уходило в общий error-handler
+    и пользователь видел «Упс». Теперь Suno-кнопки не падают: если edit не прошёл, отправляем
+    новое сообщение.
+    """
+    try:
+        if edit:
+            await q.message.reply_text(text, reply_markup=reply_markup)
+            return
+    except Exception as e:
+        log.warning("Suno callback edit failed, fallback to reply. data=%s err=%s", getattr(q, "data", ""), e)
+    try:
+        await q.message.reply_text(text, reply_markup=reply_markup)
+    except Exception as e:
+        log.warning("Suno callback reply failed: %s", e)
+
+
+async def on_cb_suno(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = (q.data or "").strip()
+    uid = q.from_user.id
+
+    try:
+        if data == "suno:back_fun":
+            context.user_data.pop("awaiting_suno_brief", None)
+            context.user_data.pop("suno_preset_kind", None)
+            _set_mode_clean(uid, "Развлечения", "")
+            with contextlib.suppress(Exception):
+                await q.answer("Назад")
+            await _safe_suno_callback_reply(q, _mode_desc("fun"), reply_markup=_mode_kb("fun"))
+            return
+
+        if data == "suno:free":
+            _clear_transient_flows(context)
+            _set_mode_clean(uid, "Развлечения", "suno_music")
+            context.user_data["awaiting_suno_brief"] = True
+            with contextlib.suppress(Exception):
+                await q.answer("Свободный запрос")
+            await _safe_suno_callback_reply(
+                q,
+                "✍️ Свободный запрос для Suno\n\n"
+                "Напишите одним сообщением, какую музыку сделать: жанр, настроение, язык/вокал, длительность и назначение.\n\n"
+                "Пример: сделай джингл 20 секунд для агентства недвижимости на Самуи, tropical house, luxury, без вокала.",
+                reply_markup=_suno_menu_kb(),
+            )
+            return
+
+        if data.startswith("suno:preset:"):
+            kind = data.split(":", 2)[2]
+            _clear_transient_flows(context)
+            _set_mode_clean(uid, "Развлечения", "suno_music")
+            context.user_data["awaiting_suno_brief"] = True
+            context.user_data["suno_preset_kind"] = kind
+            with contextlib.suppress(Exception):
+                await q.answer("Пресет Suno")
+            # Для пресетов лучше отправлять новое сообщение, а не редактировать старое: так не ловим
+            # Telegram BadRequest на сторонних аккаунтах/старых inline-сообщениях.
+            await _safe_suno_callback_reply(q, _suno_preset_instruction(kind), reply_markup=_suno_menu_kb(), edit=False)
+            return
+
+        with contextlib.suppress(Exception):
+            await q.answer()
+    except Exception as e:
+        log.exception("Suno callback failed safely. data=%s uid=%s err=%s", data, uid, e)
+        with contextlib.suppress(Exception):
+            await q.answer("Ошибка Suno-меню", show_alert=False)
+        with contextlib.suppress(Exception):
+            await q.message.reply_text(
+                "⚠️ Не удалось открыть этот пункт Suno. Нажмите «🎵 Музыка / песня» ещё раз или отправьте описание песни текстом.",
+                reply_markup=_suno_menu_kb(),
+            )
+
+
+async def cmd_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    brief = " ".join(context.args).strip() if context.args else ""
+    if not brief:
+        _set_mode_clean(update.effective_user.id, "Развлечения", "suno_music")
+        context.user_data["awaiting_suno_brief"] = True
+        await update.effective_message.reply_text(_suno_submenu_text(), reply_markup=_suno_menu_kb())
+        return
+    await _run_suno_music(update, context, brief)
+
+# ───────── Photo quick actions ─────────
+def photo_revival_actions_kb():
+    """Choose motion scenario first; engine selection is the next step."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Естественное оживление", callback_data="pedit:revive_auto")],
+        [InlineKeyboardButton("🛡 Максимально сохранить лица", callback_data="pedit:revive_identity")],
+        [InlineKeyboardButton("✍️ Свой сценарий / промпт", callback_data="pedit:revive_custom")],
+        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun")],
+    ])
+
+
+def photo_revival_engines_kb():
+    """Engine selection after automatic/custom motion scenario is known."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Оживить через Runway", callback_data="pedit:revive_runway")],
+        [InlineKeyboardButton("✨ Оживить через Kling", callback_data="pedit:revive_kling")],
+        [InlineKeyboardButton("✨ Sora 2 без людей", callback_data="pedit:revive_sora")],
+        [InlineKeyboardButton("⬅️ Назад к сценарию", callback_data="pedit:revive_menu")],
+    ])
+
+
+def photo_revival_wait_kb():
+    """Navigation only while waiting for the source photo."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun")],
+    ])
+
+
+def photo_quick_actions_kb():
+    # Длинные подписи — отдельными строками, чтобы не обрезались в Telegram.
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Оживить через Runway", callback_data="pedit:revive_runway")],
+        [InlineKeyboardButton("✨ Оживить через Kling", callback_data="pedit:revive_kling")],
+        [InlineKeyboardButton("✨ Sora 2 без людей", callback_data="pedit:revive_sora")],
+        [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="pedit:avatar")],
+        [InlineKeyboardButton("🎤 AI-видеоклип / песня", callback_data="pedit:photoclip")],
+        [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="pedit:aiselfie")],
+        [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="pedit:faceswap")],
+        [InlineKeyboardButton("🧼 Удалить фон на фото", callback_data="pedit:removebg")],
+        [InlineKeyboardButton("🖼 Заменить фон на фото", callback_data="pedit:replacebg")],
+        [InlineKeyboardButton("🧽 Удалить водяной знак", callback_data="pedit:retouch")],
+        [InlineKeyboardButton("🧭 Расширить кадр", callback_data="pedit:outpaint")],
+        [InlineKeyboardButton("📽 Раскадровка фото", callback_data="pedit:story")],
+        [InlineKeyboardButton("🖌 Картинка из текста", callback_data="pedit:lumaimg")],
+        [InlineKeyboardButton("👁 Анализ фото", callback_data="pedit:vision")],
+    ])
+
+_photo_cache = {}      # user_id -> bytes (legacy/fast-mode last photo)
+_photo_url_cache = {}  # user_id -> Telegram file URL when available
+
+# High-fidelity music-video references are intentionally isolated from _photo_cache.
+# Keys: face_front, face_3q, body_full, scene_reference.
+_music_video_identity_cache: dict[int, dict[str, bytes]] = {}
+
+def _music_video_identity_put(user_id: int, slot: str, data: bytes) -> None:
+    if slot not in {"face_front", "face_3q", "body_full", "scene_reference"}:
+        raise ValueError(f"unknown identity slot: {slot}")
+    if not data:
+        raise ValueError("empty identity reference")
+    _music_video_identity_cache.setdefault(int(user_id), {})[slot] = bytes(data)
+
+def _music_video_identity_get(user_id: int, slot: str) -> bytes | None:
+    return _music_video_identity_cache.get(int(user_id), {}).get(slot)
+
+def _music_video_identity_pack(user_id: int) -> dict[str, bytes]:
+    refs = _music_video_identity_cache.get(int(user_id), {})
+    return {k: refs[k] for k in ("face_front", "face_3q", "body_full", "scene_reference") if refs.get(k)}
+
+def _music_video_identity_clear(user_id: int) -> None:
+    _music_video_identity_cache.pop(int(user_id), None)
+
+def _music_video_identity_complete(user_id: int) -> bool:
+    refs = _music_video_identity_cache.get(int(user_id), {})
+    return all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference"))
+
+def _cache_photo(user_id: int, data: bytes, file_url: str | None = None):
+    try:
+        _photo_cache[user_id] = data
+        if file_url:
+            _photo_url_cache[user_id] = str(file_url)
+    except Exception:
+        pass
+
+def _get_cached_photo(user_id: int) -> bytes | None:
+    return _photo_cache.get(user_id)
+
+def _get_cached_photo_url(user_id: int) -> str:
+    return _photo_url_cache.get(user_id, "") or ""
+
+
+# ───────── Kling Avatar / Photo→music clip ─────────
+def _is_avatar_intent(text: str) -> bool:
+    t = (text or "").lower()
+    return bool(re.search(r"(говорящ\w*\s+аватар|аватар\w*\s+говор|talking\s*avatar|avatar\s*video|lip[-\s]?sync|лип[-\s]?синк|синхрон\w*\s+губ)", t, re.I))
+
+
+def _is_photo_clip_intent(text: str) -> bool:
+    t = (text or "").lower()
+    return bool(re.search(r"(фото\s*(?:в|→|-)\s*видеоклип|фото\s*(?:в|→|-)\s*клип|видеоклип\s+из\s+фото|клип\s+из\s+фото|music\s*video|photo\s*clip)", t, re.I))
+
+
+def _clean_avatar_script(text: str) -> str:
+    t = (text or "").strip()
+    t = re.sub(r"^(?:сделай|создай|сгенерируй)?\s*(?:говорящ\w*\s+аватар|аватар|talking\s*avatar|lip[-\s]?sync)\s*[:：,-]?\s*", "", t, flags=re.I)
+    return t.strip()
+
+
+def _clean_photo_clip_prompt(text: str) -> str:
+    t = (text or "").strip()
+    t = re.sub(r"^(?:сделай|создай|сгенерируй)?\s*(?:фото\s*(?:в|→|-)\s*(?:видеоклип|клип)|видеоклип\s+из\s+фото|клип\s+из\s+фото|music\s*video|photo\s*clip)\s*[:：,-]?\s*", "", t, flags=re.I)
+    return t.strip()
+
+
+def _set_avatar_wait(context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["awaiting_avatar_script"] = True
+    context.user_data.pop("awaiting_avatar_voice_choice", None)
+    context.user_data.pop("awaiting_photo_clip_prompt", None)
+
+
+def _set_avatar_voice_choice_wait(context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["awaiting_avatar_voice_choice"] = True
+    context.user_data.pop("awaiting_avatar_script", None)
+    context.user_data.pop("awaiting_photo_clip_prompt", None)
+
+
+def _set_photo_clip_wait(context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["awaiting_photo_clip_prompt"] = True
+    context.user_data.pop("awaiting_avatar_script", None)
+
+def _set_music_video_identity_wait(context: ContextTypes.DEFAULT_TYPE, slot: str) -> None:
+    for key in ("music_video_identity_front", "music_video_identity_3q", "music_video_identity_body", "music_video_scene_reference"):
+        context.user_data.pop(key, None)
+    key = {
+        "face_front": "music_video_identity_front",
+        "face_3q": "music_video_identity_3q",
+        "body_full": "music_video_identity_body",
+        "scene_reference": "music_video_scene_reference",
+    }[slot]
+    context.user_data[key] = True
+
+def _music_video_identity_wait_slot(context: ContextTypes.DEFAULT_TYPE) -> str:
+    for key, slot in (
+        ("music_video_identity_front", "face_front"),
+        ("music_video_identity_3q", "face_3q"),
+        ("music_video_identity_body", "body_full"),
+        ("music_video_scene_reference", "scene_reference"),
+    ):
+        if context.user_data.get(key):
+            return slot
+    return ""
+
+
+def _clear_avatar_wait(context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("awaiting_avatar_script", None)
+    context.user_data.pop("awaiting_avatar_voice_choice", None)
+    context.user_data.pop("awaiting_avatar_photo", None)
+    context.user_data.pop("avatar_pending_script", None)
+
+
+def _clear_photo_clip_wait(context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("awaiting_photo_clip_prompt", None)
+    context.user_data.pop("awaiting_photo_clip_photo", None)
+
+
+def _telegram_file_public_url(file_path: str) -> str:
+    fp = (file_path or "").strip()
+    if not fp:
+        return ""
+    if fp.startswith("http://") or fp.startswith("https://"):
+        return fp
+    return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{fp.lstrip('/')}"
+
+
+def _avatar_audio_supported_filename(filename: str, mime: str = "") -> bool:
+    f = (filename or "").lower()
+    m = (mime or "").lower()
+    return (
+        f.endswith((".mp3", ".wav", ".m4a", ".aac"))
+        or "mpeg" in m or "mp3" in m or "wav" in m or "m4a" in m or "aac" in m
+    )
+
+
+def _avatar_tts_voice_get(context: ContextTypes.DEFAULT_TYPE | None = None) -> str:
+    try:
+        v = ((context.user_data.get("avatar_tts_voice") if context else "") or "").strip()
+    except Exception:
+        v = ""
+    return v or AVATAR_TTS_DEFAULT_VOICE or OPENAI_TTS_VOICE or "alloy"
+
+
+def _avatar_tts_voice_label(voice: str) -> str:
+    labels = {
+        "nova": "Nova — мягкий женский",
+        "alloy": "Alloy — нейтральный",
+        "onyx": "Onyx — низкий мужской",
+        "shimmer": "Shimmer — светлый женский",
+        "fable": "Fable — сторителлинг",
+        "echo": "Echo — мужской",
+        "sage": "Sage — спокойный",
+        "ash": "Ash — плотный",
+        "coral": "Coral — яркий",
+        "verse": "Verse — выразительный",
+        "ballad": "Ballad — мягкий",
+    }
+    return labels.get((voice or "").strip().lower(), (voice or "alloy").strip())
+
+
+async def _telegram_media_get_file_with_retry(media, *, label: str = "media"):
+    last_error = None
+    for attempt in range(3):
+        try:
+            return await media.get_file()
+        except TimedOut as exc:
+            last_error = exc
+            log.warning("telegram incoming get_file timeout label=%s attempt=%s/3", label, attempt + 1)
+            if attempt < 2:
+                await asyncio.sleep(1.5 * (attempt + 1))
+    raise last_error or RuntimeError(f"Telegram get_file failed: {label}")
+
+
+async def _upload_bytes_to_telegram_file_url(update: Update, context: ContextTypes.DEFAULT_TYPE, raw: bytes, filename: str, caption: str = "") -> str:
+    if not raw:
+        return ""
+    sent = None
+    last_send_exc = None
+    for attempt in range(3):
+        # A timed-out multipart request may have consumed the stream. Rebuild it for
+        # every attempt so a retry always sends the complete artifact.
+        bio = BytesIO(raw)
+        bio.seek(0)
+        bio.name = filename
+        try:
+            sent = await update.effective_message.reply_document(
+                document=InputFile(bio),
+                caption=caption or "Файл подготовлен для генерации.",
+                read_timeout=60,
+                write_timeout=60,
+                connect_timeout=20,
+                pool_timeout=20,
+            )
+            break
+        except TimedOut as exc:
+            last_send_exc = exc
+            log.warning(
+                "telegram reply_document timeout filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
+            if attempt < 2:
+                await asyncio.sleep(2.0 * (attempt + 1))
+    if sent is None:
+        if last_send_exc:
+            raise last_send_exc
+        return ""
+    media = getattr(sent, "document", None) or getattr(sent, "audio", None) or getattr(sent, "voice", None)
+    if not media:
+        return ""
+    # Telegram getFile can transiently time out or omit file_path even after
+    # reply_document succeeded. Retry this non-billable transport step so a prepared
+    # identity keyframe does not abort the pipeline before Suno/Kling are called.
+    tg_file = None
+    last_exc = None
+    for attempt in range(3):
+        try:
+            candidate = await context.bot.get_file(media.file_id)
+            if _telegram_file_public_url(getattr(candidate, "file_path", "") or ""):
+                tg_file = candidate
+                break
+            log.warning(
+                "telegram get_file returned no path filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
+        except TimedOut as exc:
+            last_exc = exc
+            log.warning(
+                "telegram get_file timeout filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
+        if attempt < 2:
+            await asyncio.sleep(1.5 * (attempt + 1))
+    if tg_file is None:
+        if last_exc:
+            raise last_exc
+        return ""
+    return _telegram_file_public_url(getattr(tg_file, "file_path", "") or "")
+
+
+async def _upload_file_to_telegram_file_url(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    path: str,
+    filename: str,
+    caption: str = "",
+) -> str:
+    """Stream a local provider input to Telegram and return its public HTTPS URL."""
+    if not path or not os.path.isfile(path) or os.path.getsize(path) < 512:
+        return ""
+    sent = None
+    last_exc = None
+    for attempt in range(3):
+        try:
+            with open(path, "rb") as file_obj:
+                media = InputFile(file_obj, filename=filename, read_file_handle=False)
+                sent = await update.effective_message.reply_document(
+                    document=media,
+                    caption=caption or "Фрагмент подготовлен для lip-sync.",
+                    read_timeout=120,
+                    write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S,
+                    connect_timeout=20,
+                    pool_timeout=20,
+                )
+            break
+        except TimedOut as exc:
+            last_exc = exc
+            log.warning("telegram file upload timeout filename=%s attempt=%s/3", filename, attempt + 1)
+            if attempt < 2:
+                await asyncio.sleep(2.0 * (attempt + 1))
+    if sent is None:
+        if last_exc:
+            raise last_exc
+        return ""
+    media = getattr(sent, "document", None) or getattr(sent, "video", None)
+    if not media:
+        return ""
+    tg_file = None
+    for attempt in range(3):
+        try:
+            candidate = await context.bot.get_file(media.file_id)
+            if _telegram_file_public_url(getattr(candidate, "file_path", "") or ""):
+                tg_file = candidate
+                break
+            log.warning(
+                "telegram get_file returned no path filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
+        except TimedOut as exc:
+            last_exc = exc
+            log.warning(
+                "telegram get_file timeout filename=%s attempt=%s/3",
+                filename, attempt + 1,
+            )
+        if attempt < 2:
+            await asyncio.sleep(1.5 * (attempt + 1))
+    if tg_file is None:
+        if last_exc:
+            raise last_exc
+        return ""
+    return _telegram_file_public_url(getattr(tg_file, "file_path", "") or "")
+
+
+async def _text_to_public_mp3_url(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> str:
+    text = (text or "").strip()
+    if not text or not OPENAI_TTS_KEY:
+        return ""
+    mp3 = await asyncio.to_thread(_tts_bytes_sync, text[:TTS_MAX_CHARS], "mp3", _avatar_tts_voice_get(context))
+    if not mp3:
+        return ""
+    return await _upload_bytes_to_telegram_file_url(
+        update, context, mp3, "avatar_speech.mp3", "🔊 Озвучка для говорящего аватара подготовлена."
+    )
+
+
+def _extract_task_status(js: object) -> str:
+    if not isinstance(js, dict):
+        return ""
+    for k in ("status", "state", "task_status"):
+        v = js.get(k)
+        if v is not None:
+            return str(v).lower().strip()
+    for k in ("data", "result", "response", "payload"):
+        v = js.get(k)
+        if isinstance(v, dict):
+            st = _extract_task_status(v)
+            if st:
+                return st
+    return ""
+
+
+def _extract_task_id_from_response(js: object) -> str:
+    if not isinstance(js, dict):
+        return ""
+    for k in ("id", "task_id", "generation_id", "video_id", "audio_id"):
+        v = js.get(k)
+        if v:
+            return str(v).strip()
+    for k in ("data", "result", "response", "payload"):
+        v = js.get(k)
+        if isinstance(v, dict):
+            tid = _extract_task_id_from_response(v)
+            if tid:
+                return tid
+    return ""
+
+
+async def _create_kling_tts_audio_ref(text: str) -> tuple[str, str, str]:
+    """Returns (audio_id, linked_task_id, sound_url). Prefer OpenAI TTS for RU; this is fallback."""
+    if not (KLING_API_KEY or COMET_API_KEY):
+        return "", "", ""
+    text = (text or "").strip()[:1000]
+    if not text:
+        return "", "", ""
+    headers = {"Authorization": f"Bearer {KLING_API_KEY or COMET_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
+    payload = {
+        "text": text,
+        "voice_id": KLING_TTS_VOICE_ID,
+        "voice_language": KLING_TTS_LANGUAGE,
+        "voice_speed": max(0.8, min(2.0, float(KLING_TTS_SPEED or 1.0))),
+    }
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        r = await client.post(f"{COMET_BASE_URL}{KLING_TTS_CREATE_PATH}", headers=headers, json=payload)
+        if r.status_code >= 400:
+            log.warning("Kling TTS create failed: %s", _api_error_preview(r))
+            return "", "", ""
+        js = r.json() or {}
+        sound_url = _extract_first_url(js) or ""
+        task_id = _extract_task_id_from_response(js)
+        audio_id = str((js.get("data") or {}).get("audio_id") or js.get("audio_id") or task_id or "").strip()
+        if sound_url or audio_id:
+            return audio_id, task_id, sound_url
+        return "", task_id, ""
+
+
+def _avatar_prompt_from_text(script_text: str = "") -> str:
+    base = KLING_AVATAR_PROMPT or "The person talks naturally to camera, realistic facial motion, accurate lip sync."
+    script_text = (script_text or "").strip()
+    if script_text:
+        return (base + " Speech content: " + script_text[:500]).strip()
+    return base
+
+
+async def _run_kling_avatar(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    script_text: str = "",
+    audio_bytes: bytes | None = None,
+    audio_filename: str = "",
+    audio_file_url: str = "",
+    audio_mime: str = "",
+    avatar_prompt_override: str = "",
+    max_wait_s: int | None = None,
+):
+    if not (KLING_API_KEY or COMET_API_KEY):
+        await update.effective_message.reply_text("❌ Kling Avatar: COMET_API_KEY/KLING_API_KEY не задан в Render ENV.")
+        return False
+
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    raw_b64 = base64.b64encode(img_bytes).decode("ascii")
+    sound_file = ""
+    audio_id = ""
+    linked_task_id = ""
+    script_text = (script_text or "").strip()
+
+    if audio_file_url and _avatar_audio_supported_filename(audio_filename, audio_mime):
+        sound_file = _telegram_file_public_url(audio_file_url)
+
+    if not sound_file and audio_bytes and not script_text:
+        try:
+            script_text = await _stt_transcribe_bytes(audio_filename or "voice.ogg", audio_bytes)
+        except Exception as e:
+            log.warning("Avatar voice STT failed: %s", e)
+            script_text = ""
+
+    if not sound_file and script_text and AVATAR_TTS_PROVIDER in ("openai", "auto", ""):
+        sound_file = await _text_to_public_mp3_url(update, context, script_text)
+
+    if not sound_file and script_text:
+        audio_id, linked_task_id, tts_url = await _create_kling_tts_audio_ref(script_text)
+        if tts_url:
+            sound_file = tts_url
+
+    if not sound_file and not audio_id:
+        await update.effective_message.reply_text(
+            "❌ Не получилось подготовить аудио для аватара. Пришлите MP3/WAV/M4A/AAC 2–60 секунд или добавьте OPENAI_TTS_KEY в Render ENV."
+        )
+        return False
+
+    prompt = (avatar_prompt_override or "").strip() or _avatar_prompt_from_text(script_text)
+    payload = {
+        "image": raw_b64,
+        "prompt": prompt,
+        "mode": KLING_AVATAR_MODE,
+    }
+    if sound_file:
+        payload["sound_file"] = sound_file
+    else:
+        payload["audio_id"] = audio_id
+        if linked_task_id:
+            payload["task_id"] = linked_task_id
+
+    return await _create_and_poll_i2v(
+        update,
+        COMET_BASE_URL,
+        KLING_API_KEY or COMET_API_KEY,
+        [(KLING_AVATAR_CREATE_PATH, payload), ("/kling/v1/videos/avatar/image2video", payload)],
+        [KLING_AVATAR_STATUS_PATH, "/kling/v1/videos/avatar/image2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
+        "Kling talking avatar",
+        max_wait_s=max_wait_s,
+    )
+
+
+async def _run_kling_avatar_result_bytes(
+    img_bytes: bytes,
+    audio_file_url: str,
+    audio_filename: str,
+    audio_mime: str,
+    avatar_prompt: str,
+    max_wait_s: int | None = None,
+) -> bytes | None:
+    """Kling Avatar transport for pipelines that must assemble the final MP4 themselves."""
+    if not (KLING_API_KEY or COMET_API_KEY):
+        raise RuntimeError("Kling Avatar: API key missing")
+    sound_file = _telegram_file_public_url(audio_file_url or "")
+    if not sound_file:
+        raise RuntimeError("Kling Avatar: public audio URL missing")
+    raw_b64 = base64.b64encode(img_bytes).decode("ascii")
+    payload = {
+        "image": raw_b64,
+        "prompt": (avatar_prompt or "").strip() or KLING_AVATAR_PROMPT,
+        "mode": KLING_AVATAR_MODE,
+        "sound_file": sound_file,
+    }
+    scene_bytes = await _create_and_poll_i2v_bytes(
+        COMET_BASE_URL,
+        KLING_API_KEY or COMET_API_KEY,
+        [(KLING_AVATAR_CREATE_PATH, payload), ("/kling/v1/videos/avatar/image2video", payload)],
+        [KLING_AVATAR_STATUS_PATH, "/kling/v1/videos/avatar/image2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
+        "Kling Avatar scene",
+        max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S),
+    )
+    if not scene_bytes or len(scene_bytes) < 512 or scene_bytes[4:8] != b"ftyp":
+        raise RuntimeError("Kling Avatar scene: provider result is not an MP4 video")
+    log.info("Kling Avatar scene downloaded: %d bytes", len(scene_bytes))
+    return scene_bytes
+
+
+def _provider_data_object(payload: dict) -> dict:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    return data if isinstance(data, dict) else (payload if isinstance(payload, dict) else {})
+
+
+def _provider_task_id(payload: dict) -> str:
+    data = _provider_data_object(payload)
+    return str(data.get("task_id") or data.get("taskId") or data.get("id") or payload.get("task_id") or payload.get("id") or "").strip()
+
+
+async def _kling_post_json_with_retry(client, path: str, headers: dict, payload: dict, caption: str, *, retry_unknown_post: bool = True) -> dict:
+    last_error = ""
+    attempts = KLING_LIPSYNC_RETRY_ATTEMPTS if retry_unknown_post else 1
+    for attempt in range(attempts):
+        try:
+            response = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, json=payload)
+            if response.status_code < 400:
+                body = response.json() or {}
+                if not isinstance(body, dict):
+                    raise RuntimeError(f"{caption}: invalid response object")
+                return body
+            preview = _api_error_preview(response)
+            last_error = f"POST {path} → {response.status_code}: {preview}"
+            if response.status_code == 404:
+                raise RuntimeError(f"{caption}: unsupported endpoint (404): {path}; {preview}")
+            if response.status_code not in (408, 409, 425, 429) and response.status_code < 500:
+                raise RuntimeError(f"{caption}: {last_error}")
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            last_error = f"POST {path}: {exc}"
+        if attempt + 1 < attempts:
+            await asyncio.sleep(KLING_LIPSYNC_RETRY_BASE_S * (2 ** attempt))
+    raise RuntimeError(f"{caption}: {last_error or 'provider request failed'}")
+
+
+async def _run_kling_lipsync_result_bytes(
+    video_url: str,
+    audio_url: str,
+    *,
+    duration_ms: int,
+    max_wait_s: int | None = None,
+    on_provider_state=None,
+    existing_task_id: str = "",
+) -> bytes:
+    """Documented Comet/Kling identify-face -> advanced-lip-sync transport."""
+    if not KLING_LIPSYNC_ENABLED:
+        raise RuntimeError("Kling lip-sync is disabled")
+    if not (KLING_API_KEY or COMET_API_KEY):
+        raise RuntimeError("Kling lip-sync: API key missing")
+    if not str(video_url or "").startswith("https://") or not str(audio_url or "").startswith("https://"):
+        raise RuntimeError("Kling lip-sync requires public HTTPS video and audio URLs")
+    duration_ms = int(duration_ms)
+    if not 2000 <= duration_ms <= 10000:
+        raise ValueError("Kling lip-sync duration must be between 2000 and 10000 ms")
+    headers = {"Authorization": f"Bearer {KLING_API_KEY or COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        task_id = str(existing_task_id or "").strip()
+        if not task_id:
+            identified = await _kling_post_json_with_retry(client, KLING_IDENTIFY_FACE_PATH, headers, {"video_url": video_url}, "Kling identify-face")
+            data = _provider_data_object(identified)
+            session_id = str(data.get("session_id") or identified.get("session_id") or "").strip()
+            faces = data.get("face_data") or data.get("faces") or []
+            face_id = str(faces[0].get("face_id") or faces[0].get("id") or "").strip() if isinstance(faces, list) and faces and isinstance(faces[0], dict) else ""
+            if not session_id or not face_id:
+                raise RuntimeError(f"Kling identify-face: missing session/face in {json.dumps(identified, ensure_ascii=False)[:700]}")
+            if callable(on_provider_state): on_provider_state("identify_session_id", session_id)
+            payload = {"session_id": session_id, "external_task_id": f"mv-lipsync-{uuid.uuid4().hex[:24]}", "face_choose": [{
+                "face_id": face_id, "sound_file": audio_url, "sound_start_time": 0, "sound_end_time": duration_ms,
+                "sound_insert_time": 0, "sound_volume": 1.0, "original_sound_volume": 0.0,
+            }]}
+            # This POST can create a billed task. A missing response is uncertain,
+            # so never retry it automatically.
+            created = await _kling_post_json_with_retry(client, KLING_LIPSYNC_CREATE_PATH, headers, payload, "Kling advanced lip-sync", retry_unknown_post=False)
+            task_id = _provider_task_id(created)
+            if not task_id:
+                raise RuntimeError(f"Kling advanced lip-sync: no task id in {json.dumps(created, ensure_ascii=False)[:700]}")
+            if callable(on_provider_state): on_provider_state("lip_sync_task_id", task_id)
+        result = await _poll_video_task_for_bytes(client, headers, COMET_BASE_URL, [KLING_LIPSYNC_STATUS_PATH, "/kling/v1/videos/lip-sync/{id}"], task_id, "Kling lip-sync", max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S))
+    if not result or len(result) < 512 or result[4:8] != b"ftyp":
+        raise RuntimeError("Kling lip-sync result is not an MP4 video")
+    log.info("Kling lip-sync downloaded: %d bytes", len(result))
+    return result
+
+
+async def _start_talking_avatar(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    script_text: str = "",
+    audio_bytes: bytes | None = None,
+    audio_filename: str = "",
+    audio_file_url: str = "",
+    audio_mime: str = "",
+    avatar_prompt_override: str = "",
+):
+    async def _go():
+        ok = await _run_kling_avatar(update, context, img_bytes, script_text, audio_bytes, audio_filename, audio_file_url, audio_mime, avatar_prompt_override)
+        return bool(ok)
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        "runway", AVATAR_UNIT_COST_USD, _go,
+        remember_kind="kling_talking_avatar",
+        remember_payload={"script": (script_text or "")[:500], "audio_filename": audio_filename},
+    )
+
+
+def _photo_clip_prompt(user_prompt: str, base_seconds: int = 10) -> str:
+    user_prompt = (user_prompt or "").strip()
+    if not user_prompt:
+        user_prompt = "энергичный музыкальный клип, герой в кадре, плавное движение камеры, cinematic, social media, high quality"
+    return (
+        "USER ACTION/DIRECTOR DIRECTION — execute this literally and chronologically; do not replace it with dancing or posing: "
+        + user_prompt[:2200] +
+        " Create ONLY the visual part of a short cinematic music-video clip. "
+        "Keep the same identity and face, avoid deformation, natural body/head motion and physically plausible locomotion. "
+        "Do not create subtitles, text overlays or fake logos. "
+        f" Provider duration: {base_seconds} seconds. Audio is added separately. "
+    )
+
+
+def _photo_clip_target_duration(user_prompt: str) -> int:
+    txt = (user_prompt or "").lower()
+    m = re.search(r"(\d{1,3})\s*(?:сек|секунд|second|seconds|s)\b", txt, re.I)
+    mm = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мин|минут|minute|minutes|min)\b", txt, re.I)
+    if mm:
+        try:
+            val = int(round(float(mm.group(1).replace(",", ".")) * 60))
+        except Exception:
+            val = PHOTO_CLIP_DEFAULT_DURATION_S
+    elif m:
+        try:
+            val = int(m.group(1))
+        except Exception:
+            val = PHOTO_CLIP_DEFAULT_DURATION_S
+    else:
+        val = PHOTO_CLIP_DEFAULT_DURATION_S
+    return max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), val))
+
+
+def _music_video_scene_prompts(user_prompt: str, target_duration: int) -> list[str]:
+    """Create deterministic short-scene directions for a longer coherent music video."""
+    scene_s = int(PHOTO_CLIP_SCENE_SECONDS or 10)
+    count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
+    phases = [
+        "opening shot, subtle movement, establish performers and location",
+        "medium performance shot, rhythmic body movement, sing/perform to camera",
+        "closer emotional performance shot, expressive face and natural gestures",
+        "dynamic camera move, performers interact naturally while keeping identity stable",
+        "side angle and gentle orbit camera, movement synchronized to the beat",
+        "chorus energy, stronger performance and coordinated gestures",
+        "cinematic close-up, stable facial identity and realistic mouth/body motion",
+        "wide performance shot, natural interaction and premium music-video staging",
+        "finale shot, confident ending pose and smooth camera pull-back",
+    ]
+    out = []
+    for idx in range(count):
+        phase = phases[min(idx, len(phases) - 1)]
+        out.append(
+            f"Scene {idx + 1}/{count}: {phase}. Preserve the exact same people, clothing and identities from the reference photo. "
+            f"Continue one coherent music video. User direction: {(user_prompt or '')[:650]}"
+        )
+    return out
+
+
+def _extract_last_video_frame_sync(video_bytes: bytes) -> bytes | None:
+    """Extract a JPEG continuation frame from a completed Kling segment."""
+    if not video_bytes:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    try:
+        with tempfile.TemporaryDirectory(prefix="neyro_continuity_") as td:
+            src = os.path.join(td, "segment.mp4")
+            out = os.path.join(td, "last.jpg")
+            with open(src, "wb") as fh:
+                fh.write(video_bytes)
+            cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-sseof", "-0.08", "-i", src,
+                   "-frames:v", "1", "-q:v", "2", out]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                with open(out, "rb") as fh:
+                    return fh.read()
+    except Exception as exc:
+        log.warning("continuation frame extraction failed: %s", exc)
+    return None
+
+
+def _extract_last_video_frame_file_sync(video_path: str) -> bytes | None:
+    """Extract a JPEG continuation frame while keeping the MP4 on disk."""
+    if not video_path or not os.path.isfile(video_path) or os.path.getsize(video_path) < 512:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    try:
+        with tempfile.TemporaryDirectory(prefix="neyro_continuity_frame_") as td:
+            out = os.path.join(td, "last.jpg")
+            cmd = [
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-sseof", "-0.08", "-i", video_path,
+                "-frames:v", "1", "-q:v", "2", out,
+            ]
+            with tempfile.TemporaryFile(mode="w+b") as err_fh:
+                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=err_fh, timeout=60)
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                with open(out, "rb") as fh:
+                    return fh.read()
+    except Exception as exc:
+        log.warning("continuation frame file extraction failed: %s", exc)
+    return None
+
+
+def _write_video_segment_file(directory: str, index: int, content: bytes) -> str:
+    """Persist one provider scene immediately so prior scenes never accumulate in RAM."""
+    if not content or len(content) < 512:
+        raise RuntimeError("video segment is empty")
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"scene_{int(index):02d}.mp4")
+    with open(path, "wb") as fh:
+        fh.write(content)
+    return path
+
+
+def _extract_video_interval_file_sync(
+    source_path: str,
+    start_s: float,
+    duration_s: float,
+    output_path: str,
+) -> str | None:
+    """Create a normalized silent MP4 accepted by Kling lip-sync without buffering it."""
+    duration_s = float(duration_s)
+    if duration_s < 2.0 or duration_s > 10.000001:
+        raise ValueError("lip-sync video interval must be 2 to 10 seconds")
+    cmd = [
+        _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", f"{max(0.0, float(start_s)):.3f}", "-i", source_path,
+        "-t", f"{duration_s:.3f}", "-map", "0:v:0", "-an",
+        "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+        "-crf", str(FFMPEG_MUX_CRF), "-pix_fmt", "yuv420p",
+        "-threads", str(FFMPEG_MUX_THREADS), "-movflags", "+faststart", output_path,
+    ]
+    with tempfile.TemporaryFile(mode="w+b") as err_fh:
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
+            timeout=max(90, FFMPEG_MUX_TIMEOUT_S),
+        )
+    if result.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 512:
+        return output_path
+    return None
+
+
+def _replace_video_interval_file_sync(
+    original_path: str,
+    replacement_path: str,
+    start_s: float,
+    end_s: float,
+    total_duration_s: float,
+    output_path: str,
+) -> str | None:
+    """Replace only the approved interval, preserving chronological prefix and suffix."""
+    start_s, end_s, total_duration_s = float(start_s), float(end_s), float(total_duration_s)
+    if start_s < 0 or end_s <= start_s or end_s > total_duration_s + 0.001:
+        raise ValueError("invalid lip-sync replacement interval")
+    if start_s <= 0.001 and end_s >= total_duration_s - 0.001:
+        shutil.copyfile(replacement_path, output_path)
+        return output_path if os.path.getsize(output_path) > 512 else None
+
+    ffprobe = shutil.which("ffprobe") or "ffprobe"
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+         "-of", "csv=p=0:s=x", original_path],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30,
+    )
+    try:
+        width, height = (int(part) for part in probe.stdout.strip().split("x", 1))
+    except Exception as exc:
+        raise RuntimeError("could not inspect cinematic scene dimensions") from exc
+
+    labels: list[str] = []
+    filters: list[str] = []
+    normalize = f"fps=24,scale={width}:{height},setsar=1"
+    if start_s > 0.001:
+        filters.append(f"[0:v]trim=start=0:end={start_s:.3f},setpts=PTS-STARTPTS,{normalize}[prefix]")
+        labels.append("[prefix]")
+    replacement_duration = end_s - start_s
+    filters.append(
+        f"[1:v]trim=start=0:duration={replacement_duration:.3f},setpts=PTS-STARTPTS,{normalize}[synced]"
+    )
+    labels.append("[synced]")
+    if end_s < total_duration_s - 0.001:
+        filters.append(
+            f"[0:v]trim=start={end_s:.3f}:end={total_duration_s:.3f},setpts=PTS-STARTPTS,{normalize}[suffix]"
+        )
+        labels.append("[suffix]")
+    filters.append("".join(labels) + f"concat=n={len(labels)}:v=1:a=0[outv]")
+    cmd = [
+        _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+        "-i", original_path, "-i", replacement_path,
+        "-filter_complex", ";".join(filters), "-map", "[outv]", "-an",
+        "-t", f"{total_duration_s:.3f}", "-c:v", "libx264",
+        "-preset", FFMPEG_MUX_REENCODE_PRESET, "-crf", str(FFMPEG_MUX_CRF),
+        "-pix_fmt", "yuv420p", "-threads", str(FFMPEG_MUX_THREADS),
+        "-movflags", "+faststart", output_path,
+    ]
+    with tempfile.TemporaryFile(mode="w+b") as err_fh:
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
+            timeout=max(120, FFMPEG_MUX_TIMEOUT_S),
+        )
+        if result.returncode != 0:
+            err_fh.seek(0, os.SEEK_END)
+            size = err_fh.tell()
+            err_fh.seek(max(0, size - 1200))
+            log.warning("lip-sync interval splice failed: %s", err_fh.read().decode("utf-8", "ignore"))
+    if result.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 512:
+        return output_path
+    return None
+
+
+def _concat_video_segments_sync(segments: list[bytes], target_duration: int) -> bytes | None:
+    if not segments:
+        return None
+    if len(segments) == 1:
+        return segments[0]
+    ffmpeg = _ffmpeg_exe()
+    try:
+        with tempfile.TemporaryDirectory(prefix="neyro_clip_scenes_") as td:
+            paths = []
+            for i, data in enumerate(segments):
+                p = os.path.join(td, f"scene_{i:02d}.mp4")
+                with open(p, "wb") as fh:
+                    fh.write(data)
+                paths.append(p)
+            manifest = os.path.join(td, "concat.txt")
+            with open(manifest, "w", encoding="utf-8") as fh:
+                for p in paths:
+                    fh.write("file '" + p.replace("'", "'\\''") + "'\n")
+            out = os.path.join(td, "joined.mp4")
+            cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
+                   "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", out]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(120, FFMPEG_MUX_TIMEOUT_S))
+            if res.returncode != 0 or not os.path.exists(out) or os.path.getsize(out) < 4096:
+                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
+                       "-t", str(target_duration), "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+                       "-crf", str(FFMPEG_MUX_CRF), "-an", "-movflags", "+faststart", out]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(180, FFMPEG_MUX_TIMEOUT_S + 60))
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 4096:
+                with open(out, "rb") as fh:
+                    return fh.read()
+            log.warning("scene concat failed rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-800:])
+    except Exception as e:
+        log.warning("scene concat exception: %s", e)
+    return None
+
+
+def _ffmpeg_exe() -> str:
+    try:
+        import imageio_ffmpeg  # type: ignore
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if exe:
+            return exe
+    except Exception:
+        pass
+    return shutil.which("ffmpeg") or "ffmpeg"
+
+
+async def _download_binary_from_url(client: httpx.AsyncClient, url: str, accept: str = "*/*", timeout_s: float = 300.0) -> bytes | None:
+    if not url:
+        return None
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; GPT5ProBot/1.0)", "Accept": accept}
+        r = await client.get(url, headers=headers, timeout=timeout_s, follow_redirects=True)
+        if r.status_code >= 400:
+            log.warning("download_binary failed %s: %s", r.status_code, _api_error_preview(r))
+            return None
+        ctype = (r.headers.get("content-type") or "").lower()
+        if not r.content or len(r.content) < 512:
+            log.warning("download_binary empty response url=%s bytes=%s", url[:120], len(r.content or b""))
+            return None
+        if "text/html" in ctype or "application/json" in ctype:
+            log.warning("download_binary non-binary content-type=%s body=%s", ctype, r.text[:300])
+            return None
+        return bytes(r.content)
+    except Exception as e:
+        log.warning("download_binary exception url=%s: %s", url[:120], e)
+        return None
+
+
+async def _poll_video_task_for_bytes(
+    client: httpx.AsyncClient,
+    headers: dict,
+    base_url: str,
+    status_paths: list[str],
+    task_id: str,
+    caption: str,
+    max_wait_s: int = 1200,
+) -> bytes | None:
+    started = time.time()
+    last_body = ""
+    while time.time() - started < max_wait_s:
+        for path in status_paths:
+            try:
+                url = f"{base_url}{path}".format(id=task_id)
+                rs = await client.get(url, headers=headers, timeout=60.0, follow_redirects=True)
+                if rs.status_code >= 400:
+                    last_body = f"{rs.status_code}: {_api_error_preview(rs)}"
+                    continue
+                try:
+                    js = rs.json() or {}
+                except Exception:
+                    js = {}
+                task_data = js.get("data") if isinstance(js.get("data"), dict) else {}
+                st = str(js.get("status") or js.get("state") or js.get("task_status") or task_data.get("status") or task_data.get("state") or task_data.get("task_status") or "").lower()
+                ready_url = _extract_first_url(js.get("output")) or _extract_first_url(js.get("outputs")) or _extract_first_url(js.get("assets")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
+                if ready_url and (st in ("", "completed", "succeeded", "success", "finished", "ready", "done", "succeed") or not st):
+                    content = await _download_binary_from_url(client, ready_url, accept="video/mp4,video/*,*/*;q=0.8", timeout_s=300.0)
+                    if content:
+                        return content
+                    last_body = f"ready_url download failed: {ready_url[:200]}"
+                if "veo" in caption.lower() and st in ("completed", "succeeded", "success", "finished", "ready", "done", "succeed") and not ready_url:
+                    content_url = f"{base_url.rstrip('/')}/v1/videos/{task_id}/content"
+                    cr = await client.get(content_url, headers=headers, timeout=240.0, follow_redirects=True)
+                    if cr.status_code < 400 and cr.content and "application/json" not in (cr.headers.get("content-type") or "").lower():
+                        return bytes(cr.content)
+                if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
+                    # Terminal provider state must escape immediately. Previously this
+                    # RuntimeError was swallowed by the broad polling exception handler,
+                    # so a failed Kling task looked "processing" until the 20-minute timeout.
+                    failure = json.dumps(js, ensure_ascii=False)[:1500]
+                    log.warning("%s terminal task failure task_id=%s: %s", caption, task_id, failure)
+                    raise RuntimeError(f"{caption}: render failed {failure}")
+                last_body = json.dumps(js, ensure_ascii=False)[:700]
+            except RuntimeError:
+                raise
+            except Exception as e:
+                last_body = str(e)
+                continue
+        await asyncio.sleep(VIDEO_POLL_DELAY_S)
+    raise TimeoutError(f"{caption}: timeout, last={last_body[:700]}")
+
+
+async def _create_and_poll_i2v_bytes(
+    base_url: str,
+    api_key: str,
+    create_payloads: list[tuple[str, dict]],
+    status_paths: list[str],
+    caption: str,
+    max_wait_s: int = 1200,
+    on_task_id=None,
+) -> bytes | None:
+    if not api_key:
+        raise RuntimeError(f"{caption}: API key missing")
+    auth_headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+    last_err = ""
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        # v61: for photo→music clip do not try multiple create paths after success and do not send direct links.
+        for path, payload in create_payloads[:1]:
+            try:
+                headers = dict(auth_headers)
+                headers["Content-Type"] = "application/json"
+                if str(path).startswith("/runwayml/"):
+                    headers["X-Runway-Version"] = RUNWAY_API_VERSION or "2024-11-06"
+                r = await client.post(f"{base_url}{path}", headers=headers, json=payload)
+                if r.status_code >= 400:
+                    last_err = f"POST {path} → {r.status_code}: {_api_error_preview(r)}"
+                    log.warning("%s create failed: %s", caption, last_err)
+                    continue
+                try:
+                    js = r.json() or {}
+                except Exception:
+                    js = {}
+                ready_url = _extract_first_url(js.get("output")) or _extract_first_url(js.get("outputs")) or _extract_first_url(js.get("assets")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
+                if ready_url:
+                    content = await _download_binary_from_url(client, ready_url, accept="video/mp4,video/*,*/*;q=0.8", timeout_s=300.0)
+                    if content:
+                        return content
+                task_id = str(
+                    js.get("id") or js.get("task_id") or js.get("generation_id") or js.get("video_id") or js.get("taskId") or js.get("taskID") or js.get("request_id") or js.get("uuid") or ""
+                ).strip()
+                if not task_id and isinstance(js.get("data"), dict):
+                    d = js.get("data") or {}
+                    task_id = str(d.get("id") or d.get("task_id") or d.get("generation_id") or d.get("video_id") or d.get("taskId") or d.get("taskID") or d.get("request_id") or d.get("uuid") or "").strip()
+                if not task_id and isinstance(js.get("result"), dict):
+                    d = js.get("result") or {}
+                    task_id = str(d.get("id") or d.get("task_id") or d.get("generation_id") or d.get("video_id") or d.get("taskId") or d.get("taskID") or d.get("request_id") or d.get("uuid") or "").strip()
+                if not task_id:
+                    last_err = f"POST {path}: no task id in {json.dumps(js, ensure_ascii=False)[:700]}"
+                    continue
+                if callable(on_task_id): on_task_id(task_id)
+                log.info("%s accepted task_id=%s", caption, task_id)
+                return await _poll_video_task_for_bytes(client, headers, base_url, status_paths, task_id, caption, max_wait_s=max_wait_s)
+            except Exception as e:
+                last_err = str(e)
+                log.warning("%s create/poll exception: %s", caption, e)
+                continue
+    raise RuntimeError(last_err or f"{caption}: no result")
+
+
+async def _run_kling_photo_clip_result(img_bytes: bytes, prompt: str, duration_s: int, aspect: str, image_url: str = "", *, on_task_id=None) -> bytes | None:
+    if not (KLING_API_KEY or COMET_API_KEY):
+        raise RuntimeError("Kling photo→clip: COMET_API_KEY/KLING_API_KEY не задан")
+    # Keep the photo→clip route consistent with the working explicit Kling I2V route:
+    # Comet/Kling validates image as a URL. Raw base64 can be accepted at creation
+    # but fail asynchronously. Prefer the cached Telegram HTTPS file URL.
+    image_ref = (image_url or "").strip()
+    if not image_ref.startswith("https://"):
+        image_ref = f"data:{sniff_image_mime(img_bytes)};base64,{base64.b64encode(img_bytes).decode('ascii')}"
+    base_duration = str(_duration_for_engine("kling", min(10, duration_s)))
+    kling_prompt = _photo_clip_prompt(prompt, int(base_duration))
+    # Provider hard limit is 2500 characters. The literal user direction is deliberately
+    # first, so a safety trim removes generic tail constraints rather than the requested action.
+    if len(kling_prompt) > 2480:
+        kling_prompt = kling_prompt[:2476].rstrip() + "..."
+    payload = {
+        "image": image_ref,
+        "prompt": kling_prompt,
+        "model_name": KLING_MODEL,
+        "model": KLING_MODEL,
+        "mode": PHOTO_CLIP_MODE,
+        "duration": base_duration,
+        "aspect_ratio": aspect,
+        # v61: music is added by Suno+ffmpeg. Native provider sound is not reliable here.
+        "sound": "off",
+    }
+    return await _create_and_poll_i2v_bytes(
+        COMET_BASE_URL,
+        KLING_API_KEY or COMET_API_KEY,
+        [(KLING_CREATE_PATH, payload), ("/kling/v1/videos/image2video", payload)],
+        ["/kling/v1/videos/image2video/{id}", KLING_STATUS_PATH, "/kling/v1/videos/{id}", "/v1/tasks/{id}"],
+        "Kling photo→music clip",
+        max_wait_s=max(LUMA_MAX_WAIT_S, RUNWAY_MAX_WAIT_S),
+        on_task_id=on_task_id,
+    )
+
+
+def _find_suno_clip_id(payload: object) -> str:
+    if isinstance(payload, list):
+        return next((found for item in payload if (found := _find_suno_clip_id(item))), "")
+    if not isinstance(payload, dict): return ""
+    for key in ("clip_id", "clipId", "song_id", "songId"):
+        if payload.get(key): return str(payload[key]).strip()
+    if any(payload.get(key) for key in ("audio_url", "audioUrl", "stream_audio_url")) and payload.get("id"):
+        return str(payload["id"]).strip()
+    return next((found for value in payload.values() if (found := _find_suno_clip_id(value))), "")
+
+
+async def _fetch_suno_vocal_intervals(client, headers: dict, clip_id: str, duration_s: int) -> list[tuple[float, float]]:
+    if not clip_id: return []
+    try:
+        response = await client.get(f"{SUNO_BASE_URL}/suno/act/timing/{urllib.parse.quote(clip_id, safe='')}", headers=headers, timeout=60.0)
+        if response.status_code >= 400: return []
+        return _extract_vocal_intervals(response.json() or {}, duration_s)
+    except Exception as exc:
+        log.warning("Suno timing failed clip_id=%s: %s", clip_id, exc)
+        return []
+
+
+async def _run_suno_music_result_bytes(update: Update, brief: str, *, target_duration_s: int = 90, on_provider_state=None) -> bytes | None:
+    brief = (brief or "").strip() or "dynamic catchy music video song, cinematic, social media ready"
+    if not (SUNO_AUTO_FOR_PHOTO_CLIP and SUNO_ENABLED and SUNO_API_KEY):
+        return None
+    headers = {"Authorization": f"Bearer {SUNO_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
+    # Only explicit WHOLE-TRACK instrumental requests may disable vocals.
+    # Phrases such as "инструментальное вступление без вокала" describe an intro and
+    # must not set make_instrumental=True for the entire Suno song.
+    intro_only = bool(re.search(r"(?:вступлен|интро|intro).{0,80}(?:инструментал|без вокала|без голоса)|(?:инструментал|без вокала|без голоса).{0,80}(?:вступлен|интро|intro)", brief, re.I | re.S))
+    instrumental = (not intro_only) and bool(re.search(
+        r"(?:только|полностью|целиком|вся\\s+песня|whole\\s+(?:song|track)|entire\\s+(?:song|track)).{0,50}(?:инструментал|instrumental|без вокала|без голоса)|"
+        r"(?:инструментал|instrumental|без вокала|без голоса).{0,50}(?:только|полностью|целиком|whole|entire)",
+        brief, re.I | re.S
+    ))
+    # IMPORTANT: keep music-video Suno submission identical to the proven standalone
+    # "Свободный запрос" Inspiration Mode. Do not wrap/rewrite a good user brief and do
+    # not send make_instrumental=False: Comet/Suno receives only mv + the user's own
+    # gpt_description_prompt unless the WHOLE track was explicitly requested instrumental.
+    base_payload = {"mv": SUNO_MODEL, "gpt_description_prompt": brief}
+    if instrumental:
+        base_payload.update({"prompt": "", "make_instrumental": True})
+    status_paths = [SUNO_STATUS_PATH, "/suno/fetch/{id}", "/suno/v1/music/{id}", "/api/v1/task/{id}", "/v1/tasks/{id}"]
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        last_err = ""
+        for path in (SUNO_CREATE_PATH, "/suno/submit/music"):
+            try:
+                r = await client.post(f"{SUNO_BASE_URL}{path}", headers=headers, json=base_payload)
+                if r.status_code >= 400:
+                    last_err = f"POST {path} → {r.status_code}: {_api_error_preview(r)}"
+                    continue
+                try:
+                    js = r.json() or {}
+                except Exception:
+                    js = {}
+                url = _extract_first_url(js.get("audio_url")) or _extract_first_url(js.get("audio")) or _extract_first_url(js.get("output")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
+                if url:
+                    audio = await _download_binary_from_url(client, url, accept="audio/mpeg,audio/*,*/*;q=0.8", timeout_s=300.0)
+                    if audio:
+                        return audio
+                task_id = str(js.get("id") or js.get("task_id") or js.get("taskId") or js.get("request_id") or "").strip()
+                data_obj = js.get("data")
+                if not task_id and isinstance(data_obj, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{8,}", data_obj.strip()):
+                    task_id = data_obj.strip()
+                if not task_id and isinstance(data_obj, dict):
+                    d = data_obj or {}
+                    task_id = str(d.get("id") or d.get("task_id") or d.get("taskId") or d.get("request_id") or "").strip()
+                if task_id:
+                    if callable(on_provider_state): on_provider_state("suno_task_id", task_id)
+                    started = time.time()
+                    while time.time() - started < max(30, min(SUNO_TIMEOUT_S, PHOTO_CLIP_SUNO_FAST_TIMEOUT_S)):
+                        for sp in status_paths:
+                            try:
+                                rs = await client.get(f"{SUNO_BASE_URL}{sp}".format(id=task_id), headers=headers, timeout=60.0)
+                                if rs.status_code >= 400:
+                                    continue
+                                try:
+                                    sj = rs.json() or {}
+                                except Exception:
+                                    sj = {}
+                                data_nested = sj.get("data") if isinstance(sj, dict) else None
+                                nested = data_nested if isinstance(data_nested, dict) else {}
+                                url = _extract_first_url(sj.get("audio_url")) or _extract_first_url(sj.get("audio")) or _extract_first_url(sj.get("output")) or _extract_first_url(data_nested) or _extract_first_url(nested.get("data") if isinstance(nested, dict) else None) or _extract_first_url(sj)
+                                st = str(sj.get("status") or sj.get("state") or sj.get("task_status") or nested.get("status") or "").lower()
+                                if url and (st in ("", "completed", "succeeded", "success", "finished", "done", "ready") or not st):
+                                    audio = await _download_binary_from_url(client, url, accept="audio/mpeg,audio/*,*/*;q=0.8", timeout_s=300.0)
+                                    if audio:
+                                        clip_id = _find_suno_clip_id(sj)
+                                        intervals = await _fetch_suno_vocal_intervals(client, headers, clip_id, target_duration_s)
+                                        if callable(on_provider_state):
+                                            if clip_id: on_provider_state("suno_clip_id", clip_id)
+                                            on_provider_state("vocal_intervals", intervals)
+                                        return audio
+                                if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
+                                    raise RuntimeError(json.dumps(sj, ensure_ascii=False)[:900])
+                            except Exception as e:
+                                last_err = str(e)
+                                continue
+                        await asyncio.sleep(SUNO_POLL_DELAY_S)
+            except Exception as e:
+                last_err = str(e)
+                continue
+        log.warning("Suno result bytes failed: %s", last_err)
+    return None
+
+
+def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duration_s: int, output_path: str) -> str | None:
+    """Memory-safe final mux: ffmpeg reads/writes files; Python never materializes the joined video."""
+    if not video_path or not audio_path or not os.path.exists(video_path) or not os.path.exists(audio_path):
+        return None
+    target_duration_s = max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s or PHOTO_CLIP_DEFAULT_DURATION_S or 15)))
+    timeout_s = max(30, int(FFMPEG_MUX_TIMEOUT_S or 180))
+    max_bytes = max(5, int(FFMPEG_MUX_MAX_MB or 45)) * 1024 * 1024
+    ffmpeg = _ffmpeg_exe()
+    started = time.time()
+    # Avoid copy-first for a source already known to exceed Telegram target. It only creates
+    # another ~80MB file and raises peak memory/disk pressure before the required encode.
+    source_size = os.path.getsize(video_path)
+    attempts = []
+    if FFMPEG_MUX_COPY_FIRST and source_size <= max_bytes:
+        attempts.append(("copy-first", [], "copy"))
+    # Preserve provider resolution. Never upscale a 1136x1820 source to fake 4K: that
+    # multiplies decoder/filter/encoder buffers and caused the 512 MiB Render OOM.
+    # Only true oversized inputs are reduced to a bounded long edge.
+    audio_bps = 128000
+    target_video_bps = max(1800000, int((max_bytes * 8 * 0.90) / max(5, target_duration_s) - audio_bps))
+    target_video_k = max(1800, target_video_bps // 1000)
+    max_edge = int(FFMPEG_MUX_MAX_LONG_EDGE or 2160)
+    native_safe = (
+        rf"scale=w='min(iw\,{max_edge})':h='min(ih\,{max_edge})':"
+        rf"force_original_aspect_ratio=decrease:force_divisible_by=2,fps={int(FFMPEG_MUX_FPS or 24)}"
+    )
+    attempts.extend([("native-safe", [native_safe], "encode")])
+    for name, vf, mode in attempts:
+        tmp_out = output_path + "." + name + ".mp4"
+        cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
+               "-stream_loop", "-1", "-i", audio_path, "-t", str(target_duration_s),
+               "-map", "0:v:0", "-map", "1:a:0"]
+        if mode == "copy":
+            cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+        elif mode == "encode":
+            cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+                    "-b:v", f"{target_video_k}k", "-maxrate", f"{target_video_k}k", "-bufsize", f"{target_video_k * 2}k",
+                    "-pix_fmt", "yuv420p", "-threads", str(FFMPEG_MUX_THREADS),
+                    "-filter_threads", str(FFMPEG_MUX_THREADS),
+                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+        else:
+            raise RuntimeError(f"unknown mux mode: {mode}")
+        cmd += ["-shortest", "-movflags", "+faststart", tmp_out]
+        left = max(20, timeout_s - int(time.time() - started))
+        log.info("ffmpeg file mux attempt=%s video=%s duration=%s max_bytes=%s timeout_left=%s",
+                 name, source_size, target_duration_s, max_bytes, left)
+        try:
+            # Keep ffmpeg diagnostics off the Python heap. TemporaryFile is disk-backed;
+            # only a small tail is read if the process fails.
+            with tempfile.TemporaryFile(mode="w+b") as err_fh:
+                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=err_fh, timeout=left)
+                stderr_tail = b""
+                if res.returncode != 0:
+                    err_fh.seek(0, os.SEEK_END)
+                    err_size = err_fh.tell()
+                    err_fh.seek(max(0, err_size - 1500))
+                    stderr_tail = err_fh.read(1500)
+        except subprocess.TimeoutExpired:
+            continue
+        if res.returncode != 0:
+            log.warning("ffmpeg file mux failed attempt=%s rc=%s stderr=%s",
+                        name, res.returncode, stderr_tail.decode("utf-8", "ignore"))
+        if res.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 1024:
+            size = os.path.getsize(tmp_out)
+            log.info("ffmpeg file mux ok attempt=%s output=%s elapsed=%.1fs", name, size, time.time() - started)
+            if size <= max_bytes:
+                os.replace(tmp_out, output_path)
+                return output_path
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_out)
+    return None
+
+
+def _concat_video_segment_files_sync(segment_paths: list[str], target_duration: int, output_path: str) -> str | None:
+    """Concat provider MP4 files without loading the joined result into Python memory."""
+    if not segment_paths:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    manifest = output_path + ".concat.txt"
+    with open(manifest, "w", encoding="utf-8") as fh:
+        for p in segment_paths:
+            fh.write("file '" + p.replace("'", "'\\''") + "'\n")
+    cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
+           "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", output_path]
+    with tempfile.TemporaryFile(mode="w+b") as err_fh:
+        res = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
+            timeout=max(120, FFMPEG_MUX_TIMEOUT_S),
+        )
+        stderr_tail = b""
+        if res.returncode != 0:
+            err_fh.seek(0, os.SEEK_END)
+            err_size = err_fh.tell()
+            err_fh.seek(max(0, err_size - 1500))
+            stderr_tail = err_fh.read(1500)
+    if res.returncode != 0:
+        log.warning("ffmpeg file concat failed rc=%s stderr=%s",
+                    res.returncode, stderr_tail.decode("utf-8", "ignore"))
+    if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 4096:
+        return output_path
+    return None
+
+
+def _mux_video_audio_sync(video_bytes: bytes, audio_bytes: bytes | None, target_duration_s: int) -> bytes | None:
+    """Build one Telegram-safe MP4 from Kling video + Suno audio.
+    v65: copy-first if small, then compressed fallback under FFMPEG_MUX_MAX_MB.
+    """
+    if not video_bytes or not audio_bytes:
+        return None
+    target_duration_s = max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 30), int(target_duration_s or PHOTO_CLIP_DEFAULT_DURATION_S or 15)))
+    timeout_s = max(30, int(FFMPEG_MUX_TIMEOUT_S or 180))
+    max_bytes = max(5, int(FFMPEG_MUX_MAX_MB or 45)) * 1024 * 1024
+    started = time.time()
+    try:
+        ffmpeg = _ffmpeg_exe()
+        with tempfile.TemporaryDirectory() as td:
+            vin = os.path.join(td, "input.mp4")
+            a_in = os.path.join(td, "audio.mp3")
+            out_fast = os.path.join(td, "final_fast.mp4")
+            out_compact = os.path.join(td, "final_compact.mp4")
+            out_small = os.path.join(td, "final_small.mp4")
+            with open(vin, "wb") as f:
+                f.write(video_bytes)
+            with open(a_in, "wb") as f:
+                f.write(audio_bytes)
+
+            attempts: list[tuple[str, list[str], str, bool]] = []
+            if FFMPEG_MUX_COPY_FIRST:
+                attempts.append((
+                    "copy-first",
+                    [
+                        ffmpeg, "-y",
+                        "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
+                        "-stream_loop", "-1", "-i", a_in,
+                        "-t", str(target_duration_s),
+                        "-map", "0:v:0", "-map", "1:a:0",
+                        "-c:v", "copy",
+                        "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE,
+                        "-shortest", "-movflags", "+faststart",
+                        out_fast,
+                    ],
+                    out_fast,
+                    True,
+                ))
+            # Telegram-safe compact encode. This is the primary fallback after copy-first.
+            attempts.append((
+                "compact-720p",
+                [
+                    ffmpeg, "-y",
+                    "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
+                    "-stream_loop", "-1", "-i", a_in,
+                    "-t", str(target_duration_s),
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-vf", f"scale=-2:{int(FFMPEG_MUX_SCALE_HEIGHT or 720)},fps={int(FFMPEG_MUX_FPS or 24)}",
+                    "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+                    "-crf", str(FFMPEG_MUX_CRF or "32"), "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE,
+                    "-shortest", "-movflags", "+faststart",
+                    out_compact,
+                ],
+                out_compact,
+                False,
+            ))
+            # Last-resort smaller encode if the first compact file is still too large.
+            attempts.append((
+                "small-540p",
+                [
+                    ffmpeg, "-y",
+                    "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
+                    "-stream_loop", "-1", "-i", a_in,
+                    "-t", str(target_duration_s),
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-vf", "scale=-2:540,fps=20",
+                    "-c:v", "libx264", "-preset", "ultrafast",
+                    "-crf", "35", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", "96k",
+                    "-shortest", "-movflags", "+faststart",
+                    out_small,
+                ],
+                out_small,
+                False,
+            ))
+
+            last_err = ""
+            best_too_large: bytes | None = None
+            for name, cmd, out_path, accept_only_if_small in attempts:
+                left = max(20, timeout_s - int(time.time() - started))
+                log.info("ffmpeg mux attempt=%s video=%s audio=%s duration=%s max_bytes=%s timeout_left=%s", name, len(video_bytes), len(audio_bytes), target_duration_s, max_bytes, left)
+                try:
+                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=left)
+                except subprocess.TimeoutExpired:
+                    last_err = f"{name}: timeout after {left}s"
+                    log.warning("ffmpeg mux timeout: %s", last_err)
+                    continue
+                if res.returncode != 0:
+                    last_err = f"{name}: rc={res.returncode} stderr={res.stderr.decode('utf-8', 'ignore')[-1500:]}"
+                    log.warning("ffmpeg mux failed: %s", last_err)
+                    continue
+                if not os.path.exists(out_path):
+                    last_err = f"{name}: output missing"
+                    continue
+                with open(out_path, "rb") as f:
+                    final = f.read()
+                if not final or len(final) <= 1024:
+                    last_err = f"{name}: empty output"
+                    continue
+                log.info("ffmpeg mux ok attempt=%s output=%s elapsed=%.1fs", name, len(final), time.time() - started)
+                if len(final) <= max_bytes:
+                    return final
+                best_too_large = final
+                last_err = f"{name}: output too large {len(final)} > {max_bytes}"
+                log.warning("ffmpeg mux output too large: %s", last_err)
+                if accept_only_if_small:
+                    continue
+            if best_too_large and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
+                return best_too_large
+            log.warning("ffmpeg mux all attempts failed/too-large: %s", last_err[-1500:])
+            return None
+    except Exception as e:
+        log.warning("mux_video_audio exception: %s", e)
+        return None
+
+
+
+
+
+def _trim_audio_for_vocal_clip_sync(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
+    """Telegram/Suno often returns a full 2-4 minute song, while Kling Avatar is much more reliable
+    on short audio. Trim/re-encode to a safe MP3 fragment for lip-sync.
+    """
+    if not audio_bytes:
+        return audio_bytes
+    max_seconds = max(8, min(90, int(max_seconds or 65)))
+    try:
+        ffmpeg = _ffmpeg_exe()
+        with tempfile.TemporaryDirectory() as td:
+            src = os.path.join(td, "suno_full.mp3")
+            out = os.path.join(td, "suno_lipsync_safe.mp3")
+            with open(src, "wb") as f:
+                f.write(audio_bytes)
+            cmd = [
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", src,
+                "-t", str(max_seconds),
+                "-vn", "-ac", "2", "-ar", "44100",
+                "-c:a", "libmp3lame", "-b:a", "128k",
+                out,
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 2048:
+                with open(out, "rb") as f:
+                    return f.read()
+            log.warning("vocal clip audio trim failed: rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-500:])
+    except Exception as e:
+        log.warning("vocal clip audio trim exception: %s", e)
+    return audio_bytes
+
+async def _trim_audio_for_vocal_clip(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
+    return await asyncio.to_thread(_trim_audio_for_vocal_clip_sync, audio_bytes, max_seconds)
+
+def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
+    """Infer explicit singer roles only from the user's direction; never invent gender from pixels."""
+    t = (prompt or "").lower().replace("ё", "е")
+    female = bool(re.search(r"(женщин|девуш|женск(?:ий|им|ого)?\s+(?:вокал|голос)|female\s+vocal|woman\s+sings?)", t, re.I))
+    male = bool(re.search(r"(мужчин|парень|мужск(?:ой|им|ого)?\s+(?:вокал|голос)|male\s+vocal|man\s+sings?)", t, re.I))
+    duet = bool(re.search(r"(вместе|дуэт|припев.*(?:оба|вместе)|оба.*(?:поют|петь)|duet|sing\s+together)", t, re.I))
+    if performer_count <= 1:
+        return {"mode": "solo", "female": female, "male": male, "duet": False}
+    if female and male:
+        return {"mode": "mixed_duet", "female": True, "male": True, "duet": duet}
+    return {"mode": "group", "female": female, "male": male, "duet": duet}
+
+
+def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
+    """Split a director brief into scene-local action contracts instead of repeating the whole story."""
+    source = (base_prompt or "").replace("\r\n", "\n").strip()
+    n = max(1, int(scene_count))
+    # Prefer the user's explicit timeline. Sentence splitting used to merge adjacent
+    # 0–10/10–20/20–30 lines and leak later people, props and actions into early scenes.
+    timeline_re = re.compile(
+        r"(?im)^[ \t]*(\d{1,3})\s*[-–—]\s*(\d{1,3})\s*"
+        r"(?:сек(?:унд\w*)?|s(?:ec(?:ond)?s?)?)?\s*[:：]\s*"
+    )
+    markers = list(timeline_re.finditer(source))
+    if markers:
+        explicit = []
+        for pos, marker in enumerate(markers):
+            end = markers[pos + 1].start() if pos + 1 < len(markers) else len(source)
+            chunk = source[marker.end():end]
+            chunk = re.split(
+                r"(?im)\n\s*(?:обязательные\s+условия|global\s+constraints|continuity\s+rules)\s*:",
+                chunk,
+                maxsplit=1,
+            )[0]
+            chunk = re.sub(r"\s+", " ", chunk).strip(" \n\t;-")
+            if chunk:
+                explicit.append(chunk[:1050])
+        if explicit:
+            if len(explicit) == n:
+                return explicit
+            if len(explicit) > n:
+                grouped = []
+                for i in range(n):
+                    a = int(round(i * len(explicit) / n))
+                    b = int(round((i + 1) * len(explicit) / n))
+                    grouped.append(" ".join(explicit[a:max(a + 1, b)])[:1050])
+                return grouped
+            return explicit + [
+                "Continue only the unfinished physical motion from the preceding block; do not replay it."
+            ] * (n - len(explicit))
+
+    text = re.sub(r"\s+", " ", (base_prompt or "").strip())
+    if not text:
+        return ["Continue the requested action naturally."] * n
+    # Sentence-level chronological allocation is deterministic and keeps future actions
+    # out of early Kling prompts. Identity/global constraints remain in the master lock.
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    action = [s for s in sentences if not re.search(
+        r"(identity lock|критически важно|сохранять форму|face_front|face_3q|body_full|не менять лицо|"
+        r"максимальн.*фотореал|движения естествен|никаких телепортац|каждая следующая часть|"
+        r"если .*вокал|губы|subtitles|watermark)", s, re.I)]
+    if not action:
+        action = sentences or [text]
+    out = []
+    for i in range(n):
+        a = int(round(i * len(action) / n))
+        b = int(round((i + 1) * len(action) / n))
+        chunk = action[a:max(a + 1, b)]
+        out.append(" ".join(chunk)[:1050])
+    return out
+
+
+def _music_video_world_state_ledger(base_prompt: str, scene_idx: int, scene_count: int) -> dict:
+    """Build the authoritative per-scene timeline state without exposing future content."""
+    beats = _music_video_story_beats(base_prompt, scene_count)
+    index = min(max(0, int(scene_idx) - 1), len(beats) - 1)
+    completed = beats[:index]
+    return {
+        "current": beats[index],
+        "completed": " | ".join(completed)[-900:] if completed else "none — begin from the supplied starting keyframe",
+        "future_count": max(0, len(beats) - index - 1),
+        "is_first": index == 0,
+        "is_last": index == len(beats) - 1,
+    }
+
+
+def _vocal_scene_role_prompt(
+    base_prompt: str,
+    role_plan: dict,
+    scene_idx: int,
+    scene_count: int,
+    *,
+    scene_plan: "ScenePlan | None" = None,
+) -> str:
+    """Build a strict persistent world-state contract for one chronological scene."""
+    mode = role_plan.get("mode")
+    role = "single lead protagonist" if mode == "solo" else "preserve only performer roles explicitly requested by the user"
+    if scene_plan is not None:
+        if scene_count != len(scene_plan.scenes) or not 1 <= scene_idx <= len(scene_plan.scenes):
+            raise ValueError("ScenePlan/provider scene selection mismatch")
+        contract = scene_plan.scenes[scene_idx - 1]
+        ledger = {
+            "current": contract.action,
+            "completed": " | ".join(contract.completed_actions) or "none — begin from the supplied starting keyframe",
+            "future_count": contract.future_count,
+            "is_first": scene_idx == 1,
+            "is_last": scene_idx == len(scene_plan.scenes),
+            "start_state": contract.start_state,
+            "end_state": contract.end_state,
+            "world_state": " | ".join(contract.world_state),
+        }
+    else:
+        # Compatibility for legacy non-approved callers only. Production always
+        # passes the exact immutable plan reviewed by the user.
+        ledger = _music_video_world_state_ledger(base_prompt, scene_idx, scene_count)
+        ledger.update({
+            "start_state": (
+                "use the supplied starting keyframe as the physical start"
+                if ledger["is_first"] else "use the continuation frame as the exact physical end state of the preceding scene"
+            ),
+            "end_state": "finish at the last physically implied state of the current action",
+            "world_state": "preserve every established person, prop, location, vehicle and spatial relation",
+        })
+    start = (
+        f"{ledger['start_state']}; use the supplied starting keyframe as the physical start"
+        if ledger["is_first"] else
+        f"{ledger['start_state']}; use the continuation frame as the exact physical end state of the preceding scene"
+    )
+    return (
+        "MANDATORY USER VIDEO DIRECTION. "
+        f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist. "
+        f"REQUIRED ACTION CONTRACT FOR THIS SCENE ONLY — CURRENT ACTION: {ledger['current']} "
+        f"START STATE: {start}. "
+        f"END STATE: {ledger['end_state']}. "
+        f"WORLD STATE: {ledger['world_state']}. "
+        f"COMPLETED ACTIONS (history only; never replay): {ledger['completed']}. "
+        f"UNOPENED FUTURE: {ledger['future_count']} block(s); do not introduce future people, props, vehicles, locations or actions, "
+        "and do not execute actions belonging to later scenes. Perform the current action once; do not restart the story or replay history. "
+        "WORLD LOCKS: Preserve spatial direction, wardrobe, doors, seat assignments, prop ownership/position and every established person/object. "
+        "FORBIDDEN TRANSITIONS: no teleportation, duplicates, extra limbs, geometry warping, role/seat swaps, disappearing objects, "
+        "or a supporting character become the protagonist. "
+        f"ROLE: {role}. IDENTITY: FACE_FRONT=frontal face, FACE_3Q=turned-face geometry, BODY_FULL=body. "
+        "Continuation controls world/pose, never identity. Preserve age, face, hair and body. "
+        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT unless the exact action says otherwise. "
+        "Photorealistic motion; neutral mouth unless lip-sync is active; no text."
+    )
+
+
+async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: float, duration_s: float) -> bytes:
+    def _cut() -> bytes:
+        ffmpeg = _ffmpeg_exe()
+        try:
+            with tempfile.TemporaryDirectory(prefix="neyro_vocal_scene_") as td:
+                src = os.path.join(td, "full.mp3")
+                out = os.path.join(td, "scene.mp3")
+                with open(src, "wb") as fh:
+                    fh.write(audio_bytes)
+                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", str(max(0, start_s)), "-i", src,
+                       "-t", str(max(2, duration_s)), "-vn", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", out]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+                if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                    with open(out, "rb") as fh:
+                        return fh.read()
+        except Exception as e:
+            log.warning("vocal scene audio cut failed: %s", e)
+        return b""
+    return await asyncio.to_thread(_cut)
+
+
+async def _apply_kling_lipsync_to_scene_file(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    audio_bytes: bytes,
+    scene_path: str,
+    contract,
+    directory: str,
+    on_provider_state=None,
+    audio_part_path: str = "",
+    existing_task_id: str = "",
+    sync_file_ops: bool = False,
+) -> str:
+    """Replace only one ScenePlan vocal interval and fail closed on any transport/provider error."""
+    if not contract.has_lip_sync:
+        return scene_path
+    absolute_start = float(contract.lip_sync_start_s)
+    absolute_end = float(contract.lip_sync_end_s)
+    relative_start = absolute_start - float(contract.start_s)
+    relative_end = absolute_end - float(contract.start_s)
+    duration = absolute_end - absolute_start
+    interval_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsync_input.mp4")
+    if sync_file_ops:
+        interval_path = _extract_video_interval_file_sync(scene_path, relative_start, duration, interval_path)
+    else:
+        interval_path = await asyncio.to_thread(
+            _extract_video_interval_file_sync,
+            scene_path,
+            relative_start,
+            duration,
+            interval_path,
+        )
+    if not interval_path:
+        raise RuntimeError(f"Не удалось подготовить video interval для lip-sync сцены {contract.index}.")
+    video_url = await _upload_file_to_telegram_file_url(
+        update,
+        context,
+        interval_path,
+        f"scene_{contract.index:02d}_lipsync.mp4",
+        f"🎭 Video interval сцены {contract.index} подготовлен для lip-sync.",
+    )
+    audio_part = Path(audio_part_path).read_bytes() if audio_part_path else await _extract_audio_segment_bytes(audio_bytes, absolute_start, duration)
+    if not audio_part:
+        raise RuntimeError(f"Не удалось извлечь точный audio interval для lip-sync сцены {contract.index}.")
+    audio_url = await _upload_bytes_to_telegram_file_url(
+        update,
+        context,
+        audio_part,
+        f"scene_{contract.index:02d}_lipsync.mp3",
+        f"🎧 Audio interval сцены {contract.index} подготовлен для lip-sync.",
+    )
+    del audio_part
+    if not video_url.startswith("https://") or not audio_url.startswith("https://"):
+        raise RuntimeError(f"Не удалось получить HTTPS inputs для lip-sync сцены {contract.index}.")
+    synced_bytes = await _run_kling_lipsync_result_bytes(
+        video_url,
+        audio_url,
+        duration_ms=int(round(duration * 1000)),
+        max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+        on_provider_state=on_provider_state,
+        existing_task_id=existing_task_id,
+    )
+    synced_path = _write_video_segment_file(directory, 1000 + contract.index, synced_bytes)
+    del synced_bytes
+    output_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsynced.mp4")
+    if sync_file_ops:
+        output_path = _replace_video_interval_file_sync(
+            scene_path, synced_path, relative_start, relative_end,
+            float(contract.duration_s), output_path,
+        )
+    else:
+        output_path = await asyncio.to_thread(
+            _replace_video_interval_file_sync,
+            scene_path,
+            synced_path,
+            relative_start,
+            relative_end,
+            float(contract.duration_s),
+            output_path,
+        )
+    if not output_path:
+        raise RuntimeError(f"Не удалось встроить lip-sync interval в сцену {contract.index}.")
+    return output_path
+
+
+def _vocal_clip_provider_cost_usd(scene_count: int) -> float:
+    """Conservative estimate: the base clip plus one Avatar task per extra scene."""
+    return round(
+        float(VOCAL_CLIP_UNIT_COST_USD) + max(0, int(scene_count) - 1) * float(AVATAR_UNIT_COST_USD), 4
+    )
+
+
+def _vocal_artifact_path(user_id: int, token: str, kind: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or kind not in ("audio", "video"):
+        raise ValueError("invalid vocal artifact reference")
+    suffix = "mp3" if kind == "audio" else "mp4"
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{kind}.{suffix}")
+
+
+def _vocal_job_path(user_id: int, token: str, name: str, extension: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or not re.fullmatch(r"[a-z0-9_]{1,48}", name or "") or extension not in ("json", "mp4", "bin"):
+        raise ValueError("invalid vocal job artifact reference")
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{name}.{extension}")
+
+
+def _save_vocal_job_manifest(user_id: int, token: str, manifest: dict) -> None:
+    path = _vocal_job_path(user_id, token, "job", "json"); os.makedirs(os.path.dirname(path), exist_ok=True)
+    raw = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    if len(raw) > 2 * 1024 * 1024: raise RuntimeError("vocal job manifest too large")
+    tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(raw)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+
+
+def _load_vocal_job_manifest(user_id: int, token: str) -> dict | None:
+    try:
+        path = _vocal_job_path(user_id, token, "job", "json"); st = os.stat(path)
+        if st.st_size > 2 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400: return None
+        with open(path, encoding="utf-8") as fh: value = json.load(fh)
+        return value if isinstance(value, dict) and value.get("schema") == 1 else None
+    except (OSError, ValueError, json.JSONDecodeError): return None
+
+
+def _save_vocal_job_file(user_id: int, token: str, name: str, extension: str, data: bytes) -> str:
+    path = _vocal_job_path(user_id, token, name, extension)
+    if not data or len(data) > 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(data)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _save_vocal_job_file_from_path(user_id: int, token: str, name: str, extension: str, source: str) -> str:
+    path = _vocal_job_path(user_id, token, name, extension); size = os.path.getsize(source)
+    if not 1 <= size <= 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try: shutil.copyfile(source, tmp); os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _load_vocal_job_file_path(user_id: int, token: str, name: str, extension: str) -> str | None:
+    try:
+        path = _vocal_job_path(user_id, token, name, extension); st = os.stat(path)
+        return path if 1 <= st.st_size <= 50 * 1024 * 1024 and time.time() - st.st_mtime <= 7 * 86400 else None
+    except (OSError, ValueError): return None
+
+
+def _extract_vocal_intervals(payload: object, duration_s: float) -> list[tuple[float, float]]:
+    raw = []
+    def walk(value):
+        if isinstance(value, list):
+            for item in value: walk(item)
+        elif isinstance(value, dict):
+            def number(*keys):
+                for key in keys:
+                    try:
+                        if value.get(key) is not None: return float(value[key])
+                    except (TypeError, ValueError): pass
+            start, end = number("startS", "start_s", "start", "startTime"), number("endS", "end_s", "end", "endTime")
+            text = value.get("word") or value.get("text") or value.get("lyric")
+            if start is not None and end is not None and str(text or "").strip():
+                if max(start, end) > max(100, duration_s * 10): start, end = start / 1000, end / 1000
+                if min(duration_s, end) > max(0, start): raw.append((max(0, start), min(duration_s, end)))
+            else:
+                for item in value.values(): walk(item)
+    walk(payload); merged = []
+    for start, end in sorted(set(raw)):
+        if merged and start - merged[-1][1] <= .5: merged[-1][1] = max(merged[-1][1], end)
+        else: merged.append([start, end])
+    return [(round(a, 3), round(b, 3)) for a, b in merged if b - a >= 2]
+
+
+def _verified_lipsync_window(contract, intervals) -> tuple[float, float] | None:
+    if contract.lip_sync_start_s is None or contract.lip_sync_end_s is None: return None
+    candidates = [(max(float(contract.lip_sync_start_s), a), min(float(contract.lip_sync_end_s), b)) for a, b in intervals or []]
+    candidates = [item for item in candidates if item[1] - item[0] >= 2]
+    return max(candidates, key=lambda item: item[1] - item[0]) if candidates else None
+
+
+def _prune_vocal_artifacts(user_dir: str) -> None:
+    """Keep a few recent tracks and failed deliveries on Render's persistent disk."""
+    if not os.path.isdir(user_dir):
+        return
+    now = time.time()
+    groups: dict[str, list[tuple[float, str]]] = {"audio": [], "video": []}
+    for entry in os.scandir(user_dir):
+        match = re.fullmatch(r"[0-9a-f]{12}_(audio|video)\.(?:mp3|mp4)", entry.name)
+        if not match or not entry.is_file(follow_symlinks=False):
+            continue
+        try:
+            modified = entry.stat().st_mtime
+            if now - modified > 7 * 86400:
+                os.unlink(entry.path)
+            else:
+                groups[match.group(1)].append((modified, entry.path))
+        except OSError:
+            log.exception("vocal artifact cleanup failed")
+    for kind, files in groups.items():
+        files.sort(reverse=True)
+        for _, path in files[5 if kind == "audio" else 2:]:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+
+
+def _save_vocal_artifact(user_id: int, token: str, kind: str, data: bytes) -> None:
+    path = _vocal_artifact_path(user_id, token, kind)
+    if not data or len(data) > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(temporary, "wb") as file:
+            file.write(data)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+
+
+def _save_vocal_artifact_file(user_id: int, token: str, kind: str, source_path: str) -> str:
+    """Atomically persist an artifact with file-to-file copying and bounded size."""
+    path = _vocal_artifact_path(user_id, token, kind)
+    try:
+        size = os.path.getsize(source_path)
+    except OSError as exc:
+        raise RuntimeError("vocal artifact source missing") from exc
+    if size < 512 or size > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        shutil.copyfile(source_path, temporary)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+    return path
+
+
+def _load_vocal_artifact_path(user_id: int, token: str, kind: str) -> str | None:
+    try:
+        path = _vocal_artifact_path(user_id, token, kind)
+        st = os.stat(path)
+        if st.st_size < 512 or st.st_size > 50 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400:
+            return None
+        return path
+    except (OSError, ValueError):
+        return None
+
+
+def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
+    try:
+        path = _load_vocal_artifact_path(user_id, token, kind)
+        if not path:
+            return None
+        with open(path, "rb") as file:
+            return file.read()
+    except (OSError, ValueError):
+        return None
+
+
+def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")]]
+    if pending:
+        rows.extend([
+            [InlineKeyboardButton("✅ Подтвердить это аудио", callback_data=f"mvfile:approveaudio:{token}")],
+            [InlineKeyboardButton("🔄 Сгенерировать другое аудио", callback_data=f"mvfile:regenaudio:{token}")],
+            [InlineKeyboardButton("✏️ Изменить промпт аудио", callback_data=f"mvfile:editaudio:{token}")],
+        ])
+    else:
+        if resume: rows.append([InlineKeyboardButton("▶️ Продолжить генерацию", callback_data=f"mvfile:resume:{token}")])
+        rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
+    song = BytesIO(data)
+    song.name = "suno_full_track.mp3"
+    await message.reply_document(
+        document=InputFile(song), caption="🎵 Полная исходная песня Suno. Сохраните её: клип использует фрагмент этой записи.",
+        reply_markup=_vocal_song_kb(token),
+        write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+    )
+
+
+async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    parts = (q.data or "").split(":")
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio", "resume"):
+        await q.answer("Неизвестное действие")
+        return
+    kind, token, user_id = parts[1], parts[2], q.from_user.id
+    video_path = _load_vocal_artifact_path(user_id, token, "video") if kind == "video" else None
+    data = None if kind == "video" else _load_vocal_artifact(user_id, token, "audio")
+    if not (video_path or data):
+        await q.answer("Файл больше недоступен")
+        await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
+        return
+    if kind in ("approveaudio", "resume"):
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        manifest = _load_vocal_job_manifest(user_id, token)
+        if pending_token != token and not manifest:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            await q.message.reply_text("⚠️ Этот вариант уже не является текущим. Подтвердите последнее сгенерированное аудио.")
+            return
+        context.user_data["vocal_source_token"] = token
+        with contextlib.suppress(BadRequest):
+            await q.answer("Аудио подтверждено")
+        prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
+        keyframe = context.user_data.get("music_video_pending_keyframe")
+        scene_plan = context.user_data.get("music_video_pending_scene_plan")
+        if manifest:
+            prompt = prompt or str(manifest.get("prompt") or "")
+            keyframe_path = _load_vocal_job_file_path(user_id, token, "keyframe", "bin")
+            if not keyframe and keyframe_path:
+                with open(keyframe_path, "rb") as fh: keyframe = fh.read()
+            raw_plan = manifest.get("scene_plan")
+            if not isinstance(scene_plan, ScenePlan) and isinstance(raw_plan, dict):
+                scene_plan = scene_plan_from_dict(raw_plan, expected_duration_s=int(manifest["target_duration_s"]), expected_aspect=str(manifest["aspect"]), require_lip_sync=raw_plan.get("vocal_start_s") is not None)
+        if not prompt or not keyframe or not isinstance(scene_plan, ScenePlan):
+            await q.message.reply_text("✅ Аудио подтверждено. Состояние клипа устарело — утвердите сценарий ещё раз.")
+            return
+        # Rehydrate the process-local review state from the durable checkpoint.
+        # _start_vocal_clip will republish this saved keyframe to an HTTPS URL, but
+        # must not pay Gemini/Comet to synthesize it again after a restart.
+        context.user_data["music_video_pending_prompt"] = prompt
+        context.user_data["music_video_pending_audio_token"] = token
+        context.user_data["music_video_pending_scene_plan"] = scene_plan
+        context.user_data["music_video_pending_keyframe"] = keyframe
+        context.user_data.pop("music_video_pending_keyframe_url", None)
+        await q.message.reply_text("✅ Аудио подтверждено. Продолжаю этот же клип — запускаю видеогенерацию.")
+        await _start_vocal_clip(
+            update,
+            context,
+            keyframe,
+            prompt,
+            target_duration_s=scene_plan.duration_s,
+            scene_plan=scene_plan,
+        )
+        return
+    if kind == "editaudio":
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        if pending_token != token:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            return
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data["awaiting_music_video_audio_prompt_edit"] = True
+        with contextlib.suppress(BadRequest):
+            await q.answer("Жду новый промпт")
+        old_brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        await q.message.reply_text(
+            "✏️ Отправьте новый промпт для песни целиком. Можно дополнить старую идею или полностью переписать её.\n\n"
+            "Текущий промпт:\n" + old_brief[:3000]
+        )
+        return
+    if kind == "regenaudio":
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data.pop("music_video_pending_audio_token", None)
+        with contextlib.suppress(BadRequest):
+            await q.answer("Генерирую другой вариант")
+        brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        if not brief:
+            await q.message.reply_text("Состояние музыкального задания устарело. Утвердите сценарий ещё раз.")
+            return
+        await q.message.reply_text("🔄 Генерирую другой вариант по тому же музыкальному заданию. Видео пока не запускаю.")
+        fresh = await _run_suno_music_result_bytes(update, brief)
+        if not fresh:
+            await q.message.reply_text("❌ Suno не вернул новый вариант. Старое аудио остаётся доступным.")
+            return
+        new_token = uuid.uuid4().hex[:12]
+        context.user_data["music_video_pending_audio_token"] = new_token
+        await asyncio.to_thread(_save_vocal_artifact, user_id, new_token, "audio", fresh)
+        await _send_vocal_song_file(q.message, fresh, new_token)
+        await q.message.reply_text(
+            "🎧 Проверьте новый вариант.",
+            reply_markup=_vocal_song_kb(new_token, pending=True),
+        )
+        return
+    if kind == "use":
+        context.user_data["vocal_source_token"] = token
+        await q.answer("Песня выбрана")
+        await q.message.reply_text(
+            "🎵 Для следующего вокального клипа выбрана именно эта песня. "
+            "Откройте режим AI-видеоклипа, пришлите фото и описание, затем утвердите сценарий. "
+            "Suno не будет создавать новую запись."
+        )
+    elif kind == "audio":
+        with contextlib.suppress(BadRequest):
+            await q.answer("Отправляю полную песню")
+        try:
+            await _send_vocal_song_file(q.message, data, token)
+        except Exception:
+            log.exception("vocal source audio resend failed")
+            await q.message.reply_text("Не удалось отправить аудио через Telegram. Нажмите кнопку ещё раз позднее.")
+    else:
+        with contextlib.suppress(BadRequest):
+            await q.answer("Повторно отправляю готовый клип")
+        try:
+            await _reply_video_file(update, video_path, "Готовый AI-видеоклип ✅")
+            with contextlib.suppress(OSError):
+                os.unlink(_vocal_artifact_path(user_id, token, "video"))
+        except Exception:
+            log.exception("saved vocal video resend failed")
+            await q.message.reply_text(
+                "Telegram снова прервал отправку. Готовый клип сохранён; повторите отправку этой кнопкой позднее."
+            )
+
+
+async def _start_vocal_clip(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    user_prompt: str,
+    *,
+    target_duration_s: int | None = None,
+    scene_plan: "ScenePlan | None" = None,
+):
+    """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
+    prompt = (user_prompt or "").strip()
+    if not prompt:
+        await update.effective_message.reply_text("Опишите песню/клип: стиль, язык, кто поёт, тип вокала, настроение и длительность.")
+        return
+    try:
+        faces = _detect_faces_for_choice(img_bytes) if FACESWAP_FACE_DETECTION_ENABLED else []
+    except Exception:
+        faces = []
+    performer_count = max(1, len(faces))
+    target_duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
+        if target_duration_s is not None else _photo_clip_target_duration(prompt)
+    )
+    if scene_plan is not None:
+        if scene_plan.duration_s != target_duration or scene_plan.aspect != _music_video_aspect(prompt):
+            raise ValueError("approved ScenePlan no longer matches provider parameters")
+        scene_count = len(scene_plan.scenes)
+        scene_s = max(1, int(max(scene.duration_s for scene in scene_plan.scenes)))
+        planned_lipsync = tuple(scene for scene in scene_plan.scenes if scene.has_lip_sync)
+        if scene_plan.vocal_start_s is not None and not planned_lipsync:
+            await update.effective_message.reply_text(
+                "❌ В утверждённом вокальном ScenePlan нет face-visible lip-sync интервала. Видео не запускаю."
+            )
+            return False
+        if planned_lipsync and (not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY)):
+            await update.effective_message.reply_text(
+                "❌ Kling lip-sync сейчас недоступен. Несинхронизированный вокальный клип не отправляю."
+            )
+            return False
+    else:
+        scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
+        scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
+        planned_lipsync = ()
+    role_plan = _vocal_clip_role_plan(prompt, performer_count)
+    user_id = update.effective_user.id
+    source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
+    saved_source = _load_vocal_artifact(user_id, source_token, "audio") if source_token else None
+    if source_token and not saved_source:
+        context.user_data.pop("vocal_source_token", None)
+        await update.effective_message.reply_text(
+            "Выбранная песня больше не доступна. Сценарий не запущен и кредиты не списаны. "
+            "Выберите сохранённый трек снова или утвердите сценарий для новой песни Suno."
+        )
+        return
+    img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
+    job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}:{target_duration}"
+    if job_key in _vocal_clip_background_jobs:
+        await update.effective_message.reply_text("⏳ Такой AI-видеоклип уже обрабатывается. Дождитесь результата, чтобы не получить дубли.")
+        return
+
+    async def _job():
+        _vocal_clip_background_jobs.add(job_key)
+        song_token = source_token or uuid.uuid4().hex[:12]
+        video_token = uuid.uuid4().hex[:12]
+        final_saved = False
+        heartbeat_stop = asyncio.Event()
+        # Some legacy callers load this function in isolation.  Keep checkpointing
+        # optional there, while the production module always provides every helper.
+        load_manifest = globals().get("_load_vocal_job_manifest", lambda *_: None)
+        save_manifest = globals().get("_save_vocal_job_manifest", lambda *_: None)
+        save_job_file = globals().get("_save_vocal_job_file", lambda *_: "")
+        load_job_file_path = globals().get("_load_vocal_job_file_path", lambda *_: None)
+        save_job_path = globals().get(
+            "_save_vocal_job_file_from_path", lambda _u, _t, _n, _e, path: path
+        )
+        verified_lipsync = globals().get("_verified_lipsync_window", lambda *_: None)
+        aspect_fn = globals().get("_music_video_aspect", lambda _: "9:16")
+        now_fn = globals().get("time")
+        now_s = int(now_fn.time()) if now_fn is not None else 0
+        manifest = load_manifest(user_id, song_token) or {
+            "schema": 1,
+            "created_at": now_s,
+            "prompt": prompt,
+            "target_duration_s": target_duration,
+            "aspect": scene_plan.aspect if scene_plan else aspect_fn(prompt),
+            "scene_plan": scene_plan.as_dict() if scene_plan else None,
+            "scene_plan_fingerprint": scene_plan.fingerprint if scene_plan else "",
+            "provider_tasks": {},
+            "completed_stages": [],
+            "vocal_intervals": [],
+            "last_error": "",
+        }
+        def checkpoint(stage="", **changes):
+            if stage and stage not in manifest["completed_stages"]: manifest["completed_stages"].append(stage)
+            manifest.update(changes)
+            manifest["updated_at"] = int(now_fn.time()) if now_fn is not None else 0
+            save_manifest(user_id, song_token, manifest)
+        def provider_state(key, value):
+            if key == "vocal_intervals": manifest[key] = value
+            else: manifest["provider_tasks"][key] = value
+            checkpoint()
+
+        async def _progress_heartbeat():
+            # Long provider renders can legitimately be quiet for several minutes.
+            # Keep the user informed without touching provider/billing state.
+            try:
+                while True:
+                    try:
+                        await asyncio.wait_for(heartbeat_stop.wait(), timeout=150)
+                        return
+                    except asyncio.TimeoutError:
+                        with contextlib.suppress(Exception):
+                            await update.effective_message.reply_text(
+                                "⏳ Работа продолжается, бот не завис. Генерация ещё в процессе — пожалуйста, ждите."
+                            )
+            except asyncio.CancelledError:
+                return
+
+        heartbeat_task = asyncio.create_task(_progress_heartbeat())
+        try:
+            if not saved_source and not (SUNO_ENABLED and SUNO_API_KEY):
+                raise RuntimeError("Для вокального AI-видеоклипа нужен SUNO_ENABLED=1 и SUNO_API_KEY/COMET_API_KEY.")
+            role_note = "Роли вокала беру только из вашего описания."
+            if role_plan.get("mode") == "mixed_duet":
+                role_note = "Женские и мужские партии распределяю между указанными героями; совместные партии — как дуэт."
+            await update.effective_message.reply_text(
+                f"🎤 AI-видеоклип принят: ~{target_duration} сек, {scene_count} сцен, героев: {performer_count}. "
+                f"{role_note} {'Использую выбранную песню Suno' if saved_source else 'Сначала Suno создаёт единый трек'}, "
+                f"затем Kling делает cinematic I2V и обязательный lip-sync в {len(planned_lipsync)} утверждённых face-visible интервалах."
+            )
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+            music_brief, video_brief = _music_video_split_briefs(prompt)
+
+            def _scene_role_prompt(index: int) -> str:
+                if scene_plan is None:
+                    return _vocal_scene_role_prompt(video_brief, role_plan, index, scene_count)
+                return _vocal_scene_role_prompt(
+                    video_brief, role_plan, index, scene_count, scene_plan=scene_plan
+                )
+
+            pack_fn = globals().get("_music_video_identity_pack")
+            synth_fn = globals().get("_run_comet_music_video_identity_keyframe")
+            high_fidelity = callable(pack_fn) and callable(synth_fn)
+            pending_keyframe = context.user_data.get("music_video_pending_keyframe") if saved_source else None
+            pending_keyframe_url = context.user_data.get("music_video_pending_keyframe_url") if saved_source else None
+            # The approved-audio resume path reuses the already synthesized start keyframe,
+            # but later scene re-anchors still need the original Character Identity Pack.
+            # Load it before either branch so refs is always defined for multi-scene runs.
+            refs = pack_fn(user_id) if high_fidelity else {}
+            if high_fidelity and not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
+                restored = {}
+                for name in ("face_front", "face_3q", "body_full", "scene_reference"):
+                    path = load_job_file_path(user_id, song_token, f"ref_{name}", "bin")
+                    if path:
+                        with open(path, "rb") as fh: restored[name] = fh.read()
+                refs = restored or refs
+            if high_fidelity and not all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference")):
+                raise RuntimeError("Character Identity Pack incomplete")
+            if high_fidelity and pending_keyframe:
+                img_bytes = pending_keyframe
+                keyframe_url = pending_keyframe_url or await _upload_bytes_to_telegram_file_url(
+                    update, context, img_bytes, "music_video_identity_keyframe.png",
+                    "🧬 Использую уже проверенный стартовый keyframe.",
+                )
+            elif high_fidelity:
+                await update.effective_message.reply_text("🧬 Собираю identity-preserving стартовый keyframe из 4 reference через Gemini/Comet…")
+                keyframe = await synth_fn(
+                    refs["face_front"], refs["face_3q"], refs["body_full"], refs["scene_reference"],
+                    _scene_role_prompt(1),
+                )
+                if not keyframe:
+                    raise RuntimeError("Не удалось синтезировать identity-preserving keyframe")
+                img_bytes = keyframe
+                # Kling I2V validates the image asynchronously and rejects data: URLs.
+                # Publish the synthesized keyframe through Telegram so Kling receives the
+                # same kind of HTTPS file URL that the proven photo->clip path uses.
+                keyframe_url = await _upload_bytes_to_telegram_file_url(
+                    update,
+                    context,
+                    keyframe,
+                    "music_video_identity_keyframe.png",
+                    "🧬 Identity-preserving стартовый keyframe подготовлен.",
+                )
+                if not keyframe_url.startswith("https://"):
+                    raise RuntimeError("Не удалось получить публичный HTTPS URL identity keyframe для Kling.")
+            if high_fidelity:
+                await asyncio.to_thread(save_job_file, user_id, song_token, "keyframe", "bin", img_bytes)
+                for name in ("face_front", "face_3q", "body_full", "scene_reference"):
+                    await asyncio.to_thread(save_job_file, user_id, song_token, f"ref_{name}", "bin", refs[name])
+                checkpoint("identity_pack", music_brief=music_brief)
+            audio_bytes = saved_source or await _run_suno_music_result_bytes(update, music_brief, target_duration_s=target_duration, on_provider_state=provider_state)
+            if not audio_bytes:
+                raise RuntimeError("Suno не вернул вокал/музыку.")
+            if not saved_source:
+                await asyncio.to_thread(_save_vocal_artifact, user_id, song_token, "audio", audio_bytes)
+                checkpoint("song")
+                try:
+                    await _send_vocal_song_file(update.effective_message, audio_bytes, song_token)
+                except Exception:
+                    log.exception("full Suno song Telegram delivery failed; saved for retry")
+                    with contextlib.suppress(Exception):
+                        await update.effective_message.reply_text(
+                            "🎵 Полная песня Suno сохранена, но Telegram не принял аудиофайл. "
+                            "Нажмите «Скачать полную песню» позднее.",
+                            reply_markup=_vocal_song_kb(song_token),
+                        )
+            if not saved_source:
+                # Human review gate. Persist enough state to regenerate Suno or resume the SAME
+                # clip after approval without asking the user to re-enter the brief.
+                context.user_data["music_video_pending_prompt"] = prompt
+                context.user_data["music_video_pending_music_brief"] = music_brief
+                context.user_data["music_video_pending_audio_token"] = song_token
+                context.user_data["music_video_pending_scene_plan"] = scene_plan
+                context.user_data["music_video_pending_keyframe"] = img_bytes
+                context.user_data["music_video_pending_keyframe_url"] = locals().get("keyframe_url", "")
+                await update.effective_message.reply_text(
+                    "🎧 Сначала проверьте получившуюся песню. Видео ещё НЕ запускаю. "
+                    "Выберите: подтвердить это аудио или сгенерировать другое.",
+                    reply_markup=_vocal_song_kb(song_token, pending=True),
+                )
+                # Audio review is a pending user decision, not a provider failure.
+                # None keeps paid billing uncommitted while avoiding a false error
+                # in the unlimited-access wrapper (which treats False as failure).
+                return None
+            safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
+            finalize_td = tempfile.TemporaryDirectory(prefix="neyro_vocal_finalize_")
+            try:
+                segment_paths: list[str] = []
+                if high_fidelity:
+                    await update.effective_message.reply_text(
+                        "🎵 Песня готова. Рендерю cinematic-сцены и применяю lip-sync только к утверждённым вокальным интервалам."
+                    )
+                    aspect = _music_video_aspect(prompt)
+                    continuation_bytes, continuation_url = img_bytes, keyframe_url
+                    for idx in range(1, scene_count + 1):
+                        dur_s = (
+                            int(round(scene_plan.scenes[idx - 1].duration_s))
+                            if scene_plan is not None else min(scene_s, max(2, target_duration - (idx - 1) * scene_s))
+                        )
+                        ready_name, base_name = f"scene_{idx:02d}_ready", f"scene_{idx:02d}_base"
+                        ready_path = load_job_file_path(user_id, song_token, ready_name, "mp4")
+                        base_path = load_job_file_path(user_id, song_token, base_name, "mp4")
+                        if ready_path:
+                            scene_path = ready_path
+                            await update.effective_message.reply_text(f"♻️ Сцена {idx}/{scene_count}: использую готовый checkpoint.")
+                        elif base_path:
+                            scene_path = base_path
+                            await update.effective_message.reply_text(f"♻️ Сцена {idx}/{scene_count}: Kling I2V уже готов, продолжаю с lip-sync.")
+                        else:
+                            await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
+                            scene_prompt = _scene_role_prompt(idx)
+                            scene_prompt += (
+                                " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
+                                "The continuation frame controls pose/action continuity but must never redefine identity."
+                            )
+                            scene_video = await _run_kling_photo_clip_result(continuation_bytes, scene_prompt, dur_s, aspect, continuation_url, on_task_id=lambda task_id, i=idx: provider_state(f"scene_{i}_task_id", task_id))
+                            if not scene_video: raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
+                            scene_path = await asyncio.to_thread(_write_video_segment_file, finalize_td.name, idx, scene_video)
+                            scene_path = await asyncio.to_thread(save_job_path, user_id, song_token, base_name, "mp4", scene_path)
+                            checkpoint(f"scene_{idx}_base")
+                        if scene_plan is not None:
+                            contract = scene_plan.scenes[idx - 1]
+                            window = verified_lipsync(contract, manifest.get("vocal_intervals") or [])
+                            if contract.has_lip_sync and window and not ready_path:
+                                await update.effective_message.reply_text(
+                                    f"🎭 Сцена {idx}/{scene_count}: применяю обязательный Kling lip-sync…"
+                                )
+                                effective_contract = types.SimpleNamespace(index=contract.index, start_s=contract.start_s, end_s=contract.end_s, duration_s=contract.duration_s, has_lip_sync=True, lip_sync_start_s=window[0], lip_sync_end_s=window[1])
+                                scene_path = await _apply_kling_lipsync_to_scene_file(
+                                    update,
+                                    context,
+                                    safe_audio,
+                                    scene_path,
+                                    effective_contract,
+                                    finalize_td.name,
+                                    on_provider_state=lambda key, value, i=idx: provider_state(f"scene_{i}_{key}", value),
+                                )
+                            elif contract.has_lip_sync and not window:
+                                await update.effective_message.reply_text(f"🔇 Сцена {idx}/{scene_count}: подтверждённого вокала нет — lip-sync пропущен.")
+                            if not ready_path:
+                                scene_path = await asyncio.to_thread(save_job_path, user_id, song_token, ready_name, "mp4", scene_path)
+                                checkpoint(f"scene_{idx}_ready")
+                        segment_paths.append(scene_path)
+                        if idx < scene_count:
+                            last_frame = await asyncio.to_thread(_extract_last_video_frame_file_sync, scene_path)
+                            if not last_frame:
+                                raise RuntimeError(f"Не удалось получить continuation frame после сцены {idx}.")
+                            # Re-anchor every scene to the real Character Identity Pack while retaining
+                            # the previous frame only as world/action continuity.
+                            next_prompt = _scene_role_prompt(idx + 1)
+                            reanchored = await synth_fn(
+                                refs["face_front"], refs["face_3q"], refs["body_full"], None,
+                                next_prompt, continuity_frame=last_frame,
+                            )
+                            continuation_bytes = reanchored or last_frame
+                            continuation_url = await _upload_bytes_to_telegram_file_url(
+                                update, context, continuation_bytes, f"music_video_continuation_{idx:02d}.jpg",
+                                f"🧬 Identity + continuity re-anchor {idx}/{scene_count - 1} подготовлен.",
+                            )
+                            if not continuation_url.startswith("https://"):
+                                raise RuntimeError(f"Не удалось получить HTTPS continuation frame после сцены {idx}.")
+                else:
+                    # Compatibility only for isolated legacy unit-test harnesses that intentionally execute
+                    # _start_vocal_clip without the new identity helpers.
+                    await update.effective_message.reply_text("🎵 Песня готова. Создаю lip-sync сцены через Kling…")
+                    for idx in range(1, scene_count + 1):
+                        start_s = (idx - 1) * scene_s
+                        dur_s = min(scene_s, max(2, target_duration - start_s))
+                        audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
+                        if not audio_part:
+                            raise RuntimeError(f"Не удалось подготовить аудио для сцены {idx}.")
+                        audio_url = await _upload_bytes_to_telegram_file_url(
+                            update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
+                        )
+                        scene_prompt = _scene_role_prompt(idx)
+                        scene_video = await _run_kling_avatar_result_bytes(
+                            img_bytes, audio_file_url=audio_url, audio_filename=f"vocal_scene_{idx:02d}.mp3",
+                            audio_mime="audio/mpeg", avatar_prompt=scene_prompt, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+                        )
+                        if not scene_video:
+                            raise RuntimeError(f"Kling не вернул lip-sync сцену {idx}.")
+                        segment_paths.append(await asyncio.to_thread(
+                            _write_video_segment_file, finalize_td.name, idx, scene_video
+                        ))
+                        del scene_video
+
+                await update.effective_message.reply_text("🎬 Собираю итоговый cinematic видеоряд…")
+                async with _music_video_finalize_semaphore:
+                    joined_path = os.path.join(finalize_td.name, "joined.mp4")
+                    joined_path = await asyncio.to_thread(
+                        _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
+                    )
+                    if not joined_path:
+                        raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
+                    audio_path = os.path.join(finalize_td.name, "suno.mp3")
+                    with open(audio_path, "wb") as fh:
+                        fh.write(safe_audio)
+                    safe_audio = b""
+                    audio_bytes = b""
+                    await update.effective_message.reply_text("📦 Подготавливаю видео для Telegram и добавляю исходный трек Suno…")
+                    final_path = os.path.join(finalize_td.name, "final.mp4")
+                    final_path = await asyncio.wait_for(
+                        asyncio.to_thread(_mux_video_audio_files_sync, joined_path, audio_path, target_duration, final_path),
+                        timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
+                    )
+                    if not final_path:
+                        raise RuntimeError("Не удалось собрать финальный MP4 с вокалом.")
+                    persistent_path = await asyncio.to_thread(
+                        _save_vocal_artifact_file, user_id, video_token, "video", final_path
+                    )
+                    final_saved = True
+                try:
+                    await _reply_video_file(
+                        update, persistent_path,
+                        f"AI-видеоклип с вокалом ✅ Один MP4 · ~{target_duration} сек · {scene_count} сцен"
+                    )
+                except Exception:
+                    log.exception("completed vocal MP4 delivery failed; saved for retry")
+                    await update.effective_message.reply_text(
+                        "⚠️ Клип уже готов и сохранён, но Telegram прервал отправку файла. "
+                        "Нажмите «Повторить отправку»: Suno и Kling повторно не запускаются. Кредиты не списаны.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("📥 Повторить отправку клипа", callback_data=f"mvfile:video:{video_token}")],
+                            [InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{song_token}")],
+                        ]),
+                    )
+                    return False
+                with contextlib.suppress(OSError):
+                    os.unlink(persistent_path)
+            finally:
+                finalize_td.cleanup()
+            if source_token:
+                context.user_data.pop("vocal_source_token", None)
+            return True
+        except Exception as e:
+            log.exception("vocal clip failed: %s", e)
+            with contextlib.suppress(Exception): checkpoint(last_error=str(e)[:1000])
+            with contextlib.suppress(Exception):
+                await update.effective_message.reply_text(
+                    "❌ AI-видеоклип с вокалом не получился. Кредиты не списаны. "
+                    + ("Готовый MP4 сохранён: повторите отправку кнопкой выше." if final_saved
+                       else "Полная песня сохранена, если Suno успел её создать. Попробуйте позже."),
+                    reply_markup=_vocal_song_kb(song_token, resume=not final_saved)
+                    if _load_vocal_artifact(user_id, song_token, "audio") else None,
+                )
+            return False
+        finally:
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
+            _vocal_clip_background_jobs.discard(job_key)
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        "runway", _vocal_clip_provider_cost_usd(scene_count), _job,
+        remember_kind="vocal_cinematic_clip_identity_pack",
+        remember_payload={"prompt": prompt[:500], "duration": target_duration, "scenes": scene_count, "performers": performer_count},
+        silent_failure=True,
+    )
+
+
+async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, aspect: str) -> bool:
+    """Sequential paid Kling scenes, delivered as a single vertical MP4.
+    Never resubmit a failed scene automatically: an accepted task may be billed.
+    """
+    if duration not in (15, 30, 60):
+        raise ValueError("Unsupported Shorts duration")
+    sound = bool(context.user_data.get("kling_text_sound", False))
+    scene_lengths = [10] * (duration // 10) + ([5] if duration % 10 else [])
+    await update.effective_message.reply_text(
+        f"📱 Shorts {duration} сек: {len(scene_lengths)} сцен. Создаю последовательно; "
+        "повторная отправка не запускается автоматически."
+    )
+    segments = []
+    for index, seconds in enumerate(scene_lengths, 1):
+        scene_prompt = (
+            f"{prompt[:1900]}\\nThis is scene {index} of {len(scene_lengths)} of one continuous vertical short. "
+            f"Maintain consistent characters, outfits, setting and visual style. "
+            f"Depict the {'opening' if index == 1 else 'finale' if index == len(scene_lengths) else 'next'} "
+            f"part of the story, not a repeated shot."
+        )
+        payload = {
+            "model_name": KLING_MODEL, "prompt": scene_prompt[:2450],
+            "duration": str(seconds), "aspect_ratio": "9:16",
+            "mode": "pro", "sound": "on" if sound else "off",
+        }
+        await update.effective_message.reply_text(f"🎬 Сцена {index}/{len(scene_lengths)} · {seconds} сек")
+        try:
+            segment = await _create_and_poll_i2v_bytes(
+                COMET_BASE_URL, KLING_API_KEY,
+                [(KLING_TEXT_CREATE_PATH, payload)],
+                [KLING_TEXT_STATUS_PATH, "/kling/v1/videos/text2video/{id}", "/v1/tasks/{id}"],
+                f"Kling Shorts scene {index}", max_wait_s=1200,
+            )
+        except Exception:
+            log.exception("Kling Shorts scene %s/%s failed", index, len(scene_lengths))
+            await update.effective_message.reply_text(
+                f"⚠️ Сцена {index}/{len(scene_lengths)} не получилась. "
+                "Останавливаю генерацию, чтобы не создавать дополнительные платные задачи."
+            )
+            return False
+        if not segment:
+            await update.effective_message.reply_text(f"⚠️ Сцена {index} не готова. Дальнейшие задачи не запускаю.")
+            return False
+        segments.append(segment)
+    result = await asyncio.to_thread(_concat_video_segments_sync, segments, duration)
+    if not result:
+        await update.effective_message.reply_text("⚠️ Сцены готовы, но монтаж MP4 не удался. Новые генерации не запускаю.")
+        return False
+    with tempfile.TemporaryDirectory(prefix="kling_shorts_") as td:
+        path = os.path.join(td, "shorts.mp4")
+        with open(path, "wb") as fh:
+            fh.write(result)
+        try:
+            send_path = path if os.path.getsize(path) <= 300 * 1024 * 1024 else await asyncio.to_thread(_compress_telegram_video_sync, path, os.path.join(td, "shorts_telegram.mp4"), 290 * 1024 * 1024)
+            await _reply_video_file(update, send_path, f"📱 Kling Shorts · {duration} сек · 9:16")
+        except Exception as exc:
+            log.exception("Kling Shorts delivery failed after successful rendering")
+            await update.effective_message.reply_text(
+                "⚠️ Все сцены созданы, но отправить итоговый MP4 не удалось: "
+                + str(exc)[:250] + ". Повторную платную генерацию не запускайте."
+            )
+            return False
+    return True
+
+
+async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    prompt = (prompt or "").strip()
+    if not prompt:
+        await update.effective_message.reply_text("Опишите сцену для видео.")
+        return False
+    duration, aspect = parse_video_opts(prompt)
+    engine = (context.user_data.get("text_video_engine") or TEXT_VIDEO_DEFAULT_ENGINE or "kling").strip().lower()
+    if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
+        engine = "kling"
+    if engine not in ("sora", "runway", "kling", "veo"):
+        engine = "kling"
+    if engine == "veo":
+        duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
+        if duration not in (8, 15, 24, 30, 60):
+            duration = 8
+    if engine == "kling":
+        duration = int(context.user_data.get("kling_text_duration", 5))
+        if context.user_data.get("kling_text_sound"):
+            prompt += "\\nGenerate synchronized native audio, dialogue and ambient sound matching the scene."
+    if engine == "sora" and _prompt_likely_has_people(prompt):
+        await update.effective_message.reply_text(
+            "⚠️ Sora 2 в боте используется только для сцен без людей. В запросе обнаружен человек/персонаж. Выберите Kling или Runway.",
+            reply_markup=_textvideo_action_kb("act"),
+        )
+        return False
+    if engine == "veo" and duration > 8 and context.user_data.get("veo_use_presenter_reference"):
+        image = _get_cached_photo(update.effective_user.id)
+        if not image:
+            await update.effective_message.reply_text("⚠️ Фотография ведущего не найдена. Отправьте фото и повторите запрос. Генерация не запущена.")
+            return False
+        if len(image) > 10 * 1024 * 1024 or image[:3] != bytes((255, 216, 255)):
+            await update.effective_message.reply_text("⚠️ Для референса Veo отправьте JPEG-фото размером до 10 МБ. Генерация не запущена.")
+            return False
+    if engine == "veo" and duration > 8:
+        # Opt-in only: a previously sent Telegram photo may be used as presenter reference.
+        # Do not enable this for ordinary text-to-video requests.
+        context.user_data["veo_use_presenter_reference"] = bool(
+            context.user_data.get("veo_use_presenter_reference", False)
+        )
+        import re
+        # Multi-scene native dialogue is billed per scene. Require an explicit
+        # speech track to avoid generating four independent opening speeches.
+        speech_match = re.search(
+            r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]',
+            prompt, re.I | re.S,
+        )
+        if not speech_match:
+            await update.effective_message.reply_text(
+                "⚠️ Для многосценного Veo нужен отдельный текст озвучки. "
+                "Иначе каждая сцена самостоятельно придумывает и повторяет реплику.\n\n"
+                "Добавьте к описанию строку:\n"
+                'Говорит: «Ваш точный русский текст рекламы, '
+                'разделяемый по сценам без повторов».\n\n'
+                "Генерация и списание кредитов не запущены."
+            )
+            return False
+        from neyrobot_prod.veo_multiscene import plan_video
+        try:
+            plan_video(duration, speech_match.group(1))
+        except ValueError as exc:
+            await update.effective_message.reply_text(
+                f"⚠️ Текст озвучки не подходит: {exc}. Кредиты не списаны."
+            )
+            return False
+    provider_cost = _veo_24s_provider_cost_usd() if engine == "veo" and duration == 24 else _video_provider_cost_usd(engine, duration)
+    label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
+    if engine == "veo" and duration == 24:
+        veo_cost, lipsync_cost, tts_cost, total_cost = _veo_24s_cost_breakdown_usd()
+        await update.effective_message.reply_text(
+            "🎬 План 24 сек: 3 сцены × 8 сек · 9:16 · одна русская TTS-дорожка · 3× Kling Lip-Sync.\n"
+            f"Оценка провайдеров: Veo ${veo_cost:.3f} + Kling ${lipsync_cost:.3f} + OpenAI TTS ≈ ${tts_cost:.3f} "
+            f"= ${total_cost:.3f}.\n"
+            "Точная цена в кредитах будет показана до запуска; при отмене до подтверждённого результата кредиты не списываются."
+        )
+
+    async def _go():
+        await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}.")
+        if engine == "kling" and duration > 10:
+            return await _run_kling_text_shorts(update, context, prompt, duration, "9:16")
+        if engine == "veo" and duration > 8:
+            return await _run_veo_multiscene(update, context, prompt, duration)
+        if engine == "runway":
+            return await _run_runway_video(update, context, prompt, duration, aspect)
+        return await _run_comet_text_video(update, context, engine, prompt, duration, aspect)
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        engine, provider_cost, _go,
+        remember_kind=f"text_video_{engine}",
+        remember_payload={"prompt": prompt[:500], "duration": duration, "aspect": aspect, "engine": engine},
+    )
+    return True
+
+async def _run_kling_photo_clip(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
+    """Legacy wrapper kept for external callers; v61 clean pipeline uses _start_photo_music_clip."""
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    try:
+        video = await _run_kling_photo_clip_result(img_bytes, prompt, duration_s, aspect)
+        if not video:
+            raise RuntimeError("empty video result")
+        await _reply_video_bytes(update, video, "Kling photo→music clip ✅")
+        return True
+    except Exception as e:
+        await update.effective_message.reply_text(f"❌ Kling photo→clip: {str(e)[:700]}")
+        return False
+
+
+async def _start_photo_music_clip(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    user_prompt: str,
+    *,
+    target_duration_s: int | None = None,
+    scene_plan: "ScenePlan | None" = None,
+):
+    _, aspect = parse_video_opts(user_prompt or "")
+    if not any(a in (user_prompt or "") for a in _ASPECTS):
+        aspect = "9:16"
+    elif aspect not in _ASPECTS:
+        aspect = "9:16"
+    target_duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
+        if target_duration_s is not None else _photo_clip_target_duration(user_prompt or "")
+    )
+    if scene_plan is not None and (
+        scene_plan.duration_s != target_duration or scene_plan.aspect != aspect
+    ):
+        raise ValueError("approved ScenePlan no longer matches instrumental provider parameters")
+    base_duration = min(10, target_duration)
+    user_id = update.effective_user.id
+
+    # Ключ защиты от дублей: длинные webhook-задачи Telegram может повторно доставлять.
+    img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
+    job_key = f"{user_id}:{img_digest}:{hashlib.sha1((user_prompt or '').encode('utf-8')).hexdigest()[:16]}:{target_duration}:{aspect}"
+    if job_key in _photo_clip_background_jobs:
+        await update.effective_message.reply_text("⏳ Такой фото→видеоклип уже обрабатывается. Дождитесь результата, чтобы не получить дубли.")
+        return
+
+    async def _photo_clip_job():
+        _photo_clip_background_jobs.add(job_key)
+        video_token = uuid.uuid4().hex[:12]
+        final_saved = False
+        finalize_td = tempfile.TemporaryDirectory(prefix="neyro_photo_finalize_")
+        try:
+            if not (PHOTO_CLIP_MUX_AUDIO and SUNO_AUTO_FOR_PHOTO_CLIP and SUNO_ENABLED and SUNO_API_KEY):
+                raise RuntimeError("Для полного клипа с музыкой включите SUNO_ENABLED=1, SUNO_AUTO_FOR_PHOTO_CLIP=1 и задайте SUNO_API_KEY (или COMET_API_KEY).")
+
+            await update.effective_message.reply_text(
+                f"🎬 AI-видеоклип принят. Делаю ОДИН итоговый MP4. "
+                f"Видео: Kling; музыка/песня: Suno; длина: ~{target_duration} сек; "
+                f"сцен: {len(scene_plan.scenes) if scene_plan is not None else len(_music_video_scene_prompts(user_prompt, target_duration))}. "
+                "Для длинного клипа ожидание может быть больше 15 минут."
+            )
+            await update.effective_message.reply_text("🎵 Генерирую музыку/песню через Suno…")
+            await update.effective_message.reply_text("🎞️ Генерирую видеоряд через Kling…")
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+
+            started_at = time.time()
+            kling_image_url = ""
+            with contextlib.suppress(Exception):
+                kling_image_url = _get_cached_photo_url(user_id) or ""
+            if scene_plan is not None:
+                _, video_brief = _music_video_split_briefs(user_prompt)
+                scene_prompts = [
+                    _vocal_scene_role_prompt(
+                        video_brief,
+                        {"mode": "solo"},
+                        scene.index,
+                        len(scene_plan.scenes),
+                        scene_plan=scene_plan,
+                    )
+                    for scene in scene_plan.scenes
+                ]
+                scene_durations = [int(round(scene.duration_s)) for scene in scene_plan.scenes]
+            else:
+                scene_prompts = _music_video_scene_prompts(user_prompt, target_duration)
+                scene_durations = [min(PHOTO_CLIP_SCENE_SECONDS, target_duration)] * len(scene_prompts)
+            async def _render_video_scenes():
+                segment_paths: list[str] = []
+                for scene_idx, scene_prompt in enumerate(scene_prompts, start=1):
+                    if len(scene_prompts) > 1:
+                        await update.effective_message.reply_text(
+                            f"🎞️ Сцена {scene_idx}/{len(scene_prompts)}: рендер через Kling…"
+                        )
+                    seg = await _run_kling_photo_clip_result(
+                        img_bytes, scene_prompt, scene_durations[scene_idx - 1], aspect, kling_image_url
+                    )
+                    if not seg:
+                        raise RuntimeError(f"Kling не вернул сцену {scene_idx}/{len(scene_prompts)}")
+                    segment_paths.append(await asyncio.to_thread(
+                        _write_video_segment_file, finalize_td.name, scene_idx, seg
+                    ))
+                    del seg
+                if len(segment_paths) == 1:
+                    return segment_paths[0]
+                joined_path = os.path.join(finalize_td.name, "joined.mp4")
+                async with _music_video_finalize_semaphore:
+                    joined_path = await asyncio.to_thread(
+                        _concat_video_segment_files_sync, segment_paths, target_duration, joined_path
+                    )
+                if not joined_path:
+                    raise RuntimeError("Не удалось собрать сцены Kling в единый видеоряд")
+                return joined_path
+
+            video_task = asyncio.create_task(_render_video_scenes())
+            audio_task = asyncio.create_task(_run_suno_music_result_bytes(update, user_prompt))
+
+            # Long provider renders need visible progress. Do not leave the user with
+            # a silent chat for 10–20 minutes.
+            progress_marks = (150, 330, 510, 690, 870, 1050)
+            video_path = None
+            try:
+                for mark in progress_marks:
+                    remaining = mark - int(time.time() - started_at)
+                    if remaining > 0:
+                        try:
+                            video_path = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
+                            break
+                        except asyncio.TimeoutError:
+                            pass
+                    elapsed_min = max(1, int((time.time() - started_at) // 60))
+                    await update.effective_message.reply_text(
+                        f"⏳ Клип всё ещё создаётся — прошло около {elapsed_min} мин. "
+                        "Бот не завис: Kling продолжает рендер, Suno готовит музыку. Пожалуйста, ожидайте."
+                    )
+                if video_path is None:
+                    remaining = max(1, PHOTO_CLIP_TOTAL_USER_WAIT_S - int(time.time() - started_at))
+                    video_path = await asyncio.wait_for(asyncio.shield(video_task), timeout=remaining)
+            except asyncio.TimeoutError:
+                video_task.cancel()
+                audio_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await video_task
+                with contextlib.suppress(asyncio.CancelledError):
+                    await audio_task
+                raise RuntimeError(f"Kling не вернул видео за {PHOTO_CLIP_TOTAL_USER_WAIT_S} сек. Генерация остановлена по тайм-ауту; попробуйте повторить позже.")
+            if not video_path:
+                audio_task.cancel()
+                raise RuntimeError("Kling не вернул видео")
+
+            await update.effective_message.reply_text("✅ Видеоряд готов. Ожидаю музыку Suno и затем собираю финальный MP4…")
+
+            remaining_wait = max(30, PHOTO_CLIP_TOTAL_USER_WAIT_S - int(time.time() - started_at))
+            audio_wait = max(30, min(max(PHOTO_CLIP_AUDIO_AFTER_VIDEO_WAIT_S, remaining_wait), SUNO_TIMEOUT_S))
+            audio_bytes = None
+            if audio_task.done():
+                with contextlib.suppress(Exception):
+                    audio_bytes = audio_task.result()
+            else:
+                try:
+                    audio_bytes = await asyncio.wait_for(audio_task, timeout=audio_wait)
+                except asyncio.TimeoutError:
+                    audio_task.cancel()
+                    audio_bytes = None
+
+            if not audio_bytes:
+                raise RuntimeError(
+                    "Suno не вернул музыку в отведённое время. Итоговый клип без музыки не отправляю. "
+                    "Попробуйте ещё раз или увеличьте SUNO_TIMEOUT_S / PHOTO_CLIP_TOTAL_USER_WAIT_S."
+                )
+
+            await update.effective_message.reply_text(f"🎧 Музыка получена. Склеиваю и сжимаю MP4 локально через ffmpeg, лимит ~{FFMPEG_MUX_TIMEOUT_S} сек, размер до ~{FFMPEG_MUX_MAX_MB}MB…")
+
+            final_path = None
+            async with _music_video_finalize_semaphore:
+                audio_path = os.path.join(finalize_td.name, "suno.mp3")
+                with open(audio_path, "wb") as fh:
+                    fh.write(audio_bytes)
+                audio_bytes = b""
+                if PHOTO_CLIP_PIPELINE:
+                    output_path = os.path.join(finalize_td.name, "final.mp4")
+                    final_path = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            _mux_video_audio_files_sync, video_path, audio_path, target_duration, output_path
+                        ),
+                        timeout=max(90, FFMPEG_MUX_TIMEOUT_S + 60),
+                    )
+                if not final_path and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
+                    final_path = video_path
+                if final_path:
+                    persistent_path = await asyncio.to_thread(
+                        _save_vocal_artifact_file, user_id, video_token, "video", final_path
+                    )
+                    final_saved = True
+            if not final_path:
+                raise RuntimeError("ffmpeg не успел или не смог собрать итоговый MP4 с музыкой. Проверьте Render CPU/логи ffmpeg или увеличьте FFMPEG_MUX_TIMEOUT_S.")
+
+            caption = f"Фото→видеоклип с музыкой ✅ Один MP4 · ~{target_duration} сек"
+            try:
+                await _reply_video_file(update, persistent_path, caption)
+            except Exception:
+                log.exception("completed photo music MP4 delivery failed; saved for retry")
+                await update.effective_message.reply_text(
+                    "⚠️ Клип уже готов и сохранён, но Telegram прервал отправку. "
+                    "Нажмите «Повторить отправку»: Suno и Kling повторно не запускаются. Кредиты не списаны.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📥 Повторить отправку клипа", callback_data=f"mvfile:video:{video_token}")],
+                    ]),
+                )
+                return False
+            with contextlib.suppress(OSError):
+                os.unlink(persistent_path)
+            return True
+        except Exception as e:
+            log.exception("photo music clip background pipeline failed: %s", e)
+            with contextlib.suppress(Exception):
+                await update.effective_message.reply_text(
+                    f"❌ Фото→видеоклип не получился. Причина: {str(e)[:700]}"
+                    + (" Готовый MP4 сохранён — используйте кнопку повторной отправки выше." if final_saved else "")
+                )
+            return False
+        finally:
+            finalize_td.cleanup()
+            _photo_clip_background_jobs.discard(job_key)
+
+    async def _go():
+        # Платная задача остаётся привязанной до успешной отправки итогового MP4.
+        return await _photo_clip_job()
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        "runway", PHOTO_CLIP_UNIT_COST_USD, _go,
+        remember_kind="kling_photo_music_clip_v62_background",
+        remember_payload={"prompt": user_prompt, "duration": target_duration, "aspect": aspect},
+    )
+
+# ───────── AI selfie / Nano Banana style image fusion ─────────
+def _prepare_reference_image_for_gemini(img_bytes: bytes, max_side: int | None = None) -> tuple[str, str]:
+    """Return (base64, mime). JPEG is used to keep payload smaller."""
+    max_side = int(max_side or AI_SELFIE_MAX_SIDE or 1536)
+    if Image is None:
+        return base64.b64encode(img_bytes).decode("ascii"), sniff_image_mime(img_bytes)
+    try:
+        im = Image.open(BytesIO(img_bytes)).convert("RGB")
+        if max(im.size) > max_side:
+            im.thumbnail((max_side, max_side), Image.LANCZOS)
+        bio = BytesIO()
+        im.save(bio, format="JPEG", quality=92, optimize=True)
+        return base64.b64encode(bio.getvalue()).decode("ascii"), "image/jpeg"
+    except Exception:
+        return base64.b64encode(img_bytes).decode("ascii"), sniff_image_mime(img_bytes)
+
+
+def _ai_selfie_final_prompt(user_prompt: str, preset_prompt: str = "") -> str:
+    user_prompt = (user_prompt or "").strip()
+    preset_prompt = (preset_prompt or "").strip()
+    if not user_prompt and not preset_prompt:
+        user_prompt = "realistic iPhone selfie with a celebrity, natural light, social media style, 4:5"
+    if not AI_SELFIE_ALLOW_PUBLIC_FIGURES:
+        safety_line = "Use a generic fictional celebrity-like person instead of a real public figure."
+    else:
+        safety_line = "This is a fictional AI-generated fan/selfie scene, not documentary evidence, endorsement, news, or political support."
+    parts = [
+        "Edit the uploaded user selfie into a new realistic AI photo.",
+        "Preserve the user's face identity and natural likeness.",
+        "Create one coherent iPhone/selfie-style scene with natural lighting, correct perspective and realistic skin.",
+        "No text, no captions, no watermarks, no logos, no UI overlays, no distorted hands, no duplicate faces.",
+        safety_line,
+    ]
+    if preset_prompt:
+        parts.append("Preset: " + preset_prompt[:350])
+    if user_prompt:
+        parts.append("User request: " + user_prompt[:650])
+    parts.append(f"Aspect ratio {AI_SELFIE_DEFAULT_ASPECT}. Output image size {AI_SELFIE_IMAGE_SIZE}.")
+    return " ".join(parts).strip()
+
+
+def _extract_image_b64_from_gemini(obj) -> str:
+    """Robust extraction from Interactions API responses: output_image or nested steps/content image blocks."""
+    if isinstance(obj, dict):
+        oi = obj.get("output_image")
+        if isinstance(oi, dict):
+            data = oi.get("data") or oi.get("b64_json") or oi.get("base64")
+            if isinstance(data, str) and len(data) > 100:
+                return data
+        # Common REST structures and SDK-like serialization.
+        if obj.get("type") == "image":
+            data = obj.get("data") or obj.get("b64_json") or obj.get("base64")
+            if isinstance(data, str) and len(data) > 100:
+                return data
+        for key in ("image", "generated_image", "output", "content", "steps", "candidates", "data", "result", "response"):
+            val = obj.get(key)
+            found = _extract_image_b64_from_gemini(val)
+            if found:
+                return found
+        for val in obj.values():
+            found = _extract_image_b64_from_gemini(val)
+            if found:
+                return found
+    elif isinstance(obj, (list, tuple)):
+        for item in obj:
+            found = _extract_image_b64_from_gemini(item)
+            if found:
+                return found
+    return ""
+
+
+async def _run_comet_music_video_identity_keyframe(
+    face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes | None, video_brief: str,
+    continuity_frame: bytes | None = None,
+) -> bytes | None:
+    """Synthesize an initial keyframe or minimally identity-correct a continuation frame."""
+    if not COMET_API_KEY:
+        return None
+    refs = [
+        ("FACE_FRONT", face_front),
+        ("FACE_3Q", face_3q),
+        ("BODY_FULL", body_full),
+    ]
+    if scene_reference:
+        refs.append(("SCENE_REFERENCE", scene_reference))
+    if continuity_frame:
+        refs.append(("CONTINUITY_FRAME", continuity_frame))
+    reference_contract = (
+        "SCENE_REFERENCE is an OLDER photo and defines ONLY the initial environment, composition, pose, clothing/accessories and visible tattoos; "
+        "its older face/body shape is NOT an identity reference. The scene image and identity images show the SAME PERSON at different times. "
+        if scene_reference else
+        "CONTINUATION_FRAME is the sole authority for composition, camera viewpoint, environment, pose, world state and completed actions. "
+        "The original SCENE_REFERENCE is intentionally absent and must not be reconstructed or used to reset the setting. "
+    )
+    parts = [{"text": (
+        "Create ONE photorealistic scene keyframe. "
+        "FACE_FRONT and FACE_3Q are CURRENT photos and are the ABSOLUTE authority for the person's CURRENT FACE and hair. "
+        "Never average, blend, interpolate or revert the current face toward an older face. "
+        f"BODY_FULL defines current body proportions when visible. {reference_contract}"
+        "Render the body slightly fuller when needed to be consistent with the current portrait references, while preserving scene clothing and tattoos. "
+        "Preserve current age, face shape, eyes, nose, lips, chin, hairline and hairstyle exactly from FACE_FRONT/FACE_3Q. "
+        "No beautification, no face redesign, no identity blending, no text, no watermark. "
+        "CRITICAL ACTION PRIMING: an initial SCENE_REFERENCE is not a pose lock. Use the FIRST ACTIONABLE STATE from the exact scene contract "
+        "and build the keyframe at the beginning of that state. Preserve reference appearance/environment only where it does not conflict with the requested action. "
+        "Any pose, held object, gaze direction, body orientation, door/object state, or composition from SCENE_REFERENCE that conflicts with the first requested action "
+        "must transition toward the user's requested state rather than being frozen merely because it appears in the reference. "
+        "Do not invent scenario-specific actions or props that the user did not request. "
+        "If CONTINUITY_FRAME is present, use it as the immutable geometric base and repair identity from FACE_FRONT/FACE_3Q with only a minimal protagonist identity correction. Never collage references, paste a floating head/body, duplicate the protagonist, detach limbs, or move/replace/recompose the vehicle, architecture, supporting characters or persistent props. Preserve its exact camera viewpoint and completed-action state. If clean identity correction would damage geometry, preserve CONTINUITY_FRAME geometry rather than inventing a composite. "
+        "Build the exact START STATE for the next scene contract; supporting characters must remain in their explicitly stated position and role. "
+        f"Director brief — execute literally: {(video_brief or '')[:1800]}"
+    )}]
+    for label, raw in refs:
+        b64, mime = _prepare_reference_image_for_gemini(raw, AI_SELFIE_MAX_SIDE)
+        parts.append({"text": label})
+        parts.append({"inlineData": {"mimeType": mime or "image/jpeg", "data": b64}})
+    model = (COMET_IMAGE_EDIT_FALLBACK_MODELS or [COMET_IMAGE_EDIT_MODEL])[0]
+    path = (COMET_IMAGE_EDIT_PATH or "/v1beta/models/{model}:generateContent").replace("{model}", model)
+    payload = {"contents": [{"role": "user", "parts": parts}],
+               "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}}
+    headers = {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(COMET_IMAGE_EDIT_TIMEOUT_S, connect=40.0, read=COMET_IMAGE_EDIT_TIMEOUT_S, write=120.0), follow_redirects=True) as client:
+        r = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, json=payload)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Identity keyframe synthesis failed HTTP {r.status_code}: {_api_error_preview(r)}")
+        out = await _image_bytes_from_response(r, client)
+        if not out:
+            raise RuntimeError("Identity keyframe synthesis returned no image")
+        log.info("Music-video identity keyframe synthesized refs=%d bytes=%d", len(refs), len(out))
+        return out
+
+
+async def _run_comet_ai_selfie_bytes(img_bytes: bytes, user_prompt: str, preset_prompt: str = "") -> bytes | None:
+    """AI selfie via Comet Nano Banana/Gemini generateContent.
+    v59: one primary Comet route first, longer timeout, smaller reference image, then optional compact retry.
+    """
+    if not COMET_API_KEY:
+        return None
+
+    prompt = _ai_selfie_final_prompt(user_prompt, preset_prompt)
+    img_b64, mime = _prepare_reference_image_for_gemini(img_bytes, AI_SELFIE_MAX_SIDE)
+    mime = mime or "image/jpeg"
+
+    models: list[str] = []
+    for m in COMET_IMAGE_EDIT_FALLBACK_MODELS:
+        m = (m or "").strip()
+        if m and m not in models:
+            models.append(m)
+    if AI_SELFIE_FAST_MODE and models:
+        # In production do not try many slow models before returning; first model must be the enabled Comet channel.
+        models = models[:2]
+
+    base_paths: list[str] = []
+    for p in (COMET_IMAGE_EDIT_PATH, "/v1beta/models/{model}:generateContent"):
+        p = (p or "").strip()
+        if p and p not in base_paths:
+            base_paths.append(p)
+
+    def _mk_generate_content_payload(style: str, compact: bool = False) -> dict:
+        req_prompt = prompt
+        if compact:
+            req_prompt = (
+                "Use the uploaded selfie as identity reference. Create a realistic AI selfie scene. "
+                f"User request: {(user_prompt or preset_prompt or 'celebrity selfie')[:450]}. "
+                "Preserve face identity. No text, no logos, no watermark."
+            )
+        if style == "camel":
+            image_part = {"inlineData": {"mimeType": mime, "data": img_b64}}
+            gen_cfg = {"responseModalities": ["TEXT", "IMAGE"]}
+        else:
+            image_part = {"inline_data": {"mime_type": mime, "data": img_b64}}
+            gen_cfg = {"response_modalities": ["TEXT", "IMAGE"]}
+        return {
+            "contents": [{
+                "role": "user",
+                "parts": [
+                    {"text": req_prompt},
+                    image_part,
+                ],
+            }],
+            "generationConfig": gen_cfg,
+        }
+
+    # Main Comet route. Bearer is the normal gateway auth; avoid slow duplicate auth variants unless explicitly disabled fast mode.
+    header_variants = [
+        {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"},
+    ]
+    if not AI_SELFIE_FAST_MODE:
+        header_variants.extend([
+            {"x-goog-api-key": COMET_API_KEY, "Accept": "application/json", "Content-Type": "application/json"},
+            {"Authorization": COMET_API_KEY, "Accept": "application/json", "Content-Type": "application/json"},
+        ])
+
+    last_err = ""
+    timeout_seen = False
+    async with httpx.AsyncClient(timeout=httpx.Timeout(COMET_IMAGE_EDIT_TIMEOUT_S, connect=40.0, read=COMET_IMAGE_EDIT_TIMEOUT_S, write=120.0), follow_redirects=True) as client:
+        for model in models:
+            for path_tmpl in base_paths:
+                path = path_tmpl.replace("{model}", model)
+                if "/images/" in path and "generateContent" not in path:
+                    continue
+                url = f"{COMET_BASE_URL}{path}"
+                payload_styles = ("camel", "snake") if AI_SELFIE_FAST_MODE else ("camel", "snake")
+                for payload_style in payload_styles:
+                    payload = _mk_generate_content_payload(payload_style, compact=False)
+                    for headers in header_variants:
+                        try:
+                            r = await client.post(url, headers=headers, json=payload)
+                            if r.status_code >= 400:
+                                last_err = f"{r.status_code}: {_api_error_preview(r)}" if "_api_error_preview" in globals() else f"{r.status_code}: {r.text[:500]}"
+                                log.warning("Comet generateContent AI selfie failed model=%s path=%s style=%s: %s", model, path, payload_style, last_err)
+                                continue
+                            out = await _image_bytes_from_response(r, client)
+                            if out:
+                                return out
+                            try:
+                                js = r.json() or {}
+                            except Exception:
+                                js = {}
+                            last_err = f"Comet generateContent: нет изображения в ответе {json.dumps(js, ensure_ascii=False)[:800]}"
+                        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException) as e:
+                            timeout_seen = True
+                            last_err = f"Comet image generation timeout after {COMET_IMAGE_EDIT_TIMEOUT_S}s: {type(e).__name__}"
+                            log.warning("Comet generateContent AI selfie timeout model=%s path=%s: %s", model, path, e)
+                            # Do not spend all time on additional variants when the model is just slow.
+                            break
+                        except Exception as e:
+                            last_err = str(e)
+                            log.warning("Comet generateContent AI selfie exception model=%s path=%s: %s", model, path, e)
+                            continue
+                    if timeout_seen and AI_SELFIE_FAST_MODE:
+                        break
+                if timeout_seen and AI_SELFIE_FAST_MODE:
+                    break
+            if timeout_seen and AI_SELFIE_FAST_MODE:
+                break
+
+        if timeout_seen and AI_SELFIE_RETRY_ON_TIMEOUT:
+            # One compact retry with smaller image. This often helps when the gateway times out on upload+generation+download.
+            retry_b64, retry_mime = _prepare_reference_image_for_gemini(img_bytes, 768)
+            img_b64, mime = retry_b64, retry_mime or "image/jpeg"
+            model = models[0] if models else COMET_IMAGE_EDIT_MODEL
+            path = (COMET_IMAGE_EDIT_PATH or "/v1beta/models/{model}:generateContent").replace("{model}", model)
+            url = f"{COMET_BASE_URL}{path}"
+            payload = _mk_generate_content_payload("camel", compact=True)
+            try:
+                r = await client.post(url, headers={"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}, json=payload)
+                if r.status_code < 400:
+                    out = await _image_bytes_from_response(r, client)
+                    if out:
+                        return out
+                    try:
+                        js = r.json() or {}
+                    except Exception:
+                        js = {}
+                    last_err = f"retry: нет изображения в ответе {json.dumps(js, ensure_ascii=False)[:800]}"
+                else:
+                    last_err = f"retry {r.status_code}: {_api_error_preview(r)}" if "_api_error_preview" in globals() else f"retry {r.status_code}: {r.text[:500]}"
+            except Exception as e:
+                last_err = f"retry exception: {type(e).__name__}: {e}"
+
+        if COMET_IMAGE_EDIT_OPENAI_FALLBACK:
+            headers = {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"}
+            openai_paths = ["/v1/images/edits", "/v1/images/generations"]
+            edit_bytes, filename, edit_mime = _prepare_image_for_edit(img_bytes)
+            attempts = [
+                {"prompt": prompt, "n": "1", "response_format": "b64_json", "size": "1024x1024"},
+                {"prompt": prompt, "n": "1", "response_format": "b64_json"},
+            ]
+            for path in openai_paths:
+                for model in models:
+                    for data in attempts:
+                        try:
+                            payload = {"model": model, **data}
+                            files = {"image": ("image.png", edit_bytes, edit_mime or "image/png")}
+                            r = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, data=payload, files=files)
+                            if r.status_code >= 400:
+                                last_err = f"{r.status_code}: {_api_error_preview(r)}" if "_api_error_preview" in globals() else f"{r.status_code}: {r.text[:500]}"
+                                continue
+                            out = await _image_bytes_from_response(r, client)
+                            if out:
+                                return out
+                        except Exception as e:
+                            last_err = str(e)
+                            continue
+
+    raise RuntimeError(last_err or "Comet AI selfie generateContent failed")
+
+
+async def _run_openai_ai_selfie_fallback(img_bytes: bytes, user_prompt: str, preset_prompt: str = "") -> bytes | None:
+    if not OPENAI_IMAGE_KEY or OPENAI_IMAGE_KEY.startswith("sk-or-"):
+        return None
+    return await _openai_image_edit_bytes(img_bytes, _ai_selfie_final_prompt(user_prompt, preset_prompt))
+
+
+async def _run_ai_selfie_image(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str, preset_prompt: str = "") -> bool:
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+    if not img_bytes:
+        await update.effective_message.reply_text("❌ Нет изображения для AI-селфи.")
+        return False
+    try:
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text("⏳ AI-селфи принято. Comet/Nano Banana может обрабатывать 1–5 минут, ожидаю результат…")
+        out = None
+        if AI_SELFIE_PROVIDER in ("comet", "auto", "nano", "nanobanana", "nano_banana", "gemini") and COMET_API_KEY:
+            out = await _run_comet_ai_selfie_bytes(img_bytes, user_prompt, preset_prompt)
+        if not out and AI_SELFIE_PROVIDER in ("openai", "auto", "gpt", "gptimages", "gpt_images") and OPENAI_IMAGE_KEY and not OPENAI_IMAGE_KEY.startswith("sk-or-"):
+            out = await _run_openai_ai_selfie_fallback(img_bytes, user_prompt, preset_prompt)
+        if not out:
+            await update.effective_message.reply_text(
+                "❌ AI-селфи недоступно: проверьте COMET_API_KEY, COMET_IMAGE_EDIT_MODEL и COMET_IMAGE_EDIT_PATH. "
+                "Текущий маршрут: Comet image-edit."
+            )
+            return False
+        bio = BytesIO(out)
+        bio.name = "ai_selfie.png"
+        caption = "🤳 AI-селфи готово ✅\nПометка: изображение сгенерировано ИИ; не используйте как доказательство реальной встречи/поддержки."
+        if AI_SELFIE_SEND_AS_DOCUMENT:
+            await update.effective_message.reply_document(InputFile(bio), caption=caption)
+        else:
+            await update.effective_message.reply_photo(photo=out, caption=caption)
+        return True
+    except Exception as e:
+        log.exception("AI selfie error: %s", e)
+        err_txt = str(e)[:1200]
+        if "timeout" in err_txt.lower() or "timed out" in err_txt.lower():
+            err_txt = (
+                "Comet/Nano Banana не успел вернуть изображение в отведённое время. "
+                "Попробуйте ещё раз с 1K/коротким промптом или увеличьте COMET_IMAGE_EDIT_TIMEOUT_S до 600. "
+                f"Технически: {err_txt}"
+            )
+        await update.effective_message.reply_text(f"❌ AI-селфи не получилось. Причина: {err_txt}")
+        return False
+
+
+async def _start_ai_selfie(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, user_prompt: str, preset_prompt: str = ""):
+    async def _go():
+        return bool(await _run_ai_selfie_image(update, context, img_bytes, user_prompt, preset_prompt))
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        "img", AI_SELFIE_UNIT_COST_USD, _go,
+        remember_kind="ai_selfie_gemini_image_edit",
+        remember_payload={"prompt": user_prompt, "preset": preset_prompt[:400]},
+    )
+
+def background_presets_kb():
+    # Пресеты по одному в строке: на маленьких экранах текст не обрезается.
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌫 Размыть исходный фон", callback_data="pedit:bg:blur")],
+        [InlineKeyboardButton("🏖 Пляж / море", callback_data="pedit:bg:beach")],
+        [InlineKeyboardButton("⛰ Горы / альпы", callback_data="pedit:bg:mountains")],
+        [InlineKeyboardButton("🌿 Природа / парк", callback_data="pedit:bg:nature")],
+        [InlineKeyboardButton("🏙 Крыша / город", callback_data="pedit:bg:roof")],
+        [InlineKeyboardButton("🏢 Офис / бизнес", callback_data="pedit:bg:office")],
+        [InlineKeyboardButton("⚪ Белый студийный фон", callback_data="pedit:bg:white")],
+        [InlineKeyboardButton("✍️ Свой фон", callback_data="pedit:bg:custom")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="pedit:back")],
+    ])
+
+
+def _set_waiting_removebg(context):
+    context.user_data["awaiting_photo_for"] = "removebg"
+    context.user_data["photo_flow"] = "removebg"
+
+
+def _is_waiting_removebg(context) -> bool:
+    return bool(context and (context.user_data.get("awaiting_photo_for") == "removebg" or context.user_data.get("photo_flow") == "removebg"))
+
+
+def _clear_removebg_wait(context):
+    if not context:
+        return
+    if context.user_data.get("awaiting_photo_for") == "removebg":
+        context.user_data.pop("awaiting_photo_for", None)
+    if context.user_data.get("photo_flow") == "removebg":
+        context.user_data.pop("photo_flow", None)
+
+
+def _set_waiting_replacebg(context, prompt: str = ""):
+    context.user_data["awaiting_photo_for"] = "replacebg"
+    context.user_data["photo_flow"] = "replacebg"
+    if prompt:
+        context.user_data["replacebg_prompt"] = prompt.strip()
+
+
+def _set_replacebg_wait_text(context):
+    context.user_data["replacebg_wait_text"] = "1"
+
+
+def _is_replacebg_wait_text(context) -> bool:
+    return bool(context and context.user_data.get("replacebg_wait_text"))
+
+
+def _is_waiting_replacebg(context) -> bool:
+    return bool(context and (context.user_data.get("awaiting_photo_for") == "replacebg" or context.user_data.get("photo_flow") == "replacebg"))
+
+
+def _clear_replacebg_wait(context):
+    if not context:
+        return
+    for key in ("replacebg_wait_text", "replacebg_prompt"):
+        context.user_data.pop(key, None)
+    if context.user_data.get("awaiting_photo_for") == "replacebg":
+        context.user_data.pop("awaiting_photo_for", None)
+    if context.user_data.get("photo_flow") == "replacebg":
+        context.user_data.pop("photo_flow", None)
+
+
+def _is_remove_bg_request(text: str) -> bool:
+    tl = (text or "").lower()
+    return any(k in tl for k in ("удали фон", "удалить фон", "убери фон", "убрать фон", "removebg", "remove background", "прозрачный фон", "без фона"))
+
+
+def _is_replace_bg_request(text: str) -> bool:
+    tl = (text or "").lower()
+    return any(k in tl for k in ("замени фон", "заменить фон", "поменяй фон", "поменять фон", "replacebg", "replace background", "фон на", "другой фон"))
+
+
+def _bg_kind_from_text(text: str) -> tuple[str, str]:
+    tl = (text or "").lower()
+    if any(k in tl for k in ("пляж", "море", "океан", "beach", "coast", "shore")):
+        return "beach", text
+    if any(k in tl for k in ("горы", "гора", "mountain", "alps", "альп")):
+        return "mountains", text
+    if any(k in tl for k in ("крыша", "город", "небоскреб", "rooftop", "city", "skyline", "терраса")):
+        return "roof", text
+    if any(k in tl for k in ("офис", "кабинет", "business", "office", "coworking", "переговор")):
+        return "office", text
+    if any(k in tl for k in ("природа", "лес", "зелень", "nature", "forest", "park", "парк")):
+        return "nature", text
+    if any(k in tl for k in ("белый", "white", "studio", "студ")):
+        return "white", text
+    if any(k in tl for k in ("черный", "чёрный", "black")):
+        return "black", text
+    if any(k in tl for k in ("размы", "blur", "блюр")):
+        return "blur", text
+    return "custom", text
+
+
+def _safe_b64decode_image(value: str) -> bytes | None:
+    if not value or not isinstance(value, str):
+        return None
+    s = value.strip()
+    if s.startswith("data:") and "," in s:
+        s = s.split(",", 1)[1]
+    try:
+        return base64.b64decode(s, validate=False)
+    except Exception:
+        return None
+
+
+def _find_first_image_b64(obj) -> bytes | None:
+    if isinstance(obj, dict):
+        # Gemini / Nano Banana generateContent returns candidates[].content.parts[].inlineData/inline_data.data.
+        for key in ("inline_data", "inlineData"):
+            v = obj.get(key)
+            if isinstance(v, dict):
+                mime = str(v.get("mime_type") or v.get("mimeType") or "").lower()
+                if mime.startswith("image/") or v.get("data"):
+                    out = _safe_b64decode_image(v.get("data") or v.get("bytes_base64") or v.get("bytesBase64"))
+                    if out:
+                        return out
+        for key in ("b64_json", "image_b64", "image", "png", "result_b64", "bytes_base64", "bytesBase64"):
+            if key in obj:
+                out = _safe_b64decode_image(obj.get(key))
+                if out:
+                    return out
+        for v in obj.values():
+            out = _find_first_image_b64(v)
+            if out:
+                return out
+    elif isinstance(obj, list):
+        for v in obj:
+            out = _find_first_image_b64(v)
+            if out:
+                return out
+    return None
+
+
+def _find_first_image_url(obj) -> str:
+    if isinstance(obj, dict):
+        for key in ("url", "image_url", "output_url", "result_url", "download_url", "file_url"):
+            val = obj.get(key)
+            if isinstance(val, str) and val.startswith(("http://", "https://")):
+                return val
+            if isinstance(val, dict):
+                nested = val.get("url")
+                if isinstance(nested, str) and nested.startswith(("http://", "https://")):
+                    return nested
+        for v in obj.values():
+            url = _find_first_image_url(v)
+            if url:
+                return url
+    elif isinstance(obj, list):
+        for v in obj:
+            url = _find_first_image_url(v)
+            if url:
+                return url
+    return ""
+
+
+async def _image_bytes_from_response(resp: httpx.Response, client: httpx.AsyncClient) -> bytes | None:
+    ctype = (resp.headers.get("content-type") or "").lower()
+    if ctype.startswith("image/") and resp.content:
+        return bytes(resp.content)
+    try:
+        obj = resp.json()
+    except Exception:
+        return None
+    out = _find_first_image_b64(obj)
+    if out:
+        return out
+    url = _find_first_image_url(obj)
+    if url:
+        try:
+            rr = await client.get(url, timeout=BG_REMOVE_TIMEOUT_S)
+            rr.raise_for_status()
+            if rr.content:
+                return bytes(rr.content)
+        except Exception as e:
+            log.warning("background result url download failed: %s", e)
+    return None
+
+
+def _prepare_bytes_for_rembg(img_bytes: bytes) -> bytes:
+    """
+    Render Starter может упираться в RAM на больших фото.
+    Для local rembg уменьшаем слишком крупные изображения до REMBG_MAX_SIDE.
+    """
+    if Image is None or not REMBG_MAX_SIDE or REMBG_MAX_SIDE <= 0:
+        return img_bytes
+    try:
+        im = Image.open(BytesIO(img_bytes))
+        with contextlib.suppress(Exception):
+            im = ImageOps.exif_transpose(im)
+        w, h = im.size
+        mx = max(w, h)
+        if mx <= REMBG_MAX_SIDE:
+            return img_bytes
+        scale = REMBG_MAX_SIDE / float(mx)
+        nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
+        resample = getattr(Image, "Resampling", Image).LANCZOS
+        im = im.convert("RGB").resize((nw, nh), resample)
+        out = BytesIO()
+        im.save(out, format="JPEG", quality=94, optimize=True)
+        _bg_note_error(f"local rembg input resized {w}x{h}->{nw}x{nh}")
+        return out.getvalue()
+    except Exception as e:
+        _bg_note_error(f"local rembg resize skipped: {e}")
+        return img_bytes
+
+
+def _get_local_rembg_session():
+    global _REMBG_SESSION
+    if rembg_remove is None:
+        _bg_note_error(f"rembg import failed: {REMBG_IMPORT_ERROR}")
+        return None
+    if rembg_new_session is None:
+        _bg_note_error("rembg.new_session is not available")
+        return None
+    if _REMBG_SESSION is not None:
+        return _REMBG_SESSION
+    with _REMBG_SESSION_LOCK:
+        if _REMBG_SESSION is not None:
+            return _REMBG_SESSION
+        with contextlib.suppress(Exception):
+            os.environ.setdefault("U2NET_HOME", U2NET_HOME)
+            os.makedirs(U2NET_HOME, exist_ok=True)
+            os.makedirs(XDG_CACHE_HOME, exist_ok=True)
+        last_exc = ""
+        for model_name in REMBG_MODEL_FALLBACKS:
+            try:
+                log.info("Initializing local rembg session: model=%s U2NET_HOME=%s", model_name, os.environ.get("U2NET_HOME"))
+                _REMBG_SESSION = rembg_new_session(model_name)
+                log.info("local rembg session ready: model=%s", model_name)
+                return _REMBG_SESSION
+            except Exception as e:
+                last_exc = repr(e)
+                log.warning("local rembg session init failed model=%s: %s", model_name, e)
+                _bg_note_error(f"local rembg session init failed model={model_name}: {e}")
+        _bg_note_error(f"local rembg session unavailable: {last_exc}")
+    return None
+
+
+
+async def _local_rembg_remove_subprocess(img_bytes: bytes) -> bytes | None:
+    """
+    Изолированный local rembg worker. Если rembg/onnxruntime зависнет при скачивании
+    или инициализации модели, основной бот не зависает: процесс убиваем по timeout.
+    """
+    if not LOCAL_REMBG_ENABLED or rembg_remove is None:
+        return None
+    if Image is not None:
+        img_bytes = _prepare_bytes_for_rembg(img_bytes)
+    timeout_s = max(20.0, float(LOCAL_REMBG_TIMEOUT_S or 180))
+    env = os.environ.copy()
+    env["U2NET_HOME"] = env.get("U2NET_HOME") or U2NET_HOME or "/tmp/.u2net"
+    env["XDG_CACHE_HOME"] = env.get("XDG_CACHE_HOME") or XDG_CACHE_HOME or "/tmp/.cache"
+    env.setdefault("OMP_NUM_THREADS", "1")
+    env.setdefault("MPLCONFIGDIR", "/tmp/.matplotlib")
+    for d in (env["U2NET_HOME"], env["XDG_CACHE_HOME"], env["MPLCONFIGDIR"]):
+        with contextlib.suppress(Exception):
+            os.makedirs(d, exist_ok=True)
+
+    worker_code = r'''
+import os, sys
+from pathlib import Path
+try:
+    from rembg import remove, new_session
+except Exception as e:
+    print(f"IMPORT_ERROR: {e}", file=sys.stderr)
+    sys.exit(11)
+model = os.environ.get("REMBG_MODEL", "u2netp") or "u2netp"
+inp, outp = sys.argv[1], sys.argv[2]
+try:
+    Path(os.environ.get("U2NET_HOME", "/tmp/.u2net")).mkdir(parents=True, exist_ok=True)
+    Path(os.environ.get("XDG_CACHE_HOME", "/tmp/.cache")).mkdir(parents=True, exist_ok=True)
+    data = Path(inp).read_bytes()
+    sess = new_session(model)
+    try:
+        out = remove(data, session=sess, force_return_bytes=True)
+    except TypeError:
+        out = remove(data, session=sess)
+    Path(outp).write_bytes(out)
+except Exception as e:
+    print(f"REMBG_WORKER_ERROR: {type(e).__name__}: {e}", file=sys.stderr)
+    sys.exit(12)
+'''
+    in_path = out_path = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="rembg_in_", suffix=".jpg", delete=False) as f:
+            f.write(img_bytes)
+            in_path = f.name
+        fd, out_path = tempfile.mkstemp(prefix="rembg_out_", suffix=".png")
+        os.close(fd)
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", worker_code, in_path, out_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+        except asyncio.TimeoutError:
+            with contextlib.suppress(Exception):
+                proc.kill()
+            with contextlib.suppress(Exception):
+                await proc.wait()
+            _bg_note_error(f"local rembg subprocess timeout after {timeout_s:.0f}s")
+            return None
+        if proc.returncode != 0:
+            msg = (stderr or stdout or b"").decode("utf-8", "replace")[:800]
+            _bg_note_error(f"local rembg subprocess failed rc={proc.returncode}: {msg}")
+            return None
+        if not out_path or not os.path.exists(out_path) or os.path.getsize(out_path) < 512:
+            _bg_note_error("local rembg subprocess produced empty output")
+            return None
+        with open(out_path, "rb") as f:
+            return f.read()
+    except Exception as e:
+        _bg_note_error(f"local rembg subprocess exception: {e}")
+        log.warning("local rembg subprocess exception: %s", e)
+        return None
+    finally:
+        for path in (in_path, out_path):
+            if path:
+                with contextlib.suppress(Exception):
+                    os.remove(path)
+
+def _local_rembg_remove_sync(img_bytes: bytes) -> bytes:
+    img_bytes = _prepare_bytes_for_rembg(img_bytes)
+    session = _get_local_rembg_session()
+    if session is not None:
+        try:
+            return rembg_remove(img_bytes, session=session, force_return_bytes=True)
+        except TypeError:
+            return rembg_remove(img_bytes, session=session)
+    try:
+        return rembg_remove(img_bytes, force_return_bytes=True)
+    except TypeError:
+        return rembg_remove(img_bytes)
+
+
+async def _local_rembg_remove_bytes(img_bytes: bytes) -> bytes | None:
+    if not LOCAL_REMBG_ENABLED:
+        return None
+    if rembg_remove is None:
+        log.warning("local rembg is not available: %s", REMBG_IMPORT_ERROR)
+        return None
+
+    if LOCAL_REMBG_SUBPROCESS:
+        return await _local_rembg_remove_subprocess(img_bytes)
+
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_local_rembg_remove_sync, img_bytes),
+            timeout=LOCAL_REMBG_TIMEOUT_S,
+        )
+    except Exception as e:
+        log.warning("local rembg failed: %s", e)
+        _bg_note_error(f"local rembg failed: {e}")
+        return None
+
+
+
+
+def _resize_image_bytes_for_bg_api(img_bytes: bytes, max_side: int | None = None) -> tuple[bytes, str, str]:
+    """Сжимает вход перед Photoroom, чтобы не ловить API/Telegram timeout на больших фото."""
+    max_side = int(max_side or PHOTOROOM_INPUT_MAX_SIDE or 1600)
+    mime = sniff_image_mime(img_bytes) or "image/jpeg"
+    if Image is None or max_side <= 0:
+        ext = ".jpg" if mime == "image/jpeg" else (".png" if mime == "image/png" else ".webp")
+        return img_bytes, f"image{ext}", mime
+    try:
+        im = Image.open(BytesIO(img_bytes))
+        # Для исходных фото прозрачность не нужна, Photoroom сам вернёт PNG/RGBA.
+        im = ImageOps.exif_transpose(im) if ImageOps else im
+        if max(im.size) > max_side:
+            im.thumbnail((max_side, max_side), Image.LANCZOS)
+        # JPEG сильно уменьшает размер запроса и ускоряет бесплатный API.
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        bio = BytesIO()
+        im.save(bio, format="JPEG", quality=92, optimize=True, progressive=True)
+        return bio.getvalue(), "image.jpg", "image/jpeg"
+    except Exception as e:
+        _bg_note_error(f"input resize for Photoroom failed: {e}")
+        ext = ".jpg" if mime == "image/jpeg" else (".png" if mime == "image/png" else ".webp")
+        return img_bytes, f"image{ext}", mime
+
+async def _photoroom_api_remove_bytes(img_bytes: bytes) -> bytes | None:
+    """Photoroom Remove Background API. Returns transparent PNG/RGBA bytes."""
+    if not PHOTOROOM_API_KEY:
+        _bg_note_error("Photoroom API key missing: set PHOTOROOM_API_KEY in Render Environment")
+        return None
+    upload_bytes, upload_name, mime = _resize_image_bytes_for_bg_api(img_bytes, PHOTOROOM_INPUT_MAX_SIDE)
+    url = f"{PHOTOROOM_BASE_URL}{PHOTOROOM_REMOVE_PATH}"
+    headers = {"x-api-key": PHOTOROOM_API_KEY}
+    # Photoroom /v1/segment accepts remove.bg-compatible fields.
+    data = {
+        "format": PHOTOROOM_FORMAT or "png",
+        "channels": PHOTOROOM_CHANNELS or "rgba",
+        "size": PHOTOROOM_SIZE or "hd",
+        "crop": PHOTOROOM_CROP or "false",
+        "despill": PHOTOROOM_DESPILL or "false",
+    }
+    timeout = httpx.Timeout(PHOTOROOM_TIMEOUT_S, connect=20.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            files = {"image_file": (upload_name, upload_bytes, mime)}
+            r = await client.post(url, headers=headers, data=data, files=files)
+            if r.status_code >= 400:
+                body = (r.text or "")[:900]
+                _bg_note_error(f"Photoroom API failed status={r.status_code} body={body}")
+                log.warning("Photoroom API failed status=%s body=%s", r.status_code, body)
+                return None
+            ctype = (r.headers.get("content-type") or "").lower()
+            if not r.content or len(r.content) < 300:
+                _bg_note_error(f"Photoroom API returned empty/short content: {len(r.content or b'')} bytes")
+                return None
+            if (not ctype.startswith("image/")) and (r.content[:1] not in (b"\x89", b"\xff")):
+                _bg_note_error(f"Photoroom API returned non-image content-type={ctype} body={(r.text or '')[:700]}")
+                return None
+            return bytes(r.content)
+    except Exception as e:
+        _bg_note_error(f"Photoroom API exception: {type(e).__name__}: {e}")
+        log.warning("Photoroom API exception: %s", e)
+        return None
+
+
+def _normalize_photo_result(img_bytes: bytes) -> bytes:
+    if Image is None:
+        return img_bytes
+    try:
+        im = Image.open(BytesIO(img_bytes)).convert("RGB")
+        max_side = int(BG_OUTPUT_MAX_SIDE or 1600)
+        if max_side > 0 and max(im.size) > max_side:
+            im.thumbnail((max_side, max_side), Image.LANCZOS)
+        bio = BytesIO()
+        im.save(bio, format="JPEG", quality=93, optimize=True, progressive=True)
+        return bio.getvalue()
+    except Exception as e:
+        _bg_note_error(f"normalize photo result failed: {e}")
+        return img_bytes
+
+
+def _clean_bg_prompt_text(prompt: str) -> str:
+    """Remove wording that makes AI draw a visible phone/mirror instead of just selfie-like perspective."""
+    s = (prompt or "").strip()
+    replacements = {
+        "на телефон": "",
+        "с телефона": "",
+        "на смартфон": "",
+        "со смартфона": "",
+        "телефон": "камера",
+        "смартфон": "камера",
+        "phone": "camera",
+        "smartphone": "camera",
+        "mirror": "",
+        "зеркало": "",
+        "selfie stick": "",
+        "селфи-палка": "",
+    }
+    for a, b in replacements.items():
+        s = re.sub(re.escape(a), b, s, flags=re.IGNORECASE)
+    s = re.sub(r"\s{2,}", " ", s).strip(" ,.;")
+    return s
+
+
+def _build_background_scene_prompt(kind: str, prompt: str = "") -> str:
+    kind = (kind or "custom").lower().strip()
+    user_prompt = _clean_bg_prompt_text(prompt)
+    preset_map = {
+        "beach": (
+            "photorealistic tropical beach background, natural sandy shore, clean sea horizon, calm blue water, "
+            "soft waves, realistic daylight, believable travel-photo atmosphere, open air, uncluttered foreground, "
+            "no buildings unless naturally distant"
+        ),
+        "mountains": (
+            "photorealistic mountain landscape, scenic alpine or green mountains, open outdoor view, realistic sky, "
+            "natural daylight, atmospheric perspective, clean travel-photo composition, no indoor elements"
+        ),
+        "nature": (
+            "photorealistic park or nature background, greenery, trees, soft depth, realistic outdoor daylight, "
+            "calm natural environment, clean believable background"
+        ),
+        "roof": (
+            "photorealistic rooftop terrace or city skyline, elegant urban atmosphere, realistic architecture in the distance, "
+            "natural perspective, outdoor light, clean modern background"
+        ),
+        "office": (
+            "photorealistic premium office or business-lounge background, modern interior, clean lines, "
+            "soft daylight, realistic depth, elegant professional atmosphere, no random gadgets in foreground"
+        ),
+        "white": "clean white studio background with soft even light and realistic subtle shadow",
+        "black": "clean dark studio background with soft controlled light and realistic subtle shadow",
+        "blur": "soft natural bokeh background derived from the original scene, realistic lens blur, no extra objects",
+        "custom": user_prompt,
+    }
+    scene = user_prompt or preset_map.get(kind) or "photorealistic clean environment"
+    return (
+        "Create only the BACKGROUND SCENE with no people. This is step 2 of a two-stage workflow: "
+        "the subject will be composited later, so leave clean free space for one adult person in the center foreground. "
+        "The result must be photorealistic, believable, natural perspective, eye-level camera angle, realistic light, "
+        "real-world textures, coherent depth and a clean uncluttered composition. "
+        f"Scene request: {scene}."
+    ).strip()
+
+
+def _build_background_negative_prompt(kind: str = "", prompt: str = "") -> str:
+    parts = [
+        "no people", "no portraits", "no selfie", "no face", "no hands", "no body",
+        "no phone", "no smartphone", "no screen", "no mirror", "no selfie stick",
         "no black panel", "no kiosk", "no wall device", "no random indoor artifact",
         "no duplicate objects", "no text", "no watermark", "no logo", "no cartoon",
         "no painting", "no illustration", "no anime", "no CGI", "no 3d render"
