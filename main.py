@@ -10427,6 +10427,11 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         )
         return False
     if engine == "veo" and duration > 8:
+        # Opt-in only: a previously sent Telegram photo may be used as presenter reference.
+        # Do not enable this for ordinary text-to-video requests.
+        context.user_data["veo_use_presenter_reference"] = bool(
+            context.user_data.get("veo_use_presenter_reference", False)
+        )
         import re
         # Multi-scene native dialogue is billed per scene. Require an explicit
         # speech track to avoid generating four independent opening speeches.
