@@ -1,5 +1,5 @@
 diff --git a/main.py b/main.py
-index d39ff76..3569860 100644
+index d39ff76..62e4ce0 100644
 --- a/main.py
 +++ b/main.py
 @@ -2057,7 +2057,10 @@ def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
@@ -52,17 +52,15 @@ index d39ff76..3569860 100644
              duration = 8
      if engine == "kling":
          duration = int(context.user_data.get("kling_text_duration", 5))
-@@ -10507,17 +10512,35 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
+@@ -10507,17 +10512,33 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
              await update.effective_message.reply_text("⚠️ Для референса Veo отправьте JPEG-фото размером до 10 МБ. Генерация не запущена.")
              return False
      if engine == "veo" and duration > 8:
 +        # Pure no-charge preflight: derive the spoken-content contract before
 +        # payment and before the first Google operation is submitted. This is
 +        # validation only; the native extension chain remains cumulative.
-+        from neyrobot_prod.veo_multiscene import extract_spoken_script, plan_video
-+        spoken_script = extract_spoken_script(prompt)
-+        if spoken_script:
-+            plan_video(duration, spoken_script)
++        from neyrobot_prod.veo_multiscene import plan_video
++        speech_match = any(scene.spoken_text.strip() for scene in plan_video(duration, prompt))
 +        provider = (os.environ.get("VEO_EXTEND_PROVIDER") or "google").strip().lower()
 +        google_key = (os.environ.get("GEMINI_VIDEO_API_KEY") or os.environ.get("GEMINI_API_KEY") or "").strip()
 +        if provider != "google" or not google_key:
@@ -92,7 +90,7 @@ index d39ff76..3569860 100644
  
      async def _go():
          await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}.")
-@@ -15812,13 +15835,28 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
+@@ -15812,13 +15833,28 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
  
  
  async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
@@ -124,7 +122,7 @@ index d39ff76..3569860 100644
      root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
      job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
      directory = os.path.join(root, job_hash)
-@@ -15851,24 +15889,20 @@ async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TY
+@@ -15851,24 +15887,20 @@ async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TY
          except BlockingIOError:
              await update.effective_message.reply_text("⏳ Этот ролик уже создаётся. Дождитесь завершения.")
              return False
@@ -154,7 +152,7 @@ index d39ff76..3569860 100644
                  progress=lambda message: update.effective_message.reply_text("🎬 " + message))
              log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
              await _reply_video_file(update, str(result), f"🎬 Veo 3.1 · {duration} сек · native Veo Extend · 9:16")
-@@ -16110,7 +16144,10 @@ async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@@ -16110,7 +16142,10 @@ async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
      import os
      import hashlib
      from pathlib import Path
@@ -166,7 +164,7 @@ index d39ff76..3569860 100644
      if not OWNER_ID or update.effective_user.id != OWNER_ID:
          await update.effective_message.reply_text("Команда Veo Extend доступна владельцу.")
          return
-@@ -16124,10 +16161,15 @@ async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@@ -16124,10 +16159,15 @@ async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
      if not video_uri.startswith("https://") or not continuation:
          await update.effective_message.reply_text("Нужны HTTPS-ссылка на Veo-видео и текст продолжения.")
          return
@@ -185,7 +183,7 @@ index d39ff76..3569860 100644
      root = Path(os.getenv("VEO_JOBS_DIR", "/data/veo_jobs")) / "extensions"
      root.mkdir(parents=True, exist_ok=True)
      job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_message.message_id) + "|" + raw).encode()).hexdigest()[:24]
-@@ -16135,18 +16177,43 @@ async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@@ -16135,18 +16175,43 @@ async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
      if journal.exists():
          await update.effective_message.reply_text("Эта команда уже зарегистрирована; повторный платный вызов запрещён. Журнал: " + job_hash)
          return
@@ -237,7 +235,7 @@ index d39ff76..3569860 100644
  
  
  async def cmd_heygen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-@@ -18945,7 +19012,7 @@ def build_application() -> "Application":
+@@ -18945,7 +19010,7 @@ def build_application() -> "Application":
      # 2) Новые режимы/подменю: mode:* и act:* (Учёба/Работа/Развлечения/Медицина)
      app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
      app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10|15|30|60)|sound:(?:on|off))$"), group=0)
@@ -246,3 +244,4 @@ index d39ff76..3569860 100644
  
      # Music-video draft approval: consumed once before the generic callback router.
      app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
+

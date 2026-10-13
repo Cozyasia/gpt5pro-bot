@@ -16,14 +16,14 @@ class GoogleVeoAdapterTests(unittest.TestCase):
         self.assertEqual(payload["parameters"]["aspectRatio"], "9:16")
         self.assertEqual(payload["parameters"]["resolution"], "720p")
         self.assertEqual(payload["parameters"]["durationSeconds"], 8)
-        self.assertEqual(payload["parameters"]["numberOfVideos"], 1)
+        self.assertNotIn("numberOfVideos", payload["parameters"])
 
     def test_extension_payload_embeds_previous_video_and_keeps_audio_native(self):
         payload = build_extend_payload(b"mp4-bytes", "Продолжи действие")
         video = payload["instances"][0]["video"]["inlineData"]
         self.assertEqual(video["mimeType"], "video/mp4")
         self.assertEqual(base64.b64decode(video["data"]), b"mp4-bytes")
-        self.assertEqual(payload["parameters"], {"numberOfVideos": 1, "resolution": "720p"})
+        self.assertEqual(payload["parameters"], {"resolution": "720p"})
 
     def test_operation_name_is_required(self):
         self.assertEqual(extract_operation_name({"name": "operations/123"}), "operations/123")

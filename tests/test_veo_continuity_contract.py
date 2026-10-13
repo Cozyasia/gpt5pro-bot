@@ -48,7 +48,7 @@ class VeoContinuityTests(unittest.TestCase):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
         begin = source.index('    if engine == "veo" and duration > 8:')
         end = source.index('    provider_cost = _video_provider_cost_usd(engine, duration)', begin)
-        self.assertIn("extract_spoken_script", source[begin:end])
+        self.assertIn("speech_match", source[begin:end])
         self.assertIn("plan_video(duration", source[begin:end])
 
 

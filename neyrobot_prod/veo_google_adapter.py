@@ -37,7 +37,6 @@ def build_generate_payload(prompt: str, *, aspect_ratio: str = "9:16") -> dict:
     return {
         "instances": [{"prompt": prompt.strip()}],
         "parameters": {
-            "numberOfVideos": 1,
             "resolution": "720p",
             "aspectRatio": aspect_ratio,
             "durationSeconds": 8,
@@ -60,7 +59,7 @@ def build_extend_payload(video_bytes: bytes, prompt: str) -> dict:
                 }
             },
         }],
-        "parameters": {"numberOfVideos": 1, "resolution": "720p"},
+        "parameters": {"resolution": "720p"},
     }
 
 
