@@ -22,8 +22,8 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
         dialogue = (
             'The presenter says exactly in Russian: "'
             + scene.spoken_text.replace('"', "'")
-            + '". Speak these words ONCE only. No introductions, repetitions, paraphrases, "
-              "extra commentary or dialogue from other scenes. Do not restart the advertisement.'
+            + '". Speak these words ONCE only. No introductions, repetitions, paraphrases, '
+              'extra commentary or dialogue from other scenes. Do not restart the advertisement.'
         )
     continuity = (
         "Keep the same presenter appearance, outfit, lighting, and studio "
