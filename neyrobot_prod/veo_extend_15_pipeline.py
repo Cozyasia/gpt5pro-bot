@@ -99,54 +99,108 @@ def _assemble(first, extended, destination):
     return destination
 
 
-async def create_extended_15(*, directory, prompt, base_url, api_key, fast_model,
-                             poll, reference_image=None, progress=None):
-    """Caller supplies existing read-only task polling and holds a per-job lock."""
+async def create_extended_video(*, directory, prompt, duration_seconds, base_url,
+                                api_key, fast_model, poll, reference_image=None,
+                                progress=None):
+    """Chain Veo-native extensions, persisting each billed operation separately.
+
+    Google limit: initial 8s plus up to twenty 7s extensions (148s).
+    Only provider-native cumulative video is fed to the next extension.
+    """
+    if not isinstance(duration_seconds, int) or not 8 <= duration_seconds <= 148:
+        raise ValueError("Veo Extend duration must be between 8 and 148 seconds")
+    from math import ceil
+    steps = ceil(max(0, duration_seconds - 8) / 7)
+    if steps > 20:
+        raise ValueError("Google Veo allows at most 20 extensions")
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     journal = directory / "journal.json"
+
     async def submit():
         if progress:
-            await progress("Генерирую первые 8 секунд Veo")
+            await progress("Генерирую исходные 8 секунд Veo")
         return await submit_veo_task(base_url, api_key, fast_model, prompt,
                                      reference_image=reference_image)
+
     async def save(index, payload):
         save_scene(directory, index, payload)
-    first_record = read_job(journal)["scenes"].get("1", {})
-    if first_record.get("state") != "completed":
+
+    original = read_job(journal)["scenes"].get("1", {})
+    if original.get("state") != "completed":
         await run_journaled_scene(journal, 1, submit, poll, save)
-    clips = list_complete_scenes(directory, 1)
-    if not clips:
-        raise RuntimeError("Original 8s video missing; never resubmit completed task")
-    first = clips[0]
+    first = list_complete_scenes(directory, 1)[0]
     task_id = read_job(journal)["scenes"]["1"].get("task_id")
     if not task_id:
-        raise RuntimeError("Original task ID missing; extension blocked")
-    output = directory / "final_15s.mp4"
-    if output.is_file() and abs(probe_duration(output) - 15) < 0.2:
-        return output
-    extension_file = directory / "extension.mp4"
-    state_file = directory / "extension.json"
-    state = json.loads(state_file.read_text()) if state_file.exists() else None
-    if state is None:
-        source_uri = await _provider_uri(base_url, api_key, task_id)
-        state = {"status": "submitting", "source_uri": source_uri}
-        write_job(state_file, state)
-        if progress:
-            await progress("Продлеваю исходный ролик на 7 секунд через Veo Extend")
-        try:
-            uri, response = await extend_veo(
-                base_url, api_key, source_uri, _extension_prompt(prompt),
-                model=os.getenv("VEO_EXTEND_MODEL", "veo-3.1"))
-            state = {"status": "accepted", "source_uri": source_uri,
-                     "result_uri": uri, "response": response}
+        raise RuntimeError("Original Veo task ID missing")
+
+    final = directory / ("final_%ds.mp4" % duration_seconds)
+    if final.is_file() and abs(probe_duration(final) - duration_seconds) < 0.25:
+        return final
+
+    # A provider-generated video must be passed directly; locally assembled
+    # or trimmed videos are not eligible inputs for native Veo extension.
+    source_uri = None
+    latest = first
+    for step in range(1, steps + 1):
+        state_file = directory / ("extension_%02d.json" % step)
+        video_file = directory / ("extension_%02d.mp4" % step)
+        state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
+        if state is None:
+            if source_uri is None:
+                source_uri = await _provider_uri(base_url, api_key, task_id)
+            state = {"status": "submitting", "source_uri": source_uri, "step": step}
             write_job(state_file, state)
-        except BaseException:
-            write_job(state_file, {"status": "uncertain", "source_uri": source_uri})
-            raise
-    if not extension_file.is_file():
-        uri = state.get("result_uri")
-        if not uri:
-            raise RuntimeError("Extension submitted without a final video URI. Manual reconciliation required; no retry.")
-        await _download(uri, extension_file)
-    return _assemble(first, extension_file, output)
+            if progress:
+                await progress("Veo Extend: продление %d из %d" % (step, steps))
+            try:
+                uri, response = await extend_veo(
+                    base_url, api_key, source_uri, _extension_prompt(prompt),
+                    model=os.getenv("VEO_EXTEND_MODEL", "veo-3.1"))
+                state = {"status": "accepted", "source_uri": source_uri,
+                         "result_uri": uri, "response": response, "step": step}
+                write_job(state_file, state)
+            except BaseException:
+                write_job(state_file, {"status": "uncertain",
+                                       "source_uri": source_uri, "step": step})
+                raise
+        if state.get("status") != "accepted" or not state.get("result_uri"):
+            raise RuntimeError("Extension %d needs provider reconciliation; no paid retry" % step)
+        source_uri = state["result_uri"]
+        if not video_file.is_file():
+            await _download(source_uri, video_file)
+        expected = 8 + 7 * step
+        actual = probe_duration(video_file)
+        if abs(actual - expected) > 0.5:
+            raise RuntimeError(
+                "Provider returned %.2fs at extension %d, expected %ds cumulative video. "
+                "Stopping before further paid calls." % (actual, step, expected))
+        latest = video_file
+
+    import shutil
+    import subprocess
+    if steps == 0:
+        latest = first
+    actual = probe_duration(latest)
+    if actual < duration_seconds - 0.25:
+        raise RuntimeError("Provider output shorter than requested duration")
+    if abs(actual - duration_seconds) <= 0.25:
+        shutil.copyfile(latest, final)
+    else:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+             "-y", "-i", str(latest), "-t", str(duration_seconds),
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+             "-c:a", "aac", "-movflags", "+faststart", str(final)],
+            capture_output=True, timeout=600)
+        if result.returncode:
+            raise RuntimeError("Final Veo trim failed: " +
+                               result.stderr.decode("utf-8", "replace")[-300:])
+    if abs(probe_duration(final) - duration_seconds) > 0.25:
+        raise RuntimeError("Final video duration mismatch")
+    return final
+
+
+async def create_extended_15(**kwargs):
+    """Compatibility entry point for existing Telegram 15-second jobs."""
+    return await create_extended_video(duration_seconds=15, **kwargs)
