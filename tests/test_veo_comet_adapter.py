@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from neyrobot_prod.veo_comet_adapter import submit_veo_task, UncertainVeoSubmission
+from neyrobot_prod.veo_extend_comet import CometExtensionUnavailable, extend_veo
 
 
 class VeoAdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -19,6 +20,11 @@ class VeoAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args["files"][0], ("model", (None, "veo3.1-fast")))
         self.assertEqual(args["files"][2], ("size", (None, "9:16")))
 
+    async def test_comet_extend_is_rejected_before_paid_request(self):
+        with self.assertRaises(CometExtensionUnavailable):
+            await extend_veo(
+                "https://api.cometapi.com", "key", "https://provider/video.mp4", "Continue"
+            )
     async def test_missing_task_id_is_uncertain(self):
         response = MagicMock()
         response.status_code = 200

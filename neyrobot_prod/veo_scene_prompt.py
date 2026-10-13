@@ -33,6 +33,7 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
     audio_guard = (
         "Use native Veo audio, not an external TTS track. "
         "No additional voiceover, narration, repeated opening, or unrelated words. "
+        "ONLY speech permitted is the exact Russian dialogue above. "
         "Keep music and ambience quiet under speech; end at the scene boundary."
     )
     visual_beats = (

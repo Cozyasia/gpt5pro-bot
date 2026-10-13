@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import httpx
 
 from .veo_comet_adapter import submit_veo_task
-from .veo_extend_comet import extend_veo, find_video_uri
+from .veo_extend_comet import find_video_uri
 from .veo_scene_runner import run_journaled_scene
 from .veo_scene_artifacts import save_scene, list_complete_scenes
 from .veo_task_journal import read_job, write_job
@@ -101,7 +101,8 @@ def _assemble(first, extended, destination):
 
 async def create_extended_video(*, directory, prompt, duration_seconds, base_url,
                                 api_key, fast_model, poll, reference_image=None,
-                                progress=None):
+                                progress=None, submit_initial=None,
+                                extend_video=None):
     """Chain Veo-native extensions, persisting each billed operation separately.
 
     Google limit: initial 8s plus up to twenty 7s extensions (148s).
@@ -120,6 +121,8 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
     async def submit():
         if progress:
             await progress("Генерирую исходные 8 секунд Veo")
+        if submit_initial is not None:
+            return await submit_initial()
         return await submit_veo_task(base_url, api_key, fast_model, prompt,
                                      reference_image=reference_image)
 
@@ -138,37 +141,52 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
     if final.is_file() and abs(probe_duration(final) - duration_seconds) < 0.25:
         return final
 
-    # A provider-generated video must be passed directly; locally assembled
-    # or trimmed videos are not eligible inputs for native Veo extension.
-    source_uri = None
+    # A provider-generated cumulative video must be passed directly to the
+    # native extension API. Local concatenation of independent scenes is not a
+    # substitute for Extend.
+    if steps and extend_video is None:
+        raise RuntimeError(
+            "No verified native Veo Extend provider is configured; "
+            "set VEO_EXTEND_PROVIDER=google and GEMINI_VIDEO_API_KEY"
+        )
     latest = first
     for step in range(1, steps + 1):
         state_file = directory / ("extension_%02d.json" % step)
         video_file = directory / ("extension_%02d.mp4" % step)
         state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
         if state is None:
-            if source_uri is None:
-                source_uri = await _provider_uri(base_url, api_key, task_id)
-            state = {"status": "submitting", "source_uri": source_uri, "step": step}
+            state = {"status": "submitting", "source_artifact": latest.name, "step": step}
             write_job(state_file, state)
             if progress:
                 await progress("Veo Extend: продление %d из %d" % (step, steps))
             try:
-                uri, response = await extend_veo(
-                    base_url, api_key, source_uri, _extension_prompt(prompt),
-                    model=os.getenv("VEO_EXTEND_MODEL", "veo-3.1"))
-                state = {"status": "accepted", "source_uri": source_uri,
-                         "result_uri": uri, "response": response, "step": step}
+                result = await extend_video(
+                    latest.read_bytes(), _extension_prompt(prompt))
+                if not isinstance(result, bytes) or len(result) < 1024:
+                    raise RuntimeError("Native Veo Extend returned empty video bytes")
+                _write_video_atomically(video_file, result)
+                state = {"status": "accepted", "source_artifact": latest.name,
+                         "result_artifact": video_file.name, "step": step}
                 write_job(state_file, state)
-            except BaseException:
-                write_job(state_file, {"status": "uncertain",
-                                       "source_uri": source_uri, "step": step})
+            except Exception as exc:
+                if exc.__class__.__name__ in {
+                    "GoogleVeoSubmissionUncertain", "GoogleVeoPollUncertain", "UncertainExtension"
+                }:
+                    write_job(state_file, {"status": "uncertain",
+                                           "source_artifact": latest.name, "step": step,
+                                           "error": str(exc)[:500]})
+                else:
+                    write_job(state_file, {"status": "rejected",
+                                           "source_artifact": latest.name, "step": step,
+                                           "error": str(exc)[:500]})
                 raise
-        if state.get("status") != "accepted" or not state.get("result_uri"):
+        if state.get("status") != "accepted" or not state.get("result_artifact"):
             raise RuntimeError("Extension %d needs provider reconciliation; no paid retry" % step)
-        source_uri = state["result_uri"]
         if not video_file.is_file():
-            await _download(source_uri, video_file)
+            raise RuntimeError(
+                "Extension %d was accepted but its local result artifact is missing; "
+                "manual provider reconciliation is required" % step
+            )
         expected = 8 + 7 * step
         actual = probe_duration(video_file)
         if abs(actual - expected) > 0.5:
@@ -199,6 +217,22 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
     if abs(probe_duration(final) - duration_seconds) > 0.25:
         raise RuntimeError("Final video duration mismatch")
     return final
+
+
+def _write_video_atomically(destination: Path, payload: bytes) -> None:
+    """Persist an accepted native result without exposing a partial MP4."""
+    import tempfile
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".extension-", suffix=".mp4", dir=str(destination.parent))
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(tmp, destination)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 async def create_extended_15(**kwargs):

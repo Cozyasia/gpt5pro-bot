@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class Veo24SecondProductionFlowTests(unittest.TestCase):
     def test_telegram_callback_accepts_24_seconds(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
-        self.assertIn('pattern=r"^veoopt:dur:(?:8|15|24|30|60)$"', source)
+        self.assertIn('pattern=r"^veoopt:dur:(?:8|15|24|30|45|60|90|120|148)$"', source)
 
     def test_voice_fit_rejects_a_speed_change_outside_safe_limit(self):
         from neyrobot_prod.veo_tts_timeline import required_atempo_factor
@@ -61,7 +61,8 @@ class Veo24SecondProductionFlowTests(unittest.TestCase):
         self.assertIn("VEO_24S_TTS_COST_PER_MINUTE_USD", source)
         self.assertIn("def _veo_24s_provider_cost_usd", source)
         self.assertIn("3 * VEO_24S_KLING_LIPSYNC_COST_USD", source)
-        self.assertIn("provider_cost = _veo_24s_provider_cost_usd() if engine == \"veo\" and duration == 24", source)
+        self.assertIn("provider_cost = _video_provider_cost_usd(engine, duration)", source)
+        self.assertIn("def _veo_24s_provider_cost_usd()", source)
 
 
 if __name__ == "__main__":
