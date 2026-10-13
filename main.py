@@ -10443,7 +10443,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         if not image:
             await update.effective_message.reply_text("⚠️ Фотография ведущего не найдена. Отправьте фото и повторите запрос. Генерация не запущена.")
             return False
-        if len(image) > 10 * 1024 * 1024 or image[:3] != b"\\xff\\xd8\\xff":
+        if len(image) > 10 * 1024 * 1024 or image[:3] != bytes((255, 216, 255)):
             await update.effective_message.reply_text("⚠️ Для референса Veo отправьте JPEG-фото размером до 10 МБ. Генерация не запущена.")
             return False
     if engine == "veo" and duration > 8:
