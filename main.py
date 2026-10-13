@@ -15724,7 +15724,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
     from neyrobot_prod.veo_resumable_pipeline import resume_veo_job
 
     # Spoken dialogue is optional: don't mistake the visual brief for narration.
-    match = re.search(r'(?:произносит|говорит|says)\\s*[:：]\\s*[«"“](.+?)[»"”]', prompt, re.I | re.S)
+    match = re.search(r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]', prompt, re.I | re.S)
     script = match.group(1).strip() if match else ""
     root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
     job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
