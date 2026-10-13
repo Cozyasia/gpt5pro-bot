@@ -32,6 +32,10 @@ class VeoContinuityTests(unittest.TestCase):
             self.assertIn(scene.spoken_text, prompt)
             self.assertIn("Speak these words ONCE only", prompt)
             self.assertIn("Do not invent on-screen words", prompt)
+            self.assertIn("ONLY speech permitted", prompt)
+            for other in scenes:
+                if other.index != scene.index:
+                    self.assertNotIn('The presenter says exactly in Russian: "' + other.spoken_text + '"', prompt)
 
     def test_ffmpeg_uses_low_memory_fades_and_720p_default(self):
         source = (ROOT / "neyrobot_prod/veo_assembler.py").read_text(encoding="utf-8")
