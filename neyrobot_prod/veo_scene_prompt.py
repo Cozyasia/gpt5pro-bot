@@ -30,6 +30,11 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
         "as the reference. " + presenter.strip()
         if presenter.strip() else ""
     )
+    audio_guard = (
+        "The dialogue above is the ONLY speech permitted in this scene. "
+        "No additional voiceover, narration, repeated opening, or unrelated words. "
+        "Keep music and ambience quiet under speech; end at the scene boundary."
+    )
     visual_beats = (
         "Opening establishing shot; introduce the product context without showing invented interface text.",
         "Detail shot of hands, real environment and product use; maintain visual palette.",
@@ -50,4 +55,5 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
         RUSSIAN_VOICE_RULES,
         composition_instructions(text_policy or TextPolicy()),
         dialogue,
+        audio_guard,
     )).strip()
