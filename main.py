@@ -15954,7 +15954,7 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
     if not OPENAI_TTS_KEY:
         await update.effective_message.reply_text("⚠️ OpenAI TTS не настроен. Veo и Kling не были запущены.")
         return False
-    if not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY):
+    if context.user_data.get("veo_use_presenter_reference") and (not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY)):
         await update.effective_message.reply_text("⚠️ Kling Lip-Sync не настроен. Veo и TTS не были запущены.")
         return False
 
@@ -16021,7 +16021,7 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             if not isinstance(clips, list):
                 raise RuntimeError("Veo 24-second scene pipeline did not return scene files")
-            voice_scenes = validate_voice_scenes(directory, script)
+            voice_scenes = validate_voice_scenes(directory, script, require_audio_slices=bool(context.user_data.get("veo_use_presenter_reference")))
             master_bytes, synced_paths = master_tts.read_bytes(), []
             # Narrator-only commercials have no speaking face; do not submit paid lip-sync tasks.
             if not context.user_data.get("veo_use_presenter_reference"):
