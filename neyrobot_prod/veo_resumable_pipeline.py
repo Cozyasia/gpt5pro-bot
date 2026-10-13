@@ -5,7 +5,6 @@ job lock and persist the job on a mounted volume (Render: /data).
 """
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -24,7 +23,8 @@ async def resume_veo_job(
     poll: Callable[[str], Awaitable[bytes]],
     presenter: str = "",
     reference_image: str | Path | None = None,
-) -> Path:
+    assemble: bool = True,
+) -> Path | list[Path]:
     """Create or resume scenes and return assembled MP4 path.
 
     Completed scenes are loaded, accepted scenes are polled, uncertain scenes
@@ -52,8 +52,13 @@ async def resume_veo_job(
         async def submit_this(prompt=prompt, index=scene.index):
             return await submit(prompt, index)
         async def save_this(index, payload):
-            await asyncio.to_thread(save_scene, directory, index, payload)
+            # Atomic file writes are bounded to one scene and must complete before
+            # the durable journal moves to completed.  Keep this synchronous: the
+            # Render/Python runtime's default executor can stall during shutdown.
+            save_scene(directory, index, payload)
         await run_journaled_scene(journal, scene.index, submit_this, poll, save_this)
     clips = list_complete_scenes(directory, len(scenes))
+    if not assemble:
+        return clips
     output = directory / "final.mp4"
-    return await asyncio.to_thread(assemble_vertical_video, clips, output, duration_seconds)
+    return assemble_vertical_video(clips, output, duration_seconds)
