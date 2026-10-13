@@ -23,8 +23,8 @@ def assemble_vertical_video(
 ) -> Path:
     """Normalize A/V per clip, concatenate, then trim to exact requested length.
 
-    Clip count and duration must match the timeline planner. FFmpeg preserves
-    each scene's native speech; no additional audio synthesis is performed.
+    The seamless 24-second workflow remuxes one master voice after this step,
+    so there must be no per-scene visual or audio fades that create gaps.
     """
     from .veo_multiscene import ALLOWED_DURATIONS, VEO_SCENE_SECONDS
     from math import ceil

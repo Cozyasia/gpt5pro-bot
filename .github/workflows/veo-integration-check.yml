@@ -16,3 +16,4 @@ jobs:
           python-version: '3.11'
       - run: python -m py_compile main.py
       - run: python -m unittest discover -s tests -p 'test_veo_fast_routing.py' -v
+      - run: python -m unittest discover -s tests -p 'test_veo_continuity_contract.py' -v

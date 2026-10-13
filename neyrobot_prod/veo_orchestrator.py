@@ -5,7 +5,6 @@ No automatic retry after an ambiguous provider response: a task may be billed.
 """
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Awaitable, Callable
@@ -53,6 +52,4 @@ async def render_multiscene_video(
                 paths.append(clip_path)
             except Exception as exc:
                 raise SceneGenerationError(scene.index, len(scenes)) from exc
-        return await asyncio.to_thread(
-            assemble_vertical_video, paths, destination, duration_seconds
-        )
+        return assemble_vertical_video(paths, destination, duration_seconds)

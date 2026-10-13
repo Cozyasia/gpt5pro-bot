@@ -643,6 +643,11 @@ TEXT_VIDEO_UNIT_COST_USD = _env_float("TEXT_VIDEO_UNIT_COST_USD", KLING_UNIT_COS
 TEXT_VIDEO_DEFAULT_ENGINE = os.environ.get("TEXT_VIDEO_DEFAULT_ENGINE", "kling").strip().lower() or "kling"
 VEO_FAST_MODEL = os.environ.get("VEO_FAST_MODEL", "veo3.1-fast")
 VEO_FAST_COST_PER_SECOND_USD = _env_float("VEO_FAST_COST_PER_SECOND_USD", 0.096)
+# Published Comet price for kling-advanced-lip-syn, one request per scene.
+VEO_24S_KLING_LIPSYNC_COST_USD = _pricing_cost("VEO_24S_KLING_LIPSYNC_COST_USD", 0.056)
+# OpenAI lists gpt-4o-mini-tts at an estimated $0.015 per generated minute.
+# A 24-second master track is therefore budgeted before any paid provider POST.
+VEO_24S_TTS_COST_PER_MINUTE_USD = _pricing_cost("VEO_24S_TTS_COST_PER_MINUTE_USD", 0.015)
 TEXT_VIDEO_ALLOW_RUNWAY = os.environ.get("TEXT_VIDEO_ALLOW_RUNWAY", "1").strip().lower() not in ("0", "false", "no", "off")
 
 _photo_clip_background_jobs: set[str] = set()
@@ -2061,6 +2066,24 @@ def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
     if engine == "runway":
         return round(max(2, d) * RUNWAY_COST_PER_SECOND_USD, 4)
     return max(0.0, float(TEXT_VIDEO_UNIT_COST_USD or 0.0))
+
+
+def _veo_24s_provider_cost_usd() -> float:
+    """Known provider estimate for 3 Veo scenes + 3 lip-sync jobs + one 24s TTS."""
+    return round(
+        _video_provider_cost_usd("veo", 24)
+        + 3 * VEO_24S_KLING_LIPSYNC_COST_USD
+        + (24.0 / 60.0) * VEO_24S_TTS_COST_PER_MINUTE_USD,
+        4,
+    )
+
+
+def _veo_24s_cost_breakdown_usd() -> tuple[float, float, float, float]:
+    veo = _video_provider_cost_usd("veo", 24)
+    lipsync = round(3 * VEO_24S_KLING_LIPSYNC_COST_USD, 4)
+    tts = round((24.0 / 60.0) * VEO_24S_TTS_COST_PER_MINUTE_USD, 4)
+    return veo, lipsync, tts, round(veo + lipsync + tts, 4)
+
 
 def _video_price_credits(engine: str, duration_s: int) -> int:
     return _retail_credits(_video_provider_cost_usd(engine, duration_s))
@@ -4521,7 +4544,9 @@ def _veo_video_options_keyboard(context):
     selected = int(context.user_data.get("veo_text_duration", 8))
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (8, 15)],
-        [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (30, 60)],
+        [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (24, 30, 60)],
+        [InlineKeyboardButton(("✅ " if context.user_data.get("veo_use_presenter_reference") else "") + "👤 Ведущий с фото", callback_data="veoopt:ref:on"),
+         InlineKeyboardButton(("✅ " if not context.user_data.get("veo_use_presenter_reference") else "") + "🎞️ Без ведущего", callback_data="veoopt:ref:off")],
     ])
 
 
@@ -4530,11 +4555,20 @@ async def _on_veo_video_option(update: Update, context: ContextTypes.DEFAULT_TYP
     if not context.user_data.get("awaiting_text_video_prompt") or context.user_data.get("text_video_engine") != "veo":
         await q.answer("Сначала выберите Veo.", show_alert=True)
         return
+    data = q.data or ""
+    if data in ("veoopt:ref:on", "veoopt:ref:off"):
+        if data.endswith(":on") and not _get_cached_photo(q.from_user.id):
+            await q.answer("Сначала отправьте фотографию ведущего в этот чат.", show_alert=True)
+            return
+        context.user_data["veo_use_presenter_reference"] = data.endswith(":on")
+        await q.answer("Референс ведущего включён" if data.endswith(":on") else "Режим без референса")
+        await q.message.edit_reply_markup(reply_markup=_veo_video_options_keyboard(context))
+        return
     try:
-        duration = int((q.data or "").rsplit(":", 1)[-1])
+        duration = int(data.rsplit(":", 1)[-1])
     except ValueError:
         duration = 0
-    if duration not in (8, 15, 30, 60):
+    if duration not in (8, 15, 24, 30, 60):
         await q.answer("Недопустимая длительность", show_alert=True)
         return
     context.user_data["veo_text_duration"] = duration
@@ -4588,13 +4622,14 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
         context.user_data.setdefault("kling_text_sound", False)
     if engine == "veo":
         context.user_data.setdefault("veo_text_duration", 8)
+        context.user_data["veo_use_presenter_reference"] = False
     labels = {"sora": "Sora 2 — только без людей", "kling": "Kling", "runway": "Runway", "veo": "Google Veo 3.1 Fast · русский звук (эксперимент)"}
     await q.answer(labels[engine][:180])
     warning = "\n⚠️ В промпте не должно быть людей, лиц или персонажей." if engine == "sora" else ""
     await q.message.reply_text(
         f"✅ Выбран движок: {labels[engine]}.{warning}\n"
         "Теперь напишите промпт или отправьте voice. "
-        + ("Для Veo выберите 8/15/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
+        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
         + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
         , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else None
     )
@@ -8472,9 +8507,10 @@ def _provider_task_id(payload: dict) -> str:
     return str(data.get("task_id") or data.get("taskId") or data.get("id") or payload.get("task_id") or payload.get("id") or "").strip()
 
 
-async def _kling_post_json_with_retry(client, path: str, headers: dict, payload: dict, caption: str) -> dict:
+async def _kling_post_json_with_retry(client, path: str, headers: dict, payload: dict, caption: str, *, retry_unknown_post: bool = True) -> dict:
     last_error = ""
-    for attempt in range(KLING_LIPSYNC_RETRY_ATTEMPTS):
+    attempts = KLING_LIPSYNC_RETRY_ATTEMPTS if retry_unknown_post else 1
+    for attempt in range(attempts):
         try:
             response = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, json=payload)
             if response.status_code < 400:
@@ -8492,7 +8528,7 @@ async def _kling_post_json_with_retry(client, path: str, headers: dict, payload:
             raise
         except Exception as exc:
             last_error = f"POST {path}: {exc}"
-        if attempt + 1 < KLING_LIPSYNC_RETRY_ATTEMPTS:
+        if attempt + 1 < attempts:
             await asyncio.sleep(KLING_LIPSYNC_RETRY_BASE_S * (2 ** attempt))
     raise RuntimeError(f"{caption}: {last_error or 'provider request failed'}")
 
@@ -8504,6 +8540,7 @@ async def _run_kling_lipsync_result_bytes(
     duration_ms: int,
     max_wait_s: int | None = None,
     on_provider_state=None,
+    existing_task_id: str = "",
 ) -> bytes:
     """Documented Comet/Kling identify-face -> advanced-lip-sync transport."""
     if not KLING_LIPSYNC_ENABLED:
@@ -8517,23 +8554,27 @@ async def _run_kling_lipsync_result_bytes(
         raise ValueError("Kling lip-sync duration must be between 2000 and 10000 ms")
     headers = {"Authorization": f"Bearer {KLING_API_KEY or COMET_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-        identified = await _kling_post_json_with_retry(client, KLING_IDENTIFY_FACE_PATH, headers, {"video_url": video_url}, "Kling identify-face")
-        data = _provider_data_object(identified)
-        session_id = str(data.get("session_id") or identified.get("session_id") or "").strip()
-        faces = data.get("face_data") or data.get("faces") or []
-        face_id = str(faces[0].get("face_id") or faces[0].get("id") or "").strip() if isinstance(faces, list) and faces and isinstance(faces[0], dict) else ""
-        if not session_id or not face_id:
-            raise RuntimeError(f"Kling identify-face: missing session/face in {json.dumps(identified, ensure_ascii=False)[:700]}")
-        if callable(on_provider_state): on_provider_state("identify_session_id", session_id)
-        payload = {"session_id": session_id, "external_task_id": f"mv-lipsync-{uuid.uuid4().hex[:24]}", "face_choose": [{
-            "face_id": face_id, "sound_file": audio_url, "sound_start_time": 0, "sound_end_time": duration_ms,
-            "sound_insert_time": 0, "sound_volume": 1.0, "original_sound_volume": 0.0,
-        }]}
-        created = await _kling_post_json_with_retry(client, KLING_LIPSYNC_CREATE_PATH, headers, payload, "Kling advanced lip-sync")
-        task_id = _provider_task_id(created)
+        task_id = str(existing_task_id or "").strip()
         if not task_id:
-            raise RuntimeError(f"Kling advanced lip-sync: no task id in {json.dumps(created, ensure_ascii=False)[:700]}")
-        if callable(on_provider_state): on_provider_state("lip_sync_task_id", task_id)
+            identified = await _kling_post_json_with_retry(client, KLING_IDENTIFY_FACE_PATH, headers, {"video_url": video_url}, "Kling identify-face")
+            data = _provider_data_object(identified)
+            session_id = str(data.get("session_id") or identified.get("session_id") or "").strip()
+            faces = data.get("face_data") or data.get("faces") or []
+            face_id = str(faces[0].get("face_id") or faces[0].get("id") or "").strip() if isinstance(faces, list) and faces and isinstance(faces[0], dict) else ""
+            if not session_id or not face_id:
+                raise RuntimeError(f"Kling identify-face: missing session/face in {json.dumps(identified, ensure_ascii=False)[:700]}")
+            if callable(on_provider_state): on_provider_state("identify_session_id", session_id)
+            payload = {"session_id": session_id, "external_task_id": f"mv-lipsync-{uuid.uuid4().hex[:24]}", "face_choose": [{
+                "face_id": face_id, "sound_file": audio_url, "sound_start_time": 0, "sound_end_time": duration_ms,
+                "sound_insert_time": 0, "sound_volume": 1.0, "original_sound_volume": 0.0,
+            }]}
+            # This POST can create a billed task. A missing response is uncertain,
+            # so never retry it automatically.
+            created = await _kling_post_json_with_retry(client, KLING_LIPSYNC_CREATE_PATH, headers, payload, "Kling advanced lip-sync", retry_unknown_post=False)
+            task_id = _provider_task_id(created)
+            if not task_id:
+                raise RuntimeError(f"Kling advanced lip-sync: no task id in {json.dumps(created, ensure_ascii=False)[:700]}")
+            if callable(on_provider_state): on_provider_state("lip_sync_task_id", task_id)
         result = await _poll_video_task_for_bytes(client, headers, COMET_BASE_URL, [KLING_LIPSYNC_STATUS_PATH, "/kling/v1/videos/lip-sync/{id}"], task_id, "Kling lip-sync", max_wait_s=int(max_wait_s or VOCAL_CLIP_KLING_MAX_WAIT_S))
     if not result or len(result) < 512 or result[4:8] != b"ftyp":
         raise RuntimeError("Kling lip-sync result is not an MP4 video")
@@ -9534,6 +9575,9 @@ async def _apply_kling_lipsync_to_scene_file(
     contract,
     directory: str,
     on_provider_state=None,
+    audio_part_path: str = "",
+    existing_task_id: str = "",
+    sync_file_ops: bool = False,
 ) -> str:
     """Replace only one ScenePlan vocal interval and fail closed on any transport/provider error."""
     if not contract.has_lip_sync:
@@ -9544,13 +9588,16 @@ async def _apply_kling_lipsync_to_scene_file(
     relative_end = absolute_end - float(contract.start_s)
     duration = absolute_end - absolute_start
     interval_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsync_input.mp4")
-    interval_path = await asyncio.to_thread(
-        _extract_video_interval_file_sync,
-        scene_path,
-        relative_start,
-        duration,
-        interval_path,
-    )
+    if sync_file_ops:
+        interval_path = _extract_video_interval_file_sync(scene_path, relative_start, duration, interval_path)
+    else:
+        interval_path = await asyncio.to_thread(
+            _extract_video_interval_file_sync,
+            scene_path,
+            relative_start,
+            duration,
+            interval_path,
+        )
     if not interval_path:
         raise RuntimeError(f"Не удалось подготовить video interval для lip-sync сцены {contract.index}.")
     video_url = await _upload_file_to_telegram_file_url(
@@ -9560,7 +9607,7 @@ async def _apply_kling_lipsync_to_scene_file(
         f"scene_{contract.index:02d}_lipsync.mp4",
         f"🎭 Video interval сцены {contract.index} подготовлен для lip-sync.",
     )
-    audio_part = await _extract_audio_segment_bytes(audio_bytes, absolute_start, duration)
+    audio_part = Path(audio_part_path).read_bytes() if audio_part_path else await _extract_audio_segment_bytes(audio_bytes, absolute_start, duration)
     if not audio_part:
         raise RuntimeError(f"Не удалось извлечь точный audio interval для lip-sync сцены {contract.index}.")
     audio_url = await _upload_bytes_to_telegram_file_url(
@@ -9579,19 +9626,26 @@ async def _apply_kling_lipsync_to_scene_file(
         duration_ms=int(round(duration * 1000)),
         max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
         on_provider_state=on_provider_state,
+        existing_task_id=existing_task_id,
     )
     synced_path = _write_video_segment_file(directory, 1000 + contract.index, synced_bytes)
     del synced_bytes
     output_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsynced.mp4")
-    output_path = await asyncio.to_thread(
-        _replace_video_interval_file_sync,
-        scene_path,
-        synced_path,
-        relative_start,
-        relative_end,
-        float(contract.duration_s),
-        output_path,
-    )
+    if sync_file_ops:
+        output_path = _replace_video_interval_file_sync(
+            scene_path, synced_path, relative_start, relative_end,
+            float(contract.duration_s), output_path,
+        )
+    else:
+        output_path = await asyncio.to_thread(
+            _replace_video_interval_file_sync,
+            scene_path,
+            synced_path,
+            relative_start,
+            relative_end,
+            float(contract.duration_s),
+            output_path,
+        )
     if not output_path:
         raise RuntimeError(f"Не удалось встроить lip-sync interval в сцену {contract.index}.")
     return output_path
@@ -10414,7 +10468,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         engine = "kling"
     if engine == "veo":
         duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
-        if duration not in (8, 15, 30, 60):
+        if duration not in (8, 15, 24, 30, 60):
             duration = 8
     if engine == "kling":
         duration = int(context.user_data.get("kling_text_duration", 5))
@@ -10426,8 +10480,55 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             reply_markup=_textvideo_action_kb("act"),
         )
         return False
-    provider_cost = _video_provider_cost_usd(engine, duration)
+    if engine == "veo" and duration > 8 and context.user_data.get("veo_use_presenter_reference"):
+        image = _get_cached_photo(update.effective_user.id)
+        if not image:
+            await update.effective_message.reply_text("⚠️ Фотография ведущего не найдена. Отправьте фото и повторите запрос. Генерация не запущена.")
+            return False
+        if len(image) > 10 * 1024 * 1024 or image[:3] != bytes((255, 216, 255)):
+            await update.effective_message.reply_text("⚠️ Для референса Veo отправьте JPEG-фото размером до 10 МБ. Генерация не запущена.")
+            return False
+    if engine == "veo" and duration > 8:
+        # Opt-in only: a previously sent Telegram photo may be used as presenter reference.
+        # Do not enable this for ordinary text-to-video requests.
+        context.user_data["veo_use_presenter_reference"] = bool(
+            context.user_data.get("veo_use_presenter_reference", False)
+        )
+        import re
+        # Multi-scene native dialogue is billed per scene. Require an explicit
+        # speech track to avoid generating four independent opening speeches.
+        speech_match = re.search(
+            r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]',
+            prompt, re.I | re.S,
+        )
+        if not speech_match:
+            await update.effective_message.reply_text(
+                "⚠️ Для многосценного Veo нужен отдельный текст озвучки. "
+                "Иначе каждая сцена самостоятельно придумывает и повторяет реплику.\n\n"
+                "Добавьте к описанию строку:\n"
+                'Говорит: «Ваш точный русский текст рекламы, '
+                'разделяемый по сценам без повторов».\n\n'
+                "Генерация и списание кредитов не запущены."
+            )
+            return False
+        from neyrobot_prod.veo_multiscene import plan_video
+        try:
+            plan_video(duration, speech_match.group(1))
+        except ValueError as exc:
+            await update.effective_message.reply_text(
+                f"⚠️ Текст озвучки не подходит: {exc}. Кредиты не списаны."
+            )
+            return False
+    provider_cost = _veo_24s_provider_cost_usd() if engine == "veo" and duration == 24 else _video_provider_cost_usd(engine, duration)
     label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
+    if engine == "veo" and duration == 24:
+        veo_cost, lipsync_cost, tts_cost, total_cost = _veo_24s_cost_breakdown_usd()
+        await update.effective_message.reply_text(
+            "🎬 План 24 сек: 3 сцены × 8 сек · 9:16 · одна русская TTS-дорожка · 3× Kling Lip-Sync.\n"
+            f"Оценка провайдеров: Veo ${veo_cost:.3f} + Kling ${lipsync_cost:.3f} + OpenAI TTS ≈ ${tts_cost:.3f} "
+            f"= ${total_cost:.3f}.\n"
+            "Точная цена в кредитах будет показана до запуска; при отмене до подтверждённого результата кредиты не списываются."
+        )
 
     async def _go():
         await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}.")
@@ -10441,7 +10542,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     await _try_pay_then_do(
         update, context, update.effective_user.id,
-        "runway", provider_cost, _go,
+        engine, provider_cost, _go,
         remember_kind=f"text_video_{engine}",
         remember_payload={"prompt": prompt[:500], "duration": duration, "aspect": aspect, "engine": engine},
     )
@@ -15723,6 +15824,8 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
 
 async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
     """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
+    if duration == 24:
+        return await _run_veo_24s_lipsync(update, context, prompt)
     import fcntl
     import hashlib
     import re
@@ -15736,6 +15839,27 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
     job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
     directory = os.path.join(root, job_hash)
     os.makedirs(directory, exist_ok=True)
+    # Persist the presenter snapshot inside the job, not in volatile user cache.
+    reference_path = None
+    if context.user_data.get("veo_use_presenter_reference"):
+        from pathlib import Path
+        import tempfile
+        photo_bytes = _get_cached_photo(update.effective_user.id)
+        if not photo_bytes:
+            await update.effective_message.reply_text("⚠️ Референс ведущего не найден. Сначала отправьте фотографию, затем повторите запрос. Кредиты за Veo не списывались на этом этапе.")
+            return False
+        reference_path = str(Path(directory) / "presenter_reference.jpg")
+        if not os.path.exists(reference_path):
+            fd, tmp = tempfile.mkstemp(prefix=".presenter_", dir=directory)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(photo_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, reference_path)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
     lock_path = os.path.join(directory, ".lock")
     with open(lock_path, "a+b") as lock:
         try:
@@ -15745,7 +15869,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
             return False
         async def submit(scene_prompt, index):
             await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/{(duration + 7) // 8}")
-            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt)
+            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt, reference_image=reference_path)
         async def poll(task_id):
             log.info("VEO_SCENE_POLL_START job=%s task_id=%s", job_hash, task_id)
             async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
@@ -15759,7 +15883,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             result = await resume_veo_job(
                 job_directory=directory, duration_seconds=duration,
-                spoken_script=script, visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else prompt, submit=submit, poll=poll)
+                spoken_script=script, visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else prompt, submit=submit, poll=poll, reference_image=reference_path)
             log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
             await _reply_video_file(update, str(result), f"🎬 Veo 3.1 Fast · {duration} сек · 9:16")
             log.info("VEO_DELIVERY_DONE job=%s", job_hash)
@@ -15769,6 +15893,143 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.effective_message.reply_text(
                 "⚠️ Veo: генерация остановлена. Оплаченные сцены не будут отправлены повторно автоматически. "
                 + str(exc)[:220])
+            return False
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, *, resume_directory=None) -> bool:
+    """Durable single-voice workflow: TTS -> 3 Veo -> 3 Kling -> final mux."""
+    import fcntl
+    import hashlib
+    import re
+    from pathlib import Path
+    from neyrobot_prod.veo_24s_state import (
+        begin_lipsync_submission, load_state, mark_lipsync_accepted,
+        mark_lipsync_completed, mark_lipsync_uncertain, record_job_metadata,
+    )
+    from neyrobot_prod.veo_assembler import assemble_vertical_video, probe_duration
+    from neyrobot_prod.veo_comet_adapter import submit_veo_task
+    from neyrobot_prod.veo_resumable_pipeline import resume_veo_job
+    from neyrobot_prod.veo_tts_timeline import fit_tts_master_to_24_seconds, mux_master_voice, split_tts_master
+    from neyrobot_prod.veo_voice_preflight import validate_voice_scenes
+
+    match = re.search(r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]', prompt, re.I | re.S)
+    script = match.group(1).strip() if match else ""
+    if not script:
+        await update.effective_message.reply_text("⚠️ Для 24-секундного ролика нужен точный русский текст после «Говорит:». Генерация не запущена.")
+        return False
+    if not OPENAI_TTS_KEY:
+        await update.effective_message.reply_text("⚠️ OpenAI TTS не настроен. Veo и Kling не были запущены.")
+        return False
+    if not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY):
+        await update.effective_message.reply_text("⚠️ Kling Lip-Sync не настроен. Veo и TTS не были запущены.")
+        return False
+
+    root = Path(os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs"))
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|24|" + prompt).encode("utf-8")).hexdigest()[:24]
+    directory = Path(resume_directory) if resume_directory else root / job_hash
+    directory.mkdir(parents=True, exist_ok=True)
+    workflow_path = directory / "workflow_24s.json"
+    reference_path = None
+    saved_reference = str(load_state(workflow_path).get("job", {}).get("reference_image") or "")
+    if saved_reference and Path(saved_reference).is_file():
+        reference_path = Path(saved_reference)
+    elif context.user_data.get("veo_use_presenter_reference"):
+        photo = _get_cached_photo(update.effective_user.id)
+        if not photo or len(photo) > 10 * 1024 * 1024 or photo[:3] != bytes((255, 216, 255)):
+            await update.effective_message.reply_text("⚠️ Для ведущего нужен сохранённый JPEG до 10 МБ. Платные задачи не запущены.")
+            return False
+        reference_path = directory / "presenter_reference.jpg"
+        if not reference_path.exists():
+            reference_path.write_bytes(photo)
+
+    record_job_metadata(workflow_path, spoken_script=script, prompt=prompt, duration_seconds=24,
+                        reference_image=str(reference_path) if reference_path else "", status="preflight")
+    with open(directory / ".lock", "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("⏳ Этот 24-секундный ролик уже обрабатывается.")
+            return False
+        try:
+            source_tts, master_tts = directory / "tts_master_source.mp3", directory / "tts_master.wav"
+            if not master_tts.exists():
+                if not source_tts.exists():
+                    await update.effective_message.reply_text("🎙️ Создаю единую русскую озвучку 24 сек…")
+                    raw_tts = _tts_bytes_sync(script, "mp3")
+                    if not raw_tts:
+                        raise RuntimeError("OpenAI TTS did not return audio")
+                    source_tts.write_bytes(raw_tts)
+                try:
+                    fit_tts_master_to_24_seconds(source_tts, master_tts)
+                except ValueError as exc:
+                    raise RuntimeError("Текст не подходит под естественный 24-секундный темп. Сократите или расширьте текст и повторите: " + str(exc)) from exc
+            split_tts_master(master_tts, directory)
+            record_job_metadata(workflow_path, tts_master=str(master_tts),
+                                tts_slices=[str(directory / f"tts_scene_{i:02d}.wav") for i in range(1, 4)], status="tts_ready")
+
+            async def submit(scene_prompt, index):
+                await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/3")
+                return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt,
+                                             reference_image=str(reference_path) if reference_path else None)
+
+            async def poll(task_id):
+                async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                    return await _poll_video_task_for_bytes(
+                        client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                        COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"], task_id,
+                        "Veo 24-second", max_wait_s=1200,
+                    )
+
+            clips = await resume_veo_job(
+                job_directory=directory, duration_seconds=24, spoken_script=script,
+                visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip(),
+                submit=submit, poll=poll, reference_image=reference_path, assemble=False,
+            )
+            if not isinstance(clips, list):
+                raise RuntimeError("Veo 24-second scene pipeline did not return scene files")
+            voice_scenes = validate_voice_scenes(directory, script)
+            master_bytes, synced_paths = master_tts.read_bytes(), []
+            for voice_scene in voice_scenes:
+                final_scene = directory / f"scene_{voice_scene.index:02d}_lipsynced.mp4"
+                item = load_state(workflow_path)["lipsync"].get(str(voice_scene.index), {})
+                if item.get("state") == "completed" and final_scene.is_file() and final_scene.stat().st_size >= 1024:
+                    synced_paths.append(final_scene)
+                    continue
+                existing_task_id = str(item.get("task_id") or "") if item.get("state") == "accepted" else ""
+                if not existing_task_id:
+                    begin_lipsync_submission(workflow_path, voice_scene.index)
+                await update.effective_message.reply_text(f"🎭 Kling Lip-Sync: сцена {voice_scene.index}/3")
+                contract = types.SimpleNamespace(index=voice_scene.index, start_s=voice_scene.start_seconds,
+                    end_s=voice_scene.end_seconds, duration_s=8.0, has_lip_sync=True,
+                    lip_sync_start_s=voice_scene.start_seconds, lip_sync_end_s=voice_scene.end_seconds)
+                try:
+                    synced = await _apply_kling_lipsync_to_scene_file(
+                        update, context, master_bytes, str(voice_scene.video_path), contract, str(directory),
+                        audio_part_path=str(voice_scene.audio_path), existing_task_id=existing_task_id, sync_file_ops=True,
+                        on_provider_state=lambda key, value, i=voice_scene.index: mark_lipsync_accepted(workflow_path, i, value) if key == "lip_sync_task_id" else None,
+                    )
+                except Exception:
+                    if load_state(workflow_path)["lipsync"].get(str(voice_scene.index), {}).get("state") == "submitting":
+                        mark_lipsync_uncertain(workflow_path, voice_scene.index)
+                    raise
+                synced_path = Path(synced)
+                mark_lipsync_completed(workflow_path, voice_scene.index, str(synced_path))
+                synced_paths.append(synced_path)
+
+            visual = directory / "visual_24s.mp4"
+            assemble_vertical_video(synced_paths, visual, 24)
+            final = mux_master_voice(visual, master_tts, directory / "final_24s.mp4")
+            if abs(probe_duration(final) - 24.0) > 0.15:
+                raise RuntimeError("Final 24-second video duration validation failed")
+            record_job_metadata(workflow_path, status="completed", final_mp4=str(final))
+            await _reply_video_file(update, str(final), "🎬 Veo 3.1 Fast · 24 сек · единая русская озвучка · Kling Lip-Sync")
+            return True
+        except Exception as exc:
+            record_job_metadata(workflow_path, status="blocked", error=str(exc)[:500])
+            log.exception("Veo 24-second workflow failed job=%s", job_hash)
+            await update.effective_message.reply_text("⚠️ 24-секундный Veo остановлен. Подтверждённые Veo/Kling ID и файлы сохранены; автоматический повтор оплаченных задач заблокирован. " + str(exc)[:280])
             return False
         finally:
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
@@ -15787,6 +16048,18 @@ async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("Команда доступна только владельцу бота.")
         return
     root = Path(os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs"))
+    if context.args:
+        requested = root / context.args[0].strip()
+        workflow = requested / "workflow_24s.json"
+        if workflow.is_file():
+            from neyrobot_prod.veo_24s_state import load_state
+            prompt = str(load_state(workflow).get("job", {}).get("prompt") or "")
+            if not prompt:
+                await update.effective_message.reply_text("В 24-секундном задании нет исходного промпта; повторная отправка задач заблокирована.")
+                return
+            await update.effective_message.reply_text("♻️ Восстанавливаю 24-секундное задание только по сохранённым TTS/Veo/Kling checkpoint’ам.")
+            await _run_veo_24s_lipsync(update, context, prompt, resume_directory=requested)
+            return
     jobs = sorted(root.glob("*/journal.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not jobs:
         await update.effective_message.reply_text("На постоянном диске не найдено журналов Veo.")
@@ -18528,7 +18801,7 @@ def build_application() -> "Application":
     # 2) Новые режимы/подменю: mode:* и act:* (Учёба/Работа/Развлечения/Медицина)
     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
     app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10|15|30|60)|sound:(?:on|off))$"), group=0)
-    app.add_handler(CallbackQueryHandler(_on_veo_video_option, pattern=r"^veoopt:dur:(?:8|15|30|60)$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_veo_video_option, pattern=r"^veoopt:dur:(?:8|15|24|30|60)$"), group=0)
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)

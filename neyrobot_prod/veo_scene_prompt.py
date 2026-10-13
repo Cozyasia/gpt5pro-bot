@@ -16,24 +16,44 @@ def scene_prompt(scene: Scene, visual_brief: str, *, presenter: str = "", text_p
     if not visual_brief.strip():
         raise ValueError("Visual brief required")
     if not scene.spoken_text.strip():
-        dialogue = ("If the visual brief calls for spoken narration, speak naturally in Russian only; "
-                    "otherwise use natural ambient sound without speech.")
+        dialogue = ("No dialogue, no narration, no spoken words in this scene. "
+                    "Only subtle ambient sound. Do not repeat speech from any other scene.")
     else:
         dialogue = (
             'The presenter says exactly in Russian: "'
             + scene.spoken_text.replace('"', "'")
-            + '".'
+            + '". Speak these words ONCE only. No introductions, repetitions, paraphrases, '
+              'extra commentary or dialogue from other scenes. Do not restart the advertisement.'
         )
     continuity = (
         "Keep the same presenter appearance, outfit, lighting, and studio "
         "as the reference. " + presenter.strip()
         if presenter.strip() else ""
     )
+    audio_guard = (
+        "The dialogue above is the ONLY speech permitted in this scene. "
+        "No additional voiceover, narration, repeated opening, or unrelated words. "
+        "Keep music and ambience quiet under speech; end at the scene boundary."
+    )
+    visual_beats = (
+        "Opening establishing shot; introduce the product context without showing invented interface text.",
+        "Detail shot of hands, real environment and product use; maintain visual palette.",
+        "Supporting cinematic B-roll with natural motion and no invented UI or lettering.",
+        "Closing brand-safe composition with clean negative space for a real CTA overlay.",
+    )
+    beat = visual_beats[min(scene.index - 1, len(visual_beats) - 1)]
     return "\n".join((
         "Premium photorealistic vertical 9:16 commercial scene.",
         visual_brief.strip(),
+        f"Scene {scene.index}, timeline {scene.timeline_start}-{scene.timeline_end}s. {beat}",
+        "This is a DIFFERENT consecutive scene of the same advertisement, not a new advertisement. "
+        "Never restart the narrative. Do not invent on-screen words, subtitles, logos, "
+        "payment-app screens, fake user interfaces or text. Leave typography to postproduction.",
+        "If no image reference is supplied, avoid close-ups of a speaking presenter; "
+        "prefer hands, wide shots, and B-roll to prevent identity changes between scenes.",
         continuity,
         RUSSIAN_VOICE_RULES,
         composition_instructions(text_policy or TextPolicy()),
         dialogue,
+        audio_guard,
     )).strip()
