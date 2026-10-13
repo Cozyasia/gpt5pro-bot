@@ -18,7 +18,7 @@ class VoiceScene:
     audio_path: Path
 
 
-def validate_voice_scenes(job_directory: str | Path, spoken_script: str) -> tuple[VoiceScene, ...]:
+def validate_voice_scenes(job_directory: str | Path, spoken_script: str, *, require_audio_slices: bool = True) -> tuple[VoiceScene, ...]:
     """Require all three complete video clips and matching 8s TTS slices.
 
     A caller must not invoke paid lip-sync if any prerequisite is missing.
@@ -34,7 +34,7 @@ def validate_voice_scenes(job_directory: str | Path, spoken_script: str) -> tupl
     for scene in scenes:
         video = directory / f"scene_{scene.index:02d}.mp4"
         audio = directory / f"tts_scene_{scene.index:02d}.wav"
-        for path in (video, audio):
+        for path in ((video, audio) if require_audio_slices else (video,)):
             if not path.is_file() or path.stat().st_size < 1024:
                 raise FileNotFoundError(f"Required voice scene input missing: {path.name}")
         result.append(VoiceScene(scene.index, scene.timeline_start, scene.timeline_end, video, audio))
