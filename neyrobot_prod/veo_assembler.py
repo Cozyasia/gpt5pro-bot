@@ -43,7 +43,7 @@ def assemble_vertical_video(
     if output in inputs:
         raise ValueError("Output must not overwrite input")
     output.parent.mkdir(parents=True, exist_ok=True)
-    args = ["ffmpeg", "-hide_banner", "-nostdin", "-y"]
+    args = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1"]
     for path in inputs:
         args += ["-i", str(path)]
     filters = []
@@ -63,11 +63,15 @@ def assemble_vertical_video(
         "-filter_complex", ";".join(filters),
         "-map", "[v]", "-map", "[a]",
         "-t", str(duration_seconds),
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:v", "libx264", "-threads:v", "1", "-preset", "veryfast", "-crf", "23",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart", str(output),
     ]
-    subprocess.run(args, check=True, capture_output=True, timeout=600)
+    try:
+        subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=600)
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or b"")[-4000:].decode("utf-8", "replace")
+        raise RuntimeError(f"Veo FFmpeg assembly failed: {details}") from exc
     if abs(probe_duration(output) - duration_seconds) > 0.15:
         raise RuntimeError("Output duration validation failed")
     return output
