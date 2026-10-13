@@ -2052,7 +2052,7 @@ def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
     engine = (engine or "").strip().lower()
     d = _duration_for_engine(engine, duration_s) if "_duration_for_engine" in globals() else max(5, int(duration_s or 5))
     if engine == "veo":
-        return round(8 * VEO_FAST_COST_PER_SECOND_USD, 4)
+        return round(((int(duration_s or 8) + 7) // 8) * 8 * VEO_FAST_COST_PER_SECOND_USD, 4)
     if engine == "sora":
         per_s = SORA_PRO_COST_PER_SECOND_USD if "pro" in (SORA_MODEL or "").lower() else SORA_COST_PER_SECOND_USD
         return round(max(1, d) * per_s, 4)
@@ -4517,6 +4517,31 @@ async def _handle_vocalclip_prompt_choice(update: Update, context: ContextTypes.
         )
 
 
+def _veo_video_options_keyboard(context):
+    selected = int(context.user_data.get("veo_text_duration", 8))
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (8, 15)],
+        [InlineKeyboardButton(("✅ " if selected == d else "") + str(d) + " сек", callback_data=f"veoopt:dur:{d}") for d in (30, 60)],
+    ])
+
+
+async def _on_veo_video_option(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    if not context.user_data.get("awaiting_text_video_prompt") or context.user_data.get("text_video_engine") != "veo":
+        await q.answer("Сначала выберите Veo.", show_alert=True)
+        return
+    try:
+        duration = int((q.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        duration = 0
+    if duration not in (8, 15, 30, 60):
+        await q.answer("Недопустимая длительность", show_alert=True)
+        return
+    context.user_data["veo_text_duration"] = duration
+    await q.answer("Длительность сохранена")
+    await q.message.edit_reply_markup(reply_markup=_veo_video_options_keyboard(context))
+
+
 def _kling_video_options_keyboard(context):
     duration = int(context.user_data.get("kling_text_duration", 5))
     sound = bool(context.user_data.get("kling_text_sound", False))
@@ -4561,14 +4586,17 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
     if engine == "kling":
         context.user_data.setdefault("kling_text_duration", 5)
         context.user_data.setdefault("kling_text_sound", False)
+    if engine == "veo":
+        context.user_data.setdefault("veo_text_duration", 8)
     labels = {"sora": "Sora 2 — только без людей", "kling": "Kling", "runway": "Runway", "veo": "Google Veo 3.1 Fast · русский звук (эксперимент)"}
     await q.answer(labels[engine][:180])
     warning = "\n⚠️ В промпте не должно быть людей, лиц или персонажей." if engine == "sora" else ""
     await q.message.reply_text(
         f"✅ Выбран движок: {labels[engine]}.{warning}\n"
-        "Теперь напишите промпт или отправьте voice. Для Kling выберите 5/10 секунд и звук кнопками ниже. "
-        "Для речи добавьте в промпт: «Персонаж произносит: ...». Голосовое сообщение будет распознано как текст."
-        , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else None
+        "Теперь напишите промпт или отправьте voice. "
+        + ("Для Veo выберите 8/15/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
+        + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
+        , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else None
     )
 
 
@@ -6892,7 +6920,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             until = activate_subscription_with_tier(uid, tier, months)
             await update.effective_message.reply_text(
                 f"🎉 Оплата прошла успешно!\n"
-                f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} кр."
+                f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр."
             )
             return
 
@@ -8846,6 +8874,11 @@ async def _poll_video_task_for_bytes(
                     if content:
                         return content
                     last_body = f"ready_url download failed: {ready_url[:200]}"
+                if "veo" in caption.lower() and st in ("completed", "succeeded", "success", "finished", "ready", "done", "succeed") and not ready_url:
+                    content_url = f"{base_url.rstrip('/')}/v1/videos/{task_id}/content"
+                    cr = await client.get(content_url, headers=headers, timeout=240.0, follow_redirects=True)
+                    if cr.status_code < 400 and cr.content and "application/json" not in (cr.headers.get("content-type") or "").lower():
+                        return bytes(cr.content)
                 if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
                     # Terminal provider state must escape immediately. Previously this
                     # RuntimeError was swallowed by the broad polling exception handler,
@@ -10380,7 +10413,9 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if engine not in ("sora", "runway", "kling", "veo"):
         engine = "kling"
     if engine == "veo":
-        duration, aspect = 8, "9:16"
+        duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
+        if duration not in (8, 15, 30, 60):
+            duration = 8
     if engine == "kling":
         duration = int(context.user_data.get("kling_text_duration", 5))
         if context.user_data.get("kling_text_sound"):
@@ -10398,6 +10433,8 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}.")
         if engine == "kling" and duration > 10:
             return await _run_kling_text_shorts(update, context, prompt, duration, "9:16")
+        if engine == "veo" and duration > 8:
+            return await _run_veo_multiscene(update, context, prompt, duration)
         if engine == "runway":
             return await _run_runway_video(update, context, prompt, duration, aspect)
         return await _run_comet_text_video(update, context, engine, prompt, duration, aspect)
@@ -15287,7 +15324,7 @@ async def _poll_video_task_generic(
                     # Финальный MP4 надо забрать отдельным GET /v1/videos/{id}/content.
                     if "sora" in (caption or "").lower() or "/v1/videos" in " ".join(status_paths):
                         try:
-                            content_url = f"{base_url.rstrip("/")}/v1/videos/{task_id}/content"
+                            content_url = f"{base_url.rstrip('/')}/v1/videos/{task_id}/content"
                             cr = await client.get(content_url, headers=headers, timeout=240.0, follow_redirects=True)
                             if cr.status_code < 400 and cr.content and "application/json" not in (cr.headers.get("content-type") or "").lower():
                                 await _reply_video_bytes(update, cr.content, f"{caption} ✅", task_id=task_id)
@@ -15684,6 +15721,54 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
     return False
 
 
+async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
+    """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
+    import fcntl
+    import hashlib
+    import re
+    from neyrobot_prod.veo_comet_adapter import submit_veo_task
+    from neyrobot_prod.veo_resumable_pipeline import resume_veo_job
+
+    # Spoken dialogue is optional: don't mistake the visual brief for narration.
+    match = re.search(r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]', prompt, re.I | re.S)
+    script = match.group(1).strip() if match else ""
+    root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
+    directory = os.path.join(root, job_hash)
+    os.makedirs(directory, exist_ok=True)
+    lock_path = os.path.join(directory, ".lock")
+    with open(lock_path, "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("⏳ Этот ролик уже создаётся. Дождитесь завершения.")
+            return False
+        async def submit(scene_prompt, index):
+            await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/{(duration + 7) // 8}")
+            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt)
+        async def poll(task_id):
+            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                return await _poll_video_task_for_bytes(
+                    client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                    COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"],
+                    task_id, "Veo Multi-Scene", max_wait_s=1200,
+                )
+        try:
+            result = await resume_veo_job(
+                job_directory=directory, duration_seconds=duration,
+                spoken_script=script, visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else prompt, submit=submit, poll=poll)
+            await _reply_video_file(update, str(result), f"🎬 Veo 3.1 Fast · {duration} сек · 9:16")
+            return True
+        except Exception as exc:
+            log.exception("Veo multiscene job failed job=%s", job_hash)
+            await update.effective_message.reply_text(
+                "⚠️ Veo: генерация остановлена. Оплаченные сцены не будут отправлены повторно автоматически. "
+                + str(exc)[:220])
+            return False
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, prompt: str, duration_s: int, aspect: str) -> bool:
     """Text-to-video through CometAPI: Sora 2, Kling, or Runway."""
     engine = (engine or "").lower().strip(); prompt = (prompt or "").strip()
@@ -15994,7 +16079,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             _, tier, months = payload.split(":", 2)
             months = int(months)
             until = activate_subscription_with_tier(uid, tier, months)
-            await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} кр.")
+            await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр.")
             return
 
         if payload.startswith("topup:"):
@@ -16100,7 +16185,7 @@ async def _poll_crypto_sub_invoice(
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
                         text=f"✅ CryptoBot: платёж подтверждён.\n"
-                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} кр."
+                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр."
                     )
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
@@ -18354,6 +18439,7 @@ def build_application() -> "Application":
     # 2) Новые режимы/подменю: mode:* и act:* (Учёба/Работа/Развлечения/Медицина)
     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
     app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10|15|30|60)|sound:(?:on|off))$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_veo_video_option, pattern=r"^veoopt:dur:(?:8|15|30|60)$"), group=0)
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
