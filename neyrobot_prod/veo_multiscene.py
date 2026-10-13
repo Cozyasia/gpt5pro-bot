@@ -5,6 +5,7 @@ until orchestration, accounting and FFmpeg integration pass end-to-end tests.
 """
 from dataclasses import dataclass
 from math import ceil
+import re
 
 ALLOWED_DURATIONS = (8, 15, 24, 30, 45, 60, 90, 120, 148)
 VEO_SCENE_SECONDS = 8
@@ -18,6 +19,20 @@ class Scene:
     timeline_start: int
     timeline_end: int
     spoken_text: str
+
+
+_SPOKEN_CUE_RE = re.compile(
+    r"(?:произносит|говорит|says)(?:\s+[^:\n«\"“]{0,80})?\s*[:：]\s*[«\"“](.+?)[»\"”]",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def extract_spoken_script(prompt: str) -> str:
+    """Return only explicitly quoted dialogue, excluding the visual brief."""
+    if not prompt:
+        return ""
+    matches = [match.strip() for match in _SPOKEN_CUE_RE.findall(prompt) if match.strip()]
+    return " ".join(matches)
 
 
 def split_spoken_text(script: str, scene_count: int) -> list[str]:
