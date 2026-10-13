@@ -15926,7 +15926,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
-async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, *, resume_directory=None) -> bool:
+async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, *, resume_directory=None, recovery_only: bool = False) -> bool:
     """Durable single-voice workflow: TTS -> 3 Veo -> 3 Kling -> final mux."""
     import fcntl
     import hashlib
@@ -16002,6 +16002,8 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
                                 tts_slices=[str(directory / f"tts_scene_{i:02d}.wav") for i in range(1, 4)], status="tts_ready")
 
             async def submit(scene_prompt, index):
+                if recovery_only:
+                    raise RuntimeError("Безопасное восстановление: новая платная Veo-генерация запрещена. Нужны сохранённые файлы или task ID.")
                 await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/3")
                 return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt,
                                              reference_image=str(reference_path) if reference_path else None)
@@ -16092,13 +16094,8 @@ async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not prompt:
                 await update.effective_message.reply_text("В 24-секундном задании нет исходного промпта; повторная отправка задач заблокирована.")
                 return
-            existing_scenes = [requested / f"scene_{i:02d}.mp4" for i in range(1, 4)]
-            missing_scenes = [p.name for p in existing_scenes if not p.is_file() or p.stat().st_size < 1024]
-            if missing_scenes:
-                await update.effective_message.reply_text("⛔ Восстановление без повторных списаний остановлено: отсутствуют локальные файлы " + ", ".join(missing_scenes) + ". Новые Veo задачи НЕ отправлялись.")
-                return
             await update.effective_message.reply_text("♻️ Восстанавливаю 24-секундное задание только по сохранённым TTS/Veo/Kling checkpoint’ам.")
-            await _run_veo_24s_lipsync(update, context, prompt, resume_directory=requested)
+            await _run_veo_24s_lipsync(update, context, prompt, resume_directory=requested, recovery_only=True)
             return
     jobs = sorted(root.glob("*/journal.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not jobs:
