@@ -1,6 +1,10 @@
 import unittest
 
-from neyrobot_prod.veo_multiscene import plan_video, estimated_provider_cost_usd
+from neyrobot_prod.veo_multiscene import (
+    estimated_provider_cost_usd,
+    extract_spoken_script,
+    plan_video,
+)
 
 
 class MultiSceneTests(unittest.TestCase):
@@ -20,6 +24,20 @@ class MultiSceneTests(unittest.TestCase):
     def test_reject_long_script(self):
         with self.assertRaises(ValueError):
             plan_video(8, "слово " * 17)
+
+    def test_extracts_only_explicit_dialogue_from_detailed_prompt(self):
+        prompt = (
+            "Премиальная вертикальная реклама в современном офисе с мягким светом, "
+            "дорогим интерьером, плавной камерой и реалистичным ведущим. "
+            "Ведущий говорит по-русски: «Bit2Queen помогает пользоваться цифровыми деньгами проще». "
+            "Затем он берёт смартфон и говорит: «Перейдите в описание и попробуйте сервис»."
+        )
+        self.assertEqual(
+            extract_spoken_script(prompt),
+            "Bit2Queen помогает пользоваться цифровыми деньгами проще "
+            "Перейдите в описание и попробуйте сервис",
+        )
+        self.assertEqual(len(plan_video(15, extract_spoken_script(prompt))), 2)
 
     def test_reject_unknown_duration(self):
         with self.assertRaises(ValueError):
