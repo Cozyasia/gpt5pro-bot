@@ -23,6 +23,7 @@ async def resume_veo_job(
     submit: Callable[[str, int], Awaitable[str]],
     poll: Callable[[str], Awaitable[bytes]],
     presenter: str = "",
+    reference_image: str | Path | None = None,
 ) -> Path:
     """Create or resume scenes and return assembled MP4 path.
 
@@ -33,12 +34,18 @@ async def resume_veo_job(
     directory.mkdir(parents=True, exist_ok=True)
     journal = directory / "journal.json"
     scenes = plan_video(duration_seconds, spoken_script)
+    if reference_image is not None:
+        reference_path = Path(reference_image).resolve()
+        if not reference_path.is_file():
+            raise FileNotFoundError("Veo presenter reference is missing")
     for scene in scenes:
         prior = read_job(journal)["scenes"].get(str(scene.index), {})
         if prior.get("state") == "completed":
             load_scene(directory, scene.index)
             continue
         prompt = scene_prompt(scene, visual_brief, presenter=presenter)
+        if reference_image is not None:
+            prompt += "\\nUse the attached input_reference image as the fixed presenter identity across every scene."
         async def submit_this(prompt=prompt, index=scene.index):
             return await submit(prompt, index)
         async def save_this(index, payload):
