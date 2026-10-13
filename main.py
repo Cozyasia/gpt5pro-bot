@@ -15823,7 +15823,11 @@ async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 item = read_job(journal)["scenes"].get(str(i), {})
                 state, task_id = item.get("state"), item.get("task_id")
                 if state == "completed":
-                    load_scene(directory, i)
+                    # Verify on disk without loading the entire paid MP4 into bot RAM.
+                    scene_path = directory / f"scene_{i:02d}.mp4"
+                    if not scene_path.is_file() or scene_path.stat().st_size < 1024:
+                        raise FileNotFoundError(f"Veo scene {i} marked completed but artifact is missing")
+                    log.info("VEO_RECOVER_SCENE_ON_DISK job=%s scene=%s bytes=%s", directory.name, i, scene_path.stat().st_size)
                     continue
                 if not task_id:
                     await update.effective_message.reply_text(
@@ -15842,7 +15846,9 @@ async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await asyncio.to_thread(save_scene, directory, i, payload)
                 mark_scene(journal, i, "completed", task_id)
             clips = list_complete_scenes(directory, 4)
+            log.info("VEO_RECOVER_ASSEMBLY_START job=%s files=%s", directory.name, [p.stat().st_size for p in clips])
             result = await asyncio.to_thread(assemble_vertical_video, clips, directory / "final.mp4", duration)
+            log.info("VEO_RECOVER_ASSEMBLY_DONE job=%s output_bytes=%s", directory.name, result.stat().st_size)
             await _reply_video_file(update, str(result), "🎬 Veo 3.1 Fast · восстановлено · 30 сек · 9:16")
         except Exception as exc:
             log.exception("Veo recovery failed job=%s", directory.name)
