@@ -16073,7 +16073,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
             _, tier, months = payload.split(":", 2)
             months = int(months)
             until = activate_subscription_with_tier(uid, tier, months)
-            await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} кр.")
+            await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр.")
             return
 
         if payload.startswith("topup:"):
@@ -16179,7 +16179,7 @@ async def _poll_crypto_sub_invoice(
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
                         text=f"✅ CryptoBot: платёж подтверждён.\n"
-                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or "").lower(), 0) * int(months)} кр."
+                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр."
                     )
                 return
             if st in ("expired", "cancelled", "canceled", "failed"):
