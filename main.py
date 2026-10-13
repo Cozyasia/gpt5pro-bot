@@ -10553,7 +10553,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             total_cost = veo_cost + tts_cost
         await update.effective_message.reply_text(
             ("🎬 План 24 сек: 3 сцены × 8 сек · 9:16 · одна русская TTS-дорожка · " + ("3× Kling Lip-Sync" if context.user_data.get("veo_use_presenter_reference") else "без Lip-Sync (нет ведущего)") + ".\n")
-            f"Оценка провайдеров: Veo ${veo_cost:.3f} + Kling ${lipsync_cost:.3f} + OpenAI TTS ≈ ${tts_cost:.3f} "
+            + f"Оценка провайдеров: Veo ${veo_cost:.3f} + Kling ${lipsync_cost:.3f} + OpenAI TTS ≈ ${tts_cost:.3f} "
             f"= ${total_cost:.3f}.\n"
             "Точная цена в кредитах будет показана до запуска; при отмене до подтверждённого результата кредиты не списываются."
         )
