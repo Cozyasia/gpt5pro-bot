@@ -45,7 +45,7 @@ class VeoContinuityTests(unittest.TestCase):
 
     def test_preflight_before_charge(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
-        begin = source.index('    if engine == "veo" and duration > 8:\n        import re')
+        begin = source.index('    if engine == "veo" and duration > 8:')
         end = source.index('    provider_cost = _video_provider_cost_usd(engine, duration)', begin)
         self.assertIn("speech_match", source[begin:end])
         self.assertIn("plan_video(duration", source[begin:end])
