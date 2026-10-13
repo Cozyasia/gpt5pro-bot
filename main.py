@@ -15727,7 +15727,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
     match = re.search(r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]', prompt, re.I | re.S)
     script = match.group(1).strip() if match else ""
     root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
-    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
     directory = os.path.join(root, job_hash)
     os.makedirs(directory, exist_ok=True)
     lock_path = os.path.join(directory, ".lock")
@@ -15750,7 +15750,7 @@ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             result = await resume_veo_job(
                 job_directory=directory, duration_seconds=duration,
-                spoken_script=script, visual_brief=prompt, submit=submit, poll=poll)
+                spoken_script=script, visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else prompt, submit=submit, poll=poll)
             await _reply_video_file(update, str(result), f"🎬 Veo 3.1 Fast · {duration} сек · 9:16")
             return True
         except Exception as exc:
