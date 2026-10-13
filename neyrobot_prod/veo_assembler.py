@@ -51,11 +51,13 @@ def assemble_vertical_video(
         filters.append(
             f"[{i}:v]fps=24,scale={width}:{height}:force_original_aspect_ratio=decrease,"
             f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
-            f"trim=duration=8,setpts=PTS-STARTPTS[v{i}]"
+            f"trim=duration=8,setpts=PTS-STARTPTS,"
+            f"fade=t=in:st=0:d=0.15,fade=t=out:st=7.85:d=0.15[v{i}]"
         )
         filters.append(
             f"[{i}:a]aresample=48000,atrim=duration=8,"
-            f"asetpts=PTS-STARTPTS[a{i}]"
+            f"asetpts=PTS-STARTPTS,"
+            f"afade=t=in:st=0:d=0.12,afade=t=out:st=7.88:d=0.12[a{i}]"
         )
     streams = "".join(f"[v{i}][a{i}]" for i in range(len(inputs)))
     filters.append(f"{streams}concat=n={len(inputs)}:v=1:a=1[v][a]")
