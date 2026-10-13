@@ -10549,7 +10549,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if engine == "veo" and duration == 24:
         veo_cost, lipsync_cost, tts_cost, total_cost = _veo_24s_cost_breakdown_usd()
         await update.effective_message.reply_text(
-            "🎬 План 24 сек: 3 сцены × 8 сек · 9:16 · одна русская TTS-дорожка · 3× Kling Lip-Sync.\n"
+            ("🎬 План 24 сек: 3 сцены × 8 сек · 9:16 · одна русская TTS-дорожка · " + ("3× Kling Lip-Sync" if context.user_data.get("veo_use_presenter_reference") else "без Lip-Sync (нет ведущего)") + ".\n")
             f"Оценка провайдеров: Veo ${veo_cost:.3f} + Kling ${lipsync_cost:.3f} + OpenAI TTS ≈ ${tts_cost:.3f} "
             f"= ${total_cost:.3f}.\n"
             "Точная цена в кредитах будет показана до запуска; при отмене до подтверждённого результата кредиты не списываются."
@@ -16020,7 +16020,10 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
                 raise RuntimeError("Veo 24-second scene pipeline did not return scene files")
             voice_scenes = validate_voice_scenes(directory, script)
             master_bytes, synced_paths = master_tts.read_bytes(), []
-            for voice_scene in voice_scenes:
+            # Narrator-only commercials have no speaking face; do not submit paid lip-sync tasks.
+            if not context.user_data.get("veo_use_presenter_reference"):
+                synced_paths = [Path(scene.video_path) for scene in voice_scenes]
+            for voice_scene in (voice_scenes if context.user_data.get("veo_use_presenter_reference") else []):
                 final_scene = directory / f"scene_{voice_scene.index:02d}_lipsynced.mp4"
                 item = load_state(workflow_path)["lipsync"].get(str(voice_scene.index), {})
                 if item.get("state") == "completed" and final_scene.is_file() and final_scene.stat().st_size >= 1024:
