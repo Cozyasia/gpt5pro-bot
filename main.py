@@ -10544,10 +10544,13 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 f"⚠️ Текст озвучки не подходит: {exc}. Кредиты не списаны."
             )
             return False
-    provider_cost = _veo_24s_provider_cost_usd() if engine == "veo" and duration == 24 else _video_provider_cost_usd(engine, duration)
+    provider_cost = (_video_provider_cost_usd("veo", 24) + (24.0 / 60.0) * VEO_24S_TTS_COST_PER_MINUTE_USD + (3 * VEO_24S_KLING_LIPSYNC_COST_USD if context.user_data.get("veo_use_presenter_reference") else 0)) if engine == "veo" and duration == 24 else _video_provider_cost_usd(engine, duration)
     label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
     if engine == "veo" and duration == 24:
         veo_cost, lipsync_cost, tts_cost, total_cost = _veo_24s_cost_breakdown_usd()
+        if not context.user_data.get("veo_use_presenter_reference"):
+            lipsync_cost = 0.0
+            total_cost = veo_cost + tts_cost
         await update.effective_message.reply_text(
             ("🎬 План 24 сек: 3 сцены × 8 сек · 9:16 · одна русская TTS-дорожка · " + ("3× Kling Lip-Sync" if context.user_data.get("veo_use_presenter_reference") else "без Lip-Sync (нет ведущего)") + ".\n")
             f"Оценка провайдеров: Veo ${veo_cost:.3f} + Kling ${lipsync_cost:.3f} + OpenAI TTS ≈ ${tts_cost:.3f} "
