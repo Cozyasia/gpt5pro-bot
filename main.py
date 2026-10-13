@@ -16092,6 +16092,11 @@ async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not prompt:
                 await update.effective_message.reply_text("В 24-секундном задании нет исходного промпта; повторная отправка задач заблокирована.")
                 return
+            existing_scenes = [requested / f"scene_{i:02d}.mp4" for i in range(1, 4)]
+            missing_scenes = [p.name for p in existing_scenes if not p.is_file() or p.stat().st_size < 1024]
+            if missing_scenes:
+                await update.effective_message.reply_text("⛔ Восстановление без повторных списаний остановлено: отсутствуют локальные файлы " + ", ".join(missing_scenes) + ". Новые Veo задачи НЕ отправлялись.")
+                return
             await update.effective_message.reply_text("♻️ Восстанавливаю 24-секундное задание только по сохранённым TTS/Veo/Kling checkpoint’ам.")
             await _run_veo_24s_lipsync(update, context, prompt, resume_directory=requested)
             return
