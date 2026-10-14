@@ -1,0 +1,55 @@
+diff --git a/main.py b/main.py
+--- a/main.py
++++ b/main.py
+@@ -5679,6 +5679,13 @@ def _claim_start_update(update: Update) -> bool:
+ 
+ 
+ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
++    from neyrobot_prod.veo_start_guard import is_veo_job_active
++    if is_veo_job_active(update.effective_user.id, update.effective_chat.id):
++        log.warning(
++            "Suppressed /start while Veo job is active user_id=%s chat_id=%s",
++            update.effective_user.id, update.effective_chat.id,
++        )
++        return
+     if not _claim_start_update(update):
+         log.warning("Suppressed duplicate /start update_id=%s", update.update_id)
+         return
+@@ -10532,6 +10532,15 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
+         context.user_data["veo_use_presenter_reference"] = bool(
+             context.user_data.get("veo_use_presenter_reference", False)
+         )
++    veo_guard_token = None
++    if engine == "veo":
++        from neyrobot_prod.veo_start_guard import begin_veo_job
++        veo_guard_token = f"{update.effective_message.message_id}:{duration}"
++        if not begin_veo_job(update.effective_user.id, update.effective_chat.id, veo_guard_token):
++            await update.effective_message.reply_text(
++                "⏳ У вас уже выполняется Veo-задача. Команда /start временно не прерывает её."
++            )
++            return False
+     provider_cost = _video_provider_cost_usd(engine, duration)
+     label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
+     if engine == "veo" and duration > 8:
+@@ -10552,10 +10552,15 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
+             return await _run_runway_video(update, context, prompt, duration, aspect)
+         return await _run_comet_text_video(update, context, engine, prompt, duration, aspect)
+ 
+-    await _try_pay_then_do(
+-        update, context, update.effective_user.id,
+-        engine, provider_cost, _go,
+-        remember_kind=f"text_video_{engine}",
+-        remember_payload={"prompt": prompt[:500], "duration": duration, "aspect": aspect, "engine": engine},
+-    )
++    try:
++        await _try_pay_then_do(
++            update, context, update.effective_user.id,
++            engine, provider_cost, _go,
++            remember_kind=f"text_video_{engine}",
++            remember_payload={"prompt": prompt[:500], "duration": duration, "aspect": aspect, "engine": engine},
++        )
++    finally:
++        if veo_guard_token is not None:
++            from neyrobot_prod.veo_start_guard import end_veo_job
++            end_veo_job(update.effective_user.id, update.effective_chat.id, veo_guard_token)
+     return True
