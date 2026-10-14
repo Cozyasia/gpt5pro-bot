@@ -29,6 +29,14 @@ class GoogleVeoOperationFailed(GoogleVeoError):
     """Google returned a terminal, confirmed operation failure."""
 
 
+class GoogleVeoQuotaExceeded(GoogleVeoError):
+    """Google rejected a new request because the project quota is exhausted.
+
+    A 429 response is an explicit rejection and does not contain an operation
+    ID, so it is safe to retry only after the user explicitly asks to resume.
+    """
+
+
 class GoogleVeoVideo(bytes):
     """Downloaded Veo bytes retaining the provider video reference.
 
@@ -138,6 +146,10 @@ class GoogleVeoClient:
                     "Google Veo submission outcome is unknown; do not retry"
                 ) from exc
         if response.status_code >= 400:
+            if response.status_code == 429:
+                raise GoogleVeoQuotaExceeded(
+                    f"Google Veo HTTP 429: {response.text[:500]}"
+                )
             if response.status_code >= 500:
                 raise GoogleVeoSubmissionUncertain(
                     f"Google Veo submission returned HTTP {response.status_code}; "

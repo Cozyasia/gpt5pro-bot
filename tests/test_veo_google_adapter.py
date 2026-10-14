@@ -204,3 +204,35 @@ class GoogleVeoAdapterTests(unittest.TestCase):
         import asyncio
         with self.assertRaises(GoogleVeoSubmissionUncertain):
             asyncio.run(run())
+
+    def test_http_429_quota_is_explicitly_resumeable(self):
+        from neyrobot_prod.veo_google_adapter import GoogleVeoClient, GoogleVeoQuotaExceeded
+
+        class Response:
+            status_code = 429
+            text = '{"error":{"status":"RESOURCE_EXHAUSTED"}}'
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def post(self, url, **kwargs):
+                return Response()
+
+        async def run():
+            client = GoogleVeoClient("test-key")
+            with patch(
+                "neyrobot_prod.veo_google_adapter.httpx.AsyncClient",
+                return_value=FakeClient(),
+            ):
+                await client.extend(
+                    "https://generativelanguage.googleapis.com/v1beta/files/video-previous",
+                    "Продолжи",
+                )
+
+        import asyncio
+        with self.assertRaises(GoogleVeoQuotaExceeded):
+            asyncio.run(run())

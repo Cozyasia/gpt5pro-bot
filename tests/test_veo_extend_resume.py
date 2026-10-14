@@ -10,10 +10,52 @@ from neyrobot_prod.veo_extend_15_pipeline import (
     ResumeRequired,
     create_extended_video,
 )
-from neyrobot_prod.veo_google_adapter import GoogleVeoOperationFailed
+from neyrobot_prod.veo_google_adapter import GoogleVeoOperationFailed, GoogleVeoQuotaExceeded
 
 
 class VeoExtendResumeTests(unittest.TestCase):
+    def test_quota_exhaustion_creates_explicit_resume_checkpoint(self):
+        with tempfile.TemporaryDirectory() as td:
+            directory = Path(td)
+
+            async def submit_initial():
+                return "initial-operation"
+
+            async def poll(task_id):
+                return b"initial-video" * 256
+
+            async def extend(source, prompt):
+                raise GoogleVeoQuotaExceeded("Google Veo HTTP 429: quota exceeded")
+
+            def duration(path):
+                name = Path(path).name
+                if name == "scene_01.mp4":
+                    return 8.0
+                raise AssertionError(f"unexpected probe path: {path}")
+
+            async def run():
+                with patch(
+                    "neyrobot_prod.veo_extend_15_pipeline.probe_duration",
+                    side_effect=duration,
+                ):
+                    with self.assertRaises(GoogleVeoQuotaExceeded):
+                        await create_extended_video(
+                            directory=directory,
+                            prompt="test prompt",
+                            duration_seconds=15,
+                            base_url="https://unused",
+                            api_key="unused",
+                            fast_model="unused",
+                            poll=poll,
+                            submit_initial=submit_initial,
+                            extend_video=extend,
+                        )
+
+            asyncio.run(run())
+            state = json.loads((directory / "extension_01.json").read_text())
+            self.assertEqual(state["status"], "resume_required")
+            self.assertTrue(state["retryable"])
+
     def test_failed_extend_is_retried_only_by_explicit_resume(self):
         with tempfile.TemporaryDirectory() as td:
             directory = Path(td)

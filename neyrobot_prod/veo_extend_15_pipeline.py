@@ -270,7 +270,9 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
                     write_job(state_file, {"status": "uncertain",
                                            "source_artifact": latest.name, "step": step,
                                            "error": str(exc)[:500]})
-                elif exc.__class__.__name__ == "GoogleVeoOperationFailed":
+                elif exc.__class__.__name__ in {
+                    "GoogleVeoOperationFailed", "GoogleVeoQuotaExceeded"
+                }:
                     # Google has returned a terminal provider result (for
                     # example temporary code 14).  This is safe to retry only
                     # after an explicit user click; prior cumulative output is
