@@ -2,8 +2,8 @@ diff --git a/main.py b/main.py
 --- a/main.py
 +++ b/main.py
 @@ -5728,2 +5728,9 @@
-        except Exception as e:
-            log.warning("Animated welcome failed, using image fallback: %s", e)
+-        except Exception as e:
+-            log.warning("Animated welcome failed, using image fallback: %s", e)
 +        except (TimedOut, asyncio.TimeoutError) as e:
 +            log.warning(
 +                "Animated welcome delivery outcome unknown; suppressing fallback "
@@ -11,3 +11,5 @@ diff --git a/main.py b/main.py
 +                e,
 +            )
 +            return
++        except Exception as e:
++            log.warning("Animated welcome failed, using image fallback: %s", e)
