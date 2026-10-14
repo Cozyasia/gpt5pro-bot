@@ -12,7 +12,7 @@ import httpx
 from .veo_comet_adapter import submit_veo_task
 from .veo_extend_comet import find_video_uri
 from .veo_scene_runner import run_journaled_scene
-from .veo_scene_artifacts import save_scene, list_complete_scenes
+from .veo_scene_artifacts import save_scene, list_complete_scenes, load_scene_uri
 from .veo_task_journal import read_job, write_job
 from .veo_assembler import probe_duration
 
@@ -99,6 +99,29 @@ def _assemble(first, extended, destination):
     return destination
 
 
+def _artifact_uri_file(video_file: Path) -> Path:
+    return video_file.with_suffix(".uri")
+
+
+def _load_artifact_uri(video_file: Path) -> str | None:
+    uri_file = _artifact_uri_file(video_file)
+    if not uri_file.is_file():
+        return None
+    value = uri_file.read_text(encoding="utf-8").strip()
+    return value or None
+
+
+def _save_artifact_uri(video_file: Path, result: bytes) -> None:
+    uri = getattr(result, "provider_uri", None)
+    uri_file = _artifact_uri_file(video_file)
+    if isinstance(uri, str) and uri.strip():
+        tmp = uri_file.with_suffix(".uri.tmp")
+        tmp.write_text(uri.strip(), encoding="utf-8")
+        os.replace(tmp, uri_file)
+    elif uri_file.exists():
+        uri_file.unlink()
+
+
 async def create_extended_video(*, directory, prompt, duration_seconds, base_url,
                                 api_key, fast_model, poll, reference_image=None,
                                 progress=None, submit_initial=None,
@@ -154,17 +177,35 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
         state_file = directory / ("extension_%02d.json" % step)
         video_file = directory / ("extension_%02d.mp4" % step)
         state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
+        # A confirmed 4xx validation refusal has no operation ID and therefore
+        # no paid generation to recover. It may be retried on a later resume
+        # after the payload/configuration is fixed. Uncertain states remain a
+        # hard stop and are never resubmitted automatically.
+        if state and state.get("status") == "rejected":
+            state = None
         if state is None:
             state = {"status": "submitting", "source_artifact": latest.name, "step": step}
             write_job(state_file, state)
             if progress:
                 await progress("Veo Extend: продление %d из %d" % (step, steps))
             try:
+                # Google native extension requires the provider Video object
+                # from the previous operation. The URI is persisted next to
+                # every MP4; bytes remain a compatibility path for injected
+                # test providers, while GoogleVeoClient rejects them before
+                # any paid POST.
+                source_uri = (
+                    load_scene_uri(directory, 1)
+                    if latest == first
+                    else _load_artifact_uri(latest)
+                )
+                source = source_uri or latest.read_bytes()
                 result = await extend_video(
-                    latest.read_bytes(), _extension_prompt(prompt))
+                    source, _extension_prompt(prompt))
                 if not isinstance(result, bytes) or len(result) < 1024:
                     raise RuntimeError("Native Veo Extend returned empty video bytes")
                 _write_video_atomically(video_file, result)
+                _save_artifact_uri(video_file, result)
                 state = {"status": "accepted", "source_artifact": latest.name,
                          "result_artifact": video_file.name, "step": step}
                 write_job(state_file, state)

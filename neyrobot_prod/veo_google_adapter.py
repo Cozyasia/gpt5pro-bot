@@ -29,6 +29,24 @@ class GoogleVeoOperationFailed(GoogleVeoError):
     """Google returned a terminal, confirmed operation failure."""
 
 
+class GoogleVeoVideo(bytes):
+    """Downloaded Veo bytes retaining the provider video reference.
+
+    The REST endpoint currently rejects ``video.inlineData`` for Veo 3.1
+    Fast. The SDK contract instead passes the provider's previous ``Video``
+    object. Keeping the URI attached to the bytes lets existing artifact and
+    Telegram code continue treating results as MP4 bytes while the extension
+    pipeline forwards the native provider reference.
+    """
+
+    def __new__(cls, payload: bytes, *, provider_uri: str | None = None,
+                descriptor: dict | None = None):
+        obj = bytes.__new__(cls, payload)
+        obj.provider_uri = provider_uri
+        obj.descriptor = descriptor
+        return obj
+
+
 def build_generate_payload(prompt: str, *, aspect_ratio: str = "9:16") -> dict:
     if not prompt.strip():
         raise ValueError("Veo prompt is required")
@@ -44,20 +62,15 @@ def build_generate_payload(prompt: str, *, aspect_ratio: str = "9:16") -> dict:
     }
 
 
-def build_extend_payload(video_bytes: bytes, prompt: str) -> dict:
-    if not isinstance(video_bytes, bytes) or not video_bytes:
-        raise ValueError("Previous Veo video bytes are required")
+def build_extend_payload(video_uri: str, prompt: str) -> dict:
+    if not isinstance(video_uri, str) or not video_uri.strip():
+        raise ValueError("Previous Google Veo video URI is required")
     if not prompt.strip():
         raise ValueError("Veo extension prompt is required")
     return {
         "instances": [{
             "prompt": prompt.strip(),
-            "video": {
-                "inlineData": {
-                    "mimeType": "video/mp4",
-                    "data": base64.b64encode(video_bytes).decode("ascii"),
-                }
-            },
+            "video": {"uri": video_uri.strip()},
         }],
         "parameters": {"resolution": "720p"},
     }
@@ -125,6 +138,11 @@ class GoogleVeoClient:
                     "Google Veo submission outcome is unknown; do not retry"
                 ) from exc
         if response.status_code >= 400:
+            if response.status_code >= 500:
+                raise GoogleVeoSubmissionUncertain(
+                    f"Google Veo submission returned HTTP {response.status_code}; "
+                    "the outcome is not safe to resubmit automatically"
+                )
             raise GoogleVeoError(
                 f"Google Veo HTTP {response.status_code}: {response.text[:500]}"
             )
@@ -151,8 +169,8 @@ class GoogleVeoClient:
             }
         return await self._submit(payload)
 
-    async def extend(self, video_bytes: bytes, prompt: str) -> bytes:
-        operation = await self._submit(build_extend_payload(video_bytes, prompt))
+    async def extend(self, video_uri: str, prompt: str) -> bytes:
+        operation = await self._submit(build_extend_payload(video_uri, prompt))
         return await self.poll_bytes(operation)
 
     async def poll_bytes(self, operation_name: str) -> bytes:
@@ -194,10 +212,10 @@ class GoogleVeoClient:
     async def _download_descriptor(self, client, descriptor: dict) -> bytes:
         inline = descriptor.get("videoBytes") or descriptor.get("bytesBase64Encoded")
         if isinstance(inline, str):
-            return base64.b64decode(inline)
+            return GoogleVeoVideo(base64.b64decode(inline), descriptor=descriptor)
         inline_data = descriptor.get("inlineData")
         if isinstance(inline_data, dict) and isinstance(inline_data.get("data"), str):
-            return base64.b64decode(inline_data["data"])
+            return GoogleVeoVideo(base64.b64decode(inline_data["data"]), descriptor=descriptor)
         uri = descriptor.get("uri") or descriptor.get("gcsUri")
         if not isinstance(uri, str) or not uri.startswith("https://"):
             raise GoogleVeoError("Google Veo returned no downloadable HTTPS video URI")
@@ -205,7 +223,7 @@ class GoogleVeoClient:
         result.raise_for_status()
         if not result.content:
             raise GoogleVeoError("Google Veo returned an empty video")
-        return result.content
+        return GoogleVeoVideo(result.content, provider_uri=uri, descriptor=descriptor)
 
 
 async def _async_sleep(seconds: float) -> None:

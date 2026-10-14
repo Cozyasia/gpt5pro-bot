@@ -15,6 +15,12 @@ def scene_file(job_directory: str | Path, index: int) -> Path:
     return Path(job_directory) / f"scene_{index:02d}.mp4"
 
 
+def scene_uri_file(job_directory: str | Path, index: int) -> Path:
+    if index < 1:
+        raise ValueError("Scene index must be positive")
+    return Path(job_directory) / f"scene_{index:02d}.uri"
+
+
 def save_scene(job_directory: str | Path, index: int, video: bytes) -> Path:
     if not isinstance(video, bytes) or len(video) < 1024:
         raise ValueError("Scene video must contain at least 1024 bytes")
@@ -30,6 +36,14 @@ def save_scene(job_directory: str | Path, index: int, video: bytes) -> Path:
     finally:
         if os.path.exists(temp_path):
             os.unlink(temp_path)
+    provider_uri = getattr(video, "provider_uri", None)
+    uri_path = scene_uri_file(job_directory, index)
+    if isinstance(provider_uri, str) and provider_uri.strip():
+        uri_tmp = uri_path.with_suffix(".uri.tmp")
+        uri_tmp.write_text(provider_uri.strip(), encoding="utf-8")
+        os.replace(uri_tmp, uri_path)
+    elif uri_path.exists():
+        uri_path.unlink()
     return destination
 
 
@@ -39,6 +53,14 @@ def load_scene(job_directory: str | Path, index: int) -> bytes:
     if len(result) < 1024:
         raise ValueError("Persisted scene is empty or truncated")
     return result
+
+
+def load_scene_uri(job_directory: str | Path, index: int) -> str | None:
+    path = scene_uri_file(job_directory, index)
+    if not path.is_file():
+        return None
+    value = path.read_text(encoding="utf-8").strip()
+    return value or None
 
 
 def list_complete_scenes(job_directory: str | Path, count: int) -> list[Path]:

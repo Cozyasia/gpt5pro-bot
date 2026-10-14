@@ -2,8 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 from neyrobot_prod.veo_scene_artifacts import (
-    save_scene, load_scene, list_complete_scenes, scene_file
+    save_scene, load_scene, load_scene_uri, list_complete_scenes, scene_file
 )
+
+
+class _ProviderBytes(bytes):
+    provider_uri = "https://generativelanguage.googleapis.com/v1beta/files/video-1"
 
 
 class SceneArtifactsTests(unittest.TestCase):
@@ -30,6 +34,15 @@ class SceneArtifactsTests(unittest.TestCase):
                 save_scene(td, 1, b"")
             with self.assertRaises(ValueError):
                 scene_file(td, 0)
+
+    def test_persists_provider_uri_next_to_downloaded_video(self):
+        with tempfile.TemporaryDirectory() as td:
+            video = _ProviderBytes(b"a" * 2048)
+            save_scene(td, 1, video)
+            self.assertEqual(
+                load_scene_uri(td, 1),
+                "https://generativelanguage.googleapis.com/v1beta/files/video-1",
+            )
 
 if __name__ == "__main__":
     unittest.main()
