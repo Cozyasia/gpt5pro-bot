@@ -71,7 +71,7 @@
                  progress=lambda message: update.effective_message.reply_text("🎬 " + message))
              log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
              await _reply_video_file(update, str(result), f"🎬 Veo 3.1 · {duration} сек · native Veo Extend · 9:16")
-@@ -15931,14 +15958,57 @@
+@@ -15931,14 +15958,63 @@
              return True
          except Exception as exc:
              log.exception("Veo multiscene job failed job=%s", job_hash)
@@ -88,6 +88,12 @@
 +                    reply_markup=InlineKeyboardMarkup([[
 +                        InlineKeyboardButton("♻️ Продолжить с места обрыва", callback_data=callback_data(job_hash))
 +                    ]]),
++                )
++            elif "HTTP 402" in str(exc) or "prepayment credits are depleted" in str(exc).lower():
++                await update.effective_message.reply_text(
++                    "⚠️ Veo не запущен: закончились предоплаченные кредиты Google AI Studio. "
++                    "Пополните проект в https://ai.studio/projects и запустите генерацию заново. "
++                    "На этом шаге видео ещё не создано, поэтому продолжать нечего."
 +                )
 +            else:
 +                await update.effective_message.reply_text(

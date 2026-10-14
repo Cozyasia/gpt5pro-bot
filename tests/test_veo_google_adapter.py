@@ -236,3 +236,32 @@ class GoogleVeoAdapterTests(unittest.TestCase):
         import asyncio
         with self.assertRaises(GoogleVeoQuotaExceeded):
             asyncio.run(run())
+
+    def test_http_402_depleted_prepayment_is_explicitly_resumeable(self):
+        from neyrobot_prod.veo_google_adapter import GoogleVeoClient, GoogleVeoQuotaExceeded
+
+        class Response:
+            status_code = 402
+            text = '{"error":{"status":"RESOURCE_EXHAUSTED","message":"Your prepayment credits are depleted."}}'
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def post(self, url, **kwargs):
+                return Response()
+
+        async def run():
+            client = GoogleVeoClient("test-key")
+            with patch(
+                "neyrobot_prod.veo_google_adapter.httpx.AsyncClient",
+                return_value=FakeClient(),
+            ):
+                await client.submit_initial("Проверка биллинга")
+
+        import asyncio
+        with self.assertRaisesRegex(GoogleVeoQuotaExceeded, r"HTTP 402"):
+            asyncio.run(run())

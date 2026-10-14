@@ -30,10 +30,11 @@ class GoogleVeoOperationFailed(GoogleVeoError):
 
 
 class GoogleVeoQuotaExceeded(GoogleVeoError):
-    """Google rejected a new request because the project quota is exhausted.
+    """Google rejected a new request because quota or billing is exhausted.
 
-    A 429 response is an explicit rejection and does not contain an operation
-    ID, so it is safe to retry only after the user explicitly asks to resume.
+    402/429 responses are explicit rejections and do not contain an operation
+    ID, so they are safe to retry only after the user explicitly asks to
+    resume (and, for 402, restores project billing/credits).
     """
 
 
@@ -146,9 +147,9 @@ class GoogleVeoClient:
                     "Google Veo submission outcome is unknown; do not retry"
                 ) from exc
         if response.status_code >= 400:
-            if response.status_code == 429:
+            if response.status_code in (402, 429):
                 raise GoogleVeoQuotaExceeded(
-                    f"Google Veo HTTP 429: {response.text[:500]}"
+                    f"Google Veo HTTP {response.status_code}: {response.text[:500]}"
                 )
             if response.status_code >= 500:
                 raise GoogleVeoSubmissionUncertain(

@@ -27,6 +27,8 @@ class VeoRecoveryWiringTests(unittest.TestCase):
             patched = (root / "main.py").read_text(encoding="utf-8")
             self.assertIn("veoresume:", patched)
             self.assertIn("resume_only=resume_only", patched)
+            self.assertIn("закончились предоплаченные кредиты Google AI Studio", patched)
+            self.assertIn("https://ai.studio/projects", patched)
 
     def test_docker_applies_recovery_after_start_guard(self):
         dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
