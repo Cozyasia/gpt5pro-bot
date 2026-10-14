@@ -26,7 +26,9 @@ class VeoExtendContractTests(unittest.IsolatedAsyncioTestCase):
             with patch(
                 "neyrobot_prod.veo_extend_15_pipeline.probe_duration",
                 side_effect=[15.0, 15.0, 15.0],
-            ):
+            ), patch(
+                "neyrobot_prod.veo_extend_15_pipeline._render_delivery_video",
+            ) as render:
                 await create_extended_video(
                     directory=td,
                     prompt="Test",
@@ -37,7 +39,10 @@ class VeoExtendContractTests(unittest.IsolatedAsyncioTestCase):
                     poll=poll,
                     submit_initial=submit_initial,
                     extend_video=extend,
+                    output_aspect_ratio="9:16",
                 )
+            render.assert_called_once()
+            self.assertEqual(render.call_args.args[3], "9:16")
             self.assertEqual(extend.await_args.args[0], first_uri)
             self.assertEqual(
                 (Path(td) / "extension_01.uri").read_text(), second_uri

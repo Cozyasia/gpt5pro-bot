@@ -11,12 +11,18 @@ from neyrobot_prod.veo_google_adapter import (
 
 class GoogleVeoAdapterTests(unittest.TestCase):
     def test_initial_payload_uses_official_native_video_shape(self):
-        payload = build_generate_payload("Русская реплика", aspect_ratio="9:16")
+        payload = build_generate_payload("Русская реплика")
         self.assertEqual(payload["instances"][0]["prompt"], "Русская реплика")
-        self.assertEqual(payload["parameters"]["aspectRatio"], "9:16")
+        # The current Veo Fast Extend backend accepts the cumulative source in
+        # landscape. The final Telegram delivery is normalized to 9:16 later.
+        self.assertEqual(payload["parameters"]["aspectRatio"], "16:9")
         self.assertEqual(payload["parameters"]["resolution"], "720p")
         self.assertEqual(payload["parameters"]["durationSeconds"], 8)
         self.assertNotIn("numberOfVideos", payload["parameters"])
+
+    def test_initial_payload_still_allows_explicit_supported_vertical_shape(self):
+        payload = build_generate_payload("Русская реплика", aspect_ratio="9:16")
+        self.assertEqual(payload["parameters"]["aspectRatio"], "9:16")
 
     def test_extension_payload_references_previous_google_video_uri(self):
         uri = "https://generativelanguage.googleapis.com/v1beta/files/video-1"

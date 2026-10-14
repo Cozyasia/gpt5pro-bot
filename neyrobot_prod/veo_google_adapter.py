@@ -47,7 +47,7 @@ class GoogleVeoVideo(bytes):
         return obj
 
 
-def build_generate_payload(prompt: str, *, aspect_ratio: str = "9:16") -> dict:
+def build_generate_payload(prompt: str, *, aspect_ratio: str = "16:9") -> dict:
     if not prompt.strip():
         raise ValueError("Veo prompt is required")
     if aspect_ratio not in ("9:16", "16:9"):

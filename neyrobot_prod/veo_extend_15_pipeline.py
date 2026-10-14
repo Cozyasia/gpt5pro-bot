@@ -122,10 +122,46 @@ def _save_artifact_uri(video_file: Path, result: bytes) -> None:
         uri_file.unlink()
 
 
+def _render_delivery_video(source: Path, destination: Path, duration_seconds: int,
+                           output_aspect_ratio: str) -> None:
+    """Render the cumulative native result into the Telegram delivery shape.
+
+    The Google Veo Fast Extend backend currently rejects a 9:16 source at the
+    Extend boundary. Native generation therefore stays 16:9 for the entire
+    cumulative chain; only the final, already-generated result is center-cropped
+    to the user's requested 9:16 delivery format.
+    """
+    import subprocess
+
+    if output_aspect_ratio == "9:16":
+        video_filter = (
+            "scale=720:1280:force_original_aspect_ratio=increase,"
+            "crop=720:1280,setsar=1"
+        )
+    elif output_aspect_ratio == "16:9":
+        video_filter = "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1"
+    else:
+        raise ValueError("Unsupported output aspect ratio")
+
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+         "-i", str(source), "-t", str(duration_seconds), "-vf", video_filter,
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+         "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart",
+         str(destination)],
+        capture_output=True, timeout=600,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            "Final Veo aspect-ratio render failed: " +
+            result.stderr.decode("utf-8", "replace")[-300:]
+        )
+
+
 async def create_extended_video(*, directory, prompt, duration_seconds, base_url,
                                 api_key, fast_model, poll, reference_image=None,
                                 progress=None, submit_initial=None,
-                                extend_video=None):
+                                extend_video=None, output_aspect_ratio=None):
     """Chain Veo-native extensions, persisting each billed operation separately.
 
     Google limit: initial 8s plus up to twenty 7s extensions (148s).
@@ -161,7 +197,8 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
         raise RuntimeError("Original Veo task ID missing")
 
     final = directory / ("final_%ds.mp4" % duration_seconds)
-    if final.is_file() and abs(probe_duration(final) - duration_seconds) < 0.25:
+    if (output_aspect_ratio is None and final.is_file() and
+            abs(probe_duration(final) - duration_seconds) < 0.25):
         return final
 
     # A provider-generated cumulative video must be passed directly to the
@@ -243,7 +280,9 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
     actual = probe_duration(latest)
     if actual < duration_seconds - 0.25:
         raise RuntimeError("Provider output shorter than requested duration")
-    if abs(actual - duration_seconds) <= 0.25:
+    if output_aspect_ratio:
+        _render_delivery_video(latest, final, duration_seconds, output_aspect_ratio)
+    elif abs(actual - duration_seconds) <= 0.25:
         shutil.copyfile(latest, final)
     else:
         result = subprocess.run(

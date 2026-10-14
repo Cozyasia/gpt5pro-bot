@@ -150,7 +150,7 @@ index d39ff76..3569860 100644
                  api_key=COMET_API_KEY, fast_model=VEO_FAST_MODEL,
 -                poll=poll, reference_image=reference_path,
 +                poll=poll, reference_image=reference_path, submit_initial=submit_initial,
-+                extend_video=google.extend,
++                extend_video=google.extend, output_aspect_ratio="9:16",
                  progress=lambda message: update.effective_message.reply_text("🎬 " + message))
              log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
              await _reply_video_file(update, str(result), f"🎬 Veo 3.1 · {duration} сек · native Veo Extend · 9:16")
