@@ -17,6 +17,10 @@ from .veo_task_journal import read_job, write_job
 from .veo_assembler import probe_duration
 
 
+class ResumeRequired(RuntimeError):
+    """A failed Extend may be retried only through an explicit recovery action."""
+
+
 def _uri_from_provider(payload):
     """Only provider-reported video URI; never synthesize one from task ID."""
     if not isinstance(payload, (dict, list)):
@@ -161,7 +165,8 @@ def _render_delivery_video(source: Path, destination: Path, duration_seconds: in
 async def create_extended_video(*, directory, prompt, duration_seconds, base_url,
                                 api_key, fast_model, poll, reference_image=None,
                                 progress=None, submit_initial=None,
-                                extend_video=None, output_aspect_ratio=None):
+                                extend_video=None, output_aspect_ratio=None,
+                                resume_only=False):
     """Chain Veo-native extensions, persisting each billed operation separately.
 
     Google limit: initial 8s plus up to twenty 7s extensions (148s).
@@ -176,6 +181,8 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     journal = directory / "journal.json"
+    if resume_only and not journal.exists():
+        raise ResumeRequired("Veo job journal is missing; safe recovery cannot start")
 
     async def submit():
         if progress:
@@ -214,12 +221,22 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
         state_file = directory / ("extension_%02d.json" % step)
         video_file = directory / ("extension_%02d.mp4" % step)
         state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
-        # A confirmed 4xx validation refusal has no operation ID and therefore
-        # no paid generation to recover. It may be retried on a later resume
-        # after the payload/configuration is fixed. Uncertain states remain a
-        # hard stop and are never resubmitted automatically.
+        # A confirmed validation rejection did not create a provider
+        # operation and may be retried after configuration/payload changes.
         if state and state.get("status") == "rejected":
             state = None
+        # A terminal provider operation failure is retried only after the
+        # explicit recovery button. This preserves cumulative artifacts.
+        elif state and state.get("status") == "resume_required":
+            if not resume_only:
+                raise ResumeRequired(
+                    "Veo Extend stopped at step %d; explicit recovery is required" % step
+                )
+            state = None
+        elif state and state.get("status") == "uncertain":
+            raise ResumeRequired(
+                "Veo Extend step %d has an uncertain provider outcome; reconcile before retry" % step
+            )
         if state is None:
             state = {"status": "submitting", "source_artifact": latest.name, "step": step}
             write_job(state_file, state)
@@ -252,6 +269,16 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
                 }:
                     write_job(state_file, {"status": "uncertain",
                                            "source_artifact": latest.name, "step": step,
+                                           "error": str(exc)[:500]})
+                elif exc.__class__.__name__ == "GoogleVeoOperationFailed":
+                    # Google has returned a terminal provider result (for
+                    # example temporary code 14).  This is safe to retry only
+                    # after an explicit user click; prior cumulative output is
+                    # retained and no earlier step is submitted again.
+                    write_job(state_file, {"status": "resume_required",
+                                           "retryable": True,
+                                           "source_artifact": latest.name,
+                                           "step": step,
                                            "error": str(exc)[:500]})
                 else:
                     write_job(state_file, {"status": "rejected",

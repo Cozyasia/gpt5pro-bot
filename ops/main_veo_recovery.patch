@@ -1,0 +1,142 @@
+--- a/main.py
++++ b/main.py
+@@ -15855,11 +15855,15 @@
+     return False
+ 
+ 
+-async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
+-    """Persistent native Veo Extend jobs; never resubmit an uncertain task."""
++async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int, *, resume_directory=None, resume_only=False) -> bool:
++    """Persistent native Veo Extend jobs with explicit user-confirmed recovery."""
+     import fcntl
+     import hashlib
+     from neyrobot_prod.veo_extend_15_pipeline import create_extended_video
++    from neyrobot_prod.veo_recovery import (
++        callback_data, completed_extension_seconds, read_metadata,
++        retryable_extension, write_metadata,
++    )
+ 
+     provider = (os.environ.get("VEO_EXTEND_PROVIDER") or "google").strip().lower()
+     google_key = (os.environ.get("GEMINI_VIDEO_API_KEY") or os.environ.get("GEMINI_API_KEY") or "").strip()
+@@ -15879,12 +15883,32 @@
+     )
+ 
+     root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
+-    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
+-    directory = os.path.join(root, job_hash)
++    if resume_directory is not None:
++        directory = os.path.abspath(str(resume_directory))
++        job_hash = os.path.basename(directory)
++        metadata = read_metadata(directory)
++        prompt = str(metadata.get("prompt") or prompt)
++        duration = int(metadata.get("duration_seconds") or duration)
++    else:
++        job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
++        directory = os.path.join(root, job_hash)
+     os.makedirs(directory, exist_ok=True)
++    metadata = write_metadata(
++        directory,
++        owner_user_id=update.effective_user.id,
++        owner_chat_id=update.effective_chat.id,
++        prompt=prompt,
++        duration_seconds=duration,
++        reference_image=metadata.get("reference_image") if resume_directory is not None else None,
++    )
+     # Persist the presenter snapshot inside the job, not in volatile user cache.
+     reference_path = None
+-    if context.user_data.get("veo_use_presenter_reference"):
++    saved_reference = str(metadata.get("reference_image") or "")
++    if saved_reference and os.path.isfile(saved_reference):
++        reference_path = saved_reference
++    elif resume_directory is not None and os.path.isfile(os.path.join(directory, "presenter_reference.jpg")):
++        reference_path = os.path.join(directory, "presenter_reference.jpg")
++    elif context.user_data.get("veo_use_presenter_reference"):
+         from pathlib import Path
+         import tempfile
+         photo_bytes = _get_cached_photo(update.effective_user.id)
+@@ -15903,6 +15903,8 @@
+             finally:
+                 if os.path.exists(tmp):
+                     os.unlink(tmp)
++    if reference_path:
++        metadata = write_metadata(directory, reference_image=reference_path)
+     lock_path = os.path.join(directory, ".lock")
+     with open(lock_path, "a+b") as lock:
+         try:
+@@ -15924,6 +15950,7 @@
+                 api_key=COMET_API_KEY, fast_model=VEO_FAST_MODEL,
+                 poll=poll, reference_image=reference_path, submit_initial=submit_initial,
+                 extend_video=google.extend, output_aspect_ratio="9:16",
++                resume_only=resume_only,
+                 progress=lambda message: update.effective_message.reply_text("🎬 " + message))
+             log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
+             await _reply_video_file(update, str(result), f"🎬 Veo 3.1 · {duration} сек · native Veo Extend · 9:16")
+@@ -15931,14 +15958,57 @@
+             return True
+         except Exception as exc:
+             log.exception("Veo multiscene job failed job=%s", job_hash)
+-            await update.effective_message.reply_text(
+-                "⚠️ Veo: генерация остановлена. Оплаченные сцены не будут отправлены повторно автоматически. "
+-                + str(exc)[:220])
++            checkpoint = retryable_extension(directory)
++            if checkpoint:
++                completed = completed_extension_seconds(directory)
++                await update.effective_message.reply_text(
++                    "⚠️ Veo остановлен на продлении %s. Уже готово примерно %s секунд; "
++                    "начальные и успешные продления повторно не отправляются. "
++                    "Продолжить можно отдельной кнопкой." % (checkpoint.get("step"), completed),
++                    reply_markup=InlineKeyboardMarkup([[
++                        InlineKeyboardButton("♻️ Продолжить с места обрыва", callback_data=callback_data(job_hash))
++                    ]]),
++                )
++            else:
++                await update.effective_message.reply_text(
++                    "⚠️ Veo: генерация остановлена. Оплаченные операции не будут отправлены повторно автоматически. "
++                    + str(exc)[:220])
+             return False
+         finally:
+             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+ 
+ 
++async def _on_veo_resume_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
++    """Resume one owned native Veo job from its durable failed Extend step."""
++    q = update.callback_query
++    from pathlib import Path
++    from neyrobot_prod.veo_recovery import parse_callback_data, read_metadata, retryable_extension
++
++    job_hash = parse_callback_data(q.data or "")
++    if not job_hash:
++        await q.answer("Некорректная задача", show_alert=True)
++        return
++    root = Path(os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")).resolve()
++    directory = (root / job_hash).resolve()
++    if directory.parent != root or not directory.is_dir():
++        await q.answer("Задание не найдено", show_alert=True)
++        return
++    metadata = read_metadata(directory)
++    if int(metadata.get("owner_user_id") or -1) != int(q.from_user.id):
++        await q.answer("Эта кнопка принадлежит другому пользователю", show_alert=True)
++        return
++    if not retryable_extension(directory):
++        await q.answer("Для этого задания больше нечего продолжать", show_alert=True)
++        return
++    await q.answer("Продолжаю с сохранённого шага")
++    with contextlib.suppress(Exception):
++        await q.edit_message_reply_markup(reply_markup=None)
++    await _run_veo_extend_chain(
++        update, context, str(metadata.get("prompt") or ""), int(metadata.get("duration_seconds") or 0),
++        resume_directory=directory, resume_only=True,
++    )
++
++
+ async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
+     """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
+     if 8 < duration <= 148:
+@@ -19034,6 +19102,7 @@
+     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
+     app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10|15|30|60)|sound:(?:on|off))$"), group=0)
+     app.add_handler(CallbackQueryHandler(_on_veo_video_option, pattern=r"^veoopt:dur:(?:8|15|24|30|45|60|90|120|148)$"), group=0)
++    app.add_handler(CallbackQueryHandler(_on_veo_resume_callback, pattern=r"^veoresume:[0-9a-f]{24}$"), group=0)
+ 
+     # Music-video draft approval: consumed once before the generic callback router.
+     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
