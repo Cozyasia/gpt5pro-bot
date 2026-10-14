@@ -15,6 +15,7 @@ COPY . .
 # The connected GitHub writer has a 393 KiB single-blob limit. Keep the
 # production source tree intact and apply the reviewed Veo delta in-image.
 RUN patch --batch --forward -p1 < /app/ops/main_veo.patch
+RUN patch --batch --forward -p1 < /app/ops/main_veo_start_guard.patch
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]
