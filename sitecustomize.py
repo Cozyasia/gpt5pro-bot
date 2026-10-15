@@ -334,3 +334,14 @@ try:
     print("[neyrobot-prod] V246 final selfie owner armed before Application build", flush=True)
 except Exception as exc:
     print(f"[neyrobot-prod] V246 final selfie owner warning: {type(exc).__name__}: {exc}", flush=True)
+
+
+# HeyGen talking-avatar flow. The builder hook is installed before main.py
+# registers its legacy handlers, so the existing «Говорящий аватар» menu button
+# and /heygen command consistently open the production selector.
+try:
+    from neyrobot_prod.heygen_talking_avatar import install as install_heygen_talking_avatar
+    install_heygen_talking_avatar()
+    print("[neyrobot-prod] HeyGen talking-avatar selector armed before Application build", flush=True)
+except Exception as exc:
+    print(f"[neyrobot-prod] HeyGen talking-avatar selector warning: {type(exc).__name__}: {exc}", flush=True)
