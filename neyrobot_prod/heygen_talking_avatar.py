@@ -65,17 +65,19 @@ def voice_from_api(raw: dict[str, Any]) -> Voice:
     )
 
 
-def build_talking_avatar_payload(*, avatar_id: str, voice_id: str, script: str, title: str) -> dict[str, str]:
+def build_talking_avatar_payload(*, avatar_id: str, voice_id: str, script: str, title: str) -> dict[str, Any]:
     avatar_id, voice_id, script = _str(avatar_id), _str(voice_id), _str(script)
     if not all((avatar_id, voice_id, script)):
         raise ValueError("avatar_id, voice_id and script are required")
     return {
+        "type": "avatar",
         "avatar_id": avatar_id,
         "voice_id": voice_id,
         "script": script,
         "title": _str(title) or "Neyro-Bot Studio",
         "resolution": "1080p",
         "aspect_ratio": "9:16",
+        "voice_settings": {"locale": "ru-RU"},
     }
 
 
