@@ -59,3 +59,20 @@ class HeyGenTalkingAvatarTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HeyGenEntryMenuTests(unittest.TestCase):
+    def test_current_menu_callbacks_open_the_engine_chooser(self) -> None:
+        from neyrobot_prod.heygen_talking_avatar import is_talking_avatar_entry_callback
+
+        self.assertTrue(is_talking_avatar_entry_callback("act:fun:avatar"))
+        self.assertTrue(is_talking_avatar_entry_callback("fun:avatar"))
+        self.assertFalse(is_talking_avatar_entry_callback("act:fun:avatar_text"))
+
+    def test_text_video_menu_exposes_heygen_as_a_presenter_engine(self) -> None:
+        from neyrobot_prod.heygen_talking_avatar import video_engine_options
+
+        options = video_engine_options(runway_enabled=True)
+        self.assertEqual(options[0][0], "heygen")
+        self.assertIn(("veo", "Google Veo 3.1 Fast"), options)
+        self.assertIn(("runway", "Runway"), options)
