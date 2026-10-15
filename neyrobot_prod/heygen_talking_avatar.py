@@ -83,6 +83,29 @@ def selection_key(user_id: int) -> str:
     return f"heygen-selection:{int(user_id)}"
 
 
+def is_talking_avatar_entry_callback(data: str) -> bool:
+    """Recognize both current and pre-v265 Telegram menu callback routes."""
+    return _str(data) in {"act:fun:avatar", "fun:avatar"}
+
+
+def video_engine_options(*, runway_enabled: bool) -> list[tuple[str, str]]:
+    """Stable engine catalog for the text-video chooser.
+
+    HeyGen is intentionally described as a presenter engine: its v3 Videos
+    endpoint creates a talking avatar, not a general cinematic text-to-video
+    scene.  The other engines retain their existing production handlers.
+    """
+    options = [
+        ("heygen", "HeyGen · говорящий аватар"),
+        ("sora", "Sora 2 · без людей"),
+        ("kling", "Kling"),
+        ("veo", "Google Veo 3.1 Fast"),
+    ]
+    if runway_enabled:
+        options.append(("runway", "Runway"))
+    return options
+
+
 def _runtime() -> Any | None:
     import sys
     for name in ("__main__", "main"):
@@ -309,6 +332,67 @@ def _confirm_markup() -> Any:
     ])
 
 
+def _entry_markup() -> Any:
+    return _markup([
+        [_button("🎭 HeyGen · выбрать образ и голос", "hg:entry:heygen")],
+        [_button("📸 Kling Avatar · свой портрет", "hg:entry:kling")],
+        [_button("⬅️ Назад в Развлечения", "hg:back:fun")],
+    ])
+
+
+def _video_engine_markup() -> Any:
+    runtime = _runtime()
+    runway_enabled = bool(getattr(runtime, "TEXT_VIDEO_ALLOW_RUNWAY", False))
+    rows: list[list[Any]] = []
+    for engine, label in video_engine_options(runway_enabled=runway_enabled):
+        callback = "hg:tv:heygen" if engine == "heygen" else f"hg:tv:legacy:{engine}"
+        rows.append([_button(label, callback)])
+    rows.append([_button("⬅️ Назад в Развлечения", "hg:back:fun")])
+    return _markup(rows)
+
+
+async def _show_entry_menu(message: Any) -> None:
+    await message.reply_text(
+        "🗣 <b>Говорящий аватар</b>\n\n"
+        "<b>HeyGen</b> — готовый профессиональный образ, выбор русского голоса и текст.\n"
+        "<b>Kling Avatar</b> — ваш портрет + текст или записанный voice/audio.",
+        parse_mode="HTML",
+        reply_markup=_entry_markup(),
+    )
+
+
+async def _show_video_engine_menu(message: Any) -> None:
+    await message.reply_text(
+        "🎬 <b>Видео по тексту / голосу</b>\n\n"
+        "Выберите движок. <b>Veo</b> создаёт видеоряд и нативный звук сам. "
+        "<b>HeyGen</b> создаёт видео с говорящим аватаром: далее выберите образ и русский голос.",
+        parse_mode="HTML",
+        reply_markup=_video_engine_markup(),
+    )
+
+
+async def _delegate_to_legacy_avatar(update: Any, context: Any) -> None:
+    handler = getattr(_runtime(), "on_mode_cb", None)
+    if not callable(handler):
+        raise RuntimeError("Старый режим Kling Avatar недоступен: обработчик не найден")
+    await handler(update, context)
+
+
+async def _delegate_to_legacy_text_engine(update: Any, context: Any, engine: str) -> None:
+    handler = getattr(_runtime(), "_handle_textvideo_engine_choice", None)
+    if not callable(handler):
+        raise RuntimeError("Выбранный видеодвижок временно недоступен")
+    await handler(update, context, update.callback_query, engine, prefix="act")
+
+
+async def _back_to_fun_menu(update: Any, context: Any) -> None:
+    handler = getattr(_runtime(), "_send_mode_menu", None)
+    if callable(handler):
+        await handler(update, context, "fun")
+    else:
+        await update.callback_query.message.reply_text("Откройте «Развлечения» и выберите нужный режим.")
+
+
 async def _show_avatar(message: Any, state: dict[str, Any]) -> None:
     avatar = _avatar_at(state)
     text = (
@@ -482,9 +566,29 @@ async def _callback(update: Any, context: Any) -> None:
     from telegram.ext import ApplicationHandlerStop
     query = update.callback_query
     data = _str(getattr(query, "data", ""))
+    if data == "hg:entry:kling":
+        await _delegate_to_legacy_avatar(update, context)
+        raise ApplicationHandlerStop
+    if data.startswith("hg:tv:legacy:"):
+        engine = data.rsplit(":", 1)[-1]
+        if engine not in {"sora", "kling", "veo", "runway"}:
+            await query.answer("Неизвестный движок", show_alert=True)
+        else:
+            await _delegate_to_legacy_text_engine(update, context, engine)
+        raise ApplicationHandlerStop
+
     await query.answer()
-    if data == "fun:avatar" or data == "hg:start":
+    if is_talking_avatar_entry_callback(data):
+        await _show_entry_menu(query.message)
+        raise ApplicationHandlerStop
+    if data in {"act:fun:textvideo", "fun:textvideo"}:
+        await _show_video_engine_menu(query.message)
+        raise ApplicationHandlerStop
+    if data in {"hg:start", "hg:entry:heygen", "hg:tv:heygen"}:
         await _begin(update, context)
+        raise ApplicationHandlerStop
+    if data == "hg:back:fun":
+        await _back_to_fun_menu(update, context)
         raise ApplicationHandlerStop
     state = context.user_data.get(FLOW_KEY)
     if not state:
@@ -550,7 +654,7 @@ def install() -> None:
         app = original_build(self, *args, **kwargs)
         if not getattr(app, "_heygen_talking_avatar_v1_handlers", False):
             app.add_handler(CommandHandler("heygen", _command), group=-85)
-            app.add_handler(CallbackQueryHandler(_callback, pattern=r"^(?:fun:avatar|hg:)"), group=-85)
+            app.add_handler(CallbackQueryHandler(_callback, pattern=r"^(?:act:fun:(?:avatar|textvideo)|fun:(?:avatar|textvideo)|hg:)"), group=-85)
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text_handler), group=-85)
             setattr(app, "_heygen_talking_avatar_v1_handlers", True)
         return app
@@ -561,5 +665,6 @@ def install() -> None:
 
 __all__ = [
     "Avatar", "Voice", "avatar_from_api", "voice_from_api",
-    "build_talking_avatar_payload", "selection_key", "select_vertical_look", "install",
+    "build_talking_avatar_payload", "selection_key", "is_talking_avatar_entry_callback",
+    "video_engine_options", "select_vertical_look", "install",
 ]
