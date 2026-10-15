@@ -544,12 +544,23 @@ async def _confirm(update: Any, context: Any, state: dict[str, Any]) -> None:
     job_id = _new_job(user.id, chat.id, avatar.avatar_id, voice.voice_id, script)
     await message.reply_text("🎬 HeyGen: отправляю один запрос на создание ролика.")
     try:
-        from neyrobot_prod.heygen_adapter import create_presenter_video
-        video_id = await create_presenter_video(key, avatar.avatar_id, voice.voice_id, script)
+        from neyrobot_prod.heygen_adapter import HeyGenValidationError, create_presenter_video
+        video_id = await create_presenter_video(
+            key, avatar.avatar_id, voice.voice_id, script, idempotency_key=job_id
+        )
         _update_job(job_id, "accepted", video_id=video_id)
         await message.reply_text("✅ HeyGen принял ролик. Готовый файл придёт сюда автоматически.")
         _clear_flow(context)
         asyncio.create_task(_poll_and_deliver(context.bot, chat.id, job_id, video_id))
+    except HeyGenValidationError as exc:
+        # A 4xx is an explicit pre-creation rejection, not an ambiguous paid
+        # submission.  Let the user correct the selected assets/text and retry.
+        _update_job(job_id, "validation_failed", error=f"{type(exc).__name__}: {exc}")
+        state["submitting"] = False
+        await message.reply_text(
+            "⚠️ HeyGen отклонил запрос до создания ролика: " + str(exc)[:350] +
+            ". Можно изменить образ, голос или текст и отправить заново."
+        )
     except Exception as exc:
         _update_job(job_id, "uncertain", error=f"{type(exc).__name__}: {exc}")
         await message.reply_text(
