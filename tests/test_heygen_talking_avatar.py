@@ -8,6 +8,7 @@ from neyrobot_prod.heygen_talking_avatar import (
     build_talking_avatar_payload,
     selection_key,
     voice_from_api,
+    select_vertical_look,
 )
 
 
@@ -31,6 +32,16 @@ class HeyGenTalkingAvatarTests(unittest.TestCase):
         self.assertTrue(avatar.preview_image_url.endswith("aya.jpg"))
         self.assertEqual(voice.voice_id, "voice-123")
         self.assertTrue(voice.preview_audio_url.endswith("rex.wav"))
+
+    def test_group_avatar_prefers_a_vertical_look(self) -> None:
+        base = avatar_from_api({"avatar_id": "base", "name": "Aya", "group_id": "group-1"})
+        look = select_vertical_look(base, {
+            "data": {"looks": [
+                {"avatar_id": "landscape", "name": "Aya wide", "aspect_ratio": "16:9"},
+                {"avatar_id": "portrait", "name": "Aya portrait", "aspect_ratio": "9:16"},
+            ]}
+        })
+        self.assertEqual(look.avatar_id, "portrait")
 
     def test_video_payload_uses_the_user_selected_avatar_and_voice(self) -> None:
         payload = build_talking_avatar_payload(
