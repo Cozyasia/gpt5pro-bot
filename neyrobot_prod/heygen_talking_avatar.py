@@ -155,6 +155,36 @@ def _save_preference(user_id: int, avatar: Avatar, voice: Voice) -> None:
         )
 
 
+
+def select_vertical_look(base: Avatar, looks_payload: Any) -> Avatar:
+    """Return the usable portrait look from an avatar group when HeyGen supplies one."""
+    rows = _rows(looks_payload, ("looks", "avatars", "avatar_list"))
+    choices = [avatar_from_api(row) for row in rows]
+    choices = [choice for choice in choices if choice.avatar_id]
+    if not choices:
+        return base
+
+    def score(raw: dict[str, Any]) -> tuple[int, int]:
+        aspect = _str(raw.get("aspect_ratio") or raw.get("aspectRatio") or raw.get("orientation")).lower()
+        is_vertical = int(aspect in {"9:16", "vertical", "portrait"})
+        is_default = int(bool(raw.get("is_default") or raw.get("default")))
+        return is_vertical, is_default
+
+    ranked = sorted(
+        ((score(raw), avatar_from_api(raw)) for raw in rows if _str(raw.get("avatar_id") or raw.get("id"))),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+    chosen = ranked[0][1] if ranked else choices[0]
+    return Avatar(
+        avatar_id=chosen.avatar_id,
+        name=chosen.name if chosen.name != "Без имени" else base.name,
+        gender=chosen.gender or base.gender,
+        preview_image_url=chosen.preview_image_url or base.preview_image_url,
+        group_id=base.group_id,
+    )
+
+
 def _rows(payload: Any, keys: tuple[str, ...]) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [x for x in payload if isinstance(x, dict)]
@@ -197,8 +227,17 @@ async def load_catalog() -> tuple[list[Avatar], list[Voice]]:
         _fetch_json("/v3/voices", params={"type": "public", "language": "ru", "limit": "50"}),
     )
     avatars = [avatar_from_api(row) for row in _rows(avatar_payload, ("avatars", "avatar_list"))]
-    voices = [voice_from_api(row) for row in _rows(voice_payload, ("voices", "voice_list"))]
     avatars = [x for x in avatars if x.avatar_id]
+    grouped = [avatar for avatar in avatars if avatar.group_id]
+    if grouped:
+        async def resolve(avatar: Avatar) -> Avatar:
+            try:
+                looks = await _fetch_json("/v3/avatars/looks", params={"group_id": avatar.group_id})
+                return select_vertical_look(avatar, looks)
+            except Exception:
+                return avatar
+        avatars = list(await asyncio.gather(*(resolve(avatar) for avatar in avatars)))
+    voices = [voice_from_api(row) for row in _rows(voice_payload, ("voices", "voice_list"))]
     voices = [x for x in voices if x.voice_id]
     if not avatars or not voices:
         raise RuntimeError("HeyGen не вернул доступные аватары или голоса")
@@ -522,5 +561,5 @@ def install() -> None:
 
 __all__ = [
     "Avatar", "Voice", "avatar_from_api", "voice_from_api",
-    "build_talking_avatar_payload", "selection_key", "install",
+    "build_talking_avatar_payload", "selection_key", "select_vertical_look", "install",
 ]
