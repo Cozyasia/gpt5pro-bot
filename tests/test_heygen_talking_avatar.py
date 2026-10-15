@@ -54,6 +54,8 @@ class HeyGenTalkingAvatarTests(unittest.TestCase):
         self.assertEqual(payload["avatar_id"], "avatar-123")
         self.assertEqual(payload["voice_id"], "voice-123")
         self.assertEqual(payload["aspect_ratio"], "9:16")
+        self.assertEqual(payload["type"], "avatar")
+        self.assertEqual(payload["voice_settings"]["locale"], "ru-RU")
         self.assertNotEqual(selection_key(101), selection_key(202))
 
 
