@@ -228,6 +228,29 @@ def _rows(payload: Any, keys: tuple[str, ...]) -> list[dict[str, Any]]:
     return []
 
 
+def video_ready_avatars_from_looks(looks_payload: Any) -> list[Avatar]:
+    """Extract completed *look* IDs, which are the IDs accepted by POST /v3/videos.
+
+    /v3/avatars lists avatar groups (``ag_...``), while the video endpoint
+    requires the selected look (``lk_...``).  Showing group IDs in the picker
+    creates a deterministic 404 ``avatar_not_found`` at submission time.
+    """
+    rows = _rows(looks_payload, ("looks", "avatars", "avatar_list"))
+    ready = [
+        avatar_from_api(raw)
+        for raw in rows
+        if _str(raw.get("id") or raw.get("avatar_id"))
+        and _str(raw.get("status")).lower() not in {"processing", "pending", "failed", "error"}
+    ]
+    return sorted(
+        ready,
+        key=lambda avatar: (
+            0 if _str(next((raw.get("preferred_orientation") for raw in rows if _str(raw.get("id") or raw.get("avatar_id")) == avatar.avatar_id), "")).lower() in {"portrait", "vertical", "9:16"} else 1,
+            avatar.name.lower(),
+        ),
+    )
+
+
 async def _fetch_json(path: str, *, params: dict[str, str] | None = None) -> Any:
     import httpx
     key = _str(os.getenv("HEYGEN_API_KEY"))
@@ -247,21 +270,11 @@ async def load_catalog() -> tuple[list[Avatar], list[Voice]]:
     global _CATALOG
     if _CATALOG and time.monotonic() - _CATALOG[0] < CATALOG_TTL_SECONDS:
         return _CATALOG[1], _CATALOG[2]
-    avatar_payload, voice_payload = await asyncio.gather(
-        _fetch_json("/v3/avatars", params={"limit": "50"}),
+    looks_payload, voice_payload = await asyncio.gather(
+        _fetch_json("/v3/avatars/looks", params={"ownership": "public", "limit": "50"}),
         _fetch_json("/v3/voices", params={"type": "public", "language": "ru", "limit": "50"}),
     )
-    avatars = [avatar_from_api(row) for row in _rows(avatar_payload, ("avatars", "avatar_list"))]
-    avatars = [x for x in avatars if x.avatar_id]
-    grouped = [avatar for avatar in avatars if avatar.group_id]
-    if grouped:
-        async def resolve(avatar: Avatar) -> Avatar:
-            try:
-                looks = await _fetch_json("/v3/avatars/looks", params={"group_id": avatar.group_id})
-                return select_vertical_look(avatar, looks)
-            except Exception:
-                return avatar
-        avatars = list(await asyncio.gather(*(resolve(avatar) for avatar in avatars)))
+    avatars = video_ready_avatars_from_looks(looks_payload)
     voices = [voice_from_api(row) for row in _rows(voice_payload, ("voices", "voice_list"))]
     voices = [x for x in voices if x.voice_id]
     if not avatars or not voices:
