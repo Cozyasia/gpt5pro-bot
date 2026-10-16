@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install isolated transport dependency
+        run: python -m pip install --disable-pip-version-check 'httpx>=0.27,<1'
       - name: Compile singing-clip implementation
         run: python -m py_compile main.py video_studio.py neyrobot_prod/singing_clip_pipeline.py neyrobot_prod/singing_clip_assembly.py neyrobot_prod/singing_clip_audio.py neyrobot_prod/singing_clip_seedance_reference.py
       - name: Run offline singing-clip tests
