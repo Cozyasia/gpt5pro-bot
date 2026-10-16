@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt, require_audio_driven_lipsync
 from neyrobot_prod.singing_clip_assembly import assemble_singing_clip
+from neyrobot_prod.singing_clip_audio import extract_suno_excerpt
 
 class SingingClipTests(unittest.TestCase):
     def test_requires_identity_and_audio(self):
@@ -64,6 +65,31 @@ class SingingClipTests(unittest.TestCase):
             audio.write_bytes(b"mock-audio")
             with self.assertRaises(ValueError):
                 assemble_singing_clip([str(segment)], str(audio), str(audio))
+
+    def test_suno_excerpt_preserves_original_and_uses_exact_range(self):
+        with tempfile.TemporaryDirectory() as folder:
+            audio = Path(folder) / "original.mp3"
+            excerpt = Path(folder) / "excerpt.wav"
+            audio.write_bytes(b"original")
+            def fake_ffmpeg(args, **kwargs):
+                self.assertIn("-ss", args)
+                self.assertIn("3.250", args)
+                self.assertIn("-t", args)
+                self.assertIn("4.500", args)
+                self.assertIn("pcm_s16le", args)
+                excerpt.write_bytes(b"wav")
+            with patch("neyrobot_prod.singing_clip_audio.subprocess.run", side_effect=fake_ffmpeg):
+                self.assertEqual(extract_suno_excerpt(str(audio), str(excerpt),
+                                 start_s=3.25, end_s=7.75), str(excerpt))
+            self.assertEqual(audio.read_bytes(), b"original")
+
+    def test_suno_excerpt_rejects_invalid_range(self):
+        with tempfile.TemporaryDirectory() as folder:
+            audio = Path(folder) / "original.mp3"
+            audio.write_bytes(b"original")
+            with self.assertRaises(ValueError):
+                extract_suno_excerpt(str(audio), str(Path(folder) / "out.wav"),
+                                     start_s=8, end_s=7)
 
     def test_assembly_rejects_missing_inputs(self):
         with self.assertRaises(FileNotFoundError):
