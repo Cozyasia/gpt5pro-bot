@@ -41,7 +41,7 @@ index d39ff76..3569860 100644
 -        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
 +        + ("Для Veo выберите 8–148 секунд кнопками ниже; продолжение выполняется native Veo Extend. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
          + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
-@@ -10486,7 +10491,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
+@@ -10486,8 +10491,8 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
          engine = "kling"
      if engine == "veo":
          duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
