@@ -6,7 +6,7 @@ from unittest.mock import patch
 from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt, require_audio_driven_lipsync, plan_audio_driven_segments
 from neyrobot_prod.singing_clip_assembly import assemble_singing_clip
 from neyrobot_prod.singing_clip_audio import extract_suno_excerpt
-from neyrobot_prod.singing_clip_seedance_reference import build_seedance_reference_request, to_reference_api_payload
+from neyrobot_prod.singing_clip_seedance_reference import build_seedance_reference_request, to_reference_api_payload, build_comet_reference_payload
 
 class SingingClipTests(unittest.TestCase):
     def test_requires_identity_and_audio(self):
@@ -56,6 +56,16 @@ class SingingClipTests(unittest.TestCase):
             build_seedance_reference_request(
                 portrait_url="http://example.com/face.jpg",
                 suno_excerpt_url="https://example.com/suno.wav", duration=15)
+
+    def test_comet_audio_reference_is_blocked_until_verified(self):
+        request = build_seedance_reference_request(
+            portrait_url="https://example.com/face.jpg",
+            suno_excerpt_url="https://example.com/suno.wav", duration=15)
+        with self.assertRaises(RuntimeError):
+            build_comet_reference_payload(request, audio_reference_supported=False)
+        self.assertEqual(
+            build_comet_reference_payload(request, audio_reference_supported=True)["audio_urls"],
+            ["https://example.com/suno.wav"])
 
     def test_segment_boundaries(self):
         self.assertEqual(segment_ranges(31, 15), [(0.0, 15), (15, 30), (30, 31)])
