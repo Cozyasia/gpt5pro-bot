@@ -4640,6 +4640,7 @@ async def _handle_vocalclip_prompt_choice(update: Update, context: ContextTypes.
     _set_mode_clean(q.from_user.id, "Развлечения", "vocalclip")
     img = _get_cached_photo(q.from_user.id)
     if img:
+        _seed_vocal_identity_from_portrait(q.from_user.id, img)
         _set_vocal_clip_wait(context)
         await q.answer("Готово")
         await q.message.reply_text(
@@ -8199,6 +8200,16 @@ def _music_video_identity_clear(user_id: int) -> None:
 def _music_video_identity_complete(user_id: int) -> bool:
     refs = _music_video_identity_cache.get(int(user_id), {})
     return all(refs.get(k) for k in ("face_front", "face_3q", "body_full", "scene_reference"))
+
+
+def _seed_vocal_identity_from_portrait(user_id: int, portrait: bytes) -> None:
+    """Build the one-photo identity pack promised by the vocal-clip flow."""
+    if not portrait:
+        raise ValueError("vocal portrait is empty")
+    _music_video_identity_clear(user_id)
+    for slot in ("face_front", "face_3q", "body_full", "scene_reference"):
+        _music_video_identity_put(user_id, slot, portrait)
+
 
 def _cache_photo(user_id: int, data: bytes, file_url: str | None = None):
     try:
@@ -18075,6 +18086,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if context.user_data.get("awaiting_vocal_clip_photo"):
             context.user_data.pop("awaiting_vocal_clip_photo", None)
+            _seed_vocal_identity_from_portrait(user_id, img)
             if context.user_data.get("vocal_audio_is_custom") and context.user_data.get("vocal_source_token"):
                 _set_vocal_clip_video_brief_after_custom_audio(context)
                 await update.effective_message.reply_text(

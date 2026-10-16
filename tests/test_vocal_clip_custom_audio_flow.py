@@ -89,6 +89,43 @@ class VocalClipCustomAudioFlowTests(unittest.TestCase):
         self.assertEqual(context.user_data["vocal_source_token"], "uploaded-source")
         self.assertIn("пользовательская исходная аудиодорожка", context.user_data["music_video_draft"]["source_note"])
 
+    def test_single_vocal_portrait_seeds_the_identity_pack(self):
+        module = ast.parse(SOURCE)
+        function = next(
+            (
+                node for node in module.body
+                if isinstance(node, ast.FunctionDef) and node.name == "_seed_vocal_identity_from_portrait"
+            ),
+            None,
+        )
+        self.assertIsNotNone(function, "single-portrait vocal identity seeding is missing")
+
+        pack = {99: {"old": b"stale"}}
+
+        def clear(user_id):
+            pack.pop(user_id, None)
+
+        def put(user_id, slot, data):
+            pack.setdefault(user_id, {})[slot] = bytes(data)
+
+        namespace = {
+            "_music_video_identity_clear": clear,
+            "_music_video_identity_put": put,
+        }
+        exec(compile(ast.Module(body=[function], type_ignores=[]), "<identity>", "exec"), namespace)
+
+        namespace["_seed_vocal_identity_from_portrait"](99, b"one-portrait")
+
+        self.assertEqual(
+            pack[99],
+            {
+                "face_front": b"one-portrait",
+                "face_3q": b"one-portrait",
+                "body_full": b"one-portrait",
+                "scene_reference": b"one-portrait",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
