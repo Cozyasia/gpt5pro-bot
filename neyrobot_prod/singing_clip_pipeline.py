@@ -65,3 +65,17 @@ def segment_ranges(duration_seconds: float, segment_seconds: int = 15) -> list[t
 def require_audio_driven_lipsync(*, supports_audio_reference: bool, provider_name: str) -> None:
     if not supports_audio_reference:
         raise RuntimeError(f'{provider_name} has no verified audio-driven lip-sync. Do not charge or generate.')
+
+def plan_audio_driven_segments(
+    duration_seconds: float,
+    *,
+    segment_seconds: int = 15,
+    supports_audio_reference: bool,
+    provider_name: str,
+) -> list[tuple[float, float]]:
+    """Require verified audio-reference support before scheduling any paid work."""
+    require_audio_driven_lipsync(
+        supports_audio_reference=supports_audio_reference,
+        provider_name=provider_name,
+    )
+    return segment_ranges(duration_seconds, segment_seconds)
