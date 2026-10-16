@@ -1,0 +1,24 @@
+name: Singing clip checks
+on:
+  pull_request:
+    paths:
+      - 'neyrobot_prod/singing_clip_*.py'
+      - 'tests/test_singing_clip_pipeline.py'
+      - '.github/workflows/singing-clip-checks.yml'
+  push:
+    branches:
+      - feature/suno-seedance-singing-clip
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    env:
+      PROD_HARDENING_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile new modules
+        run: python -m py_compile neyrobot_prod/singing_clip_pipeline.py neyrobot_prod/singing_clip_assembly.py tests/test_singing_clip_pipeline.py
+      - name: Run offline singing clip tests
+        run: python -m unittest discover -s tests -p 'test_singing_clip_pipeline.py' -v
