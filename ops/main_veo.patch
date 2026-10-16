@@ -34,14 +34,14 @@ index d39ff76..3569860 100644
          await q.answer("Недопустимая длительность", show_alert=True)
          return
      context.user_data["veo_text_duration"] = duration
-@@ -4667,7 +4672,7 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
+@@ -4667,5 +4672,5 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
      await q.message.reply_text(
          f"✅ Выбран движок: {labels[engine]}.{warning}\n"
          "Теперь напишите промпт или отправьте voice. "
 -        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
 +        + ("Для Veo выберите 8–148 секунд кнопками ниже; продолжение выполняется native Veo Extend. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
          + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
-@@ -10486,8 +10491,8 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
+@@ -10486,7 +10491,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
          engine = "kling"
      if engine == "veo":
          duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
@@ -50,7 +50,7 @@ index d39ff76..3569860 100644
              duration = 8
      if engine == "kling":
          duration = int(context.user_data.get("kling_text_duration", 5))
-@@ -10647,7 +10647,19 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+@@ -10647,9 +10647,22 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
      if engine == "veo" and duration > 8:
 +        # Pure no-charge preflight: derive the spoken-content contract before
 +        # payment and before the first Google operation is submitted. This is
