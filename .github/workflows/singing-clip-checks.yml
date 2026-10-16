@@ -19,6 +19,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Compile new modules
-        run: python -m py_compile neyrobot_prod/singing_clip_pipeline.py neyrobot_prod/singing_clip_assembly.py tests/test_singing_clip_pipeline.py
+        run: python -m py_compile neyrobot_prod/singing_clip_pipeline.py neyrobot_prod/singing_clip_assembly.py neyrobot_prod/singing_clip_audio.py tests/test_singing_clip_pipeline.py
       - name: Run offline singing clip tests
         run: python -m unittest discover -s tests -p 'test_singing_clip_pipeline.py' -v
