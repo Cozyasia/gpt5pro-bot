@@ -113,6 +113,16 @@ services:
     sync: false
   - key: COMET_BASE_URL
     value: https://api.cometapi.com
+  - key: SEEDANCE_ENABLED
+    value: '1'
+  - key: SEEDANCE_MODEL
+    value: seedance-2-5-260628
+  - key: SEEDANCE_MODEL_FALLBACKS
+    value: seedance-2-5,seedance-2-5-260628
+  - key: SEEDANCE_CREATE_PATH
+    value: /v1/videos
+  - key: SEEDANCE_COST_PER_SECOND_USD
+    value: '0.10'
   - key: COMET_IMAGE_GEN_MODEL
     value: gpt-image-1
   - key: COMET_IMAGE_GEN_PATH
@@ -306,6 +316,8 @@ services:
     value: '1'
   - key: TEXT_VIDEO_UNIT_COST_USD
     value: '0.40'
+  - key: VIDEO_STUDIO_ENABLED
+    value: '1'
   - key: KLING_TEXT_CREATE_PATH
     value: /kling/v1/videos/text2video
   - key: KLING_TEXT_STATUS_PATH
