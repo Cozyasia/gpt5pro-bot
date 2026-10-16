@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import mimetypes
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import httpx
 
@@ -111,11 +111,15 @@ async def seedance_generate(
     timeout_s: float = 45.0,
     poll_interval_s: float = 2.5,
     max_wait_s: float = 1800.0,
+    existing_task_id: str | None = None,
+    on_task_id: Callable[[str], None] | None = None,
 ) -> bytes:
     """Submit one Seedance job and return the finished mp4 bytes.
 
-    Model aliases are tried only when the create request itself fails. Once a
-    job id is returned, it is polled exactly once to avoid duplicate billing.
+    A known task can be resumed without sending another create request.  Model
+    aliases are tried only after a definitive client-side rejection (4xx), when
+    the provider did not create a task.  Once a request might have reached the
+    provider, this function never submits another billable create request.
     """
 
     if not api_key:
@@ -131,50 +135,67 @@ async def seedance_generate(
 
     async with httpx.AsyncClient(timeout=timeout_s, follow_redirects=True) as client:
         created: Any = None
+        task_id = str(existing_task_id or "").strip()
         last_error = ""
-        for candidate in _model_candidates(model, model_fallbacks):
-            data = {
-                "model": candidate,
-                "prompt": str(prompt).strip(),
-                "seconds": str(seconds),
-                "size": _size_for_aspect(aspect),
-            }
-            files = None
-            if reference_bytes:
-                files = {
-                    "input_reference": (
-                        reference_name,
-                        reference_bytes,
-                        mime,
-                    )
+        if not task_id:
+            for candidate in _model_candidates(model, model_fallbacks):
+                data = {
+                    "model": candidate,
+                    "prompt": str(prompt).strip(),
+                    "seconds": str(seconds),
+                    "size": _size_for_aspect(aspect),
                 }
-            try:
-                response = await client.post(
-                    f"{base}{endpoint}",
-                    headers=headers,
-                    data=data,
-                    files=files,
-                )
+                files = None
+                if reference_bytes:
+                    files = {
+                        "input_reference": (
+                            reference_name,
+                            reference_bytes,
+                            mime,
+                        )
+                    }
+                try:
+                    response = await client.post(
+                        f"{base}{endpoint}",
+                        headers=headers,
+                        data=data,
+                        files=files,
+                    )
+                except httpx.HTTPError as exc:
+                    raise SeedanceError(
+                        "Не подтверждён результат запуска Seedance; повторная отправка отключена, "
+                        "чтобы не создать дубликат."
+                    ) from exc
+                if response.status_code >= 500:
+                    raise SeedanceError(
+                        f"Seedance вернул {response.status_code}; повторная отправка отключена, "
+                        "чтобы не создать дубликат."
+                    )
                 if response.status_code >= 400:
                     last_error = f"{response.status_code}: {response.text[:500]}"
                     continue
-                created = response.json()
+                try:
+                    created = response.json()
+                except ValueError as exc:
+                    raise SeedanceError(
+                        "Seedance принял запрос, но вернул некорректный ответ; повторная отправка отключена."
+                    ) from exc
                 break
-            except (httpx.HTTPError, ValueError) as exc:
-                last_error = str(exc)
 
-        if created is None:
-            raise SeedanceError(f"Не удалось запустить Seedance через Comet: {last_error}")
+            if created is None:
+                raise SeedanceError(f"Не удалось запустить Seedance через Comet: {last_error}")
 
-        immediate = _video_bytes(created)
-        if immediate:
-            return immediate
-        immediate_url = _video_url(created)
-        task_id = _task_id(created)
-        if immediate_url:
-            return await _download_video(client, immediate_url, headers)
-        if not task_id:
-            raise SeedanceError("Comet не вернул идентификатор задачи Seedance.")
+            immediate = _video_bytes(created)
+            if immediate:
+                return immediate
+            immediate_url = _video_url(created)
+            task_id = _task_id(created) or ""
+            if immediate_url:
+                return await _download_video(client, immediate_url, headers)
+            if not task_id:
+                raise SeedanceError("Comet не вернул идентификатор задачи Seedance.")
+            if callable(on_task_id):
+                on_task_id(task_id)
 
         started = asyncio.get_running_loop().time()
         while True:

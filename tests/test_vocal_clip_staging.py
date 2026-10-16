@@ -30,8 +30,9 @@ def load_entry_points():
         "_vocal_clip_role_plan": lambda *_: {"mode": "solo"},
         "_vocal_clip_background_jobs": set(),
         "_load_vocal_artifact": lambda *_: None,
-        "VOCAL_CLIP_UNIT_COST_USD": 1.50,
-        "AVATAR_UNIT_COST_USD": 0.65,
+        "SUNO_COST_USD": 0.20,
+        "SEEDANCE_COST_PER_SECOND_USD": 0.10,
+        "VOCAL_CLIP_KLING_LIPSYNC_COST_USD": 0.056,
         "contextlib": contextlib,
         "SUNO_ENABLED": True, "SUNO_API_KEY": "test-key",
         "ChatAction": SimpleNamespace(RECORD_VIDEO="record_video"),
@@ -42,12 +43,12 @@ def load_entry_points():
 
 
 class VocalClipStagingTests(unittest.TestCase):
-    def test_price_estimate_counts_every_additional_avatar_scene(self):
+    def test_price_estimate_covers_seedance_duration_and_each_lipsync_job(self):
         env = load_entry_points()
         estimate = env["_vocal_clip_provider_cost_usd"]
-        self.assertEqual(1.50, estimate(1))
-        self.assertEqual(4.75, estimate(6))
-        self.assertEqual(6.70, estimate(9))
+        self.assertEqual(1.056, estimate(10, 1))
+        self.assertEqual(6.336, estimate(60, 6))
+        self.assertEqual(9.504, estimate(90, 9))
 
     def test_long_vocal_request_enters_scaled_billing_path(self):
         env = load_entry_points()
@@ -70,7 +71,8 @@ class VocalClipStagingTests(unittest.TestCase):
 
         self.assertEqual(1, len(billed))
         self.assertEqual(6, billed[0][1]["remember_payload"]["scenes"])
-        self.assertEqual(4.75, billed[0][0][4])
+        self.assertEqual("suno_song", billed[0][1]["remember_payload"]["stage"])
+        self.assertEqual(0.20, billed[0][0][4])
 
     def test_short_vocal_request_keeps_one_scene_billing_path(self):
         env = load_entry_points()
@@ -93,7 +95,7 @@ class VocalClipStagingTests(unittest.TestCase):
 
         self.assertEqual(1, len(billed))
         self.assertEqual(1, billed[0][1]["remember_payload"]["scenes"])
-        self.assertEqual(1.50, billed[0][0][4])
+        self.assertEqual(0.20, billed[0][0][4])
 
     def test_provider_error_details_stay_out_of_user_message(self):
         env = load_entry_points()

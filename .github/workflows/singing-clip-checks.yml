@@ -3,7 +3,14 @@ on:
   pull_request:
     paths:
       - 'neyrobot_prod/singing_clip_*.py'
+      - 'main.py'
+      - 'video_studio.py'
       - 'tests/test_singing_clip_pipeline.py'
+      - 'tests/test_seedance_resumable_transport.py'
+      - 'tests/test_vocal_clip_staging.py'
+      - 'tests/test_vocal_song_recovery.py'
+      - 'tests/test_vocal_clip_custom_audio_flow.py'
+      - 'tests/test_vocal_clip_seedance_kling_contract.py'
       - '.github/workflows/singing-clip-checks.yml'
   push:
     branches:
@@ -18,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Compile new modules
-        run: python -m py_compile neyrobot_prod/singing_clip_pipeline.py neyrobot_prod/singing_clip_assembly.py neyrobot_prod/singing_clip_audio.py neyrobot_prod/singing_clip_seedance_reference.py tests/test_singing_clip_pipeline.py
-      - name: Run offline singing clip tests
-        run: python -m unittest discover -s tests -p 'test_singing_clip_pipeline.py' -v
+      - name: Compile singing-clip implementation
+        run: python -m py_compile main.py video_studio.py neyrobot_prod/singing_clip_pipeline.py neyrobot_prod/singing_clip_assembly.py neyrobot_prod/singing_clip_audio.py neyrobot_prod/singing_clip_seedance_reference.py
+      - name: Run offline singing-clip tests
+        run: python -m unittest tests.test_singing_clip_pipeline tests.test_seedance_resumable_transport tests.test_vocal_clip_staging tests.test_music_video_audio_review_pending tests.test_vocal_song_recovery tests.test_vocal_clip_custom_audio_flow tests.test_vocal_clip_seedance_kling_contract -v

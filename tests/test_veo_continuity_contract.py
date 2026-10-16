@@ -44,12 +44,16 @@ class VeoContinuityTests(unittest.TestCase):
         self.assertNotIn("fade=t=in", source)
         self.assertNotIn("afade=t=in", source)
 
-    def test_preflight_before_charge(self):
+    def test_presenter_reference_preflight_happens_before_charge(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
-        begin = source.index('    if engine == "veo" and duration > 8:')
+        begin = source.index('    if engine == "veo" and duration > 8 and context.user_data.get("veo_use_presenter_reference"):')
         end = source.index('    provider_cost = _video_provider_cost_usd(engine, duration)', begin)
-        self.assertIn("extract_spoken_script", source[begin:end])
-        self.assertIn("plan_video(duration", source[begin:end])
+        preflight = source[begin:end]
+        self.assertIn("_get_cached_photo", preflight)
+        self.assertIn("JPEG", preflight)
+        self.assertIn("return False", preflight)
+        self.assertIn("Native Veo audio", preflight)
+        self.assertNotIn("extract_spoken_script", preflight)
 
 
 if __name__ == "__main__":
