@@ -16465,7 +16465,7 @@ async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TY
         await update.effective_message.reply_text("❌ Пустой запрос для видео.")
         return False
     if engine == "sora" and _prompt_likely_has_people(prompt):
-        await update.effective_message.reply_text("⚠️ Sora 2 доступна только для сцен без людей. Используйте Kling or Runway.")
+        await update.effective_message.reply_text("⚠️ Sora 2 доступна только для сцен без людей. Используйте Kling или Runway.")
         return False
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
     if engine == "seedance":
