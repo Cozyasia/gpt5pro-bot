@@ -19155,6 +19155,28 @@ def build_application() -> "Application":
     # 1) Подписка/оплаты
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
+    # Explicit high-priority Video Studio callback routing, independent of legacy fun/act routers.
+    async def _on_video_studio_engine_callback(update, context):
+        q = update.callback_query
+        action = (q.data or "").rsplit(":", 1)[-1]
+        engines = {"tv_engine_seedance": "seedance", "tv_engine_veo": "veo",
+                   "tv_engine_kling": "kling", "tv_engine_sora": "sora",
+                   "tv_engine_runway": "runway"}
+        try:
+            await _handle_textvideo_engine_choice(update, context, q, engines[action], prefix="fun")
+        except Exception:
+            log.exception("Video Studio engine selection failed: %s", action)
+            with contextlib.suppress(Exception):
+                await q.answer("Ошибка выбора движка", show_alert=True)
+            with contextlib.suppress(Exception):
+                await q.message.reply_text("Не удалось открыть движок. Повторите выбор.")
+        raise ApplicationHandlerStop
+
+    app.add_handler(CallbackQueryHandler(
+        _on_video_studio_engine_callback,
+        pattern=r"^(?:fun:|act:fun:)tv_engine_(?:seedance|veo|kling|sora|runway)$"
+    ), group=-1)
+
     # 2) Новые режимы/подменю: mode:* и act:* (Учёба/Работа/Развлечения/Медицина)
     app.add_handler(CallbackQueryHandler(on_mode_cb, pattern=r"^(?:mode:|act:)"), group=0)
     app.add_handler(CallbackQueryHandler(_on_kling_video_option, pattern=r"^tvopt:(?:dur:(?:5|10|15|30|60)|sound:(?:on|off))$"), group=0)
