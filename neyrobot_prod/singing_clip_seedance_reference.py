@@ -64,3 +64,19 @@ def to_reference_api_payload(request: SeedanceReferenceRequest) -> dict:
         "aspect_ratio": request.aspect_ratio,
         "generate_audio": False,
     }
+
+def build_comet_reference_payload(
+    request: SeedanceReferenceRequest, *, audio_reference_supported: bool
+) -> dict:
+    """Comet adapter. Refuse unsupported audio rather than silently dropping it.
+
+    Comet's existing /v1/videos integration accepts multipart input_reference
+    for images. Audio reference support needs a verified API contract before
+    this payload may be sent to the production endpoint.
+    """
+    if not audio_reference_supported:
+        raise RuntimeError(
+            "CometAPI /v1/videos audio reference is unverified; "
+            "cannot submit or charge for a lip-sync job."
+        )
+    return to_reference_api_payload(request)
