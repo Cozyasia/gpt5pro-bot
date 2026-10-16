@@ -3,7 +3,7 @@ import unittest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt
+from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt, require_audio_driven_lipsync
 from neyrobot_prod.singing_clip_assembly import assemble_singing_clip
 
 class SingingClipTests(unittest.TestCase):
@@ -14,6 +14,20 @@ class SingingClipTests(unittest.TestCase):
                                suno_audio_url="https://example.com/song.mp3",
                                reference_image_url="https://example.com/portrait.jpg")
         self.assertTrue(ready.ready_for_video())
+
+    def test_rejects_unsafe_or_missing_assets(self):
+        for url in ("http://example.com/audio.mp3", "file:///tmp/audio.mp3", "https://u:p@example.com/audio.mp3"):
+            job = SingingClipJob(user_id=1, prompt="song", suno_audio_url=url,
+                                 reference_image_url="https://example.com/portrait.jpg")
+            with self.assertRaises(ValueError):
+                job.validated_inputs()
+        with self.assertRaises(ValueError):
+            SingingClipJob(user_id=1, prompt="song").validated_inputs()
+
+    def test_unverified_lipsync_fails_closed(self):
+        with self.assertRaises(RuntimeError):
+            require_audio_driven_lipsync(supports_audio_reference=False, provider_name="Seedance")
+        require_audio_driven_lipsync(supports_audio_reference=True, provider_name="VerifiedProvider")
 
     def test_segment_boundaries(self):
         self.assertEqual(segment_ranges(31, 15), [(0.0, 15), (15, 30), (30, 31)])
