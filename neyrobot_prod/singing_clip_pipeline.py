@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import urlparse
 
 Stage = Literal["lyrics", "suno", "photo", "seedance", "assemble", "complete"]
 
@@ -31,6 +32,14 @@ class SingingClipJob:
     def ready_for_video(self) -> bool:
         return bool(self.suno_audio_url and self.reference_image_url)
 
+    def validated_inputs(self) -> None:
+        if not self.ready_for_video():
+            raise ValueError('Suno audio and singer reference image are required')
+        for asset in (self.suno_audio_url, self.reference_image_url):
+            parsed = urlparse(asset or '')
+            if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError('provider asset must use a public HTTPS URL')
+
 def seedance_reference_prompt(language: str = "Russian") -> str:
     return (
         "Use the supplied image as the singer identity reference and the supplied "
@@ -51,3 +60,8 @@ def segment_ranges(duration_seconds: float, segment_seconds: int = 15) -> list[t
         result.append((round(start, 3), round(end, 3)))
         start = end
     return result
+
+
+def require_audio_driven_lipsync(*, supports_audio_reference: bool, provider_name: str) -> None:
+    if not supports_audio_reference:
+        raise RuntimeError(f'{provider_name} has no verified audio-driven lip-sync. Do not charge or generate.')
