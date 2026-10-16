@@ -4220,9 +4220,11 @@ async def _stage_music_video_draft(
     if selected_duration_s is not None:
         video_brief = _music_video_replace_duration_field(video_brief, duration)
     combined = _music_video_join_briefs(music_brief, video_brief)
-    # A new draft is a new audio review transaction. Never inherit an approved token
-    # from a previous clip/test; explicit saved-song selection happens through its own action.
-    context.user_data.pop("vocal_source_token", None)
+    # A newly written Suno brief must not inherit an old approved song.  An uploaded
+    # source track is different: it is the user's explicit audio selection and must
+    # survive staging through approval so Suno is not called again.
+    if not context.user_data.get("vocal_audio_is_custom"):
+        context.user_data.pop("vocal_source_token", None)
     context.user_data.pop("music_video_pending_audio_token", None)
     pack_fn = globals().get("_music_video_identity_pack")
     complete_fn = globals().get("_music_video_identity_complete")
@@ -4273,10 +4275,15 @@ async def _stage_music_video_draft(
         _mode_track_set(update.effective_user.id, "")
         kv_set(f"music_video_music_brief:{update.effective_user.id}", "")
     source_token = context.user_data.get("vocal_source_token")
+    has_saved_source = bool(
+        _clip_wants_vocals(music_brief) and source_token
+        and _load_vocal_artifact(update.effective_user.id, source_token, "audio")
+    )
     source_note = (
-        "\n\n🎵 Для этого клипа выбрана сохранённая полная песня Suno; новую песню не создаю."
-        if _clip_wants_vocals(music_brief) and source_token
-        and _load_vocal_artifact(update.effective_user.id, source_token, "audio") else ""
+        "\n\n🎵 Для этого клипа выбрана пользовательская исходная аудиодорожка; Suno не запускаю."
+        if has_saved_source and context.user_data.get("vocal_audio_is_custom")
+        else "\n\n🎵 Для этого клипа выбрана сохранённая полная песня Suno; новую песню не создаю."
+        if has_saved_source else ""
     )
     context.user_data["music_video_draft"]["source_note"] = source_note
     await _send_music_video_review(update.effective_message, context.user_data["music_video_draft"])
