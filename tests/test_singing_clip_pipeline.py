@@ -1,5 +1,8 @@
 """No paid provider calls: local validation tests for singing-clip planning."""
 import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt
 from neyrobot_prod.singing_clip_assembly import assemble_singing_clip
 
@@ -19,6 +22,34 @@ class SingingClipTests(unittest.TestCase):
 
     def test_prompt_preserves_original_audio(self):
         self.assertIn("original Suno audio", seedance_reference_prompt())
+
+    def test_assembly_uses_original_audio_and_safe_arguments(self):
+        with tempfile.TemporaryDirectory() as folder:
+            segment = Path(folder) / "scene one.mp4"
+            audio = Path(folder) / "suno original.mp3"
+            output = Path(folder) / "result.mp4"
+            segment.write_bytes(b"mock-video")
+            audio.write_bytes(b"mock-audio")
+            def fake_ffmpeg(args, **kwargs):
+                self.assertEqual(args[0], "ffmpeg")
+                self.assertIn(str(audio), args)
+                self.assertIn("-filter_complex", args)
+                self.assertIn("-map", args)
+                self.assertIn("1:a:0", args)
+                self.assertNotIn("shell", kwargs)
+                output.write_bytes(b"mock-result")
+            with patch("neyrobot_prod.singing_clip_assembly.subprocess.run", side_effect=fake_ffmpeg) as run:
+                self.assertEqual(assemble_singing_clip([str(segment)], str(audio), str(output)), str(output))
+                run.assert_called_once()
+
+    def test_assembly_refuses_to_overwrite_original_audio(self):
+        with tempfile.TemporaryDirectory() as folder:
+            segment = Path(folder) / "scene.mp4"
+            audio = Path(folder) / "song.mp3"
+            segment.write_bytes(b"mock-video")
+            audio.write_bytes(b"mock-audio")
+            with self.assertRaises(ValueError):
+                assemble_singing_clip([str(segment)], str(audio), str(audio))
 
     def test_assembly_rejects_missing_inputs(self):
         with self.assertRaises(FileNotFoundError):
