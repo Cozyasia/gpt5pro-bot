@@ -4,7 +4,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from neyrobot_prod.veo_extend_15_pipeline import create_extended_video
+from neyrobot_prod.veo_extend_15_pipeline import (
+    _extension_prompt,
+    _render_delivery_video,
+    create_extended_video,
+)
 from neyrobot_prod.veo_task_journal import read_job, write_job
 
 
@@ -16,6 +20,29 @@ class _ProviderVideo(bytes):
 
 
 class VeoExtendContractTests(unittest.IsolatedAsyncioTestCase):
+    def test_vertical_delivery_pads_unexpected_ratio_instead_of_cropping(self):
+        with patch("subprocess.run") as run:
+            run.return_value.returncode = 0
+            _render_delivery_video(Path("source.mp4"), Path("result.mp4"), 30, "9:16")
+        args = run.call_args.args[0]
+        video_filter = args[args.index("-vf") + 1]
+        self.assertIn("pad=720:1280", video_filter)
+        self.assertNotIn("crop=720:1280", video_filter)
+
+    def test_extension_prompt_is_continuation_only_and_has_timeline_guard(self):
+        prompt = _extension_prompt(
+            "Сцена 1: ведущий говорит: «Откройте приложение и повторите эту фразу».",
+            step=2,
+            previous_duration=15,
+            target_duration=22,
+            total_steps=4,
+        )
+        self.assertIn("extension 2 of 4", prompt)
+        self.assertIn("seconds 15–22", prompt)
+        self.assertIn("Do not restart, recap, reshoot, repeat or paraphrase", prompt)
+        self.assertIn("continuity context only, not dialogue", prompt)
+        self.assertNotIn("Откройте приложение", prompt)
+
     async def test_native_provider_uri_is_forwarded_between_extensions(self):
         first_uri = "https://generativelanguage.googleapis.com/v1beta/files/initial"
         second_uri = "https://generativelanguage.googleapis.com/v1beta/files/extended"

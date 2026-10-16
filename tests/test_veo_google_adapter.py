@@ -1,6 +1,7 @@
 import base64
+import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from neyrobot_prod.veo_google_adapter import (
     build_generate_payload,
@@ -10,6 +11,19 @@ from neyrobot_prod.veo_google_adapter import (
 
 
 class GoogleVeoAdapterTests(unittest.TestCase):
+    def test_initial_submission_defaults_to_vertical_delivery_shape(self):
+        from neyrobot_prod.veo_google_adapter import GoogleVeoClient
+
+        async def run():
+            client = GoogleVeoClient("test-key")
+            client._submit = AsyncMock(return_value="operations/initial")
+            result = await client.submit_initial("Русская реплика")
+            return result, client._submit.await_args.args[0]
+
+        operation, payload = asyncio.run(run())
+        self.assertEqual(operation, "operations/initial")
+        self.assertEqual(payload["parameters"]["aspectRatio"], "9:16")
+
     def test_initial_payload_uses_official_native_video_shape(self):
         payload = build_generate_payload("Русская реплика")
         self.assertEqual(payload["instances"][0]["prompt"], "Русская реплика")

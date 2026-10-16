@@ -132,7 +132,7 @@ index d39ff76..3569860 100644
 +        async def submit_initial():
              await update.effective_message.reply_text("🎬 Veo: начальная генерация 8 секунд")
 -            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt, reference_image=reference_path)
-+            return await google.submit_initial(prompt, reference_image=reference_path)
++            return await google.submit_initial(prompt, reference_image=reference_path, aspect_ratio="9:16")
          async def poll(task_id):
              log.info("VEO_SCENE_POLL_START job=%s task_id=%s", job_hash, task_id)
 -            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:

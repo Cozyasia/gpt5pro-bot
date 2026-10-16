@@ -166,8 +166,14 @@ class GoogleVeoClient:
                 "Google Veo accepted response did not contain an operation ID"
             ) from exc
 
-    async def submit_initial(self, prompt: str, *, reference_image: str | None = None) -> str:
-        payload = build_generate_payload(prompt)
+    async def submit_initial(
+        self,
+        prompt: str,
+        *,
+        reference_image: str | None = None,
+        aspect_ratio: str = "9:16",
+    ) -> str:
+        payload = build_generate_payload(prompt, aspect_ratio=aspect_ratio)
         if reference_image:
             from pathlib import Path
             path = Path(reference_image)

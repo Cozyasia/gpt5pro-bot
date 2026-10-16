@@ -28,13 +28,37 @@ def _uri_from_provider(payload):
     return find_video_uri(payload)
 
 
-def _extension_prompt(original):
+def _extension_prompt(original, *, step: int, previous_duration: int,
+                      target_duration: int, total_steps: int) -> str:
+    """Build a continuation-only prompt for one cumulative Extend call.
+
+    The previous implementation appended the complete original brief to every
+    extension.  When that brief contained a spoken script, Veo treated it as a
+    fresh scene and replayed the opening dialogue.  The previous cumulative
+    video is already the authoritative visual/audio context; the brief is now
+    explicitly non-spoken continuity context only.
+    """
+    import re
+    brief = " ".join(str(original or "").split())
+    # Never feed already-spoken quoted dialogue back as extension context. The
+    # prior cumulative Veo video is the source of truth for words already heard.
+    brief = re.sub(r"[«“\"][^»”\"]+[»”\"]", " ", brief)
+    brief = " ".join(brief.split())
+    if len(brief) > 1800:
+        brief = brief[:1800].rstrip() + "…"
     return (
-        "Extend the supplied Veo video forward by exactly 7 seconds, preserving the "
-        "same presenter, face, clothes, framing, environment, camera motion, lighting, "
-        "voice timbre and native audio continuity. All speech must be Russian; no "
-        "English words or English narration. Continue the action and dialogue "
-        "naturally, without restarting the scene. Original creative brief: " + original
+        f"CONTINUE THE EXISTING CUMULATIVE VEO VIDEO. This is extension {step} "
+        f"of {total_steps}, covering only seconds {previous_duration}–{target_duration}. "
+        "Extend forward by exactly 7 seconds from the final frame. The previous "
+        "video already contains all earlier action, shots, gestures, on-screen text "
+        "and dialogue. Do not restart, recap, reshoot, repeat or paraphrase any "
+        "earlier scene, spoken phrase, sound cue, title, phone action or camera move. "
+        "Do not replay the opening or repeat the same words. Begin at the exact last "
+        "moment and advance the story with new action and new Russian speech only. "
+        "Keep the same presenter, face, clothes, framing, environment, lighting, "
+        "voice timbre, native-audio continuity and vertical 9:16 composition. "
+        "The following is continuity context only, not dialogue and not text to say: "
+        + brief
     )
 
 
@@ -130,20 +154,18 @@ def _render_delivery_video(source: Path, destination: Path, duration_seconds: in
                            output_aspect_ratio: str) -> None:
     """Render the cumulative native result into the Telegram delivery shape.
 
-    The Google Veo Fast Extend backend currently rejects a 9:16 source at the
-    Extend boundary. Native generation therefore stays 16:9 for the entire
-    cumulative chain; only the final, already-generated result is center-cropped
-    to the user's requested 9:16 delivery format.
+    Prefer preserving the complete provider frame. If a provider unexpectedly
+    returns a different ratio, pad instead of center-cropping important content.
     """
     import subprocess
 
     if output_aspect_ratio == "9:16":
         video_filter = (
-            "scale=720:1280:force_original_aspect_ratio=increase,"
-            "crop=720:1280,setsar=1"
+            "scale=720:1280:force_original_aspect_ratio=decrease,"
+            "pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1"
         )
     elif output_aspect_ratio == "16:9":
-        video_filter = "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1"
+        video_filter = "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1"
     else:
         raise ValueError("Unsupported output aspect ratio")
 
@@ -255,7 +277,15 @@ async def create_extended_video(*, directory, prompt, duration_seconds, base_url
                 )
                 source = source_uri or latest.read_bytes()
                 result = await extend_video(
-                    source, _extension_prompt(prompt))
+                    source,
+                    _extension_prompt(
+                        prompt,
+                        step=step,
+                        previous_duration=8 + 7 * (step - 1),
+                        target_duration=8 + 7 * step,
+                        total_steps=steps,
+                    ),
+                )
                 if not isinstance(result, bytes) or len(result) < 1024:
                     raise RuntimeError("Native Veo Extend returned empty video bytes")
                 _write_video_atomically(video_file, result)
