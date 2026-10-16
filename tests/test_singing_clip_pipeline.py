@@ -6,6 +6,7 @@ from unittest.mock import patch
 from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt, require_audio_driven_lipsync, plan_audio_driven_segments
 from neyrobot_prod.singing_clip_assembly import assemble_singing_clip
 from neyrobot_prod.singing_clip_audio import extract_suno_excerpt
+from neyrobot_prod.singing_clip_seedance_reference import build_seedance_reference_request, to_reference_api_payload
 
 class SingingClipTests(unittest.TestCase):
     def test_requires_identity_and_audio(self):
@@ -38,6 +39,23 @@ class SingingClipTests(unittest.TestCase):
         self.assertEqual(plan_audio_driven_segments(
             31, segment_seconds=15, supports_audio_reference=True,
             provider_name="VerifiedProvider"), [(0.0, 15), (15, 30), (30, 31)])
+
+    def test_seedance_audio_reference_payload(self):
+        request = build_seedance_reference_request(
+            portrait_url="https://example.com/face.jpg",
+            suno_excerpt_url="https://example.com/suno.wav",
+            duration=15)
+        payload = to_reference_api_payload(request)
+        self.assertEqual(payload["audio_urls"], ["https://example.com/suno.wav"])
+        self.assertEqual(payload["image_urls"], ["https://example.com/face.jpg"])
+        self.assertIn("@audio1", payload["prompt"])
+        self.assertFalse(payload["generate_audio"])
+
+    def test_seedance_reference_rejects_invalid_assets(self):
+        with self.assertRaises(ValueError):
+            build_seedance_reference_request(
+                portrait_url="http://example.com/face.jpg",
+                suno_excerpt_url="https://example.com/suno.wav", duration=15)
 
     def test_segment_boundaries(self):
         self.assertEqual(segment_ranges(31, 15), [(0.0, 15), (15, 30), (30, 31)])
