@@ -4640,6 +4640,18 @@ async def _on_kling_video_option(update: Update, context: ContextTypes.DEFAULT_T
     await q.message.edit_reply_markup(reply_markup=_kling_video_options_keyboard(context))
 
 
+def _seedance_duration_keyboard(context):
+    selected = int(context.user_data.get("seedance_text_duration", 10))
+    choices = (4, 8, 10, 15, 20, 30)
+    rows = []
+    for offset in range(0, len(choices), 3):
+        rows.append([InlineKeyboardButton(
+            ("✅ " if seconds == selected else "") + f"{seconds} сек",
+            callback_data=f"seedance_duration:{seconds}"
+        ) for seconds in choices[offset:offset + 3]])
+    return InlineKeyboardMarkup(rows)
+
+
 async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, engine: str, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "textvideo")
@@ -4671,7 +4683,7 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
         "Теперь напишите промпт или отправьте voice. "
         + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
         + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
-        , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else None
+        , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else _seedance_duration_keyboard(context) if engine == "seedance" else None
     )
 
 
@@ -10628,7 +10640,10 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         if context.user_data.get("kling_text_sound"):
             prompt += "\\nGenerate synchronized native audio, dialogue and ambient sound matching the scene."
     if engine == "seedance":
-        duration = max(4, min(30, int(context.user_data.get("seedance_text_duration", 10))))
+        # Explicit prompt duration overrides the menu default.
+        explicit = re.search(r"(?<!\\d)([4-9]|[12]\\d|30)\\s*(?:секунд(?:ы|у)?|сек\\.?|seconds?|s)\\b", prompt, re.IGNORECASE)
+        duration = int(explicit.group(1)) if explicit else int(context.user_data.get("seedance_text_duration", 10))
+        duration = max(4, min(30, duration))
         aspect = aspect if aspect in {"9:16", "16:9", "1:1", "4:5"} else "9:16"
     if engine == "sora" and _prompt_likely_has_people(prompt):
         await update.effective_message.reply_text(
@@ -19171,6 +19186,27 @@ def build_application() -> "Application":
             with contextlib.suppress(Exception):
                 await q.message.reply_text("Не удалось открыть движок. Повторите выбор.")
         raise ApplicationHandlerStop
+
+    async def _on_seedance_duration_callback(update, context):
+        q = update.callback_query
+        seconds = int((q.data or "").split(":")[-1])
+        if seconds not in (4, 8, 10, 15, 20, 30):
+            await q.answer("Недопустимая длительность", show_alert=True)
+            raise ApplicationHandlerStop
+        context.user_data["seedance_text_duration"] = seconds
+        _set_text_video_wait(context, "seedance")
+        await q.answer(f"Seedance: {seconds} сек")
+        await q.message.reply_text(
+            f"✅ Seedance 2.5 · {seconds} секунд · 9:16. Теперь отправьте промпт. "
+            "Стоимость будет рассчитана для выбранной длительности.",
+            reply_markup=_seedance_duration_keyboard(context),
+        )
+        raise ApplicationHandlerStop
+
+    app.add_handler(CallbackQueryHandler(
+        _on_seedance_duration_callback,
+        pattern=r"^seedance_duration:(?:4|8|10|15|20|30)$"
+    ), group=-2)
 
     app.add_handler(CallbackQueryHandler(
         _on_video_studio_engine_callback,
