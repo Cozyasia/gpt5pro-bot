@@ -30,6 +30,7 @@ from music_video_scene_plan import (
     scene_plan_from_dict,
     scene_plan_from_explicit_timeline,
 )
+from video_studio import SeedanceError, seedance_generate, seedance_scene_prompt
 
 # ───────── Render Secret Files bootstrap ─────────
 # Must run before any API keys are read from os.environ.
@@ -121,7 +122,7 @@ log = logging.getLogger("gpt-bot")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-PATCH_VERSION = "v104-presentation-preflight-self-heal-2026-07-16"
+PATCH_VERSION = "v105-seedance-video-studio-2026-10-16"
 
 # ───────── ENV ─────────
 
@@ -649,6 +650,11 @@ VEO_24S_KLING_LIPSYNC_COST_USD = _pricing_cost("VEO_24S_KLING_LIPSYNC_COST_USD",
 # A 24-second master track is therefore budgeted before any paid provider POST.
 VEO_24S_TTS_COST_PER_MINUTE_USD = _pricing_cost("VEO_24S_TTS_COST_PER_MINUTE_USD", 0.015)
 TEXT_VIDEO_ALLOW_RUNWAY = os.environ.get("TEXT_VIDEO_ALLOW_RUNWAY", "1").strip().lower() not in ("0", "false", "no", "off")
+SEEDANCE_ENABLED = os.environ.get("SEEDANCE_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
+SEEDANCE_MODEL = os.environ.get("SEEDANCE_MODEL", "seedance-2-5-260628").strip() or "seedance-2-5-260628"
+SEEDANCE_MODEL_FALLBACKS = [item.strip() for item in os.environ.get("SEEDANCE_MODEL_FALLBACKS", "seedance-2-5,seedance-2-5-260628").split(",") if item.strip()]
+SEEDANCE_CREATE_PATH = os.environ.get("SEEDANCE_CREATE_PATH", "/v1/videos").strip() or "/v1/videos"
+SEEDANCE_COST_PER_SECOND_USD = _pricing_cost("SEEDANCE_COST_PER_SECOND_USD", 0.10)
 
 _photo_clip_background_jobs: set[str] = set()
 _vocal_clip_background_jobs: set[str] = set()
@@ -2061,6 +2067,8 @@ def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
     if engine == "sora":
         per_s = SORA_PRO_COST_PER_SECOND_USD if "pro" in (SORA_MODEL or "").lower() else SORA_COST_PER_SECOND_USD
         return round(max(1, d) * per_s, 4)
+    if engine == "seedance":
+        return round(max(4, min(30, int(duration_s or 10))) * SEEDANCE_COST_PER_SECOND_USD, 4)
     if engine == "kling":
         return round(KLING_5S_COST_USD * (max(1, (int(duration_s or 5) + 4) // 5) if int(duration_s or 5) > 10 else (2 if d >= 10 else 1)), 4)
     if engine == "runway":
@@ -4419,6 +4427,8 @@ def _textvideo_menu_text() -> str:
         "• *Kling* — люди, динамика, Reels/Shorts и универсальные сцены.\n"
         "• *Google Veo 3.1 Fast* — 8 секунд, 9:16, нативный звук (русская речь экспериментальная).\n"
         "• *Runway* — люди и кинематографичные сцены; официальный Runway API используется первым, Comet и Kling — резерв.\n\n"
+        "• *Seedance 2.5* — 4–30 секунд, рекламные сцены, референсы и звук через Comet.\n"
+        "Автоматические режимы: авторежиссёр разбивает запрос на сцены, автомонтаж собирает их в один вертикальный ролик.\n"
         "Стоимость показывается в кредитах и списывается только после успешного результата."
     )
 
@@ -4430,9 +4440,13 @@ def _textvideo_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
         [InlineKeyboardButton(f"🎬 Kling · {_video_price_credits('kling', 5)} кр.", callback_data=f"{base}:tv_engine_kling")],
         [InlineKeyboardButton(f"🇷🇺 Veo 3.1 Fast · 8 сек · {_video_price_credits('veo', 8)} кр.", callback_data=f"{base}:tv_engine_veo")],
     ]
+    if SEEDANCE_ENABLED:
+        rows.append([InlineKeyboardButton(f"✨ Seedance 2.5 · 4–30 сек · {_video_price_credits('seedance', 10)} кр.", callback_data=f"{base}:tv_engine_seedance")])
     if TEXT_VIDEO_ALLOW_RUNWAY:
         rows.append([InlineKeyboardButton(f"🎥 Runway · {_video_price_credits('runway', 5)} кр.", callback_data=f"{base}:tv_engine_runway")])
     rows.extend([
+        [InlineKeyboardButton("🎬 Авторежиссёр", callback_data=f"{base}:video_director")],
+        [InlineKeyboardButton("🛠 Автомонтаж сцен", callback_data=f"{base}:video_montage")],
         [InlineKeyboardButton("📝 Ввести текст / 🎙 отправить voice", callback_data=f"{base}:tv_prompt")],
         [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun" if prefix == "act" else "fun:back")],
     ])
@@ -4632,7 +4646,7 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
     engine = (engine or TEXT_VIDEO_DEFAULT_ENGINE or "kling").strip().lower()
     if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
         engine = "kling"
-    if engine not in ("sora", "kling", "runway", "veo"):
+    if engine not in ("sora", "kling", "runway", "veo", "seedance"):
         engine = "kling"
     _set_text_video_wait(context, engine)
     if engine == "kling":
@@ -4641,13 +4655,21 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
     if engine == "veo":
         context.user_data.setdefault("veo_text_duration", 8)
         context.user_data["veo_use_presenter_reference"] = False
-    labels = {"sora": "Sora 2 — только без людей", "kling": "Kling", "runway": "Runway", "veo": "Google Veo 3.1 Fast · русский звук (эксперимент)"}
+    if engine == "seedance":
+        context.user_data.setdefault("seedance_text_duration", 10)
+    labels = {
+        "sora": "Sora 2 — только без людей",
+        "kling": "Kling",
+        "runway": "Runway",
+        "veo": "Google Veo 3.1 Fast · русский звук (эксперимент)",
+        "seedance": "Seedance 2.5 · Comet",
+    }
     await q.answer(labels[engine][:180])
     warning = "\n⚠️ В промпте не должно быть людей, лиц или персонажей." if engine == "sora" else ""
     await q.message.reply_text(
         f"✅ Выбран движок: {labels[engine]}.{warning}\n"
         "Теперь напишите промпт или отправьте voice. "
-        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
+        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
         + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
         , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else None
     )
@@ -10473,6 +10495,119 @@ async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_T
     return True
 
 
+
+async def _start_video_studio(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+) -> bool:
+    """Compile a scene plan, generate Seedance scenes, and auto-montage them."""
+    prompt = (prompt or "").strip()
+    if not prompt:
+        await update.effective_message.reply_text("Опишите ролик одним сообщением.")
+        return False
+
+    parsed_duration, _ = parse_video_opts(prompt)
+    duration = parsed_duration if re.search(r"\d+\s*(?:сек|с)", prompt.lower()) else 20
+    duration = max(4, min(30, int(duration)))
+    aspect = next((value for value in ("9:16", "16:9", "1:1", "4:5") if value in prompt), "9:16")
+    mode = context.user_data.pop("video_studio_mode", "director")
+    context.user_data.pop("awaiting_video_studio_prompt", None)
+
+    await update.effective_message.reply_text(
+        "🎬 Авторежиссёр строит план сцен. После проверки плана Seedance создаст "
+        f"{duration} секунд видео, а автомонтаж склеит сцены в один ролик."
+    )
+    try:
+        plan = await _compile_music_video_scene_plan(
+            "",
+            prompt,
+            duration,
+            aspect,
+            user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+        )
+    except Exception as exc:
+        log.exception("Video Studio scene plan failed")
+        await update.effective_message.reply_text(
+            "❌ Не удалось собрать план сцен: " + str(exc)[:500]
+        )
+        return False
+
+    if not plan.scenes:
+        await update.effective_message.reply_text("❌ Авторежиссёр не вернул ни одной сцены.")
+        return False
+
+    provider_cost = sum(
+        _video_provider_cost_usd("seedance", max(4, int(round(scene.duration_s))))
+        for scene in plan.scenes
+    )
+    label = "Авторежиссёр + автомонтаж" if mode == "director" else "Автомонтаж сцен"
+
+    async def _go():
+        await update.effective_message.reply_text(
+            f"🛠 {label}: {len(plan.scenes)} сцен, {plan.duration_s} сек, {plan.aspect}."
+        )
+        with tempfile.TemporaryDirectory(prefix="video-studio-") as workdir:
+            scene_paths = []
+            reference = _get_cached_photo(update.effective_user.id)
+            for position, scene in enumerate(plan.scenes, start=1):
+                seconds = max(4, min(30, int(round(scene.duration_s))))
+                await update.effective_message.reply_text(
+                    f"🎞 Сцена {position}/{len(plan.scenes)}: Seedance {seconds} сек."
+                )
+                scene_prompt = seedance_scene_prompt(scene, prompt)
+                content = await seedance_generate(
+                    api_key=COMET_API_KEY,
+                    base_url=COMET_BASE_URL,
+                    prompt=scene_prompt,
+                    seconds=seconds,
+                    aspect=plan.aspect,
+                    model=SEEDANCE_MODEL,
+                    model_fallbacks=SEEDANCE_MODEL_FALLBACKS,
+                    reference_bytes=reference,
+                    create_path=SEEDANCE_CREATE_PATH,
+                )
+                scene_path = os.path.join(workdir, f"scene_{position:02d}.mp4")
+                with open(scene_path, "wb") as scene_file:
+                    scene_file.write(content)
+                scene_paths.append(scene_path)
+
+            output_path = os.path.join(workdir, "video_studio_final.mp4")
+            from neyrobot_prod.veo_assembler import assemble_vertical_video
+            await asyncio.to_thread(
+                assemble_vertical_video,
+                scene_paths,
+                output_path,
+                plan.duration_s,
+            )
+            await _reply_video_file(
+                update,
+                output_path,
+                caption=f"{label} · Seedance 2.5 · {plan.duration_s} сек · {plan.aspect}",
+                task_id=f"video-studio:{uuid.uuid4().hex}",
+            )
+        return True
+
+    await _try_pay_then_do(
+        update,
+        context,
+        update.effective_user.id,
+        "seedance",
+        provider_cost,
+        _go,
+        remember_kind="video_studio_seedance",
+        remember_payload={
+            "prompt": prompt[:500],
+            "duration": plan.duration_s,
+            "aspect": plan.aspect,
+            "scenes": len(plan.scenes),
+            "mode": mode,
+        },
+    )
+    return True
+
+
 async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
     prompt = (prompt or "").strip()
     if not prompt:
@@ -10482,7 +10617,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     engine = (context.user_data.get("text_video_engine") or TEXT_VIDEO_DEFAULT_ENGINE or "kling").strip().lower()
     if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
         engine = "kling"
-    if engine not in ("sora", "runway", "kling", "veo"):
+    if engine not in ("sora", "runway", "kling", "veo", "seedance"):
         engine = "kling"
     if engine == "veo":
         duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
@@ -10492,6 +10627,9 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         duration = int(context.user_data.get("kling_text_duration", 5))
         if context.user_data.get("kling_text_sound"):
             prompt += "\\nGenerate synchronized native audio, dialogue and ambient sound matching the scene."
+    if engine == "seedance":
+        duration = max(4, min(30, int(context.user_data.get("seedance_text_duration", 10))))
+        aspect = aspect if aspect in {"9:16", "16:9", "1:1", "4:5"} else "9:16"
     if engine == "sora" and _prompt_likely_has_people(prompt):
         await update.effective_message.reply_text(
             "⚠️ Sora 2 в боте используется только для сцен без людей. В запросе обнаружен человек/персонаж. Выберите Kling или Runway.",
@@ -10515,7 +10653,13 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         import re
         # Native Veo audio: a single visual prompt is sufficient.
     provider_cost = _video_provider_cost_usd(engine, duration)
-    label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
+    label = {
+        "sora": "Sora 2 · без людей",
+        "runway": "Runway",
+        "kling": "Kling",
+        "veo": "Google Veo 3.1 Fast · native audio",
+        "seedance": "Seedance 2.5 · Comet",
+    }[engine]
     if engine == "veo" and duration > 8:
         await update.effective_message.reply_text(f"🎬 Veo: {(duration + 7) // 8} самостоятельных сцен с оригинальным звуком Veo · 9:16. Без OpenAI TTS и Kling Lip-Sync. Сцены будут смонтированы в один ролик.")
 
@@ -16272,6 +16416,48 @@ async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
+
+async def _run_seedance_direct(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    duration_s: int,
+    aspect: str,
+    *,
+    reference_bytes: bytes | None = None,
+    caption_prefix: str = "Seedance 2.5",
+) -> bool:
+    """Run one Seedance scene and deliver it as an MP4."""
+    if not SEEDANCE_ENABLED:
+        await update.effective_message.reply_text("Seedance временно отключён в настройках сервиса.")
+        return False
+    try:
+        content = await seedance_generate(
+            api_key=COMET_API_KEY,
+            base_url=COMET_BASE_URL,
+            prompt=prompt,
+            seconds=duration_s,
+            aspect=aspect,
+            model=SEEDANCE_MODEL,
+            model_fallbacks=SEEDANCE_MODEL_FALLBACKS,
+            reference_bytes=reference_bytes,
+            create_path=SEEDANCE_CREATE_PATH,
+        )
+        await _reply_video_bytes(
+            update,
+            content,
+            caption=f"{caption_prefix} · {duration_s} сек · {aspect}",
+            task_id=f"seedance:{uuid.uuid4().hex}",
+        )
+        return True
+    except Exception as exc:
+        log.exception("Seedance generation failed")
+        await update.effective_message.reply_text(
+            "❌ Seedance не смог завершить генерацию: " + str(exc)[:500]
+        )
+        return False
+
+
 async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, prompt: str, duration_s: int, aspect: str) -> bool:
     """Text-to-video through CometAPI: Sora 2, Kling, or Runway."""
     engine = (engine or "").lower().strip(); prompt = (prompt or "").strip()
@@ -16282,6 +16468,8 @@ async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TY
         await update.effective_message.reply_text("⚠️ Sora 2 доступна только для сцен без людей. Используйте Kling или Runway.")
         return False
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    if engine == "seedance":
+        return await _run_seedance_direct(update, context, prompt, duration_s, aspect)
     if engine == "runway":
         return bool(await _run_runway_video(update, context, prompt, duration_s, aspect))
     if engine == "veo":
@@ -17182,6 +17370,11 @@ async def on_text(
             "✅ Сценарий сохранён. Теперь выберите движок:",
             reply_markup=photo_revival_engines_kb(),
         )
+        return
+
+    # Video Studio: one prompt -> validated scene plan -> Seedance scenes -> montage.
+    if context.user_data.get("awaiting_video_studio_prompt"):
+        await _start_video_studio(update, context, text)
         return
 
     # Видео по тексту/голосу: ждём prompt после выбора движка.
@@ -18265,6 +18458,26 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == "tv_engine_veo":
         await _handle_textvideo_engine_choice(update, context, q, "veo", prefix="fun")
+        return
+
+    if action == "tv_engine_seedance":
+        await _handle_textvideo_engine_choice(update, context, q, "seedance", prefix="fun")
+        return
+
+    if action in {"video_director", "video_montage"}:
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", action)
+        context.user_data["awaiting_video_studio_prompt"] = True
+        context.user_data["video_studio_mode"] = "director" if action == "video_director" else "montage"
+        await q.answer("Авторежиссёр" if action == "video_director" else "Автомонтаж")
+        await q.message.reply_text(
+            ("🎬 Пришлите один промпт для авторежиссёра. Я разобью его на сцены, "
+             "создам сцены через Seedance 2.5 и соберу финальный ролик.")
+            if action == "video_director"
+            else
+            ("🛠 Пришлите описание ролика для автомонтажа. Я создам отдельные сцены "
+             "и автоматически склею удачные фрагменты в один ролик.")
+        )
         return
 
     if action == "tv_engine_kling":

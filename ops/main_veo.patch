@@ -34,15 +34,13 @@ index d39ff76..3569860 100644
          await q.answer("Недопустимая длительность", show_alert=True)
          return
      context.user_data["veo_text_duration"] = duration
-@@ -4647,7 +4652,7 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
+@@ -4667,5 +4672,5 @@ async def _handle_textvideo_engine_choice(update: Update, context: ContextTypes.
      await q.message.reply_text(
          f"✅ Выбран движок: {labels[engine]}.{warning}\n"
          "Теперь напишите промпт или отправьте voice. "
--        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
-+        + ("Для Veo выберите 8–148 секунд кнопками ниже; продолжение выполняется native Veo Extend. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "")
+-        + ("Для Veo выберите 8/15/24/30/60 секунд кнопками ниже. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
++        + ("Для Veo выберите 8–148 секунд кнопками ниже; продолжение выполняется native Veo Extend. " if engine == "veo" else "Для Kling выберите длительность и звук кнопками ниже. " if engine == "kling" else "Seedance создаёт сцену 4–30 секунд; по умолчанию — 10 секунд. " if engine == "seedance" else "")
          + "Для речи укажите: Персонаж произносит: «Ваш текст». Голосовое сообщение будет распознано как текст."
-         , reply_markup=_kling_video_options_keyboard(context) if engine == "kling" else _veo_video_options_keyboard(context) if engine == "veo" else None
-     )
 @@ -10486,7 +10491,7 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
          engine = "kling"
      if engine == "veo":
@@ -52,9 +50,7 @@ index d39ff76..3569860 100644
              duration = 8
      if engine == "kling":
          duration = int(context.user_data.get("kling_text_duration", 5))
-@@ -10507,17 +10512,35 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
-             await update.effective_message.reply_text("⚠️ Для референса Veo отправьте JPEG-фото размером до 10 МБ. Генерация не запущена.")
-             return False
+@@ -10647,9 +10647,22 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
      if engine == "veo" and duration > 8:
 +        # Pure no-charge preflight: derive the spoken-content contract before
 +        # payment and before the first Google operation is submitted. This is
@@ -80,18 +76,6 @@ index d39ff76..3569860 100644
 -        import re
 -        # Native Veo audio: a single visual prompt is sufficient.
      provider_cost = _video_provider_cost_usd(engine, duration)
-     label = {"sora": "Sora 2 · без людей", "runway": "Runway", "kling": "Kling", "veo": "Google Veo 3.1 Fast · native audio"}[engine]
-     if engine == "veo" and duration > 8:
--        await update.effective_message.reply_text(f"🎬 Veo: {(duration + 7) // 8} самостоятельных сцен с оригинальным звуком Veo · 9:16. Без OpenAI TTS и Kling Lip-Sync. Сцены будут смонтированы в один ролик.")
-+        extensions = (duration - 8 + 6) // 7
-+        await update.effective_message.reply_text(
-+            f"🎬 Veo: 8 секунд + {extensions} native Extend-продлений по 7 секунд · "
-+            f"итог до {8 + extensions * 7} секунд · 9:16. "
-+            "Каждое продление использует предыдущий накопленный Veo-ролик."
-+        )
- 
-     async def _go():
-         await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}.")
 @@ -15812,13 +15835,28 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
  
  
