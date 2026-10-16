@@ -3,7 +3,7 @@ import unittest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt, require_audio_driven_lipsync
+from neyrobot_prod.singing_clip_pipeline import SingingClipJob, segment_ranges, seedance_reference_prompt, require_audio_driven_lipsync, plan_audio_driven_segments
 from neyrobot_prod.singing_clip_assembly import assemble_singing_clip
 from neyrobot_prod.singing_clip_audio import extract_suno_excerpt
 
@@ -29,6 +29,15 @@ class SingingClipTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             require_audio_driven_lipsync(supports_audio_reference=False, provider_name="Seedance")
         require_audio_driven_lipsync(supports_audio_reference=True, provider_name="VerifiedProvider")
+
+    def test_paid_segments_blocked_without_verified_audio_provider(self):
+        with self.assertRaises(RuntimeError):
+            plan_audio_driven_segments(30, segment_seconds=15,
+                                       supports_audio_reference=False,
+                                       provider_name="Seedance")
+        self.assertEqual(plan_audio_driven_segments(
+            31, segment_seconds=15, supports_audio_reference=True,
+            provider_name="VerifiedProvider"), [(0.0, 15), (15, 30), (30, 31)])
 
     def test_segment_boundaries(self):
         self.assertEqual(segment_ranges(31, 15), [(0.0, 15), (15, 30), (30, 31)])
