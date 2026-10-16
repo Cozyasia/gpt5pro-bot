@@ -646,6 +646,11 @@ VEO_FAST_MODEL = os.environ.get("VEO_FAST_MODEL", "veo3.1-fast")
 VEO_FAST_COST_PER_SECOND_USD = _env_float("VEO_FAST_COST_PER_SECOND_USD", 0.096)
 # Published Comet price for kling-advanced-lip-syn, one request per scene.
 VEO_24S_KLING_LIPSYNC_COST_USD = _pricing_cost("VEO_24S_KLING_LIPSYNC_COST_USD", 0.056)
+# The vocal-clip flow uses the same documented advanced lip-sync endpoint.  Keep
+# its estimate separate so a future provider change cannot silently affect Veo.
+VOCAL_CLIP_KLING_LIPSYNC_COST_USD = _pricing_cost(
+    "VOCAL_CLIP_KLING_LIPSYNC_COST_USD", VEO_24S_KLING_LIPSYNC_COST_USD
+)
 # OpenAI lists gpt-4o-mini-tts at an estimated $0.015 per generated minute.
 # A 24-second master track is therefore budgeted before any paid provider POST.
 VEO_24S_TTS_COST_PER_MINUTE_USD = _pricing_cost("VEO_24S_TTS_COST_PER_MINUTE_USD", 0.015)
@@ -2719,6 +2724,38 @@ async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
     log.error("STT failed: %s", last_err)
     return ""
 
+
+def _normalize_vocal_source_audio_sync(raw: bytes, filename: str) -> bytes:
+    """Keep MP3 untouched; transcode other Telegram audio to a safe MP3 source."""
+    if not 512 <= len(raw or b"") <= 50 * 1024 * 1024:
+        raise ValueError("audio size is outside the 512 B–50 MB limit")
+    if str(filename or "").lower().endswith(".mp3"):
+        return raw
+    suffix = os.path.splitext(str(filename or "audio.bin"))[1].lower() or ".bin"
+    with tempfile.TemporaryDirectory(prefix="neyro_vocal_source_") as td:
+        source_path = os.path.join(td, "source" + suffix)
+        output_path = os.path.join(td, "source.mp3")
+        with open(source_path, "wb") as fh:
+            fh.write(raw)
+        completed = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", source_path,
+                "-map", "0:a:0", "-vn", "-ac", "2", "-ar", "44100",
+                "-c:a", "libmp3lame", "-b:a", "192k", output_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=180,
+            check=False,
+        )
+        if completed.returncode != 0 or not os.path.isfile(output_path):
+            raise RuntimeError("ffmpeg could not normalize the uploaded audio")
+        with open(output_path, "rb") as fh:
+            normalized = fh.read()
+    if not 512 <= len(normalized) <= 50 * 1024 * 1024:
+        raise RuntimeError("normalized audio size is invalid")
+    return normalized
+
 # ───────── Хендлер голосовых/аудио ─────────
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
@@ -2740,7 +2777,10 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raw = buf.getvalue()
 
         mime = (getattr(media, "mime_type", "") or "").lower()
-        if "ogg" in mime or "opus" in mime:
+        supplied_name = os.path.basename(str(getattr(media, "file_name", "") or ""))
+        if re.fullmatch(r"[A-Za-z0-9_. -]{1,160}\.(?:mp3|wav|m4a|aac|ogg|webm)", supplied_name, re.I):
+            filename = supplied_name
+        elif "ogg" in mime or "opus" in mime:
             filename = "voice.ogg"
         elif "webm" in mime:
             filename = "voice.webm"
@@ -2754,6 +2794,34 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("TG download error: %s", e)
         await msg.reply_text("Не удалось скачать голосовое сообщение. Попробуйте отправить его ещё раз, лучше не пересылая, а загрузив напрямую.")
+        return
+
+    if context.user_data.get("awaiting_vocal_clip_audio"):
+        if voice or not audio:
+            await msg.reply_text("Пришлите песню как файл *Audio* (MP3, WAV, M4A/AAC), а не голосовое сообщение.", parse_mode="Markdown")
+            return
+        try:
+            source_audio = await asyncio.to_thread(_normalize_vocal_source_audio_sync, raw, filename)
+            token = uuid.uuid4().hex[:12]
+            await asyncio.to_thread(_save_vocal_artifact, update.effective_user.id, token, "audio", source_audio)
+        except Exception:
+            log.exception("custom vocal source could not be saved")
+            await msg.reply_text("Не удалось подготовить аудиодорожку. Загрузите MP3, WAV или M4A до 50 МБ.")
+            return
+        context.user_data["vocal_source_token"] = token
+        context.user_data["vocal_audio_is_custom"] = True
+        context.user_data.pop("awaiting_vocal_clip_audio", None)
+        if _get_cached_photo(update.effective_user.id):
+            _set_vocal_clip_video_brief_after_custom_audio(context)
+            await msg.reply_text(
+                "✅ Исходная аудиодорожка сохранена. Теперь опишите видеоряд: сцены, настроение, движения, локации. "
+                "Формат будет 9:16; выберите длительность на следующем шаге."
+            )
+        else:
+            context.user_data["awaiting_vocal_clip_photo"] = True
+            await msg.reply_text(
+                "✅ Исходная аудиодорожка сохранена. Теперь пришлите фронтальный портрет одного исполнителя."
+            )
         return
 
     # Если пользователь на шаге выбора голоса прислал voice/audio, используем реальный голос без TTS.
@@ -4401,9 +4469,9 @@ def _vocal_clip_menu_text() -> str:
         "Для стабильного результата работает только с *одним человеком в кадре*.\n\n"
         "Последовательность:\n"
         "1) загрузите фронтальный портрет одного человека;\n"
-        "2) опишите песню: стиль, настроение, язык, припев, длительность;\n"
-        "3) бот генерирует вокал через Suno;\n"
-        "4) затем делает lip-sync через Kling Avatar.\n\n"
+        "2) опишите песню для Suno *или загрузите свой вокальный трек*;\n"
+        "3) выберите сценарий и длительность вертикального клипа;\n"
+        "4) Seedance создаст видеоряд, а Kling синхронизирует губы по исходному аудио.\n\n"
         "Важно: если на фото два человека, качество lip-sync резко падает. Для дуэта лучше делать две отдельные сцены по одному человеку."
     )
 
@@ -4413,6 +4481,7 @@ def _vocal_clip_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📸 Загрузить портрет 1 человека", callback_data=f"{base}:vocalclip_upload")],
         [InlineKeyboardButton("✅ Использовать последнее фото", callback_data=f"{base}:vocalclip_last")],
+        [InlineKeyboardButton("🎵 Загрузить свою аудиодорожку", callback_data=f"{base}:vocalclip_audio")],
         [InlineKeyboardButton("📝 Описать песню/клип", callback_data=f"{base}:vocalclip_prompt")],
         [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun" if prefix == "act" else "fun:back")],
     ])
@@ -4514,6 +4583,8 @@ def _set_ai_selfie_wait(context: ContextTypes.DEFAULT_TYPE):
 def _clear_vocal_clip_wait(context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("awaiting_vocal_clip_photo", None)
     context.user_data.pop("awaiting_vocal_clip_prompt", None)
+    context.user_data.pop("awaiting_vocal_clip_audio", None)
+    context.user_data.pop("vocal_audio_is_custom", None)
     context.user_data.pop("vocal_clip_preset_prompt", None)
 
 
@@ -4522,6 +4593,18 @@ def _set_vocal_clip_wait(context: ContextTypes.DEFAULT_TYPE):
     context.user_data["awaiting_vocal_clip_prompt"] = True
     context.user_data.pop("awaiting_music_video_video_brief", None)
     context.user_data.pop("music_video_music_brief", None)
+
+
+def _set_vocal_clip_video_brief_after_custom_audio(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Advance an uploaded source track directly to the video-direction step."""
+    context.user_data.pop("awaiting_vocal_clip_audio", None)
+    context.user_data.pop("awaiting_vocal_clip_prompt", None)
+    context.user_data["vocal_audio_is_custom"] = True
+    context.user_data["music_video_music_brief"] = (
+        "Пользовательская исходная аудиодорожка с русским вокалом. "
+        "Не генерируй и не заменяй музыку: для lip-sync использовать именно этот трек."
+    )
+    context.user_data["awaiting_music_video_video_brief"] = True
 
 
 def _clear_text_video_wait(context: ContextTypes.DEFAULT_TYPE):
@@ -4562,6 +4645,21 @@ async def _handle_vocalclip_prompt_choice(update: Update, context: ContextTypes.
             "Сначала пришлите портрет одного человека. После загрузки я сначала попрошу описание песни, затем отдельно сценарий видео.",
             reply_markup=_vocal_clip_action_kb(prefix),
         )
+
+
+async def _handle_vocalclip_audio_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
+    _clear_transient_flows(context)
+    _set_mode_clean(q.from_user.id, "Развлечения", "vocalclip")
+    context.user_data["awaiting_vocal_clip_audio"] = True
+    context.user_data.pop("vocal_source_token", None)
+    context.user_data.pop("vocal_audio_is_custom", None)
+    await q.answer("Загрузите трек")
+    await q.message.reply_text(
+        "🎵 Пришлите аудиодорожку как *Audio* (MP3, WAV, M4A/AAC, до 50 МБ). "
+        "Я сохраню её как исходный трек: в финальном MP4 будет именно эта дорожка, без TTS-замены.",
+        parse_mode="Markdown",
+        reply_markup=_vocal_clip_action_kb(prefix),
+    )
 
 
 def _veo_video_options_keyboard(context):
@@ -5002,6 +5100,10 @@ async def on_mode_cb(update, context):
     if data == "act:fun:vocalclip_upload":
         await q.answer("Загрузите портрет")
         await _handle_vocalclip_upload_choice(update, context, q, prefix="act")
+        return
+
+    if data == "act:fun:vocalclip_audio":
+        await _handle_vocalclip_audio_choice(update, context, q, prefix="act")
         return
 
     if data in ("act:fun:vocalclip_last", "act:fun:vocalclip_prompt"):
@@ -5448,6 +5550,8 @@ def _clear_transient_flows(context):
         "ai_selfie_preset_prompt",
         "awaiting_vocal_clip_photo",
         "awaiting_vocal_clip_prompt",
+        "awaiting_vocal_clip_audio",
+        "vocal_audio_is_custom",
         "awaiting_music_video_video_brief",
         "music_video_music_brief",
         "vocal_clip_preset_prompt",
@@ -9219,8 +9323,10 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
     attempts.extend([("native-safe", [native_safe], "encode")])
     for name, vf, mode in attempts:
         tmp_out = output_path + "." + name + ".mp4"
+        # The source track must never be looped: a short upload is rejected
+        # before rendering instead of silently repeating lyrics in the final MP4.
         cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
-               "-stream_loop", "-1", "-i", audio_path, "-t", str(target_duration_s),
+               "-i", audio_path, "-t", str(target_duration_s),
                "-map", "0:v:0", "-map", "1:a:0"]
         if mode == "copy":
             cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
@@ -9449,6 +9555,27 @@ def _trim_audio_for_vocal_clip_sync(audio_bytes: bytes, max_seconds: int = 65) -
 
 async def _trim_audio_for_vocal_clip(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
     return await asyncio.to_thread(_trim_audio_for_vocal_clip_sync, audio_bytes, max_seconds)
+
+
+def _vocal_audio_duration_seconds_sync(audio_bytes: bytes) -> float:
+    """Return a bounded exact source duration without trusting Telegram metadata."""
+    if not audio_bytes:
+        return 0.0
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return 0.0
+    with tempfile.TemporaryDirectory(prefix="neyro_vocal_probe_") as td:
+        path = os.path.join(td, "source.mp3")
+        with open(path, "wb") as fh:
+            fh.write(audio_bytes)
+        try:
+            result = subprocess.run(
+                [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nk=1:nw=1", path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False,
+            )
+            return max(0.0, min(24 * 3600.0, float(result.stdout.decode("utf-8", "ignore").strip())))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return 0.0
 
 def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
     """Infer explicit singer roles only from the user's direction; never invent gender from pixels."""
@@ -9703,11 +9830,16 @@ async def _apply_kling_lipsync_to_scene_file(
     return output_path
 
 
-def _vocal_clip_provider_cost_usd(scene_count: int) -> float:
-    """Conservative estimate: the base clip plus one Avatar task per extra scene."""
-    return round(
-        float(VOCAL_CLIP_UNIT_COST_USD) + max(0, int(scene_count) - 1) * float(AVATAR_UNIT_COST_USD), 4
-    )
+def _vocal_clip_provider_cost_usd(duration_s: int, lip_sync_jobs: int) -> float:
+    """Provider reserve for Seedance visual scenes and real audio-driven lip-sync.
+
+    Suno is billed as its own completed stage before the human audio-review
+    gate.  This function deliberately excludes it, so approving a saved song
+    cannot charge Suno twice.
+    """
+    visual = max(4, int(duration_s or 10)) * float(SEEDANCE_COST_PER_SECOND_USD)
+    lipsync = max(0, int(lip_sync_jobs or 0)) * float(VOCAL_CLIP_KLING_LIPSYNC_COST_USD)
+    return round(visual + lipsync, 4)
 
 
 def _vocal_artifact_path(user_id: int, token: str, kind: str) -> str:
@@ -9907,9 +10039,9 @@ def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -
 
 async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
     song = BytesIO(data)
-    song.name = "suno_full_track.mp3"
+    song.name = "source_vocal_track.mp3"
     await message.reply_document(
-        document=InputFile(song), caption="🎵 Полная исходная песня Suno. Сохраните её: клип использует фрагмент этой записи.",
+        document=InputFile(song), caption="🎵 Исходная вокальная аудиодорожка. Сохраните её: клип использует этот трек без TTS-замены.",
         reply_markup=_vocal_song_kb(token),
         write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
     )
@@ -10049,7 +10181,7 @@ async def _start_vocal_clip(
     target_duration_s: int | None = None,
     scene_plan: "ScenePlan | None" = None,
 ):
-    """Multi-scene vocal music video: Suno song -> short Kling lip-sync scenes -> one final MP4."""
+    """Suno/custom song -> Seedance scenes -> audio-driven Kling lip-sync -> one MP4."""
     prompt = (user_prompt or "").strip()
     if not prompt:
         await update.effective_message.reply_text("Опишите песню/клип: стиль, язык, кто поёт, тип вокала, настроение и длительность.")
@@ -10094,6 +10226,29 @@ async def _start_vocal_clip(
             "Выберите сохранённый трек снова или утвердите сценарий для новой песни Suno."
         )
         return
+    duration_probe = globals().get("_vocal_audio_duration_seconds_sync")
+    if saved_source and callable(duration_probe):
+        source_duration = await asyncio.to_thread(duration_probe, saved_source)
+        if source_duration <= 0:
+            await update.effective_message.reply_text(
+                "❌ Не удалось определить длительность выбранной аудиодорожки. Загрузите MP3, WAV или M4A заново."
+            )
+            return False
+        if source_duration + 0.25 < target_duration:
+            await update.effective_message.reply_text(
+                f"❌ Аудиодорожка длится только ~{source_duration:.1f} сек, а сценарий рассчитан на {target_duration} сек. "
+                "Выберите более короткую длительность: трек не будет зациклен."
+            )
+            return False
+    # Comet documents image references for this Seedance endpoint, not an
+    # audio-reference contract.  Seedance therefore renders mute base footage;
+    # Kling receives the actual audio in the later lip-sync pass.
+    if "SEEDANCE_ENABLED" in globals() and (not SEEDANCE_ENABLED or not COMET_API_KEY):
+        await update.effective_message.reply_text(
+            "❌ Seedance 2.5 сейчас недоступен. Вокальный клип не запускаю, "
+            "потому что нельзя заменить настоящий lip-sync обычной анимацией."
+        )
+        return False
     img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
     job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}:{target_duration}"
     if job_key in _vocal_clip_background_jobs:
@@ -10167,8 +10322,9 @@ async def _start_vocal_clip(
                 role_note = "Женские и мужские партии распределяю между указанными героями; совместные партии — как дуэт."
             await update.effective_message.reply_text(
                 f"🎤 AI-видеоклип принят: ~{target_duration} сек, {scene_count} сцен, героев: {performer_count}. "
-                f"{role_note} {'Использую выбранную песню Suno' if saved_source else 'Сначала Suno создаёт единый трек'}, "
-                f"затем Kling делает cinematic I2V и обязательный lip-sync в {len(planned_lipsync)} утверждённых face-visible интервалах."
+                f"{role_note} {'Использую выбранную аудиодорожку' if saved_source else 'Сначала Suno создаёт единый трек'}, "
+                f"затем Seedance создаёт видеоряд по портрету, а Kling делает обязательный audio-driven lip-sync "
+                f"в {len(planned_lipsync)} утверждённых face-visible интервалах."
             )
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
             music_brief, video_brief = _music_video_split_briefs(prompt)
@@ -10260,11 +10416,16 @@ async def _start_vocal_clip(
                     "Выберите: подтвердить это аудио или сгенерировать другое.",
                     reply_markup=_vocal_song_kb(song_token, pending=True),
                 )
-                # Audio review is a pending user decision, not a provider failure.
-                # None keeps paid billing uncommitted while avoiding a false error
-                # in the unlimited-access wrapper (which treats False as failure).
-                return None
+                # The Suno stage is complete and billed exactly once.  The
+                # Seedance/Kling stage is created only after this approval.
+                return True
             safe_audio = await _trim_audio_for_vocal_clip(audio_bytes, target_duration)
+            if callable(duration_probe):
+                safe_duration = await asyncio.to_thread(duration_probe, safe_audio)
+                if safe_duration + 0.25 < target_duration:
+                    raise RuntimeError(
+                        f"Исходная аудиодорожка короче утверждённого клипа ({safe_duration:.1f} < {target_duration} сек)."
+                    )
             finalize_td = tempfile.TemporaryDirectory(prefix="neyro_vocal_finalize_")
             try:
                 segment_paths: list[str] = []
@@ -10287,22 +10448,51 @@ async def _start_vocal_clip(
                             await update.effective_message.reply_text(f"♻️ Сцена {idx}/{scene_count}: использую готовый checkpoint.")
                         elif base_path:
                             scene_path = base_path
-                            await update.effective_message.reply_text(f"♻️ Сцена {idx}/{scene_count}: Kling I2V уже готов, продолжаю с lip-sync.")
+                            await update.effective_message.reply_text(f"♻️ Сцена {idx}/{scene_count}: Seedance-видеоряд уже готов, продолжаю с lip-sync.")
                         else:
-                            await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: cinematic Kling I2V…")
+                            await update.effective_message.reply_text(f"🎬 Сцена {idx}/{scene_count}: Seedance 2.5 создаёт вертикальный видеоряд…")
                             scene_prompt = _scene_role_prompt(idx)
                             scene_prompt += (
                                 " IDENTITY LOCK: match the Character Identity Pack person, not a lookalike. "
-                                "The continuation frame controls pose/action continuity but must never redefine identity."
+                                "The continuation frame controls pose/action continuity but must never redefine identity. "
+                                "This is mute base footage. Keep the mouth neutral; do not synthesize speech, singing, lyrics, text or subtitles."
                             )
-                            scene_video = await _run_kling_photo_clip_result(continuation_bytes, scene_prompt, dur_s, aspect, continuation_url, on_task_id=lambda task_id, i=idx: provider_state(f"scene_{i}_task_id", task_id))
-                            if not scene_video: raise RuntimeError(f"Kling не вернул cinematic сцену {idx}.")
+                            existing_seedance_task = (manifest.get("provider_tasks") or {}).get(f"scene_{idx}_seedance_task_id")
+                            scene_video = await seedance_generate(
+                                api_key=COMET_API_KEY,
+                                base_url=COMET_BASE_URL,
+                                prompt=scene_prompt,
+                                seconds=dur_s,
+                                aspect=aspect,
+                                model=SEEDANCE_MODEL,
+                                model_fallbacks=SEEDANCE_MODEL_FALLBACKS,
+                                reference_bytes=continuation_bytes,
+                                reference_name=f"vocal_identity_{idx:02d}.jpg",
+                                create_path=SEEDANCE_CREATE_PATH,
+                                max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+                                existing_task_id=existing_seedance_task,
+                                on_task_id=lambda task_id, i=idx: provider_state(f"scene_{i}_seedance_task_id", task_id),
+                            )
+                            if not scene_video: raise RuntimeError(f"Seedance не вернул cinematic сцену {idx}.")
                             scene_path = await asyncio.to_thread(_write_video_segment_file, finalize_td.name, idx, scene_video)
                             scene_path = await asyncio.to_thread(save_job_path, user_id, song_token, base_name, "mp4", scene_path)
                             checkpoint(f"scene_{idx}_base")
                         if scene_plan is not None:
                             contract = scene_plan.scenes[idx - 1]
                             window = verified_lipsync(contract, manifest.get("vocal_intervals") or [])
+                            if contract.has_lip_sync and not window and saved_source:
+                                # A user-uploaded track (and some Suno response shapes) has no
+                                # word timing metadata.  This is still genuine audio-driven
+                                # lip-sync: pass the approved scene's exact audio window to
+                                # Kling rather than silently delivering mute face animation.
+                                fallback_start = float(contract.lip_sync_start_s or contract.start_s)
+                                fallback_end = float(contract.lip_sync_end_s or contract.end_s)
+                                if fallback_end - fallback_start >= 2:
+                                    window = (fallback_start, fallback_end)
+                                    await update.effective_message.reply_text(
+                                        f"🎭 Сцена {idx}/{scene_count}: тайминги слов недоступны, "
+                                        "применяю Kling lip-sync по утверждённому аудиоокну."
+                                    )
                             if contract.has_lip_sync and window and not ready_path:
                                 await update.effective_message.reply_text(
                                     f"🎭 Сцена {idx}/{scene_count}: применяю обязательный Kling lip-sync…"
@@ -10318,7 +10508,10 @@ async def _start_vocal_clip(
                                     on_provider_state=lambda key, value, i=idx: provider_state(f"scene_{i}_{key}", value),
                                 )
                             elif contract.has_lip_sync and not window:
-                                await update.effective_message.reply_text(f"🔇 Сцена {idx}/{scene_count}: подтверждённого вокала нет — lip-sync пропущен.")
+                                raise RuntimeError(
+                                    f"Для сцены {idx} нет подтверждённого вокального интервала; "
+                                    "несинхронизированный клип не отправляю."
+                                )
                             if not ready_path:
                                 scene_path = await asyncio.to_thread(save_job_path, user_id, song_token, ready_name, "mp4", scene_path)
                                 checkpoint(f"scene_{idx}_ready")
@@ -10400,13 +10593,13 @@ async def _start_vocal_clip(
                     log.exception("completed vocal MP4 delivery failed; saved for retry")
                     await update.effective_message.reply_text(
                         "⚠️ Клип уже готов и сохранён, но Telegram прервал отправку файла. "
-                        "Нажмите «Повторить отправку»: Suno и Kling повторно не запускаются. Кредиты не списаны.",
+                        "Нажмите «Повторить отправку»: Suno, Seedance и Kling повторно не запускаются.",
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton("📥 Повторить отправку клипа", callback_data=f"mvfile:video:{video_token}")],
                             [InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{song_token}")],
                         ]),
                     )
-                    return False
+                    return True
                 with contextlib.suppress(OSError):
                     os.unlink(persistent_path)
             finally:
@@ -10435,9 +10628,15 @@ async def _start_vocal_clip(
 
     await _try_pay_then_do(
         update, context, update.effective_user.id,
-        "runway", _vocal_clip_provider_cost_usd(scene_count), _job,
+        "seedance" if saved_source else "suno",
+        _vocal_clip_provider_cost_usd(target_duration, len(planned_lipsync) or scene_count)
+        if saved_source else SUNO_COST_USD,
+        _job,
         remember_kind="vocal_cinematic_clip_identity_pack",
-        remember_payload={"prompt": prompt[:500], "duration": target_duration, "scenes": scene_count, "performers": performer_count},
+        remember_payload={
+            "prompt": prompt[:500], "duration": target_duration, "scenes": scene_count,
+            "performers": performer_count, "stage": "video" if saved_source else "suno_song",
+        },
         silent_failure=True,
     )
 
@@ -17869,10 +18068,16 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if context.user_data.get("awaiting_vocal_clip_photo"):
             context.user_data.pop("awaiting_vocal_clip_photo", None)
-            _set_vocal_clip_wait(context)
-            await update.effective_message.reply_text(
-                "🎤 Портрет получен. Опишите песню, вокал, движение, длительность и формат — покажу сценарий для утверждения."
-            )
+            if context.user_data.get("vocal_audio_is_custom") and context.user_data.get("vocal_source_token"):
+                _set_vocal_clip_video_brief_after_custom_audio(context)
+                await update.effective_message.reply_text(
+                    "✅ Портрет и исходная аудиодорожка получены. Теперь опишите видеоряд: сцены, движения, локации и настроение."
+                )
+            else:
+                _set_vocal_clip_wait(context)
+                await update.effective_message.reply_text(
+                    "🎤 Портрет получен. Опишите песню, вокал, движение, длительность и формат — покажу сценарий для утверждения."
+                )
             return
 
         if context.user_data.get("awaiting_photo_clip_photo"):
@@ -18454,6 +18659,10 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "vocalclip_upload":
         await q.answer("Загрузите портрет")
         await _handle_vocalclip_upload_choice(update, context, q, prefix="fun")
+        return
+
+    if action == "vocalclip_audio":
+        await _handle_vocalclip_audio_choice(update, context, q, prefix="fun")
         return
 
     if action in {"vocalclip_last", "vocalclip_prompt"}:

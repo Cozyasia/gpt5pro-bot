@@ -37,7 +37,12 @@ def load_recovery(root):
         "SUNO_ENABLED": True, "SUNO_API_KEY": "test-key",
         "VOCAL_CLIP_KLING_MAX_WAIT_S": 1200,
         "FFMPEG_MUX_TIMEOUT_S": 180,
-        "VOCAL_CLIP_UNIT_COST_USD": 1.50, "AVATAR_UNIT_COST_USD": 0.65,
+        "SUNO_COST_USD": 0.20,
+        "SEEDANCE_COST_PER_SECOND_USD": 0.10,
+        "VOCAL_CLIP_KLING_LIPSYNC_COST_USD": 0.056,
+        "COMET_API_KEY": "test-key", "COMET_BASE_URL": "https://api.test",
+        "SEEDANCE_MODEL": "seedance-test", "SEEDANCE_MODEL_FALLBACKS": [],
+        "SEEDANCE_CREATE_PATH": "/v1/videos",
         "ChatAction": SimpleNamespace(RECORD_VIDEO="record_video"),
         "InlineKeyboardButton": lambda text, callback_data: SimpleNamespace(text=text, callback_data=callback_data),
         "InlineKeyboardMarkup": lambda rows: SimpleNamespace(rows=rows),
@@ -116,8 +121,8 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 provider_calls.append("suno")
                 return None
 
-            async def scene(*_args, **_kwargs):
-                provider_calls.append("kling")
+            async def seedance(*_args, **_kwargs):
+                provider_calls.append("seedance")
                 return b"\x00\x00\x00\x18ftyp" + b"v" * 4096
 
             async def result(*_args):
@@ -135,7 +140,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 "_music_video_identity_pack": lambda *_: {"face_front": b"front", "face_3q": b"3q", "body_full": b"body", "scene_reference": b"scene"},
                 "_run_comet_music_video_identity_keyframe": lambda *_: asyncio.sleep(0, result=b"keyframe"),
                 "_music_video_aspect": lambda *_: "9:16",
-                "_run_kling_photo_clip_result": scene,
+                "seedance_generate": seedance,
                 "_concat_video_segment_files_sync": lambda paths, _duration, out: (Path(out).write_bytes(b"joined") and out),
                 "_mux_video_audio_files_sync": lambda _v, _a, _d, out: (Path(out).write_bytes(b"\x00\x00\x00\x18ftyp" + b"m" * 4096) and out),
                 "_reply_video_file": result,
@@ -152,7 +157,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
             )
             asyncio.run(env["_start_vocal_clip"](update, context, b"photo", "Я пою, 10 секунд"))
             self.assertEqual([True], billed)
-            self.assertEqual(["kling", "sent"], provider_calls)
+            self.assertEqual(["seedance", "sent"], provider_calls)
             self.assertNotIn("vocal_source_token", context.user_data)
 
     def test_full_suno_song_survives_failed_video_upload_without_new_provider_call(self):
@@ -214,7 +219,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 bot=SimpleNamespace(send_chat_action=lambda *_: asyncio.sleep(0)),
             )
             asyncio.run(env["_start_vocal_clip"](update, context, b"photo", "Я пою, 10 секунд"))
-            self.assertEqual([None], billed, "audio review is pending, not a completed or failed video operation")
+            self.assertEqual([True], billed, "completed Suno is charged before the audio-review gate")
             self.assertEqual(["suno", "full-song"], events)
             audio_files = list((Path(root) / "42").glob("*_audio.mp3"))
             video_files = list((Path(root) / "42").glob("*_video.mp4"))

@@ -123,6 +123,8 @@ services:
     value: /v1/videos
   - key: SEEDANCE_COST_PER_SECOND_USD
     value: '0.10'
+  - key: VOCAL_CLIP_KLING_LIPSYNC_COST_USD
+    value: '0.056'
   - key: COMET_IMAGE_GEN_MODEL
     value: gpt-image-1
   - key: COMET_IMAGE_GEN_PATH
