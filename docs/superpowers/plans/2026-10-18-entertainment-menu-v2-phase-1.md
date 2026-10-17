@@ -86,7 +86,7 @@ Add `EntertainmentCatalogTests.test_root_menu_matches_approved_layout`. Assert e
 ]
 ```
 
-Assert callbacks are respectively `ent:menu:production`, `ent:menu:trends`, `ent:menu:video`, `ent:menu:photo`, `fun:music`, `fun:quiz`, `fun:ideas`, `fun:free`, and `ent:back:root`.
+Assert callbacks are respectively `ent:menu:production`, `ent:menu:trends`, `ent:menu:video`, `ent:menu:photo`, `fun:music`, `fun:quiz`, `fun:ideas`, `fun:free`, and `mode:root`. The last callback deliberately leaves the entertainment section through the existing root-menu handler.
 
 - [ ] **Step 5: Define the V2 root and Phase-1 submenus**
 
@@ -99,7 +99,7 @@ Use these active mappings:
 - video: `Видео по тексту или голосу → fun:textvideo`, `Оживить фото → fun:revive`, `Reels / Shorts → fun:reels`, `Мини-фильм → fun:film`, `Сценарий и раскадровка → fun:storyboard`, `Авторежиссёр → fun:video_director`, `Автомонтаж → fun:video_montage`, `Выбрать модель → fun:textvideo`;
 - photo: `Создать изображение → fun:img`, `AI-селфи → fun:aiselfie`, `Замена лица → fun:faceswap`, `Удалить фон → fun:removebg`, `Заменить фон → fun:replacebg`.
 
-All other approved submenu entries use a unique `ent:soon:<service_id>` callback, visible label suffix `· Скоро`, and status `soon`. Every submenu ends with `ent:menu:root`.
+All other approved submenu entries use a unique `ent:soon:<service_id>` callback, visible label suffix `· Скоро`, and status `soon`. Every submenu ends with `ent:back:root`, which returns to the V2 entertainment root without touching other flow state.
 
 - [ ] **Step 6: Add and run catalog integrity tests**
 
