@@ -45,8 +45,8 @@ def test_multiscene_uses_previous_last_frame_for_continuity():
     block = TEXT[start:TEXT.index("\nasync def ", start + 40)]
     assert "continuation_bytes, continuation_url = img_bytes, keyframe_url" in block
     assert "_extract_last_video_frame_sync, scene_video" in block
-    assert "continuation_bytes = last_frame" in block
-    assert 'continuation_url = await _upload_bytes_to_telegram_file_url(' in block
+    assert "continuation_bytes = reanchored or last_frame" in block
+    assert "continuation_url = _provider_input_url_from_bytes(" in block
     assert "continuation_bytes, scene_prompt, dur_s, aspect, continuation_url" in block
 
 

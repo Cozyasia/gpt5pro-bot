@@ -9,12 +9,7 @@ MAIN = Path(__file__).resolve().parents[1] / "main.py"
 
 def _load_photo_clip_reference_boundary():
     tree = ast.parse(MAIN.read_text(encoding="utf-8"))
-    names = {
-        "_telegram_file_public_url",
-        "_cache_photo",
-        "_get_cached_photo_url",
-        "_run_kling_photo_clip_result",
-    }
+    names = {"_cache_photo", "_get_cached_photo_url", "_run_kling_photo_clip_result"}
     nodes = [
         node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names
@@ -52,15 +47,26 @@ def _load_photo_clip_reference_boundary():
 
 
 class KlingPhotoClipImageReferenceTests(unittest.TestCase):
-    def test_kling_photo_clip_submits_telegram_https_url_not_data_url(self):
+    def test_kling_photo_clip_preserves_render_https_url_without_data_url(self):
         env, submitted = _load_photo_clip_reference_boundary()
         env["_cache_photo"](42, b"portrait", "photos/portrait.jpg")
 
+        self.assertEqual("photos/portrait.jpg", env["_get_cached_photo_url"](42))
+
         asyncio.run(env["_run_kling_photo_clip_result"](
-            b"portrait", "cinematic portrait", 10, "9:16", env["_get_cached_photo_url"](42)
+            b"portrait", "cinematic portrait", 10, "9:16",
+            "https://gpt5pro-bot.onrender.com/provider-input/" + "a" * 32 + ".jpg",
         ))
 
         self.assertEqual(
-            "https://api.telegram.org/file/bottest-token/photos/portrait.jpg",
+            "https://gpt5pro-bot.onrender.com/provider-input/" + "a" * 32 + ".jpg",
             submitted["payload"]["image"],
         )
+
+    def test_legacy_photo_clip_creates_render_artifact_before_paid_tasks(self):
+        source = MAIN.read_text(encoding="utf-8")
+        start = source.index("async def _start_photo_music_clip")
+        end = source.index("\nasync def ", start + 30)
+        block = source[start:end]
+        assert "kling_image_url = _provider_input_url_from_bytes(" in block
+        assert "_get_cached_photo_url" not in block
