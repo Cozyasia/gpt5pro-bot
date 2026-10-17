@@ -64,7 +64,7 @@ Add `EntertainmentFlagTests.test_default_is_disabled` and `test_truthy_and_false
 
 - [ ] **Step 2: Run the flag tests and verify failure**
 
-Run: `python -m unittest tests.test_entertainment_catalog.EntertainmentFlagTests -v`  
+Run: `python -m unittest tests.test_entertainment_catalog.EntertainmentFlagTests -v`
 Expected: FAIL because `neyrobot_prod.entertainment.catalog` does not exist.
 
 - [ ] **Step 3: Implement the immutable types and flag parser**
@@ -113,7 +113,7 @@ Add tests asserting:
 - no label contains `Автостудия`, `Создать видео по идее`, or `Фото поёт`;
 - exactly one V2 button has the meaning “video from text or voice”.
 
-Run: `python -m unittest tests.test_entertainment_catalog -v`  
+Run: `python -m unittest tests.test_entertainment_catalog -v`
 Expected: PASS.
 
 - [ ] **Step 7: Commit the catalog**
@@ -142,7 +142,7 @@ Add `EntertainmentKeyboardTests.test_renderer_preserves_rows_text_and_callbacks`
 
 - [ ] **Step 2: Run the rendering test and verify failure**
 
-Run: `python -m unittest tests.test_entertainment_catalog.EntertainmentKeyboardTests -v`  
+Run: `python -m unittest tests.test_entertainment_catalog.EntertainmentKeyboardTests -v`
 Expected: FAIL because `keyboards.py` does not exist.
 
 - [ ] **Step 3: Implement dependency-injected keyboard rendering**
@@ -164,7 +164,7 @@ Only accept catalog menu IDs for `menu`/`back`. For `soon`, accept service IDs m
 
 - [ ] **Step 6: Run tests and commit**
 
-Run: `python -m unittest tests.test_entertainment_catalog -v`  
+Run: `python -m unittest tests.test_entertainment_catalog -v`
 Expected: PASS.
 
 ```bash
@@ -194,7 +194,7 @@ Parse `main.py` and assert there is exactly one top-level function named `_fun_q
 
 - [ ] **Step 2: Run the wiring tests and verify failure**
 
-Run: `python -m unittest tests.test_entertainment_main_wiring -v`  
+Run: `python -m unittest tests.test_entertainment_main_wiring -v`
 Expected: FAIL because `main.py` currently defines `_fun_quick_kb` twice and also embeds a separate `_mode_kb("fun")` menu.
 
 - [ ] **Step 3: Consolidate the three current menu definitions**
@@ -241,7 +241,7 @@ When disabled, retain the current text. The persistent `main_kb` remains byte-fo
 
 - [ ] **Step 8: Run focused tests and commit**
 
-Run: `python -m unittest tests.test_entertainment_catalog tests.test_entertainment_main_wiring -v`  
+Run: `python -m unittest tests.test_entertainment_catalog tests.test_entertainment_main_wiring -v`
 Expected: PASS.
 
 ```bash
@@ -281,7 +281,7 @@ Expected: PASS.
 
 - [ ] **Step 3: Run the full repository suite**
 
-Run: `python -m unittest discover -s tests -v`  
+Run: `python -m unittest discover -s tests -v`
 Expected: all tests PASS. Any pre-existing failure must be reproduced on `main@5a7480e05052e4a4f5cb8e64715ebaf945083304` before it may be classified as unrelated.
 
 - [ ] **Step 4: Verify both flag states locally**

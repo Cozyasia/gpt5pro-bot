@@ -91,6 +91,12 @@ from telegram.ext import (
 from telegram.constants import ChatAction
 from telegram.error import TelegramError, TimedOut, BadRequest
 from presentation_studio import PresentationStudio, StudioConfig
+from neyrobot_prod.entertainment import (
+    build_keyboard as build_entertainment_keyboard,
+    classify_callback as classify_entertainment_callback,
+    entertainment_menu_v2_enabled,
+    get_menu as get_entertainment_menu,
+)
 # ───────── TTS imports ─────────
 import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
 
@@ -3722,6 +3728,12 @@ def _mode_desc(key: str) -> str:
             "«собери PDF-каталог объектов», «создай логотип для бренда», «убери водяной знак с фото»."
         )
     if key == "fun":
+        if entertainment_menu_v2_enabled():
+            return (
+                "🔥 Развлечения\n\n"
+                "Создавайте видео, фото, музыку и готовые проекты — от идеи до "
+                "результата. Выберите, что хотите получить."
+            )
         return (
             "🔥 *Развлечения*\n"
             "Гибрид: GPT-5 (идеи, сценарии, раскадровка), Vision (фото/референсы), "
@@ -3763,24 +3775,7 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
         ])
 
     if key == "fun":
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🪄 Оживить фото", callback_data="act:fun:revive")],
-            [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="act:fun:avatar")],
-            [InlineKeyboardButton("🎤 AI-видеоклип / песня", callback_data="act:fun:photoclip")],
-            [InlineKeyboardButton("🎬 Видео по тексту/голосу", callback_data="act:fun:textvideo")],
-            [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="act:fun:aiselfie")],
-            [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="act:fun:faceswap")],
-            [InlineKeyboardButton("🧼 Удалить фон на фото", callback_data="act:fun:removebg")],
-            [InlineKeyboardButton("🖼 Заменить фон на фото", callback_data="act:fun:replacebg")],
-            [InlineKeyboardButton("📱 Видео / Reels / Shorts", callback_data="act:fun:reels")],
-            [InlineKeyboardButton("🎞 Создать мини-фильм", callback_data="act:fun:film")],
-            [InlineKeyboardButton("🎬 Видео по тексту / голосу", callback_data="act:fun:shorts")],
-            [InlineKeyboardButton("🎵 Музыка / песня", callback_data="act:fun:music")],
-            [InlineKeyboardButton("🎮 Игры / квиз", callback_data="act:fun:games")],
-            [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="act:fun:ideas")],
-            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
-        ])
+        return _fun_quick_kb()
 
     if key == "medicine":
         return medicine_kb()
@@ -5703,23 +5698,6 @@ def _work_kb():
         [InlineKeyboardButton("💡 Идеи / бриф", callback_data="work:idea")],
     ])
 
-def _fun_quick_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🪄 Оживить фото", callback_data="fun:revive")],
-        [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="fun:avatar")],
-        [InlineKeyboardButton("🎵 Фото → видеоклип", callback_data="fun:photoclip")],
-        [InlineKeyboardButton("🎤 Клип с вокалом (1 человек)", callback_data="fun:vocalclip")],
-        [InlineKeyboardButton("🎬 Видео по тексту/голосу", callback_data="fun:textvideo")],
-        [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="fun:aiselfie")],
-        [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="fun:faceswap")],
-        [InlineKeyboardButton("🧼 Удалить фон на фото", callback_data="fun:removebg")],
-        [InlineKeyboardButton("🖼 Заменить фон на фото", callback_data="fun:replacebg")],
-        [InlineKeyboardButton("📱 Reels / Shorts", callback_data="fun:reels")],
-        [InlineKeyboardButton("🎞 Создать мини-фильм", callback_data="fun:film")],
-        [InlineKeyboardButton("🎬 Раскадровка Reels", callback_data="fun:storyboard")],
-        [InlineKeyboardButton("🖌 Создать изображение", callback_data="fun:img")],
-    ])
-
 def _fun_kb():
     # оставим и старое подменю — не используется сейчас
     return InlineKeyboardMarkup([
@@ -5747,8 +5725,9 @@ async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _clear_transient_flows(context)
     _set_mode_clean(update.effective_user.id, "Развлечения", "")
     await update.effective_message.reply_text(
-        "🔥 Развлечения — быстрые действия: видео, фото, фон и замена лица.",
-        reply_markup=_fun_quick_kb()
+        _mode_desc("fun"),
+        parse_mode="Markdown",
+        reply_markup=_fun_quick_kb(),
     )
 
 async def cmd_mode_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -18728,16 +18707,11 @@ async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_mode_kb("work"))
 
 async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = (
-        "🔥 *Развлечения*\n"
-        "Здесь быстрые творческие сценарии: оживить фотографию, сделать говорящий аватар, создать фото→видеоклип с музыкой, клип с вокалом для 1 человека, видео по тексту/голосу, "
-        "заменить лицо, удалить или заменить фон, сделать Reels/Shorts, создать мини-фильм, придумать идеи, сценарий, игру или квиз.\n\n"
-        "Выбери действие ниже или напиши свободный запрос."
-    )
+    txt = _mode_desc("fun")
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# ───── Клавиатура «Развлечения» с новыми кнопками ─────
-def _fun_quick_kb() -> InlineKeyboardMarkup:
+# ───── Единая совместимая клавиатура «Развлечения» ─────
+def _legacy_fun_quick_kb() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("🪄 Оживить фото", callback_data="fun:revive")],
         [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="fun:avatar")],
@@ -18757,6 +18731,52 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")],
     ]
     return InlineKeyboardMarkup(rows)
+
+
+def _fun_quick_kb() -> InlineKeyboardMarkup:
+    if entertainment_menu_v2_enabled():
+        return build_entertainment_keyboard(
+            "root", InlineKeyboardButton, InlineKeyboardMarkup
+        )
+    return _legacy_fun_quick_kb()
+
+
+async def on_cb_entertainment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+
+    if not entertainment_menu_v2_enabled():
+        await q.message.reply_text(
+            "🔥 Развлечения — быстрые действия: видео, фото, фон и замена лица.",
+            reply_markup=_legacy_fun_quick_kb(),
+        )
+        return
+
+    route = classify_entertainment_callback(q.data or "")
+    if route.kind == "soon":
+        menu_id = context.user_data.get("ent_nav_menu", "root")
+        try:
+            get_entertainment_menu(menu_id)
+        except KeyError:
+            menu_id = "root"
+        await q.message.reply_text(
+            "🚧 Этот сценарий уже готовим. Скоро он появится в меню — "
+            "пока кредиты не списываются.",
+            reply_markup=build_entertainment_keyboard(
+                menu_id, InlineKeyboardButton, InlineKeyboardMarkup
+            ),
+        )
+        return
+
+    menu_id = route.target if route.kind in {"menu", "back"} else "root"
+    context.user_data["ent_nav_menu"] = menu_id
+    menu = get_entertainment_menu(menu_id)
+    await q.message.reply_text(
+        f"{menu.title}\n\n{menu.intro}",
+        reply_markup=build_entertainment_keyboard(
+            menu_id, InlineKeyboardButton, InlineKeyboardMarkup
+        ),
+    )
 
 # ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -18898,6 +18918,17 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action.startswith("pc_preset_"):
         kind = action.rsplit("_", 1)[-1]
         await _handle_photoclip_preset_choice(update, context, q, kind, prefix="fun")
+        return
+
+    if action == "aiselfie":
+        await q.answer("AI-селфи")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "aiselfie")
+        await q.message.reply_text(
+            _ai_selfie_menu_text(),
+            parse_mode="Markdown",
+            reply_markup=_ai_selfie_action_kb("fun"),
+        )
         return
 
     if action == "faceswap":
@@ -19590,6 +19621,7 @@ def build_application() -> "Application":
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)
 
     # 3) Быстрые развлечения (любые fun:...)
+    app.add_handler(CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:"))
     app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
 
     # 3b) Подменю Suno: свободный запрос и пресеты
