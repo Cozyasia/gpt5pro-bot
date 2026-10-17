@@ -158,6 +158,17 @@ BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
 PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
 WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
 
+# Provider inputs cannot use Telegram's bot-file URL: some video providers reject
+# it while fetching, and it would expose the bot credential in a third-party
+# request.  Render serves short-lived opaque artifacts from this directory instead.
+PROVIDER_INPUT_DIR = _ensure_writable_dir_env(
+    "PROVIDER_INPUT_DIR", "/data/neyro_provider_inputs", "/tmp/neyro_provider_inputs"
+)
+PROVIDER_INPUT_TTL_S = max(300, min(24 * 3600, int(os.environ.get("PROVIDER_INPUT_TTL_S", "3600") or 3600)))
+PROVIDER_INPUT_MAX_BYTES = max(1024 * 1024, min(100 * 1024 * 1024, int(
+    os.environ.get("PROVIDER_INPUT_MAX_BYTES", str(64 * 1024 * 1024)) or 64 * 1024 * 1024
+)))
+
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
 OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
@@ -8215,12 +8226,10 @@ def _cache_photo(user_id: int, data: bytes, file_url: str | None = None):
     try:
         _photo_cache[user_id] = data
         if file_url:
-            # Telegram getFile returns a path such as ``photos/file.jpg``.  Kling
-            # validates external references asynchronously and rejects a data URL,
-            # so cache the full HTTPS getFile address at the source boundary.
-            public_url = _telegram_file_public_url(str(file_url))
-            if public_url:
-                _photo_url_cache[user_id] = public_url
+            # Keep only Telegram's opaque file path in the local cache.  A provider
+            # input must never use the bot getFile URL: it leaks the bot credential
+            # and third-party render workers cannot reliably fetch it.
+            _photo_url_cache[user_id] = str(file_url)
     except Exception:
         pass
 
@@ -8312,6 +8321,109 @@ def _telegram_file_public_url(file_path: str) -> str:
     if fp.startswith("http://") or fp.startswith("https://"):
         return fp
     return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{fp.lstrip('/')}"
+
+
+def _provider_input_extension(filename: str) -> str:
+    """Return one safe extension for an opaque, public provider artifact."""
+    ext = os.path.splitext((filename or "").lower())[1]
+    if ext == ".jpeg":
+        ext = ".jpg"
+    if ext not in {".jpg", ".png", ".webp", ".mp3", ".wav", ".m4a", ".aac", ".mp4"}:
+        raise ValueError("unsupported provider input type")
+    return ext
+
+
+def _provider_input_artifact_path(artifact_name: str) -> str:
+    """Resolve a generated public artifact name without allowing path traversal."""
+    artifact = (artifact_name or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{32}\.(?:jpg|png|webp|mp3|wav|m4a|aac|mp4)", artifact):
+        raise ValueError("invalid provider input artifact")
+    return os.path.join(PROVIDER_INPUT_DIR, artifact)
+
+
+def _prune_provider_input_artifacts(now: float | None = None) -> None:
+    """Best-effort TTL cleanup; failures must never interrupt a paid render."""
+    cutoff = (time.time() if now is None else float(now)) - float(PROVIDER_INPUT_TTL_S)
+    try:
+        for entry in os.scandir(PROVIDER_INPUT_DIR):
+            if not entry.is_file() or entry.stat().st_mtime >= cutoff:
+                continue
+            with contextlib.suppress(OSError):
+                os.unlink(entry.path)
+    except FileNotFoundError:
+        return
+    except Exception:
+        log.warning("provider input artifact cleanup failed", exc_info=True)
+
+
+def _provider_input_url_from_bytes(raw: bytes, filename: str) -> str:
+    """Store a short-lived Render-served provider input and return its HTTPS URL.
+
+    The random URL is intentionally opaque.  It carries no Telegram token, user
+    identifier, prompt, or original filename; providers only receive this URL.
+    """
+    if not isinstance(raw, (bytes, bytearray)) or not raw:
+        raise ValueError("empty provider input")
+    if len(raw) > int(PROVIDER_INPUT_MAX_BYTES):
+        raise ValueError("provider input exceeds size limit")
+    base_url = (PUBLIC_URL or "").strip().rstrip("/")
+    if not base_url.startswith("https://"):
+        raise RuntimeError("PUBLIC_URL must be HTTPS for video provider inputs")
+    ext = _provider_input_extension(filename)
+    artifact = f"{uuid.uuid4().hex}{ext}"
+    os.makedirs(PROVIDER_INPUT_DIR, mode=0o700, exist_ok=True)
+    destination = _provider_input_artifact_path(artifact)
+    temporary = f"{destination}.tmp-{uuid.uuid4().hex}"
+    try:
+        with open(temporary, "wb") as fh:
+            fh.write(raw)
+        os.replace(temporary, destination)
+    finally:
+        with contextlib.suppress(OSError):
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    _prune_provider_input_artifacts()
+    return f"{base_url}/provider-input/{artifact}"
+
+
+def _provider_input_url_from_file(path: str, filename: str = "") -> str:
+    if not path or not os.path.isfile(path):
+        raise ValueError("provider input file is missing")
+    if os.path.getsize(path) > int(PROVIDER_INPUT_MAX_BYTES):
+        raise ValueError("provider input exceeds size limit")
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    return _provider_input_url_from_bytes(raw, filename or os.path.basename(path))
+
+
+def _provider_input_content_type(artifact_name: str) -> str:
+    return {
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".mp4": "video/mp4",
+    }[_provider_input_extension(artifact_name)]
+
+
+def _read_provider_input_artifact(artifact_name: str) -> tuple[str, bytes] | None:
+    """Read a still-valid opaque input; expired files are deliberately a 404."""
+    try:
+        path = _provider_input_artifact_path(artifact_name)
+        stat = os.stat(path)
+        if stat.st_size <= 0 or stat.st_size > int(PROVIDER_INPUT_MAX_BYTES):
+            return None
+        if stat.st_mtime < time.time() - float(PROVIDER_INPUT_TTL_S):
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+            return None
+        with open(path, "rb") as fh:
+            return _provider_input_content_type(artifact_name), fh.read()
+    except (OSError, ValueError):
+        return None
 
 
 def _avatar_audio_supported_filename(filename: str, mime: str = "") -> bool:
@@ -8497,9 +8609,7 @@ async def _text_to_public_mp3_url(update: Update, context: ContextTypes.DEFAULT_
     mp3 = await asyncio.to_thread(_tts_bytes_sync, text[:TTS_MAX_CHARS], "mp3", _avatar_tts_voice_get(context))
     if not mp3:
         return ""
-    return await _upload_bytes_to_telegram_file_url(
-        update, context, mp3, "avatar_speech.mp3", "🔊 Озвучка для говорящего аватара подготовлена."
-    )
+    return _provider_input_url_from_bytes(mp3, "avatar_speech.mp3")
 
 
 def _extract_task_status(js: object) -> str:
@@ -8593,8 +8703,11 @@ async def _run_kling_avatar(
     linked_task_id = ""
     script_text = (script_text or "").strip()
 
-    if audio_file_url and _avatar_audio_supported_filename(audio_filename, audio_mime):
-        sound_file = _telegram_file_public_url(audio_file_url)
+    if audio_bytes and _avatar_audio_supported_filename(audio_filename, audio_mime):
+        sound_file = _provider_input_url_from_bytes(audio_bytes, audio_filename or "avatar_audio.mp3")
+    elif audio_file_url and _avatar_audio_supported_filename(audio_filename, audio_mime):
+        # Compatibility for callers that already provide a provider-safe HTTPS URL.
+        sound_file = audio_file_url if str(audio_file_url).startswith("https://") else ""
 
     if not sound_file and audio_bytes and not script_text:
         try:
@@ -9802,22 +9915,17 @@ async def _apply_kling_lipsync_to_scene_file(
         )
     if not interval_path:
         raise RuntimeError(f"Не удалось подготовить video interval для lip-sync сцены {contract.index}.")
-    video_url = await _upload_file_to_telegram_file_url(
-        update,
-        context,
+    video_url = await asyncio.to_thread(
+        _provider_input_url_from_file,
         interval_path,
         f"scene_{contract.index:02d}_lipsync.mp4",
-        f"🎭 Video interval сцены {contract.index} подготовлен для lip-sync.",
     )
     audio_part = Path(audio_part_path).read_bytes() if audio_part_path else await _extract_audio_segment_bytes(audio_bytes, absolute_start, duration)
     if not audio_part:
         raise RuntimeError(f"Не удалось извлечь точный audio interval для lip-sync сцены {contract.index}.")
-    audio_url = await _upload_bytes_to_telegram_file_url(
-        update,
-        context,
+    audio_url = _provider_input_url_from_bytes(
         audio_part,
         f"scene_{contract.index:02d}_lipsync.mp3",
-        f"🎧 Audio interval сцены {contract.index} подготовлен для lip-sync.",
     )
     del audio_part
     if not video_url.startswith("https://") or not audio_url.startswith("https://"):
@@ -10363,7 +10471,6 @@ async def _start_vocal_clip(
             synth_fn = globals().get("_run_comet_music_video_identity_keyframe")
             high_fidelity = callable(pack_fn) and callable(synth_fn)
             pending_keyframe = context.user_data.get("music_video_pending_keyframe") if saved_source else None
-            pending_keyframe_url = context.user_data.get("music_video_pending_keyframe_url") if saved_source else None
             # The approved-audio resume path reuses the already synthesized start keyframe,
             # but later scene re-anchors still need the original Character Identity Pack.
             # Load it before either branch so refs is always defined for multi-scene runs.
@@ -10379,9 +10486,8 @@ async def _start_vocal_clip(
                 raise RuntimeError("Character Identity Pack incomplete")
             if high_fidelity and pending_keyframe:
                 img_bytes = pending_keyframe
-                keyframe_url = pending_keyframe_url or await _upload_bytes_to_telegram_file_url(
-                    update, context, img_bytes, "music_video_identity_keyframe.png",
-                    "🧬 Использую уже проверенный стартовый keyframe.",
+                keyframe_url = _provider_input_url_from_bytes(
+                    img_bytes, "music_video_identity_keyframe.png"
                 )
             elif high_fidelity:
                 await update.effective_message.reply_text("🧬 Собираю identity-preserving стартовый keyframe из 4 reference через Gemini/Comet…")
@@ -10392,15 +10498,10 @@ async def _start_vocal_clip(
                 if not keyframe:
                     raise RuntimeError("Не удалось синтезировать identity-preserving keyframe")
                 img_bytes = keyframe
-                # Kling I2V validates the image asynchronously and rejects data: URLs.
-                # Publish the synthesized keyframe through Telegram so Kling receives the
-                # same kind of HTTPS file URL that the proven photo->clip path uses.
-                keyframe_url = await _upload_bytes_to_telegram_file_url(
-                    update,
-                    context,
-                    keyframe,
-                    "music_video_identity_keyframe.png",
-                    "🧬 Identity-preserving стартовый keyframe подготовлен.",
+                # Video providers fetch the image asynchronously, so use a
+                # short-lived Render URL rather than a Telegram getFile URL.
+                keyframe_url = _provider_input_url_from_bytes(
+                    keyframe, "music_video_identity_keyframe.png"
                 )
                 if not keyframe_url.startswith("https://"):
                     raise RuntimeError("Не удалось получить публичный HTTPS URL identity keyframe для Kling.")
@@ -10551,9 +10652,8 @@ async def _start_vocal_clip(
                                 next_prompt, continuity_frame=last_frame,
                             )
                             continuation_bytes = reanchored or last_frame
-                            continuation_url = await _upload_bytes_to_telegram_file_url(
-                                update, context, continuation_bytes, f"music_video_continuation_{idx:02d}.jpg",
-                                f"🧬 Identity + continuity re-anchor {idx}/{scene_count - 1} подготовлен.",
+                            continuation_url = _provider_input_url_from_bytes(
+                                continuation_bytes, f"music_video_continuation_{idx:02d}.jpg"
                             )
                             if not continuation_url.startswith("https://"):
                                 raise RuntimeError(f"Не удалось получить HTTPS continuation frame после сцены {idx}.")
@@ -10567,8 +10667,8 @@ async def _start_vocal_clip(
                         audio_part = await _extract_audio_segment_bytes(safe_audio, start_s, dur_s)
                         if not audio_part:
                             raise RuntimeError(f"Не удалось подготовить аудио для сцены {idx}.")
-                        audio_url = await _upload_bytes_to_telegram_file_url(
-                            update, context, audio_part, f"vocal_scene_{idx:02d}.mp3", f"🎧 Аудио сцены {idx}/{scene_count} подготовлено."
+                        audio_url = _provider_input_url_from_bytes(
+                            audio_part, f"vocal_scene_{idx:02d}.mp3"
                         )
                         scene_prompt = _scene_role_prompt(idx)
                         scene_video = await _run_kling_avatar_result_bytes(
@@ -10922,7 +11022,8 @@ async def _run_kling_photo_clip(update: Update, context: ContextTypes.DEFAULT_TY
     """Legacy wrapper kept for external callers; v61 clean pipeline uses _start_photo_music_clip."""
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
     try:
-        video = await _run_kling_photo_clip_result(img_bytes, prompt, duration_s, aspect)
+        image_url = _provider_input_url_from_bytes(img_bytes, "photo_clip_reference.jpg")
+        video = await _run_kling_photo_clip_result(img_bytes, prompt, duration_s, aspect, image_url)
         if not video:
             raise RuntimeError("empty video result")
         await _reply_video_bytes(update, video, "Kling photo→music clip ✅")
@@ -10984,9 +11085,7 @@ async def _start_photo_music_clip(
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
 
             started_at = time.time()
-            kling_image_url = ""
-            with contextlib.suppress(Exception):
-                kling_image_url = _get_cached_photo_url(user_id) or ""
+            kling_image_url = _provider_input_url_from_bytes(img_bytes, "photo_clip_reference.jpg")
             if scene_plan is not None:
                 _, video_brief = _music_video_split_briefs(user_prompt)
                 scene_prompts = [
@@ -11131,9 +11230,19 @@ async def _start_photo_music_clip(
             return True
         except Exception as e:
             log.exception("photo music clip background pipeline failed: %s", e)
+            error_text = str(e).lower()
+            if "imagedownloaderror" in error_text or "urlillegal" in error_text:
+                public_error = (
+                    "Kling не смог скачать исходное фото. Файл подготовлен заново; "
+                    "повторите запуск через минуту."
+                )
+            elif "timeout" in error_text or "timed out" in error_text:
+                public_error = "Kling не успел завершить рендер. Попробуйте повторить позже."
+            else:
+                public_error = "Ошибка на стороне видеопровайдера. Попробуйте повторить позже."
             with contextlib.suppress(Exception):
                 await update.effective_message.reply_text(
-                    f"❌ Фото→видеоклип не получился. Причина: {str(e)[:700]}"
+                    f"❌ Фото→видеоклип не получился. {public_error}"
                     + (" Готовый MP4 сохранён — используйте кнопку повторной отправки выше." if final_saved else "")
                 )
             return False
@@ -13872,12 +13981,34 @@ def _install_webapp_checkout_bridge(application):
                 message = str(exc)[:500] if YOO_DEBUG_PAY_ERRORS else "Не удалось создать оплату"
                 self.finish(json.dumps({"ok": False, "error": message}, ensure_ascii=False))
 
+    class ProviderInputHandler(tornado.web.RequestHandler):
+        """Serve only opaque, short-lived provider files (never Telegram URLs)."""
+        def _serve(self, artifact_name: str, *, include_body: bool) -> None:
+            item = _read_provider_input_artifact(artifact_name)
+            if item is None:
+                raise tornado.web.HTTPError(404)
+            content_type, raw = item
+            self.set_header("Content-Type", content_type)
+            self.set_header("Content-Length", str(len(raw)))
+            self.set_header("Cache-Control", "public, max-age=300")
+            self.set_header("X-Content-Type-Options", "nosniff")
+            if include_body:
+                self.write(raw)
+            self.finish()
+
+        async def get(self, artifact_name: str):
+            self._serve(artifact_name, include_body=True)
+
+        async def head(self, artifact_name: str):
+            self._serve(artifact_name, include_body=False)
+
     class CheckoutWebhookApp(tornado.web.Application):
         def __init__(self, webhook_path, bot, update_queue, secret_token=None):
             shared = {"bot": bot, "update_queue": update_queue, "secret_token": secret_token}
             handlers = [
                 (rf"{webhook_path}/?", TelegramHandler, shared),
                 (r"/webapp/checkout/?", CheckoutBridgeHandler),
+                (r"/provider-input/([0-9a-f]{32}\.(?:jpg|png|webp|mp3|wav|m4a|aac|mp4))", ProviderInputHandler),
                 (r"/healthz/?", HealthBridgeHandler),
                 (r"/?", RootBridgeHandler),
             ]
