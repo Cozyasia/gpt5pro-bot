@@ -4002,9 +4002,16 @@ def _music_video_single_scene_plan(
     video_brief: str,
     duration: int,
     aspect: str,
+    *,
+    force_vocal_lipsync: bool = False,
 ) -> ScenePlan:
-    wants_vocals = _clip_wants_vocals(music_brief)
+    wants_vocals = bool(force_vocal_lipsync or _clip_wants_vocals(music_brief))
     hinted_vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    # The explicit «Клип с вокалом» mode is an instruction to lip-sync.  It must
+    # not depend on a keyword surviving the user/LLM music brief, so scene 1 is
+    # eligible for the approved audio-driven vocal interval by default.
+    if force_vocal_lipsync and hinted_vocal_start is None:
+        hinted_vocal_start = 0.0
     vocal_start = (
         float(hinted_vocal_start)
         if hinted_vocal_start is not None and float(hinted_vocal_start) < duration
@@ -4046,11 +4053,14 @@ async def _compile_music_video_scene_plan(
     *,
     user_id: int = 0,
     chat_id: int = 0,
+    force_vocal_lipsync: bool = False,
 ) -> ScenePlan:
     """Compile exactly once; validation rejects incomplete or stale model output."""
     duration = int(duration)
-    wants_vocals = _clip_wants_vocals(music_brief)
+    wants_vocals = bool(force_vocal_lipsync or _clip_wants_vocals(music_brief))
     vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    if force_vocal_lipsync and vocal_start is None:
+        vocal_start = 0.0
     lip_sync_required = bool(wants_vocals and vocal_start is not None and duration - vocal_start >= 2)
     try:
         explicit = scene_plan_from_explicit_timeline(
@@ -4069,7 +4079,13 @@ async def _compile_music_video_scene_plan(
     except ValueError:
         pass
     if duration <= 10:
-        return _music_video_single_scene_plan(music_brief, video_brief, duration, aspect)
+        return _music_video_single_scene_plan(
+            music_brief,
+            video_brief,
+            duration,
+            aspect,
+            force_vocal_lipsync=force_vocal_lipsync,
+        )
 
     scene_seconds = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
     scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_seconds - 1) // scene_seconds))
@@ -4241,6 +4257,17 @@ async def _stage_music_video_draft(
     if selected_duration_s is not None:
         video_brief = _music_video_replace_duration_field(video_brief, duration)
     combined = _music_video_join_briefs(music_brief, video_brief)
+    # The explicit «Клип с вокалом» entry point is authoritative.  Determine it
+    # before compiling the ScenePlan so validation requires actual lip-sync
+    # intervals even if the user described the song without a keyword.
+    track_getter = globals().get("_mode_track_get")
+    active_track = ""
+    if callable(track_getter):
+        with contextlib.suppress(Exception):
+            active_track = str(track_getter(update.effective_user.id) or "")
+    force_vocal_lipsync = bool(
+        context.user_data.get("vocal_clip_flow") or active_track.startswith("vocalclip")
+    )
     # A newly written Suno brief must not inherit an old approved song.  An uploaded
     # source track is different: it is the user's explicit audio selection and must
     # survive staging through approval so Suno is not called again.
@@ -4272,6 +4299,7 @@ async def _stage_music_video_draft(
             _music_video_aspect(combined),
             user_id=update.effective_user.id,
             chat_id=update.effective_chat.id,
+            force_vocal_lipsync=force_vocal_lipsync,
         )
     except Exception:
         log.exception("music video ScenePlan compilation failed")
@@ -4283,17 +4311,6 @@ async def _stage_music_video_draft(
     for key in ("awaiting_photo_clip_prompt", "awaiting_vocal_clip_prompt", "awaiting_music_video_video_brief",
                 "music_video_music_brief", "music_video_draft_edit"):
         context.user_data.pop(key, None)
-    # The explicit «Клип с вокалом» entry point is authoritative.  Do not infer
-    # its route from wording in the music brief: an abbreviated user description
-    # must never downgrade a paid vocal clip into the legacy Kling+Suno mux flow.
-    track_getter = globals().get("_mode_track_get")
-    active_track = ""
-    if callable(track_getter):
-        with contextlib.suppress(Exception):
-            active_track = str(track_getter(update.effective_user.id) or "")
-    force_vocal_lipsync = bool(
-        context.user_data.get("vocal_clip_flow") or active_track.startswith("vocalclip")
-    )
     context.user_data["music_video_draft"] = {
         "prompt": combined, "music_brief": music_brief, "video_brief": video_brief,
         "token": token, "photo_digest": hashlib.sha256(img).hexdigest(),
@@ -4312,7 +4329,7 @@ async def _stage_music_video_draft(
         kv_set(f"music_video_music_brief:{update.effective_user.id}", "")
     source_token = context.user_data.get("vocal_source_token")
     has_saved_source = bool(
-        _clip_wants_vocals(music_brief) and source_token
+        (force_vocal_lipsync or _clip_wants_vocals(music_brief)) and source_token
         and _load_vocal_artifact(update.effective_user.id, source_token, "audio")
     )
     source_note = (
@@ -4365,6 +4382,7 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
                 _music_video_aspect(combined),
                 user_id=q.from_user.id,
                 chat_id=q.message.chat_id,
+                force_vocal_lipsync=bool(draft.get("force_vocal_lipsync")),
             )
         except Exception:
             log.exception("music video ScenePlan recompilation failed")
@@ -4413,6 +4431,7 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
                     _music_video_aspect(combined),
                     user_id=q.from_user.id,
                     chat_id=q.message.chat_id,
+                    force_vocal_lipsync=bool(draft.get("force_vocal_lipsync")),
                 )
             except Exception:
                 log.exception("automatic music video ScenePlan compilation failed")
@@ -4482,10 +4501,16 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
     context.user_data.pop("music_video_draft", None)
     context.user_data.pop("music_video_draft_edit", None)
+    force_vocal_lipsync = bool(draft.get("force_vocal_lipsync"))
+    # This route is consumed with the approved draft.  A later ordinary photo
+    # clip must not inherit vocal processing merely because this user made one.
+    context.user_data.pop("vocal_clip_flow", None)
+    with contextlib.suppress(Exception):
+        _mode_track_set(q.from_user.id, "")
     await q.answer("Запускаю клип")
     await q.message.reply_text("✅ Сценарий утверждён. Передаю его в режим AI-видеоклипа.")
     try:
-        if draft.get("force_vocal_lipsync") or _clip_wants_vocals(prompt):
+        if force_vocal_lipsync or _clip_wants_vocals(prompt):
             await _start_vocal_clip(
                 update,
                 context,

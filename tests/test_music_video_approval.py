@@ -481,7 +481,7 @@ class MusicVideoApprovalTests(unittest.TestCase):
 
     def test_explicit_vocal_mode_never_falls_back_to_photo_music_pipeline(self):
         env = load_flow()
-        messages, vocal_started, photo_started = [], [], []
+        messages, vocal_started, photo_started, mode_tracks = [], [], [], []
 
         async def start_vocal(*args, **kwargs):
             vocal_started.append((args, kwargs))
@@ -491,18 +491,23 @@ class MusicVideoApprovalTests(unittest.TestCase):
 
         env["_start_vocal_clip"] = start_vocal
         env["_start_photo_music_clip"] = start_photo
+        env["_mode_track_set"] = lambda _user_id, track: mode_tracks.append(track)
         ctx = SimpleNamespace(user_data={"vocal_clip_flow": True})
         asyncio.run(env["_stage_music_video_draft"](
             fake_update(messages),
             ctx,
             "[MUSIC_BRIEF]\nМрачный русский трек о ночном городе.\n\n[VIDEO_BRIEF]\nДлительность клипа: 10 секунд. Певец крупным планом в кадре.",
         ))
+        reviewed_plan = ctx.user_data["music_video_draft"]["scene_plan"]
+        self.assertTrue(any(scene.has_lip_sync for scene in reviewed_plan.scenes))
         token = ctx.user_data["music_video_draft"]["token"]
 
         asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
 
         self.assertEqual(1, len(vocal_started))
         self.assertEqual([], photo_started)
+        self.assertNotIn("vocal_clip_flow", ctx.user_data)
+        self.assertEqual("", mode_tracks[-1])
 
     def test_rewrite_replaces_old_script_and_invalidates_old_buttons(self):
         env = load_flow()
