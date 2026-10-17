@@ -8215,7 +8215,12 @@ def _cache_photo(user_id: int, data: bytes, file_url: str | None = None):
     try:
         _photo_cache[user_id] = data
         if file_url:
-            _photo_url_cache[user_id] = str(file_url)
+            # Telegram getFile returns a path such as ``photos/file.jpg``.  Kling
+            # validates external references asynchronously and rejects a data URL,
+            # so cache the full HTTPS getFile address at the source boundary.
+            public_url = _telegram_file_public_url(str(file_url))
+            if public_url:
+                _photo_url_cache[user_id] = public_url
     except Exception:
         pass
 
