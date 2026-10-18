@@ -25,6 +25,11 @@ def _question_text(session):
     return (f"🎮 Раунд {session.round_index + 1}/5\n\n{question.prompt}\n\n" +
             "\n".join(f"{key.upper()}. {label}" for key, label in zip("abcd", question.answers)))
 
+async def handle_game_menu(update, context):
+    q = update.callback_query
+    await q.answer()
+    await q.message.reply_text("🎮 Игры с AI\nВыберите игру:", reply_markup=_keyboard())
+
 async def handle_game_callback(update, context):
     q = update.callback_query
     await q.answer()
