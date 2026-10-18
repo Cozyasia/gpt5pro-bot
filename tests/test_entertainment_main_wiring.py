@@ -104,6 +104,13 @@ class EntertainmentMainWiringTests(unittest.TestCase):
                     source,
                 )
 
+    def test_production_brief_handler_precedes_generic_ent_in_same_group(self):
+        specific = 'CallbackQueryHandler(handle_production_brief, pattern=r"^ent:brief:"), group=0'
+        generic = 'CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:"), group=0'
+        self.assertIn(specific, self.source)
+        self.assertIn(generic, self.source)
+        self.assertLess(self.source.index(specific), self.source.index(generic))
+
     def test_v2_callback_handler_is_registered_before_legacy_fun_handler(self):
         ent_registration = (
             'CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:")'
