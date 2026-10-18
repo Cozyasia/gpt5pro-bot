@@ -1,0 +1,22 @@
+name: Entertainment V2 checks
+on:
+  push:
+    branches:
+      - feature/entertainment-menu-neuro-production
+  pull_request:
+    paths:
+      - 'neyrobot_prod/entertainment/**'
+      - 'tests/test_entertainment_*.py'
+      - '.github/workflows/entertainment-v2.yml'
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile entertainment package
+        run: python -m compileall -q neyrobot_prod/entertainment
+      - name: Run isolated entertainment unit tests
+        run: python -m unittest discover -s tests -p 'test_entertainment_*.py' -v

@@ -65,15 +65,15 @@ _MENUS: dict[str, MenuSpec] = {
         title="🎬 Нейро Продакшен",
         intro="Готовые производственные сценарии — от брифа до результата.",
         rows=(
-            (_soon("🛍 Товар → рекламный ролик", "product_ad"),),
-            (_soon("📱 UGC-реклама", "ugc_ad"),),
-            (_soon("🏠 Реклама недвижимости", "real_estate_ad"),),
-            (_soon("👤 Экспертное видео", "expert_video"),),
-            (_soon("💎 Брендовый ролик", "brand_video"),),
-            (_soon("📦 Серия Reels / Shorts", "reels_series"),),
+            (_button("🛍 Товар → рекламный ролик", "ent:brief:product_ad"),),
+            (_button("📱 UGC-реклама", "ent:brief:ugc_ad"),),
+            (_button("🏠 Реклама недвижимости", "ent:brief:real_estate_ad"),),
+            (_button("👤 Экспертное видео", "ent:brief:expert_video"),),
+            (_button("💎 Брендовый ролик", "ent:brief:brand_video"),),
+            (_button("📦 Серия Reels / Shorts", "ent:brief:reels_series"),),
             (_soon("🌍 Перевести и озвучить видео", "video_translation"),),
-            (_soon("🧪 3 версии рекламы", "ad_variants"),),
-            (_soon("🤝 Индивидуальный проект", "custom_project"),),
+            (_button("🧪 3 версии рекламы", "ent:brief:ad_variants"),),
+            (_button("🤝 Индивидуальный проект", "ent:brief:custom_project"),),
             (_button("🎛 Режим режиссёра", "fun:video_director"),),
             (_button("⬅️ Назад", "ent:back:root"),),
         ),
@@ -143,13 +143,9 @@ def entertainment_menu_v2_enabled(
     if value not in _FALSE_VALUES:
         return True
 
-    canary_raw = source.get("ENTERTAINMENT_MENU_V2_OWNER_CANARY")
-    if canary_raw is None:
-        # The production Render service is at its environment-variable limit.
-        # Until the canary is promoted or removed, Render's built-in commit
-        # marker safely enables V2 only for the configured OWNER_ID.
-        canary_raw = "1" if source.get("RENDER_GIT_COMMIT") else ""
-    canary = str(canary_raw).strip().lower()
+    canary = str(
+        source.get("ENTERTAINMENT_MENU_V2_OWNER_CANARY", "")
+    ).strip().lower()
     if canary in _FALSE_VALUES or user_id is None:
         return False
 
