@@ -33,30 +33,32 @@ QUIZ: tuple[Question, ...] = (
 )
 
 def start(game_id: str = "quick_quiz") -> GameSession:
-    if game_id != "quick_quiz":
+    if game_id not in GAME_BANKS:
         raise ValueError("Unsupported game")
     return GameSession(game_id=game_id)
 
 def current_question(session: GameSession) -> Question | None:
     if session.finished:
         return None
-    return QUIZ[session.round_index]
+    return GAME_BANKS[session.game_id][session.round_index]
 
 def answer(session: GameSession, choice: str) -> tuple[GameSession, bool]:
     if session.finished or session.answered:
         raise ValueError("Round is not accepting answers")
     if choice not in ("a", "b", "c", "d"):
         raise ValueError("Invalid answer")
-    correct = choice == QUIZ[session.round_index].correct
+    correct = choice == GAME_BANKS[session.game_id][session.round_index].correct
     return replace(session, score=session.score + int(correct), answered=True), correct
 
 def next_round(session: GameSession) -> GameSession:
     if session.finished or not session.answered:
         raise ValueError("Answer current round first")
     index = session.round_index + 1
-    if index >= len(QUIZ):
+    if index >= len(GAME_BANKS[session.game_id]):
         return replace(session, finished=True)
     return replace(session, round_index=index, answered=False)
 
 def finish(session: GameSession) -> GameSession:
     return replace(session, finished=True)
+
+GAME_BANKS = {"quick_quiz": QUIZ}
