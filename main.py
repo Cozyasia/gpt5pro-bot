@@ -10271,12 +10271,6 @@ def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
         return None
 
 
-def _is_seedance_privacy_rejection(error: BaseException | str) -> bool:
-    """Recognise a terminal Seedance image-policy rejection without exposing raw provider JSON."""
-    text = str(error or "").lower()
-    return "inputimagesensitivecontentdetected" in text or "privacyinformation" in text
-
-
 def _vocal_song_kb(
     token: str,
     *,
@@ -10890,7 +10884,11 @@ async def _start_vocal_clip(
             log.exception("vocal clip failed: %s", e)
             with contextlib.suppress(Exception): checkpoint(last_error=str(e)[:1000])
             with contextlib.suppress(Exception):
-                privacy_rejected = _is_seedance_privacy_rejection(e)
+                provider_error = str(e or "").lower()
+                privacy_rejected = (
+                    "inputimagesensitivecontentdetected" in provider_error
+                    or "privacyinformation" in provider_error
+                )
                 await update.effective_message.reply_text(
                     (
                         "⚠️ Seedance отклонил входной кадр по своей проверке privacy. "

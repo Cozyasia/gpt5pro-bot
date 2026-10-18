@@ -27,7 +27,7 @@ class VocalClipPrivacyRejectionTests(unittest.TestCase):
 
     def test_user_receives_the_provider_reason_and_keeps_the_song(self):
         block = SOURCE[SOURCE.index("async def _start_vocal_clip"):SOURCE.index("async def _run_kling_text_shorts")]
-        self.assertIn("_is_seedance_privacy_rejection", block)
+        self.assertIn("inputimagesensitivecontentdetected", block)
         self.assertIn("Seedance отклонил входной кадр", block)
         self.assertIn("privacy_rejected=privacy_rejected", block)
 
