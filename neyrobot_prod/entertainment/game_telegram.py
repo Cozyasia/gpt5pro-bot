@@ -10,6 +10,9 @@ def _keyboard():
               [B("🕵️ Детектив", callback_data="game:adventure:detective")],
               [B("📖 Интерактивная история", callback_data="game:adventure:story")],
               [B("🐉 Ролевая игра", callback_data="game:adventure:roleplay")],
+              [B("❤️ Игра для пары", callback_data="game:adventure:couple")],
+              [B("🥳 Игра для компании", callback_data="game:adventure:party")],
+              [B("🎲 Правда или действие", callback_data="game:adventure:truth_dare")],
               [B("⬅️ Развлечения", callback_data="ent:back:root")]])
 
 def _round_keyboard(session):
