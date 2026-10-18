@@ -1,11 +1,15 @@
 """Telegram adapter for the self-contained quiz. No provider calls or credit usage."""
 from .games import start, current_question, answer, next_round, finish, GAME_BANKS
+from . import adventures
 
 def _keyboard():
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     return M([[B("⚡ Быстрый квиз", callback_data="game:start:quick_quiz")],
               [B("🧠 Битва знаний", callback_data="game:start:knowledge")],
               [B("🎬 Угадай фильм", callback_data="game:start:movie")],
+              [B("🕵️ Детектив", callback_data="game:adventure:detective")],
+              [B("📖 Интерактивная история", callback_data="game:adventure:story")],
+              [B("🐉 Ролевая игра", callback_data="game:adventure:roleplay")],
               [B("⬅️ Развлечения", callback_data="ent:back:root")]])
 
 def _round_keyboard(session):
@@ -37,6 +41,29 @@ async def handle_game_callback(update, context):
     await q.answer()
     data = q.data or ""
     state = context.user_data.get("ent_game_session")
+    if data.startswith("game:adventure:"):
+        story_id = data.partition("game:adventure:")[2]
+        try:
+            adventure = adventures.start(story_id)
+        except ValueError:
+            await q.message.reply_text("Неизвестная история.", reply_markup=_keyboard())
+            return
+        context.user_data["ent_adventure"] = adventure
+        await _show_adventure(q.message, adventure)
+        return
+    if data.startswith("game:choose:"):
+        adventure = context.user_data.get("ent_adventure")
+        if adventure is None:
+            await q.message.reply_text("Сначала выберите историю.", reply_markup=_keyboard())
+            return
+        try:
+            adventure = adventures.choose(adventure, int(data.partition("game:choose:")[2]))
+        except (ValueError, TypeError):
+            await q.message.reply_text("Выберите доступный вариант.", reply_markup=_keyboard())
+            return
+        context.user_data["ent_adventure"] = adventure
+        await _show_adventure(q.message, adventure)
+        return
     if data == "game:menu":
         await q.message.reply_text("🎮 Игры с AI\nВыберите игру:", reply_markup=_keyboard())
         return
@@ -89,3 +116,10 @@ async def handle_game_callback(update, context):
             await q.message.reply_text(_question_text(updated), reply_markup=_round_keyboard(updated))
         return
     await q.message.reply_text("Выберите игру:", reply_markup=_keyboard())
+
+async def _show_adventure(message, session):
+    from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
+    prompt, options, _ = adventures.scene(session)
+    rows = [[B(label, callback_data=f"game:choose:{i}")] for i, label in enumerate(options)]
+    rows.append([B("🔄 Другая история", callback_data="game:menu")])
+    await message.reply_text(prompt, reply_markup=M(rows))
