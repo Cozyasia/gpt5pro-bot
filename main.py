@@ -11063,13 +11063,13 @@ async def _start_video_studio(
                 # Typography belongs exclusively to FFmpeg. Never pass caption
                 # directives or their exact phrases to the generative model.
                 visual_prompt = re.sub(
-                    r"(?im)^\\s*ТИТРЫ\\s*:\\s*\\d+(?:[.,]\\d+)?\\s*[-–]\\s*\\d+(?:[.,]\\d+)?\\s*\\|.*$",
+                    r"(?im)^\s*ТИТРЫ\s*:\s*\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?\s*\|.*$",
                     "", prompt,
                 ).strip()
                 scene_prompt = seedance_scene_prompt(scene, visual_prompt)
                 if ad_captions:
                     scene_prompt += (
-                        "\\nNO text or typography anywhere in the generated video. "
+                        "\nNO text or typography anywhere in the generated video. "
                         "Do not render captions, subtitles, letters, slogans, logos, "
                         "product labels, watermarks, or UI. Clean footage only; "
                         "titles will be composited in post-production."
