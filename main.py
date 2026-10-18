@@ -23,6 +23,12 @@ import subprocess
 import contextlib
 import random
 
+# ───────── Render Secret Files bootstrap ─────────
+# Must run before any API keys are read from os.environ.
+from secret_loader import bootstrap_secret_environment, get_secret
+_SECRET_FILE_SOURCES = bootstrap_secret_environment()
+
+
 from music_video_scene_plan import (
     ScenePlan,
     chunk_review_messages,
@@ -31,11 +37,6 @@ from music_video_scene_plan import (
     scene_plan_from_explicit_timeline,
 )
 from video_studio import SeedanceError, seedance_generate, seedance_scene_prompt
-
-# ───────── Render Secret Files bootstrap ─────────
-# Must run before any API keys are read from os.environ.
-from secret_loader import bootstrap_secret_environment, get_secret
-_SECRET_FILE_SOURCES = bootstrap_secret_environment()
 
 # ───────── Rembg cache bootstrap ─────────
 # Render Starter/ручной deploy часто не имеет writable /data.
