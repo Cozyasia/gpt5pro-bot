@@ -11060,7 +11060,20 @@ async def _start_video_studio(
                 await update.effective_message.reply_text(
                     f"🎞 Сцена {position}/{len(plan.scenes)}: Seedance {seconds} сек."
                 )
-                scene_prompt = seedance_scene_prompt(scene, prompt)
+                # Typography belongs exclusively to FFmpeg. Never pass caption
+                # directives or their exact phrases to the generative model.
+                visual_prompt = re.sub(
+                    r"(?im)^\\s*ТИТРЫ\\s*:\\s*\\d+(?:[.,]\\d+)?\\s*[-–]\\s*\\d+(?:[.,]\\d+)?\\s*\\|.*$",
+                    "", prompt,
+                ).strip()
+                scene_prompt = seedance_scene_prompt(scene, visual_prompt)
+                if ad_captions:
+                    scene_prompt += (
+                        "\\nNO text or typography anywhere in the generated video. "
+                        "Do not render captions, subtitles, letters, slogans, logos, "
+                        "product labels, watermarks, or UI. Clean footage only; "
+                        "titles will be composited in post-production."
+                    )
                 content = await seedance_generate(
                     api_key=COMET_API_KEY,
                     base_url=COMET_BASE_URL,
