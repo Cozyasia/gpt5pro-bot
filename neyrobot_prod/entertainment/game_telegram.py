@@ -6,10 +6,10 @@ def _keyboard():
     return M([[B("⚡ Быстрый квиз", callback_data="game:start")],
               [B("⬅️ Развлечения", callback_data="ent:back:root")]])
 
-def _round_keyboard():
+def _round_keyboard(session):
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     return M([[B(f"{key.upper()}. {value}", callback_data=f"game:answer:{key}")]
-              for key, value in zip("abcd", ("А", "Б", "В", "Г"))] +
+              for key, value in zip("abcd", current_question(session).answers)] +
              [[B("📜 Правила", callback_data="game:rules"), B("🛑 Закончить", callback_data="game:finish")]])
 
 def _after_keyboard():
@@ -40,7 +40,7 @@ async def handle_game_callback(update, context):
     if data == "game:start":
         state = start()
         context.user_data["ent_game_session"] = state
-        await q.message.reply_text(_question_text(state), reply_markup=_round_keyboard())
+        await q.message.reply_text(_question_text(state), reply_markup=_round_keyboard(state))
         return
     if data == "game:finish":
         if state:
@@ -58,7 +58,7 @@ async def handle_game_callback(update, context):
         try:
             updated, correct = answer(state, choice)
         except ValueError:
-            await q.message.reply_text("Неверная кнопка. Выберите один из четырёх ответов.", reply_markup=_round_keyboard())
+            await q.message.reply_text("Неверная кнопка. Выберите один из четырёх ответов.", reply_markup=_round_keyboard(state))
             return
         context.user_data["ent_game_session"] = updated
         question = current_question(state)
