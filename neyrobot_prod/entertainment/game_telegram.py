@@ -68,7 +68,7 @@ async def handle_game_callback(update, context):
         except (ValueError, TypeError):
             await q.message.reply_text("Выберите доступный вариант.", reply_markup=_keyboard())
             return
-        context.user_data["ent_adventure"] = adventure
+        context.user_data["ent_adventure"] = asdict(adventure)
         await _show_adventure(q.message, adventure)
         return
     if data == "game:menu":
@@ -118,7 +118,7 @@ async def handle_game_callback(update, context):
             await q.message.reply_text("Сначала ответьте на вопрос.", reply_markup=_round_keyboard(state))
             return
         updated = next_round(state)
-        context.user_data["ent_game_session"] = updated
+        context.user_data["ent_game_session"] = asdict(updated)
         if updated.finished:
             await q.message.reply_text(f"🏆 Игра завершена! Ваш результат: {updated.score}/{len(GAME_BANKS[updated.game_id])}.", reply_markup=_keyboard())
         else:
