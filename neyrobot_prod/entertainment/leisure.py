@@ -81,12 +81,17 @@ async def handle_leisure_callback(update, context):
             budget=context.user_data.get("ent_leisure_budget", 0)), reply_markup=keyboard())
         return
     if action.startswith("interest:"):
+        if not context.user_data.get("ent_leisure_category"):
+            await q.message.reply_text("Сначала выберите ситуацию.", reply_markup=keyboard())
+            return
         interest = action.partition("interest:")[2]
         category = context.user_data.get("ent_leisure_category", "home")
         if interest not in PREFERENCES:
             await q.message.reply_text("Выберите интерес:", reply_markup=keyboard())
             return
         context.user_data["ent_leisure_interest"] = interest
+        context.user_data.pop("ent_leisure_budget", None)
+        context.user_data.pop("ent_leisure_participants", None)
         from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
         rows = [[B("💸 Бесплатно", callback_data="leisure:budget:0")],
                 [B("💰 До 1000", callback_data="leisure:budget:1000"), B("💎 До 5000", callback_data="leisure:budget:5000")]]
