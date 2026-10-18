@@ -1,6 +1,7 @@
 import asyncio
 import types
 import unittest
+from unittest.mock import patch
 from neyrobot_prod.entertainment.production import BRIEFS, handle_production_brief
 
 class Message:
@@ -13,6 +14,7 @@ class Query:
     def __init__(self, data):
         self.data = data
         self.message = Message()
+        self.from_user = types.SimpleNamespace(id=12345)
     async def answer(self):
         return None
 
@@ -20,7 +22,8 @@ class ProductionTests(unittest.TestCase):
     def click(self, mode):
         q = Query("ent:brief:" + mode)
         context = types.SimpleNamespace(user_data={})
-        asyncio.run(handle_production_brief(types.SimpleNamespace(callback_query=q), context))
+        with patch.dict("os.environ", {"ENTERTAINMENT_MENU_V2": "1"}):
+            asyncio.run(handle_production_brief(types.SimpleNamespace(callback_query=q), context))
         return q.message.texts, context.user_data
 
     def test_all_briefs_have_descriptions(self):
