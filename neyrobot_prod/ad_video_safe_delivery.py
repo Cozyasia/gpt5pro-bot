@@ -48,7 +48,7 @@ async def deliver_once(path, send):
     _save(path,{"state":"sent","message_id":mid})
     return mid
 
-def render_russian_overlay(source, destination, captions, font_path, *, timeout=180):
+def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False):
     """Burn user-approved Russian captions onto an existing video, no AI charges.
     captions: [(start_seconds, end_seconds, text), ...].
     """
@@ -64,7 +64,7 @@ def render_russian_overlay(source, destination, captions, font_path, *, timeout=
         filters.append(
             "drawtext=fontfile='"+font+"':text='"+escaped+
             "':expansion=none:fontcolor=white:fontsize=h/22:"
-            "box=1:boxcolor=black@0.55:boxborderw=18:"
+            ("box=1:boxcolor=black@0.55:boxborderw=18:" if background else "box=0:shadowcolor=black@0.85:shadowx=2:shadowy=3:")
             "x=(w-text_w)/2:y=h*0.73:"
             "enable='between(t,"+str(start)+","+str(end)+")'"
         )
