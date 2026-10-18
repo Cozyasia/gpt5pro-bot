@@ -11003,7 +11003,7 @@ async def _start_video_studio(
     # ТИТРЫ: 0-3 | Красота в каждой капле
     ad_captions = []
     for start, end, caption_text in re.findall(
-        r"(?im)^\\s*ТИТРЫ\\s*:\\s*(\\d+(?:[.,]\\d+)?)\\s*[-–]\\s*(\\d+(?:[.,]\\d+)?)\\s*\\|\\s*(.+?)\\s*$",
+        r"(?im)^\s*ТИТРЫ\s*:\s*(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*\|\s*(.+?)\s*$",
         prompt,
     ):
         start_s, end_s = float(start.replace(",", ".")), float(end.replace(",", "."))
