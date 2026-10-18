@@ -91,6 +91,12 @@ from telegram.ext import (
 from telegram.constants import ChatAction
 from telegram.error import TelegramError, TimedOut, BadRequest
 from presentation_studio import PresentationStudio, StudioConfig
+from neyrobot_prod.entertainment import (
+    build_keyboard as build_entertainment_keyboard,
+    classify_callback as classify_entertainment_callback,
+    entertainment_menu_v2_enabled,
+    get_menu as get_entertainment_menu,
+)
 # ───────── TTS imports ─────────
 import contextlib  # уже у тебя выше есть, дублировать НЕ надо, если импорт стоит
 
@@ -3703,7 +3709,7 @@ def modes_root_kb() -> InlineKeyboardMarkup:
     ])
 
 # ── Описание и подменю по режимам
-def _mode_desc(key: str) -> str:
+def _mode_desc(key: str, user_id: int | None = None) -> str:
     if key == "study":
         return (
             "🎓 *Учёба*\n"
@@ -3722,6 +3728,12 @@ def _mode_desc(key: str) -> str:
             "«собери PDF-каталог объектов», «создай логотип для бренда», «убери водяной знак с фото»."
         )
     if key == "fun":
+        if entertainment_menu_v2_enabled(user_id=user_id):
+            return (
+                "🔥 Развлечения\n\n"
+                "Создавайте видео, фото, музыку и готовые проекты — от идеи до "
+                "результата. Выберите, что хотите получить."
+            )
         return (
             "🔥 *Развлечения*\n"
             "Гибрид: GPT-5 (идеи, сценарии, раскадровка), Vision (фото/референсы), "
@@ -3733,7 +3745,7 @@ def _mode_desc(key: str) -> str:
         return _medical_menu_text()
     return "Режим не найден."
 
-def _mode_kb(key: str) -> InlineKeyboardMarkup:
+def _mode_kb(key: str, user_id: int | None = None) -> InlineKeyboardMarkup:
     if key == "study":
         # Все длинные подписи идут по одной кнопке в строке — Telegram на Android не режет текст.
         return InlineKeyboardMarkup([
@@ -3763,24 +3775,7 @@ def _mode_kb(key: str) -> InlineKeyboardMarkup:
         ])
 
     if key == "fun":
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🪄 Оживить фото", callback_data="act:fun:revive")],
-            [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="act:fun:avatar")],
-            [InlineKeyboardButton("🎤 AI-видеоклип / песня", callback_data="act:fun:photoclip")],
-            [InlineKeyboardButton("🎬 Видео по тексту/голосу", callback_data="act:fun:textvideo")],
-            [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="act:fun:aiselfie")],
-            [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="act:fun:faceswap")],
-            [InlineKeyboardButton("🧼 Удалить фон на фото", callback_data="act:fun:removebg")],
-            [InlineKeyboardButton("🖼 Заменить фон на фото", callback_data="act:fun:replacebg")],
-            [InlineKeyboardButton("📱 Видео / Reels / Shorts", callback_data="act:fun:reels")],
-            [InlineKeyboardButton("🎞 Создать мини-фильм", callback_data="act:fun:film")],
-            [InlineKeyboardButton("🎬 Видео по тексту / голосу", callback_data="act:fun:shorts")],
-            [InlineKeyboardButton("🎵 Музыка / песня", callback_data="act:fun:music")],
-            [InlineKeyboardButton("🎮 Игры / квиз", callback_data="act:fun:games")],
-            [InlineKeyboardButton("🎭 Идеи для досуга", callback_data="act:fun:ideas")],
-            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
-        ])
+        return _fun_quick_kb(user_id)
 
     if key == "medicine":
         return medicine_kb()
@@ -4894,8 +4889,9 @@ async def _handle_photoclip_preset_choice(update: Update, context: ContextTypes.
 
 # Показать выбранный режим (используется и для callback, и для текста)
 async def _send_mode_menu(update, context, key: str):
-    text = _mode_desc(key)
-    kb = _mode_kb(key)
+    user_id = update.effective_user.id
+    text = _mode_desc(key, user_id)
+    kb = _mode_kb(key, user_id)
     # Если пришли из callback — редактируем; если текстом — шлём новым сообщением
     if getattr(update, "callback_query", None):
         q = update.callback_query
@@ -5237,7 +5233,7 @@ async def on_mode_cb(update, context):
         await q.answer()
         await q.message.reply_text(
             "🔥 Выберем формат: дом/улица/город/в поездке. Напишите бюджет/настроение.",
-            reply_markup=_mode_kb("fun"),
+            reply_markup=_mode_kb("fun", uid),
         )
         return
     if data == "act:fun:shorts":
@@ -5251,7 +5247,7 @@ async def on_mode_cb(update, context):
         await q.answer()
         await q.message.reply_text(
             "🎮 Тематика квиза/игры? Сгенерирую быструю викторину или мини-игру в чате.",
-            reply_markup=_mode_kb("fun"),
+            reply_markup=_mode_kb("fun", uid),
         )
         return
 
@@ -5272,7 +5268,7 @@ async def on_mode_cb(update, context):
             await _pedit_removebg(update, context, img)
         else:
             _set_waiting_removebg(context)
-            await q.message.reply_text("🧼 Пришлите фото — удалю фон и верну PNG с прозрачной подложкой.", reply_markup=_mode_kb("fun"))
+            await q.message.reply_text("🧼 Пришлите фото — удалю фон и верну PNG с прозрачной подложкой.", reply_markup=_mode_kb("fun", uid))
         return
 
     if data == "act:fun:replacebg":
@@ -5284,7 +5280,7 @@ async def on_mode_cb(update, context):
             await q.message.reply_text("🖼 Выберите новый фон для последнего загруженного фото:", reply_markup=background_presets_kb())
         else:
             context.user_data["photo_flow"] = "replacebg_menu"
-            await q.message.reply_text("🖼 Пришлите фото. После загрузки я покажу варианты фона: пляж, горы, природа, город или свой текст.", reply_markup=_mode_kb("fun"))
+            await q.message.reply_text("🖼 Пришлите фото. После загрузки я покажу варианты фона: пляж, горы, природа, город или свой текст.", reply_markup=_mode_kb("fun", uid))
         return
 
     if data == "act:fun:revive":
@@ -5313,7 +5309,7 @@ async def on_mode_cb(update, context):
         await q.message.reply_text(
             _fun_film_help_text(),
             parse_mode="Markdown",
-            reply_markup=_mode_kb("fun"),
+            reply_markup=_mode_kb("fun", uid),
         )
         return
 
@@ -5703,23 +5699,6 @@ def _work_kb():
         [InlineKeyboardButton("💡 Идеи / бриф", callback_data="work:idea")],
     ])
 
-def _fun_quick_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🪄 Оживить фото", callback_data="fun:revive")],
-        [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="fun:avatar")],
-        [InlineKeyboardButton("🎵 Фото → видеоклип", callback_data="fun:photoclip")],
-        [InlineKeyboardButton("🎤 Клип с вокалом (1 человек)", callback_data="fun:vocalclip")],
-        [InlineKeyboardButton("🎬 Видео по тексту/голосу", callback_data="fun:textvideo")],
-        [InlineKeyboardButton("🤳 AI-селфи со звездой", callback_data="fun:aiselfie")],
-        [InlineKeyboardButton("🎭 Замена лица на фото", callback_data="fun:faceswap")],
-        [InlineKeyboardButton("🧼 Удалить фон на фото", callback_data="fun:removebg")],
-        [InlineKeyboardButton("🖼 Заменить фон на фото", callback_data="fun:replacebg")],
-        [InlineKeyboardButton("📱 Reels / Shorts", callback_data="fun:reels")],
-        [InlineKeyboardButton("🎞 Создать мини-фильм", callback_data="fun:film")],
-        [InlineKeyboardButton("🎬 Раскадровка Reels", callback_data="fun:storyboard")],
-        [InlineKeyboardButton("🖌 Создать изображение", callback_data="fun:img")],
-    ])
-
 def _fun_kb():
     # оставим и старое подменю — не используется сейчас
     return InlineKeyboardMarkup([
@@ -5747,8 +5726,9 @@ async def cmd_mode_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _clear_transient_flows(context)
     _set_mode_clean(update.effective_user.id, "Развлечения", "")
     await update.effective_message.reply_text(
-        "🔥 Развлечения — быстрые действия: видео, фото, фон и замена лица.",
-        reply_markup=_fun_quick_kb()
+        _mode_desc("fun", update.effective_user.id),
+        parse_mode="Markdown",
+        reply_markup=_fun_quick_kb(update.effective_user.id),
     )
 
 async def cmd_mode_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -8043,7 +8023,9 @@ async def _show_suno_help_from_callback(q, context, reply_markup=None, submenu: 
     """
     context.user_data["awaiting_suno_brief"] = True
     text = _suno_submenu_text() if submenu else _suno_help_text()
-    kb = reply_markup or (_suno_menu_kb() if submenu else _mode_kb("fun"))
+    kb = reply_markup or (
+        _suno_menu_kb() if submenu else _mode_kb("fun", q.from_user.id)
+    )
     try:
         await q.message.reply_text(text, reply_markup=kb)
     except Exception as e:
@@ -8084,7 +8066,11 @@ async def on_cb_suno(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _set_mode_clean(uid, "Развлечения", "")
             with contextlib.suppress(Exception):
                 await q.answer("Назад")
-            await _safe_suno_callback_reply(q, _mode_desc("fun"), reply_markup=_mode_kb("fun"))
+            await _safe_suno_callback_reply(
+                q,
+                _mode_desc("fun", uid),
+                reply_markup=_mode_kb("fun", uid),
+            )
             return
 
         if data == "suno:free":
@@ -18728,16 +18714,16 @@ async def on_mode_work_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_mode_kb("work"))
 
 async def on_mode_fun_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = (
-        "🔥 *Развлечения*\n"
-        "Здесь быстрые творческие сценарии: оживить фотографию, сделать говорящий аватар, создать фото→видеоклип с музыкой, клип с вокалом для 1 человека, видео по тексту/голосу, "
-        "заменить лицо, удалить или заменить фон, сделать Reels/Shorts, создать мини-фильм, придумать идеи, сценарий, игру или квиз.\n\n"
-        "Выбери действие ниже или напиши свободный запрос."
+    user_id = update.effective_user.id
+    txt = _mode_desc("fun", user_id)
+    await update.effective_message.reply_text(
+        txt,
+        parse_mode="Markdown",
+        reply_markup=_fun_quick_kb(user_id),
     )
-    await update.effective_message.reply_text(txt, parse_mode="Markdown", reply_markup=_fun_quick_kb())
 
-# ───── Клавиатура «Развлечения» с новыми кнопками ─────
-def _fun_quick_kb() -> InlineKeyboardMarkup:
+# ───── Единая совместимая клавиатура «Развлечения» ─────
+def _legacy_fun_quick_kb() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("🪄 Оживить фото", callback_data="fun:revive")],
         [InlineKeyboardButton("🗣 Говорящий аватар", callback_data="fun:avatar")],
@@ -18757,6 +18743,52 @@ def _fun_quick_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("⬅️ Назад", callback_data="fun:back")],
     ]
     return InlineKeyboardMarkup(rows)
+
+
+def _fun_quick_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
+    if entertainment_menu_v2_enabled(user_id=user_id):
+        return build_entertainment_keyboard(
+            "root", InlineKeyboardButton, InlineKeyboardMarkup
+        )
+    return _legacy_fun_quick_kb()
+
+
+async def on_cb_entertainment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+
+    if not entertainment_menu_v2_enabled(user_id=q.from_user.id):
+        await q.message.reply_text(
+            "🔥 Развлечения — быстрые действия: видео, фото, фон и замена лица.",
+            reply_markup=_legacy_fun_quick_kb(),
+        )
+        return
+
+    route = classify_entertainment_callback(q.data or "")
+    if route.kind == "soon":
+        menu_id = context.user_data.get("ent_nav_menu", "root")
+        try:
+            get_entertainment_menu(menu_id)
+        except KeyError:
+            menu_id = "root"
+        await q.message.reply_text(
+            "🚧 Этот сценарий уже готовим. Скоро он появится в меню — "
+            "пока кредиты не списываются.",
+            reply_markup=build_entertainment_keyboard(
+                menu_id, InlineKeyboardButton, InlineKeyboardMarkup
+            ),
+        )
+        return
+
+    menu_id = route.target if route.kind in {"menu", "back"} else "root"
+    context.user_data["ent_nav_menu"] = menu_id
+    menu = get_entertainment_menu(menu_id)
+    await q.message.reply_text(
+        f"{menu.title}\n\n{menu.intro}",
+        reply_markup=build_entertainment_keyboard(
+            menu_id, InlineKeyboardButton, InlineKeyboardMarkup
+        ),
+    )
 
 # ───── Обработчик быстрых действий «Развлечения» (fallback-friendly) ─────
 async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -18900,6 +18932,17 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_photoclip_preset_choice(update, context, q, kind, prefix="fun")
         return
 
+    if action == "aiselfie":
+        await q.answer("AI-селфи")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "aiselfie")
+        await q.message.reply_text(
+            _ai_selfie_menu_text(),
+            parse_mode="Markdown",
+            reply_markup=_ai_selfie_action_kb("fun"),
+        )
+        return
+
     if action == "faceswap":
         await q.answer("Замена лица")
         _clear_transient_flows(context)
@@ -18917,7 +18960,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _pedit_removebg(update, context, img)
         else:
             _set_waiting_removebg(context)
-            await q.message.reply_text("🧼 Пришлите фото — удалю фон и верну PNG с прозрачной подложкой.", reply_markup=_fun_quick_kb())
+            await q.message.reply_text("🧼 Пришлите фото — удалю фон и верну PNG с прозрачной подложкой.", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action == "replacebg":
@@ -18929,7 +18972,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.message.reply_text("🖼 Выберите новый фон для последнего загруженного фото:", reply_markup=background_presets_kb())
         else:
             context.user_data["photo_flow"] = "replacebg_menu"
-            await q.message.reply_text("🖼 Пришлите фото. После загрузки я покажу варианты фона: пляж, горы, природа, город или свой текст.", reply_markup=_fun_quick_kb())
+            await q.message.reply_text("🖼 Пришлите фото. После загрузки я покажу варианты фона: пляж, горы, природа, город или свой текст.", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action == "revive":
@@ -18937,7 +18980,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         _set_waiting_photo_revival(update, context)
         await q.answer("Оживление фото")
-        await q.message.reply_text(_fun_revive_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
+        await q.message.reply_text(_fun_revive_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action in {"smartreels", "reels"}:
@@ -18947,7 +18990,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _set_mode_clean(q.from_user.id, "Развлечения", "fun_reels")
         context.user_data["awaiting_reels_material"] = True
         await q.answer("Reels / Shorts")
-        await q.message.reply_text(_fun_reels_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
+        await q.message.reply_text(_fun_reels_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action == "film":
@@ -18955,7 +18998,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _set_mode_clean(q.from_user.id, "Развлечения", "fun_film")
         context.user_data["awaiting_film_material"] = True
         await q.answer("Создать фильм")
-        await q.message.reply_text(_fun_film_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
+        await q.message.reply_text(_fun_film_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action == "clip":
@@ -18965,21 +19008,21 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _set_mode_clean(q.from_user.id, "Развлечения", "fun_reels")
         context.user_data["awaiting_reels_material"] = True
         await q.answer()
-        await q.message.reply_text(_fun_reels_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb())
+        await q.message.reply_text(_fun_reels_help_text(), parse_mode="Markdown", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action == "img":
         if await _try_call("cmd_img", "midjourney_flow", "images_make"):
             return
         await q.answer()
-        await q.message.reply_text("Введи /img и тему картинки, или пришли рефы.", reply_markup=_fun_quick_kb())
+        await q.message.reply_text("Введи /img и тему картинки, или пришли рефы.", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action == "storyboard":
         if await _try_call("start_storyboard", "storyboard_make"):
             return
         await q.answer()
-        await q.message.reply_text("Напиши тему шорта — накидаю структуру и раскадровку.", reply_markup=_fun_quick_kb())
+        await q.message.reply_text("Напиши тему шорта — накидаю структуру и раскадровку.", reply_markup=_fun_quick_kb(q.from_user.id))
         return
 
     if action == "music":
@@ -18995,7 +19038,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await q.message.reply_text(
             "Готов! Напиши задачу или выбери кнопку выше.",
-            reply_markup=_fun_quick_kb()
+            reply_markup=_fun_quick_kb(q.from_user.id)
         )
         return
 
@@ -19134,7 +19177,11 @@ async def on_capabilities_qa(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "_Подсказки:_ просто загрузите файл или пришлите ссылку + короткое ТЗ. "
         "Для фото — можно нажать «✨ Оживить», для видео — «🎬 Reels из длинного видео»."
     )
-    await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=_fun_quick_kb())
+    await update.effective_message.reply_text(
+        msg,
+        parse_mode="Markdown",
+        reply_markup=_fun_quick_kb(update.effective_user.id),
+    )
 
 
 # ───────── v98 LIVE SEARCH DIAGNOSTICS / PROVIDER HARDENING ─────────
@@ -19590,6 +19637,7 @@ def build_application() -> "Application":
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)
 
     # 3) Быстрые развлечения (любые fun:...)
+    app.add_handler(CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:"))
     app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
 
     # 3b) Подменю Suno: свободный запрос и пресеты
