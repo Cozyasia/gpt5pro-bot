@@ -15627,7 +15627,7 @@ def _compress_video_for_telegram_sync(video_bytes: bytes, max_mb: int = 48) -> b
 async def _compress_video_for_telegram(video_bytes: bytes, max_mb: int = 48) -> bytes | None:
     return await asyncio.to_thread(_compress_video_for_telegram_sync, video_bytes, max_mb)
 
-async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = ""):
+async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = "", *, ad_captions=None, ad_text_color="auto"):
     """One Telegram upload per provider task; never resend after an ambiguous timeout."""
     headers = {"User-Agent": "GPT5StudioAI/1.0", "Accept": "video/mp4,video/*,*/*;q=0.8"}
     r = await client.get(url, headers=headers, timeout=240.0, follow_redirects=True)
@@ -15640,6 +15640,19 @@ async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: 
         compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
         if compact:
             downloaded = compact
+    # Optional post-production path: same render as preview, no second AI generation.
+    # Enabled only for workflows that explicitly supply approved caption timings.
+    if ad_captions:
+        from neyrobot_prod.ad_video_safe_delivery import render_russian_overlay
+        with tempfile.TemporaryDirectory(prefix="gpt5-ad-") as workdir:
+            source = os.path.join(workdir, "source.mp4")
+            target = os.path.join(workdir, "captioned.mp4")
+            with open(source, "wb") as fh:
+                fh.write(downloaded)
+            font_path = os.getenv("AD_CAPTION_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+            await asyncio.to_thread(render_russian_overlay, source, target, ad_captions, font_path, text_color=ad_text_color)
+            with open(target, "rb") as fh:
+                downloaded = fh.read()
     chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
     dedupe_key = _video_result_key(chat_id, task_id=task_id, url="" if task_id else url)
     if _mark_video_sent_once(dedupe_key):
