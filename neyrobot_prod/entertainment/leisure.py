@@ -47,6 +47,33 @@ async def handle_leisure_callback(update, context):
     q = update.callback_query
     await q.answer()
     action = (q.data or "").partition(":")[2]
+    if action.startswith("budget:"):
+        try:
+            amount = int(action.partition("budget:")[2])
+        except ValueError:
+            amount = -1
+        if amount not in (0, 1000, 5000):
+            await q.message.reply_text("Выберите бюджет:", reply_markup=keyboard())
+            return
+        context.user_data["ent_leisure_budget"] = amount
+        from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
+        rows = [[B("👤 Один", callback_data="leisure:people:1"), B("👥 Двое", callback_data="leisure:people:2")],
+                [B("👨‍👩‍👧‍👦 Компания", callback_data="leisure:people:4")]]
+        await q.message.reply_text("Сколько участников?", reply_markup=M(rows))
+        return
+    if action.startswith("people:"):
+        try:
+            people = int(action.partition("people:")[2])
+        except ValueError:
+            people = -1
+        if people not in (1, 2, 4):
+            await q.message.reply_text("Выберите количество участников:", reply_markup=keyboard())
+            return
+        context.user_data["ent_leisure_participants"] = people
+        await q.message.reply_text(personalized(context.user_data.get("ent_leisure_category", "home"),
+            context.user_data.get("ent_leisure_interest", "calm"), participants=people,
+            budget=context.user_data.get("ent_leisure_budget", 0)), reply_markup=keyboard())
+        return
     if action.startswith("interest:"):
         interest = action.partition("interest:")[2]
         category = context.user_data.get("ent_leisure_category", "home")
@@ -54,7 +81,10 @@ async def handle_leisure_callback(update, context):
             await q.message.reply_text("Выберите интерес:", reply_markup=keyboard())
             return
         context.user_data["ent_leisure_interest"] = interest
-        await q.message.reply_text(personalized(category, interest), reply_markup=keyboard())
+        from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
+        rows = [[B("💸 Бесплатно", callback_data="leisure:budget:0")],
+                [B("💰 До 1000", callback_data="leisure:budget:1000"), B("💎 До 5000", callback_data="leisure:budget:5000")]]
+        await q.message.reply_text("Выберите бюджет (в вашей валюте):", reply_markup=M(rows))
         return
     if action == "nearby":
         await q.message.reply_text("📍 Для подбора реальных мест нужны город и актуальный поиск. Пока могу предложить варианты без привязки к заведениям.", reply_markup=keyboard())
