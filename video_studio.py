@@ -167,9 +167,22 @@ async def seedance_generate(
                         "чтобы не создать дубликат."
                     ) from exc
                 if response.status_code >= 500:
+                    # Some gateways return an error status even after the upstream
+                    # accepted a task. Recover its ID when explicitly present,
+                    # but never issue a second billable create request.
+                    try:
+                        error_payload = response.json()
+                    except ValueError:
+                        error_payload = None
+                    recovered_id = _task_id(error_payload) if error_payload else None
+                    if recovered_id:
+                        task_id = recovered_id
+                        if callable(on_task_id):
+                            on_task_id(task_id)
+                        break
                     raise SeedanceError(
-                        f"Seedance вернул {response.status_code}; повторная отправка отключена, "
-                        "чтобы не создать дубликат."
+                        f"Seedance вернул {response.status_code}; идентификатор задачи "
+                        "не получен. Повторная отправка отключена, чтобы не создать дубликат."
                     )
                 if response.status_code >= 400:
                     last_error = f"{response.status_code}: {response.text[:500]}"
