@@ -1,0 +1,120 @@
+"""Structured offline leisure suggestions. Never invent venue names or opening hours."""
+from __future__ import annotations
+from .catalog import entertainment_menu_v2_enabled
+
+OPTIONS = {
+    "couple": ("❤️ Для пары", ("Приготовьте вместе новое блюдо", "Устройте вечер настольных игр", "Прогуляйтесь по любимому маршруту")),
+    "kids": ("👨‍👩‍👧 С детьми", ("Сделайте домашний квест", "Устройте мастер-класс по рисованию", "Посетите ближайший парк, проверив погоду")),
+    "friends": ("🥳 Для компании", ("Проведите тематический квиз", "Устройте кулинарный баттл", "Организуйте вечер настольных игр")),
+    "home": ("🏠 Дома", ("Устройте домашний кинопоказ", "Попробуйте новый рецепт", "Сделайте творческий проект")),
+    "budget": ("💸 Недорого", ("Прогуляйтесь по новому району", "Устройте фотопрогулку", "Посетите бесплатное общественное пространство")),
+    "rain": ("🌧 В плохую погоду", ("Сыграйте в настольную игру", "Приготовьте горячий ужин", "Посетите музей, проверив часы работы")),
+}
+
+def suggestions(category: str) -> tuple[str, tuple[str, ...]]:
+    return OPTIONS[category]
+
+def format_suggestions(category: str) -> str:
+    title, ideas = suggestions(category)
+    return title + "\n\n" + "\n".join(f"{i}. {idea}" for i, idea in enumerate(ideas, 1)) + "\n\nЭто идеи без проверки местных событий и расписаний."
+
+PREFERENCES = {
+    "active": ("🚴 Активно", ("Устройте прогулку с фото-заданиями", "Попробуйте домашнюю тренировку", "Организуйте мини-турнир")),
+    "calm": ("🧘 Спокойно", ("Сделайте вечер чтения", "Послушайте новый альбом вместе", "Попробуйте медитацию")),
+    "creative": ("🎨 Творчество", ("Снимите короткий фильм на телефон", "Нарисуйте совместную картину", "Сочините историю по очереди")),
+}
+
+def personalized(category: str, interest: str, participants: int = 2, budget: int = 0) -> str:
+    if participants < 1 or budget < 0:
+        raise ValueError("Invalid preferences")
+    title, ideas = suggestions(category)
+    interest_title, interest_ideas = PREFERENCES[interest]
+    return (f"{title} · {interest_title}\nУчастников: {participants}; бюджет: до {budget} (валюта пользователя)\n\n"
+            + "\n".join(f"{index}. {idea}" for index, idea in enumerate((*ideas[:2], *interest_ideas[:2]), 1))
+            + "\n\nЭто идеи без проверки местных событий и расписаний.")
+
+def keyboard():
+    from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
+    return M([[B(label, callback_data=f"leisure:{key}")] for key, (label, _) in OPTIONS.items()] +
+             [[B("📍 Рядом со мной", callback_data="leisure:nearby")],
+              [B("⬅️ Развлечения", callback_data="ent:back:root")]])
+
+async def handle_leisure_menu(update, context):
+    q = update.callback_query
+    await q.answer()
+    await q.message.reply_text("🎉 Чем заняться? Выберите ситуацию — предложу конкретные идеи.", reply_markup=keyboard())
+
+async def handle_leisure_callback(update, context):
+    q = update.callback_query
+    await q.answer()
+    if not entertainment_menu_v2_enabled(user_id=q.from_user.id):
+        await q.message.reply_text("Этот раздел пока недоступен.")
+        return
+    action = (q.data or "").partition(":")[2]
+    if action.startswith("budget:"):
+        if not context.user_data.get("ent_leisure_interest"):
+            await q.message.reply_text("Сначала выберите ситуацию и интерес.", reply_markup=keyboard())
+            return
+        try:
+            amount = int(action.partition("budget:")[2])
+        except ValueError:
+            amount = -1
+        if amount not in (0, 1000, 5000):
+            await q.message.reply_text("Выберите бюджет:", reply_markup=keyboard())
+            return
+        context.user_data["ent_leisure_budget"] = amount
+        from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
+        rows = [[B("👤 Один", callback_data="leisure:people:1"), B("👥 Двое", callback_data="leisure:people:2")],
+                [B("👨‍👩‍👧‍👦 Компания", callback_data="leisure:people:4")]]
+        await q.message.reply_text("Сколько участников?", reply_markup=M(rows))
+        return
+    if action.startswith("people:"):
+        if "ent_leisure_budget" not in context.user_data:
+            await q.message.reply_text("Сначала выберите бюджет.", reply_markup=keyboard())
+            return
+        try:
+            people = int(action.partition("people:")[2])
+        except ValueError:
+            people = -1
+        if people not in (1, 2, 4):
+            await q.message.reply_text("Выберите количество участников:", reply_markup=keyboard())
+            return
+        context.user_data["ent_leisure_participants"] = people
+        await q.message.reply_text(personalized(context.user_data.get("ent_leisure_category", "home"),
+            context.user_data.get("ent_leisure_interest", "calm"), participants=people,
+            budget=context.user_data.get("ent_leisure_budget", 0)), reply_markup=keyboard())
+        return
+    if action.startswith("interest:"):
+        if not context.user_data.get("ent_leisure_category"):
+            await q.message.reply_text("Сначала выберите ситуацию.", reply_markup=keyboard())
+            return
+        interest = action.partition("interest:")[2]
+        category = context.user_data.get("ent_leisure_category", "home")
+        if interest not in PREFERENCES:
+            await q.message.reply_text("Выберите интерес:", reply_markup=keyboard())
+            return
+        context.user_data["ent_leisure_interest"] = interest
+        context.user_data.pop("ent_leisure_budget", None)
+        context.user_data.pop("ent_leisure_participants", None)
+        from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
+        rows = [[B("💸 Бесплатно", callback_data="leisure:budget:0")],
+                [B("💰 До 1000", callback_data="leisure:budget:1000"), B("💎 До 5000", callback_data="leisure:budget:5000")]]
+        await q.message.reply_text("Выберите бюджет (в вашей валюте):", reply_markup=M(rows))
+        return
+    if action == "nearby":
+        await q.message.reply_text("📍 Для подбора реальных мест нужны город и актуальный поиск. Пока могу предложить варианты без привязки к заведениям.", reply_markup=keyboard())
+        return
+    if action == "menu":
+        await q.message.reply_text("Выберите ситуацию:", reply_markup=keyboard())
+        return
+    if action not in OPTIONS:
+        await q.message.reply_text("Выберите ситуацию:", reply_markup=keyboard())
+        return
+    context.user_data["ent_leisure_category"] = action
+    context.user_data.pop("ent_leisure_interest", None)
+    context.user_data.pop("ent_leisure_budget", None)
+    context.user_data.pop("ent_leisure_participants", None)
+    from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
+    rows = [[B(label, callback_data=f"leisure:interest:{key}")] for key, (label, _) in PREFERENCES.items()]
+    rows.append([B("⬅️ Категории", callback_data="leisure:menu")])
+    await q.message.reply_text(format_suggestions(action) + "\n\nВыберите интерес для уточнения:", reply_markup=M(rows))
