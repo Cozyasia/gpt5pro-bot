@@ -101,6 +101,7 @@ _MENUS: dict[str, MenuSpec] = {
         intro="Выберите способ создания — бот откроет подходящий рабочий сценарий.",
         rows=(
             (_button("💬 Видео по тексту или голосу", "fun:textvideo"),),
+            (_button("🎤 Клип с вокалом", "fun:vocalclip"),),
             (_button("🖼 Оживить фото", "fun:revive"),),
             (_button("📱 Reels / Shorts", "fun:reels"),),
             (_button("🎬 Мини-фильм", "fun:film"),),

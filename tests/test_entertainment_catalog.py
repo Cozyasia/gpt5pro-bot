@@ -169,6 +169,7 @@ class EntertainmentCatalogTests(unittest.TestCase):
                 "fun:storyboard",
                 "fun:video_director",
                 "fun:video_montage",
+                "fun:vocalclip",
             },
             "photo": {
                 "fun:img",
@@ -181,6 +182,14 @@ class EntertainmentCatalogTests(unittest.TestCase):
         for menu_id, callbacks in expected.items():
             with self.subTest(menu_id=menu_id):
                 self.assertTrue(callbacks.issubset(set(self._callbacks(menu_id))))
+
+    def test_vocal_clip_is_reachable_from_create_video(self):
+        matches = [
+            button for row in get_menu("video").rows for button in row
+            if button.callback_data == "fun:vocalclip"
+        ]
+        self.assertEqual(1, len(matches))
+        self.assertIn("вокалом", matches[0].text.lower())
 
     def test_production_presets_use_existing_director(self):
         production = get_menu("production")
