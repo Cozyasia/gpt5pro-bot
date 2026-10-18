@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import contextvars
+import inspect
 import os
 import shutil
 import sys
@@ -373,6 +374,17 @@ def _patch_runtime(runtime: Any) -> None:
             _REMOVE_KEYBOARD_ONCE.set(False)
             from telegram import ReplyKeyboardRemove
             return ReplyKeyboardRemove()
+        # Some late-bound menu overlays accept only the mode key, while
+        # _send_mode_menu calls _mode_kb(mode_key, user_id). Adapt only when
+        # signature binding proves the second positional argument is extra.
+        signature = inspect.signature(original_mode_kb)
+        try:
+            signature.bind(*args, **kwargs)
+        except TypeError:
+            if len(args) == 2 and not kwargs:
+                signature.bind(args[0])
+                return original_mode_kb(args[0])
+            raise
         return original_mode_kb(*args, **kwargs)
 
     async def _start_v261(update, context, img_bytes, instruction):
