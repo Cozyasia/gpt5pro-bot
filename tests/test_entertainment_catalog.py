@@ -167,8 +167,8 @@ class EntertainmentCatalogTests(unittest.TestCase):
     def test_production_presets_use_existing_director(self):
         production = get_menu("production")
         active = [button for row in production.rows for button in row
-                  if button.callback_data.startswith("ent:brief:")]
-        self.assertEqual(len(active), 8)
+                  if button.callback_data == "fun:video_director"]
+        self.assertEqual(len(active), 9)
         self.assertTrue(all(button.status == "active" for button in active))
         self.assertTrue(any("недвижимости" in button.text.lower() for button in active))
         self.assertTrue(any("UGC" in button.text for button in active))
