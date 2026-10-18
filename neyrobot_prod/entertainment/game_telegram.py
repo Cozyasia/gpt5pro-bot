@@ -55,6 +55,7 @@ async def handle_game_callback(update, context):
             await q.message.reply_text("Неизвестная история.", reply_markup=_keyboard())
             return
         context.user_data["ent_adventure"] = asdict(adventure)
+        context.user_data.pop("ent_game_session", None)
         await _show_adventure(q.message, adventure)
         return
     if data.startswith("game:choose:"):
@@ -86,6 +87,7 @@ async def handle_game_callback(update, context):
             return
         state = start(game_id)
         context.user_data["ent_game_session"] = asdict(state)
+        context.user_data.pop("ent_adventure", None)
         await q.message.reply_text(_question_text(state), reply_markup=_round_keyboard(state))
         return
     if data == "game:finish":
