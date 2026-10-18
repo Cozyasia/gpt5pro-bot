@@ -509,13 +509,17 @@ def _patch_fun_menus() -> bool:
         return bool(mod is not None)
     original_quick = getattr(mod, "_fun_quick_kb", None)
     if callable(original_quick):
-        def openai_fun_quick_kb():
-            return _promote_openai_selfie(mod, original_quick(), ("fun:aiselfie",))
+        def openai_fun_quick_kb(*args: Any, **kwargs: Any):
+            return _promote_openai_selfie(
+                mod,
+                original_quick(*args, **kwargs),
+                ("fun:aiselfie",),
+            )
         mod._fun_quick_kb = openai_fun_quick_kb
     original_mode = getattr(mod, "_mode_kb", None)
     if callable(original_mode):
-        def openai_mode_kb(key: str):
-            markup = original_mode(key)
+        def openai_mode_kb(key: str, *args: Any, **kwargs: Any):
+            markup = original_mode(key, *args, **kwargs)
             if key == "fun":
                 return _promote_openai_selfie(mod, markup, ("act:fun:aiselfie",))
             return markup

@@ -3,6 +3,10 @@
 import ast
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from neyrobot_prod import openai_selfie_exp_v1 as lane
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,3 +34,42 @@ class SelfieLaneIsolationTest(unittest.TestCase):
         self.assertIn("openai_selfie_exp_v1", init)
         self.assertIn('callback_data=PREFIX + "open"', lane)
         self.assertIn('("fun:aiselfie",)', lane)
+
+
+class SelfieMenuCompatibilityTest(unittest.TestCase):
+    def test_menu_wrappers_forward_owner_canary_user_id(self):
+        calls = []
+
+        class Button:
+            def __init__(self, text, callback_data):
+                self.text = text
+                self.callback_data = callback_data
+
+        class Markup:
+            def __init__(self, rows):
+                self.inline_keyboard = rows
+
+        def quick(user_id=None):
+            calls.append(("quick", user_id))
+            return Markup([[Button("AI selfie", "fun:aiselfie")]])
+
+        def mode(key, user_id=None):
+            calls.append(("mode", key, user_id))
+            return Markup([[Button("AI selfie", "act:fun:aiselfie")]])
+
+        runtime = SimpleNamespace(
+            _fun_quick_kb=quick,
+            _mode_kb=mode,
+            InlineKeyboardButton=Button,
+            InlineKeyboardMarkup=Markup,
+        )
+        with patch.object(lane, "_runtime", return_value=runtime):
+            self.assertTrue(lane._patch_fun_menus())
+
+        quick_markup = runtime._fun_quick_kb(4242)
+        mode_markup = runtime._mode_kb("fun", 4242)
+
+        self.assertIn(("quick", 4242), calls)
+        self.assertIn(("mode", "fun", 4242), calls)
+        self.assertEqual("oaiselfie:open", quick_markup.inline_keyboard[0][0].callback_data)
+        self.assertEqual("oaiselfie:open", mode_markup.inline_keyboard[0][0].callback_data)
