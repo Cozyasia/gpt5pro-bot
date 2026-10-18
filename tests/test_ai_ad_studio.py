@@ -1,5 +1,6 @@
 import unittest
 from ai_ad_studio import TEMPLATES, ProductBrief, build_storyboard, list_templates
+from ai_ad_studio.professional_library import compile_library, compile_professional_prompt
 
 class TestAdStudio(unittest.TestCase):
     def test_catalog_has_one_hundred_unique_templates(self):
@@ -20,6 +21,18 @@ class TestAdStudio(unittest.TestCase):
     def test_rejects_missing_reference(self):
         with self.assertRaises(ValueError):
             build_storyboard("fragrance-001", ProductBrief("A", "B", ()))
+
+    def test_professional_library_has_100_prompt_packs(self):
+        library = compile_library()
+        self.assertEqual(len(library), 100)
+        self.assertEqual(len({p['template_id'] for p in library}), 100)
+        self.assertTrue(all(len(p['shots']) == 5 for p in library))
+        self.assertTrue(all(p['source_guides'] for p in library))
+
+    def test_runway_prompt_is_motion_focused(self):
+        result = compile_professional_prompt('fragrance-001', 'Own Brand', 'Floral scent', provider='runway')
+        self.assertIn('camera performs', result['shots'][0]['prompt'])
+        self.assertFalse(result['tested_with_provider'])
 
     def test_category_filter(self):
         self.assertEqual(len(list_templates("fragrance")), 15)
