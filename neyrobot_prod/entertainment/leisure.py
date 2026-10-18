@@ -28,7 +28,7 @@ def personalized(category: str, interest: str, participants: int = 2, budget: in
         raise ValueError("Invalid preferences")
     title, ideas = suggestions(category)
     interest_title, interest_ideas = PREFERENCES[interest]
-    return (f"{title} · {interest_title}\nУчастников: {participants}; бюджет: до {budget} ₽\n\n"
+    return (f"{title} · {interest_title}\nУчастников: {participants}; бюджет: до {budget} (валюта пользователя)\n\n"
             + "\n".join(f"{index}. {idea}" for index, idea in enumerate((*ideas[:2], *interest_ideas[:2]), 1))
             + "\n\nЭто идеи без проверки местных событий и расписаний.")
 
