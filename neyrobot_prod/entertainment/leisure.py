@@ -48,6 +48,9 @@ async def handle_leisure_callback(update, context):
     await q.answer()
     action = (q.data or "").partition(":")[2]
     if action.startswith("budget:"):
+        if not context.user_data.get("ent_leisure_interest"):
+            await q.message.reply_text("Сначала выберите ситуацию и интерес.", reply_markup=keyboard())
+            return
         try:
             amount = int(action.partition("budget:")[2])
         except ValueError:
@@ -62,6 +65,9 @@ async def handle_leisure_callback(update, context):
         await q.message.reply_text("Сколько участников?", reply_markup=M(rows))
         return
     if action.startswith("people:"):
+        if "ent_leisure_budget" not in context.user_data:
+            await q.message.reply_text("Сначала выберите бюджет.", reply_markup=keyboard())
+            return
         try:
             people = int(action.partition("people:")[2])
         except ValueError:
@@ -96,6 +102,9 @@ async def handle_leisure_callback(update, context):
         await q.message.reply_text("Выберите ситуацию:", reply_markup=keyboard())
         return
     context.user_data["ent_leisure_category"] = action
+    context.user_data.pop("ent_leisure_interest", None)
+    context.user_data.pop("ent_leisure_budget", None)
+    context.user_data.pop("ent_leisure_participants", None)
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     rows = [[B(label, callback_data=f"leisure:interest:{key}")] for key, (label, _) in PREFERENCES.items()]
     rows.append([B("⬅️ Категории", callback_data="leisure:menu")])
