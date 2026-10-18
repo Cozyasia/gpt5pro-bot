@@ -143,6 +143,12 @@ def entertainment_menu_v2_enabled(
     if value not in _FALSE_VALUES:
         return True
 
+    # Render production has reached its environment-variable limit.  When
+    # the flag is absent, enable the shipped menu on Render without requiring
+    # another variable.  An explicit false value still disables rollout.
+    if "ENTERTAINMENT_MENU_V2" not in source and source.get("RENDER_GIT_COMMIT"):
+        return True
+
     canary = str(
         source.get("ENTERTAINMENT_MENU_V2_OWNER_CANARY", "")
     ).strip().lower()

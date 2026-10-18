@@ -36,6 +36,10 @@ class EntertainmentFlagTests(unittest.TestCase):
     def test_default_is_disabled(self):
         self.assertFalse(entertainment_menu_v2_enabled({}))
 
+    def test_render_activates_menu_when_flag_is_missing(self):
+        self.assertTrue(entertainment_menu_v2_enabled({"RENDER_GIT_COMMIT": "abc123"}, user_id=42))
+        self.assertFalse(entertainment_menu_v2_enabled({"RENDER_GIT_COMMIT": "abc123", "ENTERTAINMENT_MENU_V2": "0"}, user_id=42))
+
     def test_truthy_and_falsey_values(self):
         for value in ("", "0", "false", "no", "off", "FALSE", " Off "):
             with self.subTest(value=value):
