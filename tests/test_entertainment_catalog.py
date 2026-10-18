@@ -143,6 +143,20 @@ class EntertainmentCatalogTests(unittest.TestCase):
             ],
         )
 
+    def test_star_selfie_is_only_in_trends_and_photo(self):
+        root = get_menu("root")
+        self.assertFalse(any(
+            button.callback_data == "fun:aiselfie"
+            for row in root.rows for button in row
+        ))
+        for menu_id in ("trends", "photo"):
+            matches = [
+                button for row in get_menu(menu_id).rows for button in row
+                if button.callback_data == "fun:aiselfie"
+            ]
+            self.assertEqual(1, len(matches), menu_id)
+            self.assertEqual("⭐ Селфи со звездой", matches[0].text)
+
     def test_phase_one_active_routes_reuse_existing_fun_callbacks(self):
         expected = {
             "production": {"fun:video_director"},
