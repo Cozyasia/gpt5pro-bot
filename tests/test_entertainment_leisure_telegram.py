@@ -23,6 +23,7 @@ class Query:
     def __init__(self, data):
         self.data = data
         self.message = Message()
+        self.from_user = types.SimpleNamespace(id=12345)
     async def answer(self):
         return None
 
