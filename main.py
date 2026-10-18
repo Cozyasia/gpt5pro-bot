@@ -82,7 +82,7 @@ from runway_official import (
     safe_key_fingerprint as runway_safe_key_fingerprint,
 )
 from telegram import (
-    Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InputFile,
+    Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo, InputFile,
     LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonWebApp
 )
 from telegram.ext import (
@@ -4970,12 +4970,15 @@ async def _send_mode_menu(update, context, key: str):
     user_id = update.effective_user.id
     text = _mode_desc(key, user_id)
     kb = _mode_kb(key, user_id)
-    # Если пришли из callback — редактируем; если текстом — шлём новым сообщением
+    # Inline submenu and persistent reply keyboard are separate Telegram surfaces.
+    # Remove the global reply keyboard when entering a mode; inline actions remain.
     if getattr(update, "callback_query", None):
         q = update.callback_query
+        await q.message.reply_text("⌨️ Главное меню скрыто. Для возврата нажмите «⬅️ Назад».", reply_markup=ReplyKeyboardRemove())
         await q.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
         await q.answer()
     else:
+        await update.effective_message.reply_text("⌨️ Главное меню скрыто. Для возврата нажмите «⬅️ Назад».", reply_markup=ReplyKeyboardRemove())
         await update.effective_message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
 # Обработчик callback по режимам
@@ -4987,6 +4990,7 @@ async def on_mode_cb(update, context):
     # Навигация
     if data == "mode:root":
         _clear_transient_flows(context)
+        await q.message.reply_text("🏠 Главное меню", reply_markup=main_kb)
         await q.message.reply_text(_modes_root_text(), reply_markup=modes_root_kb())
         await q.answer(); return
 
