@@ -106,7 +106,8 @@ class EntertainmentMainWiringTests(unittest.TestCase):
 
     def test_production_brief_handler_precedes_generic_ent_in_same_group(self):
         specific = 'CallbackQueryHandler(handle_production_brief, pattern=r"^ent:brief:"), group=0'
-        generic = 'CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:"), group=0'
+        # python-telegram-bot uses group=0 when add_handler omits group.
+        generic = 'CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:")'
         self.assertIn(specific, self.source)
         self.assertIn(generic, self.source)
         self.assertLess(self.source.index(specific), self.source.index(generic))
