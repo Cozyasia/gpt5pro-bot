@@ -25,3 +25,17 @@ class ContextualReplyKeyboardTests(unittest.TestCase):
     def test_start_keeps_main_keyboard(self):
         fn = next(n for n in self.tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "cmd_start")
         self.assertIn("reply_markup=main_kb", ast.get_source_segment(self.source, fn))
+
+    def test_root_has_all_main_actions(self):
+        fn = next(n for n in self.tree.body if isinstance(n, ast.FunctionDef) and n.name == "modes_root_kb")
+        body = ast.get_source_segment(self.source, fn)
+        for label in ("Учёба", "Работа/Бизнес", "Развлечения", "Медицина",
+                      "Мои чаты", "Новый чат", "Движки", "Баланс", "Подписка · Помощь"):
+            self.assertIn(label, body)
+        self.assertNotIn("ReplyKeyboardMarkup(", body)
+
+    def test_root_callbacks_reuse_existing_commands(self):
+        fn = next(n for n in self.tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "on_mode_cb")
+        body = ast.get_source_segment(self.source, fn)
+        for name in ("cmd_chats", "cmd_newchat", "cmd_engines", "cmd_balance", "cmd_subs_help"):
+            self.assertIn(name, body)
