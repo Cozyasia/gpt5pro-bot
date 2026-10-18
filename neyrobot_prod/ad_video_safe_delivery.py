@@ -48,29 +48,52 @@ async def deliver_once(path, send):
     _save(path,{"state":"sent","message_id":mid})
     return mid
 
-def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False, text_color="white"):
-    """Burn user-approved Russian captions onto an existing video, no AI charges.
-    captions: [(start_seconds, end_seconds, text), ...].
-    """
-    if not Path(font_path).is_file(): raise FileNotFoundError(font_path)
-    if not captions: raise ValueError("At least one caption required")
-    if text_color not in ("white", "black"): raise ValueError("Unsupported text color")
-    filters=[]
-    for start,end,text in captions:
-        if not (0 <= start < end): raise ValueError("Invalid caption timing")
-        # drawtext's expansion is disabled, avoiding % and backslash interpolation.
-        escaped=(text.replace("\\","\\\\").replace(":","\\:").replace("'","\\'")
-                    .replace(",","\\,").replace("[","\\[").replace("]","\\]"))
-        font=str(font_path).replace("\\","\\\\").replace(":","\\:")
+def _auto_caption_color(source, timestamp, *, timeout=20):
+    """Estimate central lower-frame luminance; choose black on light scenes."""
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+           "-ss", str(max(0, timestamp)), "-i", str(source),
+           "-frames:v", "1", "-vf", "crop=iw*0.75:ih*0.16:iw*0.125:ih*0.72,scale=1:1",
+           "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    try:
+        sample = subprocess.run(cmd, capture_output=True, timeout=timeout, check=True).stdout
+        if len(sample) >= 3:
+            r, g, b = sample[:3]
+            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            return "black" if luminance >= 145 else "white"
+    except (subprocess.SubprocessError, OSError):
+        pass
+    return "white"
+
+
+def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False, text_color="auto"):
+    """Render Russian captions with black, white, or scene-adaptive contrast."""
+    if not Path(font_path).is_file():
+        raise FileNotFoundError(font_path)
+    if not captions:
+        raise ValueError("At least one caption required")
+    if text_color not in ("white", "black", "auto"):
+        raise ValueError("Unsupported text color")
+    filters = []
+    for start, end, text in captions:
+        if not (0 <= start < end):
+            raise ValueError("Invalid caption timing")
+        color = _auto_caption_color(source, (start + end) / 2) if text_color == "auto" else text_color
+        shadow = "white@0.75" if color == "black" else "black@0.85"
+        escaped = (text.replace("\\", "\\\\").replace(":", "\\:")
+                   .replace("'", "\\'").replace(",", "\\,")
+                   .replace("[", "\\[").replace("]", "\\]"))
+        font = str(font_path).replace("\\", "\\\\").replace(":", "\\:")
+        style = ("box=1:boxcolor=black@0.55:boxborderw=18:"
+                 if background else f"box=0:shadowcolor={shadow}:shadowx=2:shadowy=2:")
         filters.append(
-            "drawtext=fontfile='"+font+"':text='"+escaped+
-            "':expansion=none:fontcolor="+text_color+":fontsize=h/22:"
-            ("box=1:boxcolor=black@0.55:boxborderw=18:" if background else ("box=0:shadowcolor=white@0.75:shadowx=1:shadowy=1:" if text_color == "black" else "box=0:shadowcolor=black@0.85:shadowx=2:shadowy=3:"))
-            "x=(w-text_w)/2:y=h*0.73:"
-            "enable='between(t,"+str(start)+","+str(end)+")'"
+            "drawtext=fontfile='" + font + "':text='" + escaped +
+            "':expansion=none:fontcolor=" + color + ":fontsize=h/22:" +
+            style + "x=(w-text_w)/2:y=h*0.73:" +
+            "enable='between(t," + str(start) + "," + str(end) + ")'"
         )
-    cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
-         "-i",str(source),"-vf",",".join(filters),"-c:v","libx264",
-         "-preset","veryfast","-crf","20","-c:a","copy","-movflags","+faststart",str(destination)]
-    subprocess.run(cmd,check=True,timeout=timeout)
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+           "-i", str(source), "-vf", ",".join(filters), "-c:v", "libx264",
+           "-preset", "veryfast", "-crf", "20", "-c:a", "copy",
+           "-movflags", "+faststart", str(destination)]
+    subprocess.run(cmd, check=True, timeout=timeout)
     return str(destination)
