@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from .catalog import get_template
 from .source_patterns import source_for_template
+from .professional_library import compile_professional_prompt
 
 @dataclass(frozen=True)
 class ProductBrief:
@@ -32,6 +33,7 @@ def build_storyboard(template_id: str, brief: ProductBrief) -> dict:
     shot_count = len(template.shots)
     boundaries = [brief.duration_seconds * i // shot_count for i in range(shot_count + 1)]
     return {
+        "professional_prompt": compile_professional_prompt(template_id, brief.name, brief.description, brief.aspect_ratio),
         "template_id": template.id,
         "professional_source": ({"title": source_pattern.source_title, "url": source_pattern.source_url,
             "example": source_pattern.source_example, "mode": source_pattern.mode} if source_pattern else None),
