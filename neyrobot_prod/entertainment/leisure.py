@@ -1,5 +1,6 @@
 """Structured offline leisure suggestions. Never invent venue names or opening hours."""
 from __future__ import annotations
+from .catalog import entertainment_menu_v2_enabled
 
 OPTIONS = {
     "couple": ("❤️ Для пары", ("Приготовьте вместе новое блюдо", "Устройте вечер настольных игр", "Прогуляйтесь по любимому маршруту")),
@@ -46,6 +47,9 @@ async def handle_leisure_menu(update, context):
 async def handle_leisure_callback(update, context):
     q = update.callback_query
     await q.answer()
+    if not entertainment_menu_v2_enabled(user_id=q.from_user.id):
+        await q.message.reply_text("Этот раздел пока недоступен.")
+        return
     action = (q.data or "").partition(":")[2]
     if action.startswith("budget:"):
         if not context.user_data.get("ent_leisure_interest"):
