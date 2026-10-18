@@ -10995,8 +10995,9 @@ async def _start_video_studio(
         await update.effective_message.reply_text("Опишите ролик одним сообщением.")
         return False
 
-    parsed_duration, _ = parse_video_opts(prompt)
-    duration = parsed_duration if re.search(r"\d+\s*(?:сек|с)", prompt.lower()) else 20
+    # The Studio brief owns its duration; generic video defaults may coerce 8s to 5s.
+    duration_match = re.search(r"(?i)(\d+)\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", prompt)
+    duration = int(duration_match.group(1)) if duration_match else 20
     duration = max(4, min(30, int(duration)))
     aspect = next((value for value in ("9:16", "16:9", "1:1", "4:5") if value in prompt), "9:16")
     # Optional explicitly timed captions in the user's brief, e.g.
