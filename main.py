@@ -10981,6 +10981,19 @@ async def _start_video_studio(
     duration = parsed_duration if re.search(r"\d+\s*(?:сек|с)", prompt.lower()) else 20
     duration = max(4, min(30, int(duration)))
     aspect = next((value for value in ("9:16", "16:9", "1:1", "4:5") if value in prompt), "9:16")
+    # Optional explicitly timed captions in the user's brief, e.g.
+    # ТИТРЫ: 0-3 | Красота в каждой капле
+    ad_captions = []
+    for start, end, caption_text in re.findall(
+        r"(?im)^\\s*ТИТРЫ\\s*:\\s*(\\d+(?:[.,]\\d+)?)\\s*[-–]\\s*(\\d+(?:[.,]\\d+)?)\\s*\\|\\s*(.+?)\\s*$",
+        prompt,
+    ):
+        start_s, end_s = float(start.replace(",", ".")), float(end.replace(",", "."))
+        if 0 <= start_s < end_s <= duration and len(caption_text) <= 160:
+            ad_captions.append((start_s, end_s, caption_text.strip()))
+    ad_style = context.user_data.get("ad_caption_style", "auto")
+    if ad_style not in {"white", "black", "auto"}:
+        ad_style = "auto"
     mode = context.user_data.pop("video_studio_mode", "director")
     context.user_data.pop("awaiting_video_studio_prompt", None)
 
@@ -11051,6 +11064,16 @@ async def _start_video_studio(
                 output_path,
                 plan.duration_s,
             )
+            if ad_captions:
+                from neyrobot_prod.ad_video_safe_delivery import render_russian_overlay
+                captioned_path = os.path.join(workdir, "video_studio_captioned.mp4")
+                font_path = os.getenv("AD_CAPTION_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+                await asyncio.to_thread(
+                    render_russian_overlay,
+                    output_path, captioned_path, ad_captions, font_path,
+                    text_color=ad_style,
+                )
+                output_path = captioned_path
             await _reply_video_file(
                 update,
                 output_path,
