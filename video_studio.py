@@ -194,6 +194,19 @@ async def seedance_generate(
                         "не получен. Повторная отправка отключена, чтобы не создать дубликат."
                     )
                 if response.status_code >= 400:
+                    # A moderation/privacy rejection is independent of model alias.
+                    # Never resend the same personal image to another provider channel.
+                    try:
+                        error_payload = response.json()
+                    except ValueError:
+                        error_payload = None
+                    error_code = str(_first_value(error_payload, ("code",)) or "")
+                    if "SensitiveContentDetected" in error_code or "PrivacyInformation" in error_code:
+                        raise SeedanceError(
+                            "Провайдер Seedance отклонил входной кадр при проверке "
+                            f"изображения ({error_code}). Песня сохранена; повторная "
+                            "отправка этого кадра на другие каналы отключена."
+                        )
                     last_error = f"{response.status_code}: {response.text[:500]}"
                     continue
                 try:
