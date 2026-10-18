@@ -3,6 +3,7 @@ from .games import start, current_question, answer, next_round, finish, GAME_BAN
 from . import adventures
 from dataclasses import asdict
 from .games import GameSession
+from .catalog import entertainment_menu_v2_enabled
 
 def _keyboard():
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
@@ -44,6 +45,9 @@ async def handle_game_menu(update, context):
 async def handle_game_callback(update, context):
     q = update.callback_query
     await q.answer()
+    if not entertainment_menu_v2_enabled(user_id=q.from_user.id):
+        await q.message.reply_text("Этот раздел пока недоступен.")
+        return
     data = q.data or ""
     raw_state = context.user_data.get("ent_game_session")
     state = GameSession(**raw_state) if isinstance(raw_state, dict) else raw_state
