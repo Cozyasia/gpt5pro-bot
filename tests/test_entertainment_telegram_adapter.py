@@ -49,9 +49,9 @@ class TelegramAdapterTests(unittest.TestCase):
                 result, kwargs = self.click("game:answer:" + str(index) + ":" + correct)
                 self.assertIn("Верно", result)
                 if index < 4:
-                    self.click("game:next")
+                    self.click("game:next:" + str(index))
                 else:
-                    self.click("game:next")
+                    self.click("game:next:" + str(index))
             self.assertTrue(self.context.user_data["ent_game_session"]["finished"])
             self.click("game:start:" + game)
             _, kwargs = self.click("game:answer:0:a")
@@ -61,7 +61,7 @@ class TelegramAdapterTests(unittest.TestCase):
     def test_stale_quiz_button_cannot_score_next_round(self):
         self.click("game:start:movie")
         self.click("game:answer:0:a")
-        self.click("game:next")
+        self.click("game:next:0")
         message, _ = self.click("game:answer:0:a")
         self.assertIn("уже завершён", message)
         self.assertEqual(self.context.user_data["ent_game_session"]["round_index"], 1)
