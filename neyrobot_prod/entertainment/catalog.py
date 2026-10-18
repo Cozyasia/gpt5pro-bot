@@ -143,9 +143,13 @@ def entertainment_menu_v2_enabled(
     if value not in _FALSE_VALUES:
         return True
 
-    canary = str(
-        source.get("ENTERTAINMENT_MENU_V2_OWNER_CANARY", "")
-    ).strip().lower()
+    canary_raw = source.get("ENTERTAINMENT_MENU_V2_OWNER_CANARY")
+    if canary_raw is None:
+        # The production Render service is at its environment-variable limit.
+        # Until the canary is promoted or removed, Render's built-in commit
+        # marker safely enables V2 only for the configured OWNER_ID.
+        canary_raw = "1" if source.get("RENDER_GIT_COMMIT") else ""
+    canary = str(canary_raw).strip().lower()
     if canary in _FALSE_VALUES or user_id is None:
         return False
 
