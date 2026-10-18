@@ -3697,16 +3697,17 @@ def _modes_root_text() -> str:
     )
 
 def modes_root_kb() -> InlineKeyboardMarkup:
-    # Не ставим 3 длинные кнопки в одну строку — на Android Telegram режет текст.
+    """Full main menu as inline buttons; never reopen the reply keyboard on Back."""
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🎓 Учёба", callback_data="mode:study"),
-            InlineKeyboardButton("💼 Работа/Бизнес", callback_data="mode:work"),
-        ],
-        [
-            InlineKeyboardButton("🔥 Развлечения", callback_data="mode:fun"),
-            InlineKeyboardButton("🩺 Медицина", callback_data="mode:medicine"),
-        ],
+        [InlineKeyboardButton("🎓 Учёба", callback_data="mode:study"),
+         InlineKeyboardButton("💼 Работа/Бизнес", callback_data="mode:work")],
+        [InlineKeyboardButton("🔥 Развлечения", callback_data="mode:fun"),
+         InlineKeyboardButton("🩺 Медицина", callback_data="mode:medicine")],
+        [InlineKeyboardButton("💬 Мои чаты", callback_data="mode:chats"),
+         InlineKeyboardButton("➕ Новый чат", callback_data="mode:newchat")],
+        [InlineKeyboardButton("🧠 Движки", callback_data="mode:engines"),
+         InlineKeyboardButton("🧾 Баланс", callback_data="mode:balance")],
+        [InlineKeyboardButton("⭐ Подписка · Помощь", callback_data="mode:subs_help")],
     ])
 
 # ── Описание и подменю по режимам
@@ -4993,6 +4994,19 @@ async def on_mode_cb(update, context):
         await q.message.reply_text("🏠 Главное меню", reply_markup=ReplyKeyboardRemove())
         await q.message.reply_text(_modes_root_text(), reply_markup=modes_root_kb())
         await q.answer(); return
+
+    # Non-mode root actions use the existing command handlers, preserving behavior.
+    root_actions = {
+        "mode:chats": cmd_chats,
+        "mode:newchat": cmd_newchat,
+        "mode:engines": cmd_engines,
+        "mode:balance": cmd_balance,
+        "mode:subs_help": cmd_subs_help,
+    }
+    if data in root_actions:
+        await q.answer()
+        await root_actions[data](update, context)
+        return
 
     if data.startswith("mode:"):
         _, key = data.split(":", 1)
