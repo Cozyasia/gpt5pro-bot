@@ -10032,7 +10032,7 @@ def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -
             [InlineKeyboardButton("✏️ Изменить промпт аудио", callback_data=f"mvfile:editaudio:{token}")],
         ])
     else:
-        if resume: rows.append([InlineKeyboardButton("▶️ Продолжить генерацию", callback_data=f"mvfile:resume:{token}")])
+        if resume: rows.append([InlineKeyboardButton("🔄 Попробовать ещё раз (без Suno)", callback_data=f"mvfile:resume:{token}")])
         rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
     return InlineKeyboardMarkup(rows)
 
