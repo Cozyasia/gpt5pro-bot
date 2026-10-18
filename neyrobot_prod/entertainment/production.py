@@ -36,7 +36,7 @@ async def handle_production_brief(update, context):
     context.user_data["awaiting_video_studio_prompt"] = True
     context.user_data["video_studio_mode"] = "director"
     await q.message.reply_text(
-        f"{title}\\n\\nПришлите бриф одним сообщением: {fields}.\\n\\n"
+        f"{title}\n\nПришлите бриф одним сообщением: {fields}.\n\n"
         "После получения брифа запустится существующий сценарий авторежиссёра. "
         "Стоимость генерации определяется действующими правилами бота."
     )
