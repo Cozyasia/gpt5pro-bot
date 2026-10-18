@@ -21,7 +21,7 @@ def _round_keyboard(session):
               for key, value in zip("abcd", current_question(session).answers)] +
              [[B("📜 Правила", callback_data="game:rules"), B("🛑 Закончить", callback_data="game:finish")]])
 
-def _after_keyboard():
+def _after_keyboard(session=None):
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     return M([[B("➡️ Следующий раунд", callback_data="game:next")],
               [B("🔄 Сыграть ещё", callback_data="game:start:quick_quiz"),
@@ -72,7 +72,7 @@ async def handle_game_callback(update, context):
         return
     if data == "game:rules":
         await q.message.reply_text("📜 Выберите один ответ на вопрос. За верный ответ — 1 очко. Всего 5 раундов. Повторный ответ не засчитывается.",
-                                   reply_markup=_after_keyboard() if state and state.answered else (_round_keyboard(state) if state and not state.finished else _keyboard()))
+                                   reply_markup=_after_keyboard(state) if state and state.answered else (_round_keyboard(state) if state and not state.finished else _keyboard()))
         return
     if data.startswith("game:start:"):
         game_id = data.partition("game:start:")[2]
@@ -94,7 +94,7 @@ async def handle_game_callback(update, context):
     if data.startswith("game:answer:"):
         choice = data[len("game:answer:"):]
         if state.answered:
-            await q.message.reply_text("Ответ уже принят. Нажмите «Следующий раунд».", reply_markup=_after_keyboard())
+            await q.message.reply_text("Ответ уже принят. Нажмите «Следующий раунд».", reply_markup=_after_keyboard(state))
             return
         try:
             updated, correct = answer(state, choice)
@@ -105,7 +105,7 @@ async def handle_game_callback(update, context):
         question = current_question(state)
         await q.message.reply_text(("✅ Верно!" if correct else f"❌ Неверно. Правильный ответ: {question.correct.upper()}.") +
                                    f"\n{question.explanation}\nОчки: {updated.score}",
-                                   reply_markup=_after_keyboard())
+                                   reply_markup=_after_keyboard(updated))
         return
     if data == "game:next":
         if not state.answered:
