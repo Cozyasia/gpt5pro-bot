@@ -48,12 +48,13 @@ async def deliver_once(path, send):
     _save(path,{"state":"sent","message_id":mid})
     return mid
 
-def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False):
+def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False, text_color="white"):
     """Burn user-approved Russian captions onto an existing video, no AI charges.
     captions: [(start_seconds, end_seconds, text), ...].
     """
     if not Path(font_path).is_file(): raise FileNotFoundError(font_path)
     if not captions: raise ValueError("At least one caption required")
+    if text_color not in ("white", "black"): raise ValueError("Unsupported text color")
     filters=[]
     for start,end,text in captions:
         if not (0 <= start < end): raise ValueError("Invalid caption timing")
@@ -63,8 +64,8 @@ def render_russian_overlay(source, destination, captions, font_path, *, timeout=
         font=str(font_path).replace("\\","\\\\").replace(":","\\:")
         filters.append(
             "drawtext=fontfile='"+font+"':text='"+escaped+
-            "':expansion=none:fontcolor=white:fontsize=h/22:"
-            ("box=1:boxcolor=black@0.55:boxborderw=18:" if background else "box=0:shadowcolor=black@0.85:shadowx=2:shadowy=3:")
+            "':expansion=none:fontcolor="+text_color+":fontsize=h/22:"
+            ("box=1:boxcolor=black@0.55:boxborderw=18:" if background else ("box=0:shadowcolor=white@0.75:shadowx=1:shadowy=1:" if text_color == "black" else "box=0:shadowcolor=black@0.85:shadowx=2:shadowy=3:"))
             "x=(w-text_w)/2:y=h*0.73:"
             "enable='between(t,"+str(start)+","+str(end)+")'"
         )
