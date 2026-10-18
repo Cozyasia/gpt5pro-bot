@@ -1,9 +1,11 @@
 """Telegram adapter for the self-contained quiz. No provider calls or credit usage."""
-from .games import start, current_question, answer, next_round, finish
+from .games import start, current_question, answer, next_round, finish, GAME_BANKS
 
 def _keyboard():
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
-    return M([[B("⚡ Быстрый квиз", callback_data="game:start")],
+    return M([[B("⚡ Быстрый квиз", callback_data="game:start:quick_quiz")],
+              [B("🧠 Битва знаний", callback_data="game:start:knowledge")],
+              [B("🎬 Угадай фильм", callback_data="game:start:movie")],
               [B("⬅️ Развлечения", callback_data="ent:back:root")]])
 
 def _round_keyboard(session):
@@ -15,14 +17,14 @@ def _round_keyboard(session):
 def _after_keyboard():
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     return M([[B("➡️ Следующий раунд", callback_data="game:next")],
-              [B("🔄 Сыграть ещё", callback_data="game:start"),
+              [B("🔄 Сыграть ещё", callback_data="game:start:quick_quiz"),
                B("🛑 Закончить", callback_data="game:finish")]])
 
 def _question_text(session):
     question = current_question(session)
     if question is None:
         return f"🏆 Игра завершена! Ваш результат: {session.score}."
-    return (f"🎮 Раунд {session.round_index + 1}/5\n\n{question.prompt}\n\n" +
+    return (f"🎮 Раунд {session.round_index + 1}/{len(GAME_BANKS[session.game_id])}\n\n{question.prompt}\n\n" +
             "\n".join(f"{key.upper()}. {label}" for key, label in zip("abcd", question.answers)))
 
 async def handle_game_menu(update, context):
@@ -42,8 +44,12 @@ async def handle_game_callback(update, context):
         await q.message.reply_text("📜 Выберите один ответ на вопрос. За верный ответ — 1 очко. Всего 5 раундов. Повторный ответ не засчитывается.",
                                    reply_markup=_after_keyboard() if state and state.answered else _keyboard())
         return
-    if data == "game:start":
-        state = start()
+    if data.startswith("game:start:"):
+        game_id = data.partition("game:start:")[2]
+        if game_id not in GAME_BANKS:
+            await q.message.reply_text("Неизвестная игра.", reply_markup=_keyboard())
+            return
+        state = start(game_id)
         context.user_data["ent_game_session"] = state
         await q.message.reply_text(_question_text(state), reply_markup=_round_keyboard(state))
         return
@@ -78,7 +84,7 @@ async def handle_game_callback(update, context):
         updated = next_round(state)
         context.user_data["ent_game_session"] = updated
         if updated.finished:
-            await q.message.reply_text(f"🏆 Игра завершена! Ваш результат: {updated.score}/5.", reply_markup=_keyboard())
+            await q.message.reply_text(f"🏆 Игра завершена! Ваш результат: {updated.score}/{len(GAME_BANKS[updated.game_id])}.", reply_markup=_keyboard())
         else:
             await q.message.reply_text(_question_text(updated), reply_markup=_round_keyboard(updated))
         return
