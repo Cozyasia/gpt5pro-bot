@@ -78,7 +78,7 @@ async def handle_game_callback(update, context):
         return
     if data == "game:rules":
         await q.message.reply_text("📜 Выберите один ответ на вопрос. За верный ответ — 1 очко. Всего 5 раундов. Повторный ответ не засчитывается.",
-                                   reply_markup=_after_keyboard(state) if state and state.finished else (_after_keyboard(state) if state and state.answered else (_round_keyboard(state) if state else _keyboard())))
+                                   reply_markup=_keyboard() if state and state.finished else (_after_keyboard(state) if state and state.answered else (_round_keyboard(state) if state else _keyboard())))
         return
     if data.startswith("game:start:"):
         game_id = data.partition("game:start:")[2]
