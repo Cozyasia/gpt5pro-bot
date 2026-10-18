@@ -128,6 +128,9 @@ async def handle_game_callback(update, context):
                                    reply_markup=_after_keyboard(updated))
         return
     if data.startswith("game:next:"):
+        if state is None or state.finished:
+            await q.message.reply_text("Игра уже завершена. Начните новую.", reply_markup=_keyboard())
+            return
         try:
             if int(data.partition("game:next:")[2]) != state.round_index:
                 await q.message.reply_text("Раунд уже изменился. Используйте актуальные кнопки.")
