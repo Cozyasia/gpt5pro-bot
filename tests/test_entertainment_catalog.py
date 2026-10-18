@@ -59,6 +59,24 @@ class EntertainmentFlagTests(unittest.TestCase):
         self.assertFalse(entertainment_menu_v2_enabled(environ, user_id=7))
         self.assertFalse(entertainment_menu_v2_enabled(environ))
 
+    def test_render_runtime_enables_owner_canary_when_env_slot_is_unavailable(self):
+        environ = {
+            "ENTERTAINMENT_MENU_V2": "0",
+            "RENDER_GIT_COMMIT": "2a61ae8",
+            "OWNER_ID": "4242",
+        }
+        self.assertTrue(entertainment_menu_v2_enabled(environ, user_id=4242))
+        self.assertFalse(entertainment_menu_v2_enabled(environ, user_id=7))
+
+    def test_explicit_canary_off_overrides_render_runtime_fallback(self):
+        environ = {
+            "ENTERTAINMENT_MENU_V2": "0",
+            "ENTERTAINMENT_MENU_V2_OWNER_CANARY": "0",
+            "RENDER_GIT_COMMIT": "2a61ae8",
+            "OWNER_ID": "4242",
+        }
+        self.assertFalse(entertainment_menu_v2_enabled(environ, user_id=4242))
+
     def test_owner_canary_fails_closed_for_invalid_configuration(self):
         for owner_id in ("", "0", "not-a-number"):
             with self.subTest(owner_id=owner_id):
