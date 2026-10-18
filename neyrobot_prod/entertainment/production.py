@@ -5,6 +5,8 @@ pretending to generate a video or charging a user for an incomplete job.
 """
 from __future__ import annotations
 
+from .catalog import entertainment_menu_v2_enabled
+
 BRIEFS = {
     "product_ad": ("🛍 Реклама товара", "Название товара, преимущества, аудитория, призыв к действию и желаемая длительность"),
     "ugc_ad": ("📱 UGC-реклама", "Товар, герой ролика, проблема покупателя, естественная подача и длительность"),
@@ -20,6 +22,9 @@ BRIEFS = {
 async def handle_production_brief(update, context):
     q = update.callback_query
     await q.answer()
+    if not entertainment_menu_v2_enabled(user_id=q.from_user.id):
+        await q.message.reply_text("Этот раздел пока недоступен.")
+        return
     mode = (q.data or "").removeprefix("ent:brief:")
     if mode not in BRIEFS:
         await q.message.reply_text("Неизвестный сценарий. Вернитесь в Нейро Продакшен.")
