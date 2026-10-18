@@ -17,15 +17,17 @@ def search_original_prompts(query: str = "", *, page: int = 1,
         raise ValueError("Invalid page or page_size")
     q = query.strip().casefold()
     entries = list_all_imported_originals()
-    matched = tuple(
-        e for e in entries
-        if (not reviewed_only or e.get("commercial_review") != "pending")
-        and (not q or q in e["title"].casefold()
-             or q in e.get("category", "").casefold()
-             or any(q in tag.casefold() for tag in HEY_BY_ID[e["id"]].tags)
-             if e["id"] in HEY_BY_ID
-             else (not q or q in e["title"].casefold()))
-    )
+    def matches(entry: dict) -> bool:
+        if reviewed_only and entry.get("commercial_review") == "pending":
+            return False
+        if not q:
+            return True
+        searchable = [entry["title"], entry.get("category", "")]
+        if entry["id"] in HEY_BY_ID:
+            searchable.extend(HEY_BY_ID[entry["id"]].tags)
+        return any(q in part.casefold() for part in searchable)
+
+    matched = tuple(e for e in entries if matches(e))
     start = (page - 1) * page_size
     return {
         "total": len(matched), "page": page, "page_size": page_size,
