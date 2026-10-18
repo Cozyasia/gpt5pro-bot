@@ -65,35 +65,47 @@ def _auto_caption_color(source, timestamp, *, timeout=20):
     return "white"
 
 
+def _wrap_caption(text, max_chars=18, max_lines=4):
+    """Wrap Russian titles to fit a portrait safe area."""
+    import textwrap
+    words = " ".join(str(text).split())
+    if not words:
+        raise ValueError("Empty caption")
+    lines = textwrap.wrap(words, width=max_chars, break_long_words=True,
+                          break_on_hyphens=False)
+    if len(lines) > max_lines:
+        raise ValueError("Caption exceeds the vertical video safe area")
+    return "\n".join(lines)
+
+
 def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False, text_color="auto"):
-    """Render Russian captions with black, white, or scene-adaptive contrast."""
+    """Single wrapped title layer, centered in 9:16 safe margins."""
     if not Path(font_path).is_file():
         raise FileNotFoundError(font_path)
     if not captions:
         raise ValueError("At least one caption required")
     if text_color not in ("white", "black", "auto"):
         raise ValueError("Unsupported text color")
-    filters = []
-    for start, end, text in captions:
-        if not (0 <= start < end):
-            raise ValueError("Invalid caption timing")
-        color = _auto_caption_color(source, (start + end) / 2) if text_color == "auto" else text_color
-        shadow = "white@0.75" if color == "black" else "black@0.85"
-        escaped = (text.replace("\\", "\\\\").replace(":", "\\:")
-                   .replace("'", "\\'").replace(",", "\\,")
-                   .replace("[", "\\[").replace("]", "\\]"))
-        font = str(font_path).replace("\\", "\\\\").replace(":", "\\:")
-        style = ("box=1:boxcolor=black@0.55:boxborderw=18:"
-                 if background else f"box=0:shadowcolor={shadow}:shadowx=2:shadowy=2:")
-        filters.append(
-            "drawtext=fontfile='" + font + "':text='" + escaped +
-            "':expansion=none:fontcolor=" + color + ":fontsize=h/22:" +
-            style + "x=(w-text_w)/2:y=h*0.73:" +
-            "enable='between(t," + str(start) + "," + str(end) + ")'"
-        )
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-           "-i", str(source), "-vf", ",".join(filters), "-c:v", "libx264",
-           "-preset", "veryfast", "-crf", "20", "-c:a", "copy",
-           "-movflags", "+faststart", str(destination)]
-    subprocess.run(cmd, check=True, timeout=timeout)
+    with tempfile.TemporaryDirectory(prefix="ad-captions-") as temp:
+        filters = []
+        for i, (start, end, caption) in enumerate(captions):
+            if not (0 <= start < end):
+                raise ValueError("Invalid caption timing")
+            color = _auto_caption_color(source, (start + end) / 2) if text_color == "auto" else text_color
+            shadow = "white@0.75" if color == "black" else "black@0.85"
+            caption_file = Path(temp) / f"caption_{i}.txt"
+            caption_file.write_text(_wrap_caption(caption), encoding="utf-8")
+            style = ("box=1:boxcolor=black@0.55:boxborderw=12:"
+                     if background else f"box=0:shadowcolor={shadow}:shadowx=2:shadowy=2:")
+            filters.append(
+                "drawtext=fontfile='" + str(font_path) + "':textfile='" + str(caption_file) +
+                "':expansion=none:fontcolor=" + color + ":fontsize=h/34:line_spacing=8:" +
+                style + "x=(w-text_w)/2:y=h*0.72:" +
+                "fix_bounds=1:enable='between(t\," + str(start) + "\," + str(end) + ")'"
+            )
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+               "-i", str(source), "-vf", ",".join(filters), "-c:v", "libx264",
+               "-preset", "veryfast", "-crf", "20", "-c:a", "copy",
+               "-movflags", "+faststart", str(destination)]
+        subprocess.run(cmd, check=True, timeout=timeout)
     return str(destination)

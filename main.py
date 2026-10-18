@@ -10995,8 +10995,9 @@ async def _start_video_studio(
         await update.effective_message.reply_text("Опишите ролик одним сообщением.")
         return False
 
-    parsed_duration, _ = parse_video_opts(prompt)
-    duration = parsed_duration if re.search(r"\d+\s*(?:сек|с)", prompt.lower()) else 20
+    # The Studio brief owns its duration; generic video defaults may coerce 8s to 5s.
+    duration_match = re.search(r"(?i)(\d+)\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", prompt)
+    duration = int(duration_match.group(1)) if duration_match else 20
     duration = max(4, min(30, int(duration)))
     aspect = next((value for value in ("9:16", "16:9", "1:1", "4:5") if value in prompt), "9:16")
     # Optional explicitly timed captions in the user's brief, e.g.
@@ -11060,7 +11061,20 @@ async def _start_video_studio(
                 await update.effective_message.reply_text(
                     f"🎞 Сцена {position}/{len(plan.scenes)}: Seedance {seconds} сек."
                 )
-                scene_prompt = seedance_scene_prompt(scene, prompt)
+                # Typography belongs exclusively to FFmpeg. Never pass caption
+                # directives or their exact phrases to the generative model.
+                visual_prompt = re.sub(
+                    r"(?im)^\s*ТИТРЫ\s*:\s*\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?\s*\|.*$",
+                    "", prompt,
+                ).strip()
+                scene_prompt = seedance_scene_prompt(scene, visual_prompt)
+                if ad_captions:
+                    scene_prompt += (
+                        "\nNO text or typography anywhere in the generated video. "
+                        "Do not render captions, subtitles, letters, slogans, logos, "
+                        "product labels, watermarks, or UI. Clean footage only; "
+                        "titles will be composited in post-production."
+                    )
                 content = await seedance_generate(
                     api_key=COMET_API_KEY,
                     base_url=COMET_BASE_URL,
