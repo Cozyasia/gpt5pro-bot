@@ -39,8 +39,9 @@ class LeisureTelegramTests(unittest.TestCase):
         self.patch.stop()
     def click(self, callback):
         query = Query(callback)
-        asyncio.run(self.leisure.handle_leisure_callback(
-            types.SimpleNamespace(callback_query=query), self.ctx))
+        with patch.dict("os.environ", {"ENTERTAINMENT_MENU_V2": "1"}):
+            asyncio.run(self.leisure.handle_leisure_callback(
+                types.SimpleNamespace(callback_query=query), self.ctx))
         return query.message.sent[-1]
     def test_out_of_order_callbacks_are_rejected(self):
         text, _ = self.click("leisure:people:2")
