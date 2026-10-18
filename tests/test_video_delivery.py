@@ -21,7 +21,7 @@ def load_delivery():
         "VIDEO_RESULT_DEDUPE_TTL_S": 900,
         "VIDEO_SEND_WRITE_TIMEOUT_S": 180,
         "_SENT_VIDEO_KEYS": {},
-        "log": SimpleNamespace(info=lambda *a, **k: None),
+        "log": SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None),
     }
     import hashlib
     import time
@@ -31,7 +31,7 @@ def load_delivery():
 
 
 class VideoDeliveryTests(unittest.TestCase):
-    def test_large_upload_gets_extended_timeout_and_can_retry_after_failure(self):
+    def test_large_upload_timeout_never_retries_ambiguous_delivery(self):
         env = load_delivery()
         calls = []
 
@@ -48,11 +48,11 @@ class VideoDeliveryTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             asyncio.run(env["_reply_video_bytes"](update, payload, "Клип"))
         asyncio.run(env["_reply_video_bytes"](update, payload, "Клип"))
-        self.assertEqual(2, len(calls))
+        self.assertEqual(1, len(calls))
         self.assertGreaterEqual(calls[0]["write_timeout"], 120)
         self.assertGreaterEqual(calls[0]["read_timeout"], 60)
         asyncio.run(env["_reply_video_bytes"](update, payload, "Клип"))
-        self.assertEqual(2, len(calls), "a confirmed upload must be suppressed")
+        self.assertEqual(1, len(calls), "ambiguous upload must be suppressed")
 
 
 if __name__ == "__main__":

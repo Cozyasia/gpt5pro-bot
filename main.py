@@ -4597,6 +4597,7 @@ def _textvideo_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
     rows.extend([
         [InlineKeyboardButton("🎬 Авторежиссёр", callback_data=f"{base}:video_director")],
         [InlineKeyboardButton("🛠 Автомонтаж сцен", callback_data=f"{base}:video_montage")],
+        [InlineKeyboardButton("🔤 Цвет титров: белый / чёрный / авто", callback_data=f"{base}:ad_caption_style")],
         [InlineKeyboardButton("📝 Ввести текст / 🎙 отправить voice", callback_data=f"{base}:tv_prompt")],
         [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun" if prefix == "act" else "fun:back")],
     ])
@@ -5207,6 +5208,15 @@ async def on_mode_cb(update, context):
         _clear_transient_flows(context)
         _set_mode_clean(uid, "Развлечения", "textvideo")
         await q.message.reply_text(_textvideo_menu_text(), parse_mode="Markdown", reply_markup=_textvideo_action_kb("act"))
+        return
+
+    if data == "act:fun:ad_caption_style":
+        await q.answer()
+        await q.message.reply_text("🔤 Выберите оформление русских титров:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚪ Белый", callback_data="adstyle:white"),
+             InlineKeyboardButton("⚫ Чёрный", callback_data="adstyle:black")],
+            [InlineKeyboardButton("◐ Автоконтраст", callback_data="adstyle:auto")],
+        ]))
         return
 
     if data == "act:fun:tv_engine_sora":
@@ -10971,6 +10981,19 @@ async def _start_video_studio(
     duration = parsed_duration if re.search(r"\d+\s*(?:сек|с)", prompt.lower()) else 20
     duration = max(4, min(30, int(duration)))
     aspect = next((value for value in ("9:16", "16:9", "1:1", "4:5") if value in prompt), "9:16")
+    # Optional explicitly timed captions in the user's brief, e.g.
+    # ТИТРЫ: 0-3 | Красота в каждой капле
+    ad_captions = []
+    for start, end, caption_text in re.findall(
+        r"(?im)^\\s*ТИТРЫ\\s*:\\s*(\\d+(?:[.,]\\d+)?)\\s*[-–]\\s*(\\d+(?:[.,]\\d+)?)\\s*\\|\\s*(.+?)\\s*$",
+        prompt,
+    ):
+        start_s, end_s = float(start.replace(",", ".")), float(end.replace(",", "."))
+        if 0 <= start_s < end_s <= duration and len(caption_text) <= 160:
+            ad_captions.append((start_s, end_s, caption_text.strip()))
+    ad_style = context.user_data.get("ad_caption_style", "auto")
+    if ad_style not in {"white", "black", "auto"}:
+        ad_style = "auto"
     mode = context.user_data.pop("video_studio_mode", "director")
     context.user_data.pop("awaiting_video_studio_prompt", None)
 
@@ -11041,6 +11064,16 @@ async def _start_video_studio(
                 output_path,
                 plan.duration_s,
             )
+            if ad_captions:
+                from neyrobot_prod.ad_video_safe_delivery import render_russian_overlay
+                captioned_path = os.path.join(workdir, "video_studio_captioned.mp4")
+                font_path = os.getenv("AD_CAPTION_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+                await asyncio.to_thread(
+                    render_russian_overlay,
+                    output_path, captioned_path, ad_captions, font_path,
+                    text_color=ad_style,
+                )
+                output_path = captioned_path
             await _reply_video_file(
                 update,
                 output_path,
@@ -15627,91 +15660,54 @@ def _compress_video_for_telegram_sync(video_bytes: bytes, max_mb: int = 48) -> b
 async def _compress_video_for_telegram(video_bytes: bytes, max_mb: int = 48) -> bytes | None:
     return await asyncio.to_thread(_compress_video_for_telegram_sync, video_bytes, max_mb)
 
-async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = ""):
-    """
-    Отправляет ОДИН результат в Telegram.
-    По умолчанию — MP4 как document, чтобы Telegram не маркировал короткий ролик как GIF.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; GPT5ProBot/1.0)",
-        "Accept": "video/mp4,video/*,*/*;q=0.8",
-    }
-
-    downloaded: bytes | None = None
-    try:
-        r = await client.get(url, headers=headers, timeout=240.0, follow_redirects=True)
-        r.raise_for_status()
-        content_type = (r.headers.get("content-type") or "").lower()
-        if not r.content or len(r.content) < 512:
-            raise RuntimeError(f"empty video response: {len(r.content)} bytes")
-        if "text/html" in content_type or "application/json" in content_type:
-            raise RuntimeError(f"not a video response: {content_type}; {r.text[:300]}")
-        downloaded = r.content
-    except Exception as e:
-        log.warning("reply_video_from_url: local download failed: %s", e)
-
+async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = "", *, ad_captions=None, ad_text_color="auto"):
+    """One Telegram upload per provider task; never resend after an ambiguous timeout."""
+    headers = {"User-Agent": "GPT5StudioAI/1.0", "Accept": "video/mp4,video/*,*/*;q=0.8"}
+    r = await client.get(url, headers=headers, timeout=240.0, follow_redirects=True)
+    r.raise_for_status()
+    content_type = (r.headers.get("content-type") or "").lower()
+    if len(r.content) < 512 or "text/html" in content_type or "application/json" in content_type:
+        raise RuntimeError("Provider returned invalid video content")
+    downloaded = r.content
+    if TELEGRAM_VIDEO_COMPRESS_ON_FAIL and len(downloaded) > max(5, int(TELEGRAM_RESULT_MAX_MB or 48)) * 1024 * 1024:
+        compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
+        if compact:
+            downloaded = compact
+    # Optional post-production path: same render as preview, no second AI generation.
+    # Enabled only for workflows that explicitly supply approved caption timings.
+    if ad_captions:
+        from neyrobot_prod.ad_video_safe_delivery import render_russian_overlay
+        with tempfile.TemporaryDirectory(prefix="gpt5-ad-") as workdir:
+            source = os.path.join(workdir, "source.mp4")
+            target = os.path.join(workdir, "captioned.mp4")
+            with open(source, "wb") as fh:
+                fh.write(downloaded)
+            font_path = os.getenv("AD_CAPTION_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+            await asyncio.to_thread(render_russian_overlay, source, target, ad_captions, font_path, text_color=ad_text_color)
+            with open(target, "rb") as fh:
+                downloaded = fh.read()
     chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
-    dedupe_key = _video_result_key(chat_id, task_id=task_id, url=url, content=downloaded)
+    dedupe_key = _video_result_key(chat_id, task_id=task_id, url="" if task_id else url)
     if _mark_video_sent_once(dedupe_key):
         log.info("reply_video_from_url: duplicate suppressed task_id=%s", task_id)
         return
-
-    if downloaded:
-        # v70: for Telegram rejection/size issues, try a compact MP4 before falling back to a raw link.
-        if TELEGRAM_VIDEO_COMPRESS_ON_FAIL and len(downloaded) > max(5, int(TELEGRAM_RESULT_MAX_MB or 48)) * 1024 * 1024:
-            compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
-            if compact:
-                downloaded = compact
-        if VIDEO_RESULT_SEND_AS_DOCUMENT:
-            try:
-                bio = BytesIO(downloaded)
-                bio.name = "result.mp4"
-                await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-                return
-            except Exception as e:
-                log.warning("reply_video_from_url: document send failed: %s", e)
-        try:
-            bio = BytesIO(downloaded)
-            bio.name = "result.mp4"
-            await update.effective_message.reply_video(video=InputFile(bio), caption=caption, supports_streaming=True)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: video send failed: %s", e)
-        try:
-            bio = BytesIO(downloaded)
-            bio.name = "result.mp4"
-            await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: document send fallback failed: %s", e)
-        if TELEGRAM_VIDEO_COMPRESS_ON_FAIL:
-            compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
-            if compact and compact != downloaded:
-                try:
-                    bio = BytesIO(compact)
-                    bio.name = "result_tg_safe.mp4"
-                    await update.effective_message.reply_document(document=InputFile(bio), caption=caption + "\n📦 Видео сжато для отправки в Telegram.")
-                    return
-                except Exception as e:
-                    log.warning("reply_video_from_url: compressed document send failed: %s", e)
-
-    if not VIDEO_RESULT_SEND_AS_DOCUMENT:
-        try:
-            await update.effective_message.reply_video(video=url, caption=caption, supports_streaming=True)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: telegram URL video send failed: %s", e)
+    bio = BytesIO(downloaded)
+    bio.name = "result.mp4"
     try:
-        await update.effective_message.reply_document(document=url, caption=caption)
-        return
-    except Exception as e:
-        log.warning("reply_video_from_url: telegram URL document send failed: %s", e)
+        if VIDEO_RESULT_SEND_AS_DOCUMENT:
+            await update.effective_message.reply_document(
+                document=InputFile(bio), caption=caption,
+                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+            )
+        else:
+            await update.effective_message.reply_video(
+                video=InputFile(bio), caption=caption, supports_streaming=True,
+                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+            )
+    except Exception:
+        log.exception("reply_video_from_url: delivery uncertain, no automatic retry task_id=%s", task_id)
+        raise
 
-    safe_url = (url or "")[:3500]
-    await update.effective_message.reply_text(
-        f"{caption}\n⚠️ Telegram не принял видеофайл напрямую, оставляю ссылку:\n{safe_url}",
-        disable_web_page_preview=False,
-    )
 
 async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_id: str = ""):
     if not content or len(content) < 512:
@@ -15738,8 +15734,8 @@ async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_
         sent_ok = True
     finally:
         if not sent_ok:
-            # A transport failure must not turn a retry into a suppressed duplicate.
-            _SENT_VIDEO_KEYS.pop(dedupe_key, None)
+            # Timeout is ambiguous: Telegram may have delivered the file.
+            log.warning("reply_video_bytes: uncertain delivery, suppressing retries task_id=%s", task_id)
 
 
 def _compress_telegram_video_sync(source: str, target: str, max_bytes: int = 48 * 1024 * 1024) -> str:
@@ -15791,7 +15787,7 @@ async def _reply_video_file(update: Update, path: str, caption: str, task_id: st
         sent_ok = True
     finally:
         if not sent_ok:
-            _SENT_VIDEO_KEYS.pop(dedupe_key, None)
+            log.warning("reply_video_file: uncertain delivery, suppressing retries task_id=%s", task_id)
 
 def _ratio_for_aspect(aspect: str) -> str:
     """
@@ -19027,6 +19023,15 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_textvideo_engine_choice(update, context, q, "seedance", prefix="fun")
         return
 
+    if action == "ad_caption_style":
+        await q.answer()
+        await q.message.reply_text("🔤 Выберите оформление русских титров:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚪ Белый", callback_data="adstyle:white"),
+             InlineKeyboardButton("⚫ Чёрный", callback_data="adstyle:black")],
+            [InlineKeyboardButton("◐ Автоконтраст", callback_data="adstyle:auto")],
+        ]))
+        return
+
     if action in {"video_director", "video_montage"}:
         _clear_transient_flows(context)
         _set_mode_clean(q.from_user.id, "Развлечения", action)
@@ -19039,7 +19044,11 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if action == "video_director"
             else
             ("🛠 Пришлите описание ролика для автомонтажа. Я создам отдельные сцены "
-             "и автоматически склею удачные фрагменты в один ролик.")
+             "и автоматически склею удачные фрагменты в один ролик.\n\n"
+             "Для надписей добавьте строки, например:\n"
+             "ТИТРЫ: 0-3 | КРАСОТА В КАЖДОЙ КАПЛЕ\n"
+             "ТИТРЫ: 3-6 | ПОПРОБУЙТЕ СЕГОДНЯ\n"
+             "Цвет выбирается отдельной кнопкой «Цвет титров».")
         )
         return
 
@@ -19735,6 +19744,20 @@ def build_application() -> "Application":
     # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
     # 1) Подписка/оплаты
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
+
+    async def _on_ad_caption_style_callback(update, context):
+        q = update.callback_query
+        style = (q.data or "").split(":")[-1]
+        if style not in {"white", "black", "auto"}:
+            await q.answer("Недопустимый режим", show_alert=True)
+            raise ApplicationHandlerStop
+        context.user_data["ad_caption_style"] = style
+        label = {"white": "белый", "black": "чёрный", "auto": "автоконтраст"}[style]
+        await q.answer("Стиль сохранён")
+        await q.message.reply_text(f"🔤 Стиль титров: {label}.")
+        raise ApplicationHandlerStop
+
+    app.add_handler(CallbackQueryHandler(_on_ad_caption_style_callback, pattern=r"^adstyle:(white|black|auto)$"))
 
     # Explicit high-priority Video Studio callback routing, independent of legacy fun/act routers.
     async def _on_video_studio_engine_callback(update, context):
