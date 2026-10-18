@@ -41,6 +41,12 @@ class LeisureTelegramTests(unittest.TestCase):
         asyncio.run(self.leisure.handle_leisure_callback(
             types.SimpleNamespace(callback_query=query), self.ctx))
         return query.message.sent[-1]
+    def test_out_of_order_callbacks_are_rejected(self):
+        text, _ = self.click("leisure:people:2")
+        self.assertIn("Сначала выберите бюджет", text)
+        text, _ = self.click("leisure:budget:1000")
+        self.assertIn("Сначала выберите ситуацию", text)
+
     def test_full_selection_flow(self):
         self.click("leisure:couple")
         self.click("leisure:interest:creative")
@@ -50,10 +56,15 @@ class LeisureTelegramTests(unittest.TestCase):
         self.assertIn("1000", text)
         self.assertIn("Творчество", text)
     def test_invalid_budget_does_not_mutate(self):
+        self.click("leisure:couple")
+        self.click("leisure:interest:calm")
         text, _ = self.click("leisure:budget:-100")
         self.assertIn("Выберите бюджет", text)
         self.assertNotIn("ent_leisure_budget", self.ctx.user_data)
     def test_invalid_party_size_does_not_mutate(self):
+        self.click("leisure:couple")
+        self.click("leisure:interest:calm")
+        self.click("leisure:budget:1000")
         text, _ = self.click("leisure:people:0")
         self.assertIn("Выберите количество", text)
         self.assertNotIn("ent_leisure_participants", self.ctx.user_data)
