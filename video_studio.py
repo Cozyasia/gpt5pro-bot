@@ -260,6 +260,14 @@ async def seedance_generate(
                 return await _download_video(client, url, headers)
             if _is_failure(status):
                 detail = _first_value(payload, ("error", "message", "detail"))
+                code = str(_first_value(detail, ("code",)) or _first_value(payload, ("code",)) or "")
+                if "PolicyViolation" in code or "SensitiveContentDetected" in code:
+                    raise SeedanceError(
+                        "Seedance отклонил готовящееся видео при проверке контента "
+                        "(возможное ограничение авторских прав). Генерация остановлена; "
+                        "автоматический повтор отключён. Измените спорные элементы "
+                        "сценария или используйте собственные оригинальные материалы."
+                    )
                 raise SeedanceError(f"Seedance завершился с ошибкой: {detail or status}.")
 
             await asyncio.sleep(poll_interval_s)
