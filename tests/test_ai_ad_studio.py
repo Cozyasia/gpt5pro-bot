@@ -6,6 +6,9 @@ class TestAdStudio(unittest.TestCase):
         self.assertEqual(len(TEMPLATES), 100)
         self.assertEqual(len({t.id for t in TEMPLATES}), 100)
 
+    def test_unique_creative_treatments(self):
+        self.assertEqual(len({t.shots[0] for t in TEMPLATES}), 100)
+
     def test_brand_neutral_storyboard(self):
         brief = ProductBrief("My Fragrance", "Amber perfume in a square bottle", ("photo1",))
         result = build_storyboard("fragrance-001", brief)
