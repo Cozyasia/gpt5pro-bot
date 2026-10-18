@@ -18803,9 +18803,8 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
 
     if action == "quiz":
-        from neyrobot_prod.entertainment.game_telegram import handle_game_callback
-        q.data = "game:menu"
-        return await handle_game_callback(update, context)
+        from neyrobot_prod.entertainment.game_telegram import handle_game_menu
+        return await handle_game_menu(update, context)
 
     if action == "avatar":
         await q.answer("Говорящий аватар")
