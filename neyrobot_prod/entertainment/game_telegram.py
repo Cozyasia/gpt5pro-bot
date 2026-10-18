@@ -54,11 +54,12 @@ async def handle_game_callback(update, context):
         except ValueError:
             await q.message.reply_text("Неизвестная история.", reply_markup=_keyboard())
             return
-        context.user_data["ent_adventure"] = adventure
+        context.user_data["ent_adventure"] = asdict(adventure)
         await _show_adventure(q.message, adventure)
         return
     if data.startswith("game:choose:"):
-        adventure = context.user_data.get("ent_adventure")
+        raw_adventure = context.user_data.get("ent_adventure")
+        adventure = adventures.Adventure(**raw_adventure) if isinstance(raw_adventure, dict) else raw_adventure
         if adventure is None:
             await q.message.reply_text("Сначала выберите историю.", reply_markup=_keyboard())
             return
