@@ -73,7 +73,7 @@ async def handle_game_callback(update, context):
         return
     if data == "game:next":
         if not state.answered:
-            await q.message.reply_text("Сначала ответьте на вопрос.", reply_markup=_round_keyboard())
+            await q.message.reply_text("Сначала ответьте на вопрос.", reply_markup=_round_keyboard(state))
             return
         updated = next_round(state)
         context.user_data["ent_game_session"] = updated
