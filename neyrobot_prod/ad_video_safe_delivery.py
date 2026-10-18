@@ -75,7 +75,7 @@ def _wrap_caption(text, max_chars=18, max_lines=4):
                           break_on_hyphens=False)
     if len(lines) > max_lines:
         raise ValueError("Caption is too long for the safe area")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False, text_color="auto"):
