@@ -1,0 +1,23 @@
+name: AI Ad Studio Source Audit
+on:
+  push:
+    branches: [feature/ai-ad-studio-templates]
+  workflow_dispatch:
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate 204 original source texts
+        run: python -m unittest tests.test_ad_studio_204_source_audit -v
+      - name: Run source duplicate and suitability audit
+        run: python -m ai_ad_studio.audit_source_library > source-audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-ad-studio-source-audit
+          path: source-audit.json
+          if-no-files-found: ignore
