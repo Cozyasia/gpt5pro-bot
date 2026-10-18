@@ -5,6 +5,7 @@ prompt texts and explicit attribution. No AI rewriting or synthetic expansion.
 """
 from .heydreaming_verified_catalog import PROMPTS as HEYDREAMING_ENTRIES
 from .heydreaming_original_prompts import ORIGINAL_PROMPTS, SOURCE_REPOSITORY, LICENSE, ATTRIBUTION
+from .seedance25_original_prompts import ORIGINAL_PROMPTS as SEEDANCE25_PROMPTS, SOURCE as SEEDANCE25_SOURCE, RIGHTS_NOTE as SEEDANCE25_RIGHTS
 
 def list_original_professional_prompts(category: str | None = None) -> tuple[dict, ...]:
     return tuple(
@@ -26,3 +27,24 @@ def get_original_professional_prompt(prompt_id: str) -> dict:
         "source_repository": SOURCE_REPOSITORY, "publisher": ATTRIBUTION,
         "license": LICENSE, "adaptation_required": True,
     }
+
+
+def list_full_source_prompts() -> tuple[dict, ...]:
+    """Return all 100 imported full-text source records (52 + 48)."""
+    first = list_original_professional_prompts()
+    second = tuple({
+        "id": prompt_id, "title": record["title"],
+        "source_url": SEEDANCE25_SOURCE, "publisher": "incendies / imageat.com",
+        "rights_note": SEEDANCE25_RIGHTS, "full_prompt_available": True,
+    } for prompt_id, record in SEEDANCE25_PROMPTS.items())
+    return first + second
+
+
+def get_full_source_prompt(prompt_id: str) -> dict:
+    """Return the unmodified original prompt and its source information."""
+    if prompt_id in SEEDANCE25_PROMPTS:
+        record = SEEDANCE25_PROMPTS[prompt_id]
+        return {"id": prompt_id, "title": record["title"], "prompt": record["prompt"],
+                "source_url": SEEDANCE25_SOURCE, "publisher": "incendies / imageat.com",
+                "rights_note": SEEDANCE25_RIGHTS}
+    return get_original_professional_prompt(prompt_id)
