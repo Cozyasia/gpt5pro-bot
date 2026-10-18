@@ -179,6 +179,13 @@ async def seedance_generate(
                         if callable(on_task_id):
                             on_task_id(task_id)
                         break
+                    # CometAPI uses 503 for a definitive model routing rejection.
+                    # No channel means no generation was accepted; try next alias.
+                    provider_code = str(_first_value(error_payload, ("code",)) or "").lower()
+                    provider_message = str(_first_value(error_payload, ("message",)) or "").lower()
+                    if provider_code == "model_not_found" and "no available channel" in provider_message:
+                        last_error = f"CometAPI has no channel for model {candidate}"
+                        continue
                     # Report a bounded, sanitized upstream error for diagnosis.
                     detail = str(_first_value(error_payload, ("message", "detail", "error", "code")) or response.text[:240])
                     detail = detail.replace(api_key, "[redacted]")[:240]
