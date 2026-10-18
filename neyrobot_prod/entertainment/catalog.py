@@ -118,7 +118,7 @@ _MENUS: dict[str, MenuSpec] = {
         intro="Создание и точечное редактирование изображений.",
         rows=(
             (_button("🎨 Создать изображение", "fun:img"),),
-            (_button("🤳 AI-селфи", "fun:aiselfie"),),
+            (_button("⭐ Селфи со звездой", "fun:aiselfie"),),
             (_button("🔄 Замена лица", "fun:faceswap"),),
             (_button("🧼 Удалить фон", "fun:removebg"),),
             (_button("🖼 Заменить фон", "fun:replacebg"),),
