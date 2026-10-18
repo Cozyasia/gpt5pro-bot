@@ -4597,6 +4597,7 @@ def _textvideo_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
     rows.extend([
         [InlineKeyboardButton("🎬 Авторежиссёр", callback_data=f"{base}:video_director")],
         [InlineKeyboardButton("🛠 Автомонтаж сцен", callback_data=f"{base}:video_montage")],
+        [InlineKeyboardButton("🔤 Цвет титров: белый / чёрный / авто", callback_data=f"{base}:ad_caption_style")],
         [InlineKeyboardButton("📝 Ввести текст / 🎙 отправить voice", callback_data=f"{base}:tv_prompt")],
         [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun" if prefix == "act" else "fun:back")],
     ])
@@ -5207,6 +5208,15 @@ async def on_mode_cb(update, context):
         _clear_transient_flows(context)
         _set_mode_clean(uid, "Развлечения", "textvideo")
         await q.message.reply_text(_textvideo_menu_text(), parse_mode="Markdown", reply_markup=_textvideo_action_kb("act"))
+        return
+
+    if data == "act:fun:ad_caption_style":
+        await q.answer()
+        await q.message.reply_text("🔤 Выберите оформление русских титров:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚪ Белый", callback_data="adstyle:white"),
+             InlineKeyboardButton("⚫ Чёрный", callback_data="adstyle:black")],
+            [InlineKeyboardButton("◐ Автоконтраст", callback_data="adstyle:auto")],
+        ]))
         return
 
     if data == "act:fun:tv_engine_sora":
@@ -18990,6 +19000,15 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_textvideo_engine_choice(update, context, q, "seedance", prefix="fun")
         return
 
+    if action == "ad_caption_style":
+        await q.answer()
+        await q.message.reply_text("🔤 Выберите оформление русских титров:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚪ Белый", callback_data="adstyle:white"),
+             InlineKeyboardButton("⚫ Чёрный", callback_data="adstyle:black")],
+            [InlineKeyboardButton("◐ Автоконтраст", callback_data="adstyle:auto")],
+        ]))
+        return
+
     if action in {"video_director", "video_montage"}:
         _clear_transient_flows(context)
         _set_mode_clean(q.from_user.id, "Развлечения", action)
@@ -19698,6 +19717,20 @@ def build_application() -> "Application":
     # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
     # 1) Подписка/оплаты
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
+
+    async def _on_ad_caption_style_callback(update, context):
+        q = update.callback_query
+        style = (q.data or "").split(":")[-1]
+        if style not in {"white", "black", "auto"}:
+            await q.answer("Недопустимый режим", show_alert=True)
+            raise ApplicationHandlerStop
+        context.user_data["ad_caption_style"] = style
+        label = {"white": "белый", "black": "чёрный", "auto": "автоконтраст"}[style]
+        await q.answer("Стиль сохранён")
+        await q.message.reply_text(f"🔤 Стиль титров: {label}.")
+        raise ApplicationHandlerStop
+
+    app.add_handler(CallbackQueryHandler(_on_ad_caption_style_callback, pattern=r"^adstyle:(white|black|auto)$"))
 
     # Explicit high-priority Video Studio callback routing, independent of legacy fun/act routers.
     async def _on_video_studio_engine_callback(update, context):
