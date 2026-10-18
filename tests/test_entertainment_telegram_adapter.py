@@ -58,6 +58,14 @@ class TelegramAdapterTests(unittest.TestCase):
             buttons = kwargs["reply_markup"].inline_keyboard
             callbacks = [b.callback_data for row in buttons for b in row]
             self.assertIn("game:start:" + game, callbacks)
+    def test_stale_next_button_cannot_skip_round(self):
+        self.click("game:start:movie")
+        self.click("game:answer:0:a")
+        self.click("game:next:0")
+        message, _ = self.click("game:next:0")
+        self.assertIn("Раунд уже изменился", message)
+        self.assertEqual(self.context.user_data["ent_game_session"]["round_index"], 1)
+
     def test_stale_quiz_button_cannot_score_next_round(self):
         self.click("game:start:movie")
         self.click("game:answer:0:a")
