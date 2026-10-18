@@ -72,6 +72,7 @@ async def handle_game_callback(update, context):
         await _show_adventure(q.message, adventure)
         return
     if data == "game:menu":
+        context.user_data.pop("ent_adventure", None)
         await q.message.reply_text("🎮 Игры с AI\nВыберите игру:", reply_markup=_keyboard())
         return
     if data == "game:rules":
@@ -88,6 +89,7 @@ async def handle_game_callback(update, context):
         await q.message.reply_text(_question_text(state), reply_markup=_round_keyboard(state))
         return
     if data == "game:finish":
+        context.user_data.pop("ent_adventure", None)
         if state:
             context.user_data["ent_game_session"] = asdict(finish(state))
         await q.message.reply_text(f"🏁 Игра окончена. Очки: {state.score if state else 0}.", reply_markup=_keyboard())
