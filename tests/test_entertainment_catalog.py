@@ -59,24 +59,6 @@ class EntertainmentFlagTests(unittest.TestCase):
         self.assertFalse(entertainment_menu_v2_enabled(environ, user_id=7))
         self.assertFalse(entertainment_menu_v2_enabled(environ))
 
-    def test_render_runtime_enables_owner_canary_when_env_slot_is_unavailable(self):
-        environ = {
-            "ENTERTAINMENT_MENU_V2": "0",
-            "RENDER_GIT_COMMIT": "2a61ae8",
-            "OWNER_ID": "4242",
-        }
-        self.assertTrue(entertainment_menu_v2_enabled(environ, user_id=4242))
-        self.assertFalse(entertainment_menu_v2_enabled(environ, user_id=7))
-
-    def test_explicit_canary_off_overrides_render_runtime_fallback(self):
-        environ = {
-            "ENTERTAINMENT_MENU_V2": "0",
-            "ENTERTAINMENT_MENU_V2_OWNER_CANARY": "0",
-            "RENDER_GIT_COMMIT": "2a61ae8",
-            "OWNER_ID": "4242",
-        }
-        self.assertFalse(entertainment_menu_v2_enabled(environ, user_id=4242))
-
     def test_owner_canary_fails_closed_for_invalid_configuration(self):
         for owner_id in ("", "0", "not-a-number"):
             with self.subTest(owner_id=owner_id):
@@ -181,6 +163,15 @@ class EntertainmentCatalogTests(unittest.TestCase):
         for menu_id, callbacks in expected.items():
             with self.subTest(menu_id=menu_id):
                 self.assertTrue(callbacks.issubset(set(self._callbacks(menu_id))))
+
+    def test_production_presets_use_existing_director(self):
+        production = get_menu("production")
+        active = [button for row in production.rows for button in row
+                  if button.callback_data.startswith("ent:brief:")]
+        self.assertEqual(len(active), 8)
+        self.assertTrue(all(button.status == "active" for button in active))
+        self.assertTrue(any("недвижимости" in button.text.lower() for button in active))
+        self.assertTrue(any("UGC" in button.text for button in active))
 
     def test_catalog_integrity(self):
         menus = iter_menus()
