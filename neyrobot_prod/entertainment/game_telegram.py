@@ -80,6 +80,6 @@ async def handle_game_callback(update, context):
         if updated.finished:
             await q.message.reply_text(f"🏆 Игра завершена! Ваш результат: {updated.score}/5.", reply_markup=_keyboard())
         else:
-            await q.message.reply_text(_question_text(updated), reply_markup=_round_keyboard())
+            await q.message.reply_text(_question_text(updated), reply_markup=_round_keyboard(updated))
         return
     await q.message.reply_text("Выберите игру:", reply_markup=_keyboard())
