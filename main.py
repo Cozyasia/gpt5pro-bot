@@ -10271,7 +10271,19 @@ def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
         return None
 
 
-def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -> InlineKeyboardMarkup:
+def _is_seedance_privacy_rejection(error: BaseException | str) -> bool:
+    """Recognise a terminal Seedance image-policy rejection without exposing raw provider JSON."""
+    text = str(error or "").lower()
+    return "inputimagesensitivecontentdetected" in text or "privacyinformation" in text
+
+
+def _vocal_song_kb(
+    token: str,
+    *,
+    pending: bool = False,
+    resume: bool = False,
+    privacy_rejected: bool = False,
+) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")]]
     if pending:
         rows.extend([
@@ -10280,7 +10292,13 @@ def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -
             [InlineKeyboardButton("✏️ Изменить промпт аудио", callback_data=f"mvfile:editaudio:{token}")],
         ])
     else:
-        if resume: rows.append([InlineKeyboardButton("🔄 Повторить создание клипа", callback_data=f"mvfile:resume:{token}")])
+        # The same rejected portrait must never be resubmitted.  Keep the Suno
+        # song and let the user explicitly supply a different, provider-eligible
+        # image instead.
+        if privacy_rejected:
+            rows.append([InlineKeyboardButton("📸 Загрузить другой портрет", callback_data=f"mvfile:newportrait:{token}")])
+        if resume and not privacy_rejected:
+            rows.append([InlineKeyboardButton("🔄 Повторить создание клипа", callback_data=f"mvfile:resume:{token}")])
         rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
     return InlineKeyboardMarkup(rows)
 
@@ -10298,7 +10316,7 @@ async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
 async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     parts = (q.data or "").split(":")
-    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio", "resume"):
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio", "resume", "newportrait"):
         await q.answer("Неизвестное действие")
         return
     kind, token, user_id = parts[1], parts[2], q.from_user.id
@@ -10390,15 +10408,27 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
             reply_markup=_vocal_song_kb(new_token, pending=True),
         )
         return
-    if kind == "use":
+    if kind in ("newportrait", "use"):
         context.user_data["vocal_source_token"] = token
-        await q.answer("Песня выбрана")
+        # A saved Suno result is an existing source track just like an uploaded
+        # file. Keep that marker through the replacement flow so it is neither
+        # generated nor charged a second time.
+        context.user_data["vocal_audio_is_custom"] = True
+        context.user_data["vocal_clip_flow"] = True
+        context.user_data["awaiting_vocal_clip_photo"] = True
+        context.user_data.pop("awaiting_vocal_clip_prompt", None)
+        context.user_data.pop("awaiting_music_video_video_brief", None)
+        with contextlib.suppress(Exception):
+            _set_mode_clean(user_id, "Развлечения", "vocalclip")
+        with contextlib.suppress(BadRequest):
+            await q.answer("Жду новый портрет")
         await q.message.reply_text(
-            "🎵 Для следующего вокального клипа выбрана именно эта песня. "
-            "Откройте режим AI-видеоклипа, пришлите фото и описание, затем утвердите сценарий. "
-            "Suno не будет создавать новую запись."
+            "📸 Пришлите фронтальный портрет одного совершеннолетнего человека: "
+            "без документов, экранов, номеров телефонов, адресов, водяных знаков и других людей. "
+            "Сохранённая песня будет использована повторно; Suno не запускается."
         )
-    elif kind == "audio":
+        return
+    if kind == "audio":
         with contextlib.suppress(BadRequest):
             await q.answer("Отправляю полную песню")
         try:
@@ -10860,11 +10890,22 @@ async def _start_vocal_clip(
             log.exception("vocal clip failed: %s", e)
             with contextlib.suppress(Exception): checkpoint(last_error=str(e)[:1000])
             with contextlib.suppress(Exception):
+                privacy_rejected = _is_seedance_privacy_rejection(e)
                 await update.effective_message.reply_text(
-                    "❌ AI-видеоклип с вокалом не получился. Кредиты не списаны. "
-                    + ("Готовый MP4 сохранён: повторите отправку кнопкой выше." if final_saved
-                       else "Полная песня сохранена, если Suno успел её создать. Попробуйте позже."),
-                    reply_markup=_vocal_song_kb(song_token, resume=not final_saved)
+                    (
+                        "⚠️ Seedance отклонил входной кадр по своей проверке privacy. "
+                        "Это ограничение провайдера, а не списание кредитов. Тот же портрет повторно не отправляю. "
+                        "Песня сохранена: можно загрузить другой портрет и использовать её без нового Suno."
+                        if privacy_rejected else
+                        "❌ AI-видеоклип с вокалом не получился. Кредиты не списаны. "
+                        + ("Готовый MP4 сохранён: повторите отправку кнопкой выше." if final_saved
+                           else "Полная песня сохранена, если Suno успел её создать. Попробуйте позже.")
+                    ),
+                    reply_markup=_vocal_song_kb(
+                        song_token,
+                        resume=not final_saved,
+                        privacy_rejected=privacy_rejected,
+                    )
                     if _load_vocal_artifact(user_id, song_token, "audio") else None,
                 )
             return False
@@ -19786,7 +19827,7 @@ def build_application() -> "Application":
 
     # Music-video draft approval: consumed once before the generic callback router.
     app.add_handler(CallbackQueryHandler(_on_music_video_draft_callback, pattern=r"^mv:(?:approve|augment|rewrite|auto|voice|dur10|dur30|dur60|dur90):[0-9a-f]{12}$"), group=0)
-    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio|editaudio|resume):[0-9a-f]{12}$"), group=0)
+    app.add_handler(CallbackQueryHandler(_on_vocal_artifact_callback, pattern=r"^mvfile:(?:audio|use|video|approveaudio|regenaudio|editaudio|resume|newportrait):[0-9a-f]{12}$"), group=0)
 
     # 2b) Старые school:/work: callbacks, если такие кнопки ещё где-то используются
     app.add_handler(CallbackQueryHandler(on_cb_mode, pattern=r"^(?:school:|work:)"), group=0)
