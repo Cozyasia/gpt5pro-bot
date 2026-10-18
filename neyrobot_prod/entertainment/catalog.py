@@ -136,10 +136,25 @@ _FALSE_VALUES = {"", "0", "false", "no", "off"}
 
 def entertainment_menu_v2_enabled(
     environ: Mapping[str, str] | None = None,
+    user_id: int | None = None,
 ) -> bool:
     source = os.environ if environ is None else environ
     value = str(source.get("ENTERTAINMENT_MENU_V2", "")).strip().lower()
-    return value not in _FALSE_VALUES
+    if value not in _FALSE_VALUES:
+        return True
+
+    canary = str(
+        source.get("ENTERTAINMENT_MENU_V2_OWNER_CANARY", "")
+    ).strip().lower()
+    if canary in _FALSE_VALUES or user_id is None:
+        return False
+
+    try:
+        owner_id = int(str(source.get("OWNER_ID", "0")).strip() or "0")
+        candidate_id = int(user_id)
+    except (TypeError, ValueError):
+        return False
+    return owner_id > 0 and candidate_id == owner_id
 
 
 def get_menu(menu_id: str) -> MenuSpec:

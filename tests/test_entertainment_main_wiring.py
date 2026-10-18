@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import inspect
 from pathlib import Path
 import types
 import unittest
@@ -41,7 +42,56 @@ class EntertainmentMainWiringTests(unittest.TestCase):
     def test_mode_kb_delegates_fun_menu_to_compatibility_builder(self):
         source = self._source_for("_mode_kb")
         self.assertIn('if key == "fun":', source)
-        self.assertIn("return _fun_quick_kb()", source)
+        self.assertIn("return _fun_quick_kb(user_id)", source)
+
+    def test_owner_canary_user_id_is_forwarded_through_menu_entry_points(self):
+        for name in ("_mode_desc", "_mode_kb", "_fun_quick_kb"):
+            with self.subTest(name=name):
+                node = self._functions(name)[0]
+                self.assertIn("user_id", [arg.arg for arg in node.args.args])
+
+        send_source = self._source_for("_send_mode_menu")
+        self.assertIn("update.effective_user.id", send_source)
+        self.assertIn("_mode_desc(key, user_id)", send_source)
+        self.assertIn("_mode_kb(key, user_id)", send_source)
+
+        handler_source = self._source_for("on_cb_entertainment")
+        self.assertIn(
+            "entertainment_menu_v2_enabled(user_id=q.from_user.id)",
+            handler_source,
+        )
+
+        fun_source = (
+            ast.get_source_segment(self.source, self._functions("on_cb_fun")[-1])
+            or ""
+        )
+        self.assertNotIn("_fun_quick_kb()", fun_source)
+        self.assertIn("_fun_quick_kb(q.from_user.id)", fun_source)
+
+        calls = [
+            node
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_fun_quick_kb"
+        ]
+        self.assertTrue(calls)
+        self.assertTrue(all(call.args or call.keywords for call in calls))
+
+        fun_mode_calls = [
+            node
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_mode_kb"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "fun"
+        ]
+        self.assertTrue(fun_mode_calls)
+        self.assertTrue(
+            all(len(call.args) > 1 or call.keywords for call in fun_mode_calls)
+        )
 
     def test_entertainment_entry_points_do_not_embed_their_own_buttons(self):
         for name in ("cmd_mode_fun", "on_mode_fun_text", "on_btn_fun"):
@@ -71,7 +121,7 @@ class EntertainmentMainWiringTests(unittest.TestCase):
 
         def render(enabled):
             namespace = {
-                "entertainment_menu_v2_enabled": lambda: enabled,
+                "entertainment_menu_v2_enabled": lambda user_id=None: enabled,
                 "_medical_menu_text": lambda: "medical",
             }
             exec(
@@ -84,7 +134,7 @@ class EntertainmentMainWiringTests(unittest.TestCase):
                 ),
                 namespace,
             )
-            return namespace["_mode_desc"]("fun")
+            return namespace["_mode_desc"]("fun", 4242)
 
         self.assertEqual(
             "🔥 Развлечения\n\n"
@@ -171,10 +221,11 @@ class FakeMessage:
 
 
 class FakeQuery:
-    def __init__(self, data):
+    def __init__(self, data, user_id=4242):
         self.data = data
         self.message = FakeMessage()
         self.answer_calls = 0
+        self.from_user = types.SimpleNamespace(id=user_id)
 
     async def answer(self, *args, **kwargs):
         self.answer_calls += 1
@@ -194,7 +245,7 @@ class EntertainmentCallbackHandlerTests(unittest.TestCase):
             and item.name == "on_cb_entertainment"
         )
         namespace = {
-            "entertainment_menu_v2_enabled": lambda: enabled,
+            "entertainment_menu_v2_enabled": lambda user_id=None: enabled,
             "classify_entertainment_callback": classifier,
             "get_entertainment_menu": get_menu,
             "build_entertainment_keyboard": lambda menu_id, *_: f"kb:{menu_id}",
@@ -213,8 +264,8 @@ class EntertainmentCallbackHandlerTests(unittest.TestCase):
         return namespace["on_cb_entertainment"]
 
     @staticmethod
-    def _run(handler, data, user_data=None):
-        query = FakeQuery(data)
+    def _run(handler, data, user_data=None, user_id=4242):
+        query = FakeQuery(data, user_id=user_id)
         update = types.SimpleNamespace(callback_query=query)
         context = types.SimpleNamespace(user_data=dict(user_data or {}))
         asyncio.run(handler(update, context))

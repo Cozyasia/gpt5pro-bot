@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from pathlib import Path
 import unittest
 
 from neyrobot_prod.entertainment.catalog import (
@@ -8,6 +10,9 @@ from neyrobot_prod.entertainment.catalog import (
     iter_menus,
 )
 from neyrobot_prod.entertainment.keyboards import build_keyboard, classify_callback
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeButton:
@@ -22,6 +27,12 @@ class FakeMarkup:
 
 
 class EntertainmentFlagTests(unittest.TestCase):
+    def test_flag_accepts_user_id_for_owner_canary(self):
+        self.assertIn(
+            "user_id",
+            inspect.signature(entertainment_menu_v2_enabled).parameters,
+        )
+
     def test_default_is_disabled(self):
         self.assertFalse(entertainment_menu_v2_enabled({}))
 
@@ -37,6 +48,55 @@ class EntertainmentFlagTests(unittest.TestCase):
                 self.assertTrue(
                     entertainment_menu_v2_enabled({"ENTERTAINMENT_MENU_V2": value})
                 )
+
+    def test_owner_canary_enables_only_the_configured_owner(self):
+        environ = {
+            "ENTERTAINMENT_MENU_V2": "0",
+            "ENTERTAINMENT_MENU_V2_OWNER_CANARY": "1",
+            "OWNER_ID": "4242",
+        }
+        self.assertTrue(entertainment_menu_v2_enabled(environ, user_id=4242))
+        self.assertFalse(entertainment_menu_v2_enabled(environ, user_id=7))
+        self.assertFalse(entertainment_menu_v2_enabled(environ))
+
+    def test_owner_canary_fails_closed_for_invalid_configuration(self):
+        for owner_id in ("", "0", "not-a-number"):
+            with self.subTest(owner_id=owner_id):
+                self.assertFalse(
+                    entertainment_menu_v2_enabled(
+                        {
+                            "ENTERTAINMENT_MENU_V2": "0",
+                            "ENTERTAINMENT_MENU_V2_OWNER_CANARY": "1",
+                            "OWNER_ID": owner_id,
+                        },
+                        user_id=4242,
+                    )
+                )
+
+    def test_global_flag_still_enables_every_user(self):
+        environ = {
+            "ENTERTAINMENT_MENU_V2": "1",
+            "ENTERTAINMENT_MENU_V2_OWNER_CANARY": "0",
+            "OWNER_ID": "4242",
+        }
+        self.assertTrue(entertainment_menu_v2_enabled(environ, user_id=7))
+
+
+class EntertainmentRolloutConfigTests(unittest.TestCase):
+    def test_checked_in_rollout_defaults_are_fail_closed(self):
+        sample = (PROJECT_ROOT / "env.sample").read_text(encoding="utf-8")
+        self.assertIn("ENTERTAINMENT_MENU_V2=0", sample)
+        self.assertIn("ENTERTAINMENT_MENU_V2_OWNER_CANARY=0", sample)
+
+        blueprint = (PROJECT_ROOT / "render.yaml").read_text(encoding="utf-8")
+        self.assertRegex(
+            blueprint,
+            r"(?m)^  - key: ENTERTAINMENT_MENU_V2\n    value: '0'$",
+        )
+        self.assertRegex(
+            blueprint,
+            r"(?m)^  - key: ENTERTAINMENT_MENU_V2_OWNER_CANARY\n    value: '0'$",
+        )
 
 
 class EntertainmentCatalogTests(unittest.TestCase):
