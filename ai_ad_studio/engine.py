@@ -1,6 +1,7 @@
 """Deterministic, non-billing storyboard builder."""
 from dataclasses import dataclass
 from .catalog import get_template
+from .source_patterns import source_for_template
 
 @dataclass(frozen=True)
 class ProductBrief:
@@ -27,10 +28,14 @@ class ProductBrief:
 def build_storyboard(template_id: str, brief: ProductBrief) -> dict:
     brief.validate()
     template = get_template(template_id)
+    source_pattern = source_for_template(template_id)
     shot_count = len(template.shots)
     boundaries = [brief.duration_seconds * i // shot_count for i in range(shot_count + 1)]
     return {
-        "template_id": template.id, "style": template.title, "category": template.category,
+        "template_id": template.id,
+        "professional_source": ({"title": source_pattern.source_title, "url": source_pattern.source_url,
+            "example": source_pattern.source_example, "mode": source_pattern.mode} if source_pattern else None),
+        "adapted_source_direction": source_pattern.adapted_direction if source_pattern else None, "style": template.title, "category": template.category,
         "product_name": brief.name, "product_description": brief.description,
         "reference_image_ids": list(brief.reference_image_ids), "logo_id": brief.logo_id,
         "language": brief.language, "aspect_ratio": brief.aspect_ratio,
