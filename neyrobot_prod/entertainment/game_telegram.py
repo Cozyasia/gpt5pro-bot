@@ -65,7 +65,11 @@ async def handle_game_callback(update, context):
             await q.message.reply_text("Сначала выберите историю.", reply_markup=_keyboard())
             return
         try:
-            adventure = adventures.choose(adventure, int(data.partition("game:choose:")[2]))
+            node_text, choice_text = data.partition("game:choose:")[2].split(":", 1)
+            if int(node_text) != adventure.node:
+                await q.message.reply_text("Этот выбор уже устарел. Продолжайте из последнего сообщения.")
+                return
+            adventure = adventures.choose(adventure, int(choice_text))
         except (ValueError, TypeError):
             await q.message.reply_text("Выберите доступный вариант.", reply_markup=_keyboard())
             return
@@ -131,6 +135,6 @@ async def handle_game_callback(update, context):
 async def _show_adventure(message, session):
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     prompt, options, _ = adventures.scene(session)
-    rows = [[B(label, callback_data=f"game:choose:{i}")] for i, label in enumerate(options)]
+    rows = [[B(label, callback_data=f"game:choose:{session.node}:{i}")] for i, label in enumerate(options)]
     rows.append([B("🔄 Другая история", callback_data="game:menu")])
     await message.reply_text(prompt, reply_markup=M(rows))
