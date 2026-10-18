@@ -19,7 +19,7 @@ def _keyboard():
 
 def _round_keyboard(session):
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
-    return M([[B(f"{key.upper()}. {value}", callback_data=f"game:answer:{key}")]
+    return M([[B(f"{key.upper()}. {value}", callback_data=f"game:answer:{session.round_index}:{key}")]
               for key, value in zip("abcd", current_question(session).answers)] +
              [[B("📜 Правила", callback_data="game:rules"), B("🛑 Закончить", callback_data="game:finish")]])
 
@@ -104,7 +104,15 @@ async def handle_game_callback(update, context):
         await q.message.reply_text("Сначала начните новую игру.", reply_markup=_keyboard())
         return
     if data.startswith("game:answer:"):
-        choice = data[len("game:answer:"):]
+        payload = data[len("game:answer:"):]
+        try:
+            round_token, choice = payload.split(":", 1)
+            if int(round_token) != state.round_index:
+                await q.message.reply_text("Этот вопрос уже завершён. Продолжайте из последнего сообщения.")
+                return
+        except (ValueError, TypeError):
+            await q.message.reply_text("Кнопка устарела. Откройте игру заново.", reply_markup=_keyboard())
+            return
         if state.answered:
             await q.message.reply_text("Ответ уже принят. Нажмите «Следующий раунд».", reply_markup=_after_keyboard(state))
             return
