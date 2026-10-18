@@ -127,10 +127,18 @@ def fake_update(messages, callback_data=None):
     async def edit_text(message, **kwargs):
         messages.append((message, kwargs.get("reply_markup"), "edit"))
 
+    async def edit_reply_markup(**kwargs):
+        messages.append(("reply_markup", kwargs.get("reply_markup"), "markup"))
+
     async def answer(*_args, **_kwargs):
         pass
 
-    msg = SimpleNamespace(reply_text=reply_text, edit_text=edit_text, chat_id=42)
+    msg = SimpleNamespace(
+        reply_text=reply_text,
+        edit_text=edit_text,
+        edit_reply_markup=edit_reply_markup,
+        chat_id=42,
+    )
     return SimpleNamespace(
         effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(id=42), effective_message=msg,
         callback_query=SimpleNamespace(data=callback_data, from_user=SimpleNamespace(id=42), message=msg, answer=answer),
@@ -305,6 +313,30 @@ class MusicVideoApprovalTests(unittest.TestCase):
         self.assertIn("заменена", changed[0][0])
         self.assertIn("30 секунд · 3 сцен", changed[1][0])
         self.assertIsNotNone(changed[1][1])
+        buttons = [button.text for row in changed[1][1].rows for button in row]
+        self.assertNotIn("⏱ 10 сек", buttons)
+        self.assertIn("✅ Утверждаю", buttons)
+
+    def test_reselecting_current_duration_removes_duration_buttons_without_republishing_review(self):
+        env = load_flow()
+        messages = []
+        ctx = SimpleNamespace(user_data={})
+        asyncio.run(env["_stage_music_video_draft"](fake_update(messages), ctx, "Я пою, клип 10 секунд"))
+        token = ctx.user_data["music_video_draft"]["token"]
+        original_plan = ctx.user_data["music_video_draft"]["scene_plan"]
+        before = len(messages)
+
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:dur10:{token}"), ctx))
+
+        changed = messages[before:]
+        self.assertEqual(original_plan, ctx.user_data["music_video_draft"]["scene_plan"])
+        self.assertTrue(ctx.user_data["music_video_draft"]["duration_locked"])
+        self.assertEqual(2, len(changed))
+        self.assertEqual("markup", changed[0][2])
+        buttons = [button.text for row in changed[0][1].rows for button in row]
+        self.assertNotIn("⏱ 10 сек", buttons)
+        self.assertIn("✅ Утверждаю", buttons)
+        self.assertIn("Длительность выбрана: 10 сек", changed[1][0])
 
     def test_voice_rewrite_keeps_button_selected_duration(self):
         env = load_flow()
@@ -446,6 +478,36 @@ class MusicVideoApprovalTests(unittest.TestCase):
         token = ctx.user_data["music_video_draft"]["token"]
         asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
         self.assertEqual(1, len(started))
+
+    def test_explicit_vocal_mode_never_falls_back_to_photo_music_pipeline(self):
+        env = load_flow()
+        messages, vocal_started, photo_started, mode_tracks = [], [], [], []
+
+        async def start_vocal(*args, **kwargs):
+            vocal_started.append((args, kwargs))
+
+        async def start_photo(*args, **kwargs):
+            photo_started.append((args, kwargs))
+
+        env["_start_vocal_clip"] = start_vocal
+        env["_start_photo_music_clip"] = start_photo
+        env["_mode_track_set"] = lambda _user_id, track: mode_tracks.append(track)
+        ctx = SimpleNamespace(user_data={"vocal_clip_flow": True})
+        asyncio.run(env["_stage_music_video_draft"](
+            fake_update(messages),
+            ctx,
+            "[MUSIC_BRIEF]\nМрачный русский трек о ночном городе.\n\n[VIDEO_BRIEF]\nДлительность клипа: 10 секунд. Певец крупным планом в кадре.",
+        ))
+        reviewed_plan = ctx.user_data["music_video_draft"]["scene_plan"]
+        self.assertTrue(any(scene.has_lip_sync for scene in reviewed_plan.scenes))
+        token = ctx.user_data["music_video_draft"]["token"]
+
+        asyncio.run(env["_on_music_video_draft_callback"](fake_update(messages, f"mv:approve:{token}"), ctx))
+
+        self.assertEqual(1, len(vocal_started))
+        self.assertEqual([], photo_started)
+        self.assertNotIn("vocal_clip_flow", ctx.user_data)
+        self.assertEqual("", mode_tracks[-1])
 
     def test_rewrite_replaces_old_script_and_invalidates_old_buttons(self):
         env = load_flow()

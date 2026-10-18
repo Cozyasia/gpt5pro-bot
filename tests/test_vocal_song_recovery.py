@@ -143,6 +143,7 @@ class VocalSongRecoveryTests(unittest.TestCase):
                 "_music_video_aspect": lambda *_: "9:16",
                 "seedance_generate": seedance,
                 "_concat_video_segment_files_sync": lambda paths, _duration, out: (Path(out).write_bytes(b"joined") and out),
+                "_normalize_vocal_clip_vertical_file_sync": lambda _video, _duration, out: (Path(out).write_bytes(b"vertical") and out),
                 "_mux_video_audio_files_sync": lambda _v, _a, _d, out: (Path(out).write_bytes(b"\x00\x00\x00\x18ftyp" + b"m" * 4096) and out),
                 "_reply_video_file": result,
                 "asyncio": SimpleNamespace(to_thread=immediate_thread, wait_for=asyncio.wait_for, Event=asyncio.Event, create_task=asyncio.create_task, TimeoutError=asyncio.TimeoutError, CancelledError=asyncio.CancelledError),

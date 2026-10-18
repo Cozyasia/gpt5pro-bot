@@ -3879,18 +3879,23 @@ def _music_video_aspect(prompt: str) -> str:
     return aspect if aspect in {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"} else "9:16"
 
 
-def _music_video_approval_kb(token: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⏱ 10 сек", callback_data=f"mv:dur10:{token}"),
-         InlineKeyboardButton("30 сек", callback_data=f"mv:dur30:{token}"),
-         InlineKeyboardButton("60 сек", callback_data=f"mv:dur60:{token}"),
-         InlineKeyboardButton("90 сек", callback_data=f"mv:dur90:{token}")],
+def _music_video_approval_kb(token: str, *, duration_locked: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if not duration_locked:
+        rows.append([
+            InlineKeyboardButton("⏱ 10 сек", callback_data=f"mv:dur10:{token}"),
+            InlineKeyboardButton("30 сек", callback_data=f"mv:dur30:{token}"),
+            InlineKeyboardButton("60 сек", callback_data=f"mv:dur60:{token}"),
+            InlineKeyboardButton("90 сек", callback_data=f"mv:dur90:{token}"),
+        ])
+    rows.extend([
         [InlineKeyboardButton("✨ Сделать промпт автоматически", callback_data=f"mv:auto:{token}")],
         [InlineKeyboardButton("🎙 По голосовому описанию", callback_data=f"mv:voice:{token}")],
         [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
         [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
         [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
     ])
+    return InlineKeyboardMarkup(rows)
 
 
 def _merge_music_video_prompt(original: str, addition: str) -> str:
@@ -3993,9 +3998,16 @@ def _music_video_single_scene_plan(
     video_brief: str,
     duration: int,
     aspect: str,
+    *,
+    force_vocal_lipsync: bool = False,
 ) -> ScenePlan:
-    wants_vocals = _clip_wants_vocals(music_brief)
+    wants_vocals = bool(force_vocal_lipsync or _clip_wants_vocals(music_brief))
     hinted_vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    # The explicit «Клип с вокалом» mode is an instruction to lip-sync.  It must
+    # not depend on a keyword surviving the user/LLM music brief, so scene 1 is
+    # eligible for the approved audio-driven vocal interval by default.
+    if force_vocal_lipsync and hinted_vocal_start is None:
+        hinted_vocal_start = 0.0
     vocal_start = (
         float(hinted_vocal_start)
         if hinted_vocal_start is not None and float(hinted_vocal_start) < duration
@@ -4037,11 +4049,14 @@ async def _compile_music_video_scene_plan(
     *,
     user_id: int = 0,
     chat_id: int = 0,
+    force_vocal_lipsync: bool = False,
 ) -> ScenePlan:
     """Compile exactly once; validation rejects incomplete or stale model output."""
     duration = int(duration)
-    wants_vocals = _clip_wants_vocals(music_brief)
+    wants_vocals = bool(force_vocal_lipsync or _clip_wants_vocals(music_brief))
     vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    if force_vocal_lipsync and vocal_start is None:
+        vocal_start = 0.0
     lip_sync_required = bool(wants_vocals and vocal_start is not None and duration - vocal_start >= 2)
     try:
         explicit = scene_plan_from_explicit_timeline(
@@ -4060,7 +4075,13 @@ async def _compile_music_video_scene_plan(
     except ValueError:
         pass
     if duration <= 10:
-        return _music_video_single_scene_plan(music_brief, video_brief, duration, aspect)
+        return _music_video_single_scene_plan(
+            music_brief,
+            video_brief,
+            duration,
+            aspect,
+            force_vocal_lipsync=force_vocal_lipsync,
+        )
 
     scene_seconds = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
     scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_seconds - 1) // scene_seconds))
@@ -4179,7 +4200,12 @@ async def _send_music_video_review(message, draft: dict, *, supersede: bool = Fa
     for index, chunk in enumerate(chunks):
         await message.reply_text(
             chunk,
-            reply_markup=_music_video_approval_kb(draft["token"]) if index == len(chunks) - 1 else None,
+            reply_markup=(
+                _music_video_approval_kb(
+                    draft["token"], duration_locked=bool(draft.get("duration_locked"))
+                )
+                if index == len(chunks) - 1 else None
+            ),
         )
 
 def _music_video_replace_duration_field(video_brief: str, seconds: int) -> str:
@@ -4227,6 +4253,17 @@ async def _stage_music_video_draft(
     if selected_duration_s is not None:
         video_brief = _music_video_replace_duration_field(video_brief, duration)
     combined = _music_video_join_briefs(music_brief, video_brief)
+    # The explicit «Клип с вокалом» entry point is authoritative.  Determine it
+    # before compiling the ScenePlan so validation requires actual lip-sync
+    # intervals even if the user described the song without a keyword.
+    track_getter = globals().get("_mode_track_get")
+    active_track = ""
+    if callable(track_getter):
+        with contextlib.suppress(Exception):
+            active_track = str(track_getter(update.effective_user.id) or "")
+    force_vocal_lipsync = bool(
+        context.user_data.get("vocal_clip_flow") or active_track.startswith("vocalclip")
+    )
     # A newly written Suno brief must not inherit an old approved song.  An uploaded
     # source track is different: it is the user's explicit audio selection and must
     # survive staging through approval so Suno is not called again.
@@ -4258,6 +4295,7 @@ async def _stage_music_video_draft(
             _music_video_aspect(combined),
             user_id=update.effective_user.id,
             chat_id=update.effective_chat.id,
+            force_vocal_lipsync=force_vocal_lipsync,
         )
     except Exception:
         log.exception("music video ScenePlan compilation failed")
@@ -4275,15 +4313,19 @@ async def _stage_music_video_draft(
         "identity_digests": {k: hashlib.sha256(v).hexdigest() for k, v in refs.items()} if refs else {},
         "duration": duration,
         "duration_locked": selected_duration_s is not None,
+        "force_vocal_lipsync": force_vocal_lipsync,
         "scene_plan": scene_plan,
         "scene_plan_fingerprint": scene_plan.fingerprint,
     }
     with contextlib.suppress(Exception):
-        _mode_track_set(update.effective_user.id, "")
+        _mode_track_set(
+            update.effective_user.id,
+            "vocalclip:approval" if force_vocal_lipsync else "",
+        )
         kv_set(f"music_video_music_brief:{update.effective_user.id}", "")
     source_token = context.user_data.get("vocal_source_token")
     has_saved_source = bool(
-        _clip_wants_vocals(music_brief) and source_token
+        (force_vocal_lipsync or _clip_wants_vocals(music_brief)) and source_token
         and _load_vocal_artifact(update.effective_user.id, source_token, "audio")
     )
     source_note = (
@@ -4306,6 +4348,23 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     action = parts[1]
     if action in ("dur10", "dur30", "dur60", "dur90"):
         seconds = int(action[3:])
+        if seconds == int(draft.get("duration") or 0):
+            # The user confirmed the already displayed plan.  Retire only the
+            # duration row: no duplicate ScenePlan and no second duration form.
+            draft["duration_locked"] = True
+            context.user_data["music_video_draft"] = draft
+            await q.answer(f"Длительность выбрана: {seconds} сек")
+            try:
+                await q.message.edit_reply_markup(
+                    reply_markup=_music_video_approval_kb(draft["token"], duration_locked=True)
+                )
+            except BadRequest as exc:
+                if "Message is not modified" not in str(exc):
+                    raise
+            await q.message.reply_text(
+                f"✅ Длительность выбрана: {seconds} сек. Проверьте сценарий выше и нажмите «Утверждаю»."
+            )
+            return
         music_brief, video_brief = _music_video_split_briefs(draft["prompt"])
         # Duration buttons are authoritative. Strip old duration declarations with a
         # real regex (the previous raw string was double-escaped and silently failed).
@@ -4319,6 +4378,7 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
                 _music_video_aspect(combined),
                 user_id=q.from_user.id,
                 chat_id=q.message.chat_id,
+                force_vocal_lipsync=bool(draft.get("force_vocal_lipsync")),
             )
         except Exception:
             log.exception("music video ScenePlan recompilation failed")
@@ -4367,6 +4427,7 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
                     _music_video_aspect(combined),
                     user_id=q.from_user.id,
                     chat_id=q.message.chat_id,
+                    force_vocal_lipsync=bool(draft.get("force_vocal_lipsync")),
                 )
             except Exception:
                 log.exception("automatic music video ScenePlan compilation failed")
@@ -4436,10 +4497,16 @@ async def _on_music_video_draft_callback(update: Update, context: ContextTypes.D
     # Consume the token before entering billing/provider code: repeated taps cannot launch duplicates.
     context.user_data.pop("music_video_draft", None)
     context.user_data.pop("music_video_draft_edit", None)
+    force_vocal_lipsync = bool(draft.get("force_vocal_lipsync"))
+    # This route is consumed with the approved draft.  A later ordinary photo
+    # clip must not inherit vocal processing merely because this user made one.
+    context.user_data.pop("vocal_clip_flow", None)
+    with contextlib.suppress(Exception):
+        _mode_track_set(q.from_user.id, "")
     await q.answer("Запускаю клип")
     await q.message.reply_text("✅ Сценарий утверждён. Передаю его в режим AI-видеоклипа.")
     try:
-        if _clip_wants_vocals(prompt):
+        if force_vocal_lipsync or _clip_wants_vocals(prompt):
             await _start_vocal_clip(
                 update,
                 context,
@@ -4600,10 +4667,12 @@ def _clear_vocal_clip_wait(context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("awaiting_vocal_clip_audio", None)
     context.user_data.pop("vocal_audio_is_custom", None)
     context.user_data.pop("vocal_clip_preset_prompt", None)
+    context.user_data.pop("vocal_clip_flow", None)
 
 
 def _set_vocal_clip_wait(context: ContextTypes.DEFAULT_TYPE):
     # First question is only about the song. Video direction is collected separately.
+    context.user_data["vocal_clip_flow"] = True
     context.user_data["awaiting_vocal_clip_prompt"] = True
     context.user_data.pop("awaiting_music_video_video_brief", None)
     context.user_data.pop("music_video_music_brief", None)
@@ -4613,6 +4682,7 @@ def _set_vocal_clip_video_brief_after_custom_audio(context: ContextTypes.DEFAULT
     """Advance an uploaded source track directly to the video-direction step."""
     context.user_data.pop("awaiting_vocal_clip_audio", None)
     context.user_data.pop("awaiting_vocal_clip_prompt", None)
+    context.user_data["vocal_clip_flow"] = True
     context.user_data["vocal_audio_is_custom"] = True
     context.user_data["music_video_music_brief"] = (
         "Пользовательская исходная аудиодорожка с русским вокалом. "
@@ -4634,17 +4704,22 @@ def _set_text_video_wait(context: ContextTypes.DEFAULT_TYPE, engine: str | None 
 async def _handle_vocalclip_upload_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "vocalclip")
+    context.user_data["vocal_clip_flow"] = True
     context.user_data["awaiting_vocal_clip_photo"] = True
+    with contextlib.suppress(Exception):
+        await q.message.edit_reply_markup(reply_markup=None)
     await q.message.reply_text(
-        "🎤 Пришлите фронтальный портрет *одного человека*. Если в кадре два человека, lip-sync будет нестабильным.",
+        "🎤 Пришлите фронтальный портрет *одного человека* — я жду фото. Если в кадре два человека, lip-sync будет нестабильным.",
         parse_mode="Markdown",
-        reply_markup=_vocal_clip_action_kb(prefix),
     )
 
 
 async def _handle_vocalclip_prompt_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "vocalclip")
+    context.user_data["vocal_clip_flow"] = True
+    with contextlib.suppress(Exception):
+        await q.message.edit_reply_markup(reply_markup=None)
     img = _get_cached_photo(q.from_user.id)
     if img:
         _seed_vocal_identity_from_portrait(q.from_user.id, img)
@@ -4657,23 +4732,24 @@ async def _handle_vocalclip_prompt_choice(update: Update, context: ContextTypes.
     else:
         context.user_data["awaiting_vocal_clip_photo"] = True
         await q.message.reply_text(
-            "Сначала пришлите портрет одного человека. После загрузки я сначала попрошу описание песни, затем отдельно сценарий видео.",
-            reply_markup=_vocal_clip_action_kb(prefix),
+            "Сначала пришлите фронтальный портрет одного человека — я жду фото. После загрузки я сначала попрошу описание песни, затем отдельно сценарий видео.",
         )
 
 
 async def _handle_vocalclip_audio_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "vocalclip")
+    context.user_data["vocal_clip_flow"] = True
     context.user_data["awaiting_vocal_clip_audio"] = True
     context.user_data.pop("vocal_source_token", None)
     context.user_data.pop("vocal_audio_is_custom", None)
     await q.answer("Загрузите трек")
+    with contextlib.suppress(Exception):
+        await q.message.edit_reply_markup(reply_markup=None)
     await q.message.reply_text(
         "🎵 Пришлите аудиодорожку как *Audio* (MP3, WAV, M4A/AAC, до 50 МБ). "
         "Я сохраню её как исходный трек: в финальном MP4 будет именно эта дорожка, без TTS-замены.",
         parse_mode="Markdown",
-        reply_markup=_vocal_clip_action_kb(prefix),
     )
 
 
@@ -5568,6 +5644,7 @@ def _clear_transient_flows(context):
         "awaiting_vocal_clip_prompt",
         "awaiting_vocal_clip_audio",
         "vocal_audio_is_custom",
+        "vocal_clip_flow",
         "awaiting_music_video_video_brief",
         "music_video_music_brief",
         "vocal_clip_preset_prompt",
@@ -9522,6 +9599,59 @@ def _concat_video_segment_files_sync(segment_paths: list[str], target_duration: 
     return None
 
 
+def _normalize_vocal_clip_vertical_file_sync(
+    video_path: str,
+    target_duration_s: int,
+    output_path: str,
+) -> str | None:
+    """Create a 9:16 vocal master without cropping the singer out of frame.
+
+    Providers occasionally ignore an aspect request.  The foreground therefore
+    uses ``decrease`` (never centre-crop the face); a blurred duplicate only
+    fills the vertical canvas behind it.  Original Suno/custom audio is added
+    in the next mux stage, so this intermediate is deliberately video-only.
+    """
+    if not video_path or not os.path.isfile(video_path):
+        return None
+    ffmpeg = _ffmpeg_exe()
+    width, height = 720, 1280
+    graph = (
+        f"[0:v]split=2[bg][fg];"
+        f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},boxblur=20:1[bgv];"
+        f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[fgv];"
+        f"[bgv][fgv]overlay=(W-w)/2:(H-h)/2,setsar=1,"
+        f"fps={int(FFMPEG_MUX_FPS or 24)},format=yuv420p[v]"
+    )
+    cmd = [
+        ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", video_path,
+        "-filter_complex", graph, "-map", "[v]", "-an",
+        "-t", str(max(1, int(target_duration_s))),
+        "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+        "-crf", "21", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output_path,
+    ]
+    try:
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            timeout=max(180, FFMPEG_MUX_TIMEOUT_S * 2),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("vocal vertical normalization failed: %s", exc)
+        return None
+    if result.returncode != 0 or not os.path.isfile(output_path) or os.path.getsize(output_path) <= 4096:
+        log.warning("vocal vertical normalization failed rc=%s stderr=%s", result.returncode, (result.stderr or b"")[-1500:].decode("utf-8", "ignore"))
+        return None
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", output_path],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30,
+    )
+    dimensions = probe.stdout.decode("utf-8", "ignore").strip()
+    if dimensions != f"{width},{height}":
+        log.warning("vocal vertical normalization produced unexpected size=%s", dimensions)
+        return None
+    return output_path
+
+
 def _mux_video_audio_sync(video_bytes: bytes, audio_bytes: bytes | None, target_duration_s: int) -> bytes | None:
     """Build one Telegram-safe MP4 from Kling video + Suno audio.
     v65: copy-first if small, then compressed fallback under FFMPEG_MUX_MAX_MB.
@@ -10677,6 +10807,15 @@ async def _start_vocal_clip(
                     )
                     if not joined_path:
                         raise RuntimeError("Не удалось собрать lip-sync сцены в единый видеоряд.")
+                    vertical_path = os.path.join(finalize_td.name, "vertical.mp4")
+                    joined_path = await asyncio.to_thread(
+                        _normalize_vocal_clip_vertical_file_sync,
+                        joined_path,
+                        target_duration,
+                        vertical_path,
+                    )
+                    if not joined_path:
+                        raise RuntimeError("Не удалось безопасно привести вокальный клип к вертикальному формату 9:16.")
                     audio_path = os.path.join(finalize_td.name, "suno.mp3")
                     with open(audio_path, "wb") as fh:
                         fh.write(safe_audio)
@@ -17694,7 +17833,10 @@ async def on_text(
         # land on a fresh worker/process, so user_data alone is not authoritative.
         with contextlib.suppress(Exception):
             kv_set(f"music_video_music_brief:{update.effective_user.id}", text.strip())
-            _mode_track_set(update.effective_user.id, "musicvideo:video")
+            _mode_track_set(
+                update.effective_user.id,
+                "vocalclip:video" if context.user_data.get("vocal_clip_flow") else "musicvideo:video",
+            )
         await update.effective_message.reply_text(
             "🎥 Теперь отдельно опишите ВИДЕО: что происходит в кадре, действия героя, куда он идёт, как движется камера, окружение, свет и финальный кадр.\n\n"
             "Например: двери лифта открываются → я выхожу → камера обходит меня и переходит за спину → следует сзади → я выхожу на солнечную улицу к оранжевому Lamborghini Urus."
@@ -18421,9 +18563,10 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _track_now = _mode_track_get(update.effective_user.id)
             except Exception:
                 _track_now = ""
-            if context.user_data.get("awaiting_vocal_clip_photo") or _track_now == "vocalclip":
+            if context.user_data.get("awaiting_vocal_clip_photo") or _track_now.startswith("vocalclip"):
                 context.user_data.pop("awaiting_vocal_clip_photo", None)
                 _set_mode_clean(update.effective_user.id, "Развлечения", "vocalclip")
+                _seed_vocal_identity_from_portrait(update.effective_user.id, raw)
                 _set_vocal_clip_wait(context)
                 await update.effective_message.reply_text(
                     "🎵 Портрет получен. Сначала отдельно опишите ПЕСНЮ: жанр, настроение, язык, тему текста, вокал и желаемую длительность.\n\n"
@@ -19094,9 +19237,9 @@ def _music_video_text_state(context: ContextTypes.DEFAULT_TYPE, user_id: int | N
     if user_id:
         with contextlib.suppress(Exception):
             track = (_mode_track_get(user_id) or "").strip().lower()
-            if track == "musicvideo:video":
+            if track in {"musicvideo:video", "vocalclip:video"}:
                 return "video"
-            if track == "musicvideo:music":
+            if track in {"musicvideo:music", "vocalclip:music"}:
                 return "music"
     return ""
 
@@ -19127,6 +19270,9 @@ async def on_music_video_text_priority(update: Update, context: ContextTypes.DEF
             raise ApplicationHandlerStop
         context.user_data["music_video_music_brief"] = music_brief
         context.user_data["awaiting_music_video_video_brief"] = True
+        with contextlib.suppress(Exception):
+            if (_mode_track_get(uid) or "").strip().lower() == "vocalclip:video":
+                context.user_data["vocal_clip_flow"] = True
         video_brief = (getattr(update.effective_message, "text", "") or "").strip()
         await _stage_music_video_draft(
             update, context, music_brief=music_brief, video_brief=video_brief

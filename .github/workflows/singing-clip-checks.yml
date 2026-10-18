@@ -11,6 +11,9 @@ on:
       - 'tests/test_vocal_song_recovery.py'
       - 'tests/test_vocal_clip_custom_audio_flow.py'
       - 'tests/test_vocal_clip_seedance_kling_contract.py'
+      - 'tests/test_music_video_approval.py'
+      - 'tests/test_music_video_prompt_ux.py'
+      - 'tests/test_vocal_clip_ui_flow.py'
       - 'tests/test_provider_input_artifacts.py'
       - 'tests/test_kling_photo_clip_image_reference.py'
       - '.github/workflows/singing-clip-checks.yml'
@@ -32,4 +35,4 @@ jobs:
       - name: Compile singing-clip implementation
         run: python -m py_compile main.py video_studio.py neyrobot_prod/singing_clip_pipeline.py neyrobot_prod/singing_clip_assembly.py neyrobot_prod/singing_clip_audio.py neyrobot_prod/singing_clip_seedance_reference.py
       - name: Run offline singing-clip tests
-        run: python -m unittest tests.test_singing_clip_pipeline tests.test_seedance_resumable_transport tests.test_vocal_clip_staging tests.test_music_video_audio_review_pending tests.test_vocal_song_recovery tests.test_vocal_clip_custom_audio_flow tests.test_vocal_clip_seedance_kling_contract tests.test_provider_input_artifacts tests.test_kling_photo_clip_image_reference -v
+        run: python -m unittest tests.test_singing_clip_pipeline tests.test_seedance_resumable_transport tests.test_vocal_clip_staging tests.test_music_video_audio_review_pending tests.test_vocal_song_recovery tests.test_vocal_clip_custom_audio_flow tests.test_vocal_clip_seedance_kling_contract tests.test_music_video_approval tests.test_music_video_prompt_ux tests.test_vocal_clip_ui_flow tests.test_provider_input_artifacts tests.test_kling_photo_clip_image_reference -v
