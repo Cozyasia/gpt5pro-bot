@@ -46,7 +46,7 @@ class TelegramAdapterTests(unittest.TestCase):
                 self.assertIsInstance(state, dict)
                 from neyrobot_prod.entertainment.games import GAME_BANKS
                 correct = GAME_BANKS[game][index].correct
-                result, kwargs = self.click("game:answer:" + correct)
+                result, kwargs = self.click("game:answer:" + str(index) + ":" + correct)
                 self.assertIn("Верно", result)
                 if index < 4:
                     self.click("game:next")
@@ -54,10 +54,19 @@ class TelegramAdapterTests(unittest.TestCase):
                     self.click("game:next")
             self.assertTrue(self.context.user_data["ent_game_session"]["finished"])
             self.click("game:start:" + game)
-            _, kwargs = self.click("game:answer:a")
+            _, kwargs = self.click("game:answer:0:a")
             buttons = kwargs["reply_markup"].inline_keyboard
             callbacks = [b.callback_data for row in buttons for b in row]
             self.assertIn("game:start:" + game, callbacks)
+    def test_stale_quiz_button_cannot_score_next_round(self):
+        self.click("game:start:movie")
+        self.click("game:answer:0:a")
+        self.click("game:next")
+        message, _ = self.click("game:answer:0:a")
+        self.assertIn("уже завершён", message)
+        self.assertEqual(self.context.user_data["ent_game_session"]["round_index"], 1)
+        self.assertFalse(self.context.user_data["ent_game_session"]["answered"])
+
     def test_adventures_are_serializable_and_finish(self):
         for game in ("detective", "story", "roleplay", "couple", "party", "truth_dare"):
             self.click("game:adventure:" + game)
