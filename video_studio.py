@@ -179,7 +179,11 @@ async def seedance_generate(
                         if callable(on_task_id):
                             on_task_id(task_id)
                         break
-                    # Report a bounded, sanitized upstream error for diagnosis.\n                    detail = str(_first_value(error_payload, ("message", "detail", "error", "code")) or response.text[:240])\n                    detail = detail.replace(api_key, "[redacted]")[:240]\n                    raise SeedanceError(\n                        f"Seedance вернул {response.status_code} (model={candidate}, endpoint={endpoint}, detail={detail}); идентификатор задачи "
+                    # Report a bounded, sanitized upstream error for diagnosis.
+                    detail = str(_first_value(error_payload, ("message", "detail", "error", "code")) or response.text[:240])
+                    detail = detail.replace(api_key, "[redacted]")[:240]
+                    raise SeedanceError(
+                        f"Seedance вернул {response.status_code} (model={candidate}, endpoint={endpoint}, detail={detail}); идентификатор задачи "
                         "не получен. Повторная отправка отключена, чтобы не создать дубликат."
                     )
                 if response.status_code >= 400:
