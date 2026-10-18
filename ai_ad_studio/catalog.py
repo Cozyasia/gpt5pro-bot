@@ -1,5 +1,6 @@
 """Brand-neutral advertising style catalog."""
 from dataclasses import dataclass
+from .creative_directions import professional_shots, CREATIVE_DIRECTIONS
 
 @dataclass(frozen=True)
 class Template:
@@ -31,10 +32,11 @@ SHOT_PLAN = (
 )
 TEMPLATES = tuple(Template(
     id=f"{category}-{index:03d}", category=category, title=title,
-    shots=SHOT_PLAN, lighting="Premium cinematic, physically plausible reflections",
+    shots=professional_shots(f'{category}-{index:03d}'), lighting="Premium cinematic, physically plausible reflections",
     camera="Smooth dolly, macro tracking and stable final hero shot",
 ) for category, titles in CATEGORIES.items() for index, title in enumerate(titles, 1))
 assert len(TEMPLATES) == 100
+assert len(CREATIVE_DIRECTIONS) == 100
 
 def get_template(template_id: str) -> Template:
     return next(t for t in TEMPLATES if t.id == template_id)
