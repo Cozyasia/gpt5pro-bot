@@ -66,7 +66,7 @@ def _auto_caption_color(source, timestamp, *, timeout=20):
 
 
 def _wrap_caption(text, max_chars=18, max_lines=4):
-    """Word-wrap vertical video captions before FFmpeg; no cropped single-line text."""
+    """Wrap Russian titles to fit a portrait safe area."""
     import textwrap
     words = " ".join(str(text).split())
     if not words:
@@ -74,12 +74,12 @@ def _wrap_caption(text, max_chars=18, max_lines=4):
     lines = textwrap.wrap(words, width=max_chars, break_long_words=True,
                           break_on_hyphens=False)
     if len(lines) > max_lines:
-        raise ValueError("Caption is too long for the safe area")
+        raise ValueError("Caption exceeds the vertical video safe area")
     return "\n".join(lines)
 
 
 def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False, text_color="auto"):
-    """Render one wrapped title layer inside 9:16 safe margins."""
+    """Single wrapped title layer, centered in 9:16 safe margins."""
     if not Path(font_path).is_file():
         raise FileNotFoundError(font_path)
     if not captions:
@@ -95,16 +95,13 @@ def render_russian_overlay(source, destination, captions, font_path, *, timeout=
             shadow = "white@0.75" if color == "black" else "black@0.85"
             caption_file = Path(temp) / f"caption_{i}.txt"
             caption_file.write_text(_wrap_caption(caption), encoding="utf-8")
-            # Textfiles prevent quote/filter escaping issues and support explicit newlines.
-            font = str(font_path).replace("\\\\", "\\\\\\\\").replace(":", "\\\\:")
-            txt = str(caption_file).replace("\\\\", "\\\\\\\\").replace(":", "\\\\:")
             style = ("box=1:boxcolor=black@0.55:boxborderw=12:"
                      if background else f"box=0:shadowcolor={shadow}:shadowx=2:shadowy=2:")
             filters.append(
-                "drawtext=fontfile='" + font + "':textfile='" + txt +
+                "drawtext=fontfile='" + str(font_path) + "':textfile='" + str(caption_file) +
                 "':expansion=none:fontcolor=" + color + ":fontsize=h/34:line_spacing=8:" +
-                style + "x=max(w*0.08\\\\,(w-text_w)/2):y=h*0.72:" +
-                "fix_bounds=1:enable='between(t\\\\," + str(start) + "\\\\," + str(end) + ")'"
+                style + "x=(w-text_w)/2:y=h*0.72:" +
+                "fix_bounds=1:enable='between(t\," + str(start) + "\," + str(end) + ")'"
             )
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                "-i", str(source), "-vf", ",".join(filters), "-c:v", "libx264",
