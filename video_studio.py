@@ -289,19 +289,16 @@ async def _download_video(
     return content
 
 
-_CAPTION_LINE = re.compile(r"^\\s*(?:ТИТРЫ|ТИТР|CAPTIONS?|ON[- ]SCREEN TEXT)\\s*:", re.IGNORECASE)
-_CAPTION_INLINE = re.compile(r"(?im)\\s*(?:ТИТРЫ|ТИТР|CAPTIONS?)\\s*:\\s*\\d{1,3}\\s*[-–—]\\s*\\d{1,3}\\s*\\|[^\\n]*")
-
+_CAPTION_LINE = re.compile(r"^\s*(?:ТИТРЫ|ТИТР|CAPTIONS?|ON[- ]SCREEN TEXT)\s*:", re.IGNORECASE)
+_CAPTION_INLINE = re.compile(r"(?im)[ \t]*(?:ТИТРЫ|ТИТР|CAPTIONS?)\s*:\s*\d{1,3}\s*[-–—]\s*\d{1,3}\s*\|[^\n]*")
 
 def _visual_only(value: Any) -> str:
-    """Keep visual instructions while removing separate caption timeline directives."""
     text = str(value or "")
     text = _CAPTION_INLINE.sub("", text)
-    return "\\n".join(line for line in text.splitlines() if not _CAPTION_LINE.match(line)).strip()
-
+    return "\n".join(line for line in text.splitlines() if not _CAPTION_LINE.match(line)).strip()
 
 def seedance_scene_prompt(scene: Any, base_prompt: str) -> str:
-    """Turn a validated scene object into a continuity-aware prompt."""
+    """Create original clean footage; keep timed captions for FFmpeg only."""
     fields = [
         ("action", getattr(scene, "action", "")),
         ("camera", getattr(scene, "camera", "")),
@@ -311,12 +308,12 @@ def seedance_scene_prompt(scene: Any, base_prompt: str) -> str:
         ("start_state", getattr(scene, "start_state", "")),
         ("end_state", getattr(scene, "end_state", "")),
     ]
-    details = "\n".join(f"{label}: {value}" for label, value in fields if value)
+    details = "\n".join(f"{label}: {_visual_only(value)}" for label, value in fields if _visual_only(value))
     return (
-        f"{str(base_prompt or '').strip()}\n"
+        f"{_visual_only(base_prompt)}\n"
         "Create one original, self-contained vertical advertising scene. "
-        "Keep the same character, wardrobe, props, lighting and product identity "
-        "throughout the scene. Do not invent readable UI text, prices, logos or "
-        "transaction values; leave any phone display clean for later compositing.\n"
+        "Maintain continuity of characters, props, lighting and product identity. "
+        "No visible typography, captions, watermarks, logos or readable UI; "
+        "all on-screen titles will be added during final editing.\n"
         f"{details}"
     ).strip()
