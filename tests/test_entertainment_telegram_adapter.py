@@ -22,6 +22,7 @@ class Message:
 class Query:
     def __init__(self, data):
         self.data, self.message = data, Message()
+        self.from_user = types.SimpleNamespace(id=12345)
     async def answer(self):
         pass
 
@@ -36,7 +37,8 @@ class TelegramAdapterTests(unittest.TestCase):
         self.patcher.stop()
     def click(self, data):
         q = Query(data)
-        asyncio.run(self.adapter.handle_game_callback(types.SimpleNamespace(callback_query=q), self.context))
+        with patch.dict("os.environ", {"ENTERTAINMENT_MENU_V2": "1"}):
+            asyncio.run(self.adapter.handle_game_callback(types.SimpleNamespace(callback_query=q), self.context))
         return q.message.sent[-1]
     def test_three_quizzes_complete_and_replay_same_category(self):
         for game in ("quick_quiz", "movie", "knowledge"):
