@@ -21,7 +21,7 @@ def load_delivery():
         "VIDEO_RESULT_DEDUPE_TTL_S": 900,
         "VIDEO_SEND_WRITE_TIMEOUT_S": 180,
         "_SENT_VIDEO_KEYS": {},
-        "log": SimpleNamespace(info=lambda *a, **k: None),
+        "log": SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None),
     }
     import hashlib
     import time
