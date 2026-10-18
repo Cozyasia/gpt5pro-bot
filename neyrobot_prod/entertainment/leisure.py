@@ -28,9 +28,9 @@ def personalized(category: str, interest: str, participants: int = 2, budget: in
         raise ValueError("Invalid preferences")
     title, ideas = suggestions(category)
     interest_title, interest_ideas = PREFERENCES[interest]
-    return (f"{title} · {interest_title}\\nУчастников: {participants}; бюджет: до {budget} ₽\\n\\n"
-            + "\\n".join(f"{index}. {idea}" for index, idea in enumerate((*ideas[:2], *interest_ideas[:2]), 1))
-            + "\\n\\nЭто идеи без проверки местных событий и расписаний.")
+    return (f"{title} · {interest_title}\nУчастников: {participants}; бюджет: до {budget} ₽\n\n"
+            + "\n".join(f"{index}. {idea}" for index, idea in enumerate((*ideas[:2], *interest_ideas[:2]), 1))
+            + "\n\nЭто идеи без проверки местных событий и расписаний.")
 
 def keyboard():
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
@@ -69,4 +69,4 @@ async def handle_leisure_callback(update, context):
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     rows = [[B(label, callback_data=f"leisure:interest:{key}")] for key, (label, _) in PREFERENCES.items()]
     rows.append([B("⬅️ Категории", callback_data="leisure:menu")])
-    await q.message.reply_text(format_suggestions(action) + "\\n\\nВыберите интерес для уточнения:", reply_markup=M(rows))
+    await q.message.reply_text(format_suggestions(action) + "\n\nВыберите интерес для уточнения:", reply_markup=M(rows))
