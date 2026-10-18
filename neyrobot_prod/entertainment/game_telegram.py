@@ -24,7 +24,7 @@ def _round_keyboard(session):
 def _after_keyboard(session=None):
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
     return M([[B("➡️ Следующий раунд", callback_data="game:next")],
-              [B("🔄 Сыграть ещё", callback_data="game:start:quick_quiz"),
+              [B("🔄 Сыграть ещё", callback_data=f"game:start:{session.game_id if session else 'quick_quiz'}"),
                B("🛑 Закончить", callback_data="game:finish")]])
 
 def _question_text(session):
