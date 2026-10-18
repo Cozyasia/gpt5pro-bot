@@ -15628,90 +15628,40 @@ async def _compress_video_for_telegram(video_bytes: bytes, max_mb: int = 48) -> 
     return await asyncio.to_thread(_compress_video_for_telegram_sync, video_bytes, max_mb)
 
 async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = ""):
-    """
-    Отправляет ОДИН результат в Telegram.
-    По умолчанию — MP4 как document, чтобы Telegram не маркировал короткий ролик как GIF.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; GPT5ProBot/1.0)",
-        "Accept": "video/mp4,video/*,*/*;q=0.8",
-    }
-
-    downloaded: bytes | None = None
-    try:
-        r = await client.get(url, headers=headers, timeout=240.0, follow_redirects=True)
-        r.raise_for_status()
-        content_type = (r.headers.get("content-type") or "").lower()
-        if not r.content or len(r.content) < 512:
-            raise RuntimeError(f"empty video response: {len(r.content)} bytes")
-        if "text/html" in content_type or "application/json" in content_type:
-            raise RuntimeError(f"not a video response: {content_type}; {r.text[:300]}")
-        downloaded = r.content
-    except Exception as e:
-        log.warning("reply_video_from_url: local download failed: %s", e)
-
+    """One Telegram upload per provider task; never resend after an ambiguous timeout."""
+    headers = {"User-Agent": "GPT5StudioAI/1.0", "Accept": "video/mp4,video/*,*/*;q=0.8"}
+    r = await client.get(url, headers=headers, timeout=240.0, follow_redirects=True)
+    r.raise_for_status()
+    content_type = (r.headers.get("content-type") or "").lower()
+    if len(r.content) < 512 or "text/html" in content_type or "application/json" in content_type:
+        raise RuntimeError("Provider returned invalid video content")
+    downloaded = r.content
+    if TELEGRAM_VIDEO_COMPRESS_ON_FAIL and len(downloaded) > max(5, int(TELEGRAM_RESULT_MAX_MB or 48)) * 1024 * 1024:
+        compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
+        if compact:
+            downloaded = compact
     chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
-    dedupe_key = _video_result_key(chat_id, task_id=task_id, url=url, content=downloaded)
+    dedupe_key = _video_result_key(chat_id, task_id=task_id, url="" if task_id else url)
     if _mark_video_sent_once(dedupe_key):
         log.info("reply_video_from_url: duplicate suppressed task_id=%s", task_id)
         return
-
-    if downloaded:
-        # v70: for Telegram rejection/size issues, try a compact MP4 before falling back to a raw link.
-        if TELEGRAM_VIDEO_COMPRESS_ON_FAIL and len(downloaded) > max(5, int(TELEGRAM_RESULT_MAX_MB or 48)) * 1024 * 1024:
-            compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
-            if compact:
-                downloaded = compact
-        if VIDEO_RESULT_SEND_AS_DOCUMENT:
-            try:
-                bio = BytesIO(downloaded)
-                bio.name = "result.mp4"
-                await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-                return
-            except Exception as e:
-                log.warning("reply_video_from_url: document send failed: %s", e)
-        try:
-            bio = BytesIO(downloaded)
-            bio.name = "result.mp4"
-            await update.effective_message.reply_video(video=InputFile(bio), caption=caption, supports_streaming=True)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: video send failed: %s", e)
-        try:
-            bio = BytesIO(downloaded)
-            bio.name = "result.mp4"
-            await update.effective_message.reply_document(document=InputFile(bio), caption=caption)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: document send fallback failed: %s", e)
-        if TELEGRAM_VIDEO_COMPRESS_ON_FAIL:
-            compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
-            if compact and compact != downloaded:
-                try:
-                    bio = BytesIO(compact)
-                    bio.name = "result_tg_safe.mp4"
-                    await update.effective_message.reply_document(document=InputFile(bio), caption=caption + "\n📦 Видео сжато для отправки в Telegram.")
-                    return
-                except Exception as e:
-                    log.warning("reply_video_from_url: compressed document send failed: %s", e)
-
-    if not VIDEO_RESULT_SEND_AS_DOCUMENT:
-        try:
-            await update.effective_message.reply_video(video=url, caption=caption, supports_streaming=True)
-            return
-        except Exception as e:
-            log.warning("reply_video_from_url: telegram URL video send failed: %s", e)
+    bio = BytesIO(downloaded)
+    bio.name = "result.mp4"
     try:
-        await update.effective_message.reply_document(document=url, caption=caption)
-        return
-    except Exception as e:
-        log.warning("reply_video_from_url: telegram URL document send failed: %s", e)
+        if VIDEO_RESULT_SEND_AS_DOCUMENT:
+            await update.effective_message.reply_document(
+                document=InputFile(bio), caption=caption,
+                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+            )
+        else:
+            await update.effective_message.reply_video(
+                video=InputFile(bio), caption=caption, supports_streaming=True,
+                write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+            )
+    except Exception:
+        log.exception("reply_video_from_url: delivery uncertain, no automatic retry task_id=%s", task_id)
+        raise
 
-    safe_url = (url or "")[:3500]
-    await update.effective_message.reply_text(
-        f"{caption}\n⚠️ Telegram не принял видеофайл напрямую, оставляю ссылку:\n{safe_url}",
-        disable_web_page_preview=False,
-    )
 
 async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_id: str = ""):
     if not content or len(content) < 512:
@@ -15738,8 +15688,8 @@ async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_
         sent_ok = True
     finally:
         if not sent_ok:
-            # A transport failure must not turn a retry into a suppressed duplicate.
-            _SENT_VIDEO_KEYS.pop(dedupe_key, None)
+            # Timeout is ambiguous: Telegram may have delivered the file.
+            log.warning("reply_video_bytes: uncertain delivery, suppressing retries task_id=%s", task_id)
 
 
 def _compress_telegram_video_sync(source: str, target: str, max_bytes: int = 48 * 1024 * 1024) -> str:
@@ -15791,7 +15741,7 @@ async def _reply_video_file(update: Update, path: str, caption: str, task_id: st
         sent_ok = True
     finally:
         if not sent_ok:
-            _SENT_VIDEO_KEYS.pop(dedupe_key, None)
+            log.warning("reply_video_file: uncertain delivery, suppressing retries task_id=%s", task_id)
 
 def _ratio_for_aspect(aspect: str) -> str:
     """
