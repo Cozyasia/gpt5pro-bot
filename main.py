@@ -10124,6 +10124,28 @@ def _load_vocal_job_manifest(user_id: int, token: str) -> dict | None:
     except (OSError, ValueError, json.JSONDecodeError): return None
 
 
+def _discard_vocal_video_checkpoints(user_id: int, token: str) -> None:
+    """Discard render state for a song while preserving its original audio file.
+
+    A replacement portrait starts a different visual clip. Reusing a previous
+    keyframe, Seedance task, or ready scene would either submit the rejected
+    image again or mix two identities into one result.
+    """
+    try:
+        directory = os.path.dirname(_vocal_job_path(user_id, token, "job", "json"))
+        keep = f"{token}_audio.mp3"
+        prefix = f"{token}_"
+        for filename in os.listdir(directory):
+            if filename.startswith(prefix) and filename != keep:
+                path = os.path.join(directory, filename)
+                if os.path.isfile(path):
+                    os.unlink(path)
+    except (OSError, ValueError):
+        # Recovery is best effort; the new portrait flow must still be able to
+        # report a normal provider error instead of failing in local cleanup.
+        pass
+
+
 def _save_vocal_job_file(user_id: int, token: str, name: str, extension: str, data: bytes) -> str:
     path = _vocal_job_path(user_id, token, name, extension)
     if not data or len(data) > 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
@@ -10403,6 +10425,21 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
         )
         return
     if kind in ("newportrait", "use"):
+        # This action can be pressed from an old message while another photo
+        # feature is awaiting input. Clear it before setting the vocal state so
+        # on_photo cannot consume the replacement portrait elsewhere.
+        _clear_transient_flows(context)
+        for stale_key in (
+            "music_video_identity_front", "music_video_identity_3q",
+            "music_video_identity_body", "music_video_scene_reference",
+            "music_video_pending_audio_token", "music_video_pending_prompt",
+            "music_video_pending_music_brief", "music_video_pending_scene_plan",
+            "music_video_pending_keyframe", "music_video_pending_keyframe_url",
+        ):
+            context.user_data.pop(stale_key, None)
+        with contextlib.suppress(Exception):
+            _music_video_identity_clear(user_id)
+            _discard_vocal_video_checkpoints(user_id, token)
         context.user_data["vocal_source_token"] = token
         # A saved Suno result is an existing source track just like an uploaded
         # file. Keep that marker through the replacement flow so it is neither

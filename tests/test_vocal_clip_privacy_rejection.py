@@ -24,6 +24,8 @@ class VocalClipPrivacyRejectionTests(unittest.TestCase):
         self.assertIn('context.user_data["vocal_audio_is_custom"] = True', callback_block)
         self.assertIn("Suno не запускается", callback_block)
         self.assertIn("resume|newportrait", SOURCE)
+        self.assertIn("_clear_transient_flows(context)", callback_block)
+        self.assertIn("_discard_vocal_video_checkpoints(user_id, token)", callback_block)
 
     def test_user_receives_the_provider_reason_and_keeps_the_song(self):
         block = SOURCE[SOURCE.index("async def _start_vocal_clip"):SOURCE.index("async def _run_kling_text_shorts")]
