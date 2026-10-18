@@ -18802,6 +18802,11 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await fn(update, context, **kwargs)
         return None
 
+    if action == "quiz":
+        from neyrobot_prod.entertainment.game_telegram import handle_game_callback
+        q.data = "game:menu"
+        return await handle_game_callback(update, context)
+
     if action == "avatar":
         await q.answer("Говорящий аватар")
         _clear_transient_flows(context)
@@ -19638,6 +19643,8 @@ def build_application() -> "Application":
 
     # 3) Быстрые развлечения (любые fun:...)
     app.add_handler(CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:"))
+    from neyrobot_prod.entertainment.game_telegram import handle_game_callback
+    app.add_handler(CallbackQueryHandler(handle_game_callback, pattern=r"^game:"), group=0)
     app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
 
     # 3b) Подменю Suno: свободный запрос и пресеты
