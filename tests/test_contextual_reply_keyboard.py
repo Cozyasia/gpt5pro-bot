@@ -20,7 +20,7 @@ class ContextualReplyKeyboardTests(unittest.TestCase):
         fn = next(n for n in self.tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "on_mode_cb")
         body = ast.get_source_segment(self.source, fn)
         self.assertIn('data == "mode:root"', body)
-        self.assertIn("reply_markup=main_kb", body)
+        self.assertIn("reply_markup=ReplyKeyboardRemove()", body)
 
     def test_start_keeps_main_keyboard(self):
         fn = next(n for n in self.tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "cmd_start")
