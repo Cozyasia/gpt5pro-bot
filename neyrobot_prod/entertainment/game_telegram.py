@@ -1,6 +1,8 @@
 """Telegram adapter for the self-contained quiz. No provider calls or credit usage."""
 from .games import start, current_question, answer, next_round, finish, GAME_BANKS
 from . import adventures
+from dataclasses import asdict
+from .games import GameSession
 
 def _keyboard():
     from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M
@@ -43,7 +45,8 @@ async def handle_game_callback(update, context):
     q = update.callback_query
     await q.answer()
     data = q.data or ""
-    state = context.user_data.get("ent_game_session")
+    raw_state = context.user_data.get("ent_game_session")
+    state = GameSession(**raw_state) if isinstance(raw_state, dict) else raw_state
     if data.startswith("game:adventure:"):
         story_id = data.partition("game:adventure:")[2]
         try:
@@ -80,12 +83,12 @@ async def handle_game_callback(update, context):
             await q.message.reply_text("Неизвестная игра.", reply_markup=_keyboard())
             return
         state = start(game_id)
-        context.user_data["ent_game_session"] = state
+        context.user_data["ent_game_session"] = asdict(state)
         await q.message.reply_text(_question_text(state), reply_markup=_round_keyboard(state))
         return
     if data == "game:finish":
         if state:
-            context.user_data["ent_game_session"] = finish(state)
+            context.user_data["ent_game_session"] = asdict(finish(state))
         await q.message.reply_text(f"🏁 Игра окончена. Очки: {state.score if state else 0}.", reply_markup=_keyboard())
         return
     if state is None or state.finished:
@@ -101,7 +104,7 @@ async def handle_game_callback(update, context):
         except ValueError:
             await q.message.reply_text("Неверная кнопка. Выберите один из четырёх ответов.", reply_markup=_round_keyboard(state))
             return
-        context.user_data["ent_game_session"] = updated
+        context.user_data["ent_game_session"] = asdict(updated)
         question = current_question(state)
         await q.message.reply_text(("✅ Верно!" if correct else f"❌ Неверно. Правильный ответ: {question.correct.upper()}.") +
                                    f"\n{question.explanation}\nОчки: {updated.score}",
