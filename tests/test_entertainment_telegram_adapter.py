@@ -62,9 +62,16 @@ class TelegramAdapterTests(unittest.TestCase):
         for game in ("detective", "story", "roleplay", "couple", "party", "truth_dare"):
             self.click("game:adventure:" + game)
             self.assertIsInstance(self.context.user_data["ent_adventure"], dict)
-            self.click("game:choose:0")
-            self.click("game:choose:0")
+            self.click("game:choose:0:0")
+            self.click("game:choose:1:0")
             self.assertTrue(self.context.user_data["ent_adventure"]["finished"])
+    def test_stale_adventure_button_cannot_advance_twice(self):
+        self.click("game:adventure:detective")
+        self.click("game:choose:0:0")
+        message, _ = self.click("game:choose:0:0")
+        self.assertIn("устарел", message)
+        self.assertEqual(self.context.user_data["ent_adventure"]["node"], 1)
+
     def test_game_rules_preserve_question(self):
         self.click("game:start:movie")
         _, kwargs = self.click("game:rules")
