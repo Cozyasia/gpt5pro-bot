@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import mimetypes
+import re
 from typing import Any, Callable, Iterable
 
 import httpx
@@ -266,7 +267,9 @@ async def seedance_generate(
                         "Seedance отклонил готовящееся видео при проверке контента "
                         "(возможное ограничение авторских прав). Генерация остановлена; "
                         "автоматический повтор отключён. Измените спорные элементы "
-                        "сценария или используйте собственные оригинальные материалы."
+                        "сценария и попробуйте ещё раз. Например, опишите вымышленный "
+                        "продукт без бренда, логотипов и отсылок к известной рекламе. "
+                        "Если отказ повторится, обратитесь в поддержку с ID задачи."
                     )
                 raise SeedanceError(f"Seedance завершился с ошибкой: {detail or status}.")
 
@@ -286,6 +289,17 @@ async def _download_video(
     return content
 
 
+_CAPTION_LINE = re.compile(r"^\\s*(?:ТИТРЫ|ТИТР|CAPTIONS?|ON[- ]SCREEN TEXT)\\s*:", re.IGNORECASE)
+_CAPTION_INLINE = re.compile(r"(?im)\\s*(?:ТИТРЫ|ТИТР|CAPTIONS?)\\s*:\\s*\\d{1,3}\\s*[-–—]\\s*\\d{1,3}\\s*\\|[^\\n]*")
+
+
+def _visual_only(value: Any) -> str:
+    """Keep visual instructions while removing separate caption timeline directives."""
+    text = str(value or "")
+    text = _CAPTION_INLINE.sub("", text)
+    return "\\n".join(line for line in text.splitlines() if not _CAPTION_LINE.match(line)).strip()
+
+
 def seedance_scene_prompt(scene: Any, base_prompt: str) -> str:
     """Turn a validated scene object into a continuity-aware prompt."""
     fields = [
@@ -300,7 +314,7 @@ def seedance_scene_prompt(scene: Any, base_prompt: str) -> str:
     details = "\n".join(f"{label}: {value}" for label, value in fields if value)
     return (
         f"{str(base_prompt or '').strip()}\n"
-        "Create one self-contained vertical advertising scene. "
+        "Create one original, self-contained vertical advertising scene. "
         "Keep the same character, wardrobe, props, lighting and product identity "
         "throughout the scene. Do not invent readable UI text, prices, logos or "
         "transaction values; leave any phone display clean for later compositing.\n"
