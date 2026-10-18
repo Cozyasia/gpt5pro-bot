@@ -11039,21 +11039,24 @@ async def _start_video_studio(
         await update.effective_message.reply_text("❌ Авторежиссёр не вернул ни одной сцены.")
         return False
 
-    provider_cost = sum(
-        _video_provider_cost_usd("seedance", max(4, int(round(scene.duration_s))))
-        for scene in plan.scenes
-    )
+    # Do not silently turn an eight-second one-scene request into five seconds.
+    scene_seconds = ([duration] if len(plan.scenes) == 1 else
+                     [max(4, min(30, int(round(scene.duration_s)))) for scene in plan.scenes])
+    if sum(scene_seconds) < duration:
+        await update.effective_message.reply_text("❌ План сцен короче запрошенного ролика. Генерация не запущена.")
+        return False
+    provider_cost = sum(_video_provider_cost_usd("seedance", sec) for sec in scene_seconds)
     label = "Авторежиссёр + автомонтаж" if mode == "director" else "Автомонтаж сцен"
 
     async def _go():
         await update.effective_message.reply_text(
-            f"🛠 {label}: {len(plan.scenes)} сцен, {plan.duration_s} сек, {plan.aspect}."
+            f"🛠 {label}: {len(plan.scenes)} сцен, {duration} сек, {plan.aspect}."
         )
         with tempfile.TemporaryDirectory(prefix="video-studio-") as workdir:
             scene_paths = []
             reference = _get_cached_photo(update.effective_user.id)
             for position, scene in enumerate(plan.scenes, start=1):
-                seconds = max(4, min(30, int(round(scene.duration_s))))
+                seconds = scene_seconds[position - 1]
                 await update.effective_message.reply_text(
                     f"🎞 Сцена {position}/{len(plan.scenes)}: Seedance {seconds} сек."
                 )
@@ -11075,12 +11078,12 @@ async def _start_video_studio(
                 scene_paths.append(scene_path)
 
             output_path = os.path.join(workdir, "video_studio_final.mp4")
-            from neyrobot_prod.veo_assembler import assemble_vertical_video
+            from neyrobot_prod.seedance_assembler import assemble_seedance_video
             await asyncio.to_thread(
-                assemble_vertical_video,
+                assemble_seedance_video,
                 scene_paths,
                 output_path,
-                plan.duration_s,
+                duration,
             )
             if ad_captions:
                 from neyrobot_prod.ad_video_safe_delivery import render_russian_overlay
@@ -11095,7 +11098,7 @@ async def _start_video_studio(
             await _reply_video_file(
                 update,
                 output_path,
-                caption=f"{label} · Seedance 2.5 · {plan.duration_s} сек · {plan.aspect}",
+                caption=f"{label} · Seedance 2.5 · {duration} сек · {plan.aspect}",
                 task_id=f"video-studio:{uuid.uuid4().hex}",
             )
         return True
@@ -11110,7 +11113,7 @@ async def _start_video_studio(
         remember_kind="video_studio_seedance",
         remember_payload={
             "prompt": prompt[:500],
-            "duration": plan.duration_s,
+            "duration": duration,
             "aspect": plan.aspect,
             "scenes": len(plan.scenes),
             "mode": mode,
