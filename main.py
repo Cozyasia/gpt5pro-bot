@@ -4990,7 +4990,7 @@ async def on_mode_cb(update, context):
     # Навигация
     if data == "mode:root":
         _clear_transient_flows(context)
-        await q.message.reply_text("🏠 Главное меню", reply_markup=main_kb)
+        await q.message.reply_text("🏠 Главное меню", reply_markup=ReplyKeyboardRemove())
         await q.message.reply_text(_modes_root_text(), reply_markup=modes_root_kb())
         await q.answer(); return
 
