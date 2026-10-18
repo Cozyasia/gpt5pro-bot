@@ -19647,6 +19647,8 @@ def build_application() -> "Application":
     # 3) Быстрые развлечения (любые fun:...)
     app.add_handler(CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:"))
     from neyrobot_prod.entertainment.game_telegram import handle_game_callback
+    from neyrobot_prod.entertainment.production import handle_production_brief
+    app.add_handler(CallbackQueryHandler(handle_production_brief, pattern=r"^ent:brief:"), group=-1)
     app.add_handler(CallbackQueryHandler(handle_game_callback, pattern=r"^game:"), group=0)
     from neyrobot_prod.entertainment.leisure import handle_leisure_callback
     app.add_handler(CallbackQueryHandler(handle_leisure_callback, pattern=r"^leisure:"), group=0)
