@@ -16,6 +16,8 @@ from .callirra_batch05 import ORIGINAL_PROMPTS as CALLIRRA_05
 from .callirra_batch06 import ORIGINAL_PROMPTS as CALLIRRA_06
 from .callirra_batch07 import ORIGINAL_PROMPTS as CALLIRRA_07
 
+from .h3_advertising_source_prompts import ORIGINAL_PROMPTS as H3_AD_PROMPTS
+
 CALLIRRA_PROMPTS = {}
 for _batch in (CALLIRRA_01, CALLIRRA_02, CALLIRRA_03, CALLIRRA_04,
                CALLIRRA_05, CALLIRRA_06, CALLIRRA_07):
@@ -79,10 +81,18 @@ def list_all_imported_originals() -> tuple[dict, ...]:
         "full_prompt_available": True, "commercial_review": "pending",
         "publisher": "Callirra AI", "license": "CC BY 4.0",
     } for key, value in CALLIRRA_PROMPTS.items())
-    return existing + additional + callirra
+    h3 = tuple({
+        "id": key, "title": value["title"], "source_url": value["source_url"],
+        "full_prompt_available": True, "commercial_review": "pending",
+        "publisher": "Flaq AI", "license": "MIT",
+    } for key, value in H3_AD_PROMPTS.items())
+    return existing + additional + callirra + h3
 
 
 def get_any_imported_original(prompt_id: str) -> dict:
+    if prompt_id in H3_AD_PROMPTS:
+        return {"id": prompt_id, **H3_AD_PROMPTS[prompt_id],
+                "publisher": "Flaq AI", "license": "MIT"}
     if prompt_id in CALLIRRA_PROMPTS:
         return {"id": prompt_id, **CALLIRRA_PROMPTS[prompt_id],
                 "publisher": "Callirra AI", "license": "CC BY 4.0"}
