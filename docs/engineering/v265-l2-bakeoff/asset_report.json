@@ -1,0 +1,13 @@
+{
+  "research_only": true,
+  "commercial_asset_license_verified": false,
+  "source_model_bytes": 173330032,
+  "regressor_bytes": 99046186,
+  "parsing_model_bytes": 53205364,
+  "geometry_pack_bytes": 36843234,
+  "identity_dimensions": 156,
+  "expression_dimensions": 177,
+  "vertices": 19546,
+  "triangles": 38792,
+  "texture_basis_excluded": true
+}

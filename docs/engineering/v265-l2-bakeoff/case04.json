@@ -1,0 +1,223 @@
+{
+  "case": "case04",
+  "source_sha256": "9ec851681b209bdc1064560946ea9e950dae174e850b7e1911185a0c4e6ccf39",
+  "baseline_3ddfa_self_reconstruction": {
+    "all68": 0.08070273842022531,
+    "inner_face": 0.07870233915476516,
+    "outline": 0.09303319920826869,
+    "mouth": 0.09713103083261146,
+    "central_chin": 0.11456816277418817,
+    "nose": 0.07472240882269968,
+    "eyes": 0.019890413225230528,
+    "lower_face": 0.10464570393813671
+  },
+  "faceverse_self_reconstruction": {
+    "eyes": 0.022607124071865697,
+    "nose": 0.05609017048327509,
+    "mouth": 0.033347942658744315,
+    "jaw": 0.0691072788580939,
+    "chin": 0.03325847839530879,
+    "cheeks": 0.06640773893729422,
+    "full_face_configuration": 0.05320591150420237
+  },
+  "faceverse_residual_self_reconstruction": {
+    "eyes": 0.01786135261485362,
+    "nose": 1.9908951595738115e-07,
+    "mouth": 0.008431254434326362,
+    "jaw": 0.006844200660130915,
+    "chin": 2.1130524811461454e-07,
+    "cheeks": 0.0022097594812551104,
+    "full_face_configuration": 0.011240258518735922
+  },
+  "faceverse_self_sufficient": false,
+  "faceverse_residual_self_sufficient": true,
+  "faceverse_expression_retarget": {
+    "source_intrinsic": {
+      "mouth_width": 0.773885190486908,
+      "upper_lip_thickness": 0.059231676161289215,
+      "lower_lip_thickness": 0.11784972250461578,
+      "lip_thickness_ratio": 0.5026034419297789,
+      "cupid_bow": -0.026009412482380867,
+      "philtrum": 0.2732778489589691,
+      "mouth_to_nose_ratio": 1.6592131412721127,
+      "mouth_to_chin_ratio": 1.4770006270374165
+    },
+    "target_expression": {
+      "opening": 0.0042956070974469185,
+      "smile_amount": 0.0005798615165986121,
+      "corner_elevation_left": 0.09499240666627884,
+      "corner_elevation_right": -0.09383268654346466,
+      "stretch": 0.7583658695220947,
+      "teeth_visibility_proxy": 0.0,
+      "bounded_asymmetry": 0.1888250857591629
+    },
+    "final_intrinsic": {
+      "mouth_width": 0.7344828248023987,
+      "upper_lip_thickness": 0.10120473057031631,
+      "lower_lip_thickness": 0.12588763236999512,
+      "lip_thickness_ratio": 0.8039290966476077,
+      "cupid_bow": -0.007577840238809586,
+      "philtrum": 0.27032485604286194,
+      "mouth_to_nose_ratio": 1.5746052170890719,
+      "mouth_to_chin_ratio": 1.368860232273218
+    },
+    "final_expression": {
+      "opening": 0.012920109555125237,
+      "smile_amount": -0.015397598966956139,
+      "corner_elevation_left": 0.0639258474111557,
+      "corner_elevation_right": -0.09472055733203888,
+      "stretch": 0.7344828248023987,
+      "teeth_visibility_proxy": 0.0,
+      "bounded_asymmetry": 0.15864640474319458
+    },
+    "identity_absolute_error": {
+      "mouth_width": 0.03940236568450928,
+      "upper_lip_thickness": 0.0419730544090271,
+      "lower_lip_thickness": 0.008037909865379333,
+      "lip_thickness_ratio": 0.3013256547178288,
+      "cupid_bow": 0.01843157224357128,
+      "philtrum": 0.0029529929161071777,
+      "mouth_to_nose_ratio": 0.08460792418304086,
+      "mouth_to_chin_ratio": 0.10814039476419857
+    },
+    "expression_absolute_error": {
+      "opening": 0.008624502457678318,
+      "smile_amount": 0.01597746048355475,
+      "corner_elevation_left": 0.03106655925512314,
+      "corner_elevation_right": 0.0008878707885742188,
+      "stretch": 0.023883044719696045,
+      "teeth_visibility_proxy": 0.0,
+      "bounded_asymmetry": 0.030178681015968323
+    },
+    "identity_geometry_within_engineering_bound": false,
+    "target_expression_within_engineering_bound": true,
+    "teeth_visibility_is_geometry_proxy_not_appearance_proof": true,
+    "mouth_texture_expression_compatible": false,
+    "expression_disentangled": false
+  },
+  "faceverse_residual_expression_retarget": {
+    "source_intrinsic": {
+      "mouth_width": 0.773885190486908,
+      "upper_lip_thickness": 0.059231676161289215,
+      "lower_lip_thickness": 0.11784972250461578,
+      "lip_thickness_ratio": 0.5026034419297789,
+      "cupid_bow": -0.026009412482380867,
+      "philtrum": 0.2732778489589691,
+      "mouth_to_nose_ratio": 1.6592131412721127,
+      "mouth_to_chin_ratio": 1.4770006270374165
+    },
+    "target_expression": {
+      "opening": 0.0042956070974469185,
+      "smile_amount": 0.0005798615165986121,
+      "corner_elevation_left": 0.09499240666627884,
+      "corner_elevation_right": -0.09383268654346466,
+      "stretch": 0.7583658695220947,
+      "teeth_visibility_proxy": 0.0,
+      "bounded_asymmetry": 0.1888250857591629
+    },
+    "final_intrinsic": {
+      "mouth_width": 0.755514919757843,
+      "upper_lip_thickness": 0.0881970226764679,
+      "lower_lip_thickness": 0.1433793157339096,
+      "lip_thickness_ratio": 0.6151307266673547,
+      "cupid_bow": -0.02641887031495571,
+      "philtrum": 0.25976911187171936,
+      "mouth_to_nose_ratio": 1.6409562606698935,
+      "mouth_to_chin_ratio": 1.541444424088486
+    },
+    "final_expression": {
+      "opening": 0.013330508954823017,
+      "smile_amount": -0.005425362382084131,
+      "corner_elevation_left": 0.07619880884885788,
+      "corner_elevation_right": -0.08704952895641327,
+      "stretch": 0.755514919757843,
+      "teeth_visibility_proxy": 0.0,
+      "bounded_asymmetry": 0.16324834525585175
+    },
+    "identity_absolute_error": {
+      "mouth_width": 0.01837027072906494,
+      "upper_lip_thickness": 0.02896534651517868,
+      "lower_lip_thickness": 0.025529593229293823,
+      "lip_thickness_ratio": 0.11252728473757578,
+      "cupid_bow": 0.00040945783257484436,
+      "philtrum": 0.013508737087249756,
+      "mouth_to_nose_ratio": 0.018256880602219194,
+      "mouth_to_chin_ratio": 0.0644437970510694
+    },
+    "expression_absolute_error": {
+      "opening": 0.009034901857376099,
+      "smile_amount": 0.006005223898682743,
+      "corner_elevation_left": 0.01879359781742096,
+      "corner_elevation_right": 0.006783157587051392,
+      "stretch": 0.002850949764251709,
+      "teeth_visibility_proxy": 0.0,
+      "bounded_asymmetry": 0.025576740503311157
+    },
+    "identity_geometry_within_engineering_bound": false,
+    "target_expression_within_engineering_bound": true,
+    "teeth_visibility_is_geometry_proxy_not_appearance_proof": true,
+    "mouth_texture_expression_compatible": false,
+    "expression_disentangled": false
+  },
+  "canonical_residual": {
+    "coordinate_system": "canonical_3d_surface",
+    "expression_invariant_pairs": 10,
+    "max_input_displacement_px": 24.707948684692383,
+    "bound_px": 24.70794677734375,
+    "active_vertices": 3756,
+    "max_vertex_magnitude": 0.07307952642440796,
+    "laplacian_regularized": true,
+    "not_2d_warp": true
+  },
+  "identity_digest_faceverse": "0a61612e0ca3cca2c90f52b86f71fe916d4d5696a6bd60fa492b0caa759e2d63",
+  "identity_digest_faceverse_residual": "c930a933fd55571e321b70c5f1d8d14781955bbc938b383d3191f7ddea9db65d",
+  "target_pose_expression_only": true,
+  "geometry_validity": {
+    "triangles": 17096,
+    "local_area_ratio": {
+      "0": 0.7224332094192505,
+      "0.01": 0.954658567905426,
+      "0.05": 0.9805298447608948,
+      "0.5": 1.0038836002349854,
+      "0.95": 1.047385573387146,
+      "0.99": 1.1074182987213135,
+      "1": 1.7612903118133545
+    },
+    "edge_stretch": {
+      "0": 0.8237072825431824,
+      "0.01": 0.9748855829238892,
+      "0.05": 0.985671877861023,
+      "0.5": 1.001221776008606,
+      "0.95": 1.0263426303863525,
+      "0.99": 1.0458256006240845,
+      "1": 1.2027745246887207
+    },
+    "triangle_aspect_distortion": {
+      "0": 0.8312961459159851,
+      "0.01": 0.9446128010749817,
+      "0.05": 0.9725209474563599,
+      "0.5": 0.9982312917709351,
+      "0.95": 1.024587631225586,
+      "0.99": 1.0434110164642334,
+      "1": 1.2208995819091797
+    },
+    "orientation_failures": 0,
+    "degenerate_triangles": 0,
+    "visible_projection_triangles": 17096,
+    "projected_back_facing_triangles": 1077,
+    "silhouette_components": 1,
+    "silhouette_holes": 0,
+    "silhouette_continuous": true
+  },
+  "critical_geometry_owner": {
+    "brow": "source_identity",
+    "eyes": "source_identity",
+    "nose": "source_identity",
+    "cheeks": "source_identity",
+    "lips": "source_identity",
+    "jaw": "source_identity",
+    "chin": "source_identity",
+    "mouth_interior": "target_expression"
+  },
+  "critical_pixel_ownership_measured": false
+}

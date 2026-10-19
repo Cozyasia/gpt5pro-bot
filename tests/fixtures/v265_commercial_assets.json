@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "production_integration_allowed": true,
+  "assets": {
+    "face_landmarker.task": {
+      "url": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
+      "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+      "license": "Apache-2.0",
+      "model_card": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Face%20Mesh%20V2.pdf",
+      "commercial_use": true,
+      "server_side_inference": true,
+      "private_server_deployment": true
+    },
+    "canonical_face_model.obj": {
+      "url": "https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/modules/face_geometry/data/canonical_face_model.obj",
+      "sha256": "8bac80443397e113f41a8b565ea72c59390bc031d9defab289dba7bc0c54e618",
+      "license": "Apache-2.0",
+      "commercial_use": true,
+      "server_side_inference": true,
+      "private_server_deployment": true
+    },
+    "selfie_multiclass_256x256.tflite": {
+      "url": "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite",
+      "sha256": "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0",
+      "license": "Apache-2.0",
+      "model_card": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf",
+      "commercial_use": true,
+      "server_side_inference": true,
+      "private_server_deployment": true,
+      "classes": ["background", "hair", "body-skin", "face-skin", "clothes", "others/accessories"]
+    }
+  }
+}

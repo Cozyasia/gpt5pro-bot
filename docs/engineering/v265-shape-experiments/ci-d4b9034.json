@@ -1,0 +1,506 @@
+{
+  "head": "d4b90347aea2a5314fdbe05ef1d0082ffec14ee2",
+  "shape_run": 34168251283,
+  "rows": [
+    {
+      "case": "case01",
+      "mode": "A_baseline",
+      "peak_rss_kib": 423992,
+      "mask_coverage": {
+        "chin": 0,
+        "jaw": 0,
+        "lip": 15
+      },
+      "pid_stable": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "07c466f97ffd72fc2b77b09d298c333bad0fa32019ab013edcb4fc30b39bafea",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 13168
+        },
+        {
+          "path": "strict",
+          "png_sha256": "67e69b121e73669ca6326261afad0b2c3ad8a4459b6e230486789acd6ccc868c",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 13230
+        }
+      ],
+      "max_morphology_delta_from_local": 1.1004066621835007e-05
+    },
+    {
+      "case": "case01",
+      "mode": "D_mask_core",
+      "peak_rss_kib": 446796,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "e50c2787932ab14786dada77d656b04eca6cc61959cb4b210d08416477662077",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "fe118c2e890aa1ee2b7fd4886e154fd9af1d4fb7308422556bac68459bce7788",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case01",
+      "mode": "F_jaw_shape",
+      "peak_rss_kib": 419184,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "e170249a626f2c025a9a7820d29716ff2f2e7e56babf2edc289bacbcb0dff232",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "51263594a2fc6fcc56d68e95d27d32c579556ef584ed4f456ae7336680a037fb",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case01",
+      "mode": "H_jaw_silhouette",
+      "peak_rss_kib": 451976,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "b85fea6330555af9c8e3e80388444bf8592df9e919c7ae6691a2ce585f23a77a",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "92988cfb88ef5b43b279684e213b1291079767cb51e8811ee5a116c225403427",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case01",
+      "mode": "T_exact_field",
+      "peak_rss_kib": 418472,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "d3e46d73b72edf8440ad871bd381dfe0f908b39b79761c9676b6702e90a7d53c",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "220c9327cc0e09de6482f31f32fa4d67c16f20b481a234a9285a029aea17483a",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case02",
+      "mode": "A_baseline",
+      "peak_rss_kib": 434676,
+      "mask_coverage": {
+        "chin": 0,
+        "jaw": 0,
+        "lip": 12
+      },
+      "pid_stable": true,
+      "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "f8e9c190f093163b1b86a3b621d0d6b1616a27cff08452414d5e8edd0ebb8f41",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 16927
+        },
+        {
+          "path": "strict",
+          "png_sha256": "f10310a6bb56cc966938d8209c4fc5085a52b2245eabeabbd2d545a1457fde95",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 16929
+        }
+      ],
+      "max_morphology_delta_from_local": 2.9068089112543882e-06
+    },
+    {
+      "case": "case02",
+      "mode": "D_mask_core",
+      "peak_rss_kib": 405880,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "f59fcd45984827f5e136ab8dffe8059f2e5829629e3428d2319c30e68b221bbb",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "cd24281a61cb40eebde881d064633c5ab470202ab1a22737ad885c231e03cd0a",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case02",
+      "mode": "F_jaw_shape",
+      "peak_rss_kib": 397112,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "b7359d1b0f64cade995c4770f9ca2cb16cfaf5e9c237bab6cf4bc5c480b79c0c",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "805063bb6c778c30d702b615cc9ab16c3df1a0bf697186e0ea8fcb72c7afaa5d",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 1.5433387636244744e-06
+    },
+    {
+      "case": "case02",
+      "mode": "G_face_shape",
+      "peak_rss_kib": 408196,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "7a12ef9177ca95e1807bd183c1ea0d7d9f9f4fae5bbed8b161314f2daf6c96ce",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "a87f28b981d465285c1d4a821a73cd5b6f6b0d5abd70649832ce7095ff9b1606",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 9.995646333443853e-06
+    },
+    {
+      "case": "case02",
+      "mode": "H_jaw_silhouette",
+      "peak_rss_kib": 459884,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "61bf0aae53d5196d4ea0a59ce6d3217ff71ea2d648504823d03531514c11eb3d",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "bbc4ecee0c929ac34d480932213bce20fa64bbcaba7ff4caeefa9b8c05626a33",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 7.3722516979873864e-06
+    },
+    {
+      "case": "case02",
+      "mode": "T_exact_field",
+      "peak_rss_kib": 453252,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "410e0f79d54b8d9f1c3d965e03652c211df5562593e5d2ac696aaf899b52bf2b",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "cfa3b98015ff71c06637c9734a5c412b48b1f8773203f96132813997d148322c",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "afb5c973de745042adfa4a1a05f22079634806455008aae2ea60b1bb084674c2",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case04",
+      "mode": "A_baseline",
+      "peak_rss_kib": 408044,
+      "mask_coverage": {
+        "chin": 0,
+        "jaw": 0,
+        "lip": 12
+      },
+      "pid_stable": true,
+      "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "25f77c7ba3d909c090ad652d44c7b8ce2d585dbeb697579f7a1608edb3937567",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 12463
+        },
+        {
+          "path": "strict",
+          "png_sha256": "94134923617c00228f7d1977d8b61ff2770569767462fb8dbed34f0f3c94c5b6",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 12495
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case04",
+      "mode": "D_mask_core",
+      "peak_rss_kib": 395572,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "5269368c147f862a76dde1cb88cb4c4ad080ad1fef5c385228a55c314bd12de6",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "248618be9398b6235ae7166e9d45e11d754ad706026e731c4c61f46b698581e2",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case04",
+      "mode": "F_jaw_shape",
+      "peak_rss_kib": 400056,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "75badc2179a7387f5b8a770d67432dfe468165fdb205b57e00f8a30d55dc8fbc",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "1eb6ba22e663efb3a2d3cbfc2aed3594fce3d89c78b2e3bb58dce4470afb892e",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case04",
+      "mode": "G_face_shape",
+      "peak_rss_kib": 397780,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "7e39b5fd2699a2ab88df1ec8ec7ef49053af951d8d791a64a3a9228a512aff73",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "8aa7d3e2f0e279f3eca6dc6b3b9997519c312dabf88cf411ca5bf9c0a5f02860",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case04",
+      "mode": "H_jaw_silhouette",
+      "peak_rss_kib": 402732,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "f4db3d5f8fccda766ce5c6158297e394d025dc1c9cf291fb00b8a391655af134",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "61993f5fdc5d568f8fe2295471ef8148278d8836522f30fee72b7fcc7c0ce261",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    },
+    {
+      "case": "case04",
+      "mode": "T_exact_field",
+      "peak_rss_kib": 392876,
+      "mask_coverage": {
+        "chin": 3,
+        "jaw": 17,
+        "lip": 20
+      },
+      "pid_stable": true,
+      "stage1_sha256": "02e5d8b8621d7598420bb18da8a11387b4ab22ea31a70660e1e47511103915c2",
+      "paths": [
+        {
+          "path": "standard",
+          "png_sha256": "d8b23b5800874a2d9467d40cd591e30b718d290dfbfcdb28b333c6ccb8d33cbd",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        },
+        {
+          "path": "strict",
+          "png_sha256": "d513393d9e5e5cdfdf95e0768410bdb09f48078d5ffb5fc376826a88f283a731",
+          "person_b_unchanged": true,
+          "neck_sample_unchanged": true,
+          "outside_support_changes": 0
+        }
+      ],
+      "max_morphology_delta_from_local": 0.0
+    }
+  ],
+  "geometry_rejected": [
+    {
+      "case": "case01",
+      "mode": "G_face_shape"
+    }
+  ],
+  "production_accepted": false
+}

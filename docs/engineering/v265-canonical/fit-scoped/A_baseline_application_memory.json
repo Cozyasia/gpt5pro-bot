@@ -1,0 +1,126 @@
+{
+  "application_constructed": true,
+  "handler_groups": 47,
+  "before_models": [
+    106823680,
+    536870912,
+    143675392,
+    4395008
+  ],
+  "after_models": [
+    280289280,
+    536870912,
+    325218304,
+    4407296
+  ],
+  "canonical_components_loaded_and_warmed": true,
+  "canonical_residency": "scoped",
+  "after_canonical_release": [
+    289091584,
+    536870912,
+    330661888,
+    4452352
+  ],
+  "retained_geometry_bytes": 460380,
+  "cgroup_evidence": {
+    "memory.current": "381591552",
+    "memory.peak": "494256128",
+    "memory.max": "536870912",
+    "memory.swap.current": "0",
+    "memory.swap.max": "0",
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0"
+  },
+  "after_canonical_components": [
+    390778880,
+    536870912,
+    437989376,
+    4452352
+  ],
+  "canonical_note": "component-residency plus baseline compositor; L renderer absent",
+  "resident_extra_mib": 0,
+  "after_resident_pressure": [
+    289091584,
+    536870912,
+    330661888,
+    4452352
+  ],
+  "rows": [
+    {
+      "iteration": 0,
+      "strict_entry_states": [
+        [
+          371527680,
+          536870912,
+          400691200,
+          10825728
+        ]
+      ],
+      "peak_rss_kib": 483544,
+      "memory_after": [
+        381263872,
+        536870912,
+        384831488,
+        23584768
+      ],
+      "sampled_cgroup_peak": 450621440,
+      "status": "completed_standard_and_strict",
+      "pid_stable": true,
+      "png_hashes": [
+        "f8e9c190f093163b1b86a3b621d0d6b1616a27cff08452414d5e8edd0ebb8f41",
+        "f10310a6bb56cc966938d8209c4fc5085a52b2245eabeabbd2d545a1457fde95"
+      ]
+    },
+    {
+      "iteration": 1,
+      "strict_entry_states": [
+        [
+          397377536,
+          536870912,
+          414547968,
+          23588864
+        ]
+      ],
+      "peak_rss_kib": 483544,
+      "memory_after": [
+        371302400,
+        536870912,
+        388837376,
+        23597056
+      ],
+      "sampled_cgroup_peak": 477720576,
+      "status": "completed_standard_and_strict",
+      "pid_stable": true,
+      "png_hashes": [
+        "f8e9c190f093163b1b86a3b621d0d6b1616a27cff08452414d5e8edd0ebb8f41",
+        "f10310a6bb56cc966938d8209c4fc5085a52b2245eabeabbd2d545a1457fde95"
+      ]
+    },
+    {
+      "iteration": 2,
+      "strict_entry_states": [
+        [
+          399187968,
+          536870912,
+          411045888,
+          23601152
+        ]
+      ],
+      "peak_rss_kib": 499068,
+      "memory_after": [
+        381591552,
+        536870912,
+        395325440,
+        23609344
+      ],
+      "sampled_cgroup_peak": 494256128,
+      "status": "completed_standard_and_strict",
+      "pid_stable": true,
+      "png_hashes": [
+        "f8e9c190f093163b1b86a3b621d0d6b1616a27cff08452414d5e8edd0ebb8f41",
+        "f10310a6bb56cc966938d8209c4fc5085a52b2245eabeabbd2d545a1457fde95"
+      ]
+    }
+  ],
+  "production_memory_qualified": false,
+  "qualification": "real app and warmed PIPNet/MobileFace, no Telegram initialize or live request history"
+}

@@ -1,0 +1,113 @@
+{
+  "commit": "006f24b082cb15149179b4d49646e6825b3ba942",
+  "run_id": 34133247725,
+  "all_three_jobs": "success",
+  "case01_measurements": [
+    {
+      "case": "case01",
+      "mode": "D_mask_core",
+      "peak_rss_kib": 425004,
+      "sampled_cgroup_peak_bytes": 536870912,
+      "cgroup_before": [
+        478703616,
+        536870912,
+        301936640,
+        113168384
+      ],
+      "cgroup_after": [
+        450670592,
+        536870912,
+        337920000,
+        48738304
+      ],
+      "pid_stable": true,
+      "daemon_context": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e"
+    },
+    {
+      "case": "case01",
+      "mode": "B_mask",
+      "peak_rss_kib": 450488,
+      "sampled_cgroup_peak_bytes": 536870912,
+      "cgroup_before": [
+        477519872,
+        536870912,
+        302002176,
+        111587328
+      ],
+      "cgroup_after": [
+        399986688,
+        536870912,
+        310763520,
+        10711040
+      ],
+      "pid_stable": true,
+      "daemon_context": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e"
+    },
+    {
+      "case": "case01",
+      "mode": "E_mask_frequency",
+      "peak_rss_kib": 425004,
+      "sampled_cgroup_peak_bytes": 536870912,
+      "cgroup_before": [
+        472977408,
+        536870912,
+        301576192,
+        107933696
+      ],
+      "cgroup_after": [
+        459173888,
+        536870912,
+        346095616,
+        49721344
+      ],
+      "pid_stable": true,
+      "daemon_context": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e"
+    },
+    {
+      "case": "case01",
+      "mode": "A_baseline",
+      "peak_rss_kib": 425216,
+      "sampled_cgroup_peak_bytes": 536870912,
+      "cgroup_before": [
+        536850432,
+        536870912,
+        302051328,
+        178925568
+      ],
+      "cgroup_after": [
+        454045696,
+        536870912,
+        340520960,
+        53706752
+      ],
+      "pid_stable": true,
+      "daemon_context": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e"
+    },
+    {
+      "case": "case01",
+      "mode": "C_core",
+      "peak_rss_kib": 402832,
+      "sampled_cgroup_peak_bytes": 536862720,
+      "cgroup_before": [
+        458309632,
+        536870912,
+        301641728,
+        74534912
+      ],
+      "cgroup_after": [
+        484839424,
+        536870912,
+        351621120,
+        68575232
+      ],
+      "pid_stable": true,
+      "daemon_context": true,
+      "stage1_sha256": "54178259ec753b5dddead347989fc73fd13a49c9265e53b03c0835f93b67435e"
+    }
+  ],
+  "limitations": "No full production application baseline in compositor matrix; cgroup peak includes reclaimable file cache."
+}
