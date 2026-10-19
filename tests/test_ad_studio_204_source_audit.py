@@ -10,9 +10,9 @@ from ai_ad_studio.original_prompt_library import (
 )
 
 class SourceLibraryAudit(unittest.TestCase):
-    def test_231_complete_source_records(self):
+    def test_254_complete_source_records(self):
         entries = list_all_imported_originals()
-        self.assertEqual(len(entries), 231)
+        self.assertEqual(len(entries), 254)
         self.assertEqual(len(CALLIRRA_PROMPTS), 52)
         self.assertEqual(len({e["id"] for e in entries}), len(entries))
         for entry in entries:
@@ -27,7 +27,7 @@ class SourceLibraryAudit(unittest.TestCase):
     def test_h3_source_records(self):
         entries = {entry["id"]: entry for entry in list_all_imported_originals()}
         h3 = [entry for entry in entries.values() if entry["id"].startswith("H3-")]
-        self.assertEqual(len(h3), 27)
+        self.assertEqual(len(h3), 50)
         for entry in h3:
             self.assertEqual(entry["license"], "MIT")
             self.assertEqual(entry["publisher"], "Flaq AI")
