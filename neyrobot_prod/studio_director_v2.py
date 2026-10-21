@@ -28,7 +28,7 @@ class Storyboard:
 
 
 def prepare_storyboard(user_text: str, *, duration: int | None = None, aspect_ratio: str = "9:16") -> Storyboard:
-    if aspect_ratio not in ("9:16", "16:9", "1:1"):
+    if aspect_ratio not in ("9:16", "16:9", "1:1", "4:5"):
         raise ValueError("Unsupported aspect ratio")
     lines = str(user_text or "").splitlines()
     visual = []
