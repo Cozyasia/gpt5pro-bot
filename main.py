@@ -10998,7 +10998,15 @@ async def _start_video_studio(
     # Director v2 preflight: validate duration/captions before paid generation.
     from neyrobot_prod.studio_director_v2 import prepare_storyboard, director_llm_instructions
     try:
-        director_board = prepare_storyboard(prompt)
+        studio_duration_match = re.search(
+            r"(?i)(\\d+)\\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", prompt
+        )
+        studio_duration = int(studio_duration_match.group(1)) if studio_duration_match else 20
+        studio_duration = max(4, min(30, studio_duration))
+        studio_aspect = next((v for v in ("9:16", "16:9", "1:1", "4:5") if v in prompt), "9:16")
+        director_board = prepare_storyboard(
+            prompt, duration=studio_duration, aspect_ratio=studio_aspect
+        )
     except ValueError as exc:
         await update.effective_message.reply_text(
             "❌ Проверьте сценарий и интервалы титров: " + str(exc)
