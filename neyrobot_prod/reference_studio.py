@@ -37,12 +37,17 @@ def decide_reference_route(
     *,
     seconds: int,
     consent_confirmed: bool = False,
+    previously_rejected: bool = False,
 ) -> ReferenceDecision:
     """Never assume a provider accepts human portraits without verified capability."""
+    if previously_rejected:
+        return ReferenceDecision(False, None, "Этот референс уже отклонён провайдером; автоматическая повторная отправка запрещена.")
     if seconds < 1:
         return ReferenceDecision(False, None, "Некорректная длительность.")
     if kind == ReferenceKind.NONE:
         return ReferenceDecision(False, None, "Не загружен референс.")
+    if not isinstance(kind, ReferenceKind):
+        return ReferenceDecision(False, None, "Неизвестный тип референса.")
     if kind == ReferenceKind.REAL_PERSON and not consent_confirmed:
         return ReferenceDecision(False, None, "Подтвердите право использовать портрет.")
     for provider in providers:
