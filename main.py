@@ -10995,6 +10995,16 @@ async def _start_video_studio(
         await update.effective_message.reply_text("Опишите ролик одним сообщением.")
         return False
 
+    # Director v2 preflight: validate duration/captions before paid generation.
+    from neyrobot_prod.studio_director_v2 import prepare_storyboard, director_llm_instructions
+    try:
+        director_board = prepare_storyboard(prompt)
+    except ValueError as exc:
+        await update.effective_message.reply_text(
+            "❌ Проверьте сценарий и интервалы титров: " + str(exc)
+        )
+        return False
+
     # The Studio brief owns its duration; generic video defaults may coerce 8s to 5s.
     duration_match = re.search(r"(?i)(\d+)\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", prompt)
     duration = int(duration_match.group(1)) if duration_match else 20
@@ -11023,7 +11033,7 @@ async def _start_video_studio(
     try:
         plan = await _compile_music_video_scene_plan(
             "",
-            prompt,
+            director_board.visual_prompt + "\n" + director_llm_instructions(director_board),
             duration,
             aspect,
             user_id=update.effective_user.id,
@@ -11067,7 +11077,7 @@ async def _start_video_studio(
                     r"(?im)^\s*ТИТРЫ\s*:\s*\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?\s*\|.*$",
                     "", prompt,
                 ).strip()
-                scene_prompt = seedance_scene_prompt(scene, visual_prompt)
+                scene_prompt = seedance_scene_prompt(scene, director_board.visual_prompt)
                 if ad_captions:
                     scene_prompt += (
                         "\nNO text or typography anywhere in the generated video. "
