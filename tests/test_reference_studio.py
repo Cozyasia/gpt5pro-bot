@@ -26,6 +26,24 @@ class ReferenceRoutingTests(unittest.TestCase):
             ReferenceKind.REAL_PERSON, providers, seconds=8, consent_confirmed=True
         ).allowed)
 
+    def test_rejected_reference_is_never_retried(self):
+        providers = (ProviderCapabilities(
+            "verified_provider", image_to_video=True,
+            real_person_reference=True, max_seconds=10,
+        ),)
+        result = decide_reference_route(
+            ReferenceKind.REAL_PERSON, providers, seconds=8,
+            consent_confirmed=True, previously_rejected=True,
+        )
+        self.assertFalse(result.allowed)
+        self.assertIsNone(result.provider)
+
+    def test_unknown_kind_fails_closed(self):
+        providers = (ProviderCapabilities("image_provider", image_to_video=True),)
+        self.assertFalse(decide_reference_route(
+            "unknown", providers, seconds=8
+        ).allowed)
+
     def test_duration_and_stylized_capabilities(self):
         providers = (ProviderCapabilities(
             "stylized_provider", image_to_video=True,
