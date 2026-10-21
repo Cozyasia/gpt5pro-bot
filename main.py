@@ -10999,7 +10999,7 @@ async def _start_video_studio(
     from neyrobot_prod.studio_director_v2 import prepare_storyboard, director_llm_instructions
     try:
         studio_duration_match = re.search(
-            r"(?i)(\\d+)\\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", prompt
+            r"(?i)(\d+)\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", prompt
         )
         studio_duration = int(studio_duration_match.group(1)) if studio_duration_match else 20
         studio_duration = max(4, min(30, studio_duration))
