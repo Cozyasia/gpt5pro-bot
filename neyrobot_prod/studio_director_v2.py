@@ -63,3 +63,48 @@ def prepare_storyboard(user_text: str, *, duration: int | None = None, aspect_ra
         "Render captions only once during final compositing."
     )
     return Storyboard(duration, aspect_ratio, cleaned, tuple(captions), notes)
+
+
+def director_llm_instructions(storyboard: Storyboard) -> str:
+    """Instructions for an existing LLM integration; never send caption text to video generation."""
+    return (
+        "You are a commercial film director and cinematographer. "
+        "Return ONLY valid JSON with keys: scenes, visual_continuity, editorial_notes. "
+        "Each scene must have integer start_second and end_second, and strings "
+        "action, camera_movement, framing, lighting, visual, transition. "
+        "Cover the entire timeline without overlaps or gaps; scene duration must be "
+        "supported by the chosen video provider. Do not invent a model capability. "
+        "Describe visible physical action and motivated camera movement, not vague mood. "
+        "Maintain identity and continuity between scenes. "
+        "No captions, written words, labels, watermarks, brands or typography in any visual field. "
+        "Do not modify the requested duration or aspect ratio. "
+        f"Duration: {storyboard.duration} seconds. Aspect ratio: {storyboard.aspect_ratio}. "
+        f"Director constraints: {storyboard.direction_notes} "
+        f"Visual brief: {storyboard.visual_prompt}"
+    )
+
+
+def validate_director_plan(plan: dict, storyboard: Storyboard) -> tuple[dict, ...]:
+    """Reject incomplete, discontinuous or text-contaminated LLM plans before any paid call."""
+    if not isinstance(plan, dict) or not isinstance(plan.get("scenes"), list) or not plan["scenes"]:
+        raise ValueError("Director plan requires nonempty scenes")
+    cursor = 0
+    required = ("action", "camera_movement", "framing", "lighting", "visual", "transition")
+    output = []
+    for scene in plan["scenes"]:
+        if not isinstance(scene, dict):
+            raise ValueError("Invalid scene object")
+        start, end = scene.get("start_second"), scene.get("end_second")
+        if type(start) is not int or type(end) is not int or start != cursor or end <= start:
+            raise ValueError("Director scene timeline has gaps, overlaps or invalid durations")
+        if end > storyboard.duration:
+            raise ValueError("Director scene exceeds requested duration")
+        if any(not isinstance(scene.get(key), str) or not scene[key].strip() for key in required):
+            raise ValueError("Director scene is missing required cinematography fields")
+        if any(re.search(r"(?i)\\b(?:captions?|subtitles?|on.screen text)\\b|титры|субтитры", scene[key]) for key in required):
+            raise ValueError("Director visual plan contains caption instructions")
+        output.append(scene)
+        cursor = end
+    if cursor != storyboard.duration:
+        raise ValueError("Director scenes do not cover requested duration")
+    return tuple(output)
