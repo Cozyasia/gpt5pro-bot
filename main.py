@@ -11085,7 +11085,8 @@ async def _start_video_studio(
                     r"(?im)^\s*ТИТРЫ\s*:\s*\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?\s*\|.*$",
                     "", prompt,
                 ).strip()
-                scene_prompt = seedance_scene_prompt(scene, director_board.visual_prompt)
+                visual_prompt = director_board.visual_prompt
+                scene_prompt = seedance_scene_prompt(scene, visual_prompt)
                 if ad_captions:
                     scene_prompt += (
                         "\nNO text or typography anywhere in the generated video. "
