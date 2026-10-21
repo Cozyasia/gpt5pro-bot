@@ -23,7 +23,7 @@ class StoryboardTests(unittest.TestCase):
             prepare_storyboard("Лампа.\nТИТРЫ: 4-4 | ТЕСТ", duration=8)
 
     def test_llm_instructions_exclude_caption_content(self):
-        board = prepare_storyboard("Лампа в интерьере.\\nТИТРЫ: 0-3 | СВЕТ", duration=8)
+        board = prepare_storyboard("Лампа в интерьере.\nТИТРЫ: 0-3 | СВЕТ", duration=8)
         instructions = director_llm_instructions(board)
         self.assertIn("camera movement", instructions)
         self.assertNotIn("СВЕТ", instructions)
