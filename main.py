@@ -19927,7 +19927,9 @@ def build_application() -> "Application":
             }
             await q.answer("План подтверждён")
             await _execute_video_studio_quote(update, context, quote)
-            _STUDIO_QUOTE_STORE.mark(token, "completed")
+            # The legacy payment wrapper returns None for success AND failures.
+            # Do not record 'completed' without a verifiable delivery/charge receipt.
+            _STUDIO_QUOTE_STORE.mark(token, "needs_review")
         except Exception:
             _STUDIO_QUOTE_STORE.mark(token, "needs_review")
             log.exception("Studio quote execution requires review: %s", token)
