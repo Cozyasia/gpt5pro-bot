@@ -14,6 +14,16 @@ class StoryboardTests(unittest.TestCase):
         self.assertNotIn("ТИТРЫ:", result.visual_prompt)
         self.assertIn("camera movement", result.direction_notes)
 
+    def test_fractional_caption_is_removed_from_visual_prompt(self):
+        board = prepare_storyboard(
+            "Камера облетает лампу.\\nТИТРЫ: 0,5-3.5 | ТЕКСТ",
+            duration=8,
+        )
+        self.assertEqual(len(board.captions), 1)
+        self.assertEqual(board.captions[0].start, 0.5)
+        self.assertEqual(board.captions[0].end, 3.5)
+        self.assertNotIn("ТИТРЫ:", board.visual_prompt)
+
     def test_rejects_caption_outside_duration(self):
         with self.assertRaises(ValueError):
             prepare_storyboard("Лампа.\nТИТРЫ: 3-9 | ТЕСТ", duration=8)
