@@ -11065,6 +11065,17 @@ async def _start_video_studio(
         await update.effective_message.reply_text("❌ План сцен короче запрошенного ролика. Генерация не запущена.")
         return False
     provider_cost = sum(_video_provider_cost_usd("seedance", sec) for sec in scene_seconds)
+    # Persist only serializable metadata; never hold a paid callable in user_data.
+    # This PR deliberately stops after the exact quote. A subsequent change must
+    # implement a restart-safe confirm/execution path reusing this exact plan.
+    await update.effective_message.reply_text(
+        f"💳 План готов: {len(plan.scenes)} сцен; {duration} сек; {plan.aspect}.\\n"
+        f"Расчётная стоимость: {_retail_credits(provider_cost)} кредитов.\\n"
+        "Генерация не запущена и кредиты не списаны. "
+        "Подтверждение оплаты будет доступно после внедрения безопасного запуска."
+    )
+    return True
+
     label = "Авторежиссёр + автомонтаж" if mode == "director" else "Автомонтаж сцен"
 
     async def _go():
@@ -17927,7 +17938,6 @@ async def on_text(
 
     # Video Studio: one prompt -> validated scene plan -> Seedance scenes -> montage.
     if context.user_data.get("awaiting_video_studio_prompt"):
-        # Consent gate: do not run the scene planner or paid provider on a raw text.
         prompt = (text or "").strip()
         if not prompt:
             await update.effective_message.reply_text("Пришлите непустой сценарий.")
@@ -17935,20 +17945,9 @@ async def on_text(
         if len(prompt) > 12000:
             await update.effective_message.reply_text("Сценарий слишком длинный (максимум 12 000 символов).")
             return
-        context.user_data["studio_pending_consent_prompt"] = prompt
-        context.user_data["studio_pending_consent_mode"] = context.user_data.get("video_studio_mode", "director")
+        # No paid generation until the scene plan has been priced and approved.
         context.user_data.pop("awaiting_video_studio_prompt", None)
-        await update.effective_message.reply_text(
-            "🎬 Сценарий принят. Следующий шаг — подготовка плана сцен и запуск Seedance.\\n"
-            "Внимание: окончательная стоимость зависит от числа и длительности сцен; "
-            "она ещё НЕ рассчитана. Не подтверждайте запуск, если требуется заранее "
-            "знать точную сумму.\\n\\n"
-            "Разрешить запуск с оплатой по рассчитанной стоимости?",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ Разрешить генерацию", callback_data="studio:consent:yes"),
-                InlineKeyboardButton("❌ Отмена", callback_data="studio:consent:no"),
-            ]]),
-        )
+        await _start_video_studio(update, context, prompt)
         return
 
     # Видео по тексту/голосу: ждём prompt после выбора движка.
@@ -19847,22 +19846,6 @@ def build_application() -> "Application":
             "Генерация не запущена, списаний нет."
         )
 
-    async def _studio_consent_callback(update, context):
-        q = update.callback_query
-        await q.answer()
-        choice = (q.data or "").rsplit(":", 1)[-1]
-        prompt = context.user_data.pop("studio_pending_consent_prompt", None)
-        mode = context.user_data.pop("studio_pending_consent_mode", "director")
-        if choice != "yes":
-            await q.message.reply_text("Генерация отменена. Списаний нет.")
-            return
-        if not prompt:
-            await q.message.reply_text("Подтверждение устарело. Отправьте сценарий заново.")
-            return
-        context.user_data["video_studio_mode"] = mode
-        await _start_video_studio(update, context, prompt)
-
-    app.add_handler(CallbackQueryHandler(_studio_consent_callback, pattern=r"^studio:consent:(yes|no)$"))
     app.add_handler(CallbackQueryHandler(_studio_director_quote_callback, pattern=r"^spl:director:quote$"))
     app.add_handler(CallbackQueryHandler(cb_studio_prompts, pattern=r"^spl:"))
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
