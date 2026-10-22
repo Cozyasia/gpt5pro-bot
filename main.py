@@ -10984,8 +10984,11 @@ async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
-# Ephemeral quote store. Expired/restarted quotes fail closed without a charge.
-_STUDIO_PENDING_QUOTES = {}
+# Durable one-shot quotes. Claimed orders never auto-restart paid provider calls.
+from neyrobot_prod.studio_quote_store import StudioQuoteStore
+_STUDIO_QUOTE_STORE = StudioQuoteStore(os.environ.get(
+    "STUDIO_QUOTE_DB_PATH", DB_PATH
+))
 
 
 async def _start_video_studio(
@@ -11069,23 +11072,23 @@ async def _start_video_studio(
         await update.effective_message.reply_text("❌ План сцен короче запрошенного ролика. Генерация не запущена.")
         return False
     provider_cost = sum(_video_provider_cost_usd("seedance", sec) for sec in scene_seconds)
-    # Pending quotes are deliberately ephemeral: after a process restart the
-    # user must re-quote, never silently regenerate a different plan.
+    # Freeze the exact approved plan and retail price before displaying consent.
     token = uuid.uuid4().hex[:20]
-    _STUDIO_PENDING_QUOTES[token] = {
-        "user_id": update.effective_user.id,
-        "chat_id": update.effective_chat.id,
-        "created": time.time(),
-        "prompt": prompt,
-        "plan": plan,
-        "board": director_board,
-        "duration": duration,
-        "scene_seconds": scene_seconds,
-        "provider_cost": provider_cost,
-        "mode": mode,
-        "ad_captions": ad_captions,
-        "ad_style": ad_style,
-    }
+    _STUDIO_QUOTE_STORE.create(
+        token, update.effective_user.id, update.effective_chat.id,
+        {
+            "prompt": prompt,
+            "plan": plan.as_dict(),
+            "board_visual_prompt": director_board.visual_prompt,
+            "duration": duration,
+            "scene_seconds": scene_seconds,
+            "provider_cost": provider_cost,
+            "mode": mode,
+            "ad_captions": ad_captions,
+            "ad_style": ad_style,
+        },
+        _retail_credits(provider_cost),
+    )
     await update.effective_message.reply_text(
         f"💳 План готов: {len(plan.scenes)} сцен; {duration} сек; {plan.aspect}.\n"
         f"Итоговая стоимость: {_retail_credits(provider_cost)} кредитов.\n"
@@ -19888,21 +19891,50 @@ def build_application() -> "Application":
             await q.answer("Некорректное подтверждение.", show_alert=True)
             return
         token = parts[3]
-        quote = _STUDIO_PENDING_QUOTES.get(token)
-        if not quote or time.time() - quote["created"] > 600:
-            _STUDIO_PENDING_QUOTES.pop(token, None)
-            await q.answer("Срок предложения истёк. Подготовьте план заново.", show_alert=True)
+        if parts[2] not in ("yes", "no"):
+            await q.answer("Некорректное действие.", show_alert=True)
             return
-        if quote["user_id"] != q.from_user.id or quote["chat_id"] != update.effective_chat.id:
-            await q.answer("Подтверждение принадлежит другому пользователю.", show_alert=True)
+        approved = parts[2] == "yes"
+        snapshot = _STUDIO_QUOTE_STORE.decide(
+            token, q.from_user.id, update.effective_chat.id, approved
+        )
+        if not approved:
+            await q.answer("Отмена обработана")
+            await q.message.reply_text(
+                "Запрос на отмену обработан. Если предложение уже было подтверждено, "
+                "повторное нажатие не изменяет выполняющийся заказ."
+            )
             return
-        _STUDIO_PENDING_QUOTES.pop(token, None)
-        if parts[2] == "no":
-            await q.answer("Отменено")
-            await q.message.reply_text("Генерация отменена. Кредиты не списаны.")
+        if snapshot is None:
+            await q.answer(
+                "Предложение уже обработано, истекло или принадлежит другому пользователю.",
+                show_alert=True,
+            )
             return
-        await q.answer("Запускаю по утверждённому плану")
-        await _execute_video_studio_quote(update, context, quote)
+        from types import SimpleNamespace
+        raw = snapshot["plan"]
+        try:
+            plan = scene_plan_from_dict(
+                raw["plan"],
+                expected_duration_s=int(raw["duration"]),
+                expected_aspect=raw["plan"]["aspect"],
+                require_lip_sync=False,
+            )
+            quote = {
+                **raw,
+                "plan": plan,
+                "board": SimpleNamespace(visual_prompt=raw["board_visual_prompt"]),
+            }
+            await q.answer("План подтверждён")
+            await _execute_video_studio_quote(update, context, quote)
+            _STUDIO_QUOTE_STORE.mark(token, "completed")
+        except Exception:
+            _STUDIO_QUOTE_STORE.mark(token, "needs_review")
+            log.exception("Studio quote execution requires review: %s", token)
+            await q.message.reply_text(
+                "⚠️ Заказ требует проверки. Не подтверждайте повторно: "
+                "повторная генерация автоматически не запускается."
+            )
 
     app.add_handler(CallbackQueryHandler(_studio_quote_confirm, pattern=r"^studio:quote:(yes|no):[a-f0-9]{20}$"))
     app.add_handler(CallbackQueryHandler(_studio_director_quote_callback, pattern=r"^spl:director:quote$"))
