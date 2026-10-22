@@ -7,7 +7,7 @@ from telegram.ext import ApplicationHandlerStop
 from neyrobot_prod.studio_prompt_telegram import (
     category_buttons, template_page, resolve_template_callback,
 )
-from neyrobot_prod.studio_prompt_library import list_prompt_categories
+from neyrobot_prod.studio_prompt_library import list_prompt_categories, get_prompt_template
 
 
 def _keyboard(buttons):
@@ -69,8 +69,24 @@ async def cb_studio_prompts(update, context):
             f'🎬 {item["title"]}\n\n{item["prompt"]}\n\n'
             "Это заготовка. Скопируйте и отредактируйте текст перед запуском генерации.",
             InlineKeyboardMarkup([[
-                InlineKeyboardButton("📚 Категории", callback_data="spl:home")
-            ]]),
+                InlineKeyboardButton("✏️ Использовать промпт", callback_data=f'spl:use:{item["id"]}')
+            ], [InlineKeyboardButton("📚 Категории", callback_data="spl:home")]]),
+        )
+        raise ApplicationHandlerStop
+    if data.startswith("spl:use:"):
+        parts = data.split(":")
+        item = get_prompt_template(parts[2]) if len(parts) == 3 else None
+        if item is None:
+            await q.message.reply_text("Шаблон не найден.")
+            raise ApplicationHandlerStop
+        context.user_data["studio_prompt_draft"] = item["prompt"]
+        await q.message.reply_text(
+            "✏️ Промпт подготовлен для редактирования.\n\n"
+            + item["prompt"]
+            + "\n\nСкопируйте текст, внесите изменения и затем выберите "
+              "«Авторежиссёр» в меню бота. Отправка этого текста в режим "
+              "Авторежиссёра может запустить платную генерацию; "
+              "перед этим проверьте стоимость и настройки."
         )
         raise ApplicationHandlerStop
     await q.message.reply_text("Неизвестная команда каталога.")
