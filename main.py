@@ -19749,6 +19749,8 @@ def build_application() -> "Application":
     app.add_handler(CommandHandler("start",        cmd_start))
     app.add_handler(CommandHandler("help",         cmd_help))
     app.add_handler(CommandHandler("examples",     cmd_examples))
+    from neyrobot_prod.studio_prompt_handlers import cmd_studio_prompts, cb_studio_prompts
+    app.add_handler(CommandHandler("prompts", cmd_studio_prompts))
     app.add_handler(CommandHandler("version",      cmd_version))
     app.add_handler(CommandHandler("engines",      cmd_engines))
     app.add_handler(CommandHandler("plans",        cmd_plans))
@@ -19797,6 +19799,7 @@ def build_application() -> "Application":
 
     # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
     # 1) Подписка/оплаты
+    app.add_handler(CallbackQueryHandler(cb_studio_prompts, pattern=r"^spl:"))
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
     async def _on_ad_caption_style_callback(update, context):
