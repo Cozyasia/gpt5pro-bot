@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-_CAPTION = re.compile(r"^\s*(?:ТИТРЫ|ТИТР|CAPTIONS?)\s*:\s*(\d+)\s*[-–—]\s*(\d+)\s*\|\s*(.+)$", re.I)
+_CAPTION = re.compile(r"^\s*(?:ТИТРЫ|ТИТР|CAPTIONS?)\s*:\s*(\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)\s*\|\s*(.+)$", re.I)
 _DURATION = re.compile(r"(\d+)\s*(?:секунд[а-я]*|сек\.?|seconds?|s)\b", re.I)
 
 
