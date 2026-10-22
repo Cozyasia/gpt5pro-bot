@@ -19805,6 +19805,28 @@ def build_application() -> "Application":
 
     # === ПАТЧ 4: Порядок callback-хендлеров (узкие → общие) ===
     # 1) Подписка/оплаты
+    async def _studio_director_quote_callback(update, context):
+        q = update.callback_query
+        await q.answer()
+        draft = context.user_data.get("studio_prompt_draft")
+        if not draft:
+            await q.message.reply_text("Черновик не найден. Начните с /prompts.")
+            return
+        import re
+        match = re.search(r"(?i)(\\d+)\\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", draft)
+        duration = max(4, min(30, int(match.group(1)) if match else 20))
+        # This is an illustrative one-scene baseline, NOT a final payable quote:
+        # the LLM scene planner determines the actual number and lengths.
+        baseline = _video_provider_cost_usd("seedance", duration)
+        await q.message.reply_text(
+            f"💳 Ориентир для Seedance: {duration} сек, одна сцена — "
+            f"{_retail_credits(baseline)} кредитов.\\n"
+            "Это НЕ окончательная цена: Авторежиссёр может создать несколько сцен. "
+            "Точная сумма рассчитывается после составления плана сцен. "
+            "Генерация не запущена, списаний нет."
+        )
+
+    app.add_handler(CallbackQueryHandler(_studio_director_quote_callback, pattern=r"^spl:director:quote$"))
     app.add_handler(CallbackQueryHandler(cb_studio_prompts, pattern=r"^spl:"))
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
 
