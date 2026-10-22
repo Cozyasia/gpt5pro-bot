@@ -17679,6 +17679,12 @@ async def on_text(
     else:
         text = (update.message.text or "").strip()
 
+    # Studio prompt edit is an explicit one-message draft workflow; no provider call.
+    if context.user_data.get("studio_prompt_awaiting_edit"):
+        from neyrobot_prod.studio_prompt_handlers import receive_prompt_draft
+        if await receive_prompt_draft(update, context, text):
+            return
+
     # Idempotency guard: the priority Presentation Studio handler may already own this update.
     with contextlib.suppress(Exception):
         if context.chat_data.get("_presentation_last_update_token") == _presentation_update_token(update):
