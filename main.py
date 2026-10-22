@@ -10984,6 +10984,13 @@ async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
+# Durable one-shot quotes. Claimed orders never auto-restart paid provider calls.
+from neyrobot_prod.studio_quote_store import StudioQuoteStore
+_STUDIO_QUOTE_STORE = StudioQuoteStore(os.environ.get(
+    "STUDIO_QUOTE_DB_PATH", DB_PATH
+))
+
+
 async def _start_video_studio(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -11065,6 +11072,47 @@ async def _start_video_studio(
         await update.effective_message.reply_text("❌ План сцен короче запрошенного ролика. Генерация не запущена.")
         return False
     provider_cost = sum(_video_provider_cost_usd("seedance", sec) for sec in scene_seconds)
+    # Freeze the exact approved plan and retail price before displaying consent.
+    token = uuid.uuid4().hex[:20]
+    _STUDIO_QUOTE_STORE.create(
+        token, update.effective_user.id, update.effective_chat.id,
+        {
+            "prompt": prompt,
+            "plan": plan.as_dict(),
+            "board_visual_prompt": director_board.visual_prompt,
+            "duration": duration,
+            "scene_seconds": scene_seconds,
+            "provider_cost": provider_cost,
+            "mode": mode,
+            "ad_captions": ad_captions,
+            "ad_style": ad_style,
+        },
+        _retail_credits(provider_cost),
+    )
+    await update.effective_message.reply_text(
+        f"💳 План готов: {len(plan.scenes)} сцен; {duration} сек; {plan.aspect}.\n"
+        f"Итоговая стоимость: {_retail_credits(provider_cost)} кредитов.\n"
+        "Сумма рассчитана по длительности всех сцен. "
+        "Кредиты пока не списаны. Подтвердите запуск в течение 10 минут.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Оплатить и создать", callback_data=f"studio:quote:yes:{token}"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"studio:quote:no:{token}"),
+        ]]),
+    )
+    return True
+
+
+async def _execute_video_studio_quote(update, context, quote):
+    """Execute the exact approved scene plan; never recompile it."""
+    prompt = quote["prompt"]
+    plan = quote["plan"]
+    director_board = quote["board"]
+    duration = quote["duration"]
+    scene_seconds = quote["scene_seconds"]
+    provider_cost = quote["provider_cost"]
+    mode = quote["mode"]
+    ad_captions = quote["ad_captions"]
+    ad_style = quote["ad_style"]
     label = "Авторежиссёр + автомонтаж" if mode == "director" else "Автомонтаж сцен"
 
     async def _go():
@@ -17927,7 +17975,16 @@ async def on_text(
 
     # Video Studio: one prompt -> validated scene plan -> Seedance scenes -> montage.
     if context.user_data.get("awaiting_video_studio_prompt"):
-        await _start_video_studio(update, context, text)
+        prompt = (text or "").strip()
+        if not prompt:
+            await update.effective_message.reply_text("Пришлите непустой сценарий.")
+            return
+        if len(prompt) > 12000:
+            await update.effective_message.reply_text("Сценарий слишком длинный (максимум 12 000 символов).")
+            return
+        # No paid generation until the scene plan has been priced and approved.
+        context.user_data.pop("awaiting_video_studio_prompt", None)
+        await _start_video_studio(update, context, prompt)
         return
 
     # Видео по тексту/голосу: ждём prompt после выбора движка.
@@ -19826,6 +19883,62 @@ def build_application() -> "Application":
             "Генерация не запущена, списаний нет."
         )
 
+    async def _studio_quote_confirm(update, context):
+        q = update.callback_query
+        data = q.data or ""
+        parts = data.split(":")
+        if len(parts) != 4:
+            await q.answer("Некорректное подтверждение.", show_alert=True)
+            return
+        token = parts[3]
+        if parts[2] not in ("yes", "no"):
+            await q.answer("Некорректное действие.", show_alert=True)
+            return
+        approved = parts[2] == "yes"
+        snapshot = _STUDIO_QUOTE_STORE.decide(
+            token, q.from_user.id, update.effective_chat.id, approved
+        )
+        if not approved:
+            await q.answer("Отмена обработана")
+            await q.message.reply_text(
+                "Запрос на отмену обработан. Если предложение уже было подтверждено, "
+                "повторное нажатие не изменяет выполняющийся заказ."
+            )
+            return
+        if snapshot is None:
+            await q.answer(
+                "Предложение уже обработано, истекло или принадлежит другому пользователю.",
+                show_alert=True,
+            )
+            return
+        from types import SimpleNamespace
+        raw = snapshot["plan"]
+        try:
+            plan = scene_plan_from_dict(
+                raw["plan"],
+                expected_duration_s=int(raw["duration"]),
+                expected_aspect=raw["plan"]["aspect"],
+                require_lip_sync=False,
+            )
+            quote = {
+                **raw,
+                "plan": plan,
+                "board": SimpleNamespace(visual_prompt=raw["board_visual_prompt"]),
+            }
+            await q.answer("План подтверждён")
+            await _execute_video_studio_quote(update, context, quote)
+            # The legacy payment wrapper returns None for success AND failures.
+            # Do not record 'completed' without a verifiable delivery/charge receipt.
+            _STUDIO_QUOTE_STORE.mark(token, "needs_review")
+        except Exception:
+            _STUDIO_QUOTE_STORE.mark(token, "needs_review")
+            log.exception("Studio quote execution requires review: %s", token)
+            await q.message.reply_text(
+                "⚠️ Заказ требует проверки. Не подтверждайте повторно: "
+                "повторная генерация автоматически не запускается."
+            )
+
+    app.add_handler(CallbackQueryHandler(_studio_quote_confirm, pattern=r"^studio:quote:(yes|no):[a-f0-9]{20}$"))
     app.add_handler(CallbackQueryHandler(_studio_director_quote_callback, pattern=r"^spl:director:quote$"))
     app.add_handler(CallbackQueryHandler(cb_studio_prompts, pattern=r"^spl:"))
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
