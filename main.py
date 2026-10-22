@@ -11087,8 +11087,8 @@ async def _start_video_studio(
         "ad_style": ad_style,
     }
     await update.effective_message.reply_text(
-        f"💳 План готов: {len(plan.scenes)} сцен; {duration} сек; {plan.aspect}.\\n"
-        f"Итоговая стоимость: {_retail_credits(provider_cost)} кредитов.\\n"
+        f"💳 План готов: {len(plan.scenes)} сцен; {duration} сек; {plan.aspect}.\n"
+        f"Итоговая стоимость: {_retail_credits(provider_cost)} кредитов.\n"
         "Сумма рассчитана по длительности всех сцен. "
         "Кредиты пока не списаны. Подтвердите запуск в течение 10 минут.",
         reply_markup=InlineKeyboardMarkup([[
