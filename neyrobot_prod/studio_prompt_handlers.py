@@ -133,7 +133,7 @@ async def receive_prompt_draft(update, context, text: str) -> bool:
     context.user_data["studio_prompt_draft"] = text.strip()
     context.user_data.pop("studio_prompt_awaiting_edit", None)
     await update.effective_message.reply_text(
-        "🎬 Черновик готов к подготовке Авторежиссёра. Генерация не запущена.\\n"
+        "🎬 Черновик готов к подготовке Авторежиссёра. Генерация не запущена.\n"
         "Для проверки сценария нажмите кнопку ниже.",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🎬 Проверить для Авторежиссёра", callback_data="spl:director:preview")
