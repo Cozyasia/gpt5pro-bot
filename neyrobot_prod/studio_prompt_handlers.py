@@ -93,7 +93,10 @@ async def cb_studio_prompts(update, context):
             f"Длительность: {duration} сек. Формат: {aspect}.\\n\\n"
             "Это только проверка сценария, не расчёт стоимости. "
             "Генерация не запущена. Для запуска требуется отдельное "
-            "подтверждение с расчётом цены, которое будет добавлено следующим этапом."
+            "подтверждение после точного расчёта цены.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("💳 Ориентир стоимости", callback_data="spl:director:quote")
+            ]])
         )
         raise ApplicationHandlerStop
     if data.startswith("spl:use:"):
