@@ -1,4 +1,4 @@
-"""Telegram UI for the Studio prompt library. No paid generation."""
+"""Read-only Telegram prompt catalog with in-place navigation."""
 from __future__ import annotations
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -7,6 +7,7 @@ from telegram.ext import ApplicationHandlerStop
 from neyrobot_prod.studio_prompt_telegram import (
     category_buttons, template_page, resolve_template_callback,
 )
+from neyrobot_prod.studio_prompt_library import list_prompt_categories
 
 
 def _keyboard(buttons):
@@ -21,12 +22,17 @@ async def cmd_studio_prompts(update, context):
     )
 
 
+async def _edit(q, text, markup):
+    # A callback originates from a bot message; edit instead of posting another menu.
+    await q.edit_message_text(text, reply_markup=markup)
+
+
 async def cb_studio_prompts(update, context):
     q = update.callback_query
     data = q.data or ""
     await q.answer()
     if data == "spl:home":
-        await q.message.reply_text("🎬 Категории промптов:", reply_markup=_keyboard(category_buttons()))
+        await _edit(q, "🎬 Библиотека промптов\nВыберите категорию:", _keyboard(category_buttons()))
         raise ApplicationHandlerStop
     if data.startswith("spl:c:"):
         parts = data.split(":")
@@ -38,19 +44,19 @@ async def cb_studio_prompts(update, context):
         except (ValueError, TypeError):
             await q.message.reply_text("Страница каталога недоступна.")
             raise ApplicationHandlerStop
-        buttons = list(page["buttons"])
         nav = []
         if page["previous"]:
             nav.append(InlineKeyboardButton("⬅️ Назад", callback_data=page["previous"]))
         if page["next"]:
             nav.append(InlineKeyboardButton("Далее ➡️", callback_data=page["next"]))
-        rows = [[InlineKeyboardButton(label, callback_data=cb)] for label, cb in buttons]
+        rows = [[InlineKeyboardButton(label, callback_data=cb)] for label, cb in page["buttons"]]
         if nav:
             rows.append(nav)
         rows.append([InlineKeyboardButton("📚 Категории", callback_data="spl:home")])
-        await q.message.reply_text(
-            f'🎬 {page["category"]}: {page["total"]} шаблонов. Страница {page["page"] + 1}.',
-            reply_markup=InlineKeyboardMarkup(rows),
+        names = {c["id"]: c["title"] for c in list_prompt_categories()}
+        await _edit(q,
+            f'🎬 {names[page["category"]]}: {page["total"]} шаблонов. Страница {page["page"] + 1}.',
+            InlineKeyboardMarkup(rows),
         )
         raise ApplicationHandlerStop
     if data.startswith("spl:p:"):
@@ -59,11 +65,10 @@ async def cb_studio_prompts(update, context):
             await q.message.reply_text("Шаблон не найден.")
             raise ApplicationHandlerStop
         context.user_data["studio_prompt_selected_id"] = item["id"]
-        # Display text without running a provider. User can copy/edit before generation.
-        await q.message.reply_text(
+        await _edit(q,
             f'🎬 {item["title"]}\n\n{item["prompt"]}\n\n'
             "Это заготовка. Скопируйте и отредактируйте текст перед запуском генерации.",
-            reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardMarkup([[
                 InlineKeyboardButton("📚 Категории", callback_data="spl:home")
             ]]),
         )
