@@ -10984,6 +10984,10 @@ async def _run_kling_text_shorts(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
+# Ephemeral quote store. Expired/restarted quotes fail closed without a charge.
+_STUDIO_PENDING_QUOTES = {}
+
+
 async def _start_video_studio(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -11065,17 +11069,47 @@ async def _start_video_studio(
         await update.effective_message.reply_text("❌ План сцен короче запрошенного ролика. Генерация не запущена.")
         return False
     provider_cost = sum(_video_provider_cost_usd("seedance", sec) for sec in scene_seconds)
-    # Persist only serializable metadata; never hold a paid callable in user_data.
-    # This PR deliberately stops after the exact quote. A subsequent change must
-    # implement a restart-safe confirm/execution path reusing this exact plan.
+    # Pending quotes are deliberately ephemeral: after a process restart the
+    # user must re-quote, never silently regenerate a different plan.
+    token = uuid.uuid4().hex[:20]
+    _STUDIO_PENDING_QUOTES[token] = {
+        "user_id": update.effective_user.id,
+        "chat_id": update.effective_chat.id,
+        "created": time.time(),
+        "prompt": prompt,
+        "plan": plan,
+        "board": director_board,
+        "duration": duration,
+        "scene_seconds": scene_seconds,
+        "provider_cost": provider_cost,
+        "mode": mode,
+        "ad_captions": ad_captions,
+        "ad_style": ad_style,
+    }
     await update.effective_message.reply_text(
         f"💳 План готов: {len(plan.scenes)} сцен; {duration} сек; {plan.aspect}.\\n"
-        f"Расчётная стоимость: {_retail_credits(provider_cost)} кредитов.\\n"
-        "Генерация не запущена и кредиты не списаны. "
-        "Подтверждение оплаты будет доступно после внедрения безопасного запуска."
+        f"Итоговая стоимость: {_retail_credits(provider_cost)} кредитов.\\n"
+        "Сумма рассчитана по длительности всех сцен. "
+        "Кредиты пока не списаны. Подтвердите запуск в течение 10 минут.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Оплатить и создать", callback_data=f"studio:quote:yes:{token}"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"studio:quote:no:{token}"),
+        ]]),
     )
     return True
 
+
+async def _execute_video_studio_quote(update, context, quote):
+    """Execute the exact approved scene plan; never recompile it."""
+    prompt = quote["prompt"]
+    plan = quote["plan"]
+    director_board = quote["board"]
+    duration = quote["duration"]
+    scene_seconds = quote["scene_seconds"]
+    provider_cost = quote["provider_cost"]
+    mode = quote["mode"]
+    ad_captions = quote["ad_captions"]
+    ad_style = quote["ad_style"]
     label = "Авторежиссёр + автомонтаж" if mode == "director" else "Автомонтаж сцен"
 
     async def _go():
@@ -19846,6 +19880,31 @@ def build_application() -> "Application":
             "Генерация не запущена, списаний нет."
         )
 
+    async def _studio_quote_confirm(update, context):
+        q = update.callback_query
+        data = q.data or ""
+        parts = data.split(":")
+        if len(parts) != 4:
+            await q.answer("Некорректное подтверждение.", show_alert=True)
+            return
+        token = parts[3]
+        quote = _STUDIO_PENDING_QUOTES.get(token)
+        if not quote or time.time() - quote["created"] > 600:
+            _STUDIO_PENDING_QUOTES.pop(token, None)
+            await q.answer("Срок предложения истёк. Подготовьте план заново.", show_alert=True)
+            return
+        if quote["user_id"] != q.from_user.id or quote["chat_id"] != update.effective_chat.id:
+            await q.answer("Подтверждение принадлежит другому пользователю.", show_alert=True)
+            return
+        _STUDIO_PENDING_QUOTES.pop(token, None)
+        if parts[2] == "no":
+            await q.answer("Отменено")
+            await q.message.reply_text("Генерация отменена. Кредиты не списаны.")
+            return
+        await q.answer("Запускаю по утверждённому плану")
+        await _execute_video_studio_quote(update, context, quote)
+
+    app.add_handler(CallbackQueryHandler(_studio_quote_confirm, pattern=r"^studio:quote:(yes|no):[a-f0-9]{20}$"))
     app.add_handler(CallbackQueryHandler(_studio_director_quote_callback, pattern=r"^spl:director:quote$"))
     app.add_handler(CallbackQueryHandler(cb_studio_prompts, pattern=r"^spl:"))
     app.add_handler(CallbackQueryHandler(on_cb_plans, pattern=r"^(?:plan:|pay:)$|^(?:plan:|pay:).+"))
