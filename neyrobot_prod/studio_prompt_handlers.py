@@ -80,14 +80,39 @@ async def cb_studio_prompts(update, context):
             await q.message.reply_text("Шаблон не найден.")
             raise ApplicationHandlerStop
         context.user_data["studio_prompt_draft"] = item["prompt"]
+        context.user_data["studio_prompt_awaiting_edit"] = True
         await q.message.reply_text(
-            "✏️ Промпт подготовлен для редактирования.\n\n"
-            + item["prompt"]
-            + "\n\nСкопируйте текст, внесите изменения и затем выберите "
-              "«Авторежиссёр» в меню бота. Отправка этого текста в режим "
-              "Авторежиссёра может запустить платную генерацию; "
-              "перед этим проверьте стоимость и настройки."
+            "✏️ Отправьте следующим сообщением отредактированный текст промпта. "
+            "Я сохраню его как черновик и покажу перед генерацией. "
+            "Деньги не списываются. Для отмены отправьте /cancel."
         )
         raise ApplicationHandlerStop
     await q.message.reply_text("Неизвестная команда каталога.")
     raise ApplicationHandlerStop
+
+async def receive_prompt_draft(update, context, text: str) -> bool:
+    """Intercept exactly one text edit when the user explicitly chose Use Prompt."""
+    if not context.user_data.get("studio_prompt_awaiting_edit"):
+        return False
+    if text.strip().lower() == "/cancel":
+        context.user_data.pop("studio_prompt_awaiting_edit", None)
+        context.user_data.pop("studio_prompt_draft", None)
+        await update.effective_message.reply_text("Редактирование промпта отменено.")
+        return True
+    if text.startswith("/"):
+        return False
+    if not text.strip():
+        await update.effective_message.reply_text("Отправьте непустой текст промпта.")
+        return True
+    if len(text) > 12000:
+        await update.effective_message.reply_text("Промпт слишком длинный (максимум 12 000 символов).")
+        return True
+    context.user_data["studio_prompt_draft"] = text.strip()
+    context.user_data.pop("studio_prompt_awaiting_edit", None)
+    await update.effective_message.reply_text(
+        "✅ Черновик сохранён. Генерация не запущена.\n\n"
+        + text.strip()
+        + "\n\nДля создания видео откройте «Авторежиссёр» в меню бота "
+          "и отправьте этот текст после проверки условий и стоимости."
+    )
+    return True
