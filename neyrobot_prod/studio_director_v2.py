@@ -13,8 +13,8 @@ _DURATION = re.compile(r"(\d+)\s*(?:секунд[а-я]*|сек\.?|seconds?|s)\b
 
 @dataclass(frozen=True)
 class Caption:
-    start: int
-    end: int
+    start: float
+    end: float
     text: str
 
 
@@ -36,7 +36,7 @@ def prepare_storyboard(user_text: str, *, duration: int | None = None, aspect_ra
     for line in lines:
         match = _CAPTION.match(line)
         if match:
-            start, end = int(match.group(1)), int(match.group(2))
+            start, end = float(match.group(1).replace(",", ".")), float(match.group(2).replace(",", "."))
             if start >= end:
                 raise ValueError("Caption interval must have positive duration")
             captions.append(Caption(start, end, match.group(3).strip()))
