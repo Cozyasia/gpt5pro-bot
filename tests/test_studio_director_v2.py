@@ -16,7 +16,7 @@ class StoryboardTests(unittest.TestCase):
 
     def test_fractional_caption_is_removed_from_visual_prompt(self):
         board = prepare_storyboard(
-            "Камера облетает лампу.\\nТИТРЫ: 0,5-3.5 | ТЕКСТ",
+            "Камера облетает лампу." + chr(10) + "ТИТРЫ: 0,5-3.5 | ТЕКСТ",
             duration=8,
         )
         self.assertEqual(len(board.captions), 1)
