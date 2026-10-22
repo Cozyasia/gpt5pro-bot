@@ -73,6 +73,29 @@ async def cb_studio_prompts(update, context):
             ], [InlineKeyboardButton("📚 Категории", callback_data="spl:home")]]),
         )
         raise ApplicationHandlerStop
+    if data == "spl:director:preview":
+        draft = context.user_data.get("studio_prompt_draft")
+        if not draft:
+            await q.message.reply_text("Черновик не найден. Выберите промпт заново.")
+            raise ApplicationHandlerStop
+        import re
+        from neyrobot_prod.studio_director_v2 import prepare_storyboard
+        match = re.search(r"(?i)(\\d+)\\s*(?:секунд(?:ы|у)?|сек(?:унд)?|с)(?![а-яa-z])", draft)
+        duration = max(4, min(30, int(match.group(1)) if match else 20))
+        aspect = next((v for v in ("9:16", "16:9", "1:1", "4:5") if v in draft), "9:16")
+        try:
+            prepare_storyboard(draft, duration=duration, aspect_ratio=aspect)
+        except ValueError as exc:
+            await q.message.reply_text("❌ Ошибка сценария: " + str(exc)[:500])
+            raise ApplicationHandlerStop
+        await q.message.reply_text(
+            f"🎬 Предварительная проверка пройдена.\\n"
+            f"Длительность: {duration} сек. Формат: {aspect}.\\n\\n"
+            "Это только проверка сценария, не расчёт стоимости. "
+            "Генерация не запущена. Для запуска требуется отдельное "
+            "подтверждение с расчётом цены, которое будет добавлено следующим этапом."
+        )
+        raise ApplicationHandlerStop
     if data.startswith("spl:use:"):
         parts = data.split(":")
         item = get_prompt_template(parts[2]) if len(parts) == 3 else None
@@ -109,6 +132,13 @@ async def receive_prompt_draft(update, context, text: str) -> bool:
         return True
     context.user_data["studio_prompt_draft"] = text.strip()
     context.user_data.pop("studio_prompt_awaiting_edit", None)
+    await update.effective_message.reply_text(
+        "🎬 Черновик готов к подготовке Авторежиссёра. Генерация не запущена.\n"
+        "Для проверки сценария нажмите кнопку ниже.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🎬 Проверить для Авторежиссёра", callback_data="spl:director:preview")
+        ]]),
+    )
     await update.effective_message.reply_text(
         "✅ Черновик сохранён. Генерация не запущена.\n\n"
         + text.strip()
