@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("BOT_TOKEN", "123456:test-token")
 os.environ.setdefault("PUBLIC_URL", "https://test.onrender.com")
+os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 import main
 
 
