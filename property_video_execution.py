@@ -347,3 +347,48 @@ async def recover_after_restart(application) -> None:
             log.info("PROPERTY_VIDEO_RECOVERED job=%s engine=%s chat_id=%s", job, engine, chat_id)
         except Exception:
             log.exception("property video restart recovery failed job=%s", job)
+
+
+
+    # A deployment can replace an ephemeral SQLite file after provider scenes
+    # have already been written to the persistent disk. Owner-test jobs are
+    # safe to recover from their durable plan manifest without inventing a
+    # retry or charging the user's wallet.
+    known_jobs = {str(row[0]) for row in rows}
+    for manifest_path in _root().glob("*/plan.json"):
+        job = manifest_path.parent.name
+        if job in known_jobs or (manifest_path.parent / "recovery_delivered").exists():
+            continue
+        try:
+            metadata = json.loads(manifest_path.read_text(encoding="utf-8"))
+            user_id = int(metadata["user_id"])
+            chat_id = int(metadata.get("chat_id") or user_id)
+            if not is_property_video_owner_free(user_id):
+                continue
+            engine = str(metadata["engine"])
+            duration = int(metadata["duration"])
+            scene_count = int(metadata["scene_count"])
+            folder = manifest_path.parent
+            scenes = [folder / f"scene_{i:02d}.mp4" for i in range(scene_count)]
+            if not all(path.is_file() and path.stat().st_size > 0 for path in scenes):
+                continue
+            output = folder / "property_review.mp4"
+            if not output.is_file() or output.stat().st_size <= 0:
+                await asyncio.to_thread(assemble_property_video, [str(path) for path in scenes], str(output), duration)
+            reserve(
+                db, job, user_id, 0,
+                provider_cost_usd=float(metadata.get("provider_cost_usd", 0) or 0),
+                metadata={**metadata, "recovered_orphan": True},
+                owner_bypass=True,
+            )
+            with output.open("rb") as handle:
+                await application.bot.send_video(
+                    chat_id=chat_id,
+                    video=handle,
+                    caption=f"🏡 Восстановленный обзор недвижимости · {_provider_label(engine)} · {duration} сек",
+                    supports_streaming=True,
+                )
+            (folder / "recovery_delivered").write_text("ok\n", encoding="utf-8")
+            log.info("PROPERTY_VIDEO_ORPHAN_RECOVERED job=%s engine=%s chat_id=%s", job, engine, chat_id)
+        except Exception:
+            log.exception("property video orphan recovery failed manifest=%s", manifest_path)
