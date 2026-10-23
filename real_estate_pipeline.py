@@ -17,7 +17,29 @@ def plan_shots(photo_ids: list[str], duration: int) -> list[dict]:
     ]
 
 
-def concatenate_mp4(clips: list[str], output: str, durations: list[float] | None = None) -> str:
+def _audio_tempo_filters(factor: float) -> str:
+    """Build atempo filters for any positive playback speed."""
+    if factor <= 0:
+        raise ValueError("Playback speed must be positive")
+    filters = []
+    remaining = factor
+    while remaining > 2.0:
+        filters.append("atempo=2.0")
+        remaining /= 2.0
+    while remaining < 0.5:
+        filters.append("atempo=0.5")
+        remaining /= 0.5
+    filters.append(f"atempo={remaining:.8f}")
+    return ",".join(filters)
+
+
+def concatenate_mp4(
+    clips: list[str],
+    output: str,
+    durations: list[float] | None = None,
+    *,
+    retime_to_fit: bool = False,
+) -> str:
     """Normalize each scene and concat through FFmpeg; no shell interpolation."""
     if not clips:
         raise ValueError("No clips supplied")
@@ -29,11 +51,33 @@ def concatenate_mp4(clips: list[str], output: str, durations: list[float] | None
     for i, clip in enumerate(clips):
         source = Path(clip).resolve(strict=True)
         intermediate = target.parent / f"normalized_{i:03d}.mp4"
+        video_filter = "scale=720:1280:force_original_aspect_ratio=decrease,"
+        video_filter += "pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
+        audio_filter = None
+        if retime_to_fit and durations is not None:
+            target_duration = float(durations[i])
+            if target_duration <= 0:
+                raise ValueError("Scene durations must be positive")
+            probe = subprocess.run([
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", str(source),
+            ], check=True, capture_output=True, text=True, timeout=30)
+            source_duration = float(probe.stdout.strip())
+            if source_duration <= 0:
+                raise ValueError(f"Clip has no positive duration: {source}")
+            playback_speed = source_duration / target_duration
+            video_filter = f"setpts=PTS/{playback_speed:.10f}," + video_filter
+            streams = subprocess.run([
+                "ffprobe", "-v", "error", "-select_streams", "a:0",
+                "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(source),
+            ], check=True, capture_output=True, text=True, timeout=30)
+            if streams.stdout.strip():
+                audio_filter = _audio_tempo_filters(playback_speed)
         command = [
             "ffmpeg", "-nostdin", "-y", "-i", str(source),
             *(["-t", f"{float(durations[i]):.3f}"] if durations is not None else []),
-            "-vf", "scale=720:1280:force_original_aspect_ratio=decrease,"
-                   "pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
+            "-vf", video_filter,
+            *(["-af", audio_filter] if audio_filter else []),
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ar", "48000", "-ac", "2",
             "-movflags", "+faststart", str(intermediate)
