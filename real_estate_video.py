@@ -82,7 +82,11 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                    [("Seedance", "engine:seedance")]]),
         )
     elif action.startswith("engine:"):
-        state["engine"] = action.split(":", 1)[1]
+        engine = action.split(":", 1)[1]
+        if engine not in ENGINES:
+            await query.message.reply_text("Неизвестный движок.")
+            return
+        state["engine"] = engine
         await query.message.reply_text(
             "Выберите длительность:", reply_markup=keyboard([
                 [("8 секунд (Veo)", "duration:8")],
@@ -94,6 +98,9 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         duration = int(action.split(":", 1)[1])
         if state.get("engine") == "veo" and duration != 8:
             await query.message.reply_text("Для Veo сейчас поддерживается только 8 секунд. Выберите 8 секунд.")
+            return
+        if duration not in (8, 10, 20, 30):
+            await query.message.reply_text("Недопустимая длительность.")
             return
         state["duration"] = duration
         state["awaiting_prompt"] = True
@@ -130,7 +137,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             state.clear()
         except Exception:
             state["generating"] = False
-            await query.message.reply_text("Не удалось выполнить генерацию. Попробуйте ещё раз; проверьте логи провайдера.")
+            await query.message.reply_text("Результат генерации не подтверждён. Не запускайте повторно: проверьте существующую операцию у провайдера, чтобы избежать двойного списания.")
 
 
 async def confirm(query, state):
