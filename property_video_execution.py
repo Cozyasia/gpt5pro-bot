@@ -12,6 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from property_video_billing import (
+    _connect,
     claim_assembly,
     job_metadata,
     mark_delivered,
@@ -292,7 +293,7 @@ async def recover_after_restart(application) -> None:
     """
     db = os.getenv("DB_PATH", "subs.db")
     try:
-        with sqlite3.connect(db) as con:
+        with _connect(db) as con:
             rows = con.execute(
                 """SELECT job_id,status,result_path,metadata_json
                    FROM property_video_charges
