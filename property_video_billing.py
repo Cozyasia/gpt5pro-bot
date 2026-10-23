@@ -138,6 +138,19 @@ def record_result(db_path: str, job_id: str, result_path: str) -> bool:
         return changed == 1
 
 
+def claim_assembly(db_path: str, job_id: str) -> bool:
+    """Claim a submitted/assembling job for post-restart local assembly."""
+    with _connect(db_path) as con:
+        con.execute("BEGIN IMMEDIATE")
+        changed = con.execute(
+            """UPDATE property_video_charges SET status='assembling',updated_at=CURRENT_TIMESTAMP
+               WHERE job_id=? AND status IN ('submitted','assembling')""",
+            (job_id,),
+        ).rowcount
+        con.commit()
+        return changed == 1
+
+
 def mark_delivered(db_path: str, job_id: str, *, telegram_file_id: str | None = None) -> bool:
     """Charge the reserved retail amount exactly once after Telegram delivery."""
     with _connect(db_path) as con:
