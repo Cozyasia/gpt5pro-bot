@@ -279,7 +279,12 @@ def assemble_property_video(scene_paths: list[str], output_path: str, duration: 
     """Normalize, concatenate and trim scenes to one Telegram-safe MP4."""
     if not scene_paths:
         raise PropertyVideoError("No generated scenes to assemble")
-    assembled = concatenate_mp4(scene_paths, output_path, durations=scene_durations)
+    assembled = concatenate_mp4(
+        scene_paths,
+        output_path,
+        durations=scene_durations,
+        retime_to_fit=scene_durations is not None,
+    )
     target = Path(output_path)
     if int(duration) <= 0:
         return assembled
