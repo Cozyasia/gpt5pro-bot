@@ -118,7 +118,7 @@ services:
   - key: GEMINI_VIDEO_BASE_URL
     value: https://generativelanguage.googleapis.com/v1beta
   - key: VEO_GOOGLE_MODEL
-    value: veo-3.1-fast-generate-preview
+    value: gemini-omni-1.1-flash
   - key: REAL_ESTATE_VIDEO_ENABLED
     value: '1'
   - key: PROPERTY_VIDEO_PAID_ENABLED

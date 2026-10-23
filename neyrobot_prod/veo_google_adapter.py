@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import time
+import uuid
 
 import httpx
 
@@ -68,6 +69,29 @@ def build_generate_payload(prompt: str, *, aspect_ratio: str = "16:9") -> dict:
             "aspectRatio": aspect_ratio,
             "durationSeconds": 8,
         },
+    }
+
+
+def build_omni_payload(
+    prompt: str,
+    first_image_b64: str,
+    last_image_b64: str | None = None,
+    *,
+    aspect_ratio: str = "16:9",
+) -> dict:
+    """Build the current Gemini Omni Flash multimodal video request."""
+    if not prompt.strip():
+        raise ValueError("Veo prompt is required")
+    if aspect_ratio not in ("9:16", "16:9"):
+        raise ValueError("Veo aspect ratio must be 9:16 or 16:9")
+    input_items = [{"type": "image", "data": first_image_b64, "mime_type": "image/jpeg"}]
+    if last_image_b64:
+        input_items.append({"type": "image", "data": last_image_b64, "mime_type": "image/jpeg"})
+    input_items.append({"type": "text", "text": prompt.strip()})
+    return {
+        "model": "gemini-omni-1.1-flash",
+        "input": input_items,
+        "response_format": {"type": "video", "aspect_ratio": aspect_ratio, "resolution": "720p"},
     }
 
 
@@ -132,6 +156,7 @@ class GoogleVeoClient:
         self.timeout_s = timeout_s
         self.poll_interval_s = poll_interval_s
         self.max_wait_s = max_wait_s
+        self._completed_results: dict[str, bytes] = {}
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -171,8 +196,21 @@ class GoogleVeoClient:
         prompt: str,
         *,
         reference_image: str | None = None,
+        reference_image_last: str | None = None,
         aspect_ratio: str = "9:16",
     ) -> str:
+        if self.model.startswith("gemini-omni"):
+            from pathlib import Path
+            if not reference_image:
+                raise ValueError("Gemini Omni property video requires a reference image")
+            first_b64 = base64.b64encode(Path(reference_image).read_bytes()).decode("ascii")
+            last_b64 = (
+                base64.b64encode(Path(reference_image_last).read_bytes()).decode("ascii")
+                if reference_image_last else None
+            )
+            return await self._submit_omni(
+                build_omni_payload(prompt, first_b64, last_b64, aspect_ratio=aspect_ratio)
+            )
         payload = build_generate_payload(prompt, aspect_ratio=aspect_ratio)
         if reference_image:
             from pathlib import Path
@@ -188,11 +226,41 @@ class GoogleVeoClient:
             }
         return await self._submit(payload)
 
+    async def _submit_omni(self, payload: dict) -> str:
+        url = f"{self.base_url}/interactions"
+        async with httpx.AsyncClient(timeout=self.timeout_s, follow_redirects=True) as client:
+            try:
+                response = await client.post(url, headers=self._headers, json=payload)
+            except httpx.RequestError as exc:
+                raise GoogleVeoSubmissionUncertain(
+                    "Gemini Omni submission outcome is unknown; do not retry"
+                ) from exc
+        if response.status_code >= 400:
+            if response.status_code in (402, 429):
+                raise GoogleVeoQuotaExceeded(
+                    f"Google Gemini Omni HTTP {response.status_code}: {response.text[:500]}"
+                )
+            if response.status_code >= 500:
+                raise GoogleVeoSubmissionUncertain(
+                    f"Google Gemini Omni submission returned HTTP {response.status_code}"
+                )
+            raise GoogleVeoError(f"Google Gemini Omni HTTP {response.status_code}: {response.text[:500]}")
+        payload_out = response.json()
+        token = str(payload_out.get("id") or "").strip() or f"inline-{uuid.uuid4().hex}"
+        immediate = self._extract_omni_video(payload_out)
+        if immediate:
+            self._completed_results[token] = immediate
+        return token
+
     async def extend(self, video_uri: str, prompt: str) -> bytes:
         operation = await self._submit(build_extend_payload(video_uri, prompt))
         return await self.poll_bytes(operation)
 
     async def poll_bytes(self, operation_name: str) -> bytes:
+        if operation_name in self._completed_results:
+            return GoogleVeoVideo(self._completed_results.pop(operation_name))
+        if self.model.startswith("gemini-omni"):
+            return await self._poll_omni(operation_name)
         deadline = time.monotonic() + self.max_wait_s
         async with httpx.AsyncClient(timeout=self.timeout_s, follow_redirects=True) as client:
             while time.monotonic() < deadline:
@@ -227,6 +295,47 @@ class GoogleVeoClient:
         raise GoogleVeoPollUncertain(
             "Google Veo operation polling timed out; reconcile the existing operation before retry"
         )
+
+    @staticmethod
+    def _extract_omni_video(payload: dict) -> bytes | None:
+        candidates = []
+        output_video = payload.get("output_video")
+        if isinstance(output_video, dict):
+            candidates.append(output_video)
+        steps = payload.get("steps")
+        if isinstance(steps, list):
+            for step in steps:
+                if isinstance(step, dict) and step.get("type") == "model_output":
+                    candidates.extend(step.get("content") or [])
+        for node in candidates:
+            if isinstance(node, dict) and isinstance(node.get("data"), str):
+                return base64.b64decode(node["data"])
+        return None
+
+    async def _poll_omni(self, interaction_id: str) -> bytes:
+        deadline = time.monotonic() + self.max_wait_s
+        async with httpx.AsyncClient(timeout=self.timeout_s, follow_redirects=True) as client:
+            while time.monotonic() < deadline:
+                try:
+                    response = await client.get(
+                        f"{self.base_url}/interactions/{interaction_id}",
+                        headers={"x-goog-api-key": self.api_key},
+                    )
+                except httpx.RequestError as exc:
+                    raise GoogleVeoPollUncertain("Google Gemini Omni polling failed") from exc
+                if response.status_code >= 400:
+                    raise GoogleVeoPollUncertain(
+                        f"Google Gemini Omni poll HTTP {response.status_code}: {response.text[:500]}"
+                    )
+                payload = response.json()
+                content = self._extract_omni_video(payload)
+                if content:
+                    return GoogleVeoVideo(content)
+                status = str(payload.get("status") or "").lower()
+                if status in {"failed", "error", "cancelled", "canceled"}:
+                    raise GoogleVeoOperationFailed(f"Google Gemini Omni interaction failed: {payload}")
+                await _async_sleep(self.poll_interval_s)
+        raise GoogleVeoPollUncertain("Google Gemini Omni interaction polling timed out")
 
     async def _download_descriptor(self, client, descriptor: dict) -> bytes:
         inline = descriptor.get("videoBytes") or descriptor.get("bytesBase64Encoded")

@@ -10,23 +10,33 @@ from telegram.ext import CallbackQueryHandler, MessageHandler, ContextTypes, fil
 PREFIX = "revideo:"
 PROMPTS = {
     "exterior": (
-        "Professional photorealistic luxury real-estate exterior walkthrough. Use the uploaded "
-        "photos as strict architectural references. Smooth gimbal dolly-in, subtle lateral "
-        "parallax, natural tropical daylight, realistic pool reflections. Preserve roof, "
-        "facade, windows, doors, landscaping and proportions. Never invent structural details. "
-        "No morphing, warping, or text."
+        "Professional photorealistic real-estate exterior walkthrough from the supplied renders. "
+        "Keep one continuous camera move rather than a slideshow. "
+        "A real camera operator moves on a stabilized gimbal: begin with a wide establishing "
+        "view, make a slow forward dolly and gentle lateral parallax around only the visible "
+        "facade, terrace and landscaping, then settle on the next supplied view when present. "
+        "Preserve roof, facade, windows, doors, terrain, outdoor furniture and proportions. "
+        "Never invent a pool, garden feature or structural detail that is not visible. "
+        "No static zoom, slideshow feel, morphing, warped geometry or text."
     ),
     "interior": (
-        "Professional photorealistic interior property tour based on the supplied photographs. "
-        "Slow stabilized walking camera, preserve consistent lighting, materials, furniture and "
-        "room geometry. Sequence rooms in upload order. Never invent additional bedrooms, "
-        "amenities, doors or a floor plan. No object morphing or warped walls."
+        "Professional photorealistic interior property tour based strictly on the supplied renders. "
+        "Keep one continuous camera move rather than a slideshow. "
+        "A real camera operator walks slowly on a stabilized gimbal through the photographed "
+        "rooms in upload order: forward dolly, gentle pan toward the next room and a natural "
+        "settle on the next supplied view when present. Preserve lighting, materials, furniture, "
+        "windows, doors and room geometry. Never invent additional bedrooms, amenities, doors or "
+        "a floor plan. No static zoom, slideshow feel, object morphing or warped walls."
     ),
     "full": (
-        "Premium real-estate film using every supplied property view in upload order. Start with "
-        "an establishing view, then follow the photographed spaces and details in sequence. "
-        "Preserve all visible architectural features and furniture. Do not label or connect "
-        "spaces that are not shown. No invented amenities or geometry changes."
+        "Premium cinematic real-estate walkthrough using every supplied property render in upload "
+        "order. A real camera operator starts with an establishing view, then moves continuously "
+        "through the photographed exterior and interior locations, using forward dolly, gentle "
+        "pan, lateral parallax and restrained orbit only when the geometry supports it. Each "
+        "transition must land on the next supplied view; alternate exterior and interior only when "
+        "the images actually show them. Preserve every visible architectural feature, material and "
+        "piece of furniture. Do not label, connect or invent spaces that are not shown. No static "
+        "zoom, slideshow feel, invented amenities, morphing or geometry changes."
     ),
 }
 ENGINES = {"kling": "Kling", "veo": "Google Veo", "seedance": "Seedance"}
@@ -63,6 +73,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action.startswith("type:"):
         state["type"] = action.split(":", 1)[1]
         state["photos"] = []
+        state["photo_keys"] = []
         await query.message.reply_text(
             "Пришлите фотографии объекта по порядку (до 10). Для интерьера загружайте комнаты "
             "в желаемом порядке обхода. Затем нажмите «Фото загружены».",
@@ -75,6 +86,13 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             f"Получено фотографий: {len(state['photos'])}. Выберите движок:",
             reply_markup=keyboard([[("Kling", "engine:kling")], [("Google Veo", "engine:veo")], [("Seedance", "engine:seedance")]]),
+        )
+    elif action == "photos_add":
+        count = len(state.get("photos") or [])
+        await query.message.reply_text(
+            f"📎 Добавляйте фотографии по порядку. Загружено: {count}/10. "
+            "После последней нажмите «Фото загружены».",
+            reply_markup=keyboard([[('✅ Фото загружены', 'photos_done')]]),
         )
     elif action.startswith("engine:"):
         engine = action.split(":", 1)[1]
@@ -176,13 +194,30 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if update.message.photo:
         file_id = update.message.photo[-1].file_id
+        photo_key = getattr(update.message.photo[-1], "file_unique_id", None) or file_id
     elif update.message.document and (update.message.document.mime_type or "").startswith("image/"):
         file_id = update.message.document.file_id
+        photo_key = getattr(update.message.document, "file_unique_id", None) or file_id
     else:
         return
-    if file_id not in state["photos"]:
-        state["photos"].append(file_id)
-    await update.message.reply_text(f"📸 Загружено: {len(state['photos'])}/10")
+    photo_keys = state.setdefault("photo_keys", [])
+    if photo_key in photo_keys or file_id in state["photos"]:
+        # Telegram can redeliver an album update or a photo with a new size.
+        # Do not emit a second progress line for a reference that was not added.
+        return
+    state["photos"].append(file_id)
+    photo_keys.append(photo_key)
+    count = len(state["photos"])
+    rows = [[("✅ Фото загружены", "photos_done")]]
+    if count < 10:
+        rows.append([("➕ Добавить ещё", "photos_add")])
+        suffix = " Можно добавить ещё или нажать «Фото загружены»."
+    else:
+        suffix = " Лимит достигнут — нажмите «Фото загружены»."
+    await update.message.reply_text(
+        f"📸 Загружено: {count}/10.{suffix}",
+        reply_markup=keyboard(rows),
+    )
 
 
 async def custom_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):

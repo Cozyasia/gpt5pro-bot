@@ -8,10 +8,21 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from property_video_billing import record_operation, reserve, status
-from property_video_execution import recover_after_restart
+from property_video_execution import recover_after_restart, execution_job
 
 
 class PropertyVideoRecoveryTests(unittest.TestCase):
+    def test_refunded_job_gets_a_new_execution_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = str(Path(td) / "subs.db")
+            state = {"job_id": "old-job"}
+            reserve(db, "old-job", 123, 0, provider_cost_usd=1.0, metadata={}, owner_bypass=True)
+            from property_video_billing import refund_before_submission
+            self.assertTrue(refund_before_submission(db, "old-job"))
+            job, current = execution_job(state, db)
+            self.assertNotEqual(job, "old-job")
+            self.assertIsNone(current)
+
     def test_restart_recovers_saved_scenes_without_provider_retry(self):
         with tempfile.TemporaryDirectory() as td:
             db = str(Path(td) / "subs.db")

@@ -9487,6 +9487,7 @@ async def _run_kling_photo_clip_result(
     duration_s: int,
     aspect: str,
     image_url: str = "",
+    image_tail_url: str = "",
     *,
     on_task_id=None,
     output_path: str = "",
@@ -9521,6 +9522,8 @@ async def _run_kling_photo_clip_result(
         # v61: music is added by Suno+ffmpeg. Native provider sound is not reliable here.
         "sound": "off",
     }
+    if image_tail_url.strip():
+        payload["image_tail"] = image_tail_url.strip()
     return await _create_and_poll_i2v_bytes(
         COMET_BASE_URL,
         KLING_API_KEY or COMET_API_KEY,
