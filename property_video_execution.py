@@ -11,6 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from property_video_billing import (
+    claim_assembly,
     job_metadata,
     mark_delivered,
     record_operation,
@@ -279,3 +280,68 @@ async def recover_ready(update, context):
             mark_delivered(db, job, telegram_file_id=getattr(getattr(sent, "video", None), "file_id", None))
             return
     await update.effective_message.reply_text("Сохранённого готового видеообзора не найдено.")
+
+
+
+async def recover_after_restart(application) -> None:
+    """Finish locally recoverable jobs after a Render/process restart.
+
+    Provider operations are never re-submitted here. Recovery only assembles
+    already downloaded scene MP4s and delivers an existing result.
+    """
+    db = os.getenv("DB_PATH", "subs.db")
+    try:
+        with sqlite3.connect(db) as con:
+            rows = con.execute(
+                """SELECT job_id,status,result_path,metadata_json
+                   FROM property_video_charges
+                   WHERE status IN ('submitted','assembling','ready')
+                   ORDER BY created_at ASC LIMIT 20"""
+            ).fetchall()
+    except Exception:
+        log.exception("property video restart recovery: database scan failed")
+        return
+
+    for job, current_status, result_path, raw_metadata in rows:
+        try:
+            metadata = json.loads(raw_metadata or "{}")
+            chat_id = int(metadata.get("chat_id") or metadata.get("user_id"))
+            duration = int(metadata["duration"])
+            engine = str(metadata["engine"])
+            scene_count = int(metadata["scene_count"])
+            folder = _root() / str(job)
+            output = Path(result_path) if result_path else folder / "property_review.mp4"
+
+            if current_status == "ready" and output.is_file() and output.stat().st_size > 0:
+                scene_paths = []
+            else:
+                scene_paths = [folder / f"scene_{i:02d}.mp4" for i in range(scene_count)]
+                if not all(path.is_file() and path.stat().st_size > 0 for path in scene_paths):
+                    log.warning(
+                        "PROPERTY_VIDEO_RECOVERY_WAIT job=%s status=%s scenes=%s/%s",
+                        job, current_status, sum(path.is_file() for path in scene_paths), scene_count,
+                    )
+                    continue
+                if not claim_assembly(db, str(job)) and current_status == "submitted":
+                    continue
+                await asyncio.to_thread(
+                    assemble_property_video,
+                    [str(path) for path in scene_paths],
+                    str(output),
+                    duration,
+                )
+                record_result(db, str(job), str(output))
+
+            with output.open("rb") as handle:
+                sent = await application.bot.send_video(
+                    chat_id=chat_id,
+                    video=handle,
+                    caption=f"🏡 Обзор недвижимости · {_provider_label(engine)} · {duration} сек",
+                    supports_streaming=True,
+                )
+            file_id = getattr(getattr(sent, "video", None), "file_id", None)
+            if not mark_delivered(db, str(job), telegram_file_id=file_id):
+                raise PropertyVideoError("recovery delivery was not committed to the billing ledger")
+            log.info("PROPERTY_VIDEO_RECOVERED job=%s engine=%s chat_id=%s", job, engine, chat_id)
+        except Exception:
+            log.exception("property video restart recovery failed job=%s", job)
