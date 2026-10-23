@@ -11,7 +11,7 @@ def install():
     if os.getenv("REAL_ESTATE_VIDEO_ENABLED", "0").lower() not in ("1", "true", "yes"):
         return False
     from telegram.ext import ApplicationBuilder, CommandHandler
-    from real_estate_video import register_real_estate_handlers, callback
+    from real_estate_safe_router import register_safe_handlers
 
     original = ApplicationBuilder.build
     if getattr(original, "_real_estate_bridge", False):
@@ -21,7 +21,7 @@ def install():
         app = original(self)
         # No provider attached until credit reservation and idempotent billing
         # are integrated. The /propertyvideo command is a safe preview entrypoint.
-        register_real_estate_handlers(app, renderer=None)
+        register_safe_handlers(app)
 
         async def start(update, context):
             context.user_data.setdefault("real_estate_video", {}).clear()
