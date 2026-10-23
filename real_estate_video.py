@@ -23,10 +23,10 @@ PROMPTS = {
         "amenities, doors or a floor plan. No object morphing or warped walls."
     ),
     "full": (
-        "Premium real-estate film combining an exterior establishing shot and a smooth interior "
-        "tour. Preserve all photographed architectural features and furniture. Use the first "
-        "supplied exterior view as the establishing shot, then follow the remaining supplied "
-        "views in order. Do not assert an unverified floor plan. No invented amenities or geometry changes."
+        "Premium real-estate film using every supplied property view in upload order. Start with "
+        "an establishing view, then follow the photographed spaces and details in sequence. "
+        "Preserve all visible architectural features and furniture. Do not label or connect "
+        "spaces that are not shown. No invented amenities or geometry changes."
     ),
 }
 ENGINES = {"kling": "Kling", "veo": "Google Veo", "seedance": "Seedance"}

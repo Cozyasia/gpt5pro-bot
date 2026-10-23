@@ -12,22 +12,35 @@ class PropertyVideoPipelineTests(unittest.TestCase):
         for count in (1, 5, 9, 10):
             scenes = plan_property_scenes(count, 30, "kling", "full")
             self.assertGreaterEqual(len(scenes), 1)
-            self.assertLessEqual(len(scenes), count)
-            self.assertEqual(len({scene.photo_index for scene in scenes}), len(scenes))
+            self.assertGreaterEqual(len(scenes), count)
+            self.assertEqual(set(range(count)), {scene.photo_index for scene in scenes})
 
     def test_all_three_engines_have_multiscene_plans(self):
         for engine in ("kling", "veo", "seedance"):
             scenes = plan_property_scenes(5, 30, engine, "full")
             self.assertGreater(len(scenes), 1)
             self.assertTrue(all(scene.seconds >= 4 for scene in scenes))
+            self.assertEqual(set(range(5)), {scene.photo_index for scene in scenes})
 
-    def test_full_review_starts_with_exterior_and_preserves_order(self):
+    def test_full_review_starts_with_establishing_view_and_preserves_order(self):
         scenes = plan_property_scenes(5, 30, "seedance", "full")
-        self.assertEqual(scenes[0].role, "exterior establishing view")
+        self.assertEqual(scenes[0].role, "property establishing view")
         self.assertEqual([scene.photo_index for scene in scenes], list(range(len(scenes))))
         prompt = scene_prompt("Use the photos", scenes[1], len(scenes))
         self.assertIn("supplied reference photograph", prompt)
         self.assertIn("Do not invent", prompt)
+
+    def test_short_review_trims_every_reference_slot(self):
+        scenes = plan_property_scenes(10, 20, "kling", "interior")
+        self.assertEqual(len(scenes), 10)
+        self.assertAlmostEqual(sum(scene.output_seconds for scene in scenes), 20)
+        self.assertEqual([scene.photo_index for scene in scenes], list(range(10)))
+
+    def test_interior_prompt_does_not_bias_to_exterior_amenities(self):
+        scene = plan_property_scenes(1, 8, "kling", "interior")[0]
+        prompt = scene_prompt("interior tour", scene, 1)
+        self.assertIn("visible interior room view", prompt)
+        self.assertIn("Do not add exterior views", prompt)
 
     def test_quote_is_scene_aware(self):
         one = quote_for_job("seedance", 1, 10, "interior")

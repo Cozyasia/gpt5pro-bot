@@ -17,24 +17,28 @@ def plan_shots(photo_ids: list[str], duration: int) -> list[dict]:
     ]
 
 
-def concatenate_mp4(clips: list[str], output: str) -> str:
+def concatenate_mp4(clips: list[str], output: str, durations: list[float] | None = None) -> str:
     """Normalize each scene and concat through FFmpeg; no shell interpolation."""
     if not clips:
         raise ValueError("No clips supplied")
+    if durations is not None and len(durations) != len(clips):
+        raise ValueError("Scene duration count must match clip count")
     target = Path(output)
     target.parent.mkdir(parents=True, exist_ok=True)
     normalized = []
     for i, clip in enumerate(clips):
         source = Path(clip).resolve(strict=True)
         intermediate = target.parent / f"normalized_{i:03d}.mp4"
-        subprocess.run([
+        command = [
             "ffmpeg", "-nostdin", "-y", "-i", str(source),
+            *(["-t", f"{float(durations[i]):.3f}"] if durations is not None else []),
             "-vf", "scale=720:1280:force_original_aspect_ratio=decrease,"
                    "pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ar", "48000", "-ac", "2",
             "-movflags", "+faststart", str(intermediate)
-        ], check=True, capture_output=True, timeout=240)
+        ]
+        subprocess.run(command, check=True, capture_output=True, timeout=240)
         normalized.append(intermediate)
     manifest = target.parent / "concat_manifest.txt"
     manifest.write_text("".join("file '" + str(p).replace("'", "'\\''") + "'\n" for p in normalized))

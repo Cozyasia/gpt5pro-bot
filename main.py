@@ -9020,6 +9020,23 @@ def _photo_clip_prompt(user_prompt: str, base_seconds: int = 10) -> str:
     )
 
 
+def _property_video_prompt(user_prompt: str, base_seconds: int = 10) -> str:
+    """Kling prompt wrapper for property I2V, separate from music clips."""
+    user_prompt = (user_prompt or "").strip()
+    if not user_prompt:
+        user_prompt = "photorealistic real-estate camera movement based strictly on the supplied property photo"
+    return (
+        "REAL-ESTATE IMAGE-TO-VIDEO DIRECTOR — follow the supplied property photo and "
+        "the direction below literally. Preserve the exact building, room geometry, "
+        "materials, furniture, windows, doors, landscaping and lighting that are visible. "
+        "Animate only a physically plausible stabilized camera move; do not redesign, "
+        "redecorate, extend or connect spaces. Never invent rooms, amenities, objects, "
+        "people, text or a floor plan; no morphing, warped walls, fake openings or logos. "
+        + user_prompt[:2200]
+        + f" Provider duration: {int(base_seconds)} seconds."
+    )
+
+
 def _photo_clip_target_duration(user_prompt: str) -> int:
     txt = (user_prompt or "").lower()
     m = re.search(r"(\d{1,3})\s*(?:сек|секунд|second|seconds|s)\b", txt, re.I)
@@ -9473,6 +9490,7 @@ async def _run_kling_photo_clip_result(
     *,
     on_task_id=None,
     output_path: str = "",
+    prompt_mode: str = "photo_clip",
 ) -> bytes | str | None:
     if not (KLING_API_KEY or COMET_API_KEY):
         raise RuntimeError("Kling photo→clip: COMET_API_KEY/KLING_API_KEY не задан")
@@ -9483,7 +9501,11 @@ async def _run_kling_photo_clip_result(
     if not image_ref.startswith("https://"):
         image_ref = f"data:{sniff_image_mime(img_bytes)};base64,{base64.b64encode(img_bytes).decode('ascii')}"
     base_duration = str(_duration_for_engine("kling", min(10, duration_s)))
-    kling_prompt = _photo_clip_prompt(prompt, int(base_duration))
+    kling_prompt = (
+        _property_video_prompt(prompt, int(base_duration))
+        if prompt_mode == "property"
+        else _photo_clip_prompt(prompt, int(base_duration))
+    )
     # Provider hard limit is 2500 characters. The literal user direction is deliberately
     # first, so a safety trim removes generic tail constraints rather than the requested action.
     if len(kling_prompt) > 2480:

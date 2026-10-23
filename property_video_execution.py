@@ -122,6 +122,14 @@ def _provider_label(engine: str) -> str:
     return {"kling": "Kling", "veo": "Google Veo", "seedance": "Seedance"}.get(engine, engine)
 
 
+def _assembly_durations(metadata: dict) -> list[float] | None:
+    """Read new per-scene output slots; keep legacy manifests recoverable."""
+    scenes = metadata.get("scenes") or []
+    if not scenes or not all("output_seconds" in item for item in scenes):
+        return None
+    return [float(item["output_seconds"]) for item in scenes]
+
+
 async def _send_saved(message, path: str, caption: str):
     with open(path, "rb") as handle:
         return await message.reply_video(video=handle, caption=caption, supports_streaming=True)
@@ -236,7 +244,9 @@ async def execute(update, context, state, prompt):
                 except Exception:
                     log.exception("property video operation journal failed job=%s scene=%s", job, scene_index)
 
-            await query.message.reply_text(f"🎬 Сцена {scene.index + 1}/{len(scenes)} · {scene.seconds} сек")
+            await query.message.reply_text(
+                f"🎬 Сцена {scene.index + 1}/{len(scenes)} · {scene.output_seconds:g} сек"
+            )
             await render_scene_to_file(
                 engine,
                 photo_paths[scene.photo_index],
@@ -253,7 +263,13 @@ async def execute(update, context, state, prompt):
 
         output = folder / "property_review.mp4"
         log.info("PROPERTY_VIDEO_ASSEMBLY_START job=%s scenes=%s", job, len(scene_paths))
-        await asyncio.to_thread(assemble_property_video, scene_paths, str(output), duration)
+        await asyncio.to_thread(
+            assemble_property_video,
+            scene_paths,
+            str(output),
+            duration,
+            [scene.output_seconds for scene in scenes],
+        )
         if not record_result(db, job, str(output)):
             raise PropertyVideoError("Итоговый файл не удалось записать в журнал задачи")
         log.info("PROPERTY_VIDEO_RESULT_READY job=%s bytes=%s", job, output.stat().st_size)
@@ -339,12 +355,11 @@ async def recover_after_restart(application) -> None:
                     continue
                 if not claim_assembly(db, str(job)) and current_status == "submitted":
                     continue
-                await asyncio.to_thread(
-                    assemble_property_video,
-                    [str(path) for path in scene_paths],
-                    str(output),
-                    duration,
-                )
+                assembly_args = ([str(path) for path in scene_paths], str(output), duration)
+                durations = _assembly_durations(metadata)
+                if durations is not None:
+                    assembly_args = (*assembly_args, durations)
+                await asyncio.to_thread(assemble_property_video, *assembly_args)
                 record_result(db, str(job), str(output))
 
             with output.open("rb") as handle:
@@ -387,7 +402,11 @@ async def recover_after_restart(application) -> None:
                 continue
             output = folder / "property_review.mp4"
             if not output.is_file() or output.stat().st_size <= 0:
-                await asyncio.to_thread(assemble_property_video, [str(path) for path in scenes], str(output), duration)
+                assembly_args = ([str(path) for path in scenes], str(output), duration)
+                durations = _assembly_durations(metadata)
+                if durations is not None:
+                    assembly_args = (*assembly_args, durations)
+                await asyncio.to_thread(assemble_property_video, *assembly_args)
             reserve(
                 db, job, user_id, 0,
                 provider_cost_usd=float(metadata.get("provider_cost_usd", 0) or 0),

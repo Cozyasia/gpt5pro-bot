@@ -1,9 +1,10 @@
 """Provider-neutral multi-scene pipeline for real-estate video reviews.
 
-The wizard accepts up to ten ordered photographs, but every provider request is
-kept to one reference image.  This is intentional: it preserves the existing
-provider contracts and prevents the model from silently treating a collage as
-the property reference.  The final MP4 is assembled locally with FFmpeg.
+Each provider request uses one source photograph because that is the existing
+provider contract. The planner nevertheless creates a montage slot for every
+uploaded photograph (and repeats a photograph only when the requested runtime
+is longer than the provider clip limit). FFmpeg trims each generated clip to
+its assigned slot, so a long provider clip cannot hide later references.
 """
 from __future__ import annotations
 
@@ -28,16 +29,21 @@ class PropertyScene:
     photo_index: int
     seconds: int
     role: str
+    output_seconds: float
 
 
-def _scene_count(photo_count: int, duration: int, engine: str) -> int:
+def _provider_clip_limit(engine: str) -> int:
+    return 8 if engine == "veo" else 10
+
+
+def _provider_seconds(engine: str, output_seconds: float) -> int:
+    """Return a supported provider duration for one output montage slot."""
     if engine == "veo":
-        provider_scene_seconds = 8
-    elif engine == "kling":
-        provider_scene_seconds = 10
-    else:
-        provider_scene_seconds = 10
-    return min(photo_count, max(1, math.ceil(duration / provider_scene_seconds)))
+        return 8
+    if engine == "kling":
+        # The production Kling transport normalizes <7s to 5s and >=7s to 10s.
+        return 10 if output_seconds > 5 else 5
+    return max(4, min(30, int(math.ceil(output_seconds))))
 
 
 def plan_property_scenes(photo_count: int, duration: int, engine: str, mode: str) -> list[PropertyScene]:
@@ -59,35 +65,51 @@ def plan_property_scenes(photo_count: int, duration: int, engine: str, mode: str
     if duration not in {8, 10, 20, 30}:
         raise ValueError("Unsupported property-video duration")
 
-    count = _scene_count(int(photo_count), duration, engine)
-    if engine == "veo":
-        seconds = [8] * count
-    else:
-        base, remainder = divmod(duration, count)
-        seconds = [base + (1 if i < remainder else 0) for i in range(count)]
-        seconds = [max(4, min(10, value)) for value in seconds]
+    # Every uploaded photo gets one slot. A single photo may be repeated for a
+    # longer requested runtime, but an uploaded photo is never silently dropped.
+    count = max(int(photo_count), math.ceil(duration / _provider_clip_limit(engine)))
+    slot_seconds = duration / count
 
     scenes: list[PropertyScene] = []
-    for i, scene_seconds in enumerate(seconds):
+    for i in range(count):
         if mode == "exterior":
-            role = "exterior establishing view" if i == 0 else "exterior architectural detail"
+            role = "visible exterior property view"
         elif mode == "interior":
-            role = "interior room view"
+            role = "visible interior room view"
         else:
-            role = "exterior establishing view" if i == 0 else "interior/property detail view"
-        scenes.append(PropertyScene(i, i % int(photo_count), int(scene_seconds), role))
+            # Upload order is the only reliable sequence signal. Do not label a
+            # frame interior/exterior without analysing its pixels.
+            role = "property establishing view" if i == 0 else "property view in upload order"
+        scenes.append(PropertyScene(
+            i, i % int(photo_count), _provider_seconds(engine, slot_seconds), role,
+            round(slot_seconds, 3),
+        ))
     return scenes
 
 
 def scene_prompt(base_prompt: str, scene: PropertyScene, total: int) -> str:
+    if "interior" in scene.role:
+        visible_constraints = (
+            "Preserve only the visible room geometry, walls, ceiling, floor, windows, doors, "
+            "materials, furniture and lighting. Do not add exterior views, rooms or amenities."
+        )
+    elif "exterior" in scene.role:
+        visible_constraints = (
+            "Preserve only the visible facade, roof, windows, doors, pool, landscaping, "
+            "terrain and outdoor furniture. Do not add rooms or unseen structures."
+        )
+    else:
+        visible_constraints = (
+            "Preserve only the visible architecture, room geometry, materials, furniture, "
+            "landscaping and lighting; do not infer whether unseen areas exist."
+        )
     return (
         f"{base_prompt.strip()}\n"
-        f"This is shot {scene.index + 1} of {total}, role: {scene.role}. "
-        "Use only the supplied reference photograph for this shot. Preserve the "
-        "exact architecture, room geometry, furniture, windows, doors, pool and "
-        "landscaping that are visible. Do not invent rooms, amenities, connections, "
-        "objects or a floor plan. Smooth realistic camera motion only; no text, "
-        "logos, watermarks, morphing or warped geometry."
+        f"This is shot {scene.index + 1} of {total}, source photo {scene.photo_index + 1}, "
+        f"role: {scene.role}. Use only this supplied reference photograph for this shot. "
+        f"{visible_constraints} Do not invent rooms, amenities, connections, objects or a "
+        "floor plan. Smooth realistic camera motion only; no text, logos, watermarks, "
+        "morphing or warped geometry. Do not blend in content from another shot."
     ).strip()
 
 
@@ -152,6 +174,7 @@ async def render_scene(
             image_url=image_url,
             on_task_id=on_task_id,
             output_path=output_path,
+            prompt_mode="property",
         )
         if not result:
             raise PropertyVideoError("Kling returned an empty video")
@@ -213,11 +236,11 @@ async def render_scene_to_file(
     return str(target)
 
 
-def assemble_property_video(scene_paths: list[str], output_path: str, duration: int) -> str:
+def assemble_property_video(scene_paths: list[str], output_path: str, duration: int, scene_durations: list[float] | None = None) -> str:
     """Normalize, concatenate and trim scenes to one Telegram-safe MP4."""
     if not scene_paths:
         raise PropertyVideoError("No generated scenes to assemble")
-    assembled = concatenate_mp4(scene_paths, output_path)
+    assembled = concatenate_mp4(scene_paths, output_path, durations=scene_durations)
     target = Path(output_path)
     if int(duration) <= 0:
         return assembled
