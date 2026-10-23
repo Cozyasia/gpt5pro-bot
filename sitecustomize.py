@@ -345,3 +345,12 @@ try:
     print("[neyrobot-prod] HeyGen talking-avatar selector armed before Application build", flush=True)
 except Exception as exc:
     print(f"[neyrobot-prod] HeyGen talking-avatar selector warning: {type(exc).__name__}: {exc}", flush=True)
+
+
+# Property video: disabled by default; no paid renderer until billing is integrated.
+try:
+    from real_estate_bootstrap import install as install_real_estate_video
+    if install_real_estate_video():
+        print("[real-estate] preview-only wizard armed", flush=True)
+except Exception as exc:
+    print(f"[real-estate] bootstrap warning: {type(exc).__name__}: {exc}", flush=True)
