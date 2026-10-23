@@ -135,12 +135,20 @@ async def render_scene(
         renderer = getattr(production_main, "_run_kling_photo_clip_result", None)
         if not callable(renderer):
             raise PropertyVideoError("Existing Kling image-to-video transport is unavailable")
+        # Kling/Comet validates the image asynchronously and rejects data URLs
+        # with UrlIllegal. Publish the downloaded Telegram photo through the
+        # existing short-lived HTTPS artifact endpoint used by other Kling
+        # flows, then pass that URL to the existing production transport.
+        input_url_factory = getattr(production_main, "_provider_input_url_from_file", None)
+        if not callable(input_url_factory):
+            raise PropertyVideoError("Provider input URL transport is unavailable")
+        image_url = input_url_factory(photo_path, Path(photo_path).name)
         result = await renderer(
             image,
             prompt,
             int(seconds),
             "9:16",
-            image_url="",
+            image_url=image_url,
             on_task_id=on_task_id,
         )
         if not result:
