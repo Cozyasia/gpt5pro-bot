@@ -19685,6 +19685,12 @@ async def _post_init_bot_profile(app):
         except Exception as e:
             log.warning("Telegram menu button update skipped: %s", e)
 
+    try:
+        from property_video_execution import recover_after_restart
+        app.create_task(recover_after_restart(app), update=None, name="property-video-restart-recovery")
+    except Exception as e:
+        log.warning("Property video restart recovery was not scheduled: %s", e)
+
 
 # ───────── Регистрация хендлеров и запуск ─────────
 def build_application() -> "Application":
