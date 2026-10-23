@@ -81,3 +81,7 @@ def refund_before_submission(db_path, job_id):
         con.execute("UPDATE property_video_charges SET status='refunded' WHERE job_id=?", (job_id,))
         con.commit()
         return True
+
+def status(db_path, job_id):
+    with _connect(db_path) as con:
+        return con.execute("SELECT status,provider_operation FROM property_video_charges WHERE job_id=?", (job_id,)).fetchone()
