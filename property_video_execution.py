@@ -36,6 +36,7 @@ async def execute(update, context, state, prompt):
     try:
         photos = await fetch_telegram_photos(context.bot, state["photos"], str(folder))
     except Exception:
+        state["generating"] = False
         await query.message.reply_text("Не удалось получить фотографию из Telegram. Средства не списаны.")
         return
     from decimal import Decimal
@@ -44,13 +45,16 @@ async def execute(update, context, state, prompt):
         if not amount.is_finite() or amount <= 0:
             raise ValueError("Invalid price")
     except Exception:
+        state["generating"] = False
         await query.message.reply_text("Стоимость Veo настроена некорректно. Списаний нет.")
         return
     result = reserve(db, job, update.effective_user.id, amount)
     if result == "insufficient":
+        state["generating"] = False
         await query.message.reply_text(f"Недостаточно кредитов. Стоимость: ${amount:.2f}. Средства не списаны.")
         return
     if result != "reserved":
+        state["generating"] = False
         await query.message.reply_text("Задача уже учтена. Повторная отправка запрещена.")
         return
     await query.message.reply_text("⏳ Veo: задача принята, ожидаем видео. Повторно не нажимайте.")
