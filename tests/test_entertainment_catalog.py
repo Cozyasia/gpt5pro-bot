@@ -120,6 +120,7 @@ class EntertainmentCatalogTests(unittest.TestCase):
         self.assertEqual(
             self._texts("root"),
             [
+                ["🏡 AI-видеообзор недвижимости"],
                 ["🎬 Нейро Продакшен"],
                 ["🔥 В тренде", "🎥 Создать видео"],
                 ["📸 Фото и эффекты", "🎵 Музыка и песня"],
@@ -131,6 +132,7 @@ class EntertainmentCatalogTests(unittest.TestCase):
         self.assertEqual(
             self._callbacks("root"),
             [
+                "revideo:start",
                 "ent:menu:production",
                 "ent:menu:trends",
                 "ent:menu:video",
