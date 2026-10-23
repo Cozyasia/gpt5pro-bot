@@ -130,6 +130,17 @@ def _assembly_durations(metadata: dict) -> list[float] | None:
     return [float(item["output_seconds"]) for item in scenes]
 
 
+def execution_job(state: dict, db: str) -> tuple[str, tuple | None]:
+    """Return a reusable job, replacing only a terminal pre-submit refund."""
+    job = str(state.setdefault("job_id", uuid4().hex))
+    current = status(db, job)
+    if current and current[0] == "refunded":
+        job = uuid4().hex
+        state["job_id"] = job
+        current = None
+    return job, current
+
+
 async def _send_saved(message, path: str, caption: str):
     with open(path, "rb") as handle:
         return await message.reply_video(video=handle, caption=caption, supports_streaming=True)
@@ -157,9 +168,8 @@ async def execute(update, context, state, prompt):
         getattr(update.effective_user, "username", None),
     )
 
-    job = str(state.setdefault("job_id", uuid4().hex))
     db = os.getenv("DB_PATH", "subs.db")
-    current = status(db, job)
+    job, current = execution_job(state, db)
     if current:
         existing_status, _operation, existing_result, _tx, file_id = current
         if existing_result and Path(existing_result).is_file():
@@ -254,6 +264,10 @@ async def execute(update, context, state, prompt):
                 scene.seconds,
                 str(scene_path),
                 on_task_id=_remember,
+                last_photo_path=(
+                    photo_paths[scene.next_photo_index]
+                    if scene.next_photo_index is not None else ""
+                ),
             )
             log.info(
                 "PROPERTY_VIDEO_SCENE_READY job=%s scene=%s/%s bytes=%s",

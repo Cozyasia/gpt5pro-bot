@@ -30,6 +30,7 @@ class PropertyScene:
     seconds: int
     role: str
     output_seconds: float
+    next_photo_index: int | None = None
 
 
 def _provider_clip_limit(engine: str) -> int:
@@ -65,9 +66,14 @@ def plan_property_scenes(photo_count: int, duration: int, engine: str, mode: str
     if duration not in {8, 10, 20, 30}:
         raise ValueError("Unsupported property-video duration")
 
-    # Every uploaded photo gets one slot. A single photo may be repeated for a
-    # longer requested runtime, but an uploaded photo is never silently dropped.
-    count = max(int(photo_count), math.ceil(duration / _provider_clip_limit(engine)))
+    # Kling and Gemini Omni accept first/last reference frames, so consecutive
+    # photos can form a real transition and ten photos become five usable
+    # scenes. The existing Comet Seedance contract accepts one multipart
+    # reference only; keep every uploaded photo as a scene source there instead
+    # of silently dropping the odd-numbered references.
+    transition_capable = engine in {"kling", "veo"}
+    minimum_scene_count = math.ceil(int(photo_count) / 2) if transition_capable else int(photo_count)
+    count = max(minimum_scene_count, math.ceil(duration / _provider_clip_limit(engine)))
     slot_seconds = duration / count
 
     scenes: list[PropertyScene] = []
@@ -80,9 +86,14 @@ def plan_property_scenes(photo_count: int, duration: int, engine: str, mode: str
             # Upload order is the only reliable sequence signal. Do not label a
             # frame interior/exterior without analysing its pixels.
             role = "property establishing view" if i == 0 else "property view in upload order"
+        first_photo = min(i * 2, int(photo_count) - 1) if transition_capable else min(i, int(photo_count) - 1)
+        next_photo = (
+            i * 2 + 1 if i * 2 + 1 < int(photo_count) else None
+        ) if transition_capable else None
         scenes.append(PropertyScene(
-            i, i % int(photo_count), _provider_seconds(engine, slot_seconds), role,
+            i, first_photo, _provider_seconds(engine, slot_seconds), role,
             round(slot_seconds, 3),
+            next_photo,
         ))
     return scenes
 
@@ -103,13 +114,26 @@ def scene_prompt(base_prompt: str, scene: PropertyScene, total: int) -> str:
             "Preserve only the visible architecture, room geometry, materials, furniture, "
             "landscaping and lighting; do not infer whether unseen areas exist."
         )
+    transition = ""
+    if scene.next_photo_index is not None:
+        transition = (
+            f" The next reference photo is photo {scene.next_photo_index + 1}; "
+            "move the camera through a continuous walkthrough and finish on that "
+            "next photographed view, without inventing an intermediate room."
+        )
+    reference_instruction = (
+        "Use only this supplied reference photograph as the source for this shot."
+        if scene.next_photo_index is None else
+        "Use only this supplied reference photograph as the source and the named next "
+        "reference photograph as the terminal frame for this shot."
+    )
     return (
         f"{base_prompt.strip()}\n"
         f"This is shot {scene.index + 1} of {total}, source photo {scene.photo_index + 1}, "
-        f"role: {scene.role}. Use only this supplied reference photograph for this shot. "
-        f"{visible_constraints} Do not invent rooms, amenities, connections, objects or a "
+        f"role: {scene.role}. {reference_instruction} "
+        f"{visible_constraints}{transition} Do not invent rooms, amenities, connections, objects or a "
         "floor plan. Smooth realistic camera motion only; no text, logos, watermarks, "
-        "morphing or warped geometry. Do not blend in content from another shot."
+        "morphing or warped geometry. Do not blend in content from an unrelated shot."
     ).strip()
 
 
@@ -128,6 +152,7 @@ async def render_scene(
     *,
     on_task_id: Callable[[str], None] | None = None,
     output_path: str = "",
+    last_photo_path: str = "",
 ) -> bytes | str:
     """Render one scene through the project's existing provider transports."""
     engine = engine.strip().lower()
@@ -135,14 +160,22 @@ async def render_scene(
         key = os.getenv("GEMINI_VIDEO_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not key:
             raise PropertyVideoError("Google Veo API key is not configured")
+        model = os.getenv("VEO_GOOGLE_MODEL", "gemini-omni-1.1-flash")
+        if model in {"veo-3.1-fast-generate-preview", "veo-3.1-generate-preview", "veo-3.1-lite-generate-preview"}:
+            model = "gemini-omni-1.1-flash"
         client = GoogleVeoClient(
             key,
             base_url=os.getenv("GEMINI_VIDEO_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
-            model=os.getenv("VEO_GOOGLE_MODEL", "veo-3.1-fast-generate-preview"),
+            model=model,
             poll_interval_s=float(os.getenv("PROPERTY_VIDEO_VEO_POLL_INTERVAL_S", "10")),
             max_wait_s=float(os.getenv("PROPERTY_VIDEO_PROVIDER_MAX_WAIT_S", "1800")),
         )
-        operation = await client.submit_initial(prompt, reference_image=photo_path, aspect_ratio="9:16")
+        operation = await client.submit_initial(
+            prompt,
+            reference_image=photo_path,
+            reference_image_last=last_photo_path or None,
+            aspect_ratio="9:16",
+        )
         if on_task_id:
             on_task_id(operation)
         return bytes(await client.poll_bytes(operation))
@@ -166,6 +199,9 @@ async def render_scene(
         if not callable(input_url_factory):
             raise PropertyVideoError("Provider input URL transport is unavailable")
         image_url = input_url_factory(photo_path, Path(photo_path).name)
+        image_tail_url = ""
+        if last_photo_path:
+            image_tail_url = input_url_factory(last_photo_path, Path(last_photo_path).name)
         result = await renderer(
             image,
             prompt,
@@ -175,6 +211,7 @@ async def render_scene(
             on_task_id=on_task_id,
             output_path=output_path,
             prompt_mode="property",
+            image_tail_url=image_tail_url,
         )
         if not result:
             raise PropertyVideoError("Kling returned an empty video")
@@ -211,6 +248,7 @@ async def render_scene_to_file(
     output_path: str,
     *,
     on_task_id: Callable[[str], None] | None = None,
+    last_photo_path: str = "",
 ) -> str:
     """Render one scene and persist it before the next provider result is fetched.
 
@@ -224,6 +262,7 @@ async def render_scene_to_file(
         engine, photo_path, prompt, seconds,
         on_task_id=on_task_id,
         output_path=str(target) if engine.strip().lower() == "kling" else "",
+        last_photo_path=last_photo_path,
     )
     if isinstance(result, str):
         if Path(result).resolve() != target.resolve() and Path(result).is_file():

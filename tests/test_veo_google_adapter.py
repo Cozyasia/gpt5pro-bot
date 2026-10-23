@@ -5,12 +5,26 @@ from unittest.mock import AsyncMock, patch
 
 from neyrobot_prod.veo_google_adapter import (
     build_generate_payload,
+    build_omni_payload,
     build_extend_payload,
     extract_operation_name,
 )
 
 
 class GoogleVeoAdapterTests(unittest.TestCase):
+    def test_omni_payload_supports_first_and_last_property_frames(self):
+        payload = build_omni_payload(
+            "A continuous property walkthrough",
+            "first-base64",
+            "last-base64",
+            aspect_ratio="9:16",
+        )
+        self.assertEqual(payload["model"], "gemini-omni-1.1-flash")
+        self.assertEqual([item["type"] for item in payload["input"]], ["image", "image", "text"])
+        self.assertEqual(payload["input"][0]["data"], "first-base64")
+        self.assertEqual(payload["input"][1]["data"], "last-base64")
+        self.assertEqual(payload["response_format"]["aspect_ratio"], "9:16")
+
     def test_initial_submission_defaults_to_vertical_delivery_shape(self):
         from neyrobot_prod.veo_google_adapter import GoogleVeoClient
 

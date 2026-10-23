@@ -73,6 +73,33 @@ class PropertyVideoProviderDispatchTests(unittest.TestCase):
         )
         self.assertEqual(seen, ["kling-1"])
 
+    def test_kling_passes_adjacent_reference_as_last_frame(self):
+        seen = []
+        next_photo = Path(self.tmp.name) / "next.jpg"
+        next_photo.write_bytes(b"next-jpeg")
+
+        async def fake_kling(*args, **kwargs):
+            kwargs["on_task_id"]("kling-transition-1")
+            return b"kling-mp4"
+
+        fake_main = SimpleNamespace(
+            _run_kling_photo_clip_result=AsyncMock(side_effect=fake_kling),
+            _provider_input_url_from_file=lambda path, filename: f"https://app.test/provider-input/{Path(path).name}",
+        )
+
+        async def run():
+            with patch.dict(os.environ, {"COMET_API_KEY": "test-key"}, clear=False), \
+                 patch.dict("sys.modules", {"main": fake_main}):
+                return await render_scene(
+                    "kling", str(self.photo), "property", 10,
+                    on_task_id=seen.append, last_photo_path=str(next_photo),
+                )
+
+        self.assertEqual(asyncio.run(run()), b"kling-mp4")
+        kwargs = fake_main._run_kling_photo_clip_result.await_args.kwargs
+        self.assertEqual(kwargs["image_tail_url"], "https://app.test/provider-input/next.jpg")
+        self.assertEqual(seen, ["kling-transition-1"])
+
     def test_render_scene_to_file_persists_and_does_not_keep_scene_bytes(self):
         async def run():
             with patch("property_video_pipeline.render_scene", new=AsyncMock(return_value=b"x" * 1024)):

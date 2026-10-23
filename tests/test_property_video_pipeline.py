@@ -12,35 +12,51 @@ class PropertyVideoPipelineTests(unittest.TestCase):
         for count in (1, 5, 9, 10):
             scenes = plan_property_scenes(count, 30, "kling", "full")
             self.assertGreaterEqual(len(scenes), 1)
-            self.assertGreaterEqual(len(scenes), count)
-            self.assertEqual(set(range(count)), {scene.photo_index for scene in scenes})
+            used = {scene.photo_index for scene in scenes}
+            used.update(scene.next_photo_index for scene in scenes if scene.next_photo_index is not None)
+            self.assertEqual(set(range(count)), used)
 
     def test_all_three_engines_have_multiscene_plans(self):
         for engine in ("kling", "veo", "seedance"):
             scenes = plan_property_scenes(5, 30, engine, "full")
             self.assertGreater(len(scenes), 1)
             self.assertTrue(all(scene.seconds >= 4 for scene in scenes))
-            self.assertEqual(set(range(5)), {scene.photo_index for scene in scenes})
+            used = {scene.photo_index for scene in scenes}
+            used.update(scene.next_photo_index for scene in scenes if scene.next_photo_index is not None)
+            self.assertEqual(set(range(5)), used)
+
+    def test_seedance_single_reference_transport_still_uses_every_photo(self):
+        scenes = plan_property_scenes(9, 30, "seedance", "interior")
+        self.assertEqual([scene.photo_index for scene in scenes], list(range(9)))
+        self.assertTrue(all(scene.next_photo_index is None for scene in scenes))
 
     def test_full_review_starts_with_establishing_view_and_preserves_order(self):
         scenes = plan_property_scenes(5, 30, "seedance", "full")
         self.assertEqual(scenes[0].role, "property establishing view")
-        self.assertEqual([scene.photo_index for scene in scenes], list(range(len(scenes))))
+        self.assertEqual([scene.photo_index for scene in scenes], [0, 1, 2, 3, 4])
         prompt = scene_prompt("Use the photos", scenes[1], len(scenes))
         self.assertIn("supplied reference photograph", prompt)
         self.assertIn("Do not invent", prompt)
 
     def test_short_review_trims_every_reference_slot(self):
         scenes = plan_property_scenes(10, 20, "kling", "interior")
-        self.assertEqual(len(scenes), 10)
+        self.assertEqual(len(scenes), 5)
         self.assertAlmostEqual(sum(scene.output_seconds for scene in scenes), 20)
-        self.assertEqual([scene.photo_index for scene in scenes], list(range(10)))
+        used = {scene.photo_index for scene in scenes}
+        used.update(scene.next_photo_index for scene in scenes if scene.next_photo_index is not None)
+        self.assertEqual(used, set(range(10)))
 
     def test_interior_prompt_does_not_bias_to_exterior_amenities(self):
         scene = plan_property_scenes(1, 8, "kling", "interior")[0]
         prompt = scene_prompt("interior tour", scene, 1)
         self.assertIn("visible interior room view", prompt)
         self.assertIn("Do not add exterior views", prompt)
+
+    def test_scene_prompt_requires_a_real_transition_when_next_reference_exists(self):
+        scenes = plan_property_scenes(3, 30, "kling", "full")
+        prompt = scene_prompt("property walkthrough", scenes[0], len(scenes))
+        self.assertIn("next reference photo", prompt)
+        self.assertIn("continuous walkthrough", prompt)
 
     def test_quote_is_scene_aware(self):
         one = quote_for_job("seedance", 1, 10, "interior")
