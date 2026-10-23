@@ -55,7 +55,10 @@ class PropertyVideoProviderDispatchTests(unittest.TestCase):
             kwargs["on_task_id"]("kling-1")
             return b"kling-mp4"
 
-        fake_main = SimpleNamespace(_run_kling_photo_clip_result=AsyncMock(side_effect=fake_kling))
+        fake_main = SimpleNamespace(
+            _run_kling_photo_clip_result=AsyncMock(side_effect=fake_kling),
+            _provider_input_url_from_file=lambda path, filename: "https://app.test/provider-input/reference.jpg",
+        )
 
         async def run():
             with patch.dict(os.environ, {"COMET_API_KEY": "test-key"}, clear=False), \
@@ -64,6 +67,10 @@ class PropertyVideoProviderDispatchTests(unittest.TestCase):
 
         self.assertEqual(asyncio.run(run()), b"kling-mp4")
         fake_main._run_kling_photo_clip_result.assert_awaited_once()
+        self.assertEqual(
+            fake_main._run_kling_photo_clip_result.await_args.kwargs["image_url"],
+            "https://app.test/provider-input/reference.jpg",
+        )
         self.assertEqual(seen, ["kling-1"])
 
 
