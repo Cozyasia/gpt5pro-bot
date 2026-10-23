@@ -112,7 +112,32 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["extra"] = ""
         state["awaiting_prompt"] = False
         await confirm(query, state)
+    elif action == "confirm_paid":
+        if not state.get("price_confirmed"):
+            await query.message.reply_text("Подтверждение стоимости отсутствует.")
+            return
+        from property_video_execution import execute
+        prompt = PROMPTS[state["type"]] + "\\n" + state.get("extra", "")
+        await execute(update, context, state, prompt)
     elif action == "generate":
+        import os
+        from decimal import Decimal
+        if os.getenv("PROPERTY_VIDEO_PAID_ENABLED") == "1" and state.get("engine") == "veo" and state.get("duration") == 8 and len(state.get("photos", [])) == 1:
+            raw = os.getenv("PROPERTY_VIDEO_VEO_PRICE_USD", "")
+            try:
+                price = Decimal(raw)
+                if not price.is_finite() or price <= 0:
+                    raise ValueError("price")
+            except Exception:
+                await query.message.reply_text("Стоимость генерации не настроена; списания нет.")
+                return
+            state["price_confirmed"] = True
+            await query.message.reply_text(
+                f"Подтвердите платную генерацию Veo 8 сек. Стоимость: ${price:.2f} с USD-баланса.",
+                reply_markup=keyboard([[("💳 Подтверждаю оплату", "confirm_paid")], [("↩️ Отмена", "start")]])
+            )
+            return
+
         if state.get("generating"):
             await query.message.reply_text("Генерация уже запущена.")
             return
