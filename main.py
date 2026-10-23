@@ -9538,9 +9538,1096 @@ async def _run_suno_music_result_bytes(update: Update, brief: str, *, target_dur
     if instrumental:
         base_payload.update({"prompt": "", "make_instrumental": True})
     status_paths = [SUNO_STATUS_PATH, "/suno/fetch/{id}", "/suno/v1/music/{id}", "/api/v1/task/{id}", "/v1/tasks/{id}"]
-    async with httpx.AsyncClient(timeout=
-... 58548 bytes omitted ...
-me")
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        last_err = ""
+        for path in (SUNO_CREATE_PATH, "/suno/submit/music"):
+            try:
+                r = await client.post(f"{SUNO_BASE_URL}{path}", headers=headers, json=base_payload)
+                if r.status_code >= 400:
+                    last_err = f"POST {path} → {r.status_code}: {_api_error_preview(r)}"
+                    continue
+                try:
+                    js = r.json() or {}
+                except Exception:
+                    js = {}
+                url = _extract_first_url(js.get("audio_url")) or _extract_first_url(js.get("audio")) or _extract_first_url(js.get("output")) or _extract_first_url(js.get("data")) or _extract_first_url(js)
+                if url:
+                    audio = await _download_binary_from_url(client, url, accept="audio/mpeg,audio/*,*/*;q=0.8", timeout_s=300.0)
+                    if audio:
+                        return audio
+                task_id = str(js.get("id") or js.get("task_id") or js.get("taskId") or js.get("request_id") or "").strip()
+                data_obj = js.get("data")
+                if not task_id and isinstance(data_obj, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{8,}", data_obj.strip()):
+                    task_id = data_obj.strip()
+                if not task_id and isinstance(data_obj, dict):
+                    d = data_obj or {}
+                    task_id = str(d.get("id") or d.get("task_id") or d.get("taskId") or d.get("request_id") or "").strip()
+                if task_id:
+                    if callable(on_provider_state): on_provider_state("suno_task_id", task_id)
+                    started = time.time()
+                    while time.time() - started < max(30, min(SUNO_TIMEOUT_S, PHOTO_CLIP_SUNO_FAST_TIMEOUT_S)):
+                        for sp in status_paths:
+                            try:
+                                rs = await client.get(f"{SUNO_BASE_URL}{sp}".format(id=task_id), headers=headers, timeout=60.0)
+                                if rs.status_code >= 400:
+                                    continue
+                                try:
+                                    sj = rs.json() or {}
+                                except Exception:
+                                    sj = {}
+                                data_nested = sj.get("data") if isinstance(sj, dict) else None
+                                nested = data_nested if isinstance(data_nested, dict) else {}
+                                url = _extract_first_url(sj.get("audio_url")) or _extract_first_url(sj.get("audio")) or _extract_first_url(sj.get("output")) or _extract_first_url(data_nested) or _extract_first_url(nested.get("data") if isinstance(nested, dict) else None) or _extract_first_url(sj)
+                                st = str(sj.get("status") or sj.get("state") or sj.get("task_status") or nested.get("status") or "").lower()
+                                if url and (st in ("", "completed", "succeeded", "success", "finished", "done", "ready") or not st):
+                                    audio = await _download_binary_from_url(client, url, accept="audio/mpeg,audio/*,*/*;q=0.8", timeout_s=300.0)
+                                    if audio:
+                                        clip_id = _find_suno_clip_id(sj)
+                                        intervals = await _fetch_suno_vocal_intervals(client, headers, clip_id, target_duration_s)
+                                        if callable(on_provider_state):
+                                            if clip_id: on_provider_state("suno_clip_id", clip_id)
+                                            on_provider_state("vocal_intervals", intervals)
+                                        return audio
+                                if st in ("failed", "fail", "error", "canceled", "cancelled", "rejected"):
+                                    raise RuntimeError(json.dumps(sj, ensure_ascii=False)[:900])
+                            except Exception as e:
+                                last_err = str(e)
+                                continue
+                        await asyncio.sleep(SUNO_POLL_DELAY_S)
+            except Exception as e:
+                last_err = str(e)
+                continue
+        log.warning("Suno result bytes failed: %s", last_err)
+    return None
+
+
+def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duration_s: int, output_path: str) -> str | None:
+    """Memory-safe final mux: ffmpeg reads/writes files; Python never materializes the joined video."""
+    if not video_path or not audio_path or not os.path.exists(video_path) or not os.path.exists(audio_path):
+        return None
+    target_duration_s = max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s or PHOTO_CLIP_DEFAULT_DURATION_S or 15)))
+    timeout_s = max(30, int(FFMPEG_MUX_TIMEOUT_S or 180))
+    max_bytes = max(5, int(FFMPEG_MUX_MAX_MB or 45)) * 1024 * 1024
+    ffmpeg = _ffmpeg_exe()
+    started = time.time()
+    # Avoid copy-first for a source already known to exceed Telegram target. It only creates
+    # another ~80MB file and raises peak memory/disk pressure before the required encode.
+    source_size = os.path.getsize(video_path)
+    attempts = []
+    if FFMPEG_MUX_COPY_FIRST and source_size <= max_bytes:
+        attempts.append(("copy-first", [], "copy"))
+    # Preserve provider resolution. Never upscale a 1136x1820 source to fake 4K: that
+    # multiplies decoder/filter/encoder buffers and caused the 512 MiB Render OOM.
+    # Only true oversized inputs are reduced to a bounded long edge.
+    audio_bps = 128000
+    target_video_bps = max(1800000, int((max_bytes * 8 * 0.90) / max(5, target_duration_s) - audio_bps))
+    target_video_k = max(1800, target_video_bps // 1000)
+    max_edge = int(FFMPEG_MUX_MAX_LONG_EDGE or 2160)
+    native_safe = (
+        rf"scale=w='min(iw\,{max_edge})':h='min(ih\,{max_edge})':"
+        rf"force_original_aspect_ratio=decrease:force_divisible_by=2,fps={int(FFMPEG_MUX_FPS or 24)}"
+    )
+    attempts.extend([("native-safe", [native_safe], "encode")])
+    for name, vf, mode in attempts:
+        tmp_out = output_path + "." + name + ".mp4"
+        # The source track must never be looped: a short upload is rejected
+        # before rendering instead of silently repeating lyrics in the final MP4.
+        cmd = [ffmpeg, "-y", "-stream_loop", "-1", "-fflags", "+genpts", "-i", video_path,
+               "-i", audio_path, "-t", str(target_duration_s),
+               "-map", "0:v:0", "-map", "1:a:0"]
+        if mode == "copy":
+            cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+        elif mode == "encode":
+            cmd += ["-vf", vf[0], "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+                    "-b:v", f"{target_video_k}k", "-maxrate", f"{target_video_k}k", "-bufsize", f"{target_video_k * 2}k",
+                    "-pix_fmt", "yuv420p", "-threads", str(FFMPEG_MUX_THREADS),
+                    "-filter_threads", str(FFMPEG_MUX_THREADS),
+                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE]
+        else:
+            raise RuntimeError(f"unknown mux mode: {mode}")
+        cmd += ["-shortest", "-movflags", "+faststart", tmp_out]
+        left = max(20, timeout_s - int(time.time() - started))
+        log.info("ffmpeg file mux attempt=%s video=%s duration=%s max_bytes=%s timeout_left=%s",
+                 name, source_size, target_duration_s, max_bytes, left)
+        try:
+            # Keep ffmpeg diagnostics off the Python heap. TemporaryFile is disk-backed;
+            # only a small tail is read if the process fails.
+            with tempfile.TemporaryFile(mode="w+b") as err_fh:
+                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=err_fh, timeout=left)
+                stderr_tail = b""
+                if res.returncode != 0:
+                    err_fh.seek(0, os.SEEK_END)
+                    err_size = err_fh.tell()
+                    err_fh.seek(max(0, err_size - 1500))
+                    stderr_tail = err_fh.read(1500)
+        except subprocess.TimeoutExpired:
+            continue
+        if res.returncode != 0:
+            log.warning("ffmpeg file mux failed attempt=%s rc=%s stderr=%s",
+                        name, res.returncode, stderr_tail.decode("utf-8", "ignore"))
+        if res.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 1024:
+            size = os.path.getsize(tmp_out)
+            log.info("ffmpeg file mux ok attempt=%s output=%s elapsed=%.1fs", name, size, time.time() - started)
+            if size <= max_bytes:
+                os.replace(tmp_out, output_path)
+                return output_path
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_out)
+    return None
+
+
+def _concat_video_segment_files_sync(segment_paths: list[str], target_duration: int, output_path: str) -> str | None:
+    """Concat provider MP4 files without loading the joined result into Python memory."""
+    if not segment_paths:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    manifest = output_path + ".concat.txt"
+    with open(manifest, "w", encoding="utf-8") as fh:
+        for p in segment_paths:
+            fh.write("file '" + p.replace("'", "'\\''") + "'\n")
+    cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", manifest,
+           "-t", str(target_duration), "-c", "copy", "-movflags", "+faststart", output_path]
+    with tempfile.TemporaryFile(mode="w+b") as err_fh:
+        res = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=err_fh,
+            timeout=max(120, FFMPEG_MUX_TIMEOUT_S),
+        )
+        stderr_tail = b""
+        if res.returncode != 0:
+            err_fh.seek(0, os.SEEK_END)
+            err_size = err_fh.tell()
+            err_fh.seek(max(0, err_size - 1500))
+            stderr_tail = err_fh.read(1500)
+    if res.returncode != 0:
+        log.warning("ffmpeg file concat failed rc=%s stderr=%s",
+                    res.returncode, stderr_tail.decode("utf-8", "ignore"))
+    if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 4096:
+        return output_path
+    return None
+
+
+def _normalize_vocal_clip_vertical_file_sync(
+    video_path: str,
+    target_duration_s: int,
+    output_path: str,
+) -> str | None:
+    """Create a 9:16 vocal master without cropping the singer out of frame.
+
+    Providers occasionally ignore an aspect request.  The foreground therefore
+    uses ``decrease`` (never centre-crop the face); a blurred duplicate only
+    fills the vertical canvas behind it.  Original Suno/custom audio is added
+    in the next mux stage, so this intermediate is deliberately video-only.
+    """
+    if not video_path or not os.path.isfile(video_path):
+        return None
+    ffmpeg = _ffmpeg_exe()
+    width, height = 720, 1280
+    graph = (
+        f"[0:v]split=2[bg][fg];"
+        f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},boxblur=20:1[bgv];"
+        f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[fgv];"
+        f"[bgv][fgv]overlay=(W-w)/2:(H-h)/2,setsar=1,"
+        f"fps={int(FFMPEG_MUX_FPS or 24)},format=yuv420p[v]"
+    )
+    cmd = [
+        ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", video_path,
+        "-filter_complex", graph, "-map", "[v]", "-an",
+        "-t", str(max(1, int(target_duration_s))),
+        "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+        "-crf", "21", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output_path,
+    ]
+    try:
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            timeout=max(180, FFMPEG_MUX_TIMEOUT_S * 2),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("vocal vertical normalization failed: %s", exc)
+        return None
+    if result.returncode != 0 or not os.path.isfile(output_path) or os.path.getsize(output_path) <= 4096:
+        log.warning("vocal vertical normalization failed rc=%s stderr=%s", result.returncode, (result.stderr or b"")[-1500:].decode("utf-8", "ignore"))
+        return None
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", output_path],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30,
+    )
+    dimensions = probe.stdout.decode("utf-8", "ignore").strip()
+    if dimensions != f"{width},{height}":
+        log.warning("vocal vertical normalization produced unexpected size=%s", dimensions)
+        return None
+    return output_path
+
+
+def _mux_video_audio_sync(video_bytes: bytes, audio_bytes: bytes | None, target_duration_s: int) -> bytes | None:
+    """Build one Telegram-safe MP4 from Kling video + Suno audio.
+    v65: copy-first if small, then compressed fallback under FFMPEG_MUX_MAX_MB.
+    """
+    if not video_bytes or not audio_bytes:
+        return None
+    target_duration_s = max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 30), int(target_duration_s or PHOTO_CLIP_DEFAULT_DURATION_S or 15)))
+    timeout_s = max(30, int(FFMPEG_MUX_TIMEOUT_S or 180))
+    max_bytes = max(5, int(FFMPEG_MUX_MAX_MB or 45)) * 1024 * 1024
+    started = time.time()
+    try:
+        ffmpeg = _ffmpeg_exe()
+        with tempfile.TemporaryDirectory() as td:
+            vin = os.path.join(td, "input.mp4")
+            a_in = os.path.join(td, "audio.mp3")
+            out_fast = os.path.join(td, "final_fast.mp4")
+            out_compact = os.path.join(td, "final_compact.mp4")
+            out_small = os.path.join(td, "final_small.mp4")
+            with open(vin, "wb") as f:
+                f.write(video_bytes)
+            with open(a_in, "wb") as f:
+                f.write(audio_bytes)
+
+            attempts: list[tuple[str, list[str], str, bool]] = []
+            if FFMPEG_MUX_COPY_FIRST:
+                attempts.append((
+                    "copy-first",
+                    [
+                        ffmpeg, "-y",
+                        "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
+                        "-stream_loop", "-1", "-i", a_in,
+                        "-t", str(target_duration_s),
+                        "-map", "0:v:0", "-map", "1:a:0",
+                        "-c:v", "copy",
+                        "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE,
+                        "-shortest", "-movflags", "+faststart",
+                        out_fast,
+                    ],
+                    out_fast,
+                    True,
+                ))
+            # Telegram-safe compact encode. This is the primary fallback after copy-first.
+            attempts.append((
+                "compact-720p",
+                [
+                    ffmpeg, "-y",
+                    "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
+                    "-stream_loop", "-1", "-i", a_in,
+                    "-t", str(target_duration_s),
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-vf", f"scale=-2:{int(FFMPEG_MUX_SCALE_HEIGHT or 720)},fps={int(FFMPEG_MUX_FPS or 24)}",
+                    "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET,
+                    "-crf", str(FFMPEG_MUX_CRF or "32"), "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", FFMPEG_MUX_AUDIO_BITRATE,
+                    "-shortest", "-movflags", "+faststart",
+                    out_compact,
+                ],
+                out_compact,
+                False,
+            ))
+            # Last-resort smaller encode if the first compact file is still too large.
+            attempts.append((
+                "small-540p",
+                [
+                    ffmpeg, "-y",
+                    "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
+                    "-stream_loop", "-1", "-i", a_in,
+                    "-t", str(target_duration_s),
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-vf", "scale=-2:540,fps=20",
+                    "-c:v", "libx264", "-preset", "ultrafast",
+                    "-crf", "35", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", "96k",
+                    "-shortest", "-movflags", "+faststart",
+                    out_small,
+                ],
+                out_small,
+                False,
+            ))
+
+            last_err = ""
+            best_too_large: bytes | None = None
+            for name, cmd, out_path, accept_only_if_small in attempts:
+                left = max(20, timeout_s - int(time.time() - started))
+                log.info("ffmpeg mux attempt=%s video=%s audio=%s duration=%s max_bytes=%s timeout_left=%s", name, len(video_bytes), len(audio_bytes), target_duration_s, max_bytes, left)
+                try:
+                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=left)
+                except subprocess.TimeoutExpired:
+                    last_err = f"{name}: timeout after {left}s"
+                    log.warning("ffmpeg mux timeout: %s", last_err)
+                    continue
+                if res.returncode != 0:
+                    last_err = f"{name}: rc={res.returncode} stderr={res.stderr.decode('utf-8', 'ignore')[-1500:]}"
+                    log.warning("ffmpeg mux failed: %s", last_err)
+                    continue
+                if not os.path.exists(out_path):
+                    last_err = f"{name}: output missing"
+                    continue
+                with open(out_path, "rb") as f:
+                    final = f.read()
+                if not final or len(final) <= 1024:
+                    last_err = f"{name}: empty output"
+                    continue
+                log.info("ffmpeg mux ok attempt=%s output=%s elapsed=%.1fs", name, len(final), time.time() - started)
+                if len(final) <= max_bytes:
+                    return final
+                best_too_large = final
+                last_err = f"{name}: output too large {len(final)} > {max_bytes}"
+                log.warning("ffmpeg mux output too large: %s", last_err)
+                if accept_only_if_small:
+                    continue
+            if best_too_large and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
+                return best_too_large
+            log.warning("ffmpeg mux all attempts failed/too-large: %s", last_err[-1500:])
+            return None
+    except Exception as e:
+        log.warning("mux_video_audio exception: %s", e)
+        return None
+
+
+
+
+
+def _trim_audio_for_vocal_clip_sync(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
+    """Telegram/Suno often returns a full 2-4 minute song, while Kling Avatar is much more reliable
+    on short audio. Trim/re-encode to a safe MP3 fragment for lip-sync.
+    """
+    if not audio_bytes:
+        return audio_bytes
+    max_seconds = max(8, min(90, int(max_seconds or 65)))
+    try:
+        ffmpeg = _ffmpeg_exe()
+        with tempfile.TemporaryDirectory() as td:
+            src = os.path.join(td, "suno_full.mp3")
+            out = os.path.join(td, "suno_lipsync_safe.mp3")
+            with open(src, "wb") as f:
+                f.write(audio_bytes)
+            cmd = [
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", src,
+                "-t", str(max_seconds),
+                "-vn", "-ac", "2", "-ar", "44100",
+                "-c:a", "libmp3lame", "-b:a", "128k",
+                out,
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 2048:
+                with open(out, "rb") as f:
+                    return f.read()
+            log.warning("vocal clip audio trim failed: rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-500:])
+    except Exception as e:
+        log.warning("vocal clip audio trim exception: %s", e)
+    return audio_bytes
+
+async def _trim_audio_for_vocal_clip(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
+    return await asyncio.to_thread(_trim_audio_for_vocal_clip_sync, audio_bytes, max_seconds)
+
+
+def _vocal_audio_duration_seconds_sync(audio_bytes: bytes) -> float:
+    """Return a bounded exact source duration without trusting Telegram metadata."""
+    if not audio_bytes:
+        return 0.0
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return 0.0
+    with tempfile.TemporaryDirectory(prefix="neyro_vocal_probe_") as td:
+        path = os.path.join(td, "source.mp3")
+        with open(path, "wb") as fh:
+            fh.write(audio_bytes)
+        try:
+            result = subprocess.run(
+                [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nk=1:nw=1", path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False,
+            )
+            return max(0.0, min(24 * 3600.0, float(result.stdout.decode("utf-8", "ignore").strip())))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return 0.0
+
+def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
+    """Infer explicit singer roles only from the user's direction; never invent gender from pixels."""
+    t = (prompt or "").lower().replace("ё", "е")
+    female = bool(re.search(r"(женщин|девуш|женск(?:ий|им|ого)?\s+(?:вокал|голос)|female\s+vocal|woman\s+sings?)", t, re.I))
+    male = bool(re.search(r"(мужчин|парень|мужск(?:ой|им|ого)?\s+(?:вокал|голос)|male\s+vocal|man\s+sings?)", t, re.I))
+    duet = bool(re.search(r"(вместе|дуэт|припев.*(?:оба|вместе)|оба.*(?:поют|петь)|duet|sing\s+together)", t, re.I))
+    if performer_count <= 1:
+        return {"mode": "solo", "female": female, "male": male, "duet": False}
+    if female and male:
+        return {"mode": "mixed_duet", "female": True, "male": True, "duet": duet}
+    return {"mode": "group", "female": female, "male": male, "duet": duet}
+
+
+def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
+    """Split a director brief into scene-local action contracts instead of repeating the whole story."""
+    source = (base_prompt or "").replace("\r\n", "\n").strip()
+    n = max(1, int(scene_count))
+    # Prefer the user's explicit timeline. Sentence splitting used to merge adjacent
+    # 0–10/10–20/20–30 lines and leak later people, props and actions into early scenes.
+    timeline_re = re.compile(
+        r"(?im)^[ \t]*(\d{1,3})\s*[-–—]\s*(\d{1,3})\s*"
+        r"(?:сек(?:унд\w*)?|s(?:ec(?:ond)?s?)?)?\s*[:：]\s*"
+    )
+    markers = list(timeline_re.finditer(source))
+    if markers:
+        explicit = []
+        for pos, marker in enumerate(markers):
+            end = markers[pos + 1].start() if pos + 1 < len(markers) else len(source)
+            chunk = source[marker.end():end]
+            chunk = re.split(
+                r"(?im)\n\s*(?:обязательные\s+условия|global\s+constraints|continuity\s+rules)\s*:",
+                chunk,
+                maxsplit=1,
+            )[0]
+            chunk = re.sub(r"\s+", " ", chunk).strip(" \n\t;-")
+            if chunk:
+                explicit.append(chunk[:1050])
+        if explicit:
+            if len(explicit) == n:
+                return explicit
+            if len(explicit) > n:
+                grouped = []
+                for i in range(n):
+                    a = int(round(i * len(explicit) / n))
+                    b = int(round((i + 1) * len(explicit) / n))
+                    grouped.append(" ".join(explicit[a:max(a + 1, b)])[:1050])
+                return grouped
+            return explicit + [
+                "Continue only the unfinished physical motion from the preceding block; do not replay it."
+            ] * (n - len(explicit))
+
+    text = re.sub(r"\s+", " ", (base_prompt or "").strip())
+    if not text:
+        return ["Continue the requested action naturally."] * n
+    # Sentence-level chronological allocation is deterministic and keeps future actions
+    # out of early Kling prompts. Identity/global constraints remain in the master lock.
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    action = [s for s in sentences if not re.search(
+        r"(identity lock|критически важно|сохранять форму|face_front|face_3q|body_full|не менять лицо|"
+        r"максимальн.*фотореал|движения естествен|никаких телепортац|каждая следующая часть|"
+        r"если .*вокал|губы|subtitles|watermark)", s, re.I)]
+    if not action:
+        action = sentences or [text]
+    out = []
+    for i in range(n):
+        a = int(round(i * len(action) / n))
+        b = int(round((i + 1) * len(action) / n))
+        chunk = action[a:max(a + 1, b)]
+        out.append(" ".join(chunk)[:1050])
+    return out
+
+
+def _music_video_world_state_ledger(base_prompt: str, scene_idx: int, scene_count: int) -> dict:
+    """Build the authoritative per-scene timeline state without exposing future content."""
+    beats = _music_video_story_beats(base_prompt, scene_count)
+    index = min(max(0, int(scene_idx) - 1), len(beats) - 1)
+    completed = beats[:index]
+    return {
+        "current": beats[index],
+        "completed": " | ".join(completed)[-900:] if completed else "none — begin from the supplied starting keyframe",
+        "future_count": max(0, len(beats) - index - 1),
+        "is_first": index == 0,
+        "is_last": index == len(beats) - 1,
+    }
+
+
+def _vocal_scene_role_prompt(
+    base_prompt: str,
+    role_plan: dict,
+    scene_idx: int,
+    scene_count: int,
+    *,
+    scene_plan: "ScenePlan | None" = None,
+) -> str:
+    """Build a strict persistent world-state contract for one chronological scene."""
+    mode = role_plan.get("mode")
+    role = "single lead protagonist" if mode == "solo" else "preserve only performer roles explicitly requested by the user"
+    if scene_plan is not None:
+        if scene_count != len(scene_plan.scenes) or not 1 <= scene_idx <= len(scene_plan.scenes):
+            raise ValueError("ScenePlan/provider scene selection mismatch")
+        contract = scene_plan.scenes[scene_idx - 1]
+        ledger = {
+            "current": contract.action,
+            "completed": " | ".join(contract.completed_actions) or "none — begin from the supplied starting keyframe",
+            "future_count": contract.future_count,
+            "is_first": scene_idx == 1,
+            "is_last": scene_idx == len(scene_plan.scenes),
+            "start_state": contract.start_state,
+            "end_state": contract.end_state,
+            "world_state": " | ".join(contract.world_state),
+        }
+    else:
+        # Compatibility for legacy non-approved callers only. Production always
+        # passes the exact immutable plan reviewed by the user.
+        ledger = _music_video_world_state_ledger(base_prompt, scene_idx, scene_count)
+        ledger.update({
+            "start_state": (
+                "use the supplied starting keyframe as the physical start"
+                if ledger["is_first"] else "use the continuation frame as the exact physical end state of the preceding scene"
+            ),
+            "end_state": "finish at the last physically implied state of the current action",
+            "world_state": "preserve every established person, prop, location, vehicle and spatial relation",
+        })
+    start = (
+        f"{ledger['start_state']}; use the supplied starting keyframe as the physical start"
+        if ledger["is_first"] else
+        f"{ledger['start_state']}; use the continuation frame as the exact physical end state of the preceding scene"
+    )
+    return (
+        "MANDATORY USER VIDEO DIRECTION. "
+        f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist. "
+        f"REQUIRED ACTION CONTRACT FOR THIS SCENE ONLY — CURRENT ACTION: {ledger['current']} "
+        f"START STATE: {start}. "
+        f"END STATE: {ledger['end_state']}. "
+        f"WORLD STATE: {ledger['world_state']}. "
+        f"COMPLETED ACTIONS (history only; never replay): {ledger['completed']}. "
+        f"UNOPENED FUTURE: {ledger['future_count']} block(s); do not introduce future people, props, vehicles, locations or actions, "
+        "and do not execute actions belonging to later scenes. Perform the current action once; do not restart the story or replay history. "
+        "WORLD LOCKS: Preserve spatial direction, wardrobe, doors, seat assignments, prop ownership/position and every established person/object. "
+        "FORBIDDEN TRANSITIONS: no teleportation, duplicates, extra limbs, geometry warping, role/seat swaps, disappearing objects, "
+        "or a supporting character become the protagonist. "
+        f"ROLE: {role}. IDENTITY: FACE_FRONT=frontal face, FACE_3Q=turned-face geometry, BODY_FULL=body. "
+        "Continuation controls world/pose, never identity. Preserve age, face, hair and body. "
+        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT unless the exact action says otherwise. "
+        "Photorealistic motion; neutral mouth unless lip-sync is active; no text."
+    )
+
+
+async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: float, duration_s: float) -> bytes:
+    def _cut() -> bytes:
+        ffmpeg = _ffmpeg_exe()
+        try:
+            with tempfile.TemporaryDirectory(prefix="neyro_vocal_scene_") as td:
+                src = os.path.join(td, "full.mp3")
+                out = os.path.join(td, "scene.mp3")
+                with open(src, "wb") as fh:
+                    fh.write(audio_bytes)
+                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", str(max(0, start_s)), "-i", src,
+                       "-t", str(max(2, duration_s)), "-vn", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", out]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+                if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                    with open(out, "rb") as fh:
+                        return fh.read()
+        except Exception as e:
+            log.warning("vocal scene audio cut failed: %s", e)
+        return b""
+    return await asyncio.to_thread(_cut)
+
+
+async def _apply_kling_lipsync_to_scene_file(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    audio_bytes: bytes,
+    scene_path: str,
+    contract,
+    directory: str,
+    on_provider_state=None,
+    audio_part_path: str = "",
+    existing_task_id: str = "",
+    sync_file_ops: bool = False,
+) -> str:
+    """Replace only one ScenePlan vocal interval and fail closed on any transport/provider error."""
+    if not contract.has_lip_sync:
+        return scene_path
+    absolute_start = float(contract.lip_sync_start_s)
+    absolute_end = float(contract.lip_sync_end_s)
+    relative_start = absolute_start - float(contract.start_s)
+    relative_end = absolute_end - float(contract.start_s)
+    duration = absolute_end - absolute_start
+    interval_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsync_input.mp4")
+    if sync_file_ops:
+        interval_path = _extract_video_interval_file_sync(scene_path, relative_start, duration, interval_path)
+    else:
+        interval_path = await asyncio.to_thread(
+            _extract_video_interval_file_sync,
+            scene_path,
+            relative_start,
+            duration,
+            interval_path,
+        )
+    if not interval_path:
+        raise RuntimeError(f"Не удалось подготовить video interval для lip-sync сцены {contract.index}.")
+    video_url = await asyncio.to_thread(
+        _provider_input_url_from_file,
+        interval_path,
+        f"scene_{contract.index:02d}_lipsync.mp4",
+    )
+    audio_part = Path(audio_part_path).read_bytes() if audio_part_path else await _extract_audio_segment_bytes(audio_bytes, absolute_start, duration)
+    if not audio_part:
+        raise RuntimeError(f"Не удалось извлечь точный audio interval для lip-sync сцены {contract.index}.")
+    audio_url = _provider_input_url_from_bytes(
+        audio_part,
+        f"scene_{contract.index:02d}_lipsync.mp3",
+    )
+    del audio_part
+    if not video_url.startswith("https://") or not audio_url.startswith("https://"):
+        raise RuntimeError(f"Не удалось получить HTTPS inputs для lip-sync сцены {contract.index}.")
+    synced_bytes = await _run_kling_lipsync_result_bytes(
+        video_url,
+        audio_url,
+        duration_ms=int(round(duration * 1000)),
+        max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+        on_provider_state=on_provider_state,
+        existing_task_id=existing_task_id,
+    )
+    synced_path = _write_video_segment_file(directory, 1000 + contract.index, synced_bytes)
+    del synced_bytes
+    output_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsynced.mp4")
+    if sync_file_ops:
+        output_path = _replace_video_interval_file_sync(
+            scene_path, synced_path, relative_start, relative_end,
+            float(contract.duration_s), output_path,
+        )
+    else:
+        output_path = await asyncio.to_thread(
+            _replace_video_interval_file_sync,
+            scene_path,
+            synced_path,
+            relative_start,
+            relative_end,
+            float(contract.duration_s),
+            output_path,
+        )
+    if not output_path:
+        raise RuntimeError(f"Не удалось встроить lip-sync interval в сцену {contract.index}.")
+    return output_path
+
+
+def _vocal_clip_provider_cost_usd(duration_s: int, lip_sync_jobs: int) -> float:
+    """Provider reserve for Seedance visual scenes and real audio-driven lip-sync.
+
+    Suno is billed as its own completed stage before the human audio-review
+    gate.  This function deliberately excludes it, so approving a saved song
+    cannot charge Suno twice.
+    """
+    visual = max(4, int(duration_s or 10)) * float(SEEDANCE_COST_PER_SECOND_USD)
+    lipsync = max(0, int(lip_sync_jobs or 0)) * float(VOCAL_CLIP_KLING_LIPSYNC_COST_USD)
+    return round(visual + lipsync, 4)
+
+
+def _vocal_artifact_path(user_id: int, token: str, kind: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or kind not in ("audio", "video"):
+        raise ValueError("invalid vocal artifact reference")
+    suffix = "mp3" if kind == "audio" else "mp4"
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{kind}.{suffix}")
+
+
+def _vocal_job_path(user_id: int, token: str, name: str, extension: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or not re.fullmatch(r"[a-z0-9_]{1,48}", name or "") or extension not in ("json", "mp4", "bin"):
+        raise ValueError("invalid vocal job artifact reference")
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{name}.{extension}")
+
+
+def _save_vocal_job_manifest(user_id: int, token: str, manifest: dict) -> None:
+    path = _vocal_job_path(user_id, token, "job", "json"); os.makedirs(os.path.dirname(path), exist_ok=True)
+    raw = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    if len(raw) > 2 * 1024 * 1024: raise RuntimeError("vocal job manifest too large")
+    tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(raw)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+
+
+def _load_vocal_job_manifest(user_id: int, token: str) -> dict | None:
+    try:
+        path = _vocal_job_path(user_id, token, "job", "json"); st = os.stat(path)
+        if st.st_size > 2 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400: return None
+        with open(path, encoding="utf-8") as fh: value = json.load(fh)
+        return value if isinstance(value, dict) and value.get("schema") == 1 else None
+    except (OSError, ValueError, json.JSONDecodeError): return None
+
+
+def _save_vocal_job_file(user_id: int, token: str, name: str, extension: str, data: bytes) -> str:
+    path = _vocal_job_path(user_id, token, name, extension)
+    if not data or len(data) > 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(data)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _save_vocal_job_file_from_path(user_id: int, token: str, name: str, extension: str, source: str) -> str:
+    path = _vocal_job_path(user_id, token, name, extension); size = os.path.getsize(source)
+    if not 1 <= size <= 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try: shutil.copyfile(source, tmp); os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _load_vocal_job_file_path(user_id: int, token: str, name: str, extension: str) -> str | None:
+    try:
+        path = _vocal_job_path(user_id, token, name, extension); st = os.stat(path)
+        return path if 1 <= st.st_size <= 50 * 1024 * 1024 and time.time() - st.st_mtime <= 7 * 86400 else None
+    except (OSError, ValueError): return None
+
+
+def _extract_vocal_intervals(payload: object, duration_s: float) -> list[tuple[float, float]]:
+    raw = []
+    def walk(value):
+        if isinstance(value, list):
+            for item in value: walk(item)
+        elif isinstance(value, dict):
+            def number(*keys):
+                for key in keys:
+                    try:
+                        if value.get(key) is not None: return float(value[key])
+                    except (TypeError, ValueError): pass
+            start, end = number("startS", "start_s", "start", "startTime"), number("endS", "end_s", "end", "endTime")
+            text = value.get("word") or value.get("text") or value.get("lyric")
+            if start is not None and end is not None and str(text or "").strip():
+                if max(start, end) > max(100, duration_s * 10): start, end = start / 1000, end / 1000
+                if min(duration_s, end) > max(0, start): raw.append((max(0, start), min(duration_s, end)))
+            else:
+                for item in value.values(): walk(item)
+    walk(payload); merged = []
+    for start, end in sorted(set(raw)):
+        if merged and start - merged[-1][1] <= .5: merged[-1][1] = max(merged[-1][1], end)
+        else: merged.append([start, end])
+    return [(round(a, 3), round(b, 3)) for a, b in merged if b - a >= 2]
+
+
+def _verified_lipsync_window(contract, intervals) -> tuple[float, float] | None:
+    if contract.lip_sync_start_s is None or contract.lip_sync_end_s is None: return None
+    candidates = [(max(float(contract.lip_sync_start_s), a), min(float(contract.lip_sync_end_s), b)) for a, b in intervals or []]
+    candidates = [item for item in candidates if item[1] - item[0] >= 2]
+    return max(candidates, key=lambda item: item[1] - item[0]) if candidates else None
+
+
+def _prune_vocal_artifacts(user_dir: str) -> None:
+    """Keep a few recent tracks and failed deliveries on Render's persistent disk."""
+    if not os.path.isdir(user_dir):
+        return
+    now = time.time()
+    groups: dict[str, list[tuple[float, str]]] = {"audio": [], "video": []}
+    for entry in os.scandir(user_dir):
+        match = re.fullmatch(r"[0-9a-f]{12}_(audio|video)\.(?:mp3|mp4)", entry.name)
+        if not match or not entry.is_file(follow_symlinks=False):
+            continue
+        try:
+            modified = entry.stat().st_mtime
+            if now - modified > 7 * 86400:
+                os.unlink(entry.path)
+            else:
+                groups[match.group(1)].append((modified, entry.path))
+        except OSError:
+            log.exception("vocal artifact cleanup failed")
+    for kind, files in groups.items():
+        files.sort(reverse=True)
+        for _, path in files[5 if kind == "audio" else 2:]:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+
+
+def _save_vocal_artifact(user_id: int, token: str, kind: str, data: bytes) -> None:
+    path = _vocal_artifact_path(user_id, token, kind)
+    if not data or len(data) > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(temporary, "wb") as file:
+            file.write(data)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+
+
+def _save_vocal_artifact_file(user_id: int, token: str, kind: str, source_path: str) -> str:
+    """Atomically persist an artifact with file-to-file copying and bounded size."""
+    path = _vocal_artifact_path(user_id, token, kind)
+    try:
+        size = os.path.getsize(source_path)
+    except OSError as exc:
+        raise RuntimeError("vocal artifact source missing") from exc
+    if size < 512 or size > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        shutil.copyfile(source_path, temporary)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+    return path
+
+
+def _load_vocal_artifact_path(user_id: int, token: str, kind: str) -> str | None:
+    try:
+        path = _vocal_artifact_path(user_id, token, kind)
+        st = os.stat(path)
+        if st.st_size < 512 or st.st_size > 50 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400:
+            return None
+        return path
+    except (OSError, ValueError):
+        return None
+
+
+def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
+    try:
+        path = _load_vocal_artifact_path(user_id, token, kind)
+        if not path:
+            return None
+        with open(path, "rb") as file:
+            return file.read()
+    except (OSError, ValueError):
+        return None
+
+
+def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")]]
+    if pending:
+        rows.extend([
+            [InlineKeyboardButton("✅ Подтвердить это аудио", callback_data=f"mvfile:approveaudio:{token}")],
+            [InlineKeyboardButton("🔄 Сгенерировать другое аудио", callback_data=f"mvfile:regenaudio:{token}")],
+            [InlineKeyboardButton("✏️ Изменить промпт аудио", callback_data=f"mvfile:editaudio:{token}")],
+        ])
+    else:
+        if resume: rows.append([InlineKeyboardButton("🔄 Повторить создание клипа", callback_data=f"mvfile:resume:{token}")])
+        rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
+    song = BytesIO(data)
+    song.name = "source_vocal_track.mp3"
+    await message.reply_document(
+        document=InputFile(song), caption="🎵 Исходная вокальная аудиодорожка. Сохраните её: клип использует этот трек без TTS-замены.",
+        reply_markup=_vocal_song_kb(token),
+        write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+    )
+
+
+async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    parts = (q.data or "").split(":")
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio", "resume"):
+        await q.answer("Неизвестное действие")
+        return
+    kind, token, user_id = parts[1], parts[2], q.from_user.id
+    video_path = _load_vocal_artifact_path(user_id, token, "video") if kind == "video" else None
+    data = None if kind == "video" else _load_vocal_artifact(user_id, token, "audio")
+    if not (video_path or data):
+        await q.answer("Файл больше недоступен")
+        await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
+        return
+    if kind in ("approveaudio", "resume"):
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        manifest = _load_vocal_job_manifest(user_id, token)
+        if pending_token != token and not manifest:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            await q.message.reply_text("⚠️ Этот вариант уже не является текущим. Подтвердите последнее сгенерированное аудио.")
+            return
+        context.user_data["vocal_source_token"] = token
+        with contextlib.suppress(BadRequest):
+            await q.answer("Аудио подтверждено")
+        prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
+        keyframe = context.user_data.get("music_video_pending_keyframe")
+        scene_plan = context.user_data.get("music_video_pending_scene_plan")
+        if manifest:
+            prompt = prompt or str(manifest.get("prompt") or "")
+            keyframe_path = _load_vocal_job_file_path(user_id, token, "keyframe", "bin")
+            if not keyframe and keyframe_path:
+                with open(keyframe_path, "rb") as fh: keyframe = fh.read()
+            raw_plan = manifest.get("scene_plan")
+            if not isinstance(scene_plan, ScenePlan) and isinstance(raw_plan, dict):
+                scene_plan = scene_plan_from_dict(raw_plan, expected_duration_s=int(manifest["target_duration_s"]), expected_aspect=str(manifest["aspect"]), require_lip_sync=raw_plan.get("vocal_start_s") is not None)
+        if not prompt or not keyframe or not isinstance(scene_plan, ScenePlan):
+            await q.message.reply_text("✅ Аудио подтверждено. Состояние клипа устарело — утвердите сценарий ещё раз.")
+            return
+        # Rehydrate the process-local review state from the durable checkpoint.
+        # _start_vocal_clip will republish this saved keyframe to an HTTPS URL, but
+        # must not pay Gemini/Comet to synthesize it again after a restart.
+        context.user_data["music_video_pending_prompt"] = prompt
+        context.user_data["music_video_pending_audio_token"] = token
+        context.user_data["music_video_pending_scene_plan"] = scene_plan
+        context.user_data["music_video_pending_keyframe"] = keyframe
+        context.user_data.pop("music_video_pending_keyframe_url", None)
+        await q.message.reply_text("✅ Аудио подтверждено. Продолжаю этот же клип — запускаю видеогенерацию.")
+        await _start_vocal_clip(
+            update,
+            context,
+            keyframe,
+            prompt,
+            target_duration_s=scene_plan.duration_s,
+            scene_plan=scene_plan,
+        )
+        return
+    if kind == "editaudio":
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        if pending_token != token:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            return
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data["awaiting_music_video_audio_prompt_edit"] = True
+        with contextlib.suppress(BadRequest):
+            await q.answer("Жду новый промпт")
+        old_brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        await q.message.reply_text(
+            "✏️ Отправьте новый промпт для песни целиком. Можно дополнить старую идею или полностью переписать её.\n\n"
+            "Текущий промпт:\n" + old_brief[:3000]
+        )
+        return
+    if kind == "regenaudio":
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data.pop("music_video_pending_audio_token", None)
+        with contextlib.suppress(BadRequest):
+            await q.answer("Генерирую другой вариант")
+        brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        if not brief:
+            await q.message.reply_text("Состояние музыкального задания устарело. Утвердите сценарий ещё раз.")
+            return
+        await q.message.reply_text("🔄 Генерирую другой вариант по тому же музыкальному заданию. Видео пока не запускаю.")
+        fresh = await _run_suno_music_result_bytes(update, brief)
+        if not fresh:
+            await q.message.reply_text("❌ Suno не вернул новый вариант. Старое аудио остаётся доступным.")
+            return
+        new_token = uuid.uuid4().hex[:12]
+        context.user_data["music_video_pending_audio_token"] = new_token
+        await asyncio.to_thread(_save_vocal_artifact, user_id, new_token, "audio", fresh)
+        await _send_vocal_song_file(q.message, fresh, new_token)
+        await q.message.reply_text(
+            "🎧 Проверьте новый вариант.",
+            reply_markup=_vocal_song_kb(new_token, pending=True),
+        )
+        return
+    if kind == "use":
+        context.user_data["vocal_source_token"] = token
+        await q.answer("Песня выбрана")
+        await q.message.reply_text(
+            "🎵 Для следующего вокального клипа выбрана именно эта песня. "
+            "Откройте режим AI-видеоклипа, пришлите фото и описание, затем утвердите сценарий. "
+            "Suno не будет создавать новую запись."
+        )
+    elif kind == "audio":
+        with contextlib.suppress(BadRequest):
+            await q.answer("Отправляю полную песню")
+        try:
+            await _send_vocal_song_file(q.message, data, token)
+        except Exception:
+            log.exception("vocal source audio resend failed")
+            await q.message.reply_text("Не удалось отправить аудио через Telegram. Нажмите кнопку ещё раз позднее.")
+    else:
+        with contextlib.suppress(BadRequest):
+            await q.answer("Повторно отправляю готовый клип")
+        try:
+            await _reply_video_file(update, video_path, "Готовый AI-видеоклип ✅")
+            with contextlib.suppress(OSError):
+                os.unlink(_vocal_artifact_path(user_id, token, "video"))
+        except Exception:
+            log.exception("saved vocal video resend failed")
+            await q.message.reply_text(
+                "Telegram снова прервал отправку. Готовый клип сохранён; повторите отправку этой кнопкой позднее."
+            )
+
+
+async def _start_vocal_clip(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    user_prompt: str,
+    *,
+    target_duration_s: int | None = None,
+    scene_plan: "ScenePlan | None" = None,
+):
+    """Suno/custom song -> Seedance scenes -> audio-driven Kling lip-sync -> one MP4."""
+    prompt = (user_prompt or "").strip()
+    if not prompt:
+        await update.effective_message.reply_text("Опишите песню/клип: стиль, язык, кто поёт, тип вокала, настроение и длительность.")
+        return
+    try:
+        faces = _detect_faces_for_choice(img_bytes) if FACESWAP_FACE_DETECTION_ENABLED else []
+    except Exception:
+        faces = []
+    performer_count = max(1, len(faces))
+    target_duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
+        if target_duration_s is not None else _photo_clip_target_duration(prompt)
+    )
+    if scene_plan is not None:
+        if scene_plan.duration_s != target_duration or scene_plan.aspect != _music_video_aspect(prompt):
+            raise ValueError("approved ScenePlan no longer matches provider parameters")
+        scene_count = len(scene_plan.scenes)
+        scene_s = max(1, int(max(scene.duration_s for scene in scene_plan.scenes)))
+        planned_lipsync = tuple(scene for scene in scene_plan.scenes if scene.has_lip_sync)
+        if scene_plan.vocal_start_s is not None and not planned_lipsync:
+            await update.effective_message.reply_text(
+                "❌ В утверждённом вокальном ScenePlan нет face-visible lip-sync интервала. Видео не запускаю."
+            )
+            return False
+        if planned_lipsync and (not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY)):
+            await update.effective_message.reply_text(
+                "❌ Kling lip-sync сейчас недоступен. Несинхронизированный вокальный клип не отправляю."
+            )
+            return False
+    else:
+        scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
+        scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
+        planned_lipsync = ()
+    role_plan = _vocal_clip_role_plan(prompt, performer_count)
+    user_id = update.effective_user.id
+    source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
+    saved_source = _load_vocal_artifact(user_id, source_token, "audio") if source_token else None
+    if source_token and not saved_source:
+        context.user_data.pop("vocal_source_token", None)
+        await update.effective_message.reply_text(
+            "Выбранная песня больше не доступна. Сценарий не запущен и кредиты не списаны. "
+            "Выберите сохранённый трек снова или утвердите сценарий для новой песни Suno."
+        )
+        return
+    duration_probe = globals().get("_vocal_audio_duration_seconds_sync")
+    if saved_source and callable(duration_probe):
+        source_duration = await asyncio.to_thread(duration_probe, saved_source)
+        if source_duration <= 0:
+            await update.effective_message.reply_text(
+                "❌ Не удалось определить длительность выбранной аудиодорожки. Загрузите MP3, WAV или M4A заново."
+            )
+            return False
+        if source_duration + 0.25 < target_duration:
+            await update.effective_message.reply_text(
+                f"❌ Аудиодорожка длится только ~{source_duration:.1f} сек, а сценарий рассчитан на {target_duration} сек. "
+                "Выберите более короткую длительность: трек не будет зациклен."
+            )
+            return False
+    # Comet documents image references for this Seedance endpoint, not an
+    # audio-reference contract.  Seedance therefore renders mute base footage;
+    # Kling receives the actual audio in the later lip-sync pass.
+    if "SEEDANCE_ENABLED" in globals() and (not SEEDANCE_ENABLED or not COMET_API_KEY):
+        await update.effective_message.reply_text(
+            "❌ Seedance 2.5 сейчас недоступен. Вокальный клип не запускаю, "
+            "потому что нельзя заменить настоящий lip-sync обычной анимацией."
+        )
+        return False
+    img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
+    job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}:{target_duration}"
+    if job_key in _vocal_clip_background_jobs:
+        await update.effective_message.reply_text("⏳ Такой AI-видеоклип уже обрабатывается. Дождитесь результата, чтобы не получить дубли.")
+        return
+
+    async def _job():
+        _vocal_clip_background_jobs.add(job_key)
+        song_token = source_token or uuid.uuid4().hex[:12]
+        video_token = uuid.uuid4().hex[:12]
+        final_saved = False
+        heartbeat_stop = asyncio.Event()
+        # Some legacy callers load this function in isolation.  Keep checkpointing
+        # optional there, while the production module always provides every helper.
+        load_manifest = globals().get("_load_vocal_job_manifest", lambda *_: None)
+        save_manifest = globals().get("_save_vocal_job_manifest", lambda *_: None)
+        save_job_file = globals().get("_save_vocal_job_file", lambda *_: "")
+        load_job_file_path = globals().get("_load_vocal_job_file_path", lambda *_: None)
+        save_job_path = globals().get(
+            "_save_vocal_job_file_from_path", lambda _u, _t, _n, _e, path: path
+        )
+        verified_lipsync = globals().get("_verified_lipsync_window", lambda *_: None)
+        aspect_fn = globals().get("_music_video_aspect", lambda _: "9:16")
+        now_fn = globals().get("time")
         now_s = int(now_fn.time()) if now_fn is not None else 0
         manifest = load_manifest(user_id, song_token) or {
             "schema": 1,
