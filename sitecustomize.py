@@ -358,6 +358,6 @@ try:
         _re_sys.path.insert(0, _re_root)
     from real_estate_bootstrap import install as install_real_estate_video
     if install_real_estate_video():
-        print("[real-estate] preview-only wizard armed", flush=True)
+        print("[real-estate] guarded production wizard armed", flush=True)
 except Exception as exc:
     print(f"[real-estate] bootstrap warning: {type(exc).__name__}: {exc}", flush=True)

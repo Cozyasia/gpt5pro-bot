@@ -76,7 +76,11 @@ def quote_for_job(engine: str, photo_count: int, duration: int, mode: str = "ful
 def _require_provider(engine: str) -> None:
     if engine == "veo" and not (os.getenv("GEMINI_VIDEO_API_KEY") or os.getenv("GEMINI_API_KEY")):
         raise PropertyVideoError("Google Veo не настроен в Render ENV")
-    if engine in {"kling", "seedance"} and not (os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY") or os.getenv("KLING_API_KEY")):
+    if engine == "kling" and not (
+        os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY") or os.getenv("KLING_API_KEY")
+    ):
+        raise PropertyVideoError(f"{engine.title()} не настроен в Render ENV")
+    if engine == "seedance" and not (os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY")):
         raise PropertyVideoError(f"{engine.title()} не настроен в Render ENV")
 
 
