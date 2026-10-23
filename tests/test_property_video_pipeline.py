@@ -65,6 +65,26 @@ class PropertyVideoPipelineTests(unittest.TestCase):
         self.assertGreater(many["provider_cost_usd"], one["provider_cost_usd"])
         self.assertGreater(many["retail_usd"], 0)
 
+    def test_ffmpeg_assembly_retimes_scene_to_preserve_terminal_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "transition.mp4"
+            output = root / "final.mp4"
+            subprocess.run([
+                "ffmpeg", "-nostdin", "-y", "-f", "lavfi", "-i",
+                "color=c=red:s=160x90:d=4.5", "-f", "lavfi", "-i",
+                "color=c=blue:s=160x90:d=0.5", "-filter_complex",
+                "[0:v][1:v]concat=n=2:v=1:a=0,format=yuv420p[v]",
+                "-map", "[v]", "-r", "30", "-c:v", "libx264", str(source),
+            ], check=True, capture_output=True)
+            assemble_property_video([str(source)], str(output), 4, scene_durations=[4])
+            pixel = subprocess.run([
+                "ffmpeg", "-nostdin", "-v", "error", "-ss", "3.9", "-i", str(output),
+                "-frames:v", "1", "-vf", "scale=1:1", "-f", "rawvideo",
+                "-pix_fmt", "rgb24", "pipe:1",
+            ], check=True, capture_output=True).stdout
+            self.assertGreater(pixel[2], pixel[0], "terminal reference frame was trimmed away")
+
     def test_ffmpeg_assembly_normalizes_and_trims_final_mp4(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
