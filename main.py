@@ -109,13 +109,29 @@ except Exception:
     ImageFilter = None
     ImageOps = None
     ImageDraw = None
-try:
-    from rembg import remove as rembg_remove, new_session as rembg_new_session
-    REMBG_IMPORT_ERROR = ""
-except Exception as _rembg_e:
-    rembg_remove = None
-    rembg_new_session = None
-    REMBG_IMPORT_ERROR = repr(_rembg_e)
+# rembg imports onnxruntime and can reserve hundreds of MiB.  It is only needed
+# by the optional background-removal flow, not by the bot/video providers, so do
+# not load it during normal startup on the 512 MiB Render Starter instance.
+rembg_remove = None
+rembg_new_session = None
+REMBG_IMPORT_ERROR = "lazy import not attempted"
+_REMBG_IMPORT_ATTEMPTED = False
+
+
+def _ensure_rembg_import() -> bool:
+    global rembg_remove, rembg_new_session, REMBG_IMPORT_ERROR, _REMBG_IMPORT_ATTEMPTED
+    if _REMBG_IMPORT_ATTEMPTED:
+        return rembg_remove is not None
+    _REMBG_IMPORT_ATTEMPTED = True
+    try:
+        from rembg import remove as _remove, new_session as _new_session
+        rembg_remove = _remove
+        rembg_new_session = _new_session
+        REMBG_IMPORT_ERROR = ""
+        return True
+    except Exception as exc:
+        REMBG_IMPORT_ERROR = repr(exc)
+        return False
 
 # ───────── LOGGING ─────────
 logging.basicConfig(
@@ -475,6 +491,7 @@ def _bg_last_errors_text() -> str:
 
 async def cmd_diag_bg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Диагностика удаления/замены фона: ENV, rembg import, model session."""
+    _ensure_rembg_import()
     lines: list[str] = []
     lines.append(f"🧪 BG diagnostic / {PATCH_VERSION}")
     lines.append(f"BG_PROVIDER={BG_PROVIDER}")
@@ -12107,6 +12124,7 @@ def _prepare_bytes_for_rembg(img_bytes: bytes) -> bytes:
 
 def _get_local_rembg_session():
     global _REMBG_SESSION
+    _ensure_rembg_import()
     if rembg_remove is None:
         _bg_note_error(f"rembg import failed: {REMBG_IMPORT_ERROR}")
         return None
@@ -12143,7 +12161,7 @@ async def _local_rembg_remove_subprocess(img_bytes: bytes) -> bytes | None:
     Изолированный local rembg worker. Если rembg/onnxruntime зависнет при скачивании
     или инициализации модели, основной бот не зависает: процесс убиваем по timeout.
     """
-    if not LOCAL_REMBG_ENABLED or rembg_remove is None:
+    if not LOCAL_REMBG_ENABLED or not _ensure_rembg_import():
         return None
     if Image is not None:
         img_bytes = _prepare_bytes_for_rembg(img_bytes)
@@ -12239,7 +12257,7 @@ def _local_rembg_remove_sync(img_bytes: bytes) -> bytes:
 async def _local_rembg_remove_bytes(img_bytes: bytes) -> bytes | None:
     if not LOCAL_REMBG_ENABLED:
         return None
-    if rembg_remove is None:
+    if not _ensure_rembg_import():
         log.warning("local rembg is not available: %s", REMBG_IMPORT_ERROR)
         return None
 
@@ -12646,7 +12664,7 @@ async def _remove_bg_bytes_primary(img_bytes: bytes) -> bytes | None:
             return _normalize_transparent_png(out)
 
     # 4) Last-resort local rembg only if explicitly enabled; disabled in production on Render Starter.
-    local_allowed = bool((not BG_DISABLE_LOCAL_REMBG) and LOCAL_REMBG_ENABLED and rembg_remove is not None and provider not in ("photoroom-api-only", "photoroom-only", "removebg-api-only", "removebg-only", "api-only"))
+    local_allowed = bool((not BG_DISABLE_LOCAL_REMBG) and LOCAL_REMBG_ENABLED and provider not in ("photoroom-api-only", "photoroom-only", "removebg-api-only", "removebg-only", "api-only"))
     if local_allowed:
         out = await _local_rembg_remove_bytes(img_bytes)
         if out:
