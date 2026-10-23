@@ -98,8 +98,12 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif action == "default_prompt":
         state["extra"] = ""
+        state["awaiting_prompt"] = False
         await confirm(query, state)
     elif action == "generate":
+        if state.get("generating"):
+            await query.message.reply_text("Генерация уже запущена.")
+            return
         if not all(k in state for k in ("type", "photos", "engine", "duration")) or not state["photos"]:
             await query.message.reply_text("Сессия неполная. Начните заново.")
             return
@@ -110,12 +114,14 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         prompt = PROMPTS[state["type"]] + "\n" + state.get("extra", "")
+        state["generating"] = True
         await query.message.reply_text("⏳ Отправляю задачу на генерацию…")
         try:
             result_url = await _renderer(state["engine"], state["photos"], prompt, state["type"], state["duration"])
             await query.message.reply_video(video=result_url)
             state.clear()
         except Exception:
+            state["generating"] = False
             await query.message.reply_text("Не удалось выполнить генерацию. Попробуйте ещё раз; проверьте логи провайдера.")
 
 
@@ -136,9 +142,13 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Максимум 10 фотографий.")
         return
     if update.message.photo:
-        state["photos"].append(update.message.photo[-1].file_id)
+        file_id = update.message.photo[-1].file_id
+        if file_id not in state["photos"]:
+            state["photos"].append(file_id)
     elif update.message.document and update.message.document.mime_type.startswith("image/"):
-        state["photos"].append(update.message.document.file_id)
+        file_id = update.message.document.file_id
+        if file_id not in state["photos"]:
+            state["photos"].append(file_id)
     else:
         return
     await update.message.reply_text(f"📸 Загружено: {len(state['photos'])}/10")
