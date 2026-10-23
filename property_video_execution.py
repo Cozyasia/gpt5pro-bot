@@ -20,9 +20,14 @@ async def execute(update, context, state, prompt):
     if not price or not key:
         await query.message.reply_text("Veo не настроен: требуется цена и API-ключ. Списаний нет.")
         return
+    if state.get("generating"):
+        await query.message.reply_text("Генерация уже выполняется.")
+        return
+    state["generating"] = True
     job = state.setdefault("job_id", uuid4().hex)
     old = status(db, job)
     if old:
+        state["generating"] = False
         await query.message.reply_text("Задача уже зарегистрирована (статус: %s). Повторный платный запрос запрещён." % old[0])
         return
     # Fetch the input before reserving credits; this is a no-charge operation.
@@ -48,13 +53,13 @@ async def execute(update, context, state, prompt):
     if result != "reserved":
         await query.message.reply_text("Задача уже учтена. Повторная отправка запрещена.")
         return
-    state["generating"] = True
     await query.message.reply_text("⏳ Veo: задача принята, ожидаем видео. Повторно не нажимайте.")
     client = GoogleVeoClient(key, base_url=os.getenv("GEMINI_VIDEO_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
                            model=os.getenv("VEO_GOOGLE_MODEL", "veo-3.1-fast-generate-preview"))
     try:
         operation = await client.submit_initial(prompt, reference_image=photos[0], aspect_ratio="9:16")
     except GoogleVeoSubmissionUncertain:
+        state["generating"] = False
         await query.message.reply_text("Статус отправки Google неизвестен. Резерв сохранён для сверки, повторная генерация запрещена.")
         return
     except Exception:
