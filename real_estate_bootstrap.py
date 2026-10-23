@@ -10,7 +10,7 @@ import os
 def install():
     if os.getenv("REAL_ESTATE_VIDEO_ENABLED", "0").lower() not in ("1", "true", "yes"):
         return False
-    from telegram.ext import ApplicationBuilder, CommandHandler
+    from telegram.ext import ApplicationBuilder
     from real_estate_safe_router import register_safe_handlers
 
     original = ApplicationBuilder.build
@@ -23,17 +23,6 @@ def install():
         # are integrated. The /propertyvideo command is a safe preview entrypoint.
         register_safe_handlers(app)
 
-        async def start(update, context):
-            context.user_data.setdefault("real_estate_video", {}).clear()
-            await update.message.reply_text(
-                "🏡 Видеообзор недвижимости: выберите режим",
-                reply_markup=__import__("telegram").InlineKeyboardMarkup([[
-                    __import__("telegram").InlineKeyboardButton(
-                        "🏡 Создать обзор", callback_data="revideo:start"
-                    )
-                ]]),
-            )
-        app.add_handler(CommandHandler("propertyvideo", start), group=-2)
         return app
 
     wrapped._real_estate_bridge = True
