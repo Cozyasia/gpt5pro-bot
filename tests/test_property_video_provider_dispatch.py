@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from property_video_pipeline import render_scene
+from property_video_pipeline import render_scene, render_scene_to_file
 
 
 class PropertyVideoProviderDispatchTests(unittest.TestCase):
@@ -72,6 +72,18 @@ class PropertyVideoProviderDispatchTests(unittest.TestCase):
             "https://app.test/provider-input/reference.jpg",
         )
         self.assertEqual(seen, ["kling-1"])
+
+    def test_render_scene_to_file_persists_and_does_not_keep_scene_bytes(self):
+        async def run():
+            with patch("property_video_pipeline.render_scene", new=AsyncMock(return_value=b"x" * 1024)):
+                return await render_scene_to_file(
+                    "seedance", str(self.photo), "property", 10,
+                    str(Path(self.tmp.name) / "scene.mp4"),
+                )
+
+        path = asyncio.run(run())
+        self.assertTrue(Path(path).is_file())
+        self.assertEqual(Path(path).stat().st_size, 1024)
 
 
 if __name__ == "__main__":

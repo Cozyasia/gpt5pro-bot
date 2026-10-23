@@ -105,7 +105,8 @@ async def render_scene(
     seconds: int,
     *,
     on_task_id: Callable[[str], None] | None = None,
-) -> bytes:
+    output_path: str = "",
+) -> bytes | str:
     """Render one scene through the project's existing provider transports."""
     engine = engine.strip().lower()
     if engine == "veo":
@@ -150,9 +151,12 @@ async def render_scene(
             "9:16",
             image_url=image_url,
             on_task_id=on_task_id,
+            output_path=output_path,
         )
         if not result:
             raise PropertyVideoError("Kling returned an empty video")
+        if output_path and isinstance(result, str):
+            return result
         return bytes(result)
 
     key = os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY")
@@ -174,6 +178,39 @@ async def render_scene(
         on_task_id=on_task_id,
     )
     return bytes(result)
+
+
+async def render_scene_to_file(
+    engine: str,
+    photo_path: str,
+    prompt: str,
+    seconds: int,
+    output_path: str,
+    *,
+    on_task_id: Callable[[str], None] | None = None,
+) -> str:
+    """Render one scene and persist it before the next provider result is fetched.
+
+    Kling can stream its result directly to ``output_path``. The other existing
+    transports still return bytes, so this wrapper writes and releases that
+    payload immediately instead of keeping completed scenes alive across the
+    multi-scene loop.
+    """
+    target = Path(output_path)
+    result = await render_scene(
+        engine, photo_path, prompt, seconds,
+        on_task_id=on_task_id,
+        output_path=str(target) if engine.strip().lower() == "kling" else "",
+    )
+    if isinstance(result, str):
+        if Path(result).resolve() != target.resolve() and Path(result).is_file():
+            Path(result).replace(target)
+    else:
+        target.write_bytes(result)
+        del result
+    if not target.is_file() or target.stat().st_size < 512:
+        raise PropertyVideoError("Provider returned an empty video file")
+    return str(target)
 
 
 def assemble_property_video(scene_paths: list[str], output_path: str, duration: int) -> str:

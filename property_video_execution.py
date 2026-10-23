@@ -26,7 +26,7 @@ from property_video_pipeline import (
     PropertyVideoError,
     assemble_property_video,
     plan_property_scenes,
-    render_scene,
+    render_scene_to_file,
     scene_manifest,
     scene_prompt,
 )
@@ -237,23 +237,32 @@ async def execute(update, context, state, prompt):
                     log.exception("property video operation journal failed job=%s scene=%s", job, scene_index)
 
             await query.message.reply_text(f"🎬 Сцена {scene.index + 1}/{len(scenes)} · {scene.seconds} сек")
-            rendered = await render_scene(
+            await render_scene_to_file(
                 engine,
                 photo_paths[scene.photo_index],
                 scene_prompt(prompt, scene, len(scenes)),
                 scene.seconds,
+                str(scene_path),
                 on_task_id=_remember,
             )
-            scene_path.write_bytes(rendered)
+            log.info(
+                "PROPERTY_VIDEO_SCENE_READY job=%s scene=%s/%s bytes=%s",
+                job, scene.index + 1, len(scenes), scene_path.stat().st_size,
+            )
             scene_paths.append(str(scene_path))
 
         output = folder / "property_review.mp4"
+        log.info("PROPERTY_VIDEO_ASSEMBLY_START job=%s scenes=%s", job, len(scene_paths))
         await asyncio.to_thread(assemble_property_video, scene_paths, str(output), duration)
-        record_result(db, job, str(output))
+        if not record_result(db, job, str(output)):
+            raise PropertyVideoError("Итоговый файл не удалось записать в журнал задачи")
+        log.info("PROPERTY_VIDEO_RESULT_READY job=%s bytes=%s", job, output.stat().st_size)
+        log.info("PROPERTY_VIDEO_DELIVERY_START job=%s", job)
         sent = await _send_saved(query.message, str(output), f"🏡 Обзор недвижимости · {_provider_label(engine)} · {duration} сек")
         file_id = getattr(getattr(sent, "video", None), "file_id", None)
         if not mark_delivered(db, job, telegram_file_id=file_id):
             raise PropertyVideoError("Видео доставлено, но платёжный ledger не подтвердил списание")
+        log.info("PROPERTY_VIDEO_DELIVERED job=%s file_id=%s", job, bool(file_id))
         state.clear()
     except Exception as exc:
         log.exception("property video job failed job=%s engine=%s", job, engine)
