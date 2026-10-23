@@ -123,6 +123,8 @@ services:
     value: '1'
   - key: PROPERTY_VIDEO_PAID_ENABLED
     value: '1'
+  - key: PROPERTY_VIDEO_OWNER_FREE_ENABLED
+    value: '1'
   - key: PROPERTY_VIDEO_ROOT
     value: /data/real_estate_jobs
   - key: PROPERTY_VIDEO_PROVIDER_MAX_WAIT_S

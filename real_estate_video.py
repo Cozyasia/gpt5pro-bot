@@ -122,8 +122,12 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Платный режим видеообзора выключен в production ENV. Списаний нет.")
             return
         try:
-            from property_video_execution import quote_for_job
+            from property_video_execution import is_property_video_owner_free, quote_for_job
             quote = quote_for_job(state["engine"], len(state["photos"]), state["duration"], state["type"])
+            owner_free = is_property_video_owner_free(
+                update.effective_user.id,
+                getattr(update.effective_user, "username", None),
+            )
         except Exception as exc:
             await query.message.reply_text(f"Не удалось рассчитать стоимость; генерация не запущена. {str(exc)[:300]}")
             return
@@ -137,6 +141,15 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         state["quoted_price_usd"] = float(quote["retail_usd"])
         state["price_confirmed"] = True
+        if owner_free:
+            await query.message.reply_text(
+                f"🧪 Тестовый доступ владельца\n"
+                f"Провайдер: {ENGINES[state['engine']]} · сцен: {quote['scene_count']}\n"
+                f"Расход API провайдера: примерно ${quote['provider_cost_usd']:.2f}\n"
+                "С внутреннего баланса пользователя списания не будет. Запустить реальную генерацию?",
+                reply_markup=keyboard([[('🧪 Запустить тест без списания', 'confirm_paid')], [('↩️ Отмена', 'start')]]),
+            )
+            return
         await query.message.reply_text(
             f"💳 Стоимость обзора: ${quote['retail_usd']:.2f}{credits}\n"
             f"Сцен: {quote['scene_count']} · Провайдер: {ENGINES[state['engine']]}\n"

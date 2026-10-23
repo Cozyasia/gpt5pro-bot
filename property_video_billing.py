@@ -56,9 +56,15 @@ def _now() -> int:
 
 
 def reserve(db_path: str, job_id: str, user_id: int, price_usd, *,
-            provider_cost_usd=None, metadata: dict | None = None) -> str:
-    """Atomically reserve retail balance exactly once for a job."""
-    amount = cents(price_usd)
+            provider_cost_usd=None, metadata: dict | None = None,
+            owner_bypass: bool = False) -> str:
+    """Atomically reserve retail balance exactly once for a job.
+
+    ``owner_bypass`` keeps the provider cost and operation in the durable
+    ledger for audit/recovery, while reserving zero retail credits. It is
+    enabled only by the production owner-test gate in the execution layer.
+    """
+    amount = 0 if owner_bypass else cents(price_usd)
     retail = amount / 100.0
     provider = float(provider_cost_usd if provider_cost_usd is not None else price_usd)
     with _connect(db_path) as con:
@@ -72,23 +78,28 @@ def reserve(db_path: str, job_id: str, user_id: int, price_usd, *,
                 raise ValueError("Job id reused with different owner or amount")
             con.commit()
             return str(old[2])
-        con.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (int(user_id),))
-        balance = float(con.execute("SELECT COALESCE(usd,0) FROM wallet WHERE user_id=?", (int(user_id),)).fetchone()[0])
-        reserved = float(con.execute(
-            "SELECT COALESCE(SUM(retail_usd),0) FROM credit_ledger WHERE user_id=? AND status='reserved'",
-            (int(user_id),)).fetchone()[0])
-        if balance - reserved + 1e-9 < retail:
-            con.rollback()
-            return "insufficient"
+        if not owner_bypass:
+            con.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (int(user_id),))
+            balance = float(con.execute("SELECT COALESCE(usd,0) FROM wallet WHERE user_id=?", (int(user_id),)).fetchone()[0])
+            reserved = float(con.execute(
+                "SELECT COALESCE(SUM(retail_usd),0) FROM credit_ledger WHERE user_id=? AND status='reserved'",
+                (int(user_id),)).fetchone()[0])
+            if balance - reserved + 1e-9 < retail:
+                con.rollback()
+                return "insufficient"
         tx_id = uuid.uuid4().hex
         now = _now()
-        metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+        details = dict(metadata or {})
+        if owner_bypass:
+            details["billing_mode"] = "owner_test"
+        metadata_json = json.dumps(details, ensure_ascii=False)
+        ledger_status = "owner_reserved" if owner_bypass else "reserved"
         con.execute("""INSERT INTO credit_ledger(
             tx_id,user_id,feature,engine,provider_cost_usd,retail_usd,
             credits,status,metadata_json,created_ts,updated_ts)
             VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (tx_id, int(user_id), "property_video", "property-video", provider,
-             retail, retail, "reserved", metadata_json, now, now))
+             retail, retail, ledger_status, metadata_json, now, now))
         con.execute("""INSERT INTO property_video_charges(
             job_id,user_id,amount_cents,status,tx_id,metadata_json,updated_at)
             VALUES (?,?,?,'reserved',?,?,CURRENT_TIMESTAMP)""",
@@ -150,6 +161,11 @@ def mark_delivered(db_path: str, job_id: str, *, telegram_file_id: str | None = 
             con.execute("UPDATE property_video_charges SET status='delivered',delivered_file_id=COALESCE(?,delivered_file_id),updated_at=CURRENT_TIMESTAMP WHERE job_id=?", (telegram_file_id, job_id))
             con.commit()
             return True
+        if ledger[1] == "owner_reserved":
+            con.execute("UPDATE credit_ledger SET status='owner_delivered',updated_ts=? WHERE tx_id=? AND status='owner_reserved'", (_now(), tx_id))
+            con.execute("UPDATE property_video_charges SET status='delivered',delivered_file_id=COALESCE(?,delivered_file_id),updated_at=CURRENT_TIMESTAMP WHERE job_id=?", (telegram_file_id, job_id))
+            con.commit()
+            return True
         if ledger[1] != "reserved":
             con.rollback()
             return False
@@ -173,7 +189,12 @@ def refund_before_submission(db_path: str, job_id: str) -> bool:
         if not row or row[1] != "reserved" or row[2]:
             con.commit()
             return False
-        con.execute("UPDATE credit_ledger SET status='released',updated_ts=? WHERE tx_id=? AND status='reserved'", (_now(), row[0]))
+        ledger = con.execute("SELECT status FROM credit_ledger WHERE tx_id=?", (row[0],)).fetchone()
+        if not ledger or ledger[0] not in ("reserved", "owner_reserved"):
+            con.rollback()
+            return False
+        final_status = "owner_refunded" if ledger[0] == "owner_reserved" else "released"
+        con.execute("UPDATE credit_ledger SET status=?,updated_ts=? WHERE tx_id=? AND status=?", (final_status, _now(), row[0], ledger[0]))
         con.execute("UPDATE property_video_charges SET status='refunded',updated_at=CURRENT_TIMESTAMP WHERE job_id=?", (job_id,))
         con.commit()
         return True

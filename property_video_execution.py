@@ -32,6 +32,24 @@ from real_estate_pipeline import fetch_telegram_photos
 log = logging.getLogger(__name__)
 
 
+def is_property_video_owner_free(user_id: int, username: str | None = None) -> bool:
+    """Return whether this account may run provider-backed owner tests for free."""
+    enabled = os.getenv("PROPERTY_VIDEO_OWNER_FREE_ENABLED", "1").strip().lower()
+    if enabled not in ("1", "true", "yes", "on"):
+        return False
+    try:
+        owner_id = int(os.getenv("OWNER_ID", "0") or "0")
+    except (TypeError, ValueError):
+        owner_id = 0
+    if not owner_id:
+        try:
+            import main as production_main
+            owner_id = int(getattr(production_main, "OWNER_ID", 0) or 0)
+        except Exception:
+            owner_id = 0
+    return owner_id > 0 and int(user_id) == owner_id
+
+
 def _provider_cost(engine: str, scenes) -> float:
     engine = engine.lower()
     if engine == "veo":
@@ -116,6 +134,11 @@ async def execute(update, context, state, prompt):
         await query.message.reply_text(f"Генерация не запущена: {str(exc)[:500]}. Списаний нет.")
         return
 
+    owner_free = is_property_video_owner_free(
+        update.effective_user.id,
+        getattr(update.effective_user, "username", None),
+    )
+
     job = str(state.setdefault("job_id", uuid4().hex))
     db = os.getenv("DB_PATH", "subs.db")
     current = status(db, job)
@@ -159,8 +182,11 @@ async def execute(update, context, state, prompt):
         "scenes": scene_manifest(scenes),
     }
     reserved = reserve(
-        db, job, update.effective_user.id, quote["retail_usd"],
-        provider_cost_usd=quote["provider_cost_usd"], metadata=metadata,
+        db, job, update.effective_user.id,
+        0 if owner_free else quote["retail_usd"],
+        provider_cost_usd=quote["provider_cost_usd"],
+        metadata={**metadata, "retail_quote_usd": quote["retail_usd"]},
+        owner_bypass=owner_free,
     )
     if reserved == "insufficient":
         state["generating"] = False
@@ -174,6 +200,11 @@ async def execute(update, context, state, prompt):
         return
 
     (folder / "plan.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    if owner_free:
+        await query.message.reply_text(
+            f"🧪 Тестовый режим владельца: {_provider_label(engine)} запускается реально. "
+            "Внутренние кредиты не списываются; расход идёт из API-баланса провайдера."
+        )
     await query.message.reply_text(
         f"⏳ {_provider_label(engine)}: запускаю {len(scenes)} сцен(ы). "
         "Повторно кнопку не нажимайте — задача сохранена в журнале."

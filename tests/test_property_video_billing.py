@@ -52,5 +52,20 @@ class PropertyVideoBillingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             reserve(self.db, "job-5", 999, 1)
 
+    def test_owner_bypass_keeps_wallet_and_records_provider_cost(self):
+        self.assertEqual(
+            reserve(self.db, "owner-job", 123, 0, provider_cost_usd=1.20, owner_bypass=True),
+            "reserved",
+        )
+        record_operation(self.db, "owner-job", "task-owner-1", provider="kling")
+        record_result(self.db, "owner-job", "/tmp/property-review.mp4")
+        self.assertTrue(mark_delivered(self.db, "owner-job"))
+        self.assertAlmostEqual(self.balance(), 10.0)
+        with sqlite3.connect(self.db) as con:
+            ledger = con.execute(
+                "SELECT provider_cost_usd,retail_usd,status FROM credit_ledger WHERE tx_id=(SELECT tx_id FROM property_video_charges WHERE job_id='owner-job')"
+            ).fetchone()
+        self.assertEqual(ledger, (1.2, 0.0, "owner_delivered"))
+
 if __name__ == "__main__":
     unittest.main()
