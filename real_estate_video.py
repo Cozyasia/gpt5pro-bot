@@ -1,11 +1,9 @@
-"""Real-estate video wizard for python-telegram-bot 21.x.
-
-Register with register_real_estate_handlers(application). Provider execution is deliberately
-delegated to an injected async render callback; no simulated video is returned.
-"""
+"""Telegram wizard for paid multi-scene real-estate video reviews."""
 from __future__ import annotations
 
+import os
 from typing import Awaitable, Callable
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
@@ -15,21 +13,20 @@ PROMPTS = {
         "Professional photorealistic luxury real-estate exterior walkthrough. Use the uploaded "
         "photos as strict architectural references. Smooth gimbal dolly-in, subtle lateral "
         "parallax, natural tropical daylight, realistic pool reflections. Preserve roof, "
-        "facade, windows, doors, landscaping and proportions. Connect viewpoints only where "
-        "visually plausible. Never invent structural details. No morphing, warping, or text."
+        "facade, windows, doors, landscaping and proportions. Never invent structural details. "
+        "No morphing, warping, or text."
     ),
     "interior": (
         "Professional photorealistic interior property tour based on the supplied photographs. "
-        "Slow stabilized walking camera, preserve consistent lighting, materials, furniture and room "
-        "geometry. Sequence rooms in upload order. Use short neutral transitional corridors "
-        "only where the layout is unknown; do not claim inferred connections are factual. "
-        "Never invent additional bedrooms or amenities. No object morphing, no warped walls."
+        "Slow stabilized walking camera, preserve consistent lighting, materials, furniture and "
+        "room geometry. Sequence rooms in upload order. Never invent additional bedrooms, "
+        "amenities, doors or a floor plan. No object morphing or warped walls."
     ),
     "full": (
         "Premium real-estate film combining an exterior establishing shot and a smooth interior "
-        "tour. Preserve all photographed architectural features and furniture. Build cinematic "
-        "transitions between reference photos without asserting an unverified floor plan. "
-        "Realistic lens, slow gimbal motion, no invented amenities, no geometry changes."
+        "tour. Preserve all photographed architectural features and furniture. Use the first "
+        "supplied exterior view as the establishing shot, then follow the remaining supplied "
+        "views in order. Do not assert an unverified floor plan. No invented amenities or geometry changes."
     ),
 }
 ENGINES = {"kling": "Kling", "veo": "Google Veo", "seedance": "Seedance"}
@@ -67,9 +64,8 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["type"] = action.split(":", 1)[1]
         state["photos"] = []
         await query.message.reply_text(
-            "Пришлите фотографии объекта по порядку (до 10). "
-            "Для интерьера загружайте комнаты в желаемом порядке обхода. "
-            "Затем нажмите «Фото загружены».",
+            "Пришлите фотографии объекта по порядку (до 10). Для интерьера загружайте комнаты "
+            "в желаемом порядке обхода. Затем нажмите «Фото загружены».",
             reply_markup=keyboard([[("✅ Фото загружены", "photos_done")]]),
         )
     elif action == "photos_done":
@@ -78,8 +74,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await query.message.reply_text(
             f"Получено фотографий: {len(state['photos'])}. Выберите движок:",
-            reply_markup=keyboard([[("Kling", "engine:kling")], [("Google Veo", "engine:veo")],
-                                   [("Seedance", "engine:seedance")]]),
+            reply_markup=keyboard([[("Kling", "engine:kling")], [("Google Veo", "engine:veo")], [("Seedance", "engine:seedance")]]),
         )
     elif action.startswith("engine:"):
         engine = action.split(":", 1)[1]
@@ -88,17 +83,15 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         state["engine"] = engine
         await query.message.reply_text(
-            "Выберите длительность:", reply_markup=keyboard([
-                [("8 секунд (Veo)", "duration:8")],
+            "Выберите длительность:",
+            reply_markup=keyboard([
+                [("8 секунд", "duration:8")],
                 [("10 секунд", "duration:10"), ("20 секунд", "duration:20")],
                 [("30 секунд", "duration:30")],
             ]),
         )
     elif action.startswith("duration:"):
         duration = int(action.split(":", 1)[1])
-        if state.get("engine") == "veo" and duration != 8:
-            await query.message.reply_text("Для Veo сейчас поддерживается только 8 секунд. Выберите 8 секунд.")
-            return
         if duration not in (8, 10, 20, 30):
             await query.message.reply_text("Недопустимая длительность.")
             return
@@ -112,6 +105,12 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["extra"] = ""
         state["awaiting_prompt"] = False
         await confirm(query, state)
+    elif action == "confirm_paid":
+        if not state.get("price_confirmed"):
+            await query.message.reply_text("Подтверждение стоимости отсутствует.")
+            return
+        from property_video_execution import execute
+        await execute(update, context, state, PROMPTS[state["type"]] + "\n" + state.get("extra", ""))
     elif action == "generate":
         if state.get("generating"):
             await query.message.reply_text("Генерация уже запущена.")
@@ -119,25 +118,31 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not all(k in state for k in ("type", "photos", "engine", "duration")) or not state["photos"]:
             await query.message.reply_text("Сессия неполная. Начните заново.")
             return
-        if state.get("engine") != "veo":
-            await query.message.reply_text("Этот движок пока не подключён к режиму недвижимости. Платный запрос не отправлен.")
+        if os.getenv("PROPERTY_VIDEO_PAID_ENABLED", "0").lower() not in ("1", "true", "yes", "on"):
+            await query.message.reply_text("Платный режим видеообзора выключен в production ENV. Списаний нет.")
             return
-        if _renderer is None:
-            await query.message.reply_text(
-                "Генерация пока не подключена к API провайдера. "
-                "Настройки сохранены; списание средств не выполнялось."
-            )
-            return
-        prompt = PROMPTS[state["type"]] + "\n" + state.get("extra", "")
-        state["generating"] = True
-        await query.message.reply_text("⏳ Отправляю задачу на генерацию…")
         try:
-            result_url = await _renderer(state["engine"], state["photos"], prompt, state["type"], state["duration"])
-            await query.message.reply_video(video=result_url)
-            state.clear()
+            from property_video_execution import quote_for_job
+            quote = quote_for_job(state["engine"], len(state["photos"]), state["duration"], state["type"])
+        except Exception as exc:
+            await query.message.reply_text(f"Не удалось рассчитать стоимость; генерация не запущена. {str(exc)[:300]}")
+            return
+        credits = ""
+        try:
+            import main as production_main
+            formatter = getattr(production_main, "_credits_fmt_from_usd", None)
+            if callable(formatter):
+                credits = f" ({formatter(quote['retail_usd'])})"
         except Exception:
-            state["generating"] = False
-            await query.message.reply_text("Результат генерации не подтверждён. Не запускайте повторно: проверьте существующую операцию у провайдера, чтобы избежать двойного списания.")
+            pass
+        state["quoted_price_usd"] = float(quote["retail_usd"])
+        state["price_confirmed"] = True
+        await query.message.reply_text(
+            f"💳 Стоимость обзора: ${quote['retail_usd']:.2f}{credits}\n"
+            f"Сцен: {quote['scene_count']} · Провайдер: {ENGINES[state['engine']]}\n"
+            "Сумма резервируется перед запуском и списывается только после доставки MP4. Подтвердить?",
+            reply_markup=keyboard([[("💳 Подтверждаю оплату", "confirm_paid")], [("↩️ Отмена", "start")]]),
+        )
 
 
 async def confirm(query, state):
@@ -158,14 +163,12 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if update.message.photo:
         file_id = update.message.photo[-1].file_id
-        if file_id not in state["photos"]:
-            state["photos"].append(file_id)
     elif update.message.document and (update.message.document.mime_type or "").startswith("image/"):
         file_id = update.message.document.file_id
-        if file_id not in state["photos"]:
-            state["photos"].append(file_id)
     else:
         return
+    if file_id not in state["photos"]:
+        state["photos"].append(file_id)
     await update.message.reply_text(f"📸 Загружено: {len(state['photos'])}/10")
 
 
@@ -176,18 +179,12 @@ async def custom_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state["extra"] = update.message.text[:1500]
     state["awaiting_prompt"] = False
     await update.message.reply_text(
-        f"Дополнительные пожелания сохранены. Режим: {state['type']}, "
-        f"движок: {ENGINES[state['engine']]}.",
+        f"Дополнительные пожелания сохранены. Режим: {state['type']}, движок: {ENGINES[state['engine']]}.",
         reply_markup=keyboard([[("🚀 Создать видео", "generate")], [("↩️ Заново", "start")]]),
     )
 
 
 def register_real_estate_handlers(application, renderer: RenderCallback | None = None):
-    """Register after existing generic message handlers or in a higher-priority group.
-
-    The renderer must resolve Telegram file IDs to downloadable URLs or bytes and
-    orchestrate multiple provider clips when duration exceeds the provider limit.
-    """
     global _renderer
     _renderer = renderer
     application.add_handler(CallbackQueryHandler(callback, pattern=r"^revideo:"), group=1)
