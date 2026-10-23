@@ -153,7 +153,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_id = update.message.photo[-1].file_id
         if file_id not in state["photos"]:
             state["photos"].append(file_id)
-    elif update.message.document and update.message.document.mime_type.startswith("image/"):
+    elif update.message.document and (update.message.document.mime_type or "").startswith("image/"):
         file_id = update.message.document.file_id
         if file_id not in state["photos"]:
             state["photos"].append(file_id)
