@@ -38,6 +38,13 @@ def is_property_video_owner_free(user_id: int, username: str | None = None) -> b
     if enabled not in ("1", "true", "yes", "on"):
         return False
     try:
+        import main as production_main
+        unlimited = getattr(production_main, "is_unlimited", None)
+        if callable(unlimited) and unlimited(int(user_id), username):
+            return True
+    except Exception:
+        pass
+    try:
         owner_id = int(os.getenv("OWNER_ID", "0") or "0")
     except (TypeError, ValueError):
         owner_id = 0
