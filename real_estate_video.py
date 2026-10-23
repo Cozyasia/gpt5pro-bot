@@ -117,7 +117,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Подтверждение стоимости отсутствует.")
             return
         from property_video_execution import execute
-        prompt = PROMPTS[state["type"]] + "\\n" + state.get("extra", "")
+        prompt = PROMPTS[state["type"]] + "\n" + state.get("extra", "")
         await execute(update, context, state, prompt)
     elif action == "generate":
         import os
