@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import asyncio
+import sqlite3
 import sys
 from pathlib import Path
 from uuid import uuid4
