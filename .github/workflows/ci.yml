@@ -25,6 +25,8 @@ jobs:
           pip install -r requirements.txt
       - name: Compile all Python modules
         run: python -m compileall -q .
+      - name: Install FFmpeg for media integration tests
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
       - name: Run production core tests
         env:
           PROD_HARDENING_ENABLED: "0"
