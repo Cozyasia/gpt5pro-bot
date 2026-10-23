@@ -113,6 +113,20 @@ services:
     sync: false
   - key: COMET_BASE_URL
     value: https://api.cometapi.com
+  - key: GEMINI_VIDEO_API_KEY
+    sync: false
+  - key: GEMINI_VIDEO_BASE_URL
+    value: https://generativelanguage.googleapis.com/v1beta
+  - key: VEO_GOOGLE_MODEL
+    value: veo-3.1-fast-generate-preview
+  - key: REAL_ESTATE_VIDEO_ENABLED
+    value: '1'
+  - key: PROPERTY_VIDEO_PAID_ENABLED
+    value: '1'
+  - key: PROPERTY_VIDEO_ROOT
+    value: /data/real_estate_jobs
+  - key: PROPERTY_VIDEO_PROVIDER_MAX_WAIT_S
+    value: '1800'
   - key: SEEDANCE_ENABLED
     value: '1'
   - key: SEEDANCE_MODEL

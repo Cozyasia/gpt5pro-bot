@@ -347,7 +347,8 @@ except Exception as exc:
     print(f"[neyrobot-prod] HeyGen talking-avatar selector warning: {type(exc).__name__}: {exc}", flush=True)
 
 
-# Property video: disabled by default; no paid renderer until billing is integrated.
+# Property video: opt-in startup bridge; paid execution remains separately
+# gated by PROPERTY_VIDEO_PAID_ENABLED and the durable credit ledger.
 try:
     # Ensure the adjacent bootstrap module is importable during site initialization.
     import sys as _re_sys

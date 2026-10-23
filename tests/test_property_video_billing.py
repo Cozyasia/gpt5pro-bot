@@ -2,7 +2,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from property_video_billing import reserve, record_operation, refund_before_submission, mark_delivered
+from property_video_billing import reserve, record_operation, refund_before_submission, mark_delivered, record_result, status
 
 class PropertyVideoBillingTests(unittest.TestCase):
     def setUp(self):
@@ -22,6 +22,11 @@ class PropertyVideoBillingTests(unittest.TestCase):
     def test_reserve_only_once(self):
         self.assertEqual(reserve(self.db, "job-1", 123, "2.50"), "reserved")
         self.assertEqual(reserve(self.db, "job-1", 123, "2.50"), "reserved")
+        # A reserve occupies capacity in credit_ledger; the wallet is charged
+        # only after the final MP4 is delivered.
+        self.assertAlmostEqual(self.balance(), 10.0)
+        record_result(self.db, "job-1", "/tmp/property-review.mp4")
+        self.assertTrue(mark_delivered(self.db, "job-1"))
         self.assertAlmostEqual(self.balance(), 7.5)
 
     def test_insufficient_does_not_debit(self):
@@ -38,6 +43,7 @@ class PropertyVideoBillingTests(unittest.TestCase):
         reserve(self.db, "job-4", 123, 3)
         record_operation(self.db, "job-4", "operations/123")
         self.assertFalse(refund_before_submission(self.db, "job-4"))
+        record_result(self.db, "job-4", "/tmp/property-review.mp4")
         mark_delivered(self.db, "job-4")
         self.assertAlmostEqual(self.balance(), 7)
 

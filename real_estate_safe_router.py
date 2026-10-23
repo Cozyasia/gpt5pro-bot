@@ -43,8 +43,15 @@ async def _start(update, context):
     raise ApplicationHandlerStop
 
 
+async def _recover(update, context):
+    from property_video_execution import recover_ready
+    await recover_ready(update, context)
+    raise ApplicationHandlerStop
+
+
 def register_safe_handlers(application):
     application.add_handler(CommandHandler("propertyvideo", _start), group=-3)
+    application.add_handler(CommandHandler("propertyvideo_recover", _recover), group=-3)
     application.add_handler(CallbackQueryHandler(_callback, pattern=r"^revideo:"), group=-3)
     application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, _photo), group=-3)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text), group=-3)
