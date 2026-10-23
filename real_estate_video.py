@@ -85,12 +85,17 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["engine"] = action.split(":", 1)[1]
         await query.message.reply_text(
             "Выберите длительность:", reply_markup=keyboard([
+                [("8 секунд (Veo)", "duration:8")],
                 [("10 секунд", "duration:10"), ("20 секунд", "duration:20")],
                 [("30 секунд", "duration:30")],
             ]),
         )
     elif action.startswith("duration:"):
-        state["duration"] = int(action.split(":", 1)[1])
+        duration = int(action.split(":", 1)[1])
+        if state.get("engine") == "veo" and duration != 8:
+            await query.message.reply_text("Для Veo сейчас поддерживается только 8 секунд. Выберите 8 секунд.")
+            return
+        state["duration"] = duration
         state["awaiting_prompt"] = True
         await query.message.reply_text(
             "Напишите дополнительные пожелания к съёмке или нажмите «Готовый промпт».",
@@ -106,6 +111,9 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if not all(k in state for k in ("type", "photos", "engine", "duration")) or not state["photos"]:
             await query.message.reply_text("Сессия неполная. Начните заново.")
+            return
+        if state.get("engine") != "veo":
+            await query.message.reply_text("Этот движок пока не подключён к режиму недвижимости. Платный запрос не отправлен.")
             return
         if _renderer is None:
             await query.message.reply_text(
@@ -175,6 +183,6 @@ def register_real_estate_handlers(application, renderer: RenderCallback | None =
     """
     global _renderer
     _renderer = renderer
-    application.add_handler(CallbackQueryHandler(callback, pattern=r"^revideo:"), group=-1)
+    application.add_handler(CallbackQueryHandler(callback, pattern=r"^revideo:"), group=1)
     application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, photo), group=-1)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_prompt), group=-1)
