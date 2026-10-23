@@ -20,7 +20,7 @@ PROMPTS = {
     ),
     "interior": (
         "Professional photorealistic interior property tour based on the supplied photographs. "
-        "Slow stabilized walking camera, consistent lighting, materials, furniture and room "
+        "Slow stabilized walking camera, preserve consistent lighting, materials, furniture and room "
         "geometry. Sequence rooms in upload order. Use short neutral transitional corridors "
         "only where the layout is unknown; do not claim inferred connections are factual. "
         "Never invent additional bedrooms or amenities. No object morphing, no warped walls."
