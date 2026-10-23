@@ -185,9 +185,12 @@ async def execute(update, context, state, prompt):
     metadata = {
         "user_id": int(update.effective_user.id),
         "chat_id": int(update.effective_chat.id),
+        "username": getattr(update.effective_user, "username", None),
+        "owner_free": bool(owner_free),
         "engine": engine,
         "mode": mode,
         "duration": duration,
+        "provider_cost_usd": quote["provider_cost_usd"],
         "scene_count": len(scenes),
         "scenes": scene_manifest(scenes),
     }
@@ -300,6 +303,7 @@ async def recover_after_restart(application) -> None:
                    WHERE status IN ('submitted','assembling','ready')
                    ORDER BY created_at ASC LIMIT 20"""
             ).fetchall()
+        log.info("PROPERTY_VIDEO_RECOVERY_SCAN jobs=%s root=%s", len(rows), _root())
     except Exception:
         log.exception("property video restart recovery: database scan failed")
         return
@@ -363,7 +367,7 @@ async def recover_after_restart(application) -> None:
             metadata = json.loads(manifest_path.read_text(encoding="utf-8"))
             user_id = int(metadata["user_id"])
             chat_id = int(metadata.get("chat_id") or user_id)
-            if not is_property_video_owner_free(user_id):
+            if not metadata.get("owner_free") and not is_property_video_owner_free(user_id, metadata.get("username")):
                 continue
             engine = str(metadata["engine"])
             duration = int(metadata["duration"])
