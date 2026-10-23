@@ -349,7 +349,7 @@ except Exception as exc:
 
 # Property video: disabled by default; no paid renderer until billing is integrated.
 try:
-    from real_estate_bootstrap import install as install_real_estate_video
+    # sitecustomize runs during Python site initialization, before the script\n    # directory is necessarily inserted into sys.path. Resolve the adjacent\n    # bootstrap explicitly so production startup can import it reliably.\n    import sys as _re_sys\n    from pathlib import Path as _re_Path\n    _re_root = str(_re_Path(__file__).resolve().parent)\n    if _re_root not in _re_sys.path:\n        _re_sys.path.insert(0, _re_root)\n    from real_estate_bootstrap import install as install_real_estate_video
     if install_real_estate_video():
         print("[real-estate] preview-only wizard armed", flush=True)
 except Exception as exc:
