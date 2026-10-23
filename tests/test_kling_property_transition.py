@@ -1,6 +1,8 @@
+import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
+os.environ.setdefault("BOT_TOKEN", "123456:test-token")
 import main
 
 
