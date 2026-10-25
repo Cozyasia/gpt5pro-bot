@@ -35,6 +35,17 @@ from property_video_pipeline import (
 )
 from real_estate_pipeline import fetch_telegram_photos
 from property_video_director import analyse_reference_photos
+from property_video_audio import (
+    create_narration_plan,
+    mix_property_audio,
+    recover_music_track,
+    recover_voice_track,
+    render_music_track,
+    render_voice_track,
+    sound_has_music,
+    sound_has_voice,
+    validate_sound_mode,
+)
 
 log = logging.getLogger(__name__)
 
@@ -91,21 +102,38 @@ def _retail_price(provider_cost: float) -> float:
     return round(provider_cost * multiplier, 2)
 
 
-def quote_for_job(engine: str, photo_count: int, duration: int, mode: str = "full") -> dict:
+def _audio_cost(sound_mode: str, duration: int) -> dict:
+    mode = validate_sound_mode(sound_mode)
+    music = float(os.getenv("PROPERTY_VIDEO_SUNO_COST_USD", os.getenv("SUNO_COST_USD", "0.20"))) if sound_has_music(mode) else 0.0
+    voice_per_minute = float(os.getenv(
+        "PROPERTY_VIDEO_TTS_COST_PER_MINUTE_USD",
+        os.getenv("VEO_24S_TTS_COST_PER_MINUTE_USD", "0.015"),
+    ))
+    voice = (max(1, int(duration)) / 60.0) * voice_per_minute if sound_has_voice(mode) else 0.0
+    return {"music_cost_usd": round(music, 4), "voice_cost_usd": round(voice, 4)}
+
+
+def quote_for_job(
+    engine: str, photo_count: int, duration: int, mode: str = "full", *, sound_mode: str = "none",
+) -> dict:
     scenes = plan_property_scenes(photo_count, duration, engine, mode)
-    provider_cost = _provider_cost(engine, scenes)
+    video_cost = _provider_cost(engine, scenes)
+    audio = _audio_cost(sound_mode, duration)
+    provider_cost = round(video_cost + audio["music_cost_usd"] + audio["voice_cost_usd"], 4)
     retail = _retail_price(provider_cost)
     return {
         "engine": engine,
         "duration": int(duration),
         "scene_count": len(scenes),
         "provider_cost_usd": provider_cost,
+        "video_cost_usd": video_cost,
+        **audio,
         "retail_usd": retail,
         "scenes": scene_manifest(scenes),
     }
 
 
-def _require_provider(engine: str) -> None:
+def _require_provider(engine: str, sound_mode: str = "none") -> None:
     if engine == "veo" and not (os.getenv("GEMINI_VIDEO_API_KEY") or os.getenv("GEMINI_API_KEY")):
         raise PropertyVideoError("Google Veo не настроен в Render ENV")
     if engine == "kling" and not (
@@ -114,6 +142,11 @@ def _require_provider(engine: str) -> None:
         raise PropertyVideoError(f"{engine.title()} не настроен в Render ENV")
     if engine == "seedance" and not (os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY")):
         raise PropertyVideoError(f"{engine.title()} не настроен в Render ENV")
+    mode = validate_sound_mode(sound_mode)
+    if sound_has_music(mode) and not os.getenv("SUNO_API_KEY"):
+        raise PropertyVideoError("Suno не настроен в Render ENV")
+    if sound_has_voice(mode) and not (os.getenv("OPENAI_TTS_KEY") or os.getenv("OPENAI_API_KEY")):
+        raise PropertyVideoError("OpenAI TTS не настроен в Render ENV")
 
 
 def _root() -> Path:
@@ -137,6 +170,52 @@ def _assembly_durations(metadata: dict) -> list[float] | None:
 def _assembly_aspect(metadata: dict) -> str:
     value = str(metadata.get("aspect_ratio") or "9:16")
     return value if value in {"9:16", "16:9"} else "9:16"
+
+
+def _saved_audio_paths(folder: Path, sound_mode: str, metadata: dict) -> tuple[str, str]:
+    mode = validate_sound_mode(sound_mode)
+    music = folder / "audio" / "music_source.mp3"
+    voice = folder / "audio" / "voice_master.wav"
+    if sound_has_music(mode) and not (music.is_file() and music.stat().st_size > 0):
+        raise PropertyVideoError("saved Suno track is not ready")
+    if sound_has_voice(mode) and not (voice.is_file() and voice.stat().st_size > 0):
+        try:
+            recover_voice_track(
+                metadata.get("narration_plan") or {}, _assembly_durations(metadata) or [], str(folder / "audio"),
+            )
+        except Exception as exc:
+            raise PropertyVideoError("saved narration track is not ready") from exc
+    return (str(music) if sound_has_music(mode) else "", str(voice) if sound_has_voice(mode) else "")
+
+
+async def _assemble_saved_job(folder: Path, scene_paths: list[Path], output: Path, metadata: dict) -> None:
+    duration = int(metadata["duration"])
+    aspect = _assembly_aspect(metadata)
+    mode = validate_sound_mode(metadata.get("sound_mode"))
+    music_file = folder / "audio" / "music_source.mp3"
+    if sound_has_music(mode) and not (music_file.is_file() and music_file.stat().st_size > 0):
+        db = os.getenv("DB_PATH", "subs.db")
+        with _connect(db) as con:
+            row = con.execute(
+                "SELECT operation_id FROM property_video_operations WHERE job_id=? AND scene_index=-1",
+                (folder.name,),
+            ).fetchone()
+        if row:
+            await recover_music_track(str(row[0]), str(folder / "audio"))
+    silent = folder / "property_review_silent.mp4"
+    assembly_args = ([str(path) for path in scene_paths], str(silent), duration)
+    durations = _assembly_durations(metadata)
+    if durations is not None or metadata.get("aspect_ratio"):
+        assembly_args = (*assembly_args, durations, aspect)
+    await asyncio.to_thread(assemble_property_video, *assembly_args)
+    music, voice = _saved_audio_paths(folder, mode, metadata)
+    await asyncio.to_thread(
+        mix_property_audio, str(silent), str(output), duration,
+        music_path=music, voice_path=voice,
+    )
+    await asyncio.to_thread(
+        inspect_property_video, str(output), duration, aspect, expect_audio=mode != "none",
+    )
 
 
 def execution_job(state: dict, db: str) -> tuple[str, tuple | None]:
@@ -168,13 +247,18 @@ async def execute(update, context, state, prompt):
     engine = str(state.get("engine") or "").lower()
     mode = str(state.get("type") or "full").lower()
     duration = int(state.get("duration") or 0)
+    sound_mode = str(state.get("sound_mode") or "none")
     photo_ids = list(state.get("photos") or [])
     if engine not in {"kling", "veo", "seedance"} or not photo_ids:
         await query.message.reply_text("Сессия видеообзора неполная. Начните заново.")
         return
     try:
-        quote = quote_for_job(engine, len(photo_ids), duration, mode)
-        _require_provider(engine)
+        sound_mode = validate_sound_mode(sound_mode)
+        quote = quote_for_job(engine, len(photo_ids), duration, mode, sound_mode=sound_mode)
+        _require_provider(engine, sound_mode)
+        confirmed_price = float(state.get("quoted_price_usd"))
+        if abs(confirmed_price - float(quote["retail_usd"])) > 0.005:
+            raise PropertyVideoError("Стоимость изменилась после подтверждения; выполните новый расчёт")
     except Exception as exc:
         state["generating"] = False
         await query.message.reply_text(f"Генерация не запущена: {str(exc)[:500]}. Списаний нет.")
@@ -220,10 +304,21 @@ async def execute(update, context, state, prompt):
         f"🧭 Режиссёр анализирует {len(photo_paths)} фотографий, типы помещений и маршрут."
     )
     try:
-        analysis = await analyse_reference_photos(photo_paths)
+        cached_analysis = state.get("reference_analysis")
+        if isinstance(cached_analysis, list) and len(cached_analysis) == len(photo_paths):
+            analysis = cached_analysis
+        else:
+            analysis = await analyse_reference_photos(photo_paths)
         labels = [str(item.get("space") or "unknown") for item in analysis]
         aspect_ratio = resolve_reference_aspect(photo_paths, str(state.get("aspect") or "auto"))
         scenes = plan_property_scenes(len(photo_paths), duration, engine, mode, labels=labels)
+        narration_plan = state.get("narration_plan") if sound_has_voice(sound_mode) else None
+        if sound_has_voice(sound_mode) and not narration_plan:
+            narration_plan = await create_narration_plan(
+                analysis, scenes,
+                state.get("narration_language", "ru"), state.get("narration_voice", "female"),
+                user_id=int(update.effective_user.id), chat_id=int(update.effective_chat.id),
+            )
     except Exception as exc:
         state["generating"] = False
         log.exception("property video director failed before provider submission")
@@ -241,7 +336,14 @@ async def execute(update, context, state, prompt):
         "duration": duration,
         "aspect_ratio": aspect_ratio,
         "reference_analysis": analysis,
+        "sound_mode": sound_mode,
+        "narration_language": state.get("narration_language", "ru"),
+        "narration_voice": state.get("narration_voice", "female"),
+        "narration_plan": narration_plan,
         "provider_cost_usd": quote["provider_cost_usd"],
+        "video_cost_usd": quote["video_cost_usd"],
+        "music_cost_usd": quote["music_cost_usd"],
+        "voice_cost_usd": quote["voice_cost_usd"],
         "scene_count": len(scenes),
         "scenes": scene_manifest(scenes),
     }
@@ -309,17 +411,60 @@ async def execute(update, context, state, prompt):
             )
             scene_paths.append(str(scene_path))
 
+        audio_folder = folder / "audio"
+        music_path = ""
+        voice_path = ""
+        if sound_has_voice(sound_mode):
+            voice_target = audio_folder / "voice_master.wav"
+            if voice_target.is_file() and voice_target.stat().st_size > 0:
+                voice_path = str(voice_target)
+            else:
+                await query.message.reply_text("🎙 Создаю и синхронизирую голос диктора по сценам.")
+
+                def _remember_tts(index: int):
+                    record_operation(
+                        db, job, f"tts-request:{job}:{index}", provider="openai_tts", scene_index=-100-index,
+                    )
+
+                voice_path = await render_voice_track(
+                    narration_plan or {}, [scene.output_seconds for scene in scenes], str(audio_folder),
+                    on_request_start=_remember_tts,
+                )
+        if sound_has_music(sound_mode):
+            music_target = audio_folder / "music_source.mp3"
+            if music_target.is_file() and music_target.stat().st_size > 0:
+                music_path = str(music_target)
+            else:
+                await query.message.reply_text("🎵 Suno создаёт спокойную инструментальную музыку для обзора.")
+
+                def _remember_music(operation: str):
+                    record_operation(db, job, operation, provider="suno", scene_index=-1)
+
+                record_operation(db, job, f"suno-submit:{job}", provider="suno", scene_index=-1)
+                music_path = await render_music_track(
+                    update, duration, str(audio_folder), on_task_id=_remember_music,
+                )
+
+
         output = folder / "property_review.mp4"
+        silent_output = folder / "property_review_silent.mp4"
         log.info("PROPERTY_VIDEO_ASSEMBLY_START job=%s scenes=%s", job, len(scene_paths))
         await asyncio.to_thread(
             assemble_property_video,
             scene_paths,
-            str(output),
+            str(silent_output),
             duration,
             [scene.output_seconds for scene in scenes],
             aspect_ratio,
         )
-        quality = await asyncio.to_thread(inspect_property_video, str(output), duration, aspect_ratio)
+        await asyncio.to_thread(
+            mix_property_audio, str(silent_output), str(output), duration,
+            music_path=music_path, voice_path=voice_path,
+        )
+        quality = await asyncio.to_thread(
+            inspect_property_video, str(output), duration, aspect_ratio,
+            expect_audio=sound_mode != "none",
+        )
         (folder / "quality.json").write_text(
             json.dumps(quality, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -332,7 +477,7 @@ async def execute(update, context, state, prompt):
             sent = await _send_saved(
                 query.message,
                 str(output),
-                f"🏡 Обзор недвижимости · {_provider_label(engine)} · {duration} сек · {aspect_ratio}",
+                f"🏡 Обзор недвижимости · {_provider_label(engine)} · {duration} сек · {aspect_ratio} · звук: {sound_mode}",
             )
         except Exception as delivery_exc:
             # Telegram may accept a media upload but return no acknowledgement.
@@ -438,11 +583,7 @@ async def recover_after_restart(application) -> None:
                     continue
                 if not claim_assembly(db, str(job)) and current_status == "submitted":
                     continue
-                assembly_args = ([str(path) for path in scene_paths], str(output), duration)
-                durations = _assembly_durations(metadata)
-                if durations is not None or metadata.get("aspect_ratio"):
-                    assembly_args = (*assembly_args, durations, _assembly_aspect(metadata))
-                await asyncio.to_thread(assemble_property_video, *assembly_args)
+                await _assemble_saved_job(folder, scene_paths, output, metadata)
                 record_result(db, str(job), str(output))
 
             with output.open("rb") as handle:
@@ -489,11 +630,7 @@ async def recover_after_restart(application) -> None:
                 continue
             output = folder / "property_review.mp4"
             if not output.is_file() or output.stat().st_size <= 0:
-                assembly_args = ([str(path) for path in scenes], str(output), duration)
-                durations = _assembly_durations(metadata)
-                if durations is not None or metadata.get("aspect_ratio"):
-                    assembly_args = (*assembly_args, durations, _assembly_aspect(metadata))
-                await asyncio.to_thread(assemble_property_video, *assembly_args)
+                await _assemble_saved_job(folder, scenes, output, metadata)
             reserve(
                 db, job, user_id, 0,
                 provider_cost_usd=float(metadata.get("provider_cost_usd", 0) or 0),

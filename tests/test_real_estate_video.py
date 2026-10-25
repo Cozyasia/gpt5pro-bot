@@ -38,6 +38,47 @@ class RealEstateVideoTests(unittest.TestCase):
         k = keyboard([[("Экстерьер", "type:exterior")]])
         self.assertEqual(k.inline_keyboard[0][0].callback_data, "revideo:type:exterior")
 
+    def test_duration_step_offers_all_sound_modes(self):
+        from real_estate_video import callback
+
+        async def run():
+            message = SimpleNamespace(reply_text=AsyncMock())
+            query = SimpleNamespace(
+                data="revideo:duration:20", answer=AsyncMock(), message=message,
+            )
+            context = SimpleNamespace(user_data={"real_estate_video": {}})
+            await callback(SimpleNamespace(callback_query=query), context)
+            return context, message
+
+        context, message = asyncio.run(run())
+        self.assertEqual(context.user_data["real_estate_video"]["duration"], 20)
+        markup = message.reply_text.await_args.kwargs["reply_markup"]
+        callbacks = {button.callback_data for row in markup.inline_keyboard for button in row}
+        self.assertEqual(callbacks, {
+            "revideo:sound:none", "revideo:sound:music",
+            "revideo:sound:voice", "revideo:sound:both",
+        })
+
+    def test_stale_payment_button_is_rejected_after_settings_change(self):
+        from real_estate_video import callback
+
+        async def run():
+            message = SimpleNamespace(reply_text=AsyncMock())
+            query = SimpleNamespace(data="revideo:confirm_paid", answer=AsyncMock(), message=message)
+            state = {
+                "type": "full", "photos": ["1", "2"], "aspect": "9:16", "engine": "kling",
+                "duration": 20, "sound_mode": "both", "narration_language": "ru",
+                "narration_voice": "female", "price_confirmed": True,
+                "price_quote_key": "full|2|9:16|kling|20|none||",
+            }
+            context = SimpleNamespace(user_data={"real_estate_video": state})
+            await callback(SimpleNamespace(callback_query=query), context)
+            return state, message
+
+        state, message = asyncio.run(run())
+        self.assertFalse(state["price_confirmed"])
+        self.assertIn("Настройки изменились", message.reply_text.await_args.args[0])
+
 
     def test_photo_upload_feedback_is_at_bottom_and_deduplicated(self):
         from real_estate_video import photo
