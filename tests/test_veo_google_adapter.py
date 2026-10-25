@@ -24,6 +24,13 @@ class GoogleVeoAdapterTests(unittest.TestCase):
         self.assertEqual(payload["input"][0]["data"], "first-base64")
         self.assertEqual(payload["input"][1]["data"], "last-base64")
         self.assertEqual(payload["response_format"]["aspect_ratio"], "9:16")
+        text = payload["input"][2]["text"]
+        self.assertIn("<FIRST_FRAME>", text)
+        self.assertIn("<LAST_FRAME>", text)
+        self.assertEqual(
+            payload["generation_config"]["video_config"]["task"],
+            "image_to_video",
+        )
 
     def test_initial_submission_defaults_to_vertical_delivery_shape(self):
         from neyrobot_prod.veo_google_adapter import GoogleVeoClient

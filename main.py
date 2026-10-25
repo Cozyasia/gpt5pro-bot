@@ -9026,12 +9026,17 @@ def _property_video_prompt(user_prompt: str, base_seconds: int = 10) -> str:
     if not user_prompt:
         user_prompt = "photorealistic real-estate camera movement based strictly on the supplied property photo"
     return (
-        "REAL-ESTATE IMAGE-TO-VIDEO DIRECTOR — follow the supplied property photo and "
-        "the direction below literally. Preserve the exact building, room geometry, "
-        "materials, furniture, windows, doors, landscaping and lighting that are visible. "
-        "Animate only a physically plausible stabilized camera move; do not redesign, "
-        "redecorate, extend or connect spaces. Never invent rooms, amenities, objects, "
-        "people, text or a floor plan; no morphing, warped walls, fake openings or logos. "
+        "REAL-ESTATE WALKTHROUGH DIRECTOR — execute the movement direction literally. "
+        "This is a first-person smartphone-gimbal recording made by a camera operator walking, "
+        "not an animated photograph. The camera position physically travels through 3D space: "
+        "foreground objects cross the frame faster than the background and perspective changes "
+        "with real translational parallax. No digital zoom, static pan, Ken Burns effect, orbit "
+        "around a flat image, dissolve or geometry morph. Preserve the exact visible building, "
+        "room geometry, materials, furniture, windows, doors, landscaping and lighting. When two "
+        "reference frames do not show a trustworthy connection, use a brief full-frame foreground "
+        "occlusion at a real wall, doorframe or pillar as an invisible cut, then land exactly on "
+        "the supplied terminal frame. Never expose an invented connecting room, amenity, object, "
+        "person, text, fake opening or floor plan. "
         + user_prompt[:2200]
         + f" Provider duration: {int(base_seconds)} seconds."
     )

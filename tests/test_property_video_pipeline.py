@@ -1,6 +1,7 @@
 import subprocess
 import tempfile
 import unittest
+import ast
 from pathlib import Path
 
 from property_video_pipeline import assemble_property_video, plan_property_scenes, scene_prompt
@@ -57,6 +58,29 @@ class PropertyVideoPipelineTests(unittest.TestCase):
         prompt = scene_prompt("property walkthrough", scenes[0], len(scenes))
         self.assertIn("next reference photo", prompt)
         self.assertIn("continuous walkthrough", prompt)
+
+    def test_scene_prompt_requires_first_person_translation_not_a_photo_pan(self):
+        scene = plan_property_scenes(4, 10, "kling", "interior")[0]
+        prompt = scene_prompt("property walkthrough", scene, 2).lower()
+        self.assertIn("first-person", prompt)
+        self.assertIn("camera position physically", prompt)
+        self.assertIn("foreground parallax", prompt)
+        self.assertIn("doorframe", prompt)
+        self.assertIn("no digital zoom", prompt)
+
+    def test_kling_property_wrapper_does_not_forbid_the_requested_transition(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef) and item.name == "_property_video_prompt"
+        )
+        namespace = {}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "main.py", "exec"), namespace)
+        prompt = namespace["_property_video_prompt"]("walk into the next supplied view", 5).lower()
+        self.assertNotIn("do not redesign, redecorate, extend or connect spaces", prompt)
+        self.assertIn("camera position physically", prompt)
+        self.assertIn("no digital zoom", prompt)
 
     def test_quote_is_scene_aware(self):
         one = quote_for_job("seedance", 1, 10, "interior")
