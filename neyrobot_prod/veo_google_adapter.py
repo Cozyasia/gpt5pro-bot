@@ -87,11 +87,22 @@ def build_omni_payload(
     input_items = [{"type": "image", "data": first_image_b64, "mime_type": "image/jpeg"}]
     if last_image_b64:
         input_items.append({"type": "image", "data": last_image_b64, "mime_type": "image/jpeg"})
-    input_items.append({"type": "text", "text": prompt.strip()})
+        role_prompt = (
+            "[# Sources <FIRST_FRAME>@Image1 <LAST_FRAME>@Image2] "
+            "<FIRST_FRAME> <LAST_FRAME> " + prompt.strip() +
+            " Use Image1 as the exact starting frame and Image2 as the exact final frame."
+        )
+    else:
+        role_prompt = (
+            "[# Sources <FIRST_FRAME>@Image1] <FIRST_FRAME> " + prompt.strip() +
+            " Use Image1 as the exact starting frame."
+        )
+    input_items.append({"type": "text", "text": role_prompt})
     return {
         "model": "gemini-omni-1.1-flash",
         "input": input_items,
         "response_format": {"type": "video", "aspect_ratio": aspect_ratio, "resolution": "720p"},
+        "generation_config": {"video_config": {"task": "image_to_video"}},
     }
 
 
