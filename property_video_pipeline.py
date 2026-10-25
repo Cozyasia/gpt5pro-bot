@@ -1,15 +1,15 @@
 """Provider-neutral multi-scene pipeline for real-estate video reviews.
 
-Each provider request uses one source photograph because that is the existing
-provider contract. The planner nevertheless creates a montage slot for every
-uploaded photograph (and repeats a photograph only when the requested runtime
-is longer than the provider clip limit). FFmpeg trims each generated clip to
-its assigned slot, so a long provider clip cannot hide later references.
+Kling and Gemini Omni pair adjacent uploads as exact first/last frames for a
+directed walkthrough transition. Seedance keeps one reference per scene. The
+assembler retimes complete generated clips into their montage slots so the
+terminal reference frame is preserved.
 """
 from __future__ import annotations
 
 import math
 import os
+import logging
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Callable
@@ -17,6 +17,9 @@ from typing import Callable
 from real_estate_pipeline import concatenate_mp4
 from video_studio import seedance_generate
 from neyrobot_prod.veo_google_adapter import GoogleVeoClient
+
+
+log = logging.getLogger(__name__)
 
 
 class PropertyVideoError(RuntimeError):
@@ -117,9 +120,15 @@ def scene_prompt(base_prompt: str, scene: PropertyScene, total: int) -> str:
     transition = ""
     if scene.next_photo_index is not None:
         transition = (
-            f" The next reference photo is photo {scene.next_photo_index + 1}; "
-            "move the camera through a continuous walkthrough and finish on that "
-            "next photographed view, without inventing an intermediate room."
+            f" The next reference photo is photo {scene.next_photo_index + 1} and is the LAST_FRAME. "
+            "Create one continuous walkthrough as an unbroken first-person smartphone-gimbal shot from the "
+            "FIRST_FRAME to the LAST_FRAME. The camera position physically travels forward "
+            "through 3D space with strong foreground parallax and natural walking inertia; "
+            "it must not merely rotate or enlarge the first photograph. If the photographs "
+            "do not reveal a trustworthy physical connection, hide a motivated cut by passing "
+            "within centimetres of a real wall, doorframe or pillar until it fills the frame, "
+            "use brief natural motion blur, then emerge into the exact LAST_FRAME. No digital zoom, "
+            "static pan, Ken Burns effect, dissolve or geometry morph."
         )
     reference_instruction = (
         "Use only this supplied reference photograph as the source for this shot."
@@ -156,6 +165,10 @@ async def render_scene(
 ) -> bytes | str:
     """Render one scene through the project's existing provider transports."""
     engine = engine.strip().lower()
+    log.info(
+        "PROPERTY_VIDEO_PROVIDER_SUBMIT engine=%s paired=%s seconds=%s prompt_chars=%s",
+        engine, bool(last_photo_path), int(seconds), len(prompt),
+    )
     if engine == "veo":
         key = os.getenv("GEMINI_VIDEO_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not key:
