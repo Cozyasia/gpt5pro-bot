@@ -8,36 +8,25 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
 PREFIX = "revideo:"
+MAX_PHOTOS = 30
+MASTER_DIRECTOR_PROMPT = (
+    "Create an ultra-realistic architectural walkthrough of the exact property in the supplied references. "
+    "The result must feel like authentic footage captured by a professional real-estate videographer physically "
+    "walking with a stabilized camera, never like independently animated photographs. Camera height approximately "
+    "1.6 metres; realistic 20-24mm full-frame architectural lens; smooth forward walking, gentle turns, natural "
+    "acceleration and deceleration, subtle handheld micro-movement, real foreground-background parallax and changing "
+    "perspective. Preserve the actual architecture, furniture, materials, lighting, colours, pool and landscaping. "
+    "Infer connectivity only when the references support it. If a connection is unknown, use a restrained natural "
+    "cinematic cut hidden by foreground occlusion instead of inventing a passage. Maintain consistent tropical daylight, "
+    "exposure, white balance, reflections and material textures. NO photo slideshow. NO static zoom, Ken Burns effect, "
+    "flat-image push-in, repeated forward-backward zoom, unrelated-room morphing, wall teleportation, invented architecture, "
+    "furniture transformation, distorted doorway, impossible camera path, text, logo or watermark. Prefer a shorter accurate "
+    "shot when genuine spatial movement would require fabricated geometry."
+)
 PROMPTS = {
-    "exterior": (
-        "Professional photorealistic real-estate exterior walkthrough from the supplied renders. "
-        "Keep one continuous camera move rather than a slideshow. "
-        "A real camera operator moves on a stabilized gimbal: begin with a wide establishing "
-        "view, make a slow forward dolly and gentle lateral parallax around only the visible "
-        "facade, terrace and landscaping, then settle on the next supplied view when present. "
-        "Preserve roof, facade, windows, doors, terrain, outdoor furniture and proportions. "
-        "Never invent a pool, garden feature or structural detail that is not visible. "
-        "No static zoom, slideshow feel, morphing, warped geometry or text."
-    ),
-    "interior": (
-        "Professional photorealistic interior property tour based strictly on the supplied renders. "
-        "Keep one continuous camera move rather than a slideshow. "
-        "A real camera operator walks slowly on a stabilized gimbal through the photographed "
-        "rooms in upload order: forward dolly, gentle pan toward the next room and a natural "
-        "settle on the next supplied view when present. Preserve lighting, materials, furniture, "
-        "windows, doors and room geometry. Never invent additional bedrooms, amenities, doors or "
-        "a floor plan. No static zoom, slideshow feel, object morphing or warped walls."
-    ),
-    "full": (
-        "Premium cinematic real-estate walkthrough using every supplied property render in upload "
-        "order. A real camera operator starts with an establishing view, then moves continuously "
-        "through the photographed exterior and interior locations, using forward dolly, gentle "
-        "pan, lateral parallax and restrained orbit only when the geometry supports it. Each "
-        "transition must land on the next supplied view; alternate exterior and interior only when "
-        "the images actually show them. Preserve every visible architectural feature, material and "
-        "piece of furniture. Do not label, connect or invent spaces that are not shown. No static "
-        "zoom, slideshow feel, invented amenities, morphing or geometry changes."
-    ),
+    "exterior": MASTER_DIRECTOR_PROMPT + " Begin with a wide exterior establishing view and move continuously through only the visible facade, entrance, terrace, pool and landscaping.",
+    "interior": MASTER_DIRECTOR_PROMPT + " Build a continuous-feeling interior route through the photographed rooms in upload order, using supported doorways and open-plan connections only.",
+    "full": MASTER_DIRECTOR_PROMPT + " Build a logical continuous-feeling route from the strongest establishing view through the selected interior and exterior zones, ending on the best real hero view.",
 }
 ENGINES = {"kling": "Kling", "veo": "Google Veo", "seedance": "Seedance"}
 RenderCallback = Callable[[str, list[str], str, str, int], Awaitable[str]]
@@ -63,7 +52,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "start":
         state.clear()
         await query.message.reply_text(
-            "🏡 Видеообзор недвижимости\nВыберите сценарий:",
+            "🏡 AI-видеообзор недвижимости — Режиссёр\nВыберите сценарий:",
             reply_markup=keyboard([
                 [("🏝 Экстерьер", "type:exterior")],
                 [("🛋 Интерьер", "type:interior")],
@@ -75,7 +64,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["photos"] = []
         state["photo_keys"] = []
         await query.message.reply_text(
-            "Пришлите фотографии объекта по порядку (до 10). Для интерьера загружайте комнаты "
+            f"Пришлите фотографии объекта по порядку (до {MAX_PHOTOS}). Для интерьера загружайте комнаты "
             "в желаемом порядке обхода. Затем нажмите «Фото загружены».",
             reply_markup=keyboard([[("✅ Фото загружены", "photos_done")]]),
         )
@@ -84,13 +73,27 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Сначала загрузите хотя бы одну фотографию.")
             return
         await query.message.reply_text(
-            f"Получено фотографий: {len(state['photos'])}. Выберите движок:",
+            f"Получено фотографий: {len(state['photos'])}. Выберите формат:",
+            reply_markup=keyboard([
+                [("✨ Автоматически", "format:auto")],
+                [("↔️ Горизонтально 16:9", "format:16:9")],
+                [("↕️ Вертикально 9:16", "format:9:16")],
+            ]),
+        )
+    elif action.startswith("format:"):
+        aspect = action.split(":", 1)[1]
+        if aspect not in {"auto", "16:9", "9:16"}:
+            await query.message.reply_text("Неизвестный формат.")
+            return
+        state["aspect"] = aspect
+        await query.message.reply_text(
+            "Выберите движок:",
             reply_markup=keyboard([[("Kling", "engine:kling")], [("Google Veo", "engine:veo")], [("Seedance", "engine:seedance")]]),
         )
     elif action == "photos_add":
         count = len(state.get("photos") or [])
         await query.message.reply_text(
-            f"📎 Добавляйте фотографии по порядку. Загружено: {count}/10. "
+            f"📎 Добавляйте фотографии по порядку. Загружено: {count}/{MAX_PHOTOS}. "
             "После последней нажмите «Фото загружены».",
             reply_markup=keyboard([[('✅ Фото загружены', 'photos_done')]]),
         )
@@ -106,11 +109,12 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [("8 секунд", "duration:8")],
                 [("10 секунд", "duration:10"), ("20 секунд", "duration:20")],
                 [("30 секунд", "duration:30")],
+                [("45 секунд", "duration:45"), ("60 секунд", "duration:60")],
             ]),
         )
     elif action.startswith("duration:"):
         duration = int(action.split(":", 1)[1])
-        if duration not in (8, 10, 20, 30):
+        if duration not in (8, 10, 20, 30, 45, 60):
             await query.message.reply_text("Недопустимая длительность.")
             return
         state["duration"] = duration
@@ -123,6 +127,9 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["extra"] = ""
         state["awaiting_prompt"] = False
         await confirm(query, state)
+    elif action == "recover":
+        from property_video_execution import recover_ready
+        await recover_ready(update, context)
     elif action == "confirm_paid":
         if not state.get("price_confirmed"):
             await query.message.reply_text("Подтверждение стоимости отсутствует.")
@@ -180,7 +187,7 @@ async def confirm(query, state):
     prompt = PROMPTS[state["type"]] + ("\n" + state.get("extra", "") if state.get("extra") else "")
     await query.message.reply_text(
         f"🎬 {state['type']} | {ENGINES[state['engine']]} | {state['duration']} сек.\n"
-        f"Фото: {len(state['photos'])}\n\nПромпт:\n{prompt[:2200]}",
+        f"Фото: {len(state['photos'])} · формат: {state.get('aspect', 'auto')}\n\nПромпт:\n{prompt[:2200]}",
         reply_markup=keyboard([[("🚀 Создать видео", "generate")], [("↩️ Заново", "start")]]),
     )
 
@@ -189,8 +196,8 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("real_estate_video")
     if not state or "photos" not in state or state.get("engine"):
         return
-    if len(state["photos"]) >= 10:
-        await update.message.reply_text("Максимум 10 фотографий.")
+    if len(state["photos"]) >= MAX_PHOTOS:
+        await update.message.reply_text(f"Максимум {MAX_PHOTOS} фотографий.")
         return
     if update.message.photo:
         file_id = update.message.photo[-1].file_id
@@ -209,15 +216,32 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_keys.append(photo_key)
     count = len(state["photos"])
     rows = [[("✅ Фото загружены", "photos_done")]]
-    if count < 10:
+    if count < MAX_PHOTOS:
         rows.append([("➕ Добавить ещё", "photos_add")])
         suffix = " Можно добавить ещё или нажать «Фото загружены»."
     else:
         suffix = " Лимит достигнут — нажмите «Фото загружены»."
-    await update.message.reply_text(
-        f"📸 Загружено: {count}/10.{suffix}",
-        reply_markup=keyboard(rows),
-    )
+    text = f"📸 Загружено: {count}/{MAX_PHOTOS}.{suffix}"
+    markup = keyboard(rows)
+    progress_id = state.get("progress_message_id")
+    if progress_id:
+        try:
+            chat_id = getattr(getattr(update, "effective_chat", None), "id", None)
+            if chat_id is None:
+                chat_id = getattr(update.message, "chat_id", None)
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=progress_id,
+                text=text,
+                reply_markup=markup,
+            )
+            return
+        except Exception:
+            state.pop("progress_message_id", None)
+    sent = await update.message.reply_text(text, reply_markup=markup)
+    message_id = getattr(sent, "message_id", None)
+    if message_id:
+        state["progress_message_id"] = message_id
 
 
 async def custom_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):

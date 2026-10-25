@@ -138,6 +138,24 @@ def record_result(db_path: str, job_id: str, result_path: str) -> bool:
         return changed == 1
 
 
+def mark_delivery_unknown(db_path: str, job_id: str) -> bool:
+    """Record an ambiguous Telegram upload without declaring generation failed.
+
+    The wallet remains reserved until a later confirmed delivery. The saved MP4
+    can be sent again without another provider call.
+    """
+    with _connect(db_path) as con:
+        con.execute("BEGIN IMMEDIATE")
+        changed = con.execute(
+            """UPDATE property_video_charges
+               SET status='delivery_unknown',updated_at=CURRENT_TIMESTAMP
+               WHERE job_id=? AND status IN ('ready','delivery_unknown')""",
+            (job_id,),
+        ).rowcount
+        con.commit()
+        return changed == 1
+
+
 def claim_assembly(db_path: str, job_id: str) -> bool:
     """Claim a submitted/assembling job for post-restart local assembly."""
     with _connect(db_path) as con:
@@ -163,7 +181,7 @@ def mark_delivered(db_path: str, job_id: str, *, telegram_file_id: str | None = 
         if current == "delivered":
             con.commit()
             return True
-        if current not in ("ready", "submitted", "assembling") or not tx_id:
+        if current not in ("ready", "delivery_unknown", "submitted", "assembling") or not tx_id:
             con.rollback()
             return False
         ledger = con.execute("SELECT retail_usd,status FROM credit_ledger WHERE tx_id=?", (tx_id,)).fetchone()

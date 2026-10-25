@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 import subprocess
+import os
 
 
 def plan_shots(photo_ids: list[str], duration: int) -> list[dict]:
@@ -39,20 +40,32 @@ def concatenate_mp4(
     durations: list[float] | None = None,
     *,
     retime_to_fit: bool = False,
+    aspect_ratio: str = "9:16",
 ) -> str:
     """Normalize each scene and concat through FFmpeg; no shell interpolation."""
     if not clips:
         raise ValueError("No clips supplied")
     if durations is not None and len(durations) != len(clips):
         raise ValueError("Scene duration count must match clip count")
+    if aspect_ratio == "9:16":
+        width, height = 720, 1280
+    elif aspect_ratio == "16:9":
+        width, height = 1280, 720
+    else:
+        raise ValueError("Output aspect ratio must be 9:16 or 16:9")
     target = Path(output)
     target.parent.mkdir(parents=True, exist_ok=True)
     normalized = []
+    crossfade = 0.0
+    if durations is not None and len(clips) > 1:
+        crossfade = max(0.0, min(float(os.getenv("PROPERTY_VIDEO_CROSSFADE_S", "0.12")), 0.35))
     for i, clip in enumerate(clips):
         source = Path(clip).resolve(strict=True)
         intermediate = target.parent / f"normalized_{i:03d}.mp4"
-        video_filter = "scale=720:1280:force_original_aspect_ratio=decrease,"
-        video_filter += "pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
+        # Fill the delivery canvas. Padding created 62.5% black pixels in a
+        # real property test and made the result look like a cheap slideshow.
+        video_filter = f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        video_filter += f"crop={width}:{height},setsar=1,fps=30"
         audio_filter = None
         if retime_to_fit and durations is not None:
             target_duration = float(durations[i])
@@ -73,9 +86,17 @@ def concatenate_mp4(
             ], check=True, capture_output=True, text=True, timeout=30)
             if streams.stdout.strip():
                 audio_filter = _audio_tempo_filters(playback_speed)
+        if crossfade and i < len(clips) - 1:
+            # Hold the exact terminal reference briefly so the next clip can
+            # blend from the same shared route frame without shortening the
+            # requested final duration.
+            video_filter += f",tpad=stop_mode=clone:stop_duration={crossfade:.3f}"
+        render_duration = None
+        if durations is not None:
+            render_duration = float(durations[i]) + (crossfade if i < len(clips) - 1 else 0.0)
         command = [
             "ffmpeg", "-nostdin", "-y", "-i", str(source),
-            *(["-t", f"{float(durations[i]):.3f}"] if durations is not None else []),
+            *(["-t", f"{render_duration:.3f}"] if render_duration is not None else []),
             "-vf", video_filter,
             *(["-af", audio_filter] if audio_filter else []),
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -84,6 +105,29 @@ def concatenate_mp4(
         ]
         subprocess.run(command, check=True, capture_output=True, timeout=240)
         normalized.append(intermediate)
+    if crossfade:
+        command = ["ffmpeg", "-nostdin", "-y"]
+        for path in normalized:
+            command.extend(["-i", str(path)])
+        filters = []
+        previous = "0:v"
+        offset = float(durations[0])
+        for index in range(1, len(normalized)):
+            output_label = f"xf{index}"
+            filters.append(
+                f"[{previous}][{index}:v]xfade=transition=fade:duration={crossfade:.3f}:"
+                f"offset={offset:.3f}[{output_label}]"
+            )
+            previous = output_label
+            offset += float(durations[index])
+        command.extend([
+            "-filter_complex", ";".join(filters), "-map", f"[{previous}]", "-an",
+            "-c:v", "libx264", "-preset", os.getenv("PROPERTY_VIDEO_FFMPEG_PRESET", "veryfast"),
+            "-crf", os.getenv("PROPERTY_VIDEO_FFMPEG_CRF", "20"), "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart", str(target),
+        ])
+        subprocess.run(command, check=True, capture_output=True, timeout=240)
+        return str(target)
     manifest = target.parent / "concat_manifest.txt"
     manifest.write_text("".join("file '" + str(p).replace("'", "'\\''") + "'\n" for p in normalized))
     subprocess.run([

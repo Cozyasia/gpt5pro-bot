@@ -2,7 +2,15 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from property_video_billing import reserve, record_operation, refund_before_submission, mark_delivered, record_result, status
+from property_video_billing import (
+    mark_delivered,
+    mark_delivery_unknown,
+    record_operation,
+    record_result,
+    refund_before_submission,
+    reserve,
+    status,
+)
 
 class PropertyVideoBillingTests(unittest.TestCase):
     def setUp(self):
@@ -66,6 +74,16 @@ class PropertyVideoBillingTests(unittest.TestCase):
                 "SELECT provider_cost_usd,retail_usd,status FROM credit_ledger WHERE tx_id=(SELECT tx_id FROM property_video_charges WHERE job_id='owner-job')"
             ).fetchone()
         self.assertEqual(ledger, (1.2, 0.0, "owner_delivered"))
+
+    def test_delivery_timeout_keeps_ready_result_recoverable(self):
+        reserve(self.db, "delivery-job", 123, 2)
+        record_operation(self.db, "delivery-job", "provider-task")
+        record_result(self.db, "delivery-job", "/tmp/ready.mp4")
+        self.assertTrue(mark_delivery_unknown(self.db, "delivery-job"))
+        self.assertEqual(status(self.db, "delivery-job")[0], "delivery_unknown")
+        self.assertAlmostEqual(self.balance(), 10.0)
+        self.assertTrue(mark_delivered(self.db, "delivery-job", telegram_file_id="file-1"))
+        self.assertAlmostEqual(self.balance(), 8.0)
 
 if __name__ == "__main__":
     unittest.main()
