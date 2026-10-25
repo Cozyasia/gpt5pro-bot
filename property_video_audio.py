@@ -313,6 +313,26 @@ async def recover_music_track(task_id: str, output_dir: str) -> str:
     headers = {"Authorization": f"Bearer {key}", "Accept": "audio/mpeg,audio/*,application/json"}
     configured = str(getattr(production_main, "SUNO_STATUS_PATH", "/suno/fetch/{id}"))
     paths = [configured, "/suno/fetch/{id}", "/suno/v1/music/{id}", "/api/v1/task/{id}", "/v1/tasks/{id}"]
+
+    def _audio_url(value) -> str | None:
+        extract = getattr(production_main, "_extract_first_url")
+        if isinstance(value, dict):
+            for key_name in ("audio_url", "audioUrl", "stream_audio_url", "source_audio_url", "audio"):
+                found = extract(value.get(key_name))
+                if found:
+                    return found
+            for nested_value in value.values():
+                if isinstance(nested_value, (dict, list, tuple)):
+                    found = _audio_url(nested_value)
+                    if found:
+                        return found
+        elif isinstance(value, (list, tuple)):
+            for nested_value in value:
+                found = _audio_url(nested_value)
+                if found:
+                    return found
+        return None
+
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         for template in dict.fromkeys(paths):
             try:
@@ -320,8 +340,16 @@ async def recover_music_track(task_id: str, output_dir: str) -> str:
                 if response.status_code >= 400:
                     continue
                 payload = response.json() or {}
-                extract = getattr(production_main, "_extract_first_url")
-                url = extract(payload)
+                nested = payload.get("data") if isinstance(payload, dict) and isinstance(payload.get("data"), dict) else {}
+                status = str(
+                    payload.get("status") or payload.get("state") or payload.get("task_status")
+                    or nested.get("status") or ""
+                ).lower()
+                if status in {"failed", "fail", "error", "canceled", "cancelled", "rejected"}:
+                    raise PropertyAudioError("submitted Suno task failed")
+                if status and status not in {"completed", "succeeded", "success", "finished", "done", "ready"}:
+                    continue
+                url = _audio_url(payload)
                 if not url:
                     continue
                 download = getattr(production_main, "_download_binary_from_url")
@@ -330,7 +358,16 @@ async def recover_music_track(task_id: str, output_dir: str) -> str:
                     folder = Path(output_dir)
                     folder.mkdir(parents=True, exist_ok=True)
                     path = folder / "music_source.mp3"
-                    path.write_bytes(bytes(data))
+                    candidate = folder / "music_source.recovering"
+                    candidate.write_bytes(bytes(data))
+                    probe = subprocess.run([
+                        "ffprobe", "-v", "error", "-select_streams", "a:0",
+                        "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(candidate),
+                    ], capture_output=True, text=True, timeout=30)
+                    if probe.returncode != 0 or "audio" not in probe.stdout.splitlines():
+                        candidate.unlink(missing_ok=True)
+                        continue
+                    candidate.replace(path)
                     return str(path)
             except Exception:
                 continue

@@ -1,14 +1,18 @@
 import asyncio
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from property_video_audio import (
     create_narration_plan,
     manual_narration_plan,
     mix_property_audio,
     parse_narration_plan,
+    recover_music_track,
 )
 from property_video_pipeline import plan_property_scenes
 
@@ -101,6 +105,49 @@ class PropertyVideoAudioTests(unittest.TestCase):
                 "ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(output),
             ], check=True, capture_output=True, text=True).stdout.splitlines()
             self.assertEqual(streams, ["video"])
+
+    def test_suno_recovery_prefers_completed_audio_over_cover_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tone = root / "tone.mp3"
+            subprocess.run([
+                "ffmpeg", "-nostdin", "-y", "-f", "lavfi", "-i",
+                "sine=frequency=330:duration=1", str(tone),
+            ], check=True, capture_output=True)
+            requested = []
+
+            def extract(value):
+                return value if isinstance(value, str) and value.startswith("https://") else None
+
+            async def download(_client, url, **_kwargs):
+                requested.append(url)
+                return tone.read_bytes()
+
+            fake_main = SimpleNamespace(
+                SUNO_API_KEY="key", SUNO_BASE_URL="https://suno.test",
+                SUNO_STATUS_PATH="/status/{id}", _extract_first_url=extract,
+                _download_binary_from_url=download,
+            )
+
+            class Response:
+                status_code = 200
+
+                @staticmethod
+                def json():
+                    return {
+                        "status": "completed", "url": "https://cdn.test/cover.jpg",
+                        "audio_url": "https://cdn.test/final.mp3",
+                    }
+
+            class Client:
+                async def __aenter__(self): return self
+                async def __aexit__(self, *_args): return False
+                async def get(self, *_args, **_kwargs): return Response()
+
+            with patch.dict(sys.modules, {"main": fake_main}), patch("httpx.AsyncClient", return_value=Client()):
+                path = asyncio.run(recover_music_track("task-123", str(root / "audio")))
+            self.assertEqual(requested, ["https://cdn.test/final.mp3"])
+            self.assertTrue(Path(path).is_file())
 
 
 if __name__ == "__main__":
