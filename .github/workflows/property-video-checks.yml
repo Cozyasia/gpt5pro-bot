@@ -28,8 +28,8 @@ jobs:
       - name: Install Telegram SDK
         run: python -m pip install 'python-telegram-bot>=21,<23'
       - name: Compile property modules
-        run: python -m py_compile real_estate_video.py real_estate_safe_router.py real_estate_bootstrap.py real_estate_pipeline.py real_estate_veo_adapter.py property_video_billing.py property_video_pipeline.py property_video_execution.py
+        run: python -m py_compile real_estate_video.py real_estate_safe_router.py real_estate_bootstrap.py real_estate_pipeline.py real_estate_veo_adapter.py property_video_billing.py property_video_pipeline.py property_video_execution.py property_video_director.py
       - name: Run property wizard tests
         run: python -m unittest discover -s tests -p 'test_real_estate*.py' -v
       - name: Run property pipeline and billing tests
-        run: python -m unittest tests.test_property_video_pipeline tests.test_property_video_billing -v
+        run: python -m unittest tests.test_property_video_pipeline tests.test_property_video_billing tests.test_property_video_director -v

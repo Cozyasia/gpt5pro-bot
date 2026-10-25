@@ -16,6 +16,7 @@ from property_video_billing import (
     claim_assembly,
     job_metadata,
     mark_delivered,
+    mark_delivery_unknown,
     record_operation,
     record_result,
     refund_before_submission,
@@ -27,10 +28,13 @@ from property_video_pipeline import (
     assemble_property_video,
     plan_property_scenes,
     render_scene_to_file,
+    resolve_reference_aspect,
+    inspect_property_video,
     scene_manifest,
     scene_prompt,
 )
 from real_estate_pipeline import fetch_telegram_photos
+from property_video_director import analyse_reference_photos
 
 log = logging.getLogger(__name__)
 
@@ -130,6 +134,11 @@ def _assembly_durations(metadata: dict) -> list[float] | None:
     return [float(item["output_seconds"]) for item in scenes]
 
 
+def _assembly_aspect(metadata: dict) -> str:
+    value = str(metadata.get("aspect_ratio") or "9:16")
+    return value if value in {"9:16", "16:9"} else "9:16"
+
+
 def execution_job(state: dict, db: str) -> tuple[str, tuple | None]:
     """Return a reusable job, replacing only a terminal pre-submit refund."""
     job = str(state.setdefault("job_id", uuid4().hex))
@@ -143,7 +152,15 @@ def execution_job(state: dict, db: str) -> tuple[str, tuple | None]:
 
 async def _send_saved(message, path: str, caption: str):
     with open(path, "rb") as handle:
-        return await message.reply_video(video=handle, caption=caption, supports_streaming=True)
+        return await message.reply_video(
+            video=handle,
+            caption=caption,
+            supports_streaming=True,
+            write_timeout=180,
+            read_timeout=180,
+            connect_timeout=30,
+            pool_timeout=30,
+        )
 
 
 async def execute(update, context, state, prompt):
@@ -199,7 +216,21 @@ async def execute(update, context, state, prompt):
         await query.message.reply_text("Не удалось получить фотографии из Telegram. Средства не списаны.")
         return
 
-    scenes = plan_property_scenes(len(photo_paths), duration, engine, mode)
+    await query.message.reply_text(
+        f"🧭 Режиссёр анализирует {len(photo_paths)} фотографий, типы помещений и маршрут."
+    )
+    try:
+        analysis = await analyse_reference_photos(photo_paths)
+        labels = [str(item.get("space") or "unknown") for item in analysis]
+        aspect_ratio = resolve_reference_aspect(photo_paths, str(state.get("aspect") or "auto"))
+        scenes = plan_property_scenes(len(photo_paths), duration, engine, mode, labels=labels)
+    except Exception as exc:
+        state["generating"] = False
+        log.exception("property video director failed before provider submission")
+        await query.message.reply_text(
+            f"Режиссёр не смог подготовить маршрут; генерация провайдера не запускалась. Ошибка: {str(exc)[:300]}"
+        )
+        return
     metadata = {
         "user_id": int(update.effective_user.id),
         "chat_id": int(update.effective_chat.id),
@@ -208,6 +239,8 @@ async def execute(update, context, state, prompt):
         "engine": engine,
         "mode": mode,
         "duration": duration,
+        "aspect_ratio": aspect_ratio,
+        "reference_analysis": analysis,
         "provider_cost_usd": quote["provider_cost_usd"],
         "scene_count": len(scenes),
         "scenes": scene_manifest(scenes),
@@ -238,7 +271,7 @@ async def execute(update, context, state, prompt):
         )
     await query.message.reply_text(
         f"⏳ {_provider_label(engine)}: запускаю {len(scenes)} сцен(ы). "
-        "Повторно кнопку не нажимайте — задача сохранена в журнале."
+        f"Формат {aspect_ratio}. Повторно кнопку не нажимайте — задача сохранена в журнале."
     )
     scene_paths: list[str] = []
     try:
@@ -268,6 +301,7 @@ async def execute(update, context, state, prompt):
                     photo_paths[scene.next_photo_index]
                     if scene.next_photo_index is not None else ""
                 ),
+                aspect_ratio=aspect_ratio,
             )
             log.info(
                 "PROPERTY_VIDEO_SCENE_READY job=%s scene=%s/%s bytes=%s",
@@ -283,12 +317,47 @@ async def execute(update, context, state, prompt):
             str(output),
             duration,
             [scene.output_seconds for scene in scenes],
+            aspect_ratio,
         )
+        quality = await asyncio.to_thread(inspect_property_video, str(output), duration, aspect_ratio)
+        (folder / "quality.json").write_text(
+            json.dumps(quality, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        log.info("PROPERTY_VIDEO_QUALITY_OK job=%s metrics=%s", job, quality)
         if not record_result(db, job, str(output)):
             raise PropertyVideoError("Итоговый файл не удалось записать в журнал задачи")
         log.info("PROPERTY_VIDEO_RESULT_READY job=%s bytes=%s", job, output.stat().st_size)
         log.info("PROPERTY_VIDEO_DELIVERY_START job=%s", job)
-        sent = await _send_saved(query.message, str(output), f"🏡 Обзор недвижимости · {_provider_label(engine)} · {duration} сек")
+        try:
+            sent = await _send_saved(
+                query.message,
+                str(output),
+                f"🏡 Обзор недвижимости · {_provider_label(engine)} · {duration} сек · {aspect_ratio}",
+            )
+        except Exception as delivery_exc:
+            # Telegram may accept a media upload but return no acknowledgement.
+            # The generated result remains ready and must never be reported as a
+            # provider/generation failure or submitted to the paid provider again.
+            if delivery_exc.__class__.__name__ not in {"TimedOut", "NetworkError"}:
+                raise
+            mark_delivery_unknown(db, job)
+            log.warning(
+                "PROPERTY_VIDEO_DELIVERY_UNKNOWN job=%s error=%s",
+                job, delivery_exc.__class__.__name__,
+            )
+            state.clear()
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            try:
+                await query.message.reply_text(
+                    "✅ Видео создано и сохранено. Telegram не подтвердил загрузку вовремя. "
+                    "Если файл не появился, отправьте сохранённый результат повторно — нового списания и вызова провайдера не будет.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("📥 Получить готовое видео", callback_data="revideo:recover")
+                    ]]),
+                )
+            except Exception:
+                log.exception("property video delivery recovery notice failed job=%s", job)
+            return
         file_id = getattr(getattr(sent, "video", None), "file_id", None)
         if not mark_delivered(db, job, telegram_file_id=file_id):
             raise PropertyVideoError("Видео доставлено, но платёжный ledger не подтвердил списание")
@@ -339,7 +408,7 @@ async def recover_after_restart(application) -> None:
             rows = con.execute(
                 """SELECT job_id,status,result_path,metadata_json
                    FROM property_video_charges
-                   WHERE status IN ('submitted','assembling','ready')
+                   WHERE status IN ('submitted','assembling','ready','delivery_unknown')
                    ORDER BY created_at ASC LIMIT 20"""
             ).fetchall()
         log.info("PROPERTY_VIDEO_RECOVERY_SCAN jobs=%s root=%s", len(rows), _root())
@@ -357,7 +426,7 @@ async def recover_after_restart(application) -> None:
             folder = _root() / str(job)
             output = Path(result_path) if result_path else folder / "property_review.mp4"
 
-            if current_status == "ready" and output.is_file() and output.stat().st_size > 0:
+            if current_status in {"ready", "delivery_unknown"} and output.is_file() and output.stat().st_size > 0:
                 scene_paths = []
             else:
                 scene_paths = [folder / f"scene_{i:02d}.mp4" for i in range(scene_count)]
@@ -371,8 +440,8 @@ async def recover_after_restart(application) -> None:
                     continue
                 assembly_args = ([str(path) for path in scene_paths], str(output), duration)
                 durations = _assembly_durations(metadata)
-                if durations is not None:
-                    assembly_args = (*assembly_args, durations)
+                if durations is not None or metadata.get("aspect_ratio"):
+                    assembly_args = (*assembly_args, durations, _assembly_aspect(metadata))
                 await asyncio.to_thread(assemble_property_video, *assembly_args)
                 record_result(db, str(job), str(output))
 
@@ -382,6 +451,10 @@ async def recover_after_restart(application) -> None:
                     video=handle,
                     caption=f"🏡 Обзор недвижимости · {_provider_label(engine)} · {duration} сек",
                     supports_streaming=True,
+                    write_timeout=180,
+                    read_timeout=180,
+                    connect_timeout=30,
+                    pool_timeout=30,
                 )
             file_id = getattr(getattr(sent, "video", None), "file_id", None)
             if not mark_delivered(db, str(job), telegram_file_id=file_id):
@@ -418,8 +491,8 @@ async def recover_after_restart(application) -> None:
             if not output.is_file() or output.stat().st_size <= 0:
                 assembly_args = ([str(path) for path in scenes], str(output), duration)
                 durations = _assembly_durations(metadata)
-                if durations is not None:
-                    assembly_args = (*assembly_args, durations)
+                if durations is not None or metadata.get("aspect_ratio"):
+                    assembly_args = (*assembly_args, durations, _assembly_aspect(metadata))
                 await asyncio.to_thread(assemble_property_video, *assembly_args)
             reserve(
                 db, job, user_id, 0,
@@ -433,6 +506,10 @@ async def recover_after_restart(application) -> None:
                     video=handle,
                     caption=f"🏡 Восстановленный обзор недвижимости · {_provider_label(engine)} · {duration} сек",
                     supports_streaming=True,
+                    write_timeout=180,
+                    read_timeout=180,
+                    connect_timeout=30,
+                    pool_timeout=30,
                 )
             (folder / "recovery_delivered").write_text("ok\n", encoding="utf-8")
             log.info("PROPERTY_VIDEO_ORPHAN_RECOVERED job=%s engine=%s chat_id=%s", job, engine, chat_id)
