@@ -95,10 +95,12 @@ class PropertyVideoProviderDispatchTests(unittest.TestCase):
                     on_task_id=seen.append, last_photo_path=str(next_photo),
                 )
 
-        self.assertEqual(asyncio.run(run()), b"kling-mp4")
+        with self.assertLogs("property_video_pipeline", level="INFO") as captured:
+            self.assertEqual(asyncio.run(run()), b"kling-mp4")
         kwargs = fake_main._run_kling_photo_clip_result.await_args.kwargs
         self.assertEqual(kwargs["image_tail_url"], "https://app.test/provider-input/next.jpg")
         self.assertEqual(seen, ["kling-transition-1"])
+        self.assertTrue(any("engine=kling" in line and "paired=True" in line for line in captured.output))
 
     def test_render_scene_to_file_persists_and_does_not_keep_scene_bytes(self):
         async def run():
