@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from typing import Awaitable, Callable
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -29,6 +30,14 @@ PROMPTS = {
     "full": MASTER_DIRECTOR_PROMPT + " Build a logical continuous-feeling route from the strongest establishing view through the selected interior and exterior zones, ending on the best real hero view.",
 }
 ENGINES = {"kling": "Kling", "veo": "Google Veo", "seedance": "Seedance"}
+SOUND_LABELS = {
+    "none": "Без звука",
+    "music": "Фоновая музыка Suno",
+    "voice": "Диктор",
+    "both": "Диктор + музыка",
+}
+VOICE_LABELS = {"male": "Спокойный мужской", "female": "Мягкий женский"}
+LANGUAGE_LABELS = {"ru": "Русский", "en": "English"}
 RenderCallback = Callable[[str, list[str], str, str, int], Awaitable[str]]
 _renderer: RenderCallback | None = None
 
@@ -42,6 +51,14 @@ def keyboard(rows):
         [InlineKeyboardButton(label, callback_data=PREFIX + value) for label, value in row]
         for row in rows
     ])
+
+
+def _price_quote_key(state: dict) -> str:
+    return "|".join(str(value) for value in (
+        state.get("type"), len(state.get("photos") or []), state.get("aspect", "auto"),
+        state.get("engine"), state.get("duration"), state.get("sound_mode", "none"),
+        state.get("narration_language", ""), state.get("narration_voice", ""),
+    ))
 
 
 async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,21 +135,68 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Недопустимая длительность.")
             return
         state["duration"] = duration
-        state["awaiting_prompt"] = True
         await query.message.reply_text(
-            "Напишите дополнительные пожелания к съёмке или нажмите «Готовый промпт».",
-            reply_markup=keyboard([[("✨ Готовый промпт", "default_prompt")]]),
+            "Выберите звуковое оформление:",
+            reply_markup=keyboard([
+                [("🎙 Диктор + музыка", "sound:both")],
+                [("🎵 Фоновая музыка", "sound:music"), ("🎙 Только диктор", "sound:voice")],
+                [("🔇 Без звука", "sound:none")],
+            ]),
         )
+    elif action.startswith("sound:"):
+        sound_mode = action.split(":", 1)[1]
+        if sound_mode not in SOUND_LABELS:
+            await query.message.reply_text("Неизвестный режим звука.")
+            return
+        state["sound_mode"] = sound_mode
+        state.pop("narration_plan", None)
+        state.pop("reference_analysis", None)
+        if sound_mode in {"voice", "both"}:
+            await query.message.reply_text(
+                "Выберите язык диктора:",
+                reply_markup=keyboard([[("🇷🇺 Русский", "language:ru"), ("🇬🇧 English", "language:en")]]),
+            )
+        else:
+            await _ask_shooting_prompt(query.message, state)
+    elif action.startswith("language:"):
+        language = action.split(":", 1)[1]
+        if language not in LANGUAGE_LABELS:
+            await query.message.reply_text("Неизвестный язык.")
+            return
+        state["narration_language"] = language
+        await query.message.reply_text(
+            "Выберите голос диктора:",
+            reply_markup=keyboard([
+                [("🎙 Спокойный мужской", "voice:male")],
+                [("🎙 Мягкий женский", "voice:female")],
+            ]),
+        )
+    elif action.startswith("voice:"):
+        voice = action.split(":", 1)[1]
+        if voice not in VOICE_LABELS:
+            await query.message.reply_text("Неизвестный голос.")
+            return
+        state["narration_voice"] = voice
+        await _ask_shooting_prompt(query.message, state)
     elif action == "default_prompt":
         state["extra"] = ""
         state["awaiting_prompt"] = False
-        await confirm(query, state)
+        await confirm(query.message, state, context, query.from_user.id, query.message.chat_id)
+    elif action == "narration_edit":
+        state["awaiting_narration_script"] = True
+        await query.message.reply_text(
+            "Пришлите новый текст диктора. Лучше написать отдельную строку для каждой сцены. "
+            "Бот автоматически ограничит длину текста таймингом ролика."
+        )
     elif action == "recover":
         from property_video_execution import recover_ready
         await recover_ready(update, context)
     elif action == "confirm_paid":
-        if not state.get("price_confirmed"):
-            await query.message.reply_text("Подтверждение стоимости отсутствует.")
+        if not state.get("price_confirmed") or state.get("price_quote_key") != _price_quote_key(state):
+            state["price_confirmed"] = False
+            await query.message.reply_text(
+                "Настройки изменились после расчёта. Нажмите «Создать видео», чтобы увидеть и подтвердить актуальную стоимость."
+            )
             return
         from property_video_execution import execute
         await execute(update, context, state, PROMPTS[state["type"]] + "\n" + state.get("extra", ""))
@@ -148,7 +212,10 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         try:
             from property_video_execution import is_property_video_owner_free, quote_for_job
-            quote = quote_for_job(state["engine"], len(state["photos"]), state["duration"], state["type"])
+            quote = quote_for_job(
+                state["engine"], len(state["photos"]), state["duration"], state["type"],
+                sound_mode=state.get("sound_mode", "none"),
+            )
             owner_free = is_property_video_owner_free(
                 update.effective_user.id,
                 getattr(update.effective_user, "username", None),
@@ -166,11 +233,17 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         state["quoted_price_usd"] = float(quote["retail_usd"])
         state["price_confirmed"] = True
+        state["price_quote_key"] = _price_quote_key(state)
+        audio_cost = float(quote.get("music_cost_usd", 0)) + float(quote.get("voice_cost_usd", 0))
+        breakdown = (
+            f"Видео API: примерно ${quote.get('video_cost_usd', quote['provider_cost_usd']):.2f}"
+            + (f" · аудио API: примерно ${audio_cost:.2f}" if audio_cost else "")
+        )
         if owner_free:
             await query.message.reply_text(
                 f"🧪 Тестовый доступ владельца\n"
                 f"Провайдер: {ENGINES[state['engine']]} · сцен: {quote['scene_count']}\n"
-                f"Расход API провайдера: примерно ${quote['provider_cost_usd']:.2f}\n"
+                f"{breakdown}\nВсего API: примерно ${quote['provider_cost_usd']:.2f}\n"
                 "С внутреннего баланса пользователя списания не будет. Запустить реальную генерацию?",
                 reply_markup=keyboard([[('🧪 Запустить тест без списания', 'confirm_paid')], [('↩️ Отмена', 'start')]]),
             )
@@ -178,17 +251,68 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             f"💳 Стоимость обзора: ${quote['retail_usd']:.2f}{credits}\n"
             f"Сцен: {quote['scene_count']} · Провайдер: {ENGINES[state['engine']]}\n"
+            f"{breakdown}\n"
             "Сумма резервируется перед запуском и списывается только после доставки MP4. Подтвердить?",
             reply_markup=keyboard([[("💳 Подтверждаю оплату", "confirm_paid")], [("↩️ Отмена", "start")]]),
         )
 
 
-async def confirm(query, state):
+async def _ask_shooting_prompt(message, state):
+    state["awaiting_prompt"] = True
+    await message.reply_text(
+        "Напишите дополнительные пожелания к съёмке или нажмите «Готовый промпт».",
+        reply_markup=keyboard([[("✨ Готовый промпт", "default_prompt")]]),
+    )
+
+
+async def _prepare_narration(message, state, context, user_id: int, chat_id: int):
+    if state.get("sound_mode") not in {"voice", "both"} or state.get("narration_plan"):
+        return
+    await message.reply_text("📝 Анализирую фотографии и готовлю синхронный текст диктора…")
+    from property_video_director import analyse_reference_photos
+    from property_video_pipeline import plan_property_scenes
+    from property_video_audio import create_narration_plan
+    from real_estate_pipeline import fetch_telegram_photos
+    with tempfile.TemporaryDirectory(prefix="property_narration_") as folder:
+        paths = await fetch_telegram_photos(context.bot, list(state.get("photos") or []), folder)
+        analysis = await analyse_reference_photos(paths)
+    labels = [str(item.get("space") or "unknown") for item in analysis]
+    scenes = plan_property_scenes(
+        len(analysis), int(state["duration"]), state["engine"], state["type"], labels=labels,
+    )
+    state["reference_analysis"] = analysis
+    state["narration_plan"] = await create_narration_plan(
+        analysis, scenes,
+        state.get("narration_language", "ru"), state.get("narration_voice", "female"),
+        user_id=user_id, chat_id=chat_id,
+    )
+
+
+async def confirm(message, state, context, user_id: int, chat_id: int):
+    try:
+        await _prepare_narration(message, state, context, user_id, chat_id)
+    except Exception as exc:
+        state.pop("narration_plan", None)
+        state.pop("reference_analysis", None)
+        await message.reply_text(
+            f"Не удалось подготовить текст диктора: {str(exc)[:300]}. Выберите другой режим звука или попробуйте снова."
+        )
+        return
     prompt = PROMPTS[state["type"]] + ("\n" + state.get("extra", "") if state.get("extra") else "")
-    await query.message.reply_text(
+    plan = state.get("narration_plan") or {}
+    if plan.get("segments"):
+        lines = [f"{item['start']:g} сек. — {item['text']}" for item in plan["segments"]]
+        await message.reply_text("🎙 Текст диктора:\n\n" + "\n".join(lines))
+    rows = [[("🚀 Создать видео", "generate")]]
+    if plan.get("segments"):
+        rows.append([("✏️ Изменить текст диктора", "narration_edit")])
+    rows.append([("↩️ Заново", "start")])
+    await message.reply_text(
         f"🎬 {state['type']} | {ENGINES[state['engine']]} | {state['duration']} сек.\n"
-        f"Фото: {len(state['photos'])} · формат: {state.get('aspect', 'auto')}\n\nПромпт:\n{prompt[:2200]}",
-        reply_markup=keyboard([[("🚀 Создать видео", "generate")], [("↩️ Заново", "start")]]),
+        f"Фото: {len(state['photos'])} · формат: {state.get('aspect', 'auto')}\n"
+        f"Звук: {SOUND_LABELS.get(state.get('sound_mode', 'none'), 'Без звука')}\n\n"
+        f"Промпт:\n{prompt[:1800]}",
+        reply_markup=keyboard(rows),
     )
 
 
@@ -246,14 +370,33 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def custom_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("real_estate_video")
-    if not state or not state.get("awaiting_prompt") or not state.get("engine"):
+    if not state or not state.get("engine"):
+        return
+    if state.get("awaiting_narration_script"):
+        from property_video_audio import manual_narration_plan
+        from property_video_pipeline import plan_property_scenes
+        analysis = list(state.get("reference_analysis") or [])
+        labels = [str(item.get("space") or "unknown") for item in analysis]
+        scenes = plan_property_scenes(
+            len(state.get("photos") or []), int(state["duration"]), state["engine"], state["type"],
+            labels=labels if len(labels) == len(state.get("photos") or []) else None,
+        )
+        try:
+            state["narration_plan"] = manual_narration_plan(
+                update.message.text[:2500], scenes,
+                state.get("narration_language", "ru"), state.get("narration_voice", "female"),
+            )
+        except ValueError as exc:
+            await update.message.reply_text(f"Не удалось распределить текст по сценам: {exc}")
+            return
+        state["awaiting_narration_script"] = False
+        await confirm(update.message, state, context, update.effective_user.id, update.effective_chat.id)
+        return
+    if not state.get("awaiting_prompt"):
         return
     state["extra"] = update.message.text[:1500]
     state["awaiting_prompt"] = False
-    await update.message.reply_text(
-        f"Дополнительные пожелания сохранены. Режим: {state['type']}, движок: {ENGINES[state['engine']]}.",
-        reply_markup=keyboard([[("🚀 Создать видео", "generate")], [("↩️ Заново", "start")]]),
-    )
+    await confirm(update.message, state, context, update.effective_user.id, update.effective_chat.id)
 
 
 def register_real_estate_handlers(application, renderer: RenderCallback | None = None):

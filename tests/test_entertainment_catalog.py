@@ -120,7 +120,6 @@ class EntertainmentCatalogTests(unittest.TestCase):
         self.assertEqual(
             self._texts("root"),
             [
-                ["🏡 AI-видеообзор недвижимости"],
                 ["🎬 Нейро Продакшен"],
                 ["🔥 В тренде", "🎥 Создать видео"],
                 ["📸 Фото и эффекты", "🎵 Музыка и песня"],
@@ -132,7 +131,6 @@ class EntertainmentCatalogTests(unittest.TestCase):
         self.assertEqual(
             self._callbacks("root"),
             [
-                "revideo:start",
                 "ent:menu:production",
                 "ent:menu:trends",
                 "ent:menu:video",
@@ -195,6 +193,8 @@ class EntertainmentCatalogTests(unittest.TestCase):
 
     def test_production_presets_use_existing_director(self):
         production = get_menu("production")
+        self.assertEqual(production.rows[0][0].callback_data, "revideo:start")
+        self.assertEqual(production.rows[0][0].text, "🏡 AI-видеообзор недвижимости")
         active = [button for row in production.rows for button in row
                   if button.callback_data.startswith("ent:brief:")]
         self.assertEqual(len(active), 8)

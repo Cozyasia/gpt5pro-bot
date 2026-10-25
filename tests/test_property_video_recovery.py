@@ -46,7 +46,9 @@ class PropertyVideoRecoveryTests(unittest.TestCase):
                 return output
 
             with patch.dict(os.environ, {"DB_PATH": db, "PROPERTY_VIDEO_ROOT": str(root)}, clear=False), \
-                 patch("property_video_execution.assemble_property_video", side_effect=fake_assemble):
+                 patch("property_video_execution.assemble_property_video", side_effect=fake_assemble), \
+                 patch("property_video_execution.mix_property_audio", side_effect=lambda source, output, duration, **kwargs: Path(output).write_bytes(Path(source).read_bytes()) or output), \
+                 patch("property_video_execution.inspect_property_video", return_value={}):
                 asyncio.run(recover_after_restart(app))
 
             self.assertEqual(status(db, job)[0], "delivered")

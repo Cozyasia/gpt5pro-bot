@@ -435,7 +435,9 @@ def assemble_property_video(
     return str(target)
 
 
-def inspect_property_video(path: str, expected_duration: int, aspect_ratio: str) -> dict:
+def inspect_property_video(
+    path: str, expected_duration: int, aspect_ratio: str, *, expect_audio: bool | None = None,
+) -> dict:
     """Run deterministic delivery checks without another provider request."""
     target = Path(path)
     probe = subprocess.run([
@@ -454,6 +456,17 @@ def inspect_property_video(path: str, expected_duration: int, aspect_ratio: str)
         raise PropertyVideoError(f"Unexpected property video size: {width}x{height}")
     if abs(duration - float(expected_duration)) > 0.6:
         raise PropertyVideoError(f"Unexpected property video duration: {duration:.3f}s")
+
+    audio_probe = subprocess.run([
+        "ffprobe", "-v", "error", "-select_streams", "a:0",
+        "-show_entries", "stream=codec_name,channels,sample_rate", "-of", "json", str(target),
+    ], check=True, capture_output=True, text=True, timeout=30)
+    audio_streams = (json.loads(audio_probe.stdout).get("streams") or [])
+    if expect_audio and not audio_streams:
+        raise PropertyVideoError("Final property video has no requested audio stream")
+    if expect_audio is False and audio_streams:
+        raise PropertyVideoError("Final property video unexpectedly contains audio")
+    audio = audio_streams[0] if audio_streams else {}
 
     from PIL import Image
     black_border_samples = 0
@@ -481,6 +494,9 @@ def inspect_property_video(path: str, expected_duration: int, aspect_ratio: str)
         "duration": round(duration, 3),
         "size": int(fmt.get("size") or target.stat().st_size),
         "black_border_samples": black_border_samples,
+        "audio_codec": str(audio.get("codec_name") or ""),
+        "audio_channels": int(audio.get("channels") or 0),
+        "audio_sample_rate": int(audio.get("sample_rate") or 0),
     }
 
 

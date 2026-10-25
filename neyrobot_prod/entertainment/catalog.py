@@ -43,7 +43,6 @@ _MENUS: dict[str, MenuSpec] = {
             "от идеи до результата. Выберите, что хотите получить."
         ),
         rows=(
-            (_button("🏡 AI-видеообзор недвижимости", "revideo:start"),),
             (_button("🎬 Нейро Продакшен", "ent:menu:production"),),
             (
                 _button("🔥 В тренде", "ent:menu:trends"),
@@ -66,6 +65,7 @@ _MENUS: dict[str, MenuSpec] = {
         title="🎬 Нейро Продакшен",
         intro="Готовые производственные сценарии — от брифа до результата.",
         rows=(
+            (_button("🏡 AI-видеообзор недвижимости", "revideo:start"),),
             (_button("🛍 Товар → рекламный ролик", "ent:brief:product_ad"),),
             (_button("📱 UGC-реклама", "ent:brief:ugc_ad"),),
             (_button("🏠 Реклама недвижимости", "ent:brief:real_estate_ad"),),

@@ -126,6 +126,15 @@ class PropertyVideoPipelineTests(unittest.TestCase):
         self.assertGreater(many["provider_cost_usd"], one["provider_cost_usd"])
         self.assertGreater(many["retail_usd"], 0)
 
+    def test_quote_includes_requested_audio_costs(self):
+        silent = quote_for_job("kling", 4, 20, "full", sound_mode="none")
+        voiced = quote_for_job("kling", 4, 20, "full", sound_mode="both")
+        self.assertEqual(silent["music_cost_usd"], 0)
+        self.assertEqual(silent["voice_cost_usd"], 0)
+        self.assertGreater(voiced["music_cost_usd"], 0)
+        self.assertGreater(voiced["voice_cost_usd"], 0)
+        self.assertGreater(voiced["provider_cost_usd"], silent["provider_cost_usd"])
+
     def test_ffmpeg_assembly_retimes_scene_to_preserve_terminal_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

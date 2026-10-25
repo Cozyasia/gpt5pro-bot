@@ -20,7 +20,7 @@ async def _photo(update, context):
 
 async def _text(update, context):
     state = context.user_data.get("real_estate_video") or {}
-    if not state.get("awaiting_prompt") or not state.get("engine"):
+    if not (state.get("awaiting_prompt") or state.get("awaiting_narration_script")) or not state.get("engine"):
         return
     await custom_prompt(update, context)
     raise ApplicationHandlerStop
