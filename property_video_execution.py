@@ -40,6 +40,8 @@ from property_video_audio import (
     mix_property_audio,
     recover_music_track,
     recover_voice_track,
+    property_caption_segments,
+    render_property_captions,
     render_music_track,
     render_voice_track,
     sound_has_music,
@@ -147,7 +149,10 @@ def _require_provider(engine: str, sound_mode: str = "none") -> None:
         os.getenv("SUNO_API_KEY") or os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY")
     ):
         raise PropertyVideoError("Suno не настроен в Render ENV")
-    if sound_has_voice(mode) and not (os.getenv("OPENAI_TTS_KEY") or os.getenv("OPENAI_API_KEY")):
+    if sound_has_voice(mode) and not (
+        os.getenv("OPENAI_TTS_KEY") or os.getenv("OPENAI_API_KEY")
+        or os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY")
+    ):
         raise PropertyVideoError("OpenAI TTS не настроен в Render ENV")
 
 
@@ -172,6 +177,17 @@ def _assembly_durations(metadata: dict) -> list[float] | None:
 def _assembly_aspect(metadata: dict) -> str:
     value = str(metadata.get("aspect_ratio") or "9:16")
     return value if value in {"9:16", "16:9"} else "9:16"
+
+
+def _caption_scenes(metadata: dict):
+    """Recreate the minimal scene interface needed for durable caption recovery."""
+    from types import SimpleNamespace
+
+    durations = _assembly_durations(metadata)
+    if durations is None:
+        count = max(1, int(metadata.get("scene_count") or 1))
+        durations = [float(metadata["duration"]) / count] * count
+    return [SimpleNamespace(output_seconds=float(value)) for value in durations]
 
 
 def _saved_audio_paths(folder: Path, sound_mode: str, metadata: dict) -> tuple[str, str]:
@@ -238,6 +254,17 @@ async def _assemble_saved_job(folder: Path, scene_paths: list[Path], output: Pat
         mix_property_audio, str(silent), str(output), duration,
         music_path=music, voice_path=voice,
     )
+    caption_mode = str(metadata.get("caption_mode") or "none")
+    captions = property_caption_segments(
+        caption_mode,
+        _caption_scenes(metadata),
+        narration_plan=metadata.get("narration_plan") or {},
+        custom_lines=metadata.get("custom_caption_lines") or [],
+    )
+    if captions:
+        captioned = folder / "property_review_captioned.mp4"
+        await asyncio.to_thread(render_property_captions, str(output), str(captioned), captions)
+        captioned.replace(output)
     await asyncio.to_thread(
         inspect_property_video, str(output), duration, aspect, expect_audio=mode != "none",
     )
@@ -365,6 +392,8 @@ async def execute(update, context, state, prompt):
         "narration_language": state.get("narration_language", "ru"),
         "narration_voice": state.get("narration_voice", "female"),
         "narration_plan": narration_plan,
+        "caption_mode": state.get("caption_mode", "none"),
+        "custom_caption_lines": list(state.get("custom_caption_lines") or []),
         "provider_cost_usd": quote["provider_cost_usd"],
         "video_cost_usd": quote["video_cost_usd"],
         "music_cost_usd": quote["music_cost_usd"],
@@ -486,6 +515,18 @@ async def execute(update, context, state, prompt):
             mix_property_audio, str(silent_output), str(output), duration,
             music_path=music_path, voice_path=voice_path,
         )
+        captions = property_caption_segments(
+            state.get("caption_mode", "none"), scenes,
+            narration_plan=narration_plan or {},
+            custom_lines=state.get("custom_caption_lines") or [],
+        )
+        if captions:
+            await query.message.reply_text("💬 Добавляю синхронные титры по сценам.")
+            captioned_output = folder / "property_review_captioned.mp4"
+            await asyncio.to_thread(
+                render_property_captions, str(output), str(captioned_output), captions,
+            )
+            captioned_output.replace(output)
         quality = await asyncio.to_thread(
             inspect_property_video, str(output), duration, aspect_ratio,
             expect_audio=sound_mode != "none",

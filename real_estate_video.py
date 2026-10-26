@@ -38,6 +38,11 @@ SOUND_LABELS = {
 }
 VOICE_LABELS = {"male": "Спокойный мужской", "female": "Мягкий женский"}
 LANGUAGE_LABELS = {"ru": "Русский", "en": "English"}
+CAPTION_LABELS = {
+    "none": "Без титров",
+    "narration": "Субтитры диктора",
+    "custom": "Свои титры",
+}
 RenderCallback = Callable[[str, list[str], str, str, int], Awaitable[str]]
 _renderer: RenderCallback | None = None
 
@@ -58,6 +63,7 @@ def _price_quote_key(state: dict) -> str:
         state.get("type"), len(state.get("photos") or []), state.get("aspect", "auto"),
         state.get("engine"), state.get("duration"), state.get("sound_mode", "none"),
         state.get("narration_language", ""), state.get("narration_voice", ""),
+        state.get("caption_mode", "none"), "\n".join(state.get("custom_caption_lines") or []),
     ))
 
 
@@ -151,13 +157,17 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["sound_mode"] = sound_mode
         state.pop("narration_plan", None)
         state.pop("reference_analysis", None)
+        state.pop("caption_mode", None)
+        state.pop("custom_caption_lines", None)
+        state.pop("awaiting_caption_script", None)
+        state.pop("caption_scene_count", None)
         if sound_mode in {"voice", "both"}:
             await query.message.reply_text(
                 "Выберите язык диктора:",
                 reply_markup=keyboard([[("🇷🇺 Русский", "language:ru"), ("🇬🇧 English", "language:en")]]),
             )
         else:
-            await _ask_shooting_prompt(query.message, state)
+            await _ask_caption_mode(query.message, state)
     elif action.startswith("language:"):
         language = action.split(":", 1)[1]
         if language not in LANGUAGE_LABELS:
@@ -167,8 +177,8 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             "Выберите голос диктора:",
             reply_markup=keyboard([
+                [("🎙 Мягкий женский — рекомендуем", "voice:female")],
                 [("🎙 Спокойный мужской", "voice:male")],
-                [("🎙 Мягкий женский", "voice:female")],
             ]),
         )
     elif action.startswith("voice:"):
@@ -177,7 +187,30 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Неизвестный голос.")
             return
         state["narration_voice"] = voice
-        await _ask_shooting_prompt(query.message, state)
+        await _ask_caption_mode(query.message, state)
+    elif action.startswith("caption:"):
+        caption_mode = action.split(":", 1)[1]
+        if caption_mode not in CAPTION_LABELS:
+            await query.message.reply_text("Неизвестный режим титров.")
+            return
+        if caption_mode == "narration" and state.get("sound_mode") not in {"voice", "both"}:
+            await query.message.reply_text("Субтитры диктора доступны только вместе с диктором.")
+            return
+        state["caption_mode"] = caption_mode
+        state.pop("custom_caption_lines", None)
+        if caption_mode == "custom":
+            from property_video_pipeline import plan_property_scenes
+            scenes = plan_property_scenes(
+                len(state.get("photos") or []), int(state["duration"]), state["engine"], state["type"],
+            )
+            state["awaiting_caption_script"] = True
+            state["caption_scene_count"] = len(scenes)
+            await query.message.reply_text(
+                f"Пришлите {len(scenes)} коротких титра — каждый с новой строки, по одному для каждой сцены. "
+                "До 68 символов в строке. Используйте только проверенные данные объекта."
+            )
+        else:
+            await _ask_shooting_prompt(query.message, state)
     elif action == "default_prompt":
         state["extra"] = ""
         state["awaiting_prompt"] = False
@@ -265,6 +298,17 @@ async def _ask_shooting_prompt(message, state):
     )
 
 
+async def _ask_caption_mode(message, state):
+    rows = []
+    if state.get("sound_mode") in {"voice", "both"}:
+        rows.append([("💬 Субтитры диктора — рекомендуем", "caption:narration")])
+    rows.extend([
+        [("✍️ Свои титры", "caption:custom")],
+        [("Без титров", "caption:none")],
+    ])
+    await message.reply_text("Добавить титры в нижней части видео?", reply_markup=keyboard(rows))
+
+
 async def _prepare_narration(message, state, context, user_id: int, chat_id: int):
     if state.get("sound_mode") not in {"voice", "both"} or state.get("narration_plan"):
         return
@@ -307,6 +351,12 @@ async def confirm(message, state, context, user_id: int, chat_id: int):
             await message.reply_text("ℹ️ " + str(plan["notice"]))
         if plan.get("analysis_warning"):
             await message.reply_text("⚠️ " + str(plan["analysis_warning"]))
+    if state.get("caption_mode") == "custom" and state.get("custom_caption_lines"):
+        await message.reply_text(
+            "💬 Свои титры:\n\n" + "\n".join(
+                f"{index}. {line}" for index, line in enumerate(state["custom_caption_lines"], start=1)
+            )
+        )
     rows = [[("🚀 Создать видео", "generate")]]
     if plan.get("segments"):
         rows.append([("✏️ Изменить текст диктора", "narration_edit")])
@@ -315,6 +365,7 @@ async def confirm(message, state, context, user_id: int, chat_id: int):
         f"🎬 {state['type']} | {ENGINES[state['engine']]} | {state['duration']} сек.\n"
         f"Фото: {len(state['photos'])} · формат: {state.get('aspect', 'auto')}\n"
         f"Звук: {SOUND_LABELS.get(state.get('sound_mode', 'none'), 'Без звука')}\n\n"
+        f"Титры: {CAPTION_LABELS.get(state.get('caption_mode', 'none'), 'Без титров')}\n\n"
         f"Промпт:\n{prompt[:1800]}",
         reply_markup=keyboard(rows),
     )
@@ -396,6 +447,21 @@ async def custom_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         state["awaiting_narration_script"] = False
         await confirm(update.message, state, context, update.effective_user.id, update.effective_chat.id)
+        return
+    if state.get("awaiting_caption_script"):
+        lines = [" ".join(line.split()) for line in update.message.text.splitlines() if line.strip()]
+        expected = int(state.get("caption_scene_count") or 0)
+        if len(lines) != expected:
+            await update.message.reply_text(
+                f"Нужно ровно {expected} строк — по одной для каждой сцены. Сейчас получено: {len(lines)}."
+            )
+            return
+        if any(len(line) > 68 for line in lines):
+            await update.message.reply_text("Каждый титр должен быть не длиннее 68 символов.")
+            return
+        state["custom_caption_lines"] = lines
+        state["awaiting_caption_script"] = False
+        await _ask_shooting_prompt(update.message, state)
         return
     if not state.get("awaiting_prompt"):
         return

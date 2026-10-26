@@ -78,7 +78,10 @@ def _wrap_caption(text, max_chars=18, max_lines=4):
     return "\n".join(lines)
 
 
-def render_russian_overlay(source, destination, captions, font_path, *, timeout=180, background=False, text_color="auto"):
+def render_russian_overlay(
+    source, destination, captions, font_path, *, timeout=180, background=False,
+    text_color="auto", max_chars=18, max_lines=4, y_ratio=0.72,
+):
     """Single wrapped title layer, centered in 9:16 safe margins."""
     if not Path(font_path).is_file():
         raise FileNotFoundError(font_path)
@@ -94,14 +97,21 @@ def render_russian_overlay(source, destination, captions, font_path, *, timeout=
             color = _auto_caption_color(source, (start + end) / 2) if text_color == "auto" else text_color
             shadow = "white@0.75" if color == "black" else "black@0.85"
             caption_file = Path(temp) / f"caption_{i}.txt"
-            caption_file.write_text(_wrap_caption(caption), encoding="utf-8")
+            if int(max_chars) == 18 and int(max_lines) == 4:
+                # Preserve the established ad-caption path and its source-level contract.
+                caption_file.write_text(_wrap_caption(caption), encoding="utf-8")
+            else:
+                caption_file.write_text(
+                    _wrap_caption(caption, max_chars=int(max_chars), max_lines=int(max_lines)),
+                    encoding="utf-8",
+                )
             style = ("box=1:boxcolor=black@0.55:boxborderw=12:"
                      if background else f"box=0:shadowcolor={shadow}:shadowx=2:shadowy=2:")
             filters.append(
                 "drawtext=fontfile='" + str(font_path) + "':textfile='" + str(caption_file) +
                 "':expansion=none:fontcolor=" + color + ":fontsize=h/34:line_spacing=8:" +
-                style + "x=(w-text_w)/2:y=h*0.72:" +
-                "fix_bounds=1:enable='between(t\," + str(start) + "\," + str(end) + ")'"
+                style + "x=(w-text_w)/2:y=h*" + str(float(y_ratio)) + ":" +
+                "fix_bounds=1:enable='between(t\\," + str(start) + "\\," + str(end) + ")'"
             )
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                "-i", str(source), "-vf", ",".join(filters), "-c:v", "libx264",

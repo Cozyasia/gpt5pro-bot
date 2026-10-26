@@ -14,7 +14,9 @@ from property_video_audio import (
     manual_narration_plan,
     mix_property_audio,
     parse_narration_plan,
+    property_caption_segments,
     recover_music_track,
+    render_property_captions,
     render_voice_track,
 )
 from property_video_pipeline import plan_property_scenes
@@ -191,6 +193,38 @@ class PropertyVideoAudioTests(unittest.TestCase):
                 "ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(output),
             ], check=True, capture_output=True, text=True).stdout.splitlines()
             self.assertEqual(streams, ["video"])
+
+    def test_narration_captions_follow_scene_timing(self):
+        scenes = plan_property_scenes(5, 20, "kling", "full")
+        plan = parse_narration_plan(
+            {"scenes": [{"text": f"Сцена {index}"} for index in range(1, 5)]},
+            scenes, "ru", "female",
+        )
+        captions = property_caption_segments("narration", scenes, narration_plan=plan)
+        self.assertEqual(len(captions), 4)
+        self.assertEqual(captions[0], (0.0, 5.0, "Сцена 1."))
+        self.assertEqual(captions[-1], (15.0, 20.0, "Сцена 4."))
+
+    def test_custom_captions_require_one_line_per_scene(self):
+        scenes = plan_property_scenes(5, 20, "kling", "full")
+        with self.assertRaises(PropertyAudioError):
+            property_caption_segments("custom", scenes, custom_lines=["Только одна строка"])
+
+    def test_caption_overlay_preserves_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.mp4"
+            output = root / "captioned.mp4"
+            subprocess.run([
+                "ffmpeg", "-nostdin", "-y", "-f", "lavfi", "-i", "color=c=white:s=360x640:d=1",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-shortest",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(source),
+            ], check=True, capture_output=True)
+            render_property_captions(str(source), str(output), [(0.0, 1.0, "Светлая гостиная")])
+            streams = subprocess.run([
+                "ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(output),
+            ], check=True, capture_output=True, text=True).stdout.splitlines()
+            self.assertEqual(streams, ["video", "audio"])
 
     def test_suno_recovery_prefers_completed_audio_over_cover_url(self):
         with tempfile.TemporaryDirectory() as tmp:
