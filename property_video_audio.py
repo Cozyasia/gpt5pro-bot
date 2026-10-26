@@ -14,6 +14,7 @@ from typing import Awaitable, Callable
 log = logging.getLogger(__name__)
 
 SOUND_MODES = {"none", "music", "voice", "both"}
+CAPTION_MODES = {"none", "narration", "custom"}
 VOICE_MAP = {"male": "onyx", "female": "nova"}
 LUXURY_LOUNGE_BRIEF = (
     "Entire track must be instrumental with no vocals. Elegant luxury real-estate lounge music, "
@@ -40,6 +41,71 @@ def sound_has_music(mode: str) -> bool:
 
 def sound_has_voice(mode: str) -> bool:
     return validate_sound_mode(mode) in {"voice", "both"}
+
+
+def validate_caption_mode(value: str | None) -> str:
+    mode = str(value or "none").strip().lower()
+    if mode not in CAPTION_MODES:
+        raise ValueError("Unsupported property-video caption mode")
+    return mode
+
+
+def property_caption_segments(
+    mode: str, scenes, *, narration_plan: dict | None = None,
+    custom_lines: list[str] | None = None,
+) -> list[tuple[float, float, str]]:
+    """Return scene-timed captions without inventing property facts."""
+    mode = validate_caption_mode(mode)
+    if mode == "none":
+        return []
+    if mode == "narration":
+        items = list((narration_plan or {}).get("segments") or [])
+        if len(items) != len(scenes):
+            raise PropertyAudioError("Narration captions do not match the scene plan")
+        captions = []
+        for scene, item in zip(scenes, items):
+            start = float(item.get("start", 0))
+            duration = float(scene.output_seconds)
+            text = " ".join(str(item.get("text") or "").split())
+            if not text:
+                raise PropertyAudioError("Narration caption is empty")
+            captions.append((start, start + duration, text))
+        return captions
+    lines = [" ".join(str(line).split()) for line in (custom_lines or []) if str(line).strip()]
+    if len(lines) != len(scenes):
+        raise PropertyAudioError(f"Custom captions require exactly {len(scenes)} lines")
+    if any(len(line) > 68 for line in lines):
+        raise PropertyAudioError("Each custom caption must be 68 characters or shorter")
+    captions = []
+    start = 0.0
+    for scene, line in zip(scenes, lines):
+        end = start + float(scene.output_seconds)
+        captions.append((start, end, line))
+        start = end
+    return captions
+
+
+def render_property_captions(
+    source_path: str, output_path: str, captions: list[tuple[float, float, str]],
+) -> str:
+    """Burn readable Russian/English captions into the final property MP4."""
+    if not captions:
+        raise PropertyAudioError("No property captions to render")
+    from neyrobot_prod.ad_video_safe_delivery import render_russian_overlay
+
+    font_path = os.getenv(
+        "PROPERTY_VIDEO_CAPTION_FONT_PATH",
+        os.getenv("AD_CAPTION_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    )
+    return render_russian_overlay(
+        source_path, output_path, captions, font_path,
+        timeout=int(os.getenv("PROPERTY_VIDEO_FFMPEG_TIMEOUT_S", "600")),
+        background=True,
+        text_color="white",
+        max_chars=28,
+        max_lines=3,
+        y_ratio=0.78,
+    )
 
 
 def narration_word_budgets(scenes) -> list[int]:
