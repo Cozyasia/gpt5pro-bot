@@ -303,6 +303,10 @@ async def confirm(message, state, context, user_id: int, chat_id: int):
     if plan.get("segments"):
         lines = [f"{item['start']:g} сек. — {item['text']}" for item in plan["segments"]]
         await message.reply_text("🎙 Текст диктора:\n\n" + "\n".join(lines))
+        if plan.get("notice"):
+            await message.reply_text("ℹ️ " + str(plan["notice"]))
+        if plan.get("analysis_warning"):
+            await message.reply_text("⚠️ " + str(plan["analysis_warning"]))
     rows = [[("🚀 Создать видео", "generate")]]
     if plan.get("segments"):
         rows.append([("✏️ Изменить текст диктора", "narration_edit")])
@@ -373,7 +377,7 @@ async def custom_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not state or not state.get("engine"):
         return
     if state.get("awaiting_narration_script"):
-        from property_video_audio import manual_narration_plan
+        from property_video_audio import create_manual_narration_plan
         from property_video_pipeline import plan_property_scenes
         analysis = list(state.get("reference_analysis") or [])
         labels = [str(item.get("space") or "unknown") for item in analysis]
@@ -382,11 +386,12 @@ async def custom_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
             labels=labels if len(labels) == len(state.get("photos") or []) else None,
         )
         try:
-            state["narration_plan"] = manual_narration_plan(
+            state["narration_plan"] = await create_manual_narration_plan(
                 update.message.text[:2500], scenes,
                 state.get("narration_language", "ru"), state.get("narration_voice", "female"),
+                user_id=int(update.effective_user.id), chat_id=int(update.effective_chat.id),
             )
-        except ValueError as exc:
+        except Exception as exc:
             await update.message.reply_text(f"Не удалось распределить текст по сценам: {exc}")
             return
         state["awaiting_narration_script"] = False

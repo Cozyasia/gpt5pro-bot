@@ -69,9 +69,14 @@ async def _analyse_one_reference(path: str, index: int) -> dict:
     }:
         return {"space": "unknown", "summary": ""}
     try:
+        import httpx
         import main as production_main
-        analyser = getattr(production_main, "ask_openai_vision", None)
-        if not callable(analyser):
+        key = str(
+            getattr(production_main, "OPENAI_TTS_KEY", "")
+            or getattr(production_main, "OPENAI_API_KEY", "")
+            or ""
+        ).strip()
+        if not key:
             return {"space": "unknown", "summary": ""}
         image_b64, mime = await asyncio.to_thread(_analysis_image, path)
         prompt = (
@@ -82,14 +87,31 @@ async def _analyse_one_reference(path: str, index: int) -> dict:
             "Do not infer unseen rooms or connections. "
             f"Reference number: {index + 1}."
         )
-
-        # The production vision helper currently wraps a synchronous SDK call
-        # in an async function. Run that coroutine in a worker thread so up to
-        # three photo analyses do not freeze Telegram's event loop.
-        def invoke():
-            return asyncio.run(analyser(prompt, image_b64, mime))
-
-        response = await asyncio.to_thread(invoke)
+        base = str(
+            getattr(production_main, "OPENAI_TTS_BASE_URL", "")
+            or "https://api.openai.com/v1"
+        ).rstrip("/")
+        model = os.getenv("PROPERTY_VIDEO_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            result = await client.post(
+                f"{base}/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "temperature": 0.1,
+                    "response_format": {"type": "json_object"},
+                    "messages": [
+                        {"role": "system", "content": "You classify property photographs. Output strict JSON only."},
+                        {"role": "user", "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
+                        ]},
+                    ],
+                },
+            )
+            result.raise_for_status()
+            payload = result.json()
+        response = payload["choices"][0]["message"]["content"]
         return parse_photo_analysis(response)
     except Exception:
         log.warning("PROPERTY_VIDEO_REFERENCE_ANALYSIS_FAILED index=%s path=%s", index, Path(path).name,
