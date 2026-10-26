@@ -109,6 +109,30 @@ def _transition_kind(source_label: str, target_label: str) -> str:
     return "cinematic_cut"
 
 
+def _adjacent_pair_starts(photo_count: int, count: int, labels: list[str] | None) -> list[int]:
+    """Spread adjacent pairs across the upload route, preferring supported zones."""
+    starts = _evenly_spaced_indices(max(1, int(photo_count) - 1), int(count))
+    if not labels or len(labels) < int(photo_count):
+        return starts
+    radius = max(1, int(math.ceil((int(photo_count) - 1) / max(1, int(count)) / 2)))
+    chosen: set[int] = set()
+    result: list[int] = []
+    for target in starts:
+        candidates = [
+            index for index in range(max(0, target - radius), min(int(photo_count) - 1, target + radius + 1))
+            if index not in chosen
+        ]
+        candidates.sort(key=lambda index: (
+            0 if _transition_kind(labels[index], labels[index + 1]) == "continuous" else 1,
+            abs(index - target),
+            index,
+        ))
+        selected = candidates[0] if candidates else target
+        chosen.add(selected)
+        result.append(selected)
+    return sorted(result)
+
+
 def plan_property_scenes(
     photo_count: int,
     duration: int,
@@ -148,7 +172,15 @@ def plan_property_scenes(
         selected = [int(value) for value in selected_indices]
         if not selected or selected != sorted(set(selected)) or selected[0] < 0 or selected[-1] >= int(photo_count):
             raise ValueError("Selected property references must be ordered unique valid indices")
-    count = max(1, len(selected) - 1) if transition_capable and len(selected) > 1 else len(selected)
+    if transition_capable and selected_indices is None and int(photo_count) > 1:
+        # A short tour cannot safely morph across distant keyframes. Choose
+        # adjacent upload pairs spread through the route. The analyser can
+        # then disable a tail frame when the adjacent spaces are unrelated.
+        count = min(budget, int(photo_count) - 1)
+        pair_starts = _adjacent_pair_starts(int(photo_count), count, labels)
+    else:
+        pair_starts = []
+        count = max(1, len(selected) - 1) if transition_capable and len(selected) > 1 else len(selected)
     slot_seconds = duration / count
 
     scenes: list[PropertyScene] = []
@@ -161,15 +193,33 @@ def plan_property_scenes(
             # Upload order is the only reliable sequence signal. Do not label a
             # frame interior/exterior without analysing its pixels.
             role = "property establishing view" if i == 0 else "property view in upload order"
-        first_photo = selected[i]
-        next_photo = selected[i + 1] if transition_capable and i + 1 < len(selected) else None
+        if pair_starts:
+            first_photo = pair_starts[i]
+            candidate_next = first_photo + 1
+        else:
+            first_photo = selected[i]
+            candidate_next = selected[i + 1] if transition_capable and i + 1 < len(selected) else None
+        next_photo = candidate_next
         source_label = labels[first_photo] if labels and first_photo < len(labels) else "unknown"
         target_label = labels[next_photo] if labels and next_photo is not None and next_photo < len(labels) else "unknown"
+        transition_kind = _transition_kind(source_label, target_label) if next_photo is not None else "single_reference"
+        if (
+            next_photo is not None
+            and labels
+            and source_label not in {"unknown", "other"}
+            and target_label not in {"unknown", "other"}
+            and transition_kind != "continuous"
+        ):
+            # Kling/Veo should not fabricate a geometric bridge between
+            # unrelated rooms. The final assembler supplies the clean cut.
+            next_photo = None
+            target_label = "unknown"
+            transition_kind = "single_reference"
         scenes.append(PropertyScene(
             i, first_photo, _provider_seconds(engine, slot_seconds), role,
             round(slot_seconds, 3),
             next_photo,
-            _transition_kind(source_label, target_label) if next_photo is not None else "single_reference",
+            transition_kind,
             source_label,
             target_label,
         ))

@@ -15,16 +15,36 @@ from property_video_execution import quote_for_job
 
 
 class PropertyVideoPipelineTests(unittest.TestCase):
-    def test_kling_builds_an_overlapping_route_instead_of_disjoint_pairs(self):
+    def test_short_kling_tour_never_morphs_between_non_adjacent_uploads(self):
+        scenes = plan_property_scenes(
+            14, 20, "kling", "full",
+            labels=[
+                "exterior", "terrace_pool", "dining_room", "dining_room",
+                "living_room", "dining_room", "kitchen", "living_room",
+                "bedroom", "bedroom", "bathroom", "bathroom", "bedroom", "bedroom",
+            ],
+        )
+        self.assertEqual(len(scenes), 4)
+        self.assertTrue(all(
+            scene.next_photo_index is None or scene.next_photo_index == scene.photo_index + 1
+            for scene in scenes
+        ))
+
+    def test_unrelated_adjacent_rooms_are_joined_by_montage_not_kling_morph(self):
+        scenes = plan_property_scenes(
+            3, 10, "kling", "full",
+            labels=["exterior", "bedroom", "kitchen"],
+        )
+        self.assertTrue(all(scene.next_photo_index is None for scene in scenes))
+
+    def test_kling_uses_adjacent_pairs_instead_of_distant_morphs(self):
         scenes = plan_property_scenes(9, 20, "kling", "full")
         self.assertEqual(len(scenes), 4)
         self.assertEqual(
             [(scene.photo_index, scene.next_photo_index) for scene in scenes],
-            [(0, 2), (2, 4), (4, 6), (6, 8)],
+            [(0, 1), (2, 3), (5, 6), (7, 8)],
         )
         self.assertTrue(all(scene.next_photo_index is not None for scene in scenes))
-        for current, following in zip(scenes, scenes[1:]):
-            self.assertEqual(current.next_photo_index, following.photo_index)
 
     def test_all_three_engines_have_duration_bounded_multiscene_plans(self):
         for engine in ("kling", "veo", "seedance"):
@@ -46,14 +66,14 @@ class PropertyVideoPipelineTests(unittest.TestCase):
         self.assertIn("supplied reference photograph", prompt)
         self.assertIn("Do not invent", prompt)
 
-    def test_short_review_selects_keyframes_and_preserves_route_overlap(self):
+    def test_short_review_selects_adjacent_pairs_across_the_route(self):
         scenes = plan_property_scenes(10, 20, "kling", "interior")
         self.assertEqual(len(scenes), 4)
         self.assertAlmostEqual(sum(scene.output_seconds for scene in scenes), 20)
-        self.assertEqual(scenes[0].photo_index, 0)
-        self.assertEqual(scenes[-1].next_photo_index, 9)
-        for current, following in zip(scenes, scenes[1:]):
-            self.assertEqual(current.next_photo_index, following.photo_index)
+        self.assertEqual(
+            [(scene.photo_index, scene.next_photo_index) for scene in scenes],
+            [(0, 1), (3, 4), (5, 6), (8, 9)],
+        )
 
     def test_director_accepts_thirty_photos_and_long_tours(self):
         scenes = plan_property_scenes(30, 60, "kling", "full")
@@ -85,24 +105,25 @@ class PropertyVideoPipelineTests(unittest.TestCase):
         self.assertIn("20-24mm", prompt)
         self.assertIn("shorter accurate shot", prompt)
 
-    def test_unknown_room_connection_requests_a_cinematic_cut(self):
+    def test_unknown_room_connection_uses_final_montage_cut(self):
         scenes = plan_property_scenes(
             3, 10, "kling", "full",
             labels=["exterior", "bedroom", "kitchen"],
         )
-        self.assertEqual(scenes[0].transition_kind, "cinematic_cut")
+        self.assertEqual(scenes[0].transition_kind, "single_reference")
+        self.assertIsNone(scenes[0].next_photo_index)
         prompt = scene_prompt("property walkthrough", scenes[0], len(scenes)).lower()
-        self.assertIn("natural cinematic cut", prompt)
-        self.assertIn("do not invent a corridor", prompt)
+        self.assertNotIn("next reference photo", prompt)
+        self.assertIn("do not invent rooms", prompt)
 
-    def test_director_prefers_room_boundaries_over_duplicate_views(self):
+    def test_director_prefers_supported_adjacent_pairs_over_room_morphs(self):
         scenes = plan_property_scenes(
             6, 10, "kling", "interior",
             labels=["living_room", "living_room", "living_room", "living_room", "kitchen", "bedroom"],
         )
         self.assertEqual(
             [(scene.photo_index, scene.next_photo_index) for scene in scenes],
-            [(0, 4), (4, 5)],
+            [(0, 1), (3, 4)],
         )
 
     def test_kling_property_wrapper_does_not_forbid_the_requested_transition(self):

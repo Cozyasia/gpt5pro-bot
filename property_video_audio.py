@@ -100,11 +100,11 @@ def render_property_captions(
     return render_russian_overlay(
         source_path, output_path, captions, font_path,
         timeout=int(os.getenv("PROPERTY_VIDEO_FFMPEG_TIMEOUT_S", "600")),
-        background=True,
-        text_color="white",
+        background=False,
+        text_color="auto",
         max_chars=28,
         max_lines=3,
-        y_ratio=0.78,
+        y_ratio=0.74,
     )
 
 

@@ -144,6 +144,32 @@ class RealEstateVideoTests(unittest.TestCase):
         callbacks = [button.callback_data for row in kwargs["reply_markup"].inline_keyboard for button in row]
         self.assertNotIn("revideo:photos_add", callbacks)
 
+    def test_album_photos_are_kept_in_telegram_message_order(self):
+        from real_estate_video import photo
+
+        class Message:
+            def __init__(self, message_id, name):
+                self.message_id = message_id
+                self.photo = [SimpleNamespace(file_id=f"file-{name}", file_unique_id=name)]
+                self.document = None
+
+            async def reply_text(self, _text, **_kwargs):
+                return SimpleNamespace(message_id=999)
+
+        async def run():
+            context = SimpleNamespace(
+                user_data={"real_estate_video": {"type": "full", "photos": []}},
+                bot=SimpleNamespace(edit_message_text=AsyncMock()),
+            )
+            # Telegram album updates may reach the handler out of order even though
+            # message_id still records the order selected by the user.
+            for message in (Message(114, "last"), Message(101, "first"), Message(107, "middle")):
+                await photo(SimpleNamespace(message=message), context)
+            return context.user_data["real_estate_video"]
+
+        state = asyncio.run(run())
+        self.assertEqual(state["photos"], ["file-first", "file-middle", "file-last"])
+
     def test_saved_video_delivery_uses_media_timeouts(self):
         from property_video_execution import _send_saved
 
