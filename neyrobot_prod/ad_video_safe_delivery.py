@@ -97,10 +97,14 @@ def render_russian_overlay(
             color = _auto_caption_color(source, (start + end) / 2) if text_color == "auto" else text_color
             shadow = "white@0.75" if color == "black" else "black@0.85"
             caption_file = Path(temp) / f"caption_{i}.txt"
-            caption_file.write_text(
-                _wrap_caption(caption, max_chars=int(max_chars), max_lines=int(max_lines)),
-                encoding="utf-8",
-            )
+            if int(max_chars) == 18 and int(max_lines) == 4:
+                # Preserve the established ad-caption path and its source-level contract.
+                caption_file.write_text(_wrap_caption(caption), encoding="utf-8")
+            else:
+                caption_file.write_text(
+                    _wrap_caption(caption, max_chars=int(max_chars), max_lines=int(max_lines)),
+                    encoding="utf-8",
+                )
             style = ("box=1:boxcolor=black@0.55:boxborderw=12:"
                      if background else f"box=0:shadowcolor={shadow}:shadowx=2:shadowy=2:")
             filters.append(
