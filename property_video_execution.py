@@ -654,14 +654,14 @@ async def recover_after_restart(application) -> None:
             if not all(path.is_file() and path.stat().st_size > 0 for path in scenes):
                 continue
             output = folder / "property_review.mp4"
-            if not output.is_file() or output.stat().st_size <= 0:
-                await _assemble_saved_job(folder, scenes, output, metadata)
             reserve(
                 db, job, user_id, 0,
                 provider_cost_usd=float(metadata.get("provider_cost_usd", 0) or 0),
                 metadata={**metadata, "recovered_orphan": True},
                 owner_bypass=True,
             )
+            if not output.is_file() or output.stat().st_size <= 0:
+                await _assemble_saved_job(folder, scenes, output, metadata)
             with output.open("rb") as handle:
                 await application.bot.send_video(
                     chat_id=chat_id,
