@@ -166,37 +166,98 @@ def _fallback_narration(analysis: list[dict], scenes, language: str, voice: str)
 
 
 async def _property_json_request(prompt: str, extra_system: str) -> str:
-    """Use the configured official OpenAI key reserved for speech features.
-
-    The main chat can be routed through OpenRouter. Property narration must still
-    work when that unrelated route is unavailable, so it uses the TTS/OpenAI key
-    and an explicit official model.
-    """
+    """Use OpenAI first and the configured Comet gateway as a failover."""
     import httpx
     import main as production_main
 
-    key = str(getattr(production_main, "OPENAI_TTS_KEY", "") or getattr(production_main, "OPENAI_API_KEY", ""))
-    if not key:
+    primary_key = str(
+        getattr(production_main, "OPENAI_TTS_KEY", "")
+        or getattr(production_main, "OPENAI_API_KEY", "")
+        or ""
+    ).strip()
+    comet_key = str(getattr(production_main, "COMET_API_KEY", "") or "").strip()
+    if not (primary_key or comet_key):
         raise PropertyAudioError("OpenAI key for property narration is unavailable")
-    base = str(getattr(production_main, "OPENAI_TTS_BASE_URL", "") or "https://api.openai.com/v1").rstrip("/")
-    model = os.getenv("PROPERTY_VIDEO_TEXT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    endpoints = []
+    if primary_key:
+        endpoints.append((
+            str(getattr(production_main, "OPENAI_TTS_BASE_URL", "") or "https://api.openai.com/v1").rstrip("/"),
+            primary_key,
+            os.getenv("PROPERTY_VIDEO_TEXT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+            "openai",
+        ))
+    if comet_key:
+        endpoints.append((
+            str(getattr(production_main, "COMET_BASE_URL", "") or "https://api.cometapi.com").rstrip("/"),
+            comet_key,
+            os.getenv("PROPERTY_VIDEO_COMET_TEXT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+            "comet",
+        ))
+    last_error = None
     async with httpx.AsyncClient(timeout=90.0) as client:
-        response = await client.post(
-            f"{base}/chat/completions",
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "temperature": 0.2,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": extra_system},
-                    {"role": "user", "content": prompt},
-                ],
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
-    return str(payload["choices"][0]["message"]["content"] or "")
+        for base, key, model, provider in endpoints:
+            try:
+                response = await client.post(
+                    f"{base}/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "temperature": 0.2,
+                        "response_format": {"type": "json_object"},
+                        "messages": [
+                            {"role": "system", "content": extra_system},
+                            {"role": "user", "content": prompt},
+                        ],
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                return str(payload["choices"][0]["message"]["content"] or "")
+            except Exception as exc:
+                last_error = exc
+                log.warning("PROPERTY_VIDEO_TEXT_PROVIDER_FAILED provider=%s", provider, exc_info=True)
+    raise PropertyAudioError("Property narration providers are unavailable") from last_error
+
+
+def _comet_tts_bytes_sync(text: str, voice: str) -> bytes | None:
+    """Generate speech through Comet's OpenAI-compatible audio endpoint."""
+    import httpx
+    import main as production_main
+
+    key = str(getattr(production_main, "COMET_API_KEY", "") or "").strip()
+    base = str(getattr(production_main, "COMET_BASE_URL", "") or "https://api.cometapi.com").rstrip("/")
+    if not key:
+        return None
+    models = list(dict.fromkeys(filter(None, [
+        os.getenv("PROPERTY_VIDEO_COMET_TTS_MODEL", "gpt-4o-mini-tts").strip(),
+        "tts-1-hd",
+        "tts-1",
+    ])))
+    last_error = ""
+    with httpx.Client(timeout=httpx.Timeout(connect=20.0, read=180.0, write=30.0, pool=20.0)) as client:
+        for path in ("/v1/audio/speech", "/audio/speech"):
+            for model in models:
+                try:
+                    response = client.post(
+                        f"{base}{path}",
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model,
+                            "voice": voice,
+                            "input": text,
+                            "response_format": "mp3",
+                        },
+                    )
+                    if response.status_code >= 400:
+                        last_error = f"{path} model={model} status={response.status_code}"
+                        continue
+                    if response.content:
+                        log.info("PROPERTY_VIDEO_TTS_FALLBACK_OK provider=comet model=%s bytes=%s", model, len(response.content))
+                        return bytes(response.content)
+                except Exception as exc:
+                    last_error = f"{path} model={model} error={type(exc).__name__}"
+    log.warning("PROPERTY_VIDEO_TTS_FALLBACK_FAILED provider=comet error=%s", last_error)
+    return None
 
 
 async def create_narration_plan(
@@ -387,15 +448,20 @@ async def render_voice_track(
     if tts_renderer is None:
         import main as production_main
         renderer = production_main._tts_bytes_sync
-        tts_renderer = lambda text, selected: renderer(text, "mp3", selected)
+        def default_renderer(text, selected):
+            return renderer(text, "mp3", selected) or _comet_tts_bytes_sync(text, selected)
+        tts_renderer = default_renderer
     paths = []
     for index, segment in enumerate(plan.get("segments") or []):
+        path = folder / f"voice_source_{index:02d}.mp3"
+        if path.is_file() and path.stat().st_size > 0:
+            paths.append(path)
+            continue
         if callable(on_request_start):
             on_request_start(index)
         data = await asyncio.to_thread(tts_renderer, str(segment.get("text") or ""), voice)
         if not data:
             raise PropertyAudioError(f"TTS did not return scene {index + 1}")
-        path = folder / f"voice_source_{index:02d}.mp3"
         path.write_bytes(bytes(data))
         paths.append(path)
     return await asyncio.to_thread(

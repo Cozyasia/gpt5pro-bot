@@ -71,12 +71,13 @@ async def _analyse_one_reference(path: str, index: int) -> dict:
     try:
         import httpx
         import main as production_main
-        key = str(
+        primary_key = str(
             getattr(production_main, "OPENAI_TTS_KEY", "")
             or getattr(production_main, "OPENAI_API_KEY", "")
             or ""
         ).strip()
-        if not key:
+        comet_key = str(getattr(production_main, "COMET_API_KEY", "") or "").strip()
+        if not (primary_key or comet_key):
             return {"space": "unknown", "summary": ""}
         image_b64, mime = await asyncio.to_thread(_analysis_image, path)
         prompt = (
@@ -87,32 +88,55 @@ async def _analyse_one_reference(path: str, index: int) -> dict:
             "Do not infer unseen rooms or connections. "
             f"Reference number: {index + 1}."
         )
-        base = str(
-            getattr(production_main, "OPENAI_TTS_BASE_URL", "")
-            or "https://api.openai.com/v1"
-        ).rstrip("/")
-        model = os.getenv("PROPERTY_VIDEO_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+        endpoints = []
+        if primary_key:
+            endpoints.append((
+                str(getattr(production_main, "OPENAI_TTS_BASE_URL", "") or "https://api.openai.com/v1").rstrip("/"),
+                primary_key,
+                os.getenv("PROPERTY_VIDEO_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+                "openai",
+            ))
+        if comet_key:
+            endpoints.append((
+                str(getattr(production_main, "COMET_BASE_URL", "") or "https://api.cometapi.com").rstrip("/"),
+                comet_key,
+                os.getenv("PROPERTY_VIDEO_COMET_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+                "comet",
+            ))
+        last_error = None
         async with httpx.AsyncClient(timeout=90.0) as client:
-            result = await client.post(
-                f"{base}/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "temperature": 0.1,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {"role": "system", "content": "You classify property photographs. Output strict JSON only."},
-                        {"role": "user", "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
-                        ]},
-                    ],
-                },
-            )
-            result.raise_for_status()
-            payload = result.json()
-        response = payload["choices"][0]["message"]["content"]
-        return parse_photo_analysis(response)
+            for base, key, model, provider in endpoints:
+                try:
+                    result = await client.post(
+                        f"{base}/chat/completions",
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model,
+                            "temperature": 0.1,
+                            "response_format": {"type": "json_object"},
+                            "messages": [
+                                {"role": "system", "content": "You classify property photographs. Output strict JSON only."},
+                                {"role": "user", "content": [
+                                    {"type": "text", "text": prompt},
+                                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
+                                ]},
+                            ],
+                        },
+                    )
+                    result.raise_for_status()
+                    payload = result.json()
+                    parsed = parse_photo_analysis(payload["choices"][0]["message"]["content"])
+                    if parsed["space"] != "unknown":
+                        return parsed
+                except Exception as exc:
+                    last_error = exc
+                    log.warning(
+                        "PROPERTY_VIDEO_VISION_PROVIDER_FAILED provider=%s index=%s",
+                        provider, index, exc_info=True,
+                    )
+        if last_error:
+            raise last_error
+        return {"space": "unknown", "summary": ""}
     except Exception:
         log.warning("PROPERTY_VIDEO_REFERENCE_ANALYSIS_FAILED index=%s path=%s", index, Path(path).name,
                     exc_info=True)
