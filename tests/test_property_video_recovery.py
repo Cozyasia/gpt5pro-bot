@@ -12,6 +12,26 @@ from property_video_execution import recover_after_restart, execution_job
 
 
 class PropertyVideoRecoveryTests(unittest.TestCase):
+    def test_long_stage_sends_periodic_still_working_updates(self):
+        from property_video_execution import _await_with_progress
+
+        async def run():
+            message = SimpleNamespace(reply_text=AsyncMock())
+
+            async def slow_result():
+                await asyncio.sleep(0.035)
+                return "ready"
+
+            result = await _await_with_progress(
+                message, slow_result(), "Kling создаёт сцену 1/4", interval_s=0.01,
+            )
+            return result, message
+
+        result, message = asyncio.run(run())
+        self.assertEqual(result, "ready")
+        self.assertGreaterEqual(message.reply_text.await_count, 2)
+        self.assertIn("работа продолжается", message.reply_text.await_args.args[0].lower())
+
     def test_refunded_job_gets_a_new_execution_id(self):
         with tempfile.TemporaryDirectory() as td:
             db = str(Path(td) / "subs.db")

@@ -86,6 +86,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["type"] = action.split(":", 1)[1]
         state["photos"] = []
         state["photo_keys"] = []
+        state["photo_items"] = []
         await query.message.reply_text(
             f"Пришлите фотографии объекта по порядку (до {MAX_PHOTOS}). Для интерьера загружайте комнаты "
             "в желаемом порядке обхода. Затем нажмите «Фото загружены».",
@@ -391,8 +392,19 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Telegram can redeliver an album update or a photo with a new size.
         # Do not emit a second progress line for a reference that was not added.
         return
-    state["photos"].append(file_id)
-    photo_keys.append(photo_key)
+    items = state.setdefault("photo_items", [])
+    if not items and state["photos"]:
+        # Upgrade an in-progress legacy state without changing the order that
+        # was already shown to the user.
+        for position, (saved_id, saved_key) in enumerate(zip(state["photos"], photo_keys)):
+            items.append({"message_id": position, "file_id": saved_id, "photo_key": saved_key})
+    message_id = getattr(update.message, "message_id", None)
+    if message_id is None:
+        message_id = max((int(item["message_id"]) for item in items), default=-1) + 1
+    items.append({"message_id": int(message_id), "file_id": file_id, "photo_key": photo_key})
+    items.sort(key=lambda item: int(item["message_id"]))
+    state["photos"] = [item["file_id"] for item in items]
+    state["photo_keys"] = [item["photo_key"] for item in items]
     count = len(state["photos"])
     rows = [[("✅ Фото загружены", "photos_done")]]
     if count < MAX_PHOTOS:

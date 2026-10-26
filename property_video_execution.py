@@ -52,6 +52,38 @@ from property_video_audio import (
 log = logging.getLogger(__name__)
 
 
+async def _await_with_progress(message, awaitable, label: str, *, interval_s: float | None = None):
+    """Await a long stage and reassure the user while the provider is silent."""
+    interval = float(
+        interval_s if interval_s is not None
+        else os.getenv("PROPERTY_VIDEO_PROGRESS_INTERVAL_S", "90")
+    )
+    interval = max(0.01, interval)
+    task = asyncio.ensure_future(awaitable)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    try:
+        while True:
+            done, _pending = await asyncio.wait(
+                {task}, timeout=interval, return_when=asyncio.FIRST_COMPLETED,
+            )
+            if task in done:
+                return await task
+            elapsed = max(1, int(loop.time() - started))
+            minutes, seconds = divmod(elapsed, 60)
+            elapsed_text = f"{minutes} мин {seconds:02d} сек" if minutes else f"{seconds} сек"
+            try:
+                await message.reply_text(
+                    f"⏳ {label}: работа продолжается, прошло {elapsed_text}. Пожалуйста, ожидайте."
+                )
+            except Exception:
+                log.exception("property video progress heartbeat failed stage=%s", label)
+    except BaseException:
+        if not task.done():
+            task.cancel()
+        raise
+
+
 def is_property_video_owner_free(user_id: int, username: str | None = None) -> bool:
     """Return whether this account may run provider-backed owner tests for free."""
     enabled = os.getenv("PROPERTY_VIDEO_OWNER_FREE_ENABLED", "1").strip().lower()
@@ -364,6 +396,12 @@ async def execute(update, context, state, prompt):
         labels = [str(item.get("space") or "unknown") for item in analysis]
         aspect_ratio = resolve_reference_aspect(photo_paths, str(state.get("aspect") or "auto"))
         scenes = plan_property_scenes(len(photo_paths), duration, engine, mode, labels=labels)
+        route = ", ".join(
+            f"{scene.photo_index + 1}→{scene.next_photo_index + 1}"
+            if scene.next_photo_index is not None else f"{scene.photo_index + 1}"
+            for scene in scenes
+        )
+        log.info("PROPERTY_VIDEO_PLAN engine=%s photos=%s route=%s", engine, len(photo_paths), route)
         narration_plan = state.get("narration_plan") if sound_has_voice(sound_mode) else None
         if sound_has_voice(sound_mode) and not narration_plan:
             narration_plan = await create_narration_plan(
@@ -429,6 +467,10 @@ async def execute(update, context, state, prompt):
         f"⏳ {_provider_label(engine)}: запускаю {len(scenes)} сцен(ы). "
         f"Формат {aspect_ratio}. Повторно кнопку не нажимайте — задача сохранена в журнале."
     )
+    await query.message.reply_text(
+        f"🧭 Порядок кадров подтверждён: {route}. "
+        "Несвязанные помещения будут разделены монтажным стыком без искусственного морфинга."
+    )
     scene_paths: list[str] = []
     try:
         for scene in scenes:
@@ -446,18 +488,22 @@ async def execute(update, context, state, prompt):
             await query.message.reply_text(
                 f"🎬 Сцена {scene.index + 1}/{len(scenes)} · {scene.output_seconds:g} сек"
             )
-            await render_scene_to_file(
-                engine,
-                photo_paths[scene.photo_index],
-                scene_prompt(prompt, scene, len(scenes)),
-                scene.seconds,
-                str(scene_path),
-                on_task_id=_remember,
-                last_photo_path=(
-                    photo_paths[scene.next_photo_index]
-                    if scene.next_photo_index is not None else ""
+            await _await_with_progress(
+                query.message,
+                render_scene_to_file(
+                    engine,
+                    photo_paths[scene.photo_index],
+                    scene_prompt(prompt, scene, len(scenes)),
+                    scene.seconds,
+                    str(scene_path),
+                    on_task_id=_remember,
+                    last_photo_path=(
+                        photo_paths[scene.next_photo_index]
+                        if scene.next_photo_index is not None else ""
+                    ),
+                    aspect_ratio=aspect_ratio,
                 ),
-                aspect_ratio=aspect_ratio,
+                f"{_provider_label(engine)} создаёт сцену {scene.index + 1}/{len(scenes)}",
             )
             log.info(
                 "PROPERTY_VIDEO_SCENE_READY job=%s scene=%s/%s bytes=%s",
@@ -480,9 +526,13 @@ async def execute(update, context, state, prompt):
                         db, job, f"tts-request:{job}:{index}", provider="openai_tts", scene_index=-100-index,
                     )
 
-                voice_path = await render_voice_track(
-                    narration_plan or {}, [scene.output_seconds for scene in scenes], str(audio_folder),
-                    on_request_start=_remember_tts,
+                voice_path = await _await_with_progress(
+                    query.message,
+                    render_voice_track(
+                        narration_plan or {}, [scene.output_seconds for scene in scenes], str(audio_folder),
+                        on_request_start=_remember_tts,
+                    ),
+                    "создаю и синхронизирую голос диктора",
                 )
         if sound_has_music(sound_mode):
             music_target = audio_folder / "music_source.mp3"
@@ -495,25 +545,38 @@ async def execute(update, context, state, prompt):
                     record_operation(db, job, operation, provider="suno", scene_index=-1)
 
                 record_operation(db, job, f"suno-submit:{job}", provider="suno", scene_index=-1)
-                music_path = await render_music_track(
-                    update, duration, str(audio_folder), on_task_id=_remember_music,
+                music_path = await _await_with_progress(
+                    query.message,
+                    render_music_track(
+                        update, duration, str(audio_folder), on_task_id=_remember_music,
+                    ),
+                    "Suno создаёт музыку",
                 )
 
 
         output = folder / "property_review.mp4"
         silent_output = folder / "property_review_silent.mp4"
         log.info("PROPERTY_VIDEO_ASSEMBLY_START job=%s scenes=%s", job, len(scene_paths))
-        await asyncio.to_thread(
-            assemble_property_video,
-            scene_paths,
-            str(silent_output),
-            duration,
-            [scene.output_seconds for scene in scenes],
-            aspect_ratio,
+        await query.message.reply_text("🎞 Собираю сцены и подготавливаю финальный ролик.")
+        await _await_with_progress(
+            query.message,
+            asyncio.to_thread(
+                assemble_property_video,
+                scene_paths,
+                str(silent_output),
+                duration,
+                [scene.output_seconds for scene in scenes],
+                aspect_ratio,
+            ),
+            "собираю сцены",
         )
-        await asyncio.to_thread(
-            mix_property_audio, str(silent_output), str(output), duration,
-            music_path=music_path, voice_path=voice_path,
+        await _await_with_progress(
+            query.message,
+            asyncio.to_thread(
+                mix_property_audio, str(silent_output), str(output), duration,
+                music_path=music_path, voice_path=voice_path,
+            ),
+            "свожу голос и музыку",
         )
         captions = property_caption_segments(
             state.get("caption_mode", "none"), scenes,
@@ -523,8 +586,12 @@ async def execute(update, context, state, prompt):
         if captions:
             await query.message.reply_text("💬 Добавляю синхронные титры по сценам.")
             captioned_output = folder / "property_review_captioned.mp4"
-            await asyncio.to_thread(
-                render_property_captions, str(output), str(captioned_output), captions,
+            await _await_with_progress(
+                query.message,
+                asyncio.to_thread(
+                    render_property_captions, str(output), str(captioned_output), captions,
+                ),
+                "добавляю титры",
             )
             captioned_output.replace(output)
         quality = await asyncio.to_thread(

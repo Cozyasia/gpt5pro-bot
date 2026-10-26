@@ -226,6 +226,24 @@ class PropertyVideoAudioTests(unittest.TestCase):
             ], check=True, capture_output=True, text=True).stdout.splitlines()
             self.assertEqual(streams, ["video", "audio"])
 
+    def test_property_captions_use_adaptive_shadow_text_without_box(self):
+        captured = {}
+
+        def overlay(*args, **kwargs):
+            captured.update(kwargs)
+            Path(args[1]).write_bytes(b"video")
+            return args[1]
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch("neyrobot_prod.ad_video_safe_delivery.render_russian_overlay", side_effect=overlay):
+            source = Path(tmp) / "source.mp4"
+            output = Path(tmp) / "output.mp4"
+            source.write_bytes(b"source")
+            render_property_captions(str(source), str(output), [(0.0, 1.0, "Светлая гостиная")])
+
+        self.assertFalse(captured["background"])
+        self.assertEqual(captured["text_color"], "auto")
+
     def test_suno_recovery_prefers_completed_audio_over_cover_url(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
