@@ -194,21 +194,44 @@ async def _assemble_saved_job(folder: Path, scene_paths: list[Path], output: Pat
     duration = int(metadata["duration"])
     aspect = _assembly_aspect(metadata)
     mode = validate_sound_mode(metadata.get("sound_mode"))
+    durations = _assembly_durations(metadata) or []
+    db = os.getenv("DB_PATH", "subs.db")
+    if sound_has_voice(mode):
+        voice_file = folder / "audio" / "voice_master.wav"
+        if not (voice_file.is_file() and voice_file.stat().st_size > 0):
+            def _remember_tts(index: int):
+                record_operation(
+                    db, folder.name, f"tts-recovery:{folder.name}:{index}",
+                    provider="openai_tts_or_comet", scene_index=-100-index,
+                )
+            await render_voice_track(
+                metadata.get("narration_plan") or {}, durations, str(folder / "audio"),
+                on_request_start=_remember_tts,
+            )
     music_file = folder / "audio" / "music_source.mp3"
     if sound_has_music(mode) and not (music_file.is_file() and music_file.stat().st_size > 0):
-        db = os.getenv("DB_PATH", "subs.db")
         with _connect(db) as con:
             row = con.execute(
                 "SELECT operation_id FROM property_video_operations WHERE job_id=? AND scene_index=-1",
                 (folder.name,),
             ).fetchone()
-        if row:
-            await recover_music_track(str(row[0]), str(folder / "audio"))
+        operation = str(row[0]) if row else ""
+        if operation and not operation.startswith("suno-submit:"):
+            await recover_music_track(operation, str(folder / "audio"))
+        elif not operation:
+            record_operation(
+                db, folder.name, f"suno-submit:{folder.name}", provider="suno", scene_index=-1,
+            )
+            def _remember_music(task_id: str):
+                record_operation(db, folder.name, task_id, provider="suno", scene_index=-1)
+            await render_music_track(
+                None, duration, str(folder / "audio"), on_task_id=_remember_music,
+            )
     silent = folder / "property_review_silent.mp4"
     assembly_args = ([str(path) for path in scene_paths], str(silent), duration)
-    durations = _assembly_durations(metadata)
-    if durations is not None or metadata.get("aspect_ratio"):
-        assembly_args = (*assembly_args, durations, aspect)
+    stored_durations = _assembly_durations(metadata)
+    if stored_durations is not None or metadata.get("aspect_ratio"):
+        assembly_args = (*assembly_args, stored_durations, aspect)
     await asyncio.to_thread(assemble_property_video, *assembly_args)
     music, voice = _saved_audio_paths(folder, mode, metadata)
     await asyncio.to_thread(
@@ -546,8 +569,8 @@ async def recover_ready(update, context):
 async def recover_after_restart(application) -> None:
     """Finish locally recoverable jobs after a Render/process restart.
 
-    Provider operations are never re-submitted here. Recovery only assembles
-    already downloaded scene MP4s and delivers an existing result.
+    Paid video scenes are never re-submitted here. Recovery reuses downloaded
+    scene MP4s and may finish missing narration or music before delivery.
     """
     db = os.getenv("DB_PATH", "subs.db")
     try:

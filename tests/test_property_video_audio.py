@@ -15,6 +15,7 @@ from property_video_audio import (
     mix_property_audio,
     parse_narration_plan,
     recover_music_track,
+    render_voice_track,
 )
 from property_video_pipeline import plan_property_scenes
 
@@ -109,6 +110,34 @@ class PropertyVideoAudioTests(unittest.TestCase):
                 "Очень длинное описание объекта " * 20,
                 scenes, "ru", "female", writer=writer,
             ))
+
+    def test_voice_generation_falls_back_to_comet_and_resumes_saved_segments(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "voice_source_00.mp3").write_bytes(b"saved")
+            requested = []
+            fake_main = SimpleNamespace(_tts_bytes_sync=lambda *_args: None)
+
+            def comet(text, voice):
+                requested.append((text, voice))
+                return b"comet-audio"
+
+            def timeline(paths, durations, output):
+                self.assertEqual([path.name for path in paths], ["voice_source_00.mp3", "voice_source_01.mp3"])
+                self.assertEqual(durations, [5.0, 5.0])
+                Path(output).write_bytes(b"wave")
+                return str(output)
+
+            plan = {
+                "voice": "female",
+                "segments": [{"text": "Первая сцена"}, {"text": "Вторая сцена"}],
+            }
+            with patch.dict(sys.modules, {"main": fake_main}), \
+                 patch("property_video_audio._comet_tts_bytes_sync", side_effect=comet), \
+                 patch("property_video_audio._build_voice_timeline", side_effect=timeline):
+                result = asyncio.run(render_voice_track(plan, [5.0, 5.0], str(root)))
+            self.assertEqual(requested, [("Вторая сцена", "nova")])
+            self.assertTrue(Path(result).is_file())
 
     def test_parser_rejects_missing_scene(self):
         scenes = plan_property_scenes(5, 20, "kling", "full")
