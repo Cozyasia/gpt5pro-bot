@@ -143,7 +143,9 @@ def _require_provider(engine: str, sound_mode: str = "none") -> None:
     if engine == "seedance" and not (os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY")):
         raise PropertyVideoError(f"{engine.title()} не настроен в Render ENV")
     mode = validate_sound_mode(sound_mode)
-    if sound_has_music(mode) and not os.getenv("SUNO_API_KEY"):
+    if sound_has_music(mode) and not (
+        os.getenv("SUNO_API_KEY") or os.getenv("COMET_API_KEY") or os.getenv("COMETAPI_KEY")
+    ):
         raise PropertyVideoError("Suno не настроен в Render ENV")
     if sound_has_voice(mode) and not (os.getenv("OPENAI_TTS_KEY") or os.getenv("OPENAI_API_KEY")):
         raise PropertyVideoError("OpenAI TTS не настроен в Render ENV")

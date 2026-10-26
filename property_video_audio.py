@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import subprocess
 from pathlib import Path
 from typing import Awaitable, Callable
 
+
+log = logging.getLogger(__name__)
 
 SOUND_MODES = {"none", "music", "voice", "both"}
 VOICE_MAP = {"male": "onyx", "female": "nova"}
@@ -124,6 +127,21 @@ def _fallback_narration(analysis: list[dict], scenes, language: str, voice: str)
         "unknown": "The property tour continues",
     }
     table = en if str(language).lower() == "en" else ru
+    unknown_lines = (
+        [
+            "We begin the property tour",
+            "We continue through the next area",
+            "We take a closer look at the interior",
+            "We finish with the final property view",
+        ]
+        if str(language).lower() == "en"
+        else [
+            "Начинаем обзор объекта недвижимости",
+            "Переходим к следующей части объекта",
+            "Рассматриваем детали внутреннего пространства",
+            "Завершаем обзор финальным видом объекта",
+        ]
+    )
     budgets = narration_word_budgets(scenes)
     items = []
     for index, scene in enumerate(scenes):
@@ -131,10 +149,54 @@ def _fallback_narration(analysis: list[dict], scenes, language: str, voice: str)
             scene.next_photo_index if scene.next_photo_index is not None else scene.photo_index
         )
         item = _analysis_item(analysis, reference_index)
-        items.append({"text": table.get(item["space"], table["unknown"])})
-    return parse_narration_plan({"scenes": items}, scenes, language, voice) or {
+        text = table.get(item["space"], table["unknown"])
+        if item["space"] in {"other", "unknown"}:
+            text = unknown_lines[index % len(unknown_lines)]
+        items.append({"text": text})
+    result = parse_narration_plan({"scenes": items}, scenes, language, voice) or {
         "language": language, "voice": voice, "segments": [], "full_text": "",
     }
+    if analysis and all(_analysis_item(analysis, index)["space"] == "unknown" for index in range(len(analysis))):
+        result["analysis_warning"] = (
+            "Не удалось распознать помещения на фотографиях. Проверьте текст диктора перед запуском."
+            if str(language).lower() != "en"
+            else "The rooms could not be recognized. Review the narration before generation."
+        )
+    return result
+
+
+async def _property_json_request(prompt: str, extra_system: str) -> str:
+    """Use the configured official OpenAI key reserved for speech features.
+
+    The main chat can be routed through OpenRouter. Property narration must still
+    work when that unrelated route is unavailable, so it uses the TTS/OpenAI key
+    and an explicit official model.
+    """
+    import httpx
+    import main as production_main
+
+    key = str(getattr(production_main, "OPENAI_TTS_KEY", "") or getattr(production_main, "OPENAI_API_KEY", ""))
+    if not key:
+        raise PropertyAudioError("OpenAI key for property narration is unavailable")
+    base = str(getattr(production_main, "OPENAI_TTS_BASE_URL", "") or "https://api.openai.com/v1").rstrip("/")
+    model = os.getenv("PROPERTY_VIDEO_TEXT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        response = await client.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "temperature": 0.2,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": extra_system},
+                    {"role": "user", "content": prompt},
+                ],
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+    return str(payload["choices"][0]["message"]["content"] or "")
 
 
 async def create_narration_plan(
@@ -165,23 +227,92 @@ async def create_narration_plan(
         json.dumps(facts, ensure_ascii=False)
     )
     if writer is None:
-        try:
-            import main as production_main
-            writer = production_main.ask_openai_text
-        except Exception:
-            writer = None
+        writer = _property_json_request
     if callable(writer):
         try:
-            response = await writer(
-                prompt, user_id=user_id or None, chat_id=chat_id or None,
-                extra_system="You are a factual luxury real-estate voice-over editor. Output strict JSON only.",
-            )
+            if writer is _property_json_request:
+                response = await writer(
+                    prompt,
+                    "You are a factual luxury real-estate voice-over editor. Output strict JSON only.",
+                )
+            else:
+                response = await writer(
+                    prompt, user_id=user_id or None, chat_id=chat_id or None,
+                    extra_system="You are a factual luxury real-estate voice-over editor. Output strict JSON only.",
+                )
             parsed = parse_narration_plan(response, scenes, language, voice)
             if parsed:
                 return parsed
         except Exception:
-            pass
+            log.warning("PROPERTY_VIDEO_AUTO_NARRATION_FAILED", exc_info=True)
     return _fallback_narration(analysis, scenes, language, voice)
+
+
+async def create_manual_narration_plan(
+    text: str, scenes, language: str, voice: str, *,
+    user_id: int = 0, chat_id: int = 0,
+    writer: Callable[..., Awaitable[str]] | None = None,
+) -> dict:
+    """Rewrite a user's description into complete, timed scene lines."""
+    source = " ".join(str(text or "").split())
+    if not source:
+        raise ValueError("Narration text is empty")
+    language = "en" if str(language).lower() == "en" else "ru"
+    voice = voice if voice in VOICE_MAP else "female"
+    budgets = narration_word_budgets(scenes)
+    slots = [
+        {"scene": index + 1, "seconds": float(scene.output_seconds), "max_words": budget}
+        for index, (scene, budget) in enumerate(zip(scenes, budgets))
+    ]
+    prompt = (
+        "Rewrite the user's real-estate description as synchronized voice-over. "
+        f"Return JSON only as {{\"scenes\":[{{\"scene\":1,\"text\":\"...\"}}]}} with exactly {len(scenes)} scenes. "
+        f"Write in {'English' if language == 'en' else 'Russian'}. "
+        "Use only claims from USER TEXT. Keep the property's location and strongest features when they fit. "
+        "Preserve the final call to action in the final scene. Condense aggressively when needed. "
+        "Every line must be a complete natural phrase, must fit max_words, and must never end mid-thought. "
+        "Correct spelling and grammar without changing the meaning. Do not add facts.\n"
+        f"SLOTS: {json.dumps(slots, ensure_ascii=False)}\nUSER TEXT: {source}"
+    )
+    if writer is None:
+        writer = _property_json_request
+    parsed = None
+    try:
+        if writer is _property_json_request:
+            response = await writer(
+                prompt,
+                "You edit concise property-ad narration. Keep user claims, timing and final CTA. Output strict JSON only.",
+            )
+        else:
+            response = await writer(
+                prompt, user_id=user_id or None, chat_id=chat_id or None,
+                extra_system="You edit concise property-ad narration. Output strict JSON only.",
+            )
+        parsed = parse_narration_plan(response, scenes, language, voice)
+    except Exception:
+        log.warning("PROPERTY_VIDEO_MANUAL_NARRATION_REWRITE_FAILED", exc_info=True)
+    if not parsed:
+        if len(source.split()) > sum(budgets):
+            limit = sum(budgets)
+            raise PropertyAudioError(
+                f"Не удалось автоматически сократить текст до {limit} слов. "
+                "Попробуйте ещё раз или отправьте более короткое описание."
+                if language == "ru"
+                else f"The script could not be shortened to {limit} words. Retry or send a shorter description."
+            )
+        parsed = manual_narration_plan(source, scenes, language, voice)
+    source_words = len(source.split())
+    script_words = len(str(parsed.get("full_text") or "").split())
+    parsed["source_word_count"] = source_words
+    parsed["script_word_count"] = script_words
+    parsed["condensed"] = script_words < source_words
+    if parsed["condensed"]:
+        parsed["notice"] = (
+            f"Текст сокращён с {source_words} до {script_words} слов, чтобы диктор успел за роликом."
+            if language == "ru"
+            else f"The script was shortened from {source_words} to {script_words} words to fit the video."
+        )
+    return parsed
 
 
 def manual_narration_plan(text: str, scenes, language: str, voice: str) -> dict:

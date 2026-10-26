@@ -8,6 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from property_video_audio import (
+    PropertyAudioError,
+    create_manual_narration_plan,
     create_narration_plan,
     manual_narration_plan,
     mix_property_audio,
@@ -52,6 +54,61 @@ class PropertyVideoAudioTests(unittest.TestCase):
         scenes = plan_property_scenes(3, 10, "kling", "full")
         plan = manual_narration_plan("Первая сцена. Вторая сцена.", scenes, "ru", "female")
         self.assertEqual([item["text"] for item in plan["segments"]], ["Первая сцена.", "Вторая сцена."])
+
+    def test_long_manual_script_is_rewritten_to_scene_safe_copy(self):
+        scenes = plan_property_scenes(14, 20, "kling", "interior")
+        source = (
+            "Новая трехспальная вилла с приватным бассейном на острове Самуи, район Ламай. "
+            "Большая гостиная и домашний кинотеатр. Полностью оборудованная кухня. "
+            "Хотите встретить здесь Новый год? Узнайте цену, ссылка в описании."
+        )
+
+        async def writer(prompt, **_kwargs):
+            self.assertIn("preserve the final call to action", prompt.lower())
+            self.assertIn(source, prompt)
+            return (
+                '{"scenes":['
+                '{"text":"Вилла с бассейном на Самуи, район Ламай"},'
+                '{"text":"Просторная гостиная и домашний кинотеатр"},'
+                '{"text":"Полностью оборудованная кухня и три спальни"},'
+                '{"text":"Узнайте цену по ссылке в описании"}'
+                ']}'
+            )
+
+        plan = asyncio.run(create_manual_narration_plan(
+            source, scenes, "ru", "female", writer=writer,
+        ))
+        self.assertEqual(len(plan["segments"]), 4)
+        self.assertIn("Ламай", plan["full_text"])
+        self.assertIn("ссылке в описании", plan["segments"][-1]["text"])
+        self.assertTrue(plan["condensed"])
+        self.assertGreater(plan["source_word_count"], plan["script_word_count"])
+
+    def test_unknown_auto_fallback_does_not_repeat_one_phrase(self):
+        scenes = plan_property_scenes(14, 20, "kling", "interior")
+
+        async def writer(*_args, **_kwargs):
+            return "not json"
+
+        plan = asyncio.run(create_narration_plan(
+            [{"space": "unknown", "summary": ""}] * 14,
+            scenes, "ru", "female", writer=writer,
+        ))
+        texts = [item["text"] for item in plan["segments"]]
+        self.assertEqual(len(texts), len(set(texts)))
+        self.assertTrue(plan.get("analysis_warning"))
+
+    def test_long_manual_script_is_not_silently_chopped_when_rewrite_fails(self):
+        scenes = plan_property_scenes(14, 20, "kling", "interior")
+
+        async def writer(*_args, **_kwargs):
+            return "not json"
+
+        with self.assertRaises(PropertyAudioError):
+            asyncio.run(create_manual_narration_plan(
+                "Очень длинное описание объекта " * 20,
+                scenes, "ru", "female", writer=writer,
+            ))
 
     def test_parser_rejects_missing_scene(self):
         scenes = plan_property_scenes(5, 20, "kling", "full")
