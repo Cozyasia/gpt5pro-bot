@@ -96,6 +96,7 @@ async def callback(update, context):
         return
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
+        context.user_data.pop('mp_last_album_id', None)
     else:
         save(context.user_data, project)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
