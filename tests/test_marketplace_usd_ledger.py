@@ -56,6 +56,13 @@ class USDLedgerTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             asyncio.run(self.ledger.release(r))
 
+    def test_exact_balance_debit_is_atomic(self):
+        r = asyncio.run(self.ledger.reserve(user_id=42, amount=1000, idempotency_key='exact'))
+        self.assertTrue(r.newly_reserved)
+        self.assertAlmostEqual(self.balance(), 0.0)
+        second = asyncio.run(self.ledger.reserve(user_id=42, amount=1, idempotency_key='second'))
+        self.assertIsNone(second)
+
     def test_insufficient_balance_no_reservation(self):
         r = asyncio.run(self.ledger.reserve(user_id=42, amount=1001, idempotency_key="job-3"))
         self.assertIsNone(r)
