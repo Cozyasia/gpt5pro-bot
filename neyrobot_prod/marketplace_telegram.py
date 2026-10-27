@@ -70,7 +70,7 @@ def apply_action(project, action):
         from .marketplace_studio import confirm_attributes
         return confirm_attributes(project)
     if action == 'finish' and project.stage == Stage.APPROVAL:
-        return project
+        raise ValueError('Генерация ещё не подключена. Проект сохранён; кредиты не списаны.')
     if action == 'continue':
         return continue_after_references(project)
     if action.startswith('output:'):
