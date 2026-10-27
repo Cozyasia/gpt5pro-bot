@@ -2,7 +2,10 @@ import unittest
 from dataclasses import replace
 
 from neyrobot_prod.marketplace_generation import prepare_generation
-from neyrobot_prod.marketplace_quote import fingerprint, validated_quote_cents
+from neyrobot_prod.marketplace_quote import (
+    fingerprint, validated_marketplace_quote, validated_quote_cents,
+)
+from neyrobot_prod.marketplace_pricing import MarketplaceQuote
 from neyrobot_prod.marketplace_studio import ProductProject, Stage, Output, Marketplace
 
 
@@ -35,6 +38,20 @@ class QuoteFingerprintTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validated_quote_cents({"mp_quoted_usd_cents": amount,
                                        "mp_quote_fingerprint": fingerprint(self.request)}, self.request)
+
+    def test_full_quote_expires_and_cannot_be_charged(self):
+        quote = MarketplaceQuote(125, 125, 0.5, 1.25, 3, 3, 1, "gpt-image-2", "medium")
+        state = {
+            "mp_quoted_usd_cents": 125,
+            "mp_quote_fingerprint": fingerprint(self.request),
+            "mp_quote_created_ts": 1000,
+            "mp_quote_details": quote.to_dict(),
+        }
+        self.assertEqual(
+            validated_marketplace_quote(state, self.request, now=1100), quote
+        )
+        with self.assertRaisesRegex(ValueError, "устарела"):
+            validated_marketplace_quote(state, self.request, now=2000)
 
 
 if __name__ == "__main__":

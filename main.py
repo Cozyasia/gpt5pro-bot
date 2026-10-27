@@ -2254,9 +2254,9 @@ async def _send_free_quota_exhausted(update: Update, context: ContextTypes.DEFAU
 def _credit_release_stale(cur, user_id: int | None = None):
     cutoff = int(time.time()) - max(300, int(CREDIT_RESERVATION_TTL_S or 10800))
     if user_id is None:
-        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE status='reserved' AND created_ts<?", (int(time.time()), cutoff))
+        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE status='reserved' AND feature!='marketplace_cards' AND created_ts<?", (int(time.time()), cutoff))
     else:
-        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE user_id=? AND status='reserved' AND created_ts<?", (int(time.time()), int(user_id), cutoff))
+        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE user_id=? AND status='reserved' AND feature!='marketplace_cards' AND created_ts<?", (int(time.time()), int(user_id), cutoff))
 
 
 def _wallet_reserved_total_get(user_id: int) -> float:
@@ -19779,6 +19779,50 @@ def _pick_first_defined(*names):
     return None
 
 # ───────── Telegram profile setup ─────────
+async def _recover_marketplace_after_restart(app) -> int:
+    ledger = app.bot_data.get("marketplace_usd_ledger")
+    if ledger is None:
+        return 0
+    from neyrobot_prod.marketplace_pipeline import recover_deliveries
+
+    recovered = await recover_deliveries(bot=app.bot, ledger=ledger)
+    if recovered:
+        log.info("Marketplace restart recovery delivered %s job(s)", recovered)
+    return recovered
+
+
+async def _marketplace_voice_priority(update, context):
+    """Transcribe voice/audio only while the product wizard awaits its brief."""
+    from neyrobot_prod.marketplace_telegram import is_active, receive_transcript
+    from neyrobot_prod.marketplace_studio import Stage
+
+    if not is_active(context.user_data, Stage.BRIEF):
+        return
+    message = update.effective_message
+    media = getattr(message, "voice", None) or getattr(message, "audio", None)
+    if not media:
+        return
+    try:
+        tg_file = await context.bot.get_file(media.file_id)
+        audio_bytes = BytesIO()
+        await tg_file.download_to_memory(out=audio_bytes)
+        mime = (getattr(media, "mime_type", "") or "").lower()
+        filename = getattr(media, "file_name", None) or (
+            "voice.ogg" if not mime else "voice." + ("mp3" if "mpeg" in mime else "ogg")
+        )
+        transcript = await _stt_transcribe_bytes(filename, audio_bytes.getvalue())
+        if not transcript:
+            await message.reply_text(
+                "Не удалось распознать речь. Повторите голосовое или отправьте описание текстом."
+            )
+        else:
+            await receive_transcript(update, context, transcript)
+    except Exception:
+        log.exception("Marketplace voice transcription failed")
+        await message.reply_text("Ошибка распознавания. Попробуйте ещё раз или пришлите текст.")
+    raise ApplicationHandlerStop()
+
+
 async def _post_init_bot_profile(app):
     """Обновляет профиль и системную кнопку меню Telegram после запуска."""
     if AUTO_SET_BOT_PROFILE:
@@ -19810,6 +19854,16 @@ async def _post_init_bot_profile(app):
         app.create_task(recover_after_restart(app), update=None, name="property-video-restart-recovery")
     except Exception as e:
         log.warning("Property video restart recovery was not scheduled: %s", e)
+
+    if app.bot_data.get("marketplace_usd_ledger") is not None:
+        try:
+            app.create_task(
+                _recover_marketplace_after_restart(app),
+                update=None,
+                name="marketplace-restart-recovery",
+            )
+        except Exception as e:
+            log.warning("Marketplace restart recovery was not scheduled: %s", e)
 
 
 # ───────── Регистрация хендлеров и запуск ─────────
@@ -20080,32 +20134,10 @@ def build_application() -> "Application":
 
     app.add_handler(MessageHandler(filters.PHOTO, _mp_photo_priority), group=-3)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _mp_text_priority), group=-3)
-    async def _mp_voice_priority(update, context):
-        from neyrobot_prod.marketplace_telegram import is_active, receive_transcript
-        from neyrobot_prod.marketplace_studio import Stage
-        if not is_active(context.user_data, Stage.BRIEF):
-            return
-        message = update.effective_message
-        media = getattr(message, "voice", None) or getattr(message, "audio", None)
-        if not media:
-            return
-        try:
-            tg_file = await context.bot.get_file(media.file_id)
-            audio_bytes = BytesIO()
-            await tg_file.download_to_memory(out=audio_bytes)
-            mime = (getattr(media, "mime_type", "") or "").lower()
-            filename = getattr(media, "file_name", None) or ("voice.ogg" if not mime else "voice." + ("mp3" if "mpeg" in mime else "ogg"))
-            transcript = await _stt_transcribe_bytes(filename, audio_bytes.getvalue())
-            if not transcript:
-                await message.reply_text("Не удалось распознать речь. Повторите голосовое или отправьте описание текстом.")
-            else:
-                await receive_transcript(update, context, transcript)
-        except Exception:
-            log.exception("Marketplace voice transcription failed")
-            await message.reply_text("Ошибка распознавания. Попробуйте ещё раз или пришлите текст.")
-        raise ApplicationHandlerStop()
-
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, _mp_voice_priority), group=-3)
+    app.add_handler(
+        MessageHandler(filters.VOICE | filters.AUDIO, _marketplace_voice_priority),
+        group=-3,
+    )
 
     # Голос/аудио — относим к медиагруппе (идёт раньше общего текстового хендлера)
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
@@ -20178,6 +20210,33 @@ def build_application() -> "Application":
 
 
 # === main() с безопасной инициализацией БД (без изменений по сути) ===
+def _configure_marketplace_app(app) -> bool:
+    """Attach marketplace dependencies after the production DB is initialized."""
+    try:
+        from neyrobot_prod.marketplace_runtime import initialize_marketplace_runtime
+
+        enabled = initialize_marketplace_runtime(
+            app.bot_data,
+            db_path=DB_PATH,
+            retail_usd=_retail_usd,
+            usd_to_credits=_usd_to_credits,
+        )
+        log.info(
+            "Marketplace Studio runtime %s",
+            "enabled" if enabled else "disabled by feature flag",
+        )
+        return bool(enabled)
+    except Exception as exc:
+        for key in (
+            "marketplace_usd_ledger",
+            "marketplace_quote_service",
+            "marketplace_image_client",
+        ):
+            app.bot_data.pop(key, None)
+        log.error("Marketplace Studio runtime disabled safely: %s", exc)
+        return False
+
+
 def main():
     log.info("Starting bot patch version: %s", PATCH_VERSION)
     with contextlib.suppress(Exception):
@@ -20190,6 +20249,7 @@ def main():
         _db_init_prefs()
 
     app = build_application()
+    _configure_marketplace_app(app)
 
     if USE_WEBHOOK:
         _install_webapp_checkout_bridge(app)

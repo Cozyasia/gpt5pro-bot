@@ -56,8 +56,8 @@ def prompt(project):
         return ('Проверьте описание товара:\n\n' + project.brief +
                 '\n\nФотографий: ' + str(len(project.reference_ids)) +
                 '\nПодтвердите характеристики или вернитесь для исправления.')
-    return ('Характеристики подтверждены. Можно проверить задание и запросить стоимость. '
-            'Платная генерация пока отключена; средства не списываются.')
+    return ('Характеристики подтверждены. Проверьте задание, получите точную стоимость '
+            'и только затем подтвердите создание комплекта.')
 
 
 def apply_action(project, action):
@@ -132,6 +132,8 @@ async def callback(update, context):
         context.user_data.pop('mp_quoted_usd_cents', None)
         context.user_data.pop('mp_quote_fingerprint', None)
         context.user_data.pop('mp_generation_job_id', None)
+        context.user_data.pop('mp_quote_details', None)
+        context.user_data.pop('mp_quote_created_ts', None)
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
         context.user_data.pop('mp_last_album_id', None)
@@ -140,7 +142,7 @@ async def callback(update, context):
     else:
         save(context.user_data, project)
         if action == 'continue':
-            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents', 'mp_quote_fingerprint', 'mp_generation_job_id'):
+            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents', 'mp_quote_fingerprint', 'mp_quote_details', 'mp_quote_created_ts', 'mp_generation_job_id'):
                 context.user_data.pop(key, None)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + data)] for label, data in buttons(project)])
@@ -244,8 +246,6 @@ async def quote_callback(update, context, project):
         request = prepare_generation(project)
         if request.output.value == 'video':
             raise ValueError('Для видео нужен отдельный видеоконвейер.')
-        if len(request.reference_file_ids) > 16:
-            raise ValueError('Для генерации выберите не более 16 фотографий товара.')
         quote_service = context.bot_data.get('marketplace_quote_service')
         if quote_service is None:
             await update.callback_query.message.reply_text(
@@ -253,14 +253,35 @@ async def quote_callback(update, context, project):
             )
             return
         quote = await quote_service(request=request, user_id=update.effective_user.id)
-        if not isinstance(quote, int) or isinstance(quote, bool) or quote <= 0:
-            raise ValueError('Сервис стоимости не вернул действительную цену в центах USD.')
+        from .marketplace_pricing import MarketplaceQuote
+        if not isinstance(quote, MarketplaceQuote):
+            raise ValueError('Сервис стоимости не вернул полный расчёт в USD.')
+        # Round-trip validation also rejects malformed values before they enter user_data.
+        quote = MarketplaceQuote.from_dict(quote.to_dict())
         from .marketplace_quote import fingerprint
-        context.user_data['mp_quoted_usd_cents'] = quote
+        import time
+        context.user_data['mp_quoted_usd_cents'] = quote.amount_cents
         context.user_data['mp_quote_fingerprint'] = fingerprint(request)
+        context.user_data['mp_quote_details'] = quote.to_dict()
+        context.user_data['mp_quote_created_ts'] = time.time()
+        result_names = {
+            Output.PHOTOS: 'Студийные фото',
+            Output.INFOGRAPHICS: 'Главное фото + инфографика',
+            Output.COMPLETE: 'Полный комплект',
+        }
+        refs_note = (
+            f'Основных референсов: {quote.selected_reference_count} '
+            f'из {len(request.reference_file_ids)}.\n'
+        )
         await update.callback_query.message.reply_text(
-            f'Стоимость одной генерации: ${quote / 100:.2f} USD. '
-            'Платная генерация пока отключена; средства не списаны.'
+            'Расчёт готов:\n'
+            f'Результат: {result_names[request.output]}.\n'
+            f'Изображений в результате: {quote.delivered_image_count}.\n'
+            + refs_note
+            + f'Итоговая стоимость: {quote.credits} кр. (${quote.retail_usd:.2f} USD).\n'
+            f'Сумма списания после доставки: {quote.credits} кр. (${quote.retail_usd:.2f} USD).\n\n'
+            'Для запуска нажмите «Создать за указанную стоимость». '
+            'До успешной доставки списания не будет.'
         )
     except (ValueError, RuntimeError) as error:
         await update.callback_query.message.reply_text(str(error))
@@ -271,16 +292,14 @@ async def generate_callback(update, context, project):
     import os
     import uuid
     from .marketplace_generation import prepare_generation
-    from .marketplace_quote import validated_quote_cents
+    from .marketplace_quote import validated_marketplace_quote
 
     message = update.callback_query.message
     try:
         request = prepare_generation(project)
-        amount = validated_quote_cents(context.user_data, request)
-        if request.output not in (Output.PHOTOS, Output.INFOGRAPHICS):
+        quote = validated_marketplace_quote(context.user_data, request)
+        if request.output not in (Output.PHOTOS, Output.INFOGRAPHICS, Output.COMPLETE):
             raise ValueError('Этот формат ещё не поддерживается платным генератором.')
-        if len(request.reference_file_ids) > 16:
-            raise ValueError('Максимум 16 референсов на одну генерацию.')
         if os.getenv('MARKETPLACE_PAID_GENERATION_ENABLED') != '1':
             raise ValueError('Платная генерация отключена администратором. Средства не списаны.')
         ledger = context.bot_data.get('marketplace_usd_ledger')
@@ -298,19 +317,28 @@ async def generate_callback(update, context, project):
         async with lock:
             from .marketplace_pipeline import generate_and_deliver
             job_id = context.user_data.setdefault('mp_generation_job_id', uuid.uuid4().hex)
-            await message.reply_text(f'Запрос принят. Максимальная стоимость: ${amount / 100:.2f} USD. Начинаю обработку.')
+            await message.reply_text(
+                f'Запрос принят. Будет создано изображений: {quote.delivered_image_count}. '
+                f'Подтверждённая стоимость: {quote.credits} кр. (${quote.retail_usd:.2f} USD). '
+                'Начинаю обработку.'
+            )
             await generate_and_deliver(
                 project=project, bot=context.bot, chat_id=update.effective_chat.id,
                 provider_client=provider, credit_ledger=ledger,
-                user_id=update.effective_user.id, quoted_credits=amount,
+                user_id=update.effective_user.id, quote=quote,
                 quote_accepted=True, provider_enabled=True,
                 job_id=job_id,
+                artifact_dir=context.bot_data.get(
+                    'marketplace_artifact_dir', '/data/marketplace_jobs'
+                ),
             )
             clear_project(context.user_data)
             context.user_data.pop('mp_generation_job_id', None)
             context.user_data.pop('mp_quoted_usd_cents', None)
             context.user_data.pop('mp_quote_fingerprint', None)
-            await message.reply_text('Готово. Изображение отправлено файлом без сжатия.')
+            context.user_data.pop('mp_quote_details', None)
+            context.user_data.pop('mp_quote_created_ts', None)
+            await message.reply_text('Готово. Комплект отправлен файлами без сжатия.')
     except (ValueError, RuntimeError) as error:
         await message.reply_text(str(error))
     except Exception:

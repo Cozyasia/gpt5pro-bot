@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
+
+from .marketplace_pricing import MarketplaceQuote
 
 
 def fingerprint(request) -> str:
@@ -23,3 +26,21 @@ def validated_quote_cents(user_data, request) -> int:
     if user_data.get("mp_quote_fingerprint") != fingerprint(request):
         raise ValueError("Задание изменилось. Необходимо заново рассчитать стоимость.")
     return amount
+
+
+def validated_marketplace_quote(
+    user_data,
+    request,
+    *,
+    now: float | None = None,
+    max_age_seconds: int = 900,
+) -> MarketplaceQuote:
+    amount = validated_quote_cents(user_data, request)
+    created = user_data.get("mp_quote_created_ts")
+    current = time.time() if now is None else now
+    if not isinstance(created, (int, float)) or current - float(created) > max_age_seconds:
+        raise ValueError("Стоимость устарела. Рассчитайте её заново.")
+    quote = MarketplaceQuote.from_dict(user_data.get("mp_quote_details"))
+    if quote.amount_cents != amount:
+        raise ValueError("Сохранённая стоимость не совпадает с подтверждённой.")
+    return quote

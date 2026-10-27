@@ -1,4 +1,5 @@
 import asyncio
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -7,6 +8,7 @@ from neyrobot_prod.marketplace_studio import ProductProject, Output, Marketplace
 from neyrobot_prod.marketplace_telegram import generate_callback, save
 from neyrobot_prod.marketplace_generation import prepare_generation
 from neyrobot_prod.marketplace_quote import fingerprint
+from neyrobot_prod.marketplace_pricing import MarketplaceQuote
 
 
 class GenerateCallbackTests(unittest.TestCase):
@@ -22,8 +24,16 @@ class GenerateCallbackTests(unittest.TestCase):
             effective_chat=SimpleNamespace(id=66))
         self.data = {}
         save(self.data, self.project)
+        self.quote = MarketplaceQuote(
+            amount_cents=125, credits=125, provider_cost_usd=0.24,
+            retail_usd=1.25, provider_image_count=3,
+            delivered_image_count=3, selected_reference_count=1,
+            model='gpt-image-2', quality='medium',
+        )
         self.data['mp_quoted_usd_cents'] = 125
         self.data['mp_quote_fingerprint'] = fingerprint(prepare_generation(self.project))
+        self.data['mp_quote_details'] = self.quote.to_dict()
+        self.data['mp_quote_created_ts'] = time.time()
         self.context = SimpleNamespace(user_data=self.data, bot_data={}, bot=AsyncMock())
 
     def test_feature_disabled_cannot_charge(self):
@@ -44,7 +54,7 @@ class GenerateCallbackTests(unittest.TestCase):
             with patch('neyrobot_prod.marketplace_pipeline.generate_and_deliver', new_callable=AsyncMock) as generate:
                 asyncio.run(generate_callback(self.update, self.context, self.project))
         generate.assert_awaited_once()
-        self.assertEqual(generate.await_args.kwargs['quoted_credits'], 125)
+        self.assertEqual(generate.await_args.kwargs['quote'], self.quote)
         self.assertNotIn('mp_quoted_usd_cents', self.data)
         self.assertNotIn('mp_generation_job_id', self.data)
 

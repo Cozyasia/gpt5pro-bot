@@ -46,7 +46,9 @@ def generate_product_image(
     references: tuple[ReferenceImage, ...],
     *,
     client,
-    model: str = "gpt-image-1",
+    model: str = "gpt-image-2",
+    quality: str = "medium",
+    shot_instruction: str | None = None,
 ) -> bytes:
     """Edit using source images, never text-only generation.
 
@@ -54,17 +56,27 @@ def generate_product_image(
     duplicate provider charges. API credentials are managed by the host.
     """
     _validate_references(references)
-    if len(references) > 16:
-        raise ValueError('Модель редактирования принимает не более 16 референсов за запрос. Выберите основные фотографии.')
     if len(references) != len(request.reference_file_ids):
         raise ValueError("Количество скачанных фотографий не совпадает с заданием.")
     if not model.strip():
         raise ValueError("Не задана модель генерации.")
+    if quality not in {"low", "medium", "high"}:
+        raise ValueError("Неизвестное качество генерации.")
+    # Telegram intake accepts up to 30 images. The edit endpoint accepts at
+    # most 16, so the first 16 images (the user's upload order) are the primary
+    # identity references for every consistent shot in the set.
+    primary_references = references[:16]
     response = client.images.edit(
         model=model,
-        image=_image_files(references),
-        prompt=build_product_image_prompt(request),
+        image=_image_files(primary_references),
+        prompt=build_product_image_prompt(
+            request, shot_instruction=shot_instruction
+        ),
         size="1024x1024",
+        response_format="b64_json",
+        # openai==1.x does not expose this newer field in its typed signature,
+        # but forwards extra_body to the current Images API.
+        extra_body={"quality": quality},
     )
     data = getattr(response, "data", None)
     encoded = getattr(data[0], "b64_json", None) if data else None
