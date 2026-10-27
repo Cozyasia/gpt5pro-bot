@@ -69,6 +69,8 @@ def apply_action(project, action):
 async def callback(update, context):
     query = update.callback_query
     await query.answer()
+    if not (query.data or '').startswith('mp:'):
+        return
     try:
         project = apply_action(load(context.user_data), (query.data or '').removeprefix('mp:'))
     except ValueError as error:
@@ -102,14 +104,25 @@ async def receive_photo(update, context):
 
 async def receive_text(update, context):
     """Consume text only while the marketplace wizard awaits a brief."""
+    if not update.message or not update.message.text:
+        return False
+    return await receive_transcript(update, context, update.message.text)
+
+
+async def receive_transcript(update, context, transcript):
+    """Accept recognized voice text through the same validation as typed text.
+
+    Speech-to-text remains the host application's responsibility; this function
+    must be called only after a successful transcription.
+    """
     from .marketplace_studio import set_brief
-    if STATE_KEY not in context.user_data or not update.message or not update.message.text:
+    if STATE_KEY not in context.user_data or not update.message:
         return False
     project = load(context.user_data)
     if project.stage != Stage.BRIEF:
         return False
     try:
-        project = set_brief(project, update.message.text)
+        project = set_brief(project, transcript)
     except ValueError as error:
         await update.message.reply_text(str(error))
         return True
