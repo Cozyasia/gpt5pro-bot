@@ -211,6 +211,34 @@ async def _post_init_recovery(app: Any, previous: Any = None) -> None:
     await recover_pending(mod, app)
 
 
+async def _cmd_fixmenu(update: Any, context: Any) -> None:
+    """Repair this chat's Telegram Web App menu, without changing other chats."""
+    from telegram import MenuButtonWebApp, WebAppInfo
+    url = "https://neyro-studio-ui.onrender.com/?menu=20261028"
+    chat = update.effective_chat
+    if chat is None or chat.type != "private":
+        return
+    try:
+        before = await context.bot.get_chat_menu_button(chat_id=chat.id)
+        await context.bot.set_chat_menu_button(
+            chat_id=chat.id,
+            menu_button=MenuButtonWebApp(text="Меню ботов", web_app=WebAppInfo(url=url)),
+        )
+        after = await context.bot.get_chat_menu_button(chat_id=chat.id)
+        actual = getattr(getattr(after, "web_app", None), "url", "")
+        if actual != url:
+            raise RuntimeError("Telegram returned a different menu URL")
+        await update.effective_message.reply_text(
+            "✅ Меню вашего чата обновлено. Закройте окно Mini App и нажмите «Меню ботов» снова."
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Failed to repair chat menu")
+        await update.effective_message.reply_text(
+            "Не удалось обновить кнопку меню. Повторите /fixmenu позже."
+        )
+
+
 def _install_builder_hook() -> None:
     global _BUILDER_HOOKED
     if _BUILDER_HOOKED:
@@ -239,6 +267,7 @@ def _install_builder_hook() -> None:
             app.add_handler(CommandHandler("diag_jobs", _cmd_diag_jobs), group=-99)
             app.add_handler(CommandHandler("diag_medcard", _cmd_diag_medcard), group=-99)
             app.add_handler(CommandHandler("backup_now", _cmd_backup_now), group=-99)
+            app.add_handler(CommandHandler("fixmenu", _cmd_fixmenu), group=-99)
             previous = getattr(app, "post_init", None)
 
             async def post_init(application: Any) -> None:
