@@ -124,6 +124,8 @@ async def callback(update, context):
                 return
             await query.message.reply_text('Предпросмотр задания для генератора (без запуска и списания):\\n\\n' + preview)
         return
+    if action != 'preview':
+        context.user_data.pop('mp_quoted_credits', None)
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
         context.user_data.pop('mp_last_album_id', None)
