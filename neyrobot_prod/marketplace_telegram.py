@@ -185,6 +185,8 @@ async def receive_transcript(update, context, transcript):
 def start_project(user_data):
     """Start a fresh product-card draft; explicit entrypoint for the host menu."""
     project = ProductProject()
+    for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at'):
+        user_data.pop(key, None)
     save(user_data, project)
     return project
 
@@ -198,3 +200,5 @@ def is_active(user_data, stage=None):
 
 def clear_project(user_data):
     user_data.pop(STATE_KEY, None)
+    for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at'):
+        user_data.pop(key, None)
