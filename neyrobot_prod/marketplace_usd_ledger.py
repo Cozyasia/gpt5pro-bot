@@ -328,7 +328,7 @@ class SQLiteUSDWalletLedger:
                 return False
             retail_usd = float(row[5])
             changed = con.execute(
-                "UPDATE wallet SET usd=ROUND(COALESCE(usd,0)-?,2) "
+                "UPDATE wallet SET usd=COALESCE(usd,0)-? "
                 "WHERE user_id=? AND COALESCE(usd,0)+1e-9>=?",
                 (retail_usd, reservation.user_id, retail_usd),
             )
