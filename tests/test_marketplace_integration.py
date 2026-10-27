@@ -1,5 +1,6 @@
 import unittest
-from unittest.mock import AsyncMock, SimpleNamespace, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from neyrobot_prod.marketplace_studio import ProductProject, Stage, add_references, set_brief
 from neyrobot_prod.marketplace_telegram import (STATE_KEY, save, load, receive_transcript, receive_photo, buttons, apply_action)
 
