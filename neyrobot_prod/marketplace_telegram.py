@@ -132,8 +132,9 @@ async def receive_photo(update, context):
     if album and context.user_data.get('mp_last_album_id') == album:
         status_id = context.user_data.get('mp_album_status_message')
         if status_id:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             try:
-                await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=status_id, text=prompt(project), reply_markup=__import__('telegram').InlineKeyboardMarkup([[__import__('telegram').InlineKeyboardButton(label, callback_data='ent:brief:' + action)] for label, action in buttons(project)]))
+                await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=status_id, text=prompt(project), reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + action)] for label, action in buttons(project)]))
             except Exception:
                 pass
         return True
