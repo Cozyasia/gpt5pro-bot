@@ -78,3 +78,41 @@ async def callback(update, context):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=data)] for label, data in buttons(project)])
     await query.message.reply_text(prompt(project), reply_markup=keyboard)
+
+
+async def receive_photo(update, context):
+    """Return False when this update belongs to another bot workflow."""
+    from .marketplace_studio import add_references
+    if STATE_KEY not in context.user_data or not update.message or not update.message.photo:
+        return False
+    project = load(context.user_data)
+    if project.stage != Stage.REFERENCES:
+        return False
+    try:
+        project = add_references(project, (update.message.photo[-1].file_id,))
+    except ValueError as error:
+        await update.message.reply_text(str(error))
+        return True
+    save(context.user_data, project)
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=action)] for label, action in buttons(project)])
+    await update.message.reply_text(prompt(project), reply_markup=markup)
+    return True
+
+
+async def receive_text(update, context):
+    """Consume text only while the marketplace wizard awaits a brief."""
+    from .marketplace_studio import set_brief
+    if STATE_KEY not in context.user_data or not update.message or not update.message.text:
+        return False
+    project = load(context.user_data)
+    if project.stage != Stage.BRIEF:
+        return False
+    try:
+        project = set_brief(project, update.message.text)
+    except ValueError as error:
+        await update.message.reply_text(str(error))
+        return True
+    save(context.user_data, project)
+    await update.message.reply_text(prompt(project))
+    return True
