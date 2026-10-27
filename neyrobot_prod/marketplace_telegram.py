@@ -89,6 +89,9 @@ async def callback(update, context):
         action = raw.removeprefix('mp:')
     else:
         return
+    if STATE_KEY not in context.user_data:
+        await query.message.reply_text('Проект уже закрыт. Начните новый через меню.')
+        return
     if action == 'continue' and context.user_data.get('mp_album_last_photo_at'):
         import time
         if time.monotonic() - context.user_data['mp_album_last_photo_at'] < 3:
