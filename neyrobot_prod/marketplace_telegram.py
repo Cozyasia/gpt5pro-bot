@@ -38,7 +38,8 @@ def buttons(project):
     if project.stage == Stage.REVIEW:
         return [('Характеристики верны', 'mp:confirm'), ('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
     if project.stage == Stage.APPROVAL:
-        return [('Проверить задание', 'mp:preview'), ('Рассчитать стоимость', 'mp:quote'), ('Отмена', 'mp:cancel')]
+        return [('Проверить задание', 'mp:preview'), ('Рассчитать стоимость', 'mp:quote'),
+                ('Создать за указанную стоимость', 'mp:generate'), ('Отмена', 'mp:cancel')]
     return [('Отмена', 'mp:cancel')]
 
 
@@ -69,7 +70,7 @@ def apply_action(project, action):
     if action == 'confirm':
         from .marketplace_studio import confirm_attributes
         return confirm_attributes(project)
-    if action in ('preview', 'quote') and project.stage == Stage.APPROVAL:
+    if action in ('preview', 'quote', 'generate') and project.stage == Stage.APPROVAL:
         return project
     if action == 'finish' and project.stage == Stage.APPROVAL:
         raise ValueError('Генерация ещё не подключена. Проект сохранён; кредиты не списаны.')
@@ -106,6 +107,9 @@ async def callback(update, context):
         return
     if action == 'quote':
         await quote_callback(update, context, project)
+        return
+    if action == 'generate':
+        await generate_callback(update, context, project)
         return
     if action == 'preview':
         from .marketplace_generation import prepare_generation, build_product_image_prompt
@@ -259,3 +263,54 @@ async def quote_callback(update, context, project):
         )
     except (ValueError, RuntimeError) as error:
         await update.callback_query.message.reply_text(str(error))
+
+
+async def generate_callback(update, context, project):
+    """Explicit user-triggered generation, disabled unless every dependency is configured."""
+    import os
+    import uuid
+    from .marketplace_generation import prepare_generation
+    from .marketplace_quote import validated_quote_cents
+
+    message = update.callback_query.message
+    try:
+        request = prepare_generation(project)
+        amount = validated_quote_cents(context.user_data, request)
+        if request.output not in (Output.PHOTOS, Output.INFOGRAPHICS):
+            raise ValueError('Этот формат ещё не поддерживается платным генератором.')
+        if len(request.reference_file_ids) > 16:
+            raise ValueError('Максимум 16 референсов на одну генерацию.')
+        if os.getenv('MARKETPLACE_PAID_GENERATION_ENABLED') != '1':
+            raise ValueError('Платная генерация отключена администратором. Средства не списаны.')
+        ledger = context.bot_data.get('marketplace_usd_ledger')
+        provider = context.bot_data.get('marketplace_image_client')
+        if ledger is None or provider is None:
+            raise ValueError('Платёжный модуль или генератор не настроен. Средства не списаны.')
+        # A user-specific lock avoids simultaneous callbacks charging for the same draft.
+        lock = context.user_data.get('mp_generation_lock')
+        if lock is None:
+            import asyncio
+            lock = asyncio.Lock()
+            context.user_data['mp_generation_lock'] = lock
+        if lock.locked():
+            raise ValueError('Генерация уже выполняется. Дождитесь результата.')
+        async with lock:
+            from .marketplace_pipeline import generate_and_deliver
+            await message.reply_text(f'Генерация началась. Стоимость: ${amount / 100:.2f} USD.')
+            await generate_and_deliver(
+                project=project, bot=context.bot, chat_id=update.effective_chat.id,
+                provider_client=provider, credit_ledger=ledger,
+                user_id=update.effective_user.id, quoted_credits=amount,
+                quote_accepted=True, provider_enabled=True,
+                job_id=uuid.uuid4().hex,
+            )
+            clear_project(context.user_data)
+            context.user_data.pop('mp_quoted_usd_cents', None)
+            context.user_data.pop('mp_quote_fingerprint', None)
+            await message.reply_text('Готово. Изображение отправлено файлом без сжатия.')
+    except (ValueError, RuntimeError) as error:
+        await message.reply_text(str(error))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Marketplace paid generation failed')
+        await message.reply_text('Генерация завершилась ошибкой. Если средства были зарезервированы, операция требует проверки администратором.')
