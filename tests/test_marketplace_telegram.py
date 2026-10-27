@@ -11,6 +11,16 @@ class MarketplaceTelegramTests(unittest.TestCase):
         save(data, p)
         self.assertEqual(load(data), p)
         self.assertIn(('Продолжить', 'mp:continue'), buttons(p))
+    def test_preview_available_only_after_confirmation(self):
+        from neyrobot_prod.marketplace_studio import set_brief, confirm_attributes
+        from neyrobot_prod.marketplace_telegram import buttons
+        p = ProductProject(stage=Stage.BRIEF, reference_ids=('ref',))
+        p = confirm_attributes(set_brief(p, 'Фарфоровая кружка'))
+        self.assertIn(('Проверить задание', 'mp:preview'), buttons(p))
+        self.assertEqual(apply_action(p, 'preview'), p)
+        with self.assertRaises(ValueError):
+            apply_action(ProductProject(), 'preview')
+
     def test_unavailable_generation_cannot_finish(self):
         from neyrobot_prod.marketplace_studio import set_brief, confirm_attributes
         p = ProductProject(stage=Stage.BRIEF, reference_ids=('ref',))
