@@ -117,6 +117,11 @@ async def receive_photo(update, context):
         await update.message.reply_text(str(error))
         return True
     save(context.user_data, project)
+    album = getattr(update.message, 'media_group_id', None)
+    if album and context.user_data.get('mp_last_album_id') == album:
+        return True
+    if album:
+        context.user_data['mp_last_album_id'] = album
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + action)] for label, action in buttons(project)])
     await update.message.reply_text(prompt(project), reply_markup=markup)
