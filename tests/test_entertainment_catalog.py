@@ -197,9 +197,9 @@ class EntertainmentCatalogTests(unittest.TestCase):
         self.assertEqual(production.rows[0][0].text, "🏡 AI-видеообзор недвижимости")
         active = [button for row in production.rows for button in row
                   if button.callback_data.startswith("ent:brief:")]
-        self.assertEqual(len(active), 8)
+        self.assertEqual(len(active), 7)
         self.assertTrue(all(button.status == "active" for button in active))
-        self.assertTrue(any("недвижимости" in button.text.lower() for button in active))
+        self.assertTrue(any("услуг" in button.text.lower() for button in active))
         self.assertTrue(any("UGC" in button.text for button in active))
 
     def test_catalog_integrity(self):
