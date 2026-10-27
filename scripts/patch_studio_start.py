@@ -13,9 +13,9 @@ HOOK = "studio_start_markup(context.args)"
 
 def patch(source: str) -> str:
     tree = ast.parse(source)
-    functions = [node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == "cmd_start"]
+    functions = [node for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef) and node.name == "cmd_start"]
     if len(functions) != 1:
-        raise ValueError("Expected exactly one top-level cmd_start")
+        raise ValueError("Expected exactly one cmd_start definition")
     fn = functions[0]
     lines = source.splitlines(keepends=True)
     block = "".join(lines[fn.lineno - 1:fn.end_lineno])
