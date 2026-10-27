@@ -16,7 +16,7 @@ from .marketplace_telegram_media import download_reference_images
 async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
                                credit_ledger, user_id: int, quoted_credits: int,
                                quote_accepted: bool, provider_enabled: bool = False,
-                               model: str = "gpt-image-1"):
+                               model: str = "gpt-image-1", job_id: str | None = None):
     """Execute after explicit user consent; reserve before calling the provider.
 
     Ledger must provide async reserve(user_id, amount, idempotency_key),
@@ -30,17 +30,21 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
         quoted_credits=quoted_credits,
         quote_accepted=quote_accepted,
     )
+    if not job_id or not job_id.strip():
+        raise ValueError('Для платной генерации необходим уникальный идентификатор задания.')
     references = await download_reference_images(bot, request)
     reservation = await credit_ledger.reserve(
         user_id=user_id,
         amount=quoted_credits,
-        idempotency_key=f"marketplace:{user_id}:{chat_id}:{project.reference_ids}:{project.brief}",
+        idempotency_key=f"marketplace:{user_id}:{job_id}",
     )
     if reservation is None:
         raise RuntimeError("Не удалось зарезервировать кредиты.")
+    provider_started = False
     delivered = False
     try:
         # OpenAI synchronous SDK call must not block Telegram's event loop.
+        provider_started = True
         result = await asyncio.to_thread(
             generate_product_image,
             request,
@@ -59,8 +63,9 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
         await credit_ledger.commit(reservation)
         return message
     except Exception:
-        if not delivered:
+        if not provider_started:
             await credit_ledger.release(reservation)
-        # If delivery succeeded but commit failed, keep reservation for
-        # reconciliation rather than refunding a delivered paid product.
+        # Once the paid provider call has started, retain the reservation
+        # for reconciliation: delivery failure does not undo provider cost.
+        # A retry must use a new job or reconcile the existing job first.
         raise
