@@ -124,7 +124,7 @@ async def callback(update, context):
                 return
             await query.message.reply_text('Предпросмотр задания для генератора (без запуска и списания):\\n\\n' + preview)
         return
-    if action != 'preview':
+    if action not in ('preview', 'quote'):
         context.user_data.pop('mp_quoted_credits', None)
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
@@ -236,6 +236,10 @@ async def quote_callback(update, context, project):
     from .marketplace_generation import prepare_generation
     try:
         request = prepare_generation(project)
+        if request.output.value == 'video':
+            raise ValueError('Для видео нужен отдельный видеоконвейер.')
+        if len(request.reference_file_ids) > 16:
+            raise ValueError('Для генерации выберите не более 16 фотографий товара.')
         quote_service = context.bot_data.get('marketplace_quote_service')
         if quote_service is None:
             await update.callback_query.message.reply_text(
