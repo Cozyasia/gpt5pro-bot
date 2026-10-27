@@ -70,6 +70,14 @@ class USDLedgerTests(unittest.TestCase):
         self.assertAlmostEqual(self.balance(), 7.75)
         self.assertEqual(asyncio.run(self.ledger.status(reservation.key)).status, "delivered")
 
+    def test_commit_preserves_existing_subcent_wallet_precision(self):
+        with sqlite3.connect(self.path) as con:
+            con.execute("UPDATE wallet SET usd=10.005 WHERE user_id=42")
+        reservation = self.reserve(key="precision")
+        self.deliver(reservation)
+        self.assertTrue(asyncio.run(self.ledger.commit(reservation)))
+        self.assertAlmostEqual(self.balance(), 7.755, places=6)
+
     def test_commit_refuses_partial_delivery_without_debit(self):
         reservation = self.reserve(outputs=2)
         asyncio.run(self.ledger.mark_provider_started(reservation, operation_id="started"))
