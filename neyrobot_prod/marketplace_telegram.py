@@ -172,7 +172,9 @@ async def receive_transcript(update, context, transcript):
         await update.message.reply_text(str(error))
         return True
     save(context.user_data, project)
-    await update.message.reply_text(prompt(project))
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + action)] for label, action in buttons(project)])
+    await update.message.reply_text(prompt(project), reply_markup=markup)
     return True
 
 
