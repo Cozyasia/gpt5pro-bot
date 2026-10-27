@@ -48,7 +48,6 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
     if not getattr(reservation, 'newly_reserved', False):
         raise RuntimeError('Задание уже существует или резерв не подтверждён как новый.')
     provider_started = False
-    delivered = False
     try:
         # OpenAI synchronous SDK call must not block Telegram's event loop.
         provider_started = True
@@ -66,7 +65,6 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
             document=output,
             caption="Готовая AI-карточка товара. Проверьте соответствие оригиналу.",
         )
-        delivered = True
         await credit_ledger.commit(reservation)
         return message
     except Exception:
