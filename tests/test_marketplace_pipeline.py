@@ -17,7 +17,7 @@ class MarketplacePipelineTests(unittest.TestCase):
         self.bot = AsyncMock()
         self.bot.send_document.return_value = "sent"
         self.ledger = SimpleNamespace(
-            reserve=AsyncMock(return_value="reservation"),
+            reserve=AsyncMock(return_value=SimpleNamespace(id="reservation", newly_reserved=True)),
             commit=AsyncMock(),
             release=AsyncMock(),
         )
@@ -36,7 +36,7 @@ class MarketplacePipelineTests(unittest.TestCase):
         self.assertEqual(result, "sent")
         self.ledger.reserve.assert_awaited_once()
         self.bot.send_document.assert_awaited_once()
-        self.ledger.commit.assert_awaited_once_with("reservation")
+        self.ledger.commit.assert_awaited_once_with(self.ledger.reserve.return_value)
         self.ledger.release.assert_not_awaited()
 
     def test_refuses_unaccepted_quote_without_provider_call(self):
@@ -53,6 +53,16 @@ class MarketplacePipelineTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 asyncio.run(generate_and_deliver(**self.kwargs))
         self.ledger.release.assert_not_awaited()
+
+    def test_duplicate_reservation_cannot_trigger_paid_generation(self):
+        self.ledger.reserve.return_value = SimpleNamespace(id='reservation', newly_reserved=False)
+        with patch('neyrobot_prod.marketplace_pipeline.download_reference_images', new_callable=AsyncMock) as download, \\
+             patch('neyrobot_prod.marketplace_pipeline.generate_product_image') as provider:
+            download.return_value = ('ref',)
+            with self.assertRaisesRegex(RuntimeError, 'уже существует'):
+                asyncio.run(generate_and_deliver(**self.kwargs))
+            provider.assert_not_called()
+        self.ledger.commit.assert_not_awaited()
 
     def test_rejects_missing_job_id(self):
         self.kwargs['job_id'] = None
