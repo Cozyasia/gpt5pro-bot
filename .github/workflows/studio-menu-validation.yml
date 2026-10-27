@@ -25,3 +25,16 @@ jobs:
         run: |
           python scripts/patch_studio_start.py main.py --output /tmp/main.studio.py
           python -m py_compile /tmp/main.studio.py
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          source = Path('/tmp/main.studio.py').read_text()
+          tree = ast.parse(source)
+          handlers = [n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == 'cmd_start']
+          active = max(handlers, key=lambda n: n.lineno)
+          block = '\n'.join(source.splitlines()[active.lineno-1:active.end_lineno])
+          assert block.count('studio_start_markup(context.args)') == 1
+          assert block.index('_handle_payment_start_payload(update, context)') < block.index('studio_start_markup(context.args)')
+          assert block.index('_claim_start_update(update)') < block.index('studio_start_markup(context.args)')
+          print('Active cmd_start verified: payment and duplicate guards precede Studio route')
+          PY
