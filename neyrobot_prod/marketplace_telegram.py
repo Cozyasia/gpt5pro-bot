@@ -55,8 +55,8 @@ def prompt(project):
         return ('Проверьте описание товара:\n\n' + project.brief +
                 '\n\nФотографий: ' + str(len(project.reference_ids)) +
                 '\nПодтвердите характеристики или вернитесь для исправления.')
-    return ('Характеристики подтверждены. Генерация и расчёт стоимости пока не подключены. '
-            'Кредиты не списываются.')
+    return ('Характеристики подтверждены. Можно проверить задание и запросить стоимость. '
+            'Платная генерация пока отключена; средства не списываются.')
 
 
 def apply_action(project, action):
@@ -126,6 +126,7 @@ async def callback(update, context):
         return
     if action not in ('preview', 'quote'):
         context.user_data.pop('mp_quoted_usd_cents', None)
+        context.user_data.pop('mp_quote_fingerprint', None)
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
         context.user_data.pop('mp_last_album_id', None)
@@ -134,7 +135,7 @@ async def callback(update, context):
     else:
         save(context.user_data, project)
         if action == 'continue':
-            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents'):
+            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents', 'mp_quote_fingerprint'):
                 context.user_data.pop(key, None)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + data)] for label, data in buttons(project)])
@@ -249,7 +250,9 @@ async def quote_callback(update, context, project):
         quote = await quote_service(request=request, user_id=update.effective_user.id)
         if not isinstance(quote, int) or isinstance(quote, bool) or quote <= 0:
             raise ValueError('Сервис стоимости не вернул действительную цену в центах USD.')
+        from .marketplace_quote import fingerprint
         context.user_data['mp_quoted_usd_cents'] = quote
+        context.user_data['mp_quote_fingerprint'] = fingerprint(request)
         await update.callback_query.message.reply_text(
             f'Стоимость одной генерации: ${quote / 100:.2f} USD. '
             'Платная генерация пока отключена; средства не списаны.'
