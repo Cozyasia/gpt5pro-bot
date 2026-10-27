@@ -15,7 +15,7 @@ def patch(source: str) -> str:
     tree = ast.parse(source)
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef) and node.name == "cmd_start"]
     if len(functions) != 1:
-        raise ValueError("Expected exactly one cmd_start definition")
+        raise ValueError("Expected exactly one cmd_start definition; found at lines: " + repr([node.lineno for node in functions]))
     fn = functions[0]
     lines = source.splitlines(keepends=True)
     block = "".join(lines[fn.lineno - 1:fn.end_lineno])
