@@ -23,6 +23,11 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REF_NAME" = "feature/neyro-studio-menu-integration"
+          if grep -Fq 'studio_start_markup(context.args)' main.py; then
+            echo 'Studio start already integrated'
+            python -m py_compile main.py
+            exit 0
+          fi
           python scripts/patch_studio_start.py main.py --output /tmp/main.studio.py
           python -m py_compile /tmp/main.studio.py
           cp /tmp/main.studio.py main.py
