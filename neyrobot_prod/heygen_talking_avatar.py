@@ -102,6 +102,7 @@ def video_engine_options(*, runway_enabled: bool) -> list[tuple[str, str]]:
         ("sora", "Sora 2 · без людей"),
         ("kling", "Kling"),
         ("veo", "Google Veo 3.1 Fast"),
+        ("seedance", "✨ Seedance 2.5 · 4–30 сек"),
     ]
     if runway_enabled:
         options.append(("runway", "Runway"))
@@ -597,7 +598,7 @@ async def _callback(update: Any, context: Any) -> None:
         raise ApplicationHandlerStop
     if data.startswith("hg:tv:legacy:"):
         engine = data.rsplit(":", 1)[-1]
-        if engine not in {"sora", "kling", "veo", "runway"}:
+        if engine not in {"sora", "kling", "veo", "runway", "seedance"}:
             await query.answer("Неизвестный движок", show_alert=True)
         else:
             await _delegate_to_legacy_text_engine(update, context, engine)

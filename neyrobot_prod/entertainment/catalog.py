@@ -44,6 +44,7 @@ _MENUS: dict[str, MenuSpec] = {
         ),
         rows=(
             (_button("🎬 Нейро Продакшен", "ent:menu:production"),),
+            (_button("⭐ Селфи со звездой", "fun:aiselfie"),),
             (
                 _button("🔥 В тренде", "ent:menu:trends"),
                 _button("🎥 Создать видео", "ent:menu:video"),
