@@ -54,6 +54,8 @@ def generate_product_image(
     duplicate provider charges. API credentials are managed by the host.
     """
     _validate_references(references)
+    if len(references) > 16:
+        raise ValueError('Модель редактирования принимает не более 16 референсов за запрос. Выберите основные фотографии.')
     if len(references) != len(request.reference_file_ids):
         raise ValueError("Количество скачанных фотографий не совпадает с заданием.")
     if not model.strip():
