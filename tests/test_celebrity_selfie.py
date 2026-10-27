@@ -93,8 +93,8 @@ class CelebritySelfieTests(unittest.TestCase):
         self.assertEqual(image_config["aspectRatio"], "4:5")
         self.assertEqual(image_config["imageSize"], "2K")
         prompt = request["json"]["contents"][0]["parts"][0]["text"]
-        self.assertIn("two separate recognizable individuals", prompt)
-        self.assertIn("never merge", prompt)
+        self.assertIn("Create exactly two people", prompt)
+        self.assertIn("Do not merge", prompt)
 
     def test_runtime_patch_changes_only_selfie_executor(self) -> None:
         async def original(*args, **kwargs):

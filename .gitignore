@@ -7,6 +7,7 @@ env/
 build/
 dist/
 *.egg-info/
+.superpowers/
 
 # IDE / ОС
 .vscode/

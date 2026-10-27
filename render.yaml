@@ -586,6 +586,16 @@ services:
     value: '5'
   - key: CREDIT_RESERVATION_TTL_S
     value: '10800'
+  - key: MARKETPLACE_PAID_GENERATION_ENABLED
+    value: '1'
+  - key: MARKETPLACE_IMAGE_MODEL
+    value: gpt-image-2
+  - key: MARKETPLACE_IMAGE_QUALITY
+    value: medium
+  - key: MARKETPLACE_PROVIDER_COST_PER_IMAGE_USD
+    value: '0.35'
+  - key: MARKETPLACE_ARTIFACT_DIR
+    value: /data/marketplace_jobs
   - key: START_INCLUDED_CREDITS
     value: '200'
   - key: PRO_INCLUDED_CREDITS

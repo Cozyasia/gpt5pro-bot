@@ -121,6 +121,7 @@ class EntertainmentCatalogTests(unittest.TestCase):
             self._texts("root"),
             [
                 ["🎬 Нейро Продакшен"],
+                ["⭐ Селфи со звездой"],
                 ["🔥 В тренде", "🎥 Создать видео"],
                 ["📸 Фото и эффекты", "🎵 Музыка и песня"],
                 ["🎮 Игры с AI", "🎉 Чем заняться"],
@@ -132,6 +133,7 @@ class EntertainmentCatalogTests(unittest.TestCase):
             self._callbacks("root"),
             [
                 "ent:menu:production",
+                "fun:aiselfie",
                 "ent:menu:trends",
                 "ent:menu:video",
                 "ent:menu:photo",
@@ -143,13 +145,8 @@ class EntertainmentCatalogTests(unittest.TestCase):
             ],
         )
 
-    def test_star_selfie_is_only_in_trends_and_photo(self):
-        root = get_menu("root")
-        self.assertFalse(any(
-            button.callback_data == "fun:aiselfie"
-            for row in root.rows for button in row
-        ))
-        for menu_id in ("trends", "photo"):
+    def test_star_selfie_is_reachable_from_root_trends_and_photo(self):
+        for menu_id in ("root", "trends", "photo"):
             matches = [
                 button for row in get_menu(menu_id).rows for button in row
                 if button.callback_data == "fun:aiselfie"
@@ -197,9 +194,9 @@ class EntertainmentCatalogTests(unittest.TestCase):
         self.assertEqual(production.rows[0][0].text, "🏡 AI-видеообзор недвижимости")
         active = [button for row in production.rows for button in row
                   if button.callback_data.startswith("ent:brief:")]
-        self.assertEqual(len(active), 8)
+        self.assertEqual(len(active), 7)
         self.assertTrue(all(button.status == "active" for button in active))
-        self.assertTrue(any("недвижимости" in button.text.lower() for button in active))
+        self.assertTrue(any("услуг" in button.text.lower() for button in active))
         self.assertTrue(any("UGC" in button.text for button in active))
 
     def test_catalog_integrity(self):

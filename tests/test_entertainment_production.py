@@ -7,7 +7,7 @@ from neyrobot_prod.entertainment.production import BRIEFS, handle_production_bri
 class Message:
     def __init__(self):
         self.texts = []
-    async def reply_text(self, text):
+    async def reply_text(self, text, **kwargs):
         self.texts.append(text)
 
 class Query:
@@ -29,6 +29,8 @@ class ProductionTests(unittest.TestCase):
     def test_all_briefs_have_descriptions(self):
         self.assertEqual(len(BRIEFS), 9)
         for mode in BRIEFS:
+            if mode == 'product_ad':
+                continue
             messages, state = self.click(mode)
             self.assertEqual(state["ent_production_mode"], mode)
             self.assertTrue(messages)
@@ -37,6 +39,14 @@ class ProductionTests(unittest.TestCase):
             else:
                 self.assertTrue(state["awaiting_video_studio_prompt"])
                 self.assertEqual(state["video_studio_mode"], "director")
+
+    def test_product_ad_uses_marketplace_intake(self):
+        from neyrobot_prod.marketplace_telegram import start_project, load
+        data = {}
+        self.assertEqual(load(data).stage.value, 'output')
+        start_project(data)
+        self.assertIn('marketplace_product_project', data)
+        self.assertNotIn('awaiting_video_studio_prompt', data)
 
     def test_unknown_brief_does_not_activate_generation(self):
         messages, state = self.click("invalid")

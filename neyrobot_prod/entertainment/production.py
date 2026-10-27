@@ -10,7 +10,7 @@ from .catalog import entertainment_menu_v2_enabled
 BRIEFS = {
     "product_ad": ("🛍 Реклама товара", "Название товара, преимущества, аудитория, призыв к действию и желаемая длительность"),
     "ugc_ad": ("📱 UGC-реклама", "Товар, герой ролика, проблема покупателя, естественная подача и длительность"),
-    "real_estate_ad": ("🏠 Реклама недвижимости", "Тип объекта, локация, площадь, преимущества, цена, аудитория и длительность"),
+    "real_estate_ad": ("🏢 Реклама услуг", "Название услуги, целевая аудитория, преимущества, регион оказания, призыв к действию и длительность"),
     "expert_video": ("👤 Экспертное видео", "Тема, квалификация эксперта, ключевые тезисы, аудитория и длительность"),
     "brand_video": ("💎 Брендовый ролик", "Название бренда, ценности, стиль, предложение, аудитория и длительность"),
     "reels_series": ("📦 Серия Reels", "Тема, количество роликов, длительность каждого, аудитория и последовательность сюжетов"),
@@ -26,6 +26,17 @@ async def handle_production_brief(update, context):
         await q.message.reply_text("Этот раздел пока недоступен.")
         return
     mode = (q.data or "").removeprefix("ent:brief:")
+    if mode.startswith("mp:"):
+        from neyrobot_prod.marketplace_telegram import callback
+        await callback(update, context)
+        return
+    if mode == "product_ad":
+        from neyrobot_prod.marketplace_telegram import start_project, prompt, buttons
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        project = start_project(context.user_data)
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="ent:brief:" + data)] for label, data in buttons(project)])
+        await q.message.reply_text(prompt(project), reply_markup=markup)
+        return
     if mode not in BRIEFS:
         await q.message.reply_text("Неизвестный сценарий. Вернитесь в Нейро Продакшен.")
         return
