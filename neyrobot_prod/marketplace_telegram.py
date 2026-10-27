@@ -131,6 +131,7 @@ async def callback(update, context):
     if action not in ('preview', 'quote'):
         context.user_data.pop('mp_quoted_usd_cents', None)
         context.user_data.pop('mp_quote_fingerprint', None)
+        context.user_data.pop('mp_generation_job_id', None)
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
         context.user_data.pop('mp_last_album_id', None)
@@ -139,7 +140,7 @@ async def callback(update, context):
     else:
         save(context.user_data, project)
         if action == 'continue':
-            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents', 'mp_quote_fingerprint'):
+            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents', 'mp_quote_fingerprint', 'mp_generation_job_id'):
                 context.user_data.pop(key, None)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + data)] for label, data in buttons(project)])
@@ -296,15 +297,17 @@ async def generate_callback(update, context, project):
             raise ValueError('Генерация уже выполняется. Дождитесь результата.')
         async with lock:
             from .marketplace_pipeline import generate_and_deliver
+            job_id = context.user_data.setdefault('mp_generation_job_id', uuid.uuid4().hex)
             await message.reply_text(f'Генерация началась. Стоимость: ${amount / 100:.2f} USD.')
             await generate_and_deliver(
                 project=project, bot=context.bot, chat_id=update.effective_chat.id,
                 provider_client=provider, credit_ledger=ledger,
                 user_id=update.effective_user.id, quoted_credits=amount,
                 quote_accepted=True, provider_enabled=True,
-                job_id=uuid.uuid4().hex,
+                job_id=job_id,
             )
             clear_project(context.user_data)
+            context.user_data.pop('mp_generation_job_id', None)
             context.user_data.pop('mp_quoted_usd_cents', None)
             context.user_data.pop('mp_quote_fingerprint', None)
             await message.reply_text('Готово. Изображение отправлено файлом без сжатия.')
