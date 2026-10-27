@@ -8,7 +8,7 @@ from __future__ import annotations
 from .catalog import entertainment_menu_v2_enabled
 
 BRIEFS = {
-    "product_ad": ("🛍 Реклама товара", "Название товара, преимущества, аудитория, призыв к действию и желаемая длительность"),
+    "product_ad": ("🛍 Маркетплейсы", "Название товара, преимущества, аудитория, призыв к действию и желаемая длительность"),
     "ugc_ad": ("📱 UGC-реклама", "Товар, герой ролика, проблема покупателя, естественная подача и длительность"),
     "real_estate_ad": ("🏢 Реклама услуг", "Название услуги, целевая аудитория, преимущества, регион оказания, призыв к действию и длительность"),
     "expert_video": ("👤 Экспертное видео", "Тема, квалификация эксперта, ключевые тезисы, аудитория и длительность"),
@@ -33,7 +33,11 @@ async def handle_production_brief(update, context):
     if mode == "product_ad":
         from neyrobot_prod.marketplace_telegram import start_project, prompt, buttons
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        project = start_project(context.user_data)
+        project = start_project(
+            context.user_data,
+            user_id=q.from_user.id,
+            db_path=(getattr(context, "bot_data", None) or {}).get("marketplace_db_path"),
+        )
         markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="ent:brief:" + data)] for label, data in buttons(project)])
         await q.message.reply_text(prompt(project), reply_markup=markup)
         return

@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -6,6 +8,51 @@ from neyrobot_prod.marketplace_telegram import (STATE_KEY, save, load, receive_t
 
 
 class MarketplaceIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_photo_restores_durable_marketplace_draft_instead_of_falling_through(self):
+        from neyrobot_prod.marketplace_telegram import callback, start_project
+
+        with tempfile.TemporaryDirectory() as directory:
+            database = os.path.join(directory, "subs.db")
+            bot_data = {"marketplace_db_path": database}
+            user = SimpleNamespace(id=42)
+            query_message = SimpleNamespace(reply_text=AsyncMock())
+            query = SimpleNamespace(data="", from_user=user, message=query_message)
+            first_context = SimpleNamespace(user_data={}, bot_data=bot_data)
+            start_project(
+                first_context.user_data,
+                user_id=user.id,
+                db_path=database,
+            )
+
+            query.data = "ent:brief:mp:output:infographics"
+            await callback(SimpleNamespace(callback_query=query), first_context)
+            query.data = "ent:brief:mp:market:yandex"
+            await callback(SimpleNamespace(callback_query=query), first_context)
+
+            # Simulate a process restart: PTB's in-memory user_data is empty, while
+            # the Render disk and production SQLite database remain available.
+            sent = SimpleNamespace(message_id=99)
+            photo_message = SimpleNamespace(
+                photo=[SimpleNamespace(file_id="porcelain-1")],
+                media_group_id="album-1",
+                reply_text=AsyncMock(return_value=sent),
+            )
+            update = SimpleNamespace(
+                message=photo_message,
+                effective_message=photo_message,
+                effective_user=user,
+                effective_chat=SimpleNamespace(id=123),
+            )
+            restarted_context = SimpleNamespace(
+                user_data={},
+                bot_data=bot_data,
+                bot=SimpleNamespace(edit_message_text=AsyncMock()),
+            )
+
+            self.assertTrue(await receive_photo(update, restarted_context))
+            self.assertEqual(load(restarted_context.user_data).reference_ids, ("porcelain-1",))
+            self.assertIn("1/30", photo_message.reply_text.await_args.args[0])
+
     async def test_brief_shows_confirmation_button(self):
         data = {}
         project = ProductProject(stage=Stage.BRIEF, reference_ids=("photo1",))

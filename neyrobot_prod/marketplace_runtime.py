@@ -68,6 +68,9 @@ def initialize_marketplace_runtime(
     usd_to_credits,
 ):
     """Build and inject production dependencies using host pricing functions."""
+    # Draft persistence is independent from paid generation and keeps the wizard
+    # routable across process restarts before a provider or wallet is involved.
+    bot_data["marketplace_db_path"] = db_path
     if os.getenv("MARKETPLACE_PAID_GENERATION_ENABLED") != "1":
         return configure_marketplace_runtime(bot_data)
     model = (os.getenv("MARKETPLACE_IMAGE_MODEL") or "gpt-image-2").strip()

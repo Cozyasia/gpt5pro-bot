@@ -1,8 +1,14 @@
 """Telegram UI adapter for marketplace product intake (no billing or generation)."""
+import json
+import logging
+import sqlite3
+import time
+
 from .marketplace_studio import ProductProject, Stage, Output, Marketplace, select_output, select_marketplace, continue_after_references, upload_message
 from .marketplace_navigation import back, cancel
 
 STATE_KEY = 'marketplace_product_project'
+log = logging.getLogger(__name__)
 
 
 def load(data):
@@ -24,9 +30,81 @@ def save(data, project):
                            approved=project.approved)
 
 
+def _write_draft(db_path, user_id, project):
+    if not db_path or not user_id:
+        return
+    payload = {}
+    save(payload, project)
+    with sqlite3.connect(db_path, timeout=20) as con:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS marketplace_drafts("
+            "user_id INTEGER PRIMARY KEY,payload TEXT NOT NULL,updated_ts INTEGER NOT NULL)"
+        )
+        con.execute(
+            "INSERT INTO marketplace_drafts(user_id,payload,updated_ts) VALUES(?,?,?) "
+            "ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload,updated_ts=excluded.updated_ts",
+            (int(user_id), json.dumps(payload[STATE_KEY], ensure_ascii=False), int(time.time())),
+        )
+
+
+def _delete_draft(db_path, user_id):
+    if not db_path or not user_id:
+        return
+    with sqlite3.connect(db_path, timeout=20) as con:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS marketplace_drafts("
+            "user_id INTEGER PRIMARY KEY,payload TEXT NOT NULL,updated_ts INTEGER NOT NULL)"
+        )
+        con.execute("DELETE FROM marketplace_drafts WHERE user_id=?", (int(user_id),))
+
+
+def _draft_identity(update, context):
+    query = getattr(update, 'callback_query', None)
+    user = getattr(update, 'effective_user', None) or getattr(query, 'from_user', None)
+    user_id = int(getattr(user, 'id', 0) or 0)
+    bot_data = getattr(context, 'bot_data', None) or {}
+    return user_id, bot_data.get('marketplace_db_path')
+
+
+def _persist_context_draft(update, context, project):
+    user_id, db_path = _draft_identity(update, context)
+    try:
+        _write_draft(db_path, user_id, project)
+    except Exception as exc:
+        log.warning("Marketplace draft persist failed user_id=%s: %s", user_id, type(exc).__name__)
+
+
+def _restore_context_draft(update, context):
+    if STATE_KEY in context.user_data:
+        return True
+    user_id, db_path = _draft_identity(update, context)
+    if not db_path or not user_id:
+        return False
+    try:
+        with sqlite3.connect(db_path, timeout=20) as con:
+            row = con.execute(
+                "SELECT payload FROM marketplace_drafts WHERE user_id=?",
+                (user_id,),
+            ).fetchone()
+        if not row:
+            return False
+        value = json.loads(row[0])
+        project = load({STATE_KEY: value})
+        save(context.user_data, project)
+        log.info("Marketplace draft restored user_id=%s stage=%s", user_id, project.stage.value)
+        return True
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc).lower():
+            log.warning("Marketplace draft restore failed user_id=%s: %s", user_id, type(exc).__name__)
+        return False
+    except Exception as exc:
+        log.warning("Marketplace draft restore rejected user_id=%s: %s", user_id, type(exc).__name__)
+        return False
+
+
 def buttons(project):
     if project.stage == Stage.OUTPUT:
-        return [('Студийные фото', 'mp:output:photos'), ('Инфографика', 'mp:output:infographics'),
+        return [('Студийные фото', 'mp:output:photos'), ('Главное фото + инфографика', 'mp:output:infographics'),
                 ('Видео товара', 'mp:output:video'), ('Полный комплект', 'mp:output:complete')]
     if project.stage == Stage.MARKETPLACE:
         return [(name, 'mp:market:' + value) for name, value in
@@ -92,6 +170,7 @@ async def callback(update, context):
         action = raw.removeprefix('mp:')
     else:
         return
+    _restore_context_draft(update, context)
     if STATE_KEY not in context.user_data:
         await query.message.reply_text('Проект уже закрыт. Начните новый через меню.')
         return
@@ -139,8 +218,14 @@ async def callback(update, context):
         context.user_data.pop('mp_last_album_id', None)
         context.user_data.pop('mp_album_status_message', None)
         context.user_data.pop('mp_album_last_photo_at', None)
+        user_id, db_path = _draft_identity(update, context)
+        try:
+            _delete_draft(db_path, user_id)
+        except Exception as exc:
+            log.warning("Marketplace draft delete failed user_id=%s: %s", user_id, type(exc).__name__)
     else:
         save(context.user_data, project)
+        _persist_context_draft(update, context, project)
         if action == 'continue':
             for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents', 'mp_quote_fingerprint', 'mp_quote_details', 'mp_quote_created_ts', 'mp_generation_job_id'):
                 context.user_data.pop(key, None)
@@ -152,6 +237,7 @@ async def callback(update, context):
 async def receive_photo(update, context):
     """Return False when this update belongs to another bot workflow."""
     from .marketplace_studio import add_references
+    _restore_context_draft(update, context)
     if STATE_KEY not in context.user_data or not update.message or not update.message.photo:
         return False
     project = load(context.user_data)
@@ -163,6 +249,7 @@ async def receive_photo(update, context):
         await update.message.reply_text(str(error))
         return True
     save(context.user_data, project)
+    _persist_context_draft(update, context, project)
     album = getattr(update.message, 'media_group_id', None)
     if album:
         import time
@@ -200,6 +287,7 @@ async def receive_transcript(update, context, transcript):
     must be called only after a successful transcription.
     """
     from .marketplace_studio import set_brief
+    _restore_context_draft(update, context)
     if STATE_KEY not in context.user_data or not update.message:
         return False
     project = load(context.user_data)
@@ -211,18 +299,23 @@ async def receive_transcript(update, context, transcript):
         await update.message.reply_text(str(error))
         return True
     save(context.user_data, project)
+    _persist_context_draft(update, context, project)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + action)] for label, action in buttons(project)])
     await update.message.reply_text(prompt(project), reply_markup=markup)
     return True
 
 
-def start_project(user_data):
+def start_project(user_data, *, user_id=None, db_path=None):
     """Start a fresh product-card draft; explicit entrypoint for the host menu."""
     project = ProductProject()
     for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at'):
         user_data.pop(key, None)
     save(user_data, project)
+    try:
+        _write_draft(db_path, user_id, project)
+    except Exception as exc:
+        log.warning("Marketplace draft start persist failed user_id=%s: %s", user_id, type(exc).__name__)
     return project
 
 
