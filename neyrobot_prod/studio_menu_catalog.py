@@ -15,7 +15,7 @@ class StudioSection:
 
 
 SECTIONS = (
-    StudioSection("market", "Маркетплейсы", "ent:brief:product_ad", "neyrobot_prod/production_briefs.py (current main commit #221)"),
+    StudioSection("market", "Маркетплейсы", "ent:brief:product_ad", "current main: ent:brief:product_ad callback"),
     StudioSection("medicine", "AI-Медицина", None, "not yet verified in current main"),
     StudioSection("video", "AI-Видео", None, "not yet verified in current main"),
     StudioSection("realty", "Недвижимость", "revideo:start", "current main commit #221"),
