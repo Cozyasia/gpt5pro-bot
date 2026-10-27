@@ -20068,6 +20068,11 @@ def build_application() -> "Application":
         group=-1,
     )
 
+    # Marketplace product intake takes precedence only for active drafts.
+    from neyrobot_prod.marketplace_telegram import receive_photo as _mp_photo, receive_text as _mp_text
+    app.add_handler(MessageHandler(filters.PHOTO, _mp_photo), group=-3)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _mp_text), group=-3)
+
     # Голос/аудио — относим к медиагруппе (идёт раньше общего текстового хендлера)
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
     if voice_fn:
