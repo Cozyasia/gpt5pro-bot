@@ -38,7 +38,7 @@ def buttons(project):
     if project.stage == Stage.REVIEW:
         return [('Характеристики верны', 'mp:confirm'), ('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
     if project.stage == Stage.APPROVAL:
-        return [('Завершить подготовку', 'mp:finish'), ('Отмена', 'mp:cancel')]
+        return [('Проверить задание', 'mp:preview'), ('Отмена', 'mp:cancel')]
     return [('Отмена', 'mp:cancel')]
 
 
@@ -69,6 +69,8 @@ def apply_action(project, action):
     if action == 'confirm':
         from .marketplace_studio import confirm_attributes
         return confirm_attributes(project)
+    if action == 'preview' and project.stage == Stage.APPROVAL:
+        return project
     if action == 'finish' and project.stage == Stage.APPROVAL:
         raise ValueError('Генерация ещё не подключена. Проект сохранён; кредиты не списаны.')
     if action == 'continue':
@@ -101,6 +103,14 @@ async def callback(update, context):
         project = apply_action(load(context.user_data), action)
     except ValueError as error:
         await query.message.reply_text(str(error))
+        return
+    if action == 'preview':
+        from .marketplace_generation import prepare_generation, build_product_image_prompt
+        request = prepare_generation(project)
+        if request.output.value == 'video':
+            await query.message.reply_text('Для видео нужен отдельный видеоконвейер. Генерация пока недоступна; кредиты не списываются.')
+        else:
+            await query.message.reply_text('Предпросмотр задания для генератора (без запуска и списания):\\n\\n' + build_product_image_prompt(request))
         return
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
