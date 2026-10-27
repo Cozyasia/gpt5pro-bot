@@ -14,3 +14,14 @@ class PatchStartTests(unittest.TestCase):
     def test_refuses_double_patch(self):
         with self.assertRaises(ValueError):
             patch(patch(SOURCE))
+
+    def test_duplicate_definitions_target_final_active_handler(self):
+        legacy = 'async def cmd_start(update, context):\n    if await _handle_payment_start_payload(update, context):\n        return\n    await update.effective_chat.send_message(OLD_START)\n\n'
+        result = patch(legacy + SOURCE)
+        self.assertEqual(result.count('studio_start_markup(context.args)'), 1)
+        self.assertLess(result.index('OLD_START'), result.index('studio_start_markup(context.args)'))
+
+    def test_refuses_unguarded_legacy_handler(self):
+        legacy = 'async def cmd_start(update, context):\n    if await _handle_payment_start_payload(update, context):\n        return\n'
+        with self.assertRaises(ValueError):
+            patch(legacy)
