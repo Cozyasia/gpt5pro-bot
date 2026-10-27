@@ -1,0 +1,32 @@
+name: Studio Mini App contract tests
+
+on:
+  pull_request:
+    paths:
+      - 'neyrobot_prod/studio_menu_*.py'
+      - 'tests/test_studio_menu_*.py'
+      - '.github/workflows/studio-menu-tests.yml'
+  push:
+    branches:
+      - feature/neyro-studio-menu-integration
+    paths:
+      - 'neyrobot_prod/studio_menu_*.py'
+      - 'tests/test_studio_menu_*.py'
+      - '.github/workflows/studio-menu-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile isolated modules
+        run: python -m compileall -q neyrobot_prod/studio_menu_*.py
+      - name: Run Studio tests
+        run: python -m unittest discover -s tests -p 'test_studio_menu_*.py' -v
