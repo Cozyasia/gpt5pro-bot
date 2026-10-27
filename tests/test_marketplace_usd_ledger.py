@@ -36,6 +36,19 @@ class USDLedgerTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             asyncio.run(self.ledger.release(r))
 
+    def test_idempotency_key_collision_rejected(self):
+        asyncio.run(self.ledger.reserve(user_id=42, amount=200, idempotency_key='same'))
+        with self.assertRaisesRegex(RuntimeError, 'collision'):
+            asyncio.run(self.ledger.reserve(user_id=42, amount=300, idempotency_key='same'))
+        self.assertAlmostEqual(self.balance(), 8.00)
+
+    def test_invalid_wallet_schema_fails_closed(self):
+        with sqlite3.connect(self.path) as con:
+            con.execute('DROP TABLE wallet')
+            con.execute('CREATE TABLE wallet(user_id INTEGER PRIMARY KEY, balance REAL)')
+        with self.assertRaisesRegex(RuntimeError, 'schema mismatch'):
+            self.ledger.initialize()
+
     def test_release_refunds_once(self):
         r = asyncio.run(self.ledger.reserve(user_id=42, amount=250, idempotency_key="job-2"))
         asyncio.run(self.ledger.release(r))
