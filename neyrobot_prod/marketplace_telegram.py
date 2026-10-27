@@ -89,6 +89,11 @@ async def callback(update, context):
         action = raw.removeprefix('mp:')
     else:
         return
+    if action == 'continue' and context.user_data.get('mp_album_last_photo_at'):
+        import time
+        if time.monotonic() - context.user_data['mp_album_last_photo_at'] < 3:
+            await query.message.reply_text('Фотоальбом ещё загружается. Подождите несколько секунд и нажмите «Продолжить» снова.')
+            return
     try:
         project = apply_action(load(context.user_data), action)
     except ValueError as error:
@@ -120,6 +125,9 @@ async def receive_photo(update, context):
         return True
     save(context.user_data, project)
     album = getattr(update.message, 'media_group_id', None)
+    if album:
+        import time
+        context.user_data['mp_album_last_photo_at'] = time.monotonic()
     if album and context.user_data.get('mp_last_album_id') == album:
         status_id = context.user_data.get('mp_album_status_message')
         if status_id:
