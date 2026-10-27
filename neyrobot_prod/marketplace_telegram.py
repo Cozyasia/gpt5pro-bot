@@ -35,7 +35,11 @@ def buttons(project):
     if project.stage == Stage.REFERENCES:
         return [('Добавить фото', 'mp:more'), ('Продолжить', 'mp:continue'),
                 ('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
-    return [('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
+    if project.stage == Stage.REVIEW:
+        return [('Характеристики верны', 'mp:confirm'), ('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
+    if project.stage == Stage.APPROVAL:
+        return [('Завершить подготовку', 'mp:finish'), ('Отмена', 'mp:cancel')]
+    return [('Отмена', 'mp:cancel')]
 
 
 def prompt(project):
@@ -47,7 +51,12 @@ def prompt(project):
         return upload_message(project)
     if project.stage == Stage.BRIEF:
         return 'Опишите товар текстом или голосом. Подтвердите его характеристики.'
-    return 'Проект сохранён. Следующий этап — проверка характеристик и расчёт стоимости.'
+    if project.stage == Stage.REVIEW:
+        return ('Проверьте описание товара:\\n\\n' + project.brief +
+                '\\n\\nФотографий: ' + str(len(project.reference_ids)) +
+                '\\nПодтвердите характеристики или вернитесь для исправления.')
+    return ('Характеристики подтверждены. Генерация и расчёт стоимости пока не подключены. '
+            'Кредиты не списываются.')
 
 
 def apply_action(project, action):
@@ -56,6 +65,11 @@ def apply_action(project, action):
     if action == 'back':
         return back(project)
     if action == 'more' and project.stage == Stage.REFERENCES:
+        return project
+    if action == 'confirm':
+        from .marketplace_studio import confirm_attributes
+        return confirm_attributes(project)
+    if action == 'finish' and project.stage == Stage.APPROVAL:
         return project
     if action == 'continue':
         return continue_after_references(project)
