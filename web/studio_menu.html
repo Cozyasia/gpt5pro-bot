@@ -21,6 +21,7 @@ const catalog=[
 {id:'assistant',icon:'🧠',name:'AI-Ассистент',sub:'Вопросы и поиск',role:'Помощник',tip:'Задай свой вопрос.'},
 {id:'advert',icon:'📣',name:'Реклама товара',sub:'Сценарии и проморолики',role:'Маркетолог',tip:'Загрузи референсы и опиши товар.',route:'advert'}
 ];
+const qp=new URLSearchParams(location.search);if(qp.get('bot')==='gpt5pro_bot'){qp.set('bot','progpt5_bot');history.replaceState(null,'',location.pathname+'?'+qp.toString())}
 const app=document.getElementById('app');const tg=window.Telegram?.WebApp;try{tg?.ready();tg?.expand()}catch(e){}
 const config=Object.assign({navigationEnabled:true,botUsername:'progpt5_bot'},window.NEYRO_STUDIO_CONFIG||{});const media=config.media||{};const mascot=document.getElementById('mascot');
 if(typeof config.mascotUrl==='string' && /^https:\/\//.test(config.mascotUrl)){mascot.src=config.mascotUrl;mascot.hidden=false;document.getElementById('mascotFallback').hidden=true}
