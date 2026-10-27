@@ -1,34 +1,22 @@
-"""Safe navigation contract for Neyro Studio Mini App.
-
-This module does not register Telegram handlers or alter production behavior.
-Only a trusted Telegram web_app_data handler may call resolve_navigation().
-"""
+"""Validated Studio Mini App navigation for current production callbacks."""
 import json
+from .studio_menu_catalog import verified_callback
 
-ALLOWED_ROUTES = frozenset({
-    "mode:medicine", "mode:study", "mode:work",
-    "engine:images", "engine:kling",
-})
+ALLOWED_SLUGS = frozenset(("market", "realty", "advert"))
 MAX_PAYLOAD_BYTES = 512
 
-
 def resolve_navigation(raw: str) -> str | None:
-    """Validate a Mini App navigation payload; return allowlisted route or None.
-
-    Authentication of the Telegram update, entitlement and consent checks must
-    remain in the production Telegram handler before dispatch.
-    """
     if not isinstance(raw, str) or len(raw.encode("utf-8")) > MAX_PAYLOAD_BYTES:
         return None
     try:
-        obj = json.loads(raw)
-    except (ValueError, TypeError):
+        data = json.loads(raw)
+    except (TypeError, ValueError):
         return None
-    if not isinstance(obj, dict) or set(obj) != {"v", "action", "route"}:
+    if not isinstance(data, dict) or set(data) != {"v", "action", "route"}:
         return None
-    if type(obj["v"]) is not int or obj["v"] != 1 or obj["action"] != "open_mode":
+    if type(data["v"]) is not int or data["v"] != 1 or data["action"] != "open_mode":
         return None
-    route = obj["route"]
-    if not isinstance(route, str) or route not in ALLOWED_ROUTES:
+    slug = data["route"]
+    if not isinstance(slug, str) or slug not in ALLOWED_SLUGS:
         return None
-    return route
+    return verified_callback(slug)
