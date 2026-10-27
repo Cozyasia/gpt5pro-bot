@@ -5939,6 +5939,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if await _handle_payment_start_payload(update, context):
         return
+    from neyrobot_prod.studio_menu_start import studio_start_markup
+    studio_entry = studio_start_markup(context.args)
+    if studio_entry is not None:
+        studio_title, studio_markup = studio_entry
+        await update.effective_chat.send_message(
+            'Раздел: ' + studio_title, reply_markup=studio_markup
+        )
+        return
     with contextlib.suppress(Exception):
         _chat_ensure_active(update.effective_user.id, update.effective_chat.id)
 

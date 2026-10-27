@@ -1,0 +1,44 @@
+name: Studio menu validation
+on:
+  pull_request:
+    paths:
+      - 'neyrobot_prod/studio_menu_*.py'
+      - 'web/studio_menu.html'
+      - 'scripts/patch_studio_*.py'
+      - 'tests/test_studio_*.py'
+      - 'tests/test_patch_studio_start.py'
+      - '.github/workflows/studio-menu-validation.yml'
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test navigation and patcher
+        run: python -m unittest tests.test_studio_menu_catalog tests.test_studio_menu_navigation tests.test_studio_menu_dispatch tests.test_studio_menu_telegram tests.test_studio_menu_start tests.test_studio_current_main_routes tests.test_patch_studio_start
+      - name: Validate patch against checked-out main
+        run: |
+          if grep -Fq 'studio_start_markup(context.args)' main.py; then
+            cp main.py /tmp/main.studio.py
+          else
+            python scripts/patch_studio_start.py main.py --output /tmp/main.studio.py
+          fi
+          python -m py_compile /tmp/main.studio.py
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          source = Path('/tmp/main.studio.py').read_text()
+          tree = ast.parse(source)
+          handlers = [n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == 'cmd_start']
+          active = max(handlers, key=lambda n: n.lineno)
+          block = '\n'.join(source.splitlines()[active.lineno-1:active.end_lineno])
+          assert block.count('studio_start_markup(context.args)') == 1
+          assert block.index('_handle_payment_start_payload(update, context)') < block.index('studio_start_markup(context.args)')
+          assert block.index('_claim_start_update(update)') < block.index('studio_start_markup(context.args)')
+          print('Active cmd_start verified: payment and duplicate guards precede Studio route')
+          PY
