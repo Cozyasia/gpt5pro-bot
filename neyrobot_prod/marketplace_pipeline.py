@@ -38,6 +38,7 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
     )
     if reservation is None:
         raise RuntimeError("Не удалось зарезервировать кредиты.")
+    delivered = False
     try:
         # OpenAI synchronous SDK call must not block Telegram's event loop.
         result = await asyncio.to_thread(
@@ -54,8 +55,12 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
             document=output,
             caption="Готовая AI-карточка товара. Проверьте соответствие оригиналу.",
         )
+        delivered = True
         await credit_ledger.commit(reservation)
         return message
     except Exception:
-        await credit_ledger.release(reservation)
+        if not delivered:
+            await credit_ledger.release(reservation)
+        # If delivery succeeded but commit failed, keep reservation for
+        # reconciliation rather than refunding a delivered paid product.
         raise
