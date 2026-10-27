@@ -30,7 +30,7 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
         quoted_credits=quoted_credits,
         quote_accepted=quote_accepted,
     )
-    if not job_id or not job_id.strip():
+    if not isinstance(job_id, str) or not job_id.strip():
         raise ValueError('Для платной генерации необходим уникальный идентификатор задания.')
     references = await download_reference_images(bot, request)
     reservation = await credit_ledger.reserve(
@@ -40,6 +40,11 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
     )
     if reservation is None:
         raise RuntimeError("Не удалось зарезервировать кредиты.")
+    # An idempotent ledger must reject duplicate execution of a committed or
+    # in-flight job; a reused reservation is NOT authorization to call the
+    # paid provider a second time.
+    if not getattr(reservation, 'newly_reserved', False):
+        raise RuntimeError('Задание уже существует или резерв не подтверждён как новый.')
     provider_started = False
     delivered = False
     try:
