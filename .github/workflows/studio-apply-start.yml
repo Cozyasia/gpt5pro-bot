@@ -5,6 +5,7 @@ on:
       - feature/neyro-studio-menu-integration
     paths:
       - '.github/workflows/studio-apply-start.yml'
+      - 'scripts/patch_studio_start.py'
 jobs:
   integrate:
     if: github.repository == 'Cozyasia/gpt5pro-bot'
