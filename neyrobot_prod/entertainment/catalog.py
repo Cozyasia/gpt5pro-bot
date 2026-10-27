@@ -111,6 +111,7 @@ _MENUS: dict[str, MenuSpec] = {
             (_button("✂️ Автомонтаж", "fun:video_montage"),),
             (_soon("➕ Продолжить видео", "continue_video"),),
             (_button("🧠 Выбрать модель", "fun:textvideo"),),
+            (_button("✨ Seedance 2.5 · Видео по тексту", "fun:tv_engine_seedance"),),
             (_button("⬅️ Назад", "ent:back:root"),),
         ),
     ),
