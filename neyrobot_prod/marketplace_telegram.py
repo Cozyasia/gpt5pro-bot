@@ -1,0 +1,80 @@
+"""Telegram UI adapter for marketplace product intake (no billing or generation)."""
+from .marketplace_studio import ProductProject, Stage, Output, Marketplace, select_output, select_marketplace, continue_after_references, upload_message
+from .marketplace_navigation import back, cancel
+
+STATE_KEY = 'marketplace_product_project'
+
+
+def load(data):
+    value = data.get(STATE_KEY) or {}
+    return ProductProject(output=Output(value['output']) if value.get('output') else None,
+                          marketplace=Marketplace(value['marketplace']) if value.get('marketplace') else None,
+                          stage=Stage(value.get('stage', 'output')),
+                          reference_ids=tuple(value.get('reference_ids', ())),
+                          brief=value.get('brief', ''),
+                          attributes_confirmed=bool(value.get('attributes_confirmed', False)),
+                          approved=bool(value.get('approved', False)))
+
+
+def save(data, project):
+    data[STATE_KEY] = dict(output=project.output.value if project.output else None,
+                           marketplace=project.marketplace.value if project.marketplace else None,
+                           stage=project.stage.value, reference_ids=list(project.reference_ids),
+                           brief=project.brief, attributes_confirmed=project.attributes_confirmed,
+                           approved=project.approved)
+
+
+def buttons(project):
+    if project.stage == Stage.OUTPUT:
+        return [('Студийные фото', 'mp:output:photos'), ('Инфографика', 'mp:output:infographics'),
+                ('Видео товара', 'mp:output:video'), ('Полный комплект', 'mp:output:complete')]
+    if project.stage == Stage.MARKETPLACE:
+        return [(name, 'mp:market:' + value) for name, value in
+                [('Wildberries', 'wildberries'), ('Ozon', 'ozon'), ('Яндекс Маркет', 'yandex'),
+                 ('Amazon', 'amazon'), ('Универсальный', 'generic')]]
+    if project.stage == Stage.REFERENCES:
+        return [('Добавить фото', 'mp:more'), ('Продолжить', 'mp:continue'),
+                ('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
+    return [('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
+
+
+def prompt(project):
+    if project.stage == Stage.OUTPUT:
+        return '🛍 AI-карточка товара. Выберите результат.'
+    if project.stage == Stage.MARKETPLACE:
+        return 'Выберите маркетплейс.'
+    if project.stage == Stage.REFERENCES:
+        return upload_message(project)
+    if project.stage == Stage.BRIEF:
+        return 'Опишите товар текстом или голосом. Подтвердите его характеристики.'
+    return 'Проект сохранён. Следующий этап — проверка характеристик и расчёт стоимости.'
+
+
+def apply_action(project, action):
+    if action == 'cancel':
+        return cancel()
+    if action == 'back':
+        return back(project)
+    if action == 'more' and project.stage == Stage.REFERENCES:
+        return project
+    if action == 'continue':
+        return continue_after_references(project)
+    if action.startswith('output:'):
+        return select_output(project, Output(action.split(':', 1)[1]))
+    if action.startswith('market:'):
+        return select_marketplace(project, Marketplace(action.split(':', 1)[1]))
+    raise ValueError('Invalid marketplace action')
+
+
+async def callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    try:
+        project = apply_action(load(context.user_data), (query.data or '').removeprefix('mp:'))
+    except ValueError as error:
+        await query.message.reply_text(str(error))
+        return
+    save(context.user_data, project)
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=data)] for label, data in buttons(project)])
+    await query.message.reply_text(prompt(project), reply_markup=keyboard)
