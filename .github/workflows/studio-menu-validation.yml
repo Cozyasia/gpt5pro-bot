@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Test navigation and patcher
-        run: python -m unittest discover -s tests -p 'test_studio_*.py' && python -m unittest discover -s tests -p 'test_patch_studio_start.py'
+        run: python -m unittest tests.test_studio_menu_catalog tests.test_studio_menu_navigation tests.test_studio_menu_dispatch tests.test_studio_menu_telegram tests.test_studio_menu_start tests.test_studio_current_main_routes tests.test_patch_studio_start
       - name: Validate patch against checked-out main
         run: |
           python scripts/patch_studio_start.py main.py --output /tmp/main.studio.py
