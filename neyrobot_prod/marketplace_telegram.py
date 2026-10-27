@@ -38,7 +38,7 @@ def buttons(project):
     if project.stage == Stage.REVIEW:
         return [('Характеристики верны', 'mp:confirm'), ('Назад', 'mp:back'), ('Отмена', 'mp:cancel')]
     if project.stage == Stage.APPROVAL:
-        return [('Проверить задание', 'mp:preview'), ('Отмена', 'mp:cancel')]
+        return [('Проверить задание', 'mp:preview'), ('Рассчитать стоимость', 'mp:quote'), ('Отмена', 'mp:cancel')]
     return [('Отмена', 'mp:cancel')]
 
 
@@ -69,7 +69,7 @@ def apply_action(project, action):
     if action == 'confirm':
         from .marketplace_studio import confirm_attributes
         return confirm_attributes(project)
-    if action == 'preview' and project.stage == Stage.APPROVAL:
+    if action in ('preview', 'quote') and project.stage == Stage.APPROVAL:
         return project
     if action == 'finish' and project.stage == Stage.APPROVAL:
         raise ValueError('Генерация ещё не подключена. Проект сохранён; кредиты не списаны.')
@@ -103,6 +103,9 @@ async def callback(update, context):
         project = apply_action(load(context.user_data), action)
     except ValueError as error:
         await query.message.reply_text(str(error))
+        return
+    if action == 'quote':
+        await quote_callback(update, context, project)
         return
     if action == 'preview':
         from .marketplace_generation import prepare_generation, build_product_image_prompt
@@ -224,3 +227,26 @@ def clear_project(user_data):
     user_data.pop(STATE_KEY, None)
     for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at'):
         user_data.pop(key, None)
+
+
+async def quote_callback(update, context, project):
+    """Quote only through a configured billing integration; never invent prices."""
+    from .marketplace_generation import prepare_generation
+    try:
+        request = prepare_generation(project)
+        quote_service = context.bot_data.get('marketplace_quote_service')
+        if quote_service is None:
+            await update.callback_query.message.reply_text(
+                'Расчёт стоимости пока недоступен. Кредиты не списаны.'
+            )
+            return
+        quote = await quote_service(request=request, user_id=update.effective_user.id)
+        if not isinstance(quote, int) or isinstance(quote, bool) or quote <= 0:
+            raise ValueError('Сервис стоимости не вернул действительную цену.')
+        context.user_data['mp_quoted_credits'] = quote
+        await update.callback_query.message.reply_text(
+            f'Стоимость одной генерации: {quote} кредитов. '
+            'Платная генерация пока отключена; кредиты не списаны.'
+        )
+    except (ValueError, RuntimeError) as error:
+        await update.callback_query.message.reply_text(str(error))
