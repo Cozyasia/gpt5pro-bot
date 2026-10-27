@@ -80,7 +80,7 @@ async def callback(update, context):
     except ValueError as error:
         await query.message.reply_text(str(error))
         return
-    if (query.data or '') == 'mp:cancel':
+    if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
     else:
         save(context.user_data, project)
