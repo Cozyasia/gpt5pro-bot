@@ -11,6 +11,13 @@ class MarketplaceTelegramTests(unittest.TestCase):
         save(data, p)
         self.assertEqual(load(data), p)
         self.assertIn(('Продолжить', 'mp:continue'), buttons(p))
+    def test_unavailable_generation_cannot_finish(self):
+        from neyrobot_prod.marketplace_studio import set_brief, confirm_attributes
+        p = ProductProject(stage=Stage.BRIEF, reference_ids=('ref',))
+        p = confirm_attributes(set_brief(p, 'Кружка'))
+        with self.assertRaisesRegex(ValueError, 'Генерация'):
+            apply_action(p, 'finish')
+
     def test_back(self):
         p = apply_action(ProductProject(), 'output:photos')
         self.assertEqual(apply_action(p, 'back').stage, Stage.OUTPUT)
