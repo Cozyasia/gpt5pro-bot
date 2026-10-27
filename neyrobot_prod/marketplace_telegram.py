@@ -106,11 +106,20 @@ async def callback(update, context):
         return
     if action == 'preview':
         from .marketplace_generation import prepare_generation, build_product_image_prompt
-        request = prepare_generation(project)
+        try:
+            request = prepare_generation(project)
+        except ValueError as error:
+            await query.message.reply_text(str(error))
+            return
         if request.output.value == 'video':
             await query.message.reply_text('Для видео нужен отдельный видеоконвейер. Генерация пока недоступна; кредиты не списываются.')
         else:
-            await query.message.reply_text('Предпросмотр задания для генератора (без запуска и списания):\\n\\n' + build_product_image_prompt(request))
+            try:
+                preview = build_product_image_prompt(request)
+            except ValueError as error:
+                await query.message.reply_text(str(error))
+                return
+            await query.message.reply_text('Предпросмотр задания для генератора (без запуска и списания):\\n\\n' + preview)
         return
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
