@@ -120,6 +120,12 @@ async def receive_photo(update, context):
     save(context.user_data, project)
     album = getattr(update.message, 'media_group_id', None)
     if album and context.user_data.get('mp_last_album_id') == album:
+        status_id = context.user_data.get('mp_album_status_message')
+        if status_id:
+            try:
+                await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=status_id, text=prompt(project))
+            except Exception:
+                pass
         return True
     if album:
         context.user_data['mp_last_album_id'] = album
