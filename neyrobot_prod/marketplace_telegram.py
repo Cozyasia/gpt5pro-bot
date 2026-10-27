@@ -68,11 +68,15 @@ def apply_action(project, action):
 
 async def callback(update, context):
     query = update.callback_query
-    await query.answer()
-    if not (query.data or '').startswith('mp:'):
+    raw = query.data or ''
+    if raw.startswith('ent:brief:mp:'):
+        action = raw.removeprefix('ent:brief:mp:')
+    elif raw.startswith('mp:'):
+        action = raw.removeprefix('mp:')
+    else:
         return
     try:
-        project = apply_action(load(context.user_data), (query.data or '').removeprefix('mp:'))
+        project = apply_action(load(context.user_data), action)
     except ValueError as error:
         await query.message.reply_text(str(error))
         return
@@ -81,7 +85,7 @@ async def callback(update, context):
     else:
         save(context.user_data, project)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=data)] for label, data in buttons(project)])
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + data)] for label, data in buttons(project)])
     await query.message.reply_text(prompt(project), reply_markup=keyboard)
 
 
