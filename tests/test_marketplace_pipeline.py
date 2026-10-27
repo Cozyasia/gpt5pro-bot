@@ -64,8 +64,8 @@ class MarketplacePipelineTests(unittest.TestCase):
 
     def test_duplicate_reservation_cannot_trigger_paid_generation(self):
         self.ledger.reserve.return_value = SimpleNamespace(id='reservation', newly_reserved=False)
-        with patch('neyrobot_prod.marketplace_pipeline.download_reference_images', new_callable=AsyncMock) as download, \\
-             patch('neyrobot_prod.marketplace_pipeline.generate_product_image') as provider:
+        with (patch('neyrobot_prod.marketplace_pipeline.download_reference_images', new_callable=AsyncMock) as download,
+              patch('neyrobot_prod.marketplace_pipeline.generate_product_image') as provider):
             download.return_value = ('ref',)
             with self.assertRaisesRegex(RuntimeError, 'уже существует'):
                 asyncio.run(generate_and_deliver(**self.kwargs))
