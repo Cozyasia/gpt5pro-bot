@@ -22,7 +22,7 @@ const catalog=[
 {id:'advert',icon:'📣',name:'Реклама товара',sub:'Сценарии и проморолики',role:'Маркетолог',tip:'Загрузи референсы и опиши товар.',route:'advert'}
 ];
 const app=document.getElementById('app');const tg=window.Telegram?.WebApp;try{tg?.ready();tg?.expand()}catch(e){}
-const config=window.NEYRO_STUDIO_CONFIG||{};const media=config.media||{};const mascot=document.getElementById('mascot');
+const config=Object.assign({navigationEnabled:true,botUsername:'progpt5_bot'},window.NEYRO_STUDIO_CONFIG||{});const media=config.media||{};const mascot=document.getElementById('mascot');
 if(typeof config.mascotUrl==='string' && /^https:\/\//.test(config.mascotUrl)){mascot.src=config.mascotUrl;mascot.hidden=false}
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n}
 function home(){app.replaceChildren();const hero=el('section','hero');hero.append(el('h1','', 'Твори. Исследуй. Решай.'),el('p','', 'Открой возможности Neyro-Bot — от медицины до AI-видео.'));app.append(hero);const grid=el('section','grid');catalog.forEach(c=>{const b=el('button','tile');b.type='button';b.append(el('span','emoji',c.icon),el('div','name',c.name),el('div','detail',c.sub));b.addEventListener('click',()=>show(c));grid.append(b)});app.append(grid)}
