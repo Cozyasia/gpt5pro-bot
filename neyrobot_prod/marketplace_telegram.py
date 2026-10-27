@@ -52,7 +52,7 @@ def prompt(project):
     if project.stage == Stage.BRIEF:
         return 'Опишите товар текстом или голосом. Подтвердите его характеристики.'
     if project.stage == Stage.REVIEW:
-        return ('Проверьте описание товара:\\n\\n' + project.brief +
+        return ('Проверьте описание товара:\n\n' + project.brief +
                 '\n\nФотографий: ' + str(len(project.reference_ids)) +
                 '\nПодтвердите характеристики или вернитесь для исправления.')
     return ('Характеристики подтверждены. Генерация и расчёт стоимости пока не подключены. '
