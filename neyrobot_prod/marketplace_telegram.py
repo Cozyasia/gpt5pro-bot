@@ -76,7 +76,10 @@ async def callback(update, context):
     except ValueError as error:
         await query.message.reply_text(str(error))
         return
-    save(context.user_data, project)
+    if (query.data or '') == 'mp:cancel':
+        context.user_data.pop(STATE_KEY, None)
+    else:
+        save(context.user_data, project)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=data)] for label, data in buttons(project)])
     await query.message.reply_text(prompt(project), reply_markup=keyboard)
@@ -129,3 +132,21 @@ async def receive_transcript(update, context, transcript):
     save(context.user_data, project)
     await update.message.reply_text(prompt(project))
     return True
+
+
+def start_project(user_data):
+    """Start a fresh product-card draft; explicit entrypoint for the host menu."""
+    project = ProductProject()
+    save(user_data, project)
+    return project
+
+
+def is_active(user_data, stage=None):
+    """Gate shared photo/text/voice handlers without stealing unrelated updates."""
+    if STATE_KEY not in user_data:
+        return False
+    return stage is None or load(user_data).stage == stage
+
+
+def clear_project(user_data):
+    user_data.pop(STATE_KEY, None)
