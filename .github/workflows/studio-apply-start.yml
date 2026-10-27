@@ -1,0 +1,31 @@
+name: Integrate Studio start into feature branch
+on:
+  push:
+    branches:
+      - feature/neyro-studio-menu-integration
+    paths:
+      - '.github/workflows/studio-apply-start.yml'
+jobs:
+  integrate:
+    if: github.repository == 'Cozyasia/gpt5pro-bot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify and integrate on feature branch only
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/neyro-studio-menu-integration"
+          python scripts/patch_studio_start.py main.py --output /tmp/main.studio.py
+          python -m py_compile /tmp/main.studio.py
+          cp /tmp/main.studio.py main.py
+          git diff --check
+          git add main.py
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Integrate Studio start route into active production-derived main'
+          git push origin HEAD:feature/neyro-studio-menu-integration
