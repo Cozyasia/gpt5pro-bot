@@ -26,11 +26,15 @@ async def handle_production_brief(update, context):
         await q.message.reply_text("Этот раздел пока недоступен.")
         return
     mode = (q.data or "").removeprefix("ent:brief:")
+    if mode.startswith("mp:"):
+        from neyrobot_prod.marketplace_telegram import callback
+        await callback(update, context)
+        return
     if mode == "product_ad":
         from neyrobot_prod.marketplace_telegram import start_project, prompt, buttons
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         project = start_project(context.user_data)
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=data)] for label, data in buttons(project)])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="ent:brief:" + data)] for label, data in buttons(project)])
         await q.message.reply_text(prompt(project), reply_markup=markup)
         return
     if mode not in BRIEFS:
