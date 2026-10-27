@@ -14,10 +14,11 @@ HOOK = "studio_start_markup(context.args)"
 def patch(source: str) -> str:
     tree = ast.parse(source)
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef) and node.name == "cmd_start"]
-    if len(functions) != 1:
-        raise ValueError("Expected exactly one cmd_start definition; found at lines: " + repr([node.lineno for node in functions]))
-    fn = functions[0]
     lines = source.splitlines(keepends=True)
+    functions = [node for node in functions if PAYMENT_ANCHOR in "".join(lines[node.lineno - 1:node.end_lineno])]
+    if len(functions) != 1:
+        raise ValueError("Expected exactly one payment-aware cmd_start; candidates: " + repr([node.lineno for node in functions]))
+    fn = functions[0]
     block = "".join(lines[fn.lineno - 1:fn.end_lineno])
     if HOOK in block:
         raise ValueError("Studio start hook already installed")
