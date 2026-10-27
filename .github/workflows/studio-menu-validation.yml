@@ -1,0 +1,27 @@
+name: Studio menu validation
+on:
+  pull_request:
+    paths:
+      - 'neyrobot_prod/studio_menu_*.py'
+      - 'web/studio_menu.html'
+      - 'scripts/patch_studio_*.py'
+      - 'tests/test_studio_*.py'
+      - 'tests/test_patch_studio_start.py'
+      - '.github/workflows/studio-menu-validation.yml'
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test navigation and patcher
+        run: python -m unittest discover -s tests -p 'test_studio_*.py' && python -m unittest discover -s tests -p 'test_patch_studio_start.py'
+      - name: Validate patch against checked-out main
+        run: |
+          python scripts/patch_studio_start.py main.py --output /tmp/main.studio.py
+          python -m py_compile /tmp/main.studio.py
