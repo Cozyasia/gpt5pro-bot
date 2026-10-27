@@ -30,6 +30,8 @@ async def generate_and_deliver(*, project, bot, chat_id: int, provider_client,
         quoted_credits=quoted_credits,
         quote_accepted=quote_accepted,
     )
+    if len(request.reference_file_ids) > 16:
+        raise ValueError('Для одной генерации выберите не более 16 основных фотографий товара.')
     if not isinstance(job_id, str) or not job_id.strip():
         raise ValueError('Для платной генерации необходим уникальный идентификатор задания.')
     references = await download_reference_images(bot, request)
