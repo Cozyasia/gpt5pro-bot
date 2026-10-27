@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import importlib
 import sys
 import types
 import unittest
@@ -12,6 +13,9 @@ from neyrobot_prod import selfie_storage_v205 as v205
 
 
 class SelfieStorageV205Tests(unittest.TestCase):
+    def setUp(self):
+        importlib.reload(v205)
+
     def test_storage_root_is_always_data(self):
         with mock.patch.object(v205, "_ensure_root", return_value=Path("/data/celebrity_selfie")):
             self.assertEqual(str(v205.storage_root(None)), "/data/celebrity_selfie")
