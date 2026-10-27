@@ -109,6 +109,9 @@ async def callback(update, context):
         context.user_data.pop('mp_album_last_photo_at', None)
     else:
         save(context.user_data, project)
+        if action == 'continue':
+            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at'):
+                context.user_data.pop(key, None)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + data)] for label, data in buttons(project)])
     await query.message.reply_text(prompt(project), reply_markup=keyboard)
