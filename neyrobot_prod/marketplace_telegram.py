@@ -53,8 +53,8 @@ def prompt(project):
         return 'Опишите товар текстом или голосом. Подтвердите его характеристики.'
     if project.stage == Stage.REVIEW:
         return ('Проверьте описание товара:\\n\\n' + project.brief +
-                '\\n\\nФотографий: ' + str(len(project.reference_ids)) +
-                '\\nПодтвердите характеристики или вернитесь для исправления.')
+                '\n\nФотографий: ' + str(len(project.reference_ids)) +
+                '\nПодтвердите характеристики или вернитесь для исправления.')
     return ('Характеристики подтверждены. Генерация и расчёт стоимости пока не подключены. '
             'Кредиты не списываются.')
 
@@ -118,7 +118,7 @@ async def receive_photo(update, context):
         return True
     save(context.user_data, project)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=action)] for label, action in buttons(project)])
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + action)] for label, action in buttons(project)])
     await update.message.reply_text(prompt(project), reply_markup=markup)
     return True
 
