@@ -298,7 +298,7 @@ async def generate_callback(update, context, project):
         async with lock:
             from .marketplace_pipeline import generate_and_deliver
             job_id = context.user_data.setdefault('mp_generation_job_id', uuid.uuid4().hex)
-            await message.reply_text(f'Генерация началась. Стоимость: ${amount / 100:.2f} USD.')
+            await message.reply_text(f'Запрос принят. Максимальная стоимость: ${amount / 100:.2f} USD. Начинаю обработку.')
             await generate_and_deliver(
                 project=project, bot=context.bot, chat_id=update.effective_chat.id,
                 provider_client=provider, credit_ledger=ledger,
