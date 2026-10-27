@@ -62,8 +62,13 @@ class SQLiteUSDWalletLedger:
             if row is None or int(round(float(row[0] or 0) * 100)) < amount:
                 con.rollback()
                 return None
-            con.execute("UPDATE wallet SET usd=ROUND(usd - ?, 2) WHERE user_id=?",
-                        (amount / 100, user_id))
+            changed = con.execute(
+                "UPDATE wallet SET usd=ROUND(usd - ?, 2) WHERE user_id=? AND usd >= ?",
+                (amount / 100, user_id, amount / 100),
+            )
+            if changed.rowcount != 1:
+                con.rollback()
+                return None
             con.execute(
                 "INSERT INTO marketplace_reservations VALUES (?,?,?,'reserved')",
                 (idempotency_key, user_id, amount),
