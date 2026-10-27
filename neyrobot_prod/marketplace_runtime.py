@@ -24,7 +24,7 @@ def configure_marketplace_runtime(bot_data, *, ledger=None, quote_service=None):
         raise TypeError("Marketplace quote service must be callable")
     if not all(callable(getattr(ledger, method, None)) for method in ("reserve", "commit", "release")):
         raise TypeError("Marketplace ledger must implement reserve, commit and release")
-    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    # Do not accept an arbitrary object as the production billing ledger.\n    # The host must initialize and validate the wallet schema before injection.\n    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is required for marketplace image generation")
     client = OpenAI(api_key=api_key, timeout=120, max_retries=0)
