@@ -20080,6 +20080,32 @@ def build_application() -> "Application":
 
     app.add_handler(MessageHandler(filters.PHOTO, _mp_photo_priority), group=-3)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _mp_text_priority), group=-3)
+    async def _mp_voice_priority(update, context):
+        from neyrobot_prod.marketplace_telegram import is_active, receive_transcript
+        from neyrobot_prod.marketplace_studio import Stage
+        if not is_active(context.user_data, Stage.BRIEF):
+            return
+        message = update.effective_message
+        media = getattr(message, "voice", None) or getattr(message, "audio", None)
+        if not media:
+            return
+        try:
+            tg_file = await context.bot.get_file(media.file_id)
+            audio_bytes = BytesIO()
+            await tg_file.download_to_memory(out=audio_bytes)
+            mime = (getattr(media, "mime_type", "") or "").lower()
+            filename = getattr(media, "file_name", None) or ("voice.ogg" if not mime else "voice." + ("mp3" if "mpeg" in mime else "ogg"))
+            transcript = await _stt_transcribe_bytes(filename, audio_bytes.getvalue())
+            if not transcript:
+                await message.reply_text("Не удалось распознать речь. Повторите голосовое или отправьте описание текстом.")
+            else:
+                await receive_transcript(update, context, transcript)
+        except Exception:
+            log.exception("Marketplace voice transcription failed")
+            await message.reply_text("Ошибка распознавания. Попробуйте ещё раз или пришлите текст.")
+        raise ApplicationHandlerStop()
+
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, _mp_voice_priority), group=-3)
 
     # Голос/аудио — относим к медиагруппе (идёт раньше общего текстового хендлера)
     voice_fn = _pick_first_defined("handle_voice", "on_voice", "voice_handler")
