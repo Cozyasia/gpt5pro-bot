@@ -125,7 +125,7 @@ async def callback(update, context):
             await query.message.reply_text('Предпросмотр задания для генератора (без запуска и списания):\\n\\n' + preview)
         return
     if action not in ('preview', 'quote'):
-        context.user_data.pop('mp_quoted_credits', None)
+        context.user_data.pop('mp_quoted_usd_cents', None)
     if action == 'cancel':
         context.user_data.pop(STATE_KEY, None)
         context.user_data.pop('mp_last_album_id', None)
@@ -134,7 +134,7 @@ async def callback(update, context):
     else:
         save(context.user_data, project)
         if action == 'continue':
-            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at'):
+            for key in ('mp_last_album_id', 'mp_album_status_message', 'mp_album_last_photo_at', 'mp_quoted_usd_cents'):
                 context.user_data.pop(key, None)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data='ent:brief:' + data)] for label, data in buttons(project)])
@@ -248,11 +248,11 @@ async def quote_callback(update, context, project):
             return
         quote = await quote_service(request=request, user_id=update.effective_user.id)
         if not isinstance(quote, int) or isinstance(quote, bool) or quote <= 0:
-            raise ValueError('Сервис стоимости не вернул действительную цену.')
-        context.user_data['mp_quoted_credits'] = quote
+            raise ValueError('Сервис стоимости не вернул действительную цену в центах USD.')
+        context.user_data['mp_quoted_usd_cents'] = quote
         await update.callback_query.message.reply_text(
-            f'Стоимость одной генерации: {quote} кредитов. '
-            'Платная генерация пока отключена; кредиты не списаны.'
+            f'Стоимость одной генерации: ${quote / 100:.2f} USD. '
+            'Платная генерация пока отключена; средства не списаны.'
         )
     except (ValueError, RuntimeError) as error:
         await update.callback_query.message.reply_text(str(error))
