@@ -28,6 +28,10 @@ class SQLiteUSDWalletLedger:
 
     def initialize(self):
         with self._connect() as con:
+            schema = con.execute("PRAGMA table_info(wallet)").fetchall()
+            columns = {row[1] for row in schema}
+            if not {'user_id', 'usd'}.issubset(columns):
+                raise RuntimeError('Wallet schema mismatch: expected wallet(user_id, usd). Paid generation remains disabled.')
             con.execute("""CREATE TABLE IF NOT EXISTS marketplace_reservations (
                 idempotency_key TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -49,6 +53,8 @@ class SQLiteUSDWalletLedger:
             ).fetchone()
             if existing is not None:
                 con.rollback()
+                if existing != (user_id, amount):
+                    raise RuntimeError('Idempotency key collision: user or amount mismatch')
                 return Reservation(idempotency_key, existing[0], existing[1], False)
             # The existing wallet stores USD as REAL. Round-trip to cents and
             # update in one SQLite write transaction.
