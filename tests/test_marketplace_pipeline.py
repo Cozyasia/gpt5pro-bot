@@ -54,6 +54,14 @@ class MarketplacePipelineTests(unittest.TestCase):
                 asyncio.run(generate_and_deliver(**self.kwargs))
         self.ledger.release.assert_not_awaited()
 
+    def test_too_many_references_rejected_before_credit_reservation(self):
+        from dataclasses import replace
+        self.kwargs['project'] = replace(self.project, reference_ids=tuple(f'ref{i}' for i in range(17)))
+        with self.assertRaisesRegex(ValueError, '16'):
+            asyncio.run(generate_and_deliver(**self.kwargs))
+        self.ledger.reserve.assert_not_awaited()
+        self.bot.get_file.assert_not_awaited()
+
     def test_duplicate_reservation_cannot_trigger_paid_generation(self):
         self.ledger.reserve.return_value = SimpleNamespace(id='reservation', newly_reserved=False)
         with patch('neyrobot_prod.marketplace_pipeline.download_reference_images', new_callable=AsyncMock) as download, \\
