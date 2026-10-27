@@ -21,21 +21,21 @@ class QuoteTests(unittest.TestCase):
 
     def test_missing_pricing_service_is_fail_closed(self):
         asyncio.run(quote_callback(self.update, self.context, self.project))
-        self.assertNotIn('mp_quoted_credits', self.context.user_data)
+        self.assertNotIn('mp_quoted_usd_cents', self.context.user_data)
         self.assertIn('недоступен', self.reply.await_args.args[0])
 
     def test_valid_quote_is_saved_without_charge(self):
         service = AsyncMock(return_value=7)
         self.context.bot_data['marketplace_quote_service'] = service
         asyncio.run(quote_callback(self.update, self.context, self.project))
-        self.assertEqual(self.context.user_data['mp_quoted_credits'], 7)
+        self.assertEqual(self.context.user_data['mp_quoted_usd_cents'], 7)
         service.assert_awaited_once()
-        self.assertIn('7 кредитов', self.reply.await_args.args[0])
+        self.assertIn('$0.07 USD', self.reply.await_args.args[0])
 
     def test_invalid_quote_does_not_save(self):
         self.context.bot_data['marketplace_quote_service'] = AsyncMock(return_value=True)
         asyncio.run(quote_callback(self.update, self.context, self.project))
-        self.assertNotIn('mp_quoted_credits', self.context.user_data)
+        self.assertNotIn('mp_quoted_usd_cents', self.context.user_data)
 
     def test_more_than_sixteen_images_does_not_call_pricing(self):
         from dataclasses import replace
