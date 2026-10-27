@@ -16,7 +16,12 @@ def patch(source: str) -> str:
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef) and node.name == "cmd_start"]
     lines = source.splitlines(keepends=True)
     functions = [node for node in functions if PAYMENT_ANCHOR in "".join(lines[node.lineno - 1:node.end_lineno])]
-    # Python resolves duplicate definitions to the last binding in module execution order.\n    # Require that the final candidate contains the current duplicate-update guard.\n    guarded = [node for node in functions if "_claim_start_update(update)" in "".join(lines[node.lineno - 1:node.end_lineno])]\n    if len(guarded) != 1 or guarded[0] is not functions[-1]:\n        raise ValueError("Expected final payment-aware cmd_start with update guard; candidates: " + repr([node.lineno for node in functions]))\n    fn = guarded[0]
+    # Python resolves duplicate definitions to the last binding in module execution order.
+    # Require that the final candidate contains the current duplicate-update guard.
+    guarded = [node for node in functions if "_claim_start_update(update)" in "".join(lines[node.lineno - 1:node.end_lineno])]
+    if len(guarded) != 1 or guarded[0] is not functions[-1]:
+        raise ValueError("Expected final payment-aware cmd_start with update guard; candidates: " + repr([node.lineno for node in functions]))
+    fn = guarded[0]
     block = "".join(lines[fn.lineno - 1:fn.end_lineno])
     if HOOK in block:
         raise ValueError("Studio start hook already installed")
