@@ -84,8 +84,8 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .hero .eyebrow,.hero h1,.hero p{grid-column:1}
 @media(max-width:390px){.hero{grid-template-columns:1fr 38%}.hero h1{font-size:24px}.hero p{font-size:12px}.tile{min-height:208px}.tile .name{font-size:14px}}
 .tile{transition:transform .16s ease,box-shadow .16s ease}.tile:active{transform:scale(.985)}.chip:active,.nav-item:active{transform:scale(.97)}.tile .mini-character{min-height:123px}.tile .mini-character svg{flex:none}.hero-art{min-width:0}.bottom-nav{padding-bottom:max(9px,env(safe-area-inset-bottom,0px))}@media(prefers-reduced-motion:reduce){.tile,.chip,.nav-item{transition:none}}
-/* Exact approved Neyro-Bot montage sprite, activated once the binary asset is published. */
-.tile .mini-character.has-art{background-image:url('./neyro-cards.png');background-repeat:no-repeat;background-size:400% 200%;background-color:#eaf5ff}
+/* Exact approved Neyro-Bot montage, loaded from the GitHub source asset. */
+.tile .mini-character.has-art{background-image:url('https://raw.githubusercontent.com/Cozyasia/gpt5pro-bot/studio-static-menu/web/neyro-cards.png');background-repeat:no-repeat;background-size:400% 200%;background-color:#eaf5ff}
 .tile .mini-character.has-art svg,.tile .mini-character.has-art .role-prop{display:none}
 .tile .mini-character.has-art[data-art="market"]{background-position:0% 0%}
 .tile .mini-character.has-art[data-art="realty"]{background-position:33.333% 0%}
@@ -124,7 +124,7 @@ const config=Object.assign({navigationEnabled:true,botUsername:'progpt5_bot'},wi
 if(typeof config.mascotUrl==='string' && /^https:\/\//.test(config.mascotUrl)){mascot.src=config.mascotUrl;mascot.hidden=false;document.getElementById('mascotFallback').hidden=true}
 const robotMarkup=document.getElementById('mascotFallback').innerHTML;
 const approvedArtIds=new Set(['market','realty','advert','medicine','music','photo','video','work']);
-const artProbe=new Image();artProbe.onload=()=>{if(artProbe.naturalWidth<400)return;document.querySelectorAll('.mini-character[data-art]').forEach(node=>{if(approvedArtIds.has(node.dataset.art))node.classList.add('has-art')})};artProbe.src='./neyro-cards.png';
+const artProbe=new Image();artProbe.referrerPolicy='no-referrer';artProbe.onload=()=>{if(artProbe.naturalWidth<400)return;document.querySelectorAll('.mini-character[data-art]').forEach(node=>{if(approvedArtIds.has(node.dataset.art))node.classList.add('has-art')})};artProbe.src='https://raw.githubusercontent.com/Cozyasia/gpt5pro-bot/studio-static-menu/web/neyro-cards.png';
 const roleProps={medicine:'🩺',video:'🎬',market:'🛍️',celebrity:'⭐',realty:'🏡',photo:'📸',music:'🎧',study:'📚',work:'💼',assistant:'💡',advert:'📣'};
 const roleDecor={medicine:'✚',video:'▶',market:'◆',celebrity:'★',realty:'⌂',photo:'✦',music:'♫',study:'✎',work:'▣',assistant:'✧',advert:'◈'};
 function makeCharacter(id,small=false){const stage=el('div',small?'mini-character':'character-stage');stage.dataset.role=roleDecor[id]||'✦';stage.dataset.art=id;const svg=el('div','');svg.innerHTML=robotMarkup;const art=svg.firstElementChild;if(art){art.setAttribute('aria-label','Нейро-Ботик — '+(catalog.find(x=>x.id===id)?.role||'ассистент'));stage.append(art)}stage.append(el('span','role-prop',roleProps[id]||'✨'));if(small&&approvedArtIds.has(id)&&artProbe.complete&&artProbe.naturalWidth>=400)stage.classList.add('has-art');if(!small)stage.append(el('span','role-badge',(roleDecor[id]||'✦')+' '+(catalog.find(x=>x.id===id)?.role||'AI')));return stage}
