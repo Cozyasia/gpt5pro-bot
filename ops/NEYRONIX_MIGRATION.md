@@ -22,3 +22,9 @@ Source: Cozyasia/gpt5pro-bot main. Target: @neyronixbot. Do not replace the prod
 - No separate staging service yet; cannot safely test webhook or API.
 - Production persistent disk cannot be assumed safely shareable.
 - Domain neyronix.ai is not purchased or configured.
+
+## Verified follow-up — 2026-10-28 19:08 UTC
+- Production deploy `dep-dbh3lh61egvs739cghag` is live.
+- Render Web Shell showed `DB_PATH=/data/subs.db`, 29 tables, `PRAGMA integrity_check=ok`, and active process PID 26 with open `/data/subs.db`, `-wal`, `-shm` file descriptors.
+- SQLite online backup `/data/neyronix-backups/pre-neyronix-20261028T190839Z.sqlite3` created successfully; integrity `ok`, 29 tables. Counts: `ai_chats=1`, `ai_chat_active=1`, `production_events=2`, `processed_telegram_events=5`, `processed_start_messages=4`.
+- Existing backup is on the same persistent disk: export an off-host encrypted copy before destructive operations. No token switch or production redeploy authorized by this verification.
