@@ -4,6 +4,11 @@ set -eu
 : "${MT_API_ID:?MT_API_ID is required}"
 : "${MT_API_HASH:?MT_API_HASH is required}"
 : "${PUBLIC_URL:?PUBLIC_URL is required}"
+if [ "${NEYRONIX_STAGING:-0}" = "1" ]; then
+  unset TELEGRAM_LOCAL_API_URL
+  echo "NEYRONIX staging: Telegram cloud API"
+  exec python -u main.py
+fi
 export TELEGRAM_LOCAL_API_URL=http://127.0.0.1:8081
 # Complete the cloud-to-local migration once. The cloud Bot API must be
 # logged out or it can deliver duplicate updates alongside the local server.
