@@ -376,6 +376,10 @@ def patch_runtime(mod: Any) -> bool:
         chat_id: int | None = None,
         extra_system: str = "",
     ) -> str:
+        configured_provider = os.environ.get("TEXT_PROVIDER", "").strip().lower()
+        if configured_provider and configured_provider not in {"openai", "official"}:
+            return await original_text(user_text, web_ctx, user_id, chat_id, extra_system)
+
         value = _clean(user_text, 32000)
         if not value:
             return "Пустой запрос."
