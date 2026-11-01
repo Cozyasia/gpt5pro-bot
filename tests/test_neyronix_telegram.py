@@ -236,3 +236,26 @@ def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):
     assert "asyncio.create_task(" in neyronix_branch
     assert "app.create_task(" in neyronix_branch
     assert "        return\n" in neyronix_branch
+
+
+def test_cryptobot_secret_patch_applies_and_docker_runs_it(tmp_path):
+    patch_path = ROOT / "ops" / "main_cryptobot_secret.patch"
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert patch_path.is_file()
+    assert "main_cryptobot_secret.patch" in dockerfile
+
+    target = tmp_path / "repo"
+    target.mkdir()
+    shutil.copy2(ROOT / "main.py", target / "main.py")
+    result = subprocess.run(
+        ["patch", "--batch", "--forward", "-p1", "-i", str(patch_path)],
+        cwd=target,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    patched = (target / "main.py").read_text(encoding="utf-8")
+    ast.parse(patched)
+    assert '"/etc/secrets/cryptobot.env"' in patched
+    assert patched.count('CRYPTO_PAY_API_TOKEN = _crypto_secret_value("CRYPTO_PAY_API_TOKEN")') == 2
+    assert 'CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()' not in patched
