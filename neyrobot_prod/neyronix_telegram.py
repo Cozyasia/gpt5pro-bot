@@ -53,7 +53,13 @@ def provider_configuration_status(environ: Mapping[str, str]) -> dict[str, bool]
         "heygen": all(has(name) for name in (
             "HEYGEN_API_KEY", "HEYGEN_AVATAR_ID", "HEYGEN_VOICE_ID",
         )),
-        "yookassa": has("YOOKASSA_PROVIDER_TOKEN", "PROVIDER_TOKEN_YOOKASSA"),
+        "yookassa": (
+            has("YOOKASSA_PROVIDER_TOKEN", "PROVIDER_TOKEN_YOOKASSA")
+            or (
+                has("YOO_SHOP_ID", "YOOKASSA_SHOP_ID", "YK_ID", "PAY_ID")
+                and has("YOO_SECRET_KEY", "YOOKASSA_SECRET_KEY", "YK_KEY", "PAY_KEY")
+            )
+        ),
         "cryptobot": has("CRYPTO_PAY_API_TOKEN"),
     }
 
