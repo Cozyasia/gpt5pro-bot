@@ -68,6 +68,17 @@ def test_provider_configuration_status_is_boolean_only_and_alias_aware():
     assert "secret" not in json.dumps(status)
 
 
+def test_provider_configuration_status_accepts_complete_direct_yookassa_credentials_only():
+    from neyrobot_prod.neyronix_telegram import provider_configuration_status
+
+    assert provider_configuration_status({
+        "YK_ID": "shop-id",
+        "YK_KEY": "shop-secret",
+    })["yookassa"] is True
+    assert provider_configuration_status({"YK_ID": "shop-id"})["yookassa"] is False
+    assert provider_configuration_status({"YK_KEY": "shop-secret"})["yookassa"] is False
+
+
 class FakeBot:
     def __init__(self):
         self.calls = []
