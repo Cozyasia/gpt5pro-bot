@@ -17,7 +17,7 @@ def _keyboard(buttons):
 
 async def cmd_studio_prompts(update, context):
     await update.effective_message.reply_text(
-        "🎬 Библиотека промптов GPT5 Studio AI\nВыберите категорию:",
+        "🎬 Библиотека промптов NEYRONIX\nВыберите категорию:",
         reply_markup=_keyboard(category_buttons()),
     )
 

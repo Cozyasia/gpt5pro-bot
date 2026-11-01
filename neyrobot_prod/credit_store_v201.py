@@ -220,7 +220,7 @@ async def _create_telegram_invoice(mod: Any, update: Any, context: Any, pack: Cr
     await context.bot.send_invoice(
         chat_id=update.effective_chat.id,
         title=f"{_fmt_int(pack.credits)} кредитов",
-        description=f"Пополнение баланса Neyro-Bot на {_fmt_int(pack.credits)} кредитов.",
+        description=f"Пополнение баланса NEYRONIX на {_fmt_int(pack.credits)} кредитов.",
         payload=f"topup:{pack.credits}:{pack.rub}",
         provider_token=token,
         currency="RUB",
@@ -286,7 +286,7 @@ async def _create_crypto(mod: Any, update: Any, context: Any, pack: CreditPack) 
     body = {
         "asset": str(getattr(mod, "CRYPTO_ASSET", "USDT") or "USDT"),
         "amount": f"{amount:.2f}",
-        "description": f"{pack.credits} Neyro-Bot credits",
+        "description": f"{pack.credits} NEYRONIX credits",
         "payload": payload,
         "allow_comments": False,
         "allow_anonymous": True,

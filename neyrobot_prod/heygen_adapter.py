@@ -44,7 +44,7 @@ async def create_presenter_video(
     voice_id: str,
     script: str,
     *,
-    title: str = "Neyro-Bot Studio",
+    title: str = "NEYRONIX Studio",
     idempotency_key: str | None = None,
 ) -> str:
     if not all((api_key, avatar_id, voice_id, script.strip())):

@@ -879,14 +879,14 @@ TARIFF_URL = _make_tariff_url("subscribe")
 AUTO_SET_BOT_PROFILE = os.environ.get("AUTO_SET_BOT_PROFILE", "1").strip().lower() not in ("0", "false", "no", "off")
 AUTO_SET_BOT_MENU = os.environ.get("AUTO_SET_BOT_MENU", "1").strip().lower() not in ("0", "false", "no", "off")
 BOT_MENU_TEXT = os.environ.get("BOT_MENU_TEXT", "Меню ботов").strip()[:64] or "Меню ботов"
-BOT_PUBLIC_NAME = os.environ.get("BOT_PUBLIC_NAME", "Neyro-Bot GPT 5 Studio").strip()[:64]
+BOT_PUBLIC_NAME = os.environ.get("BOT_PUBLIC_NAME", "NEYRONIX").strip()[:64]
 BOT_SHORT_DESCRIPTION = os.environ.get(
     "BOT_SHORT_DESCRIPTION",
     'GPT-5, Sora 2, Kling, Runway, Midjourney, Suno: текст, фото, видео, музыка, аватар, Reels/Shorts в одном AI-боте.'
 ).strip()[:120]
 BOT_DESCRIPTION = os.environ.get(
     "BOT_DESCRIPTION",
-    'Neyro-Bot GPT 5 Studio — мультимодельная AI-студия в Telegram. GPT-чат, PDF/DOCX, фото и скриншоты, анализ документов, озвучка и распознавание речи, генерация изображений, логотипы, Midjourney-стиль, удаление/замена фона, замена лица, оживление фото, говорящий аватар, клип с вокалом для 1 человека, видео по тексту/голосу, Reels/Shorts, мини-фильмы, Sora 2, Kling, Runway, Suno-музыка. Выберите режим или просто напишите задачу.'
+    'NEYRONIX — мультимодельная AI-студия в Telegram. GPT-чат, PDF/DOCX, фото и скриншоты, анализ документов, озвучка и распознавание речи, генерация изображений, логотипы, Midjourney-стиль, удаление/замена фона, замена лица, оживление фото, говорящий аватар, клип с вокалом для 1 человека, видео по тексту/голосу, Reels/Shorts, мини-фильмы, Sora 2, Kling, Runway, Suno-музыка. Выберите режим или просто напишите задачу.'
 ).strip()[:512]
 
 # ── OpenAI clients ──
@@ -1371,7 +1371,7 @@ async def openai_live_web_search(user_text: str) -> str | None:
     if not api_key or api_key.startswith("sk-or-") or not LIVE_SEARCH_ENABLED:
         return None
     system_text = (
-        "Ты live-поисковый помощник внутри Telegram-бота Neyro-Bot GPT 5 Studio. "
+        "Ты live-поисковый помощник внутри Telegram-бота NEYRONIX. "
         + _current_date_system_text() + " "
         "Отвечай по-русски, кратко и по делу. Если вопрос требует свежих данных, используй веб-поиск. "
         "Для запросов со словом «сегодня» принимай только материалы, которые явно относятся к текущей дате. "
@@ -2357,7 +2357,7 @@ def _register_engine_spend(user_id: int, engine: str, usd: float):
 
 # ───────── Prompts ─────────
 SYSTEM_PROMPT = (
-    "Ты — Neyro-Bot GPT 5 Studio внутри Telegram. Отвечай на русском, по сути и без лишней воды. "
+    "Ты — NEYRONIX внутри Telegram. Отвечай на русском, по сути и без лишней воды. "
     "Ты не обычный изолированный GPT-чат: ты знаешь функции этого бота и должен отвечать с учётом доступных режимов. "
     "Доступные возможности бота: GPT-чат и логика, работа с PDF/DOCX/EPUB/FB2/TXT, анализ фото и скриншотов, "
     "режимы Учёба, Работа/Бизнес, Развлечения, Медицина, Движки, OpenAI Images, Midjourney, Runway, Sora 2, Kling, Suno, "
@@ -3587,7 +3587,7 @@ async def _start_image_retouch(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # ───────── UI / тексты ─────────
 START_TEXT = (
-    "👋 Привет! Я *Neyro-Bot GPT 5 Studio* — мультимодельная AI-студия в Telegram для текста, документов, фото, видео, музыки, речи и live-поиска.\n"
+    "👋 Привет! Я *NEYRONIX* — мультимодельная AI-студия в Telegram для текста, документов, фото, видео, музыки, речи и live-поиска.\n"
     "Работаю в продакшн-режимах: сам подбираю подходящий движок под задачу или даю выбрать его вручную через «🧠 Движки».\n"
     "\n"
     "🚀 *Что умею:*\n"
@@ -5953,7 +5953,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Keep the welcome animation, text and keyboard in one Telegram message.
     # Telegram captions are limited, so use a compact start caption here.
     start_caption = (
-        "👋 Привет! Я Neyro-Bot GPT 5 Studio — мультимодельная AI-студия в Telegram "
+        "👋 Привет! Я NEYRONIX — мультимодельная AI-студия в Telegram "
         "для текста, документов, фото, видео, музыки, речи и live-поиска.\n\n"
         "🚀 Что умею:\n"
         "🎓 Учёба и работа с PDF/DOCX\n"
@@ -6287,7 +6287,7 @@ def capability_answer(text: str) -> str | None:
 
     if _is_general_capability_query(tl):
         return (
-            "Да. Я — Neyro-Bot GPT 5 Studio, мультимодельная AI-студия в Telegram для текста, документов, фото, видео, музыки, речи и live-данных.\n\n"
+            "Да. Я — NEYRONIX, мультимодельная AI-студия в Telegram для текста, документов, фото, видео, музыки, речи и live-данных.\n\n"
             "Основные режимы:\n"
             "• 🎓 Учёба — объяснение тем, задачи, конспекты из PDF/EPUB/DOCX, эссе и планы к экзамену.\n"
             "• 💼 Работа/Бизнес — письма, КП, документы, аналитика, презентации, PDF-каталоги, логотипы, ToDo, брифы и ретушь бизнес-фото.\n"
@@ -6748,7 +6748,7 @@ def _plan_card_text(key: str) -> str:
 def _plans_overview_text(user_id: int) -> str:
     parts = [
         "⭐ Подписка и тарифы",
-        "Все тарифы открывают доступ к AI-функциям Neyro-Bot GPT 5 Studio. 1 кредит = 1 ₽. Цены генераций уже включают маржу сервиса; кредиты окончательно списываются только после успешной выдачи результата. Чем выше тариф — тем больше кредитов, выше GPT-лимиты и быстрее очередь.",
+        "Все тарифы открывают доступ к AI-функциям NEYRONIX. 1 кредит = 1 ₽. Цены генераций уже включают маржу сервиса; кредиты окончательно списываются только после успешной выдачи результата. Чем выше тариф — тем больше кредитов, выше GPT-лимиты и быстрее очередь.",
         _sub_info_text(user_id),
         "— — —",
         _plan_card_text("start"),
@@ -7324,7 +7324,7 @@ async def _generate_business_presentation(update: Update, context: ContextTypes.
         title = (brief or "Презентация")[:80]
         slide = prs.slides.add_slide(prs.slide_layouts[0])
         slide.shapes.title.text = title
-        slide.placeholders[1].text = "Черновик создан Neyro-Bot GPT 5 Studio"
+        slide.placeholders[1].text = "Черновик создан NEYRONIX"
         chunks = re.split(r"\n(?=\s*(?:Слайд\s*\d+|\d+[\).]|#{1,3}\s+))", reply)
         slide_count = 0
         for ch in chunks:
@@ -14028,7 +14028,7 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await _send_invoice_rub(
                 f"{credits} кредитов",
-                f"Пополнение баланса Neyro-Bot: {credits} кредитов.",
+                f"Пополнение баланса NEYRONIX: {credits} кредитов.",
                 amount_rub,
                 f"topup:{credits}:{amount_rub}",
                 update,
@@ -14372,7 +14372,7 @@ def _install_webapp_checkout_bridge(application):
     class RootBridgeHandler(tornado.web.RequestHandler):
         async def get(self):
             self.set_header("Content-Type", "application/json; charset=utf-8")
-            self.finish(json.dumps({"ok": True, "service": "Neyro-Bot", "version": PATCH_VERSION}, ensure_ascii=False))
+            self.finish(json.dumps({"ok": True, "service": "NEYRONIX", "version": PATCH_VERSION}, ensure_ascii=False))
 
         async def head(self):
             self.set_status(204)
@@ -14489,7 +14489,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             credits, amount_rub = resolved
             ok = await _send_invoice_rub(
                 f"{credits} кредитов",
-                f"Пополнение баланса Neyro-Bot: {credits} кредитов.",
+                f"Пополнение баланса NEYRONIX: {credits} кредитов.",
                 amount_rub,
                 f"topup:{credits}:{amount_rub}",
                 update,
@@ -19660,7 +19660,7 @@ async def openai_live_web_search(user_text: str) -> str | None:
         _LIVE_SEARCH_LAST_STATUS["openai"] = {"state": "disabled", "detail": "LIVE_SEARCH_ENABLED=0"}
         return None
     system_text = (
-        "Ты live-поисковый помощник внутри Telegram-бота Neyro-Bot GPT 5 Studio. "
+        "Ты live-поисковый помощник внутри Telegram-бота NEYRONIX. "
         + _current_date_system_text() + " "
         "Отвечай по-русски, кратко и по делу. Используй веб-поиск для свежих данных. "
         "Не называй старые события сегодняшними. В конце дай источники."

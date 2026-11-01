@@ -30,11 +30,11 @@ services:
   - key: AUTO_SET_BOT_PROFILE
     value: '1'
   - key: BOT_PUBLIC_NAME
-    value: Neyro-Bot GPT 5 Studio
+    value: NEYRONIX
   - key: BOT_SHORT_DESCRIPTION
     value: 'Мультимодельный нейро-бот: GPT, Images, Runway, Sora 2, Kling, Suno, Deepgram, Photoroom, FaceSwap — в одном Telegram.'
   - key: BOT_DESCRIPTION
-    value: Neyro-Bot GPT 5 Studio — мультимодельный ИИ-бот для учёбы, работы, медицины и контента. Умеет GPT-чат, PDF/DOCX, фото,
+    value: NEYRONIX — мультимодельный ИИ-бот для учёбы, работы, медицины и контента. Умеет GPT-чат, PDF/DOCX, фото,
       речь, изображения, говорящий аватар, фото→видеоклип с музыкой, клип с вокалом для 1 человека, видео по тексту/голосу,
       Suno, презентации, PDF-каталоги, логотипы, фон и FaceSwap.
   - key: PUBLIC_URL
@@ -64,7 +64,7 @@ services:
   - key: OPENROUTER_SITE_URL
     sync: false
   - key: OPENROUTER_APP_NAME
-    value: Neyro-Bot GPT 5 Studio
+    value: NEYRONIX
   - key: LIVE_SEARCH_ENABLED
     value: '1'
   - key: LIVE_SEARCH_TIMEOUT_S

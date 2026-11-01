@@ -16,7 +16,7 @@ index b4cd0e5..b0df2cb 100644
      # Telegram captions are limited, so use a compact start caption here.
 +    public_brand = "NEYRONIX" if NEYRONIX_MODE else BOT_PUBLIC_NAME
      start_caption = (
--        "👋 Привет! Я Neyro-Bot GPT 5 Studio — мультимодельная AI-студия в Telegram "
+-        "👋 Привет! Я NEYRONIX — мультимодельная AI-студия в Telegram "
 +        f"👋 Привет! Я {public_brand} — мультимодельная AI-студия в Telegram "
          "для текста, документов, фото, видео, музыки, речи и live-поиска.\n\n"
          "🚀 Что умею:\n"
