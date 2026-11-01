@@ -166,6 +166,37 @@ def test_configure_shell_is_idempotent_and_does_not_repeat_profile_mutations():
     assert not [name for name, _ in bot.calls if name.startswith("set_")]
 
 
+def test_configure_shell_waits_for_eventually_consistent_menu_readback():
+    from neyrobot_prod.neyronix_telegram import configure_shell
+
+    class EventuallyConsistentBot(FakeBot):
+        def __init__(self):
+            super().__init__()
+            self.stale_reads = 0
+            self.pending_menu = None
+
+        async def set_chat_menu_button(self, **kwargs):
+            self.pending_menu = kwargs["menu_button"]
+            self.stale_reads = 2
+            self.calls.append(("set_chat_menu_button", kwargs))
+
+        async def get_chat_menu_button(self):
+            if self.pending_menu is not None and self.stale_reads:
+                self.stale_reads -= 1
+                return self.menu
+            if self.pending_menu is not None:
+                self.menu = self.pending_menu
+                self.pending_menu = None
+            return self.menu
+
+    bot = EventuallyConsistentBot()
+    snapshot = asyncio.run(
+        configure_shell(bot, menu_url="https://neyro-studio-ui.onrender.com/")
+    )
+    assert snapshot["menu_url"] == "https://neyro-studio-ui.onrender.com/"
+    assert [name for name, _ in bot.calls].count("set_chat_menu_button") == 1
+
+
 def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):
     patch_path = ROOT / "ops" / "main_neyronix.patch"
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")

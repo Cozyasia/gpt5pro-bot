@@ -5,6 +5,7 @@ provider keys and raw Telegram responses must never be logged by callers.
 """
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from urllib.parse import urlsplit
 
@@ -141,7 +142,16 @@ async def configure_shell(
                 web_app=WebAppInfo(url=safe_menu_url),
             )
         )
-        menu = await bot.get_chat_menu_button()
+        # Telegram's default menu is eventually consistent across Bot API
+        # replicas. Re-read briefly, but keep the final check fail-closed.
+        for delay_s in (0.0, 0.25, 0.5, 1.0, 2.0):
+            if delay_s:
+                await asyncio.sleep(delay_s)
+            menu = await bot.get_chat_menu_button()
+            observed_url = getattr(getattr(menu, "web_app", None), "url", "") or ""
+            observed_text = getattr(menu, "text", "") or ""
+            if observed_url == safe_menu_url and observed_text == MENU_BUTTON_TEXT:
+                break
 
     webhook = await bot.get_webhook_info()
     actual_menu_url = getattr(getattr(menu, "web_app", None), "url", "") or ""
