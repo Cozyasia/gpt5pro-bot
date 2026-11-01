@@ -58,6 +58,25 @@ class SelfieStorageV205Tests(unittest.TestCase):
             else:
                 sys.modules.pop("neyrobot_prod.celebrity_selfie", None)
 
+    def test_patch_iterates_over_a_stable_character_snapshot(self):
+        class MutationSensitiveCharacters(dict):
+            def __iter__(self):
+                raise RuntimeError("dictionary changed size during iteration")
+
+            def copy(self):
+                return dict(self.items())
+
+        base = types.SimpleNamespace(
+            CHARACTERS=MutationSensitiveCharacters(),
+            _storage_root=lambda _mod: Path("/data/celebrity_selfie"),
+        )
+
+        with mock.patch.object(v205, "_base", return_value=base), \
+             mock.patch.object(v205, "storage_root", return_value=Path("/data/celebrity_selfie")), \
+             mock.patch.object(v205, "_runtime_module", return_value=None), \
+             mock.patch.object(Path, "mkdir"):
+            self.assertTrue(v205.patch())
+
 
 if __name__ == "__main__":
     unittest.main()
