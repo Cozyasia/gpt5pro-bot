@@ -45,6 +45,28 @@ def test_menu_url_is_https_and_does_not_fall_back_to_checkout_page():
             raise AssertionError(f"unsafe menu URL accepted: {invalid}")
 
 
+def test_provider_configuration_status_is_boolean_only_and_alias_aware():
+    from neyrobot_prod.neyronix_telegram import provider_configuration_status
+
+    status = provider_configuration_status({
+        "OPENAI_API_KEY": "openai-secret",
+        "COMETAPI_KEY": "comet-secret",
+        "SEEDANCE_ENABLED": "1",
+        "HEYGEN_API_KEY": "heygen-secret",
+        "HEYGEN_AVATAR_ID": "avatar",
+        "HEYGEN_VOICE_ID": "voice",
+        "PROVIDER_TOKEN_YOOKASSA": "payment-secret",
+    })
+    assert status["openai"] is True
+    assert status["comet"] is True
+    assert status["kling"] is True
+    assert status["seedance"] is True
+    assert status["heygen"] is True
+    assert status["yookassa"] is True
+    assert status["cryptobot"] is False
+    assert "secret" not in json.dumps(status)
+
+
 class FakeBot:
     def __init__(self):
         self.calls = []
@@ -131,5 +153,6 @@ def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):
     assert "NEYRONIX_MODE" in patched
     assert "configure_shell" in patched
     assert "NEYRONIX_TELEGRAM_STATUS" in patched
+    assert "NEYRONIX_PROVIDER_CONFIGURATION" in patched
     assert "if NEYRONIX_MODE:" in patched
     assert "reply_text(" in patched

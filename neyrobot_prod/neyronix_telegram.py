@@ -5,6 +5,7 @@ provider keys and raw Telegram responses must never be logged by callers.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from urllib.parse import urlsplit
 
 
@@ -21,6 +22,39 @@ DESCRIPTION = (
     "изображения, Маркетплейсы, видео, музыка, речь, нейропродакшен и "
     "видеообзоры недвижимости. Выберите направление или напишите задачу."
 )
+
+
+def provider_configuration_status(environ: Mapping[str, str]) -> dict[str, bool]:
+    """Return provider readiness booleans without copying any secret value."""
+    def has(*names: str) -> bool:
+        return any(bool(str(environ.get(name, "")).strip()) for name in names)
+
+    def enabled(name: str, default: str = "1") -> bool:
+        return str(environ.get(name, default)).strip().lower() not in {
+            "0", "false", "no", "off",
+        }
+
+    openai = has("OPENAI_API_KEY")
+    comet = has("COMET_API_KEY", "COMETAPI_KEY")
+    return {
+        "openai": openai,
+        "openai_images": has("OPENAI_IMAGE_KEY") or openai,
+        "openai_stt": has("OPENAI_STT_KEY") or openai,
+        "openai_tts": has("OPENAI_TTS_KEY") or openai,
+        "tavily": has("TAVILY_API_KEY"),
+        "comet": comet,
+        "kling": has("KLING_API_KEY") or comet,
+        "seedance": enabled("SEEDANCE_ENABLED") and comet,
+        "suno": enabled("SUNO_ENABLED") and (has("SUNO_API_KEY") or comet),
+        "runway": has("RUNWAYML_API_SECRET", "RUNWAY_API_KEY", "RUNWAY_KEY") or comet,
+        "luma": has("LUMA_API_KEY"),
+        "gemini_image": has("GEMINI_IMAGE_API_KEY"),
+        "heygen": all(has(name) for name in (
+            "HEYGEN_API_KEY", "HEYGEN_AVATAR_ID", "HEYGEN_VOICE_ID",
+        )),
+        "yookassa": has("YOOKASSA_PROVIDER_TOKEN", "PROVIDER_TOKEN_YOOKASSA"),
+        "cryptobot": has("CRYPTO_PAY_API_TOKEN"),
+    }
 
 
 def public_commands() -> tuple[tuple[str, str], ...]:
@@ -107,6 +141,7 @@ __all__ = [
     "DEFAULT_MENU_URL",
     "MENU_BUTTON_TEXT",
     "configure_shell",
+    "provider_configuration_status",
     "public_commands",
     "resolve_menu_url",
 ]

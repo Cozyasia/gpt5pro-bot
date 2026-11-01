@@ -55,13 +55,24 @@ index b4cd0e5..b0df2cb 100644
  async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
      await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
  
-@@ -19857,6 +19879,27 @@ async def _post_init_bot_profile(app):
+@@ -19857,6 +19879,38 @@ async def _post_init_bot_profile(app):
          except Exception as e:
              log.warning("Telegram menu button update skipped: %s", e)
  
 +    if NEYRONIX_MODE:
 +        try:
-+            from neyrobot_prod.neyronix_telegram import configure_shell
++            from neyrobot_prod.neyronix_telegram import (
++                configure_shell,
++                provider_configuration_status,
++            )
++            log.info(
++                "NEYRONIX_PROVIDER_CONFIGURATION %s",
++                json.dumps(
++                    provider_configuration_status(os.environ),
++                    ensure_ascii=False,
++                    sort_keys=True,
++                ),
++            )
 +            snapshot = await configure_shell(
 +                app.bot,
 +                expected_username=(BOT_USERNAME or "neyronixbot"),
