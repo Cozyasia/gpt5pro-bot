@@ -96,7 +96,7 @@ index b4cd0e5..b0df2cb 100644
          try:
              await app.bot.set_chat_menu_button(
                  menu_button=MenuButtonWebApp(
-@@ -19857,6 +19879,79 @@ async def _post_init_bot_profile(app):
+@@ -19857,6 +19879,81 @@ async def _post_init_bot_profile(app):
          except Exception as e:
              log.warning("Telegram menu button update skipped: %s", e)
  
@@ -113,6 +113,8 @@ index b4cd0e5..b0df2cb 100644
 +                        **os.environ,
 +                        "CRYPTO_PAY_API_TOKEN": CRYPTO_PAY_API_TOKEN,
 +                        "YOOKASSA_PROVIDER_TOKEN": YOOKASSA_PROVIDER_TOKEN,
++                        "YOO_SHOP_ID": YOO_SHOP_ID,
++                        "YOO_SECRET_KEY": YOO_SECRET_KEY,
 +                    }),
 +                    ensure_ascii=False,
 +                    sort_keys=True,
