@@ -72,17 +72,25 @@ class FakeBot:
     def __init__(self):
         self.calls = []
         self.menu = None
+        self.me = SimpleNamespace(id=42, username="neyronixbot", first_name="Legacy")
+        self.short_description = "Legacy short"
+        self.description = "Legacy description"
+        self.commands = []
 
     async def set_my_name(self, **kwargs):
+        self.me.first_name = kwargs["name"]
         self.calls.append(("set_my_name", kwargs))
 
     async def set_my_short_description(self, **kwargs):
+        self.short_description = kwargs["short_description"]
         self.calls.append(("set_my_short_description", kwargs))
 
     async def set_my_description(self, **kwargs):
+        self.description = kwargs["description"]
         self.calls.append(("set_my_description", kwargs))
 
     async def set_my_commands(self, commands):
+        self.commands = commands
         self.calls.append(("set_my_commands", commands))
 
     async def set_chat_menu_button(self, **kwargs):
@@ -90,7 +98,16 @@ class FakeBot:
         self.calls.append(("set_chat_menu_button", kwargs))
 
     async def get_me(self):
-        return SimpleNamespace(id=42, username="neyronixbot", first_name="NEYRONIX")
+        return self.me
+
+    async def get_my_short_description(self):
+        return SimpleNamespace(short_description=self.short_description)
+
+    async def get_my_description(self):
+        return SimpleNamespace(description=self.description)
+
+    async def get_my_commands(self):
+        return self.commands
 
     async def get_webhook_info(self):
         return SimpleNamespace(
@@ -131,6 +148,22 @@ def test_configure_shell_sets_profile_commands_menu_and_returns_sanitized_snapsh
         "token" not in json.dumps(data, default=str).lower()
         for _, data in bot.calls
     )
+
+
+def test_configure_shell_is_idempotent_and_does_not_repeat_profile_mutations():
+    from neyrobot_prod.neyronix_telegram import configure_shell
+
+    bot = FakeBot()
+    asyncio.run(configure_shell(bot, menu_url="https://neyro-studio-ui.onrender.com/"))
+    assert any(name.startswith("set_") for name, _ in bot.calls)
+
+    bot.calls.clear()
+    snapshot = asyncio.run(
+        configure_shell(bot, menu_url="https://neyro-studio-ui.onrender.com/")
+    )
+    assert snapshot["first_name"] == "NEYRONIX"
+    assert snapshot["menu_url"] == "https://neyro-studio-ui.onrender.com/"
+    assert not [name for name, _ in bot.calls if name.startswith("set_")]
 
 
 def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):

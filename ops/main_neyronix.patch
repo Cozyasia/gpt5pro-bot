@@ -55,6 +55,20 @@ index b4cd0e5..b0df2cb 100644
  async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
      await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
  
+@@ -19834,6 +19856,6 @@ async def _post_init_bot_profile(app):
+ async def _post_init_bot_profile(app):
+     """Обновляет профиль и системную кнопку меню Telegram после запуска."""
+-    if AUTO_SET_BOT_PROFILE:
++    if AUTO_SET_BOT_PROFILE and not NEYRONIX_MODE:
+         try:
+             if BOT_PUBLIC_NAME:
+                 await app.bot.set_my_name(name=BOT_PUBLIC_NAME)
+@@ -19848,4 +19870,4 @@ async def _post_init_bot_profile(app):
+-    if AUTO_SET_BOT_MENU:
++    if AUTO_SET_BOT_MENU and not NEYRONIX_MODE:
+         try:
+             await app.bot.set_chat_menu_button(
+                 menu_button=MenuButtonWebApp(
 @@ -19857,6 +19879,75 @@ async def _post_init_bot_profile(app):
          except Exception as e:
              log.warning("Telegram menu button update skipped: %s", e)

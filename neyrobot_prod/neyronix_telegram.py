@@ -101,19 +101,49 @@ async def configure_shell(
 
     safe_menu_url = resolve_menu_url(menu_url)
     commands = public_commands()
-    await bot.set_my_name(name=BRAND_NAME)
-    await bot.set_my_short_description(short_description=SHORT_DESCRIPTION)
-    await bot.set_my_description(description=DESCRIPTION)
-    await bot.set_my_commands([BotCommand(command=name, description=description) for name, description in commands])
-    await bot.set_chat_menu_button(
-        menu_button=MenuButtonWebApp(
-            text=MENU_BUTTON_TEXT,
-            web_app=WebAppInfo(url=safe_menu_url),
+    desired_commands = [
+        BotCommand(command=name, description=description)
+        for name, description in commands
+    ]
+
+    # Telegram applies very long flood-control windows to profile mutations.
+    # Read first and mutate only drifted fields so container restarts are safe.
+    if (getattr(me, "first_name", "") or "") != BRAND_NAME:
+        await bot.set_my_name(name=BRAND_NAME)
+        me = await bot.get_me()
+
+    current_short = await bot.get_my_short_description()
+    if (getattr(current_short, "short_description", "") or "") != SHORT_DESCRIPTION:
+        await bot.set_my_short_description(short_description=SHORT_DESCRIPTION)
+
+    current_description = await bot.get_my_description()
+    if (getattr(current_description, "description", "") or "") != DESCRIPTION:
+        await bot.set_my_description(description=DESCRIPTION)
+
+    current_commands = await bot.get_my_commands()
+    current_command_rows = [
+        (
+            str(getattr(item, "command", "") or ""),
+            str(getattr(item, "description", "") or ""),
         )
-    )
+        for item in current_commands
+    ]
+    if current_command_rows != list(commands):
+        await bot.set_my_commands(desired_commands)
+
+    menu = await bot.get_chat_menu_button()
+    current_menu_url = getattr(getattr(menu, "web_app", None), "url", "") or ""
+    current_menu_text = getattr(menu, "text", "") or ""
+    if current_menu_url != safe_menu_url or current_menu_text != MENU_BUTTON_TEXT:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text=MENU_BUTTON_TEXT,
+                web_app=WebAppInfo(url=safe_menu_url),
+            )
+        )
+        menu = await bot.get_chat_menu_button()
 
     webhook = await bot.get_webhook_info()
-    menu = await bot.get_chat_menu_button()
     actual_menu_url = getattr(getattr(menu, "web_app", None), "url", "") or ""
     if actual_menu_url != safe_menu_url:
         raise RuntimeError("Telegram returned an unexpected Mini App menu URL")
