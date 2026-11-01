@@ -13,6 +13,8 @@ from typing import Any, Awaitable, Callable, Mapping
 
 import httpx
 
+from neyrobot_prod.provider_config import resolve_text_provider_config
+
 
 class BudgetExceeded(RuntimeError):
     """Raised before a probe could exceed its authorized billing boundary."""
@@ -78,7 +80,7 @@ def redact_payload(value: Any, *, secrets: tuple[str, ...] = ()) -> Any:
 def _summary(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         return {"response_type": type(payload).__name__}
-    for key in ("data", "results", "output"):
+    for key in ("data", "results", "output", "choices"):
         items = payload.get(key)
         if isinstance(items, list):
             return {"item_count": len(items)}
@@ -90,10 +92,16 @@ async def _request_probe(
     environ: Mapping[str, str],
 ) -> tuple[int, Any]:
     timeout = httpx.Timeout(30.0)
+    text_config = resolve_text_provider_config(
+        api_key=str(environ.get("OPENAI_API_KEY", "")),
+        base_url=str(environ.get("OPENAI_BASE_URL", "")),
+        model=str(environ.get("OPENAI_MODEL", "")),
+        provider=str(environ.get("TEXT_PROVIDER", "")),
+    )
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         if spec.probe_id == "openai_auth":
             response = await client.get(
-                "https://api.openai.com/v1/models",
+                f"{text_config.base_url}/models",
                 headers={"Authorization": f"Bearer {environ['OPENAI_API_KEY']}"},
             )
         elif spec.probe_id == "comet_auth":
@@ -104,15 +112,18 @@ async def _request_probe(
             )
         elif spec.probe_id == "openai_text":
             response = await client.post(
-                "https://api.openai.com/v1/responses",
+                f"{text_config.base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {environ['OPENAI_API_KEY']}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": str(environ.get("OPENAI_MODEL") or "gpt-4.1-mini"),
-                    "input": "Reply with exactly: OK",
-                    "max_output_tokens": 8,
+                    "model": text_config.model,
+                    "messages": [
+                        {"role": "user", "content": "Reply with exactly: OK"},
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 8,
                 },
             )
         elif spec.probe_id == "tavily_search":
