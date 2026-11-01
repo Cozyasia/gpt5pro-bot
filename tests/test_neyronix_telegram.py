@@ -233,6 +233,9 @@ def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):
     assert "NEYRONIX_PROVIDER_CONFIGURATION" in patched
     assert "from neyrobot_prod.provider_config import resolve_text_provider_config" in patched
     assert 'os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")' in patched
+    assert "comet_api_key=" in patched
+    assert "TEXT_API_KEY = _TEXT_PROVIDER_CONFIG.api_key" in patched
+    assert '"Authorization": f"Bearer {TEXT_API_KEY}"' in patched
     assert 'os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini")' not in patched
     assert "if NEYRONIX_MODE:" in patched
     assert "reply_text(" in patched
