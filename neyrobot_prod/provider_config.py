@@ -21,7 +21,7 @@ def resolve_text_provider_config(
 ) -> TextProviderConfig:
     key = str(api_key or "").strip()
     base = str(base_url or "").strip().rstrip("/")
-    selected_model = str(model or "").strip() or "gpt-4o-mini"
+    selected_model = str(model or "").strip() or "gpt-5.6-luna"
     selected_provider = str(provider or "").strip().lower()
 
     uses_openrouter = (

@@ -50,3 +50,15 @@ def test_custom_compatible_base_preserves_model_identifier():
     assert config.provider == "compatible"
     assert config.base_url == "https://llm.example.test/v1"
     assert config.model == "vendor/model-a"
+
+
+def test_direct_openai_uses_current_economy_default_when_model_is_empty():
+    config = resolve_text_provider_config(
+        api_key="sk-test",
+        base_url="https://api.openai.com/v1",
+        model="",
+        provider="openai",
+    )
+
+    assert config.provider == "openai"
+    assert config.model == "gpt-5.6-luna"

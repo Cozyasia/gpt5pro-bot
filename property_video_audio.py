@@ -249,14 +249,14 @@ async def _property_json_request(prompt: str, extra_system: str) -> str:
         endpoints.append((
             str(getattr(production_main, "OPENAI_TTS_BASE_URL", "") or "https://api.openai.com/v1").rstrip("/"),
             primary_key,
-            os.getenv("PROPERTY_VIDEO_TEXT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+            os.getenv("PROPERTY_VIDEO_TEXT_MODEL", "gpt-5.6-luna").strip() or "gpt-5.6-luna",
             "openai",
         ))
     if comet_key:
         endpoints.append((
             str(getattr(production_main, "COMET_BASE_URL", "") or "https://api.cometapi.com").rstrip("/"),
             comet_key,
-            os.getenv("PROPERTY_VIDEO_COMET_TEXT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+            os.getenv("PROPERTY_VIDEO_COMET_TEXT_MODEL", "gpt-5.6-luna").strip() or "gpt-5.6-luna",
             "comet",
         ))
     last_error = None

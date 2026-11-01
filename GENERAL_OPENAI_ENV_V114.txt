@@ -8,13 +8,13 @@ GENERAL_TEXT_ROUTER_ENABLED=1
 GENERAL_OPENAI_API_KEY=
 GENERAL_OPENAI_BASE_URL=https://api.openai.com/v1
 
-# Most ordinary answers remain on the economical GPT-5 mini route:
-GENERAL_MODEL_BASIC=gpt-5-mini
-GENERAL_MODEL_PRO=gpt-5-mini
-GENERAL_MODEL_ULTIMATE=gpt-5-mini
+# Most ordinary answers use the current economical GPT-5.6 Luna route:
+GENERAL_MODEL_BASIC=gpt-5.6-luna
+GENERAL_MODEL_PRO=gpt-5.6-luna
+GENERAL_MODEL_ULTIMATE=gpt-5.6-luna
 
 # Only complex paid requests are elevated. Runtime checks /v1/models first and
-# automatically falls back to GPT-5/GPT-5 mini during an account rollout.
+# automatically falls back to another available GPT-5-family model during rollout.
 GENERAL_MODEL_COMPLEX_PRO=gpt-5.6-luna
 GENERAL_MODEL_COMPLEX_ULTIMATE=gpt-5.6-terra
 GENERAL_COMPLEX_MIN_CHARS=1100
@@ -22,7 +22,7 @@ GENERAL_COMPLEX_MIN_CHARS=1100
 GENERAL_REASONING_EFFORT_BASIC=low
 GENERAL_REASONING_EFFORT_PRO=low
 GENERAL_REASONING_EFFORT_ULTIMATE=medium
-GENERAL_VISION_MODEL=gpt-5-mini
+GENERAL_VISION_MODEL=gpt-5.6-luna
 
 # Disabled by default so a broken/expired OpenRouter route cannot silently answer.
 GENERAL_ALLOW_LEGACY_FALLBACK=0

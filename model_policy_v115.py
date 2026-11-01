@@ -17,10 +17,10 @@ VERSION = "v115-current-model-policy-2026-07-18"
 _INSTALLED = False
 
 CURRENT_PRICES = {
-    "gpt-5.6-sol": (5.00, 30.00),
-    "gpt-5.6": (5.00, 30.00),
-    "gpt-5.6-terra": (2.50, 15.00),
-    "gpt-5.6-luna": (1.00, 6.00),
+    "gpt-5.6-sol": (4.00, 20.00),
+    "gpt-5.6": (4.00, 20.00),
+    "gpt-5.6-terra": (2.00, 12.00),
+    "gpt-5.6-luna": (0.20, 1.20),
     "gpt-5.4-mini": (0.75, 4.50),
 }
 
@@ -32,9 +32,10 @@ def _upgrade_default(name: str, legacy: set[str], new_value: str) -> None:
 
 
 def _set_policy_environment() -> None:
-    os.environ.setdefault("GENERAL_MODEL_BASIC", "gpt-5-mini")
-    os.environ.setdefault("GENERAL_MODEL_PRO", "gpt-5-mini")
-    os.environ.setdefault("GENERAL_MODEL_ULTIMATE", "gpt-5-mini")
+    legacy_economy = {"gpt-4o-mini", "gpt-5-mini"}
+    _upgrade_default("GENERAL_MODEL_BASIC", legacy_economy, "gpt-5.6-luna")
+    _upgrade_default("GENERAL_MODEL_PRO", legacy_economy, "gpt-5.6-luna")
+    _upgrade_default("GENERAL_MODEL_ULTIMATE", legacy_economy, "gpt-5.6-luna")
     _upgrade_default("GENERAL_MODEL_COMPLEX_PRO", {"gpt-5"}, "gpt-5.6-luna")
     _upgrade_default("GENERAL_MODEL_COMPLEX_ULTIMATE", {"gpt-5"}, "gpt-5.6-terra")
 

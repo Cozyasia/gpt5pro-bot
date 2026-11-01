@@ -88,7 +88,7 @@ _STUDIO_PAID_RUNNER = None
 _STUDIO_RENDER_COST_USD = 0.20
 TEXT_MODEL = (
     os.getenv("PRESENTATION_TEXT_MODEL", "").strip()
-    or os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
+    or os.getenv("OPENAI_MODEL", "gpt-5.6-luna").strip()
 )
 
 # Palette: VERDIA Natural Tech by default; generic enough for arbitrary brands.

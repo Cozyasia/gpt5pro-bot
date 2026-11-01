@@ -112,18 +112,16 @@ async def _request_probe(
             )
         elif spec.probe_id == "openai_text":
             response = await client.post(
-                f"{text_config.base_url}/chat/completions",
+                f"{text_config.base_url}/responses",
                 headers={
                     "Authorization": f"Bearer {environ['OPENAI_API_KEY']}",
                     "Content-Type": "application/json",
                 },
                 json={
                     "model": text_config.model,
-                    "messages": [
-                        {"role": "user", "content": "Reply with exactly: OK"},
-                    ],
-                    "temperature": 0,
-                    "max_tokens": 8,
+                    "input": "Reply with exactly: OK",
+                    "max_output_tokens": 16,
+                    "store": False,
                 },
             )
         elif spec.probe_id == "tavily_search":

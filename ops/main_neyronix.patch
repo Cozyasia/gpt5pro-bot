@@ -14,7 +14,7 @@ index b4cd0e5..b0df2cb 100644
  OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
  OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
 -OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
-+OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
++OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna").strip()
 +TEXT_PROVIDER    = os.environ.get("TEXT_PROVIDER", "").strip()
 +
 +from neyrobot_prod.provider_config import resolve_text_provider_config
