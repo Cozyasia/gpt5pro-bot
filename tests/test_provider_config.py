@@ -62,3 +62,31 @@ def test_direct_openai_uses_current_economy_default_when_model_is_empty():
 
     assert config.provider == "openai"
     assert config.model == "gpt-5.6-luna"
+
+
+def test_explicit_comet_provider_uses_comet_key_and_economy_model():
+    config = resolve_text_provider_config(
+        api_key="openai-key-without-quota",
+        comet_api_key="comet-paid-key",
+        base_url="https://api.openai.com/v1",
+        model="gpt-5.6-luna",
+        provider="comet",
+    )
+
+    assert config.provider == "comet"
+    assert config.base_url == "https://api.cometapi.com/v1"
+    assert config.model == "gpt-5.6-luna"
+    assert config.api_key == "comet-paid-key"
+
+
+def test_comet_base_url_selects_comet_key_without_explicit_provider():
+    config = resolve_text_provider_config(
+        api_key="openai-key",
+        comet_api_key="comet-key",
+        base_url="https://api.cometapi.com/v1",
+        model="gpt-5-mini",
+        provider="",
+    )
+
+    assert config.provider == "comet"
+    assert config.api_key == "comet-key"
