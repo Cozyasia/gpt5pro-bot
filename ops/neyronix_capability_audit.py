@@ -107,8 +107,11 @@ CAPABILITIES: tuple[Capability, ...] = (
        (("OPENAI_IMAGE_KEY", "OPENAI_API_KEY"),), "USD quote mapped to idempotent credit ledger",
        ("marketplace_pipeline", "SQLiteUSDWalletLedger", "MARKETPLACE_PAID_GENERATION_ENABLED")),
     _c("payments_yookassa", "YooKassa payments", "Plans/balance", "on_successful_payment", "YooKassa",
-       (("YOOKASSA_PROVIDER_TOKEN", "PROVIDER_TOKEN_YOOKASSA"),), "Telegram payment receipt; idempotent transaction",
-       ("PreCheckoutQueryHandler", "on_successful_payment", "YOOKASSA_PROVIDER_TOKEN")),
+       (
+           ("YOOKASSA_PROVIDER_TOKEN", "PROVIDER_TOKEN_YOOKASSA", "YOO_SHOP_ID", "YOOKASSA_SHOP_ID", "YK_ID", "PAY_ID"),
+           ("YOOKASSA_PROVIDER_TOKEN", "PROVIDER_TOKEN_YOOKASSA", "YOO_SECRET_KEY", "YOOKASSA_SECRET_KEY", "YK_KEY", "PAY_KEY"),
+       ), "Telegram payment receipt or direct API; idempotent transaction",
+       ("PreCheckoutQueryHandler", "on_successful_payment", "YOO_SHOP_ID", "YOO_SECRET_KEY")),
     _c("payments_cryptobot", "CryptoBot top-up", "Plans/balance", "crypto_create_invoice", "CryptoBot",
        (("CRYPTO_PAY_API_TOKEN",),), "Invoice reconciliation", ("CRYPTO_PAY_API_TOKEN", "createInvoice", "getInvoices")),
 )
@@ -154,7 +157,10 @@ def _configured(capability: Capability, environ: Mapping[str, str]) -> tuple[boo
 def _secret_file_key_names(secret_dir: Path) -> set[str]:
     """Return key names only; secret values never leave this function."""
     names: set[str] = set()
-    for filename in ("cryptobot.env", "cryptobot.txt", "crypto_pay.env", "crypto_pay.txt"):
+    for filename in (
+        "cryptobot.env", "cryptobot.txt", "crypto_pay.env", "crypto_pay.txt",
+        "yookassa.env", "yookassa.txt",
+    ):
         path = Path(secret_dir) / filename
         try:
             for raw in path.read_text(encoding="utf-8").splitlines():
