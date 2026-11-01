@@ -6,6 +6,7 @@ from ops.neyronix_live_provider_probe import (
     BudgetExceeded,
     LiveProbeGate,
     ProbeSpec,
+    parse_args,
     redact_payload,
     run_probe,
 )
@@ -72,3 +73,17 @@ def test_run_probe_skips_when_required_configuration_is_missing():
     assert result["status"] == "skipped"
     assert result["reason"] == "missing configuration"
     assert result["missing"] == ["TAVILY_API_KEY"]
+
+
+def test_parse_args_uses_explicit_startup_probe_environment():
+    args = parse_args([], {
+        "NEYRONIX_LIVE_PROBE_IDS": "openai_auth,comet_auth,openai_text,tavily_search",
+        "NEYRONIX_LIVE_PROBE_ALLOW_BILLABLE": "1",
+        "NEYRONIX_LIVE_PROBE_MAX_USD": "0.02",
+    })
+
+    assert args.probe == [
+        "openai_auth", "comet_auth", "openai_text", "tavily_search",
+    ]
+    assert args.allow_billable is True
+    assert args.max_usd == 0.02
