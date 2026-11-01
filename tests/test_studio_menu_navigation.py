@@ -4,7 +4,20 @@ from neyrobot_prod.studio_menu_navigation import resolve_navigation
 
 class StudioNavigationTests(unittest.TestCase):
     def test_verified_routes(self):
-        for slug, expected in (("market", "ent:brief:product_ad"), ("advert", "ent:brief:product_ad"), ("realty", "revideo:start")):
+        expected_routes = {
+            "medicine": "mode:medicine",
+            "video": "act:fun:textvideo",
+            "market": "ent:brief:product_ad",
+            "celebrity": "fun:aiselfie",
+            "realty": "revideo:start",
+            "photo": "engine:images",
+            "music": "fun:music",
+            "study": "mode:study",
+            "work": "mode:work",
+            "assistant": "mode:root",
+            "advert": "ent:brief:product_ad",
+        }
+        for slug, expected in expected_routes.items():
             self.assertEqual(resolve_navigation(json.dumps({"v": 1, "action": "open_mode", "route": slug})), expected)
 
     def test_rejects_untrusted_payloads(self):

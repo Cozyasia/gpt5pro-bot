@@ -6,9 +6,15 @@ from neyrobot_prod.studio_menu_start import parse_studio_start, studio_start_mar
 
 class StartRouteTests(unittest.TestCase):
     def test_allowed(self):
-        self.assertEqual(parse_studio_start(["studio_market"]),("market","ent:brief:product_ad"))
-        self.assertEqual(parse_studio_start(["studio_realty"]),("realty","revideo:start"))
-        self.assertEqual(parse_studio_start(["studio_advert"]),("advert","ent:brief:product_ad"))
+        expected = {
+            "medicine": "mode:medicine", "video": "act:fun:textvideo",
+            "market": "ent:brief:product_ad", "celebrity": "fun:aiselfie",
+            "realty": "revideo:start", "photo": "engine:images",
+            "music": "fun:music", "study": "mode:study", "work": "mode:work",
+            "assistant": "mode:root", "advert": "ent:brief:product_ad",
+        }
+        for slug, callback in expected.items():
+            self.assertEqual(parse_studio_start(["studio_" + slug]), (slug, callback))
     def test_rejected(self):
         for args in ([],["studio_admin"],["studio_mode:medicine"],["studio_market","extra"],["other"],["studio_"+"x"*100],None):
             self.assertIsNone(parse_studio_start(args))
@@ -21,3 +27,13 @@ class StartRouteTests(unittest.TestCase):
             title,markup=studio_start_markup(["studio_market"])
         self.assertEqual(title,"Маркетплейсы")
         self.assertEqual(markup.inline_keyboard[0][0].callback_data,"ent:brief:product_ad")
+
+    def test_every_allowed_slug_has_a_human_title(self):
+        class Button:
+            def __init__(self,text,callback_data):self.text,self.callback_data=text,callback_data
+        class Markup:
+            def __init__(self,inline_keyboard):self.inline_keyboard=inline_keyboard
+        with patch.dict(sys.modules,{"telegram":types.SimpleNamespace(InlineKeyboardButton=Button,InlineKeyboardMarkup=Markup)}):
+            for slug in ("medicine","video","market","celebrity","realty","photo","music","study","work","assistant","advert"):
+                title, _ = studio_start_markup(["studio_" + slug])
+                self.assertTrue(title)

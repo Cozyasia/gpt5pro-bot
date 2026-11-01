@@ -1,8 +1,8 @@
 """Validated Studio Mini App navigation for current production callbacks."""
 import json
-from .studio_menu_catalog import verified_callback
+from .studio_menu_catalog import SECTIONS, verified_callback
 
-ALLOWED_SLUGS = frozenset(("market", "realty", "advert"))
+ALLOWED_SLUGS = frozenset(section.slug for section in SECTIONS if section.callback)
 MAX_PAYLOAD_BYTES = 512
 
 def resolve_navigation(raw: str) -> str | None:

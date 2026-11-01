@@ -1,7 +1,8 @@
-"""Catalog routes aligned with verified current production modules.
+"""Catalog routes aligned with handlers verified in the current application.
 
 This is a presentation-only mapping, not an authorization or handler registry.
-Unavailable routes must remain disabled until production callback validation.
+The callback names are intentionally kept internal to the Telegram application;
+the Mini App only ever receives the stable, allow-listed ``slug`` values.
 """
 from dataclasses import dataclass
 
@@ -16,18 +17,26 @@ class StudioSection:
 
 SECTIONS = (
     StudioSection("market", "Маркетплейсы", "ent:brief:product_ad", "current main: ent:brief:product_ad callback"),
-    StudioSection("medicine", "AI-Медицина", None, "not yet verified in current main"),
-    StudioSection("video", "AI-Видео", None, "not yet verified in current main"),
+    StudioSection("medicine", "AI-Медицина", "mode:medicine", "current main: on_mode_cb"),
+    StudioSection("video", "AI-Видео", "act:fun:textvideo", "current main: on_mode_cb"),
     StudioSection("realty", "Недвижимость", "revideo:start", "current main commit #221"),
-    StudioSection("celebrity", "Селфи со звездой", None, "not yet verified in current main"),
-    StudioSection("photo", "AI-Фотостудия", None, "not yet verified in current main"),
-    StudioSection("music", "Музыка", None, "not yet verified in current main"),
-    StudioSection("study", "Учёба", None, "not yet verified in current main"),
-    StudioSection("work", "Работа", None, "not yet verified in current main"),
-    StudioSection("assistant", "AI-Ассистент", None, "not yet verified in current main"),
+    StudioSection("celebrity", "Селфи со звездой", "fun:aiselfie", "current main: AI-selfie high-priority handler"),
+    StudioSection("photo", "AI-Фотостудия", "engine:images", "current main: engine callback handler"),
+    StudioSection("music", "Музыка", "fun:music", "current main: on_cb_fun"),
+    StudioSection("study", "Учёба", "mode:study", "current main: on_mode_cb"),
+    StudioSection("work", "Работа", "mode:work", "current main: on_mode_cb"),
+    StudioSection("assistant", "AI-Ассистент", "mode:root", "current main: on_mode_cb"),
     StudioSection("advert", "Реклама товара", "ent:brief:product_ad", "current main commit #221"),
 )
 
 
 def verified_callback(slug: str) -> str | None:
     return next((section.callback for section in SECTIONS if section.slug == slug), None)
+
+
+def verified_section(slug: str) -> StudioSection | None:
+    """Return catalog metadata only when the section has a verified callback."""
+    return next(
+        (section for section in SECTIONS if section.slug == slug and section.callback),
+        None,
+    )

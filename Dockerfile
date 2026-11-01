@@ -18,6 +18,7 @@ RUN patch --batch --forward -p1 < /app/ops/main_veo.patch
 RUN patch --batch --forward -p1 < /app/ops/main_veo_start_guard.patch
 RUN patch --batch --forward -p1 < /app/ops/main_veo_recovery.patch
 RUN patch --batch --forward -p1 < /app/ops/main_start_welcome.patch
+RUN patch --batch --forward -p1 < /app/ops/main_neyronix.patch
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]

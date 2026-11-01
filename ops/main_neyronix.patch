@@ -1,0 +1,93 @@
+diff --git a/main.py b/main.py
+index b4cd0e5..b0df2cb 100644
+--- a/main.py
++++ b/main.py
+@@ -180,6 +180,7 @@ BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN",
+ BOT_USERNAME     = os.environ.get("BOT_USERNAME", "").strip().lstrip("@")
+ PUBLIC_URL       = os.environ.get("PUBLIC_URL", "").strip()
+ WEBAPP_URL       = os.environ.get("WEBAPP_URL", "").strip()
++NEYRONIX_MODE     = os.environ.get("NEYRONIX_MODE", "0").strip().lower() in ("1", "true", "yes", "on")
+ 
+ # Provider inputs cannot use Telegram's bot-file URL: some video providers reject
+ # it while fetching, and it would expose the bot credential in a third-party
+@@ -5952,8 +5953,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+ 
+     # Keep the welcome animation, text and keyboard in one Telegram message.
+     # Telegram captions are limited, so use a compact start caption here.
++    public_brand = "NEYRONIX" if NEYRONIX_MODE else BOT_PUBLIC_NAME
+     start_caption = (
+-        "👋 Привет! Я Neyro-Bot GPT 5 Studio — мультимодельная AI-студия в Telegram "
++        f"👋 Привет! Я {public_brand} — мультимодельная AI-студия в Telegram "
+         "для текста, документов, фото, видео, музыки, речи и live-поиска.\n\n"
+         "🚀 Что умею:\n"
+         "🎓 Учёба и работа с PDF/DOCX\n"
+@@ -5965,6 +5967,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+         "Выберите режим в меню ниже или просто напишите задачу."
+     )
+ 
++    # A cold free Render instance must answer Telegram before attempting the
++    # 7 MB animated welcome upload. NEYRONIX keeps the 3D experience in the
++    # Mini App and returns the usable reply menu immediately.
++    if NEYRONIX_MODE:
++        await update.effective_message.reply_text(
++            start_caption,
++            reply_markup=main_kb,
++            disable_web_page_preview=True,
++        )
++        return
++
+     welcome_video = os.path.join(
+         os.path.dirname(os.path.abspath(__file__)),
+         "assets",
+@@ -6017,6 +6030,15 @@ async def cmd_subs_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+     await update.effective_message.reply_text(HELP_TEXT, disable_web_page_preview=True)
+ 
++async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
++    await update.effective_message.reply_text(
++        "🏠 NEYRONIX · главное меню",
++        reply_markup=main_kb,
++    )
++    await update.effective_message.reply_text(
++        _modes_root_text(), reply_markup=modes_root_kb()
++    )
++
+ async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
+     await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
+ 
+@@ -19857,6 +19879,27 @@ async def _post_init_bot_profile(app):
+         except Exception as e:
+             log.warning("Telegram menu button update skipped: %s", e)
+ 
++    if NEYRONIX_MODE:
++        try:
++            from neyrobot_prod.neyronix_telegram import configure_shell
++            snapshot = await configure_shell(
++                app.bot,
++                expected_username=(BOT_USERNAME or "neyronixbot"),
++                menu_url=(WEBAPP_URL or "https://neyro-studio-ui.onrender.com/"),
++            )
++            log.info(
++                "NEYRONIX_TELEGRAM_STATUS %s",
++                json.dumps(snapshot, ensure_ascii=False, sort_keys=True),
++            )
++        except Exception as e:
++            # Never log Telegram request URLs or raw responses: they can include
++            # the token. The exception type is sufficient for the startup gate.
++            log.error(
++                "NEYRONIX_TELEGRAM_STATUS failed error_type=%s",
++                type(e).__name__,
++            )
++            raise
++
+     try:
+         from property_video_execution import recover_after_restart
+         app.create_task(recover_after_restart(app), update=None, name="property-video-restart-recovery")
+@@ -19942,6 +19985,7 @@ def build_application() -> "Application":
+     app.add_handler(CommandHandler("veo_extend", cmd_veo_extend))
+     app.add_handler(CommandHandler("start",        cmd_start))
+     app.add_handler(CommandHandler("help",         cmd_help))
++    app.add_handler(CommandHandler("menu",         cmd_menu))
+     app.add_handler(CommandHandler("examples",     cmd_examples))
+     from neyrobot_prod.studio_prompt_handlers import cmd_studio_prompts, cb_studio_prompts
+     app.add_handler(CommandHandler("prompts", cmd_studio_prompts))

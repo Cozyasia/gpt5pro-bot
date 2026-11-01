@@ -2,7 +2,7 @@
 
 The deep link selects a section but never invokes callback handlers directly.
 """
-from .studio_menu_catalog import verified_callback
+from .studio_menu_catalog import verified_callback, verified_section
 
 PREFIX = "studio_"
 MAX_LENGTH = 64
@@ -26,7 +26,9 @@ def studio_start_markup(args):
         return None
     slug, callback = parsed
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    titles = {"market": "Маркетплейсы", "realty": "Недвижимость", "advert": "Реклама товара"}
-    return titles[slug], InlineKeyboardMarkup([[
+    section = verified_section(slug)
+    if section is None:
+        return None
+    return section.title, InlineKeyboardMarkup([[
         InlineKeyboardButton("Открыть раздел", callback_data=callback)
     ]])
