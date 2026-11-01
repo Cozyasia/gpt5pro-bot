@@ -8,6 +8,7 @@ HTML = (Path(__file__).resolve().parents[1] / "web" / "studio_menu.html").read_t
 
 def test_miniapp_is_rebranded_and_targets_neyronix():
     assert "NEYRONIX" in HTML
+    assert "<title>NEYRONIX — AI платформа</title>" in HTML
     assert "botUsername:'neyronixbot'" in HTML
     assert "progpt5_bot" not in HTML
     assert "NEYRO-BOT GPT 5 STUDIO" not in HTML
