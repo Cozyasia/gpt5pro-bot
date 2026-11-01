@@ -75,5 +75,36 @@ class VerificationFallbackTests(unittest.TestCase):
             self.assertEqual(["gpt-4.1-mini"], FakeClient.calls)
 
 
+class ProviderDelegationTests(unittest.TestCase):
+    def test_comet_provider_keeps_the_configured_runtime_text_route(self):
+        calls = []
+
+        async def original_text(user_text, web_ctx="", user_id=None, chat_id=None, extra_system=""):
+            calls.append((user_text, web_ctx, user_id, chat_id, extra_system))
+            return "comet-ok"
+
+        async def original_vision(_user_text, _img_b64, _mime):
+            return "vision-ok"
+
+        async def must_not_call_official_openai(*_args, **_kwargs):
+            raise AssertionError("official OpenAI route must not run for TEXT_PROVIDER=comet")
+
+        module = SimpleNamespace(
+            ask_openai_text=original_text,
+            ask_openai_vision=original_vision,
+            log=None,
+        )
+
+        with patch.dict(os.environ, {"TEXT_PROVIDER": "comet"}, clear=False), \
+             patch.object(router, "_responses_call", must_not_call_official_openai):
+            self.assertTrue(router.patch_runtime(module))
+            result = asyncio.run(module.ask_openai_text(
+                "hello", "search context", 11, 22, "extra",
+            ))
+
+        self.assertEqual("comet-ok", result)
+        self.assertEqual([("hello", "search context", 11, 22, "extra")], calls)
+
+
 if __name__ == "__main__":
     unittest.main()
