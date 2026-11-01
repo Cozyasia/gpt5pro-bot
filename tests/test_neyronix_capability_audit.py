@@ -70,3 +70,22 @@ def test_live_provider_tests_require_explicit_switch_and_positive_budget():
     )
     assert gate.budget_usd == 2.5
 
+
+def test_cryptobot_secret_file_counts_as_presence_without_exposing_value(tmp_path):
+    (tmp_path / "main.py").write_text(
+        "CRYPTO_PAY_API_TOKEN createInvoice getInvoices\n", encoding="utf-8"
+    )
+    secret_dir = tmp_path / "secrets"
+    secret_dir.mkdir()
+    (secret_dir / "cryptobot.env").write_text(
+        "CRYPTO_PAY_API_TOKEN=never-print-this\n", encoding="utf-8"
+    )
+
+    report = audit_capabilities(tmp_path, environ={}, secret_dir=secret_dir)
+    crypto = next(item for item in report["capabilities"] if item["id"] == "payments_cryptobot")
+    payload = json.dumps(report, ensure_ascii=False)
+
+    assert crypto["configuration"]["ready"] is True
+    assert report["environment"]["CRYPTO_PAY_API_TOKEN"] is True
+    assert "never-print-this" not in payload
+
