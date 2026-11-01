@@ -303,7 +303,7 @@ def patch() -> bool:
     base = _base()
     base._storage_root = storage_root
     base.CHARACTERS.update(CHARACTER_ADDITIONS)
-    for slug in base.CHARACTERS:
+    for slug in base.CHARACTERS.copy():
         (storage_root(None) / "characters" / slug).mkdir(parents=True, exist_ok=True)
     mod = _runtime_module()
     if mod is not None:
