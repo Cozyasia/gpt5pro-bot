@@ -10,7 +10,7 @@ index b4cd0e5..b0df2cb 100644
  
  # Provider inputs cannot use Telegram's bot-file URL: some video providers reject
  # it while fetching, and it would expose the bot credential in a third-party
-@@ -195,3 +196,15 @@ PROVIDER_INPUT_MAX_BYTES = max(1024 * 1024, min(100 * 1024 * 1024, int(
+@@ -195,3 +196,17 @@ PROVIDER_INPUT_MAX_BYTES = max(1024 * 1024, min(100 * 1024 * 1024, int(
  OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
  OPENAI_BASE_URL  = os.environ.get("OPENAI_BASE_URL", "").strip()        # OpenRouter или свой прокси для текста
 -OPENAI_MODEL     = os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini").strip()
@@ -20,6 +20,7 @@ index b4cd0e5..b0df2cb 100644
 +from neyrobot_prod.provider_config import resolve_text_provider_config
 +_TEXT_PROVIDER_CONFIG = resolve_text_provider_config(
 +    api_key=OPENAI_API_KEY,
++    comet_api_key=(os.environ.get("COMET_API_KEY") or os.environ.get("COMETAPI_KEY") or "").strip(),
 +    base_url=OPENAI_BASE_URL,
 +    model=OPENAI_MODEL,
 +    provider=TEXT_PROVIDER,
@@ -27,6 +28,7 @@ index b4cd0e5..b0df2cb 100644
 +OPENAI_BASE_URL = _TEXT_PROVIDER_CONFIG.base_url
 +OPENAI_MODEL = _TEXT_PROVIDER_CONFIG.model
 +TEXT_PROVIDER = _TEXT_PROVIDER_CONFIG.provider
++TEXT_API_KEY = _TEXT_PROVIDER_CONFIG.api_key
 @@ -206,9 +219,5 @@ WEBHOOK_SECRET   = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
  BANNER_URL       = os.environ.get("BANNER_URL", "").strip()
  TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "").strip()
@@ -37,6 +39,22 @@ index b4cd0e5..b0df2cb 100644
  # STT:
  OPENAI_STT_KEY   = os.environ.get("OPENAI_STT_KEY", "").strip()
  TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
+@@ -2531,6 +2542,6 @@ async def ask_openai_text(user_text: str, *, user_id: int = 0, chat_id: int = 0,
+     # Если ключ от OpenRouter или TEXT_PROVIDER=openrouter — шлём на OpenRouter
+     provider = (TEXT_PROVIDER or "").strip().lower()
+-    if OPENAI_API_KEY.startswith("sk-or-") or provider == "openrouter":
++    if TEXT_API_KEY.startswith("sk-or-") or provider == "openrouter":
+         base_url = "https://openrouter.ai/api/v1"
+     else:
+         base_url = (OPENAI_BASE_URL or "").strip() or "https://api.openai.com/v1"
+@@ -2538,6 +2549,6 @@ async def ask_openai_text(user_text: str, *, user_id: int = 0, chat_id: int = 0,
+     # ── Заголовки ───────────────────────────────────────────────────────────
+     headers = {
+-        "Authorization": f"Bearer {OPENAI_API_KEY}",
++        "Authorization": f"Bearer {TEXT_API_KEY}",
+         "Content-Type": "application/json; charset=utf-8",
+         "Accept-Charset": "utf-8",
+     }
 @@ -5952,8 +5953,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
  
      # Keep the welcome animation, text and keyboard in one Telegram message.
