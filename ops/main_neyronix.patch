@@ -96,7 +96,7 @@ index b4cd0e5..b0df2cb 100644
          try:
              await app.bot.set_chat_menu_button(
                  menu_button=MenuButtonWebApp(
-@@ -19857,6 +19879,75 @@ async def _post_init_bot_profile(app):
+@@ -19857,6 +19879,79 @@ async def _post_init_bot_profile(app):
          except Exception as e:
              log.warning("Telegram menu button update skipped: %s", e)
  
@@ -109,7 +109,11 @@ index b4cd0e5..b0df2cb 100644
 +            log.info(
 +                "NEYRONIX_PROVIDER_CONFIGURATION %s",
 +                json.dumps(
-+                    provider_configuration_status(os.environ),
++                    provider_configuration_status({
++                        **os.environ,
++                        "CRYPTO_PAY_API_TOKEN": CRYPTO_PAY_API_TOKEN,
++                        "YOOKASSA_PROVIDER_TOKEN": YOOKASSA_PROVIDER_TOKEN,
++                    }),
 +                    ensure_ascii=False,
 +                    sort_keys=True,
 +                ),
@@ -172,7 +176,7 @@ index b4cd0e5..b0df2cb 100644
      try:
          from property_video_execution import recover_after_restart
          app.create_task(recover_after_restart(app), update=None, name="property-video-restart-recovery")
-@@ -19942,6 +20022,7 @@ def build_application() -> "Application":
+@@ -19942,6 +20026,7 @@ def build_application() -> "Application":
      app.add_handler(CommandHandler("veo_extend", cmd_veo_extend))
      app.add_handler(CommandHandler("start",        cmd_start))
      app.add_handler(CommandHandler("help",         cmd_help))
