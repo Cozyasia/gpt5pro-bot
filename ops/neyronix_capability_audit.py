@@ -151,14 +151,39 @@ def _configured(capability: Capability, environ: Mapping[str, str]) -> tuple[boo
     return all(group["ready"] for group in groups), groups
 
 
-def audit_capabilities(root: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
-    environ = os.environ if environ is None else environ
+def _secret_file_key_names(secret_dir: Path) -> set[str]:
+    """Return key names only; secret values never leave this function."""
+    names: set[str] = set()
+    for filename in ("cryptobot.env", "cryptobot.txt", "crypto_pay.env", "crypto_pay.txt"):
+        path = Path(secret_dir) / filename
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                name = line.split("=", 1)[0].strip()
+                if name:
+                    names.add(name)
+        except OSError:
+            continue
+    return names
+
+
+def audit_capabilities(
+    root: Path,
+    environ: Mapping[str, str] | None = None,
+    secret_dir: Path = Path("/etc/secrets"),
+) -> dict[str, object]:
+    supplied_environ = os.environ if environ is None else environ
+    effective_environ = dict(supplied_environ)
+    for name in _secret_file_key_names(secret_dir):
+        effective_environ.setdefault(name, "present-in-secret-file")
     source = _read_python_sources(Path(root))
     env_names = sorted({name for item in CAPABILITIES for group in item.env_any_groups for name in group})
     rows: list[dict[str, object]] = []
     for item in CAPABILITIES:
         missing = [token for token in item.evidence if token not in source]
-        ready, groups = _configured(item, environ)
+        ready, groups = _configured(item, effective_environ)
         rows.append({
             "id": item.capability_id,
             "name": item.name,
@@ -175,7 +200,7 @@ def audit_capabilities(root: Path, environ: Mapping[str, str] | None = None) -> 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "policy": "Source evidence and secret presence are not proof of a working provider API.",
-        "environment": {name: bool(str(environ.get(name, "")).strip()) for name in env_names},
+        "environment": {name: bool(str(effective_environ.get(name, "")).strip()) for name in env_names},
         "capabilities": rows,
     }
 
