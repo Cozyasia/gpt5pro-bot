@@ -23,7 +23,7 @@ def test_multiscene_identity_is_reanchored_from_real_pack():
     assert 'refs["face_front"]' in block
     assert 'refs["face_3q"]' in block
     assert 'refs["body_full"]' in block
-    assert "Identity + continuity re-anchor" in block
+    assert "Re-anchor every scene to the real Character Identity Pack" in block
 
 
 def test_keyframe_synth_accepts_continuity_without_changing_identity_authority():

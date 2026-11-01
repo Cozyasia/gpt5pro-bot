@@ -6,22 +6,20 @@ from pathlib import Path
 
 
 class V251V2IdentityDetailTests(unittest.TestCase):
-    def test_v251_is_loaded_at_startup(self) -> None:
+    def test_v251_is_historical_and_v265_owns_startup(self) -> None:
         from telegram.ext import ApplicationBuilder
 
-        self.assertTrue(
-            getattr(ApplicationBuilder, "_neyrobot_v251_final_builder_lock", False),
-            "V251 final builder owner was not installed by sitecustomize",
-        )
+        self.assertFalse(getattr(ApplicationBuilder, "_neyrobot_v251_final_builder_lock", False))
+        self.assertTrue(getattr(ApplicationBuilder, "_neyrobot_v265_single_owner_builder_lock", False))
 
-    def test_v251_priority_owner_precedes_v250_and_v245(self) -> None:
+    def test_v251_does_not_register_a_production_owner(self) -> None:
         from telegram.ext import ApplicationBuilder
 
         app = ApplicationBuilder().token("123456:TESTTOKEN").build()
         handlers = list(app.handlers.get(-1000003, []))
         callbacks = [getattr(h, "callback", None) for h in handlers]
         names = {getattr(cb, "__name__", "") for cb in callbacks if cb is not None}
-        self.assertIn("_generation_owner", names)
+        self.assertNotIn("_generation_owner", names)
 
     def test_v251_uses_v2_not_hyperswap_or_v4(self) -> None:
         source = Path("neyrobot_prod/selfie_v251_v2_identity_detail.py").read_text(encoding="utf-8")

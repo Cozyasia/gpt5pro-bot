@@ -11,7 +11,8 @@ def test_telegram_file_url_retries_transient_get_file_timeout():
     assert "for attempt in range(3):" in fn
     assert "except TimedOut as exc:" in fn
     assert "await asyncio.sleep(1.5 * (attempt + 1))" in fn
-    assert "tg_file = await context.bot.get_file(media.file_id)" in fn
+    assert "candidate = await context.bot.get_file(media.file_id)" in fn
+    assert "if _telegram_file_public_url(" in fn
     assert "raise last_exc" in fn
 
 

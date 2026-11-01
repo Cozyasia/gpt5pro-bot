@@ -27,12 +27,14 @@ def test_long_vocal_clip_is_not_blocked_at_approval_or_start():
 def test_duration_is_video_parameter_not_suno_brief():
     cb = TEXT[TEXT.index("async def _on_music_video_draft_callback"):TEXT.index("def _photoclip_preset_prompt")]
     assert "music_brief, video_brief = _music_video_split_briefs" in cb
-    assert 'draft["prompt"] = _music_video_join_briefs(music_brief, video_brief)' in cb
+    assert 'combined = _music_video_join_briefs(music_brief, video_brief)' in cb
+    assert 'draft["prompt"] = combined' in cb
 
 
 def test_multiscene_prompt_is_generic_and_chronological():
     fn = TEXT[TEXT.index("def _vocal_scene_role_prompt"):TEXT.index("async def _extract_audio_segment_bytes")]
-    assert "execute only the chronological" in fn
+    assert "CURRENT ACTION" in fn
+    assert "COMPLETED ACTIONS (history only; never replay)" in fn
     assert "do not restart the story" in fn
     assert "Preserve spatial direction" in fn
     assert "If doors must open" not in fn
@@ -40,14 +42,17 @@ def test_multiscene_prompt_is_generic_and_chronological():
 
 
 def test_multiscene_uses_previous_last_frame_for_continuity():
-    assert "def _extract_last_video_frame_sync" in TEXT
+    assert "def _extract_last_video_frame_file_sync" in TEXT
     start = TEXT.index("async def _start_vocal_clip")
     block = TEXT[start:TEXT.index("\nasync def ", start + 40)]
     assert "continuation_bytes, continuation_url = img_bytes, keyframe_url" in block
-    assert "_extract_last_video_frame_sync, scene_video" in block
+    assert "_extract_last_video_frame_file_sync, scene_path" in block
+    assert "reanchored = await synth_fn(" in block
+    assert 'refs["face_front"], refs["face_3q"], refs["body_full"], None' in block
+    assert "continuity_frame=last_frame" in block
     assert "continuation_bytes = reanchored or last_frame" in block
     assert "continuation_url = _provider_input_url_from_bytes(" in block
-    assert "continuation_bytes, scene_prompt, dur_s, aspect, continuation_url" in block
+    assert "reference_bytes=continuation_bytes" in block
 
 
 def test_identity_lock_survives_each_segment():

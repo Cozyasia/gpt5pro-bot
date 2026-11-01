@@ -5,6 +5,7 @@ import os
 import tempfile
 import types
 import unittest
+from pathlib import Path
 
 from neyrobot_prod import celebrity_selfie
 from neyrobot_prod import credit_store_v201 as credit_store
@@ -25,11 +26,13 @@ class Markup:
 class CreditAndSelfieV201Tests(unittest.TestCase):
     def setUp(self):
         self.saved_env = dict(os.environ)
+        self.saved_storage_root = celebrity_selfie._storage_root
         for key in list(os.environ):
             if key.startswith("CREDIT_PACK_") or key == "CELEBRITY_SELFIE_DATA_DIR":
                 os.environ.pop(key, None)
 
     def tearDown(self):
+        celebrity_selfie._storage_root = self.saved_storage_root
         os.environ.clear()
         os.environ.update(self.saved_env)
 
@@ -61,6 +64,9 @@ class CreditAndSelfieV201Tests(unittest.TestCase):
     def test_character_is_enabled_only_after_three_refs(self):
         with tempfile.TemporaryDirectory() as directory:
             os.environ["CELEBRITY_SELFIE_DATA_DIR"] = directory
+            # Other runtime-hardening tests intentionally install the persistent
+            # storage adapter process-wide. This unit test owns an isolated root.
+            celebrity_selfie._storage_root = lambda _mod: Path(directory)
             mod = types.SimpleNamespace(DB_PATH=os.path.join(directory, "db.sqlite"))
             self.assertFalse(celebrity_selfie._character_ready(mod, "roman_abramovich"))
             root = celebrity_selfie._character_dir(mod, "roman_abramovich")
