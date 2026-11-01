@@ -18,13 +18,43 @@ Source: Cozyasia/gpt5pro-bot main. Target: @neyronixbot. Do not replace the prod
 7. Cut over only after user approval; keep @progpt5_bot online with migration notice. Telegram cannot automatically move chat history or subscribers.
 
 ## Current blockers
-- New bot token not provisioned in a separate Render staging service.
-- No separate staging service yet; cannot safely test webhook or API.
-- Production persistent disk cannot be assumed safely shareable.
-- Domain neyronix.ai is not purchased or configured.
+- The staging service has no persistent disk and therefore cannot be the source
+  of truth for subscriptions, credits, payments, or long-running jobs.
+- A fresh, off-host, encrypted production backup and a restore rehearsal are
+  still required before any data cutover.
+- Paid provider end-to-end calls have not yet been authorized against a bounded
+  test budget; provider names in the menu are not treated as proof of service.
+- Domain neyronix.ai is not purchased or configured; the verified Render URLs
+  remain the active endpoints.
 
 ## Verified follow-up — 2026-10-28 19:08 UTC
 - Production deploy `dep-dbh3lh61egvs739cghag` is live.
 - Render Web Shell showed `DB_PATH=/data/subs.db`, 29 tables, `PRAGMA integrity_check=ok`, and active process PID 26 with open `/data/subs.db`, `-wal`, `-shm` file descriptors.
 - SQLite online backup `/data/neyronix-backups/pre-neyronix-20261028T190839Z.sqlite3` created successfully; integrity `ok`, 29 tables. Counts: `ai_chats=1`, `ai_chat_active=1`, `production_events=2`, `processed_telegram_events=5`, `processed_start_messages=4`.
 - Existing backup is on the same persistent disk: export an off-host encrypted copy before destructive operations. No token switch or production redeploy authorized by this verification.
+
+## Verified staging restoration — 2026-11-01 08:31 UTC
+
+- GitHub migration branch `work/neyronix-migration-20261028` advanced from
+  `9a66c7ac` to connector commit `79aaa41b`; `main` was not changed.
+- Backend service `neyronix-bot-staging` (`srv-dbh2rdt9fdbs73a3i3d0`)
+  deployed `79aaa41b` as `dep-dbjffi49v7es739uvuj0`, terminal status `live`.
+- `/healthz` returned HTTP 200. Sanitized startup verification reported
+  username `neyronixbot`, first name `NEYRONIX`, zero pending updates, no
+  webhook error, webhook `https://neyronix-bot-staging.onrender.com/tg`, eight
+  public commands, and Mini App menu URL
+  `https://neyro-studio-ui.onrender.com/`.
+- Telegram `Application started` after the verification gate. No traceback was
+  present in the post-deploy log window.
+- Static Mini App branch `studio-static-menu` advanced to `f719e91f`; a clean
+  rebuild `dep-dbjfgm2jnfac73frh7pg` reached `live`. The served HTML checksum
+  matched the repository file after CDN invalidation.
+- Browser verification found the NEYRONIX brand, 11 catalog cards, 11 available
+  routes, no horizontal overflow, a 64 px bottom navigation, and an enabled
+  Telegram launch action for the AI-Medicine card.
+- Focused shell/navigation tests passed: 39 tests plus 21 subtests. The full
+  suite completed with 736 passed, 17 failed, and 89 subtests passed; one of
+  the 17 failures is an order-dependent celebrity-selfie state leak that passes
+  alone, while the other 16 reproduce the pre-migration baseline failures.
+- Old production service `srv-d3iofgp5pdvs7394e8rg` remained on deploy
+  `dep-dbh3lh61egvs739cghag`; neither its branch, token, nor disk was changed.
