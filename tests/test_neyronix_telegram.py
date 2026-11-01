@@ -220,6 +220,9 @@ def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):
     assert "configure_shell" in patched
     assert "NEYRONIX_TELEGRAM_STATUS" in patched
     assert "NEYRONIX_PROVIDER_CONFIGURATION" in patched
+    assert "from neyrobot_prod.provider_config import resolve_text_provider_config" in patched
+    assert 'os.environ.get("OPENAI_MODEL", "gpt-4o-mini")' in patched
+    assert 'os.environ.get("OPENAI_MODEL", "openai/gpt-4o-mini")' not in patched
     assert "if NEYRONIX_MODE:" in patched
     assert "reply_text(" in patched
     assert "_defer_restart_recovery_until_running" in patched
