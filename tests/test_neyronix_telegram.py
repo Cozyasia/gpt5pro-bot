@@ -1,4 +1,5 @@
 import asyncio
+import ast
 import json
 import shutil
 import subprocess
@@ -149,6 +150,7 @@ def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     patched = (target / "main.py").read_text(encoding="utf-8")
+    ast.parse(patched)
     assert 'CommandHandler("menu",         cmd_menu)' in patched
     assert "NEYRONIX_MODE" in patched
     assert "configure_shell" in patched
@@ -156,3 +158,14 @@ def test_main_patch_applies_and_wires_fast_start_menu_and_shell(tmp_path):
     assert "NEYRONIX_PROVIDER_CONFIGURATION" in patched
     assert "if NEYRONIX_MODE:" in patched
     assert "reply_text(" in patched
+    assert "_defer_restart_recovery_until_running" in patched
+    assert "if not app.running:" in patched
+    assert 'name="neyronix-restart-recovery"' in patched
+    post_init = patched[
+        patched.index("async def _post_init_bot_profile"):
+        patched.index("\n\n# ───────── Регистрация хендлеров", patched.index("async def _post_init_bot_profile"))
+    ]
+    neyronix_branch = post_init[:post_init.index("    try:\n        from property_video_execution")]
+    assert "asyncio.create_task(" in neyronix_branch
+    assert "app.create_task(" in neyronix_branch
+    assert "        return\n" in neyronix_branch

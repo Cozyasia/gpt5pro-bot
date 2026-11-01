@@ -55,7 +55,7 @@ index b4cd0e5..b0df2cb 100644
  async def cmd_examples(update: Update, context: ContextTypes.DEFAULT_TYPE):
      await update.effective_message.reply_text(EXAMPLES_TEXT, disable_web_page_preview=True)
  
-@@ -19857,6 +19879,38 @@ async def _post_init_bot_profile(app):
+@@ -19857,6 +19879,75 @@ async def _post_init_bot_profile(app):
          except Exception as e:
              log.warning("Telegram menu button update skipped: %s", e)
  
@@ -91,10 +91,47 @@ index b4cd0e5..b0df2cb 100644
 +            )
 +            raise
 +
++    if NEYRONIX_MODE:
++        async def _run_restart_recovery():
++            try:
++                from property_video_execution import recover_after_restart
++                await recover_after_restart(app)
++            except Exception as e:
++                log.warning("Property video restart recovery failed: %s", e)
++
++            if app.bot_data.get("marketplace_usd_ledger") is not None:
++                try:
++                    await _recover_marketplace_after_restart(app)
++                except Exception as e:
++                    log.warning("Marketplace restart recovery failed: %s", e)
++
++        async def _defer_restart_recovery_until_running():
++            # PTB invokes post_init before Application.start(). Application.create_task
++            # at that point is not tracked for shutdown and emits PTBUserWarning.
++            for _ in range(600):
++                if app.running:
++                    break
++                await asyncio.sleep(0.1)
++            if not app.running:
++                log.warning("NEYRONIX restart recovery skipped: application did not start")
++                return
++            app.create_task(
++                _run_restart_recovery(),
++                update=None,
++                name="neyronix-restart-recovery",
++            )
++
++        bootstrap = asyncio.create_task(
++            _defer_restart_recovery_until_running(),
++            name="neyronix-recovery-bootstrap",
++        )
++        app.bot_data["neyronix_recovery_bootstrap"] = bootstrap
++        return
++
      try:
          from property_video_execution import recover_after_restart
          app.create_task(recover_after_restart(app), update=None, name="property-video-restart-recovery")
-@@ -19942,6 +19985,7 @@ def build_application() -> "Application":
+@@ -19942,6 +20022,7 @@ def build_application() -> "Application":
      app.add_handler(CommandHandler("veo_extend", cmd_veo_extend))
      app.add_handler(CommandHandler("start",        cmd_start))
      app.add_handler(CommandHandler("help",         cmd_help))
