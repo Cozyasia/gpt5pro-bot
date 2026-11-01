@@ -199,19 +199,7 @@ async def _run_selected(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--probe",
-        action="append",
-        choices=sorted(PROBES),
-        default=[],
-        help="Probe to run; repeat for multiple providers.",
-    )
-    parser.add_argument("--allow-billable", action="store_true")
-    parser.add_argument("--max-usd", type=float, default=0.0)
-    args = parser.parse_args()
-    if not args.probe:
-        args.probe = ["openai_auth", "comet_auth"]
+    args = parse_args()
     try:
         payload = asyncio.run(_run_selected(args))
     except BudgetExceeded as exc:
@@ -219,6 +207,43 @@ def main() -> int:
         return 2
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0 if all(row["status"] != "failed" for row in payload["results"]) else 1
+
+
+def parse_args(
+    argv: list[str] | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> argparse.Namespace:
+    environ = os.environ if environ is None else environ
+    env_probe_ids = [
+        item.strip()
+        for item in str(environ.get("NEYRONIX_LIVE_PROBE_IDS", "")).split(",")
+        if item.strip()
+    ]
+    env_allow_billable = str(
+        environ.get("NEYRONIX_LIVE_PROBE_ALLOW_BILLABLE", "")
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--probe",
+        action="append",
+        choices=sorted(PROBES),
+        default=env_probe_ids,
+        help="Probe to run; repeat for multiple providers.",
+    )
+    parser.add_argument(
+        "--allow-billable",
+        action="store_true",
+        default=env_allow_billable,
+    )
+    parser.add_argument(
+        "--max-usd",
+        type=float,
+        default=float(environ.get("NEYRONIX_LIVE_PROBE_MAX_USD", "0") or 0),
+    )
+    args = parser.parse_args(argv)
+    if not args.probe:
+        args.probe = ["openai_auth", "comet_auth"]
+    return args
 
 
 if __name__ == "__main__":
