@@ -7,6 +7,14 @@ set -eu
 if [ "${NEYRONIX_STAGING:-0}" = "1" ]; then
   unset TELEGRAM_LOCAL_API_URL
   echo "NEYRONIX staging: Telegram cloud API"
+  if [ -n "${NEYRONIX_LIVE_PROBE_RUN_ID:-}" ]; then
+    echo "NEYRONIX_LIVE_PROVIDER_PROBE_START"
+    if python -u /app/ops/neyronix_live_provider_probe.py; then
+      echo "NEYRONIX_LIVE_PROVIDER_PROBE_COMPLETE"
+    else
+      echo "NEYRONIX_LIVE_PROVIDER_PROBE_FAILED"
+    fi
+  fi
   exec python -u main.py
 fi
 export TELEGRAM_LOCAL_API_URL=http://127.0.0.1:8081
