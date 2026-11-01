@@ -89,3 +89,34 @@ def test_cryptobot_secret_file_counts_as_presence_without_exposing_value(tmp_pat
     assert report["environment"]["CRYPTO_PAY_API_TOKEN"] is True
     assert "never-print-this" not in payload
 
+
+def test_yookassa_secret_file_requires_complete_direct_pair_without_exposing_values(tmp_path):
+    (tmp_path / "main.py").write_text(
+        "PreCheckoutQueryHandler on_successful_payment YOOKASSA_PROVIDER_TOKEN "
+        "YOO_SHOP_ID YOO_SECRET_KEY\n",
+        encoding="utf-8",
+    )
+    secret_dir = tmp_path / "secrets"
+    secret_dir.mkdir()
+    secret_file = secret_dir / "yookassa.env"
+    secret_file.write_text(
+        "YK_ID=never-print-shop-id\nYK_KEY=never-print-shop-key\n",
+        encoding="utf-8",
+    )
+
+    report = audit_capabilities(tmp_path, environ={}, secret_dir=secret_dir)
+    yookassa = next(item for item in report["capabilities"] if item["id"] == "payments_yookassa")
+    payload = json.dumps(report, ensure_ascii=False)
+
+    assert yookassa["configuration"]["ready"] is True
+    assert report["environment"]["YK_ID"] is True
+    assert report["environment"]["YK_KEY"] is True
+    assert "never-print-shop" not in payload
+
+    secret_file.write_text("YK_ID=only-one-half\n", encoding="utf-8")
+    incomplete = audit_capabilities(tmp_path, environ={}, secret_dir=secret_dir)
+    incomplete_yookassa = next(
+        item for item in incomplete["capabilities"] if item["id"] == "payments_yookassa"
+    )
+    assert incomplete_yookassa["configuration"]["ready"] is False
+
