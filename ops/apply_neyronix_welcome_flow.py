@@ -54,25 +54,24 @@ old_media = '''    # The branded still is the canonical first-contact card. It i
         except Exception as e:
             log.warning("Animated welcome fallback failed: %s", e)
 '''
-new_media = '''    # Acknowledge /start immediately. Uploading a 7 MB video inside the
-    # webhook handler can exceed Telegram's request timeout, making Telegram
-    # show no response even though the update was claimed. The text/menu is
-    # therefore sent synchronously; the intro video is delivered in a tracked
-    # background task with a longer upload timeout.
-    await update.effective_message.reply_text(
-        start_caption,
-        reply_markup=main_kb,
-        disable_web_page_preview=True,
-    )
-
+new_media = '''    # Keep the webhook responsive, but make the first visible /start
+    # message a single video whose caption contains the complete description.
+    # Telegram renders that caption directly below the video, which is the
+    # intended NEYRONIX welcome layout.
     async def _deliver_neyronix_intro():
         if not os.path.isfile(welcome_video):
+            await update.effective_message.reply_text(
+                start_caption,
+                reply_markup=main_kb,
+                disable_web_page_preview=True,
+            )
             return
         try:
             with open(welcome_video, "rb") as video_file:
                 await update.effective_message.reply_video(
                     video=video_file,
-                    caption="🎬 NEYRONIX готов помочь с вашей задачей.",
+                    caption=start_caption,
+                    reply_markup=main_kb,
                     supports_streaming=True,
                     connect_timeout=30,
                     write_timeout=120,
@@ -82,27 +81,23 @@ new_media = '''    # Acknowledge /start immediately. Uploading a 7 MB video insi
             log.info("NEYRONIX_START_VIDEO delivered chat_id=%s", update.effective_chat.id)
         except (TimedOut, asyncio.TimeoutError) as e:
             # Telegram may have accepted the upload even if the client timed
-            # out. Never send a fallback after an uncertain video delivery.
+            # out. Never send a second media message after an uncertain upload.
             log.warning("NEYRONIX_START_VIDEO outcome_unknown chat_id=%s error=%s", update.effective_chat.id, type(e).__name__)
         except Exception as e:
             log.warning("NEYRONIX_START_VIDEO failed chat_id=%s error_type=%s", update.effective_chat.id, type(e).__name__)
-            if os.path.isfile(welcome_image):
-                try:
-                    with open(welcome_image, "rb") as image_file:
-                        await update.effective_message.reply_photo(
-                            photo=image_file,
-                            caption="🖼 NEYRONIX — текст, документы, фото, видео и нейропродакшен.",
-                        )
-                except Exception:
-                    log.exception("NEYRONIX_START_IMAGE fallback failed")
+            await update.effective_message.reply_text(
+                start_caption,
+                reply_markup=main_kb,
+                disable_web_page_preview=True,
+            )
 
     context.application.create_task(
         _deliver_neyronix_intro(),
         update=update,
         name="neyronix-start-video",
     )
-    # Prevent the legacy synchronous fallback below this block from sending
-    # a duplicate welcome message after the immediate acknowledgement.
+    # Prevent the legacy synchronous fallback below this block from sending a
+    # second text message after the media task has been scheduled.
     welcome_sent = True
 '''
 
