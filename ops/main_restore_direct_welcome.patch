@@ -1,0 +1,61 @@
+diff --git a/main.py b/main.py
+--- a/main.py
++++ b/main.py
+@@ -5953,40 +5953,25 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+     # Keep the welcome animation, text and keyboard in one Telegram message.
+     # Telegram captions are limited, so use a compact start caption here.
+     start_caption = (
+-        "👋 Привет! Я NEYRONIX — мультимодельный AI-бот в Telegram.\n\n"
+-        "🚀 Помогаю с текстом и голосом, PDF/DOCX, изображениями, "
+-        "Маркетплейсами, AI-видео, музыкой, live-поиском, "
+-        "нейропродакшеном и видеообзорами недвижимости.\n\n"
+-        "Выберите направление в меню ниже или просто напишите задачу."
++        "👋 Привет! Я NEYRONIX — мультимодельная AI-студия в Telegram "
++        "для текста, документов, фото, видео, музыки, речи и live-поиска.\n\n"
++        "🚀 Что умею:\n"
++        "🎓 Учёба и работа с PDF/DOCX\n"
++        "🖼 Генерация и обработка изображений\n"
++        "🎬 Видео, Reels/Shorts и оживление фото\n"
++        "🎙 Распознавание и озвучка речи\n"
++        "🎵 Генерация музыки\n"
++        "🔎 Поиск и анализ информации\n\n"
++        "Выберите режим в меню ниже или просто напишите задачу."
+     )
+ 
+-    welcome_image = os.path.join(
+-        os.path.dirname(os.path.abspath(__file__)),
+-        "assets",
+-        "neyronix_welcome.png",
+-    )
+     welcome_video = os.path.join(
+         os.path.dirname(os.path.abspath(__file__)),
+         "assets",
+         "NeyroBot_start_Live_Centered_FullHD-2.mp4",
+     )
+     welcome_sent = False
+-    # The branded still is the canonical first-contact card.  It is local and
+-    # therefore works even when BANNER_URL is unset or an external image host
+-    # is unavailable.  Keep the animated asset as a fallback for older builds.
+-    if os.path.isfile(welcome_image):
+-        try:
+-            with open(welcome_image, "rb") as image_file:
+-                await update.effective_message.reply_photo(
+-                    photo=image_file,
+-                    caption=start_caption,
+-                    reply_markup=main_kb,
+-                )
+-            welcome_sent = True
+-        except Exception as e:
+-            log.warning("Branded welcome image failed, trying animated fallback: %s", e)
+-
+-    if not welcome_sent and os.path.isfile(welcome_video):
++    if os.path.isfile(welcome_video):
+         try:
+             with open(welcome_video, "rb") as video_file:
+                 await update.effective_message.reply_video(
+@@ -5997,7 +5982,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+             )
+             welcome_sent = True
+         except Exception as e:
+-            log.warning("Animated welcome fallback failed: %s", e)
++            log.warning("Animated welcome failed, using image fallback: %s", e)

@@ -1,0 +1,71 @@
+diff --git a/main.py b/main.py
+--- a/main.py
++++ b/main.py
+@@ -5977,28 +5977,18 @@
+     # Telegram captions are limited, so use a compact start caption here.
+     public_brand = "NEYRONIX" if NEYRONIX_MODE else BOT_PUBLIC_NAME
+     start_caption = (
+-        f"👋 Привет! Я {public_brand} — мультимодельная AI-студия в Telegram "
+-        "для текста, документов, фото, видео, музыки, речи и live-поиска.\n\n"
+-        "🚀 Что умею:\n"
+-        "🎓 Учёба и работа с PDF/DOCX\n"
+-        "🖼 Генерация и обработка изображений\n"
+-        "🎬 Видео, Reels/Shorts и оживление фото\n"
+-        "🎙 Распознавание и озвучка речи\n"
+-        "🎵 Генерация музыки\n"
+-        "🔎 Поиск и анализ информации\n\n"
+-        "Выберите режим в меню ниже или просто напишите задачу."
++        "👋 Привет! Я NEYRONIX — мультимодельный AI-бот в Telegram.\n\n"
++        "🚀 Помогаю с текстом и голосом, PDF/DOCX, изображениями, "
++        "Маркетплейсами, AI-видео, музыкой, live-поиском, "
++        "нейропродакшеном и видеообзорами недвижимости.\n\n"
++        "Выберите направление в меню ниже или просто напишите задачу."
+     )
+ 
+-    # A cold free Render instance must answer Telegram before attempting the
+-    # 7 MB animated welcome upload. NEYRONIX keeps the 3D experience in the
+-    # Mini App and returns the usable reply menu immediately.
+-    if NEYRONIX_MODE:
+-        await update.effective_message.reply_text(
+-            start_caption,
+-            reply_markup=main_kb,
+-            disable_web_page_preview=True,
+-        )
+-        return
++    welcome_image = os.path.join(
++        os.path.dirname(os.path.abspath(__file__)),
++        "assets",
++        "neyronix_welcome.png",
++    )
+ 
+     welcome_video = os.path.join(
+         os.path.dirname(os.path.abspath(__file__)),
+@@ -6006,7 +5996,21 @@
+         "NeyroBot_start_Live_Centered_FullHD-2.mp4",
+     )
+     welcome_sent = False
+-    if os.path.isfile(welcome_video):
++    # The branded still is the canonical first-contact card. It is local, so
++    # it works even when BANNER_URL is unset or an external host is down.
++    if os.path.isfile(welcome_image):
++        try:
++            with open(welcome_image, "rb") as image_file:
++                await update.effective_message.reply_photo(
++                    photo=image_file,
++                    caption=start_caption,
++                    reply_markup=main_kb,
++                )
++            welcome_sent = True
++        except Exception as e:
++            log.warning("Branded welcome image failed, trying animated fallback: %s", e)
++
++    if not welcome_sent and os.path.isfile(welcome_video):
+         try:
+             with open(welcome_video, "rb") as video_file:
+                 await update.effective_message.reply_video(
+@@ -6024,7 +6028,7 @@
+             )
+             return
+         except Exception as e:
+-            log.warning("Animated welcome failed, using image fallback: %s", e)
++            log.warning("Animated welcome fallback failed: %s", e)
