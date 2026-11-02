@@ -21,6 +21,7 @@ RUN patch --batch --forward -p1 < /app/ops/main_veo_recovery.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_start_welcome.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_neyronix.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_neyronix_welcome_card.patch || true
+RUN python /app/ops/apply_neyronix_welcome_flow.py
 RUN patch --batch --forward -p1 < /app/ops/main_cryptobot_secret.patch || true
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
