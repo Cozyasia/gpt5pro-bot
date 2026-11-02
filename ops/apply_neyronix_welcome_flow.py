@@ -54,41 +54,56 @@ old_media = '''    # The branded still is the canonical first-contact card. It i
         except Exception as e:
             log.warning("Animated welcome fallback failed: %s", e)
 '''
-new_media = '''    # Send exactly one media welcome. The short Telegram profile description
-    # is the first contact; this caption continues it instead of repeating it.
-    # Prefer the animated NEYRONIX intro, with the local branded card as a
-    # deterministic fallback when Telegram rejects or times out the upload.
-    if os.path.isfile(welcome_video):
+new_media = '''    # Acknowledge /start immediately. Uploading a 7 MB video inside the
+    # webhook handler can exceed Telegram's request timeout, making Telegram
+    # show no response even though the update was claimed. The text/menu is
+    # therefore sent synchronously; the intro video is delivered in a tracked
+    # background task with a longer upload timeout.
+    await update.effective_message.reply_text(
+        start_caption,
+        reply_markup=main_kb,
+        disable_web_page_preview=True,
+    )
+
+    async def _deliver_neyronix_intro():
+        if not os.path.isfile(welcome_video):
+            return
         try:
             with open(welcome_video, "rb") as video_file:
                 await update.effective_message.reply_video(
                     video=video_file,
-                    caption=start_caption,
-                    reply_markup=main_kb,
+                    caption="🎬 NEYRONIX готов помочь с вашей задачей.",
                     supports_streaming=True,
+                    connect_timeout=30,
+                    write_timeout=120,
+                    read_timeout=120,
+                    pool_timeout=30,
                 )
-            welcome_sent = True
+            log.info("NEYRONIX_START_VIDEO delivered chat_id=%s", update.effective_chat.id)
         except (TimedOut, asyncio.TimeoutError) as e:
-            log.warning(
-                "Animated welcome delivery outcome unknown; suppressing fallback "
-                "to avoid duplicate welcome: %s",
-                e,
-            )
-            return
+            # Telegram may have accepted the upload even if the client timed
+            # out. Never send a fallback after an uncertain video delivery.
+            log.warning("NEYRONIX_START_VIDEO outcome_unknown chat_id=%s error=%s", update.effective_chat.id, type(e).__name__)
         except Exception as e:
-            log.warning("Animated welcome failed, trying branded card fallback: %s", e)
+            log.warning("NEYRONIX_START_VIDEO failed chat_id=%s error_type=%s", update.effective_chat.id, type(e).__name__)
+            if os.path.isfile(welcome_image):
+                try:
+                    with open(welcome_image, "rb") as image_file:
+                        await update.effective_message.reply_photo(
+                            photo=image_file,
+                            caption="🖼 NEYRONIX — текст, документы, фото, видео и нейропродакшен.",
+                        )
+                except Exception:
+                    log.exception("NEYRONIX_START_IMAGE fallback failed")
 
-    if not welcome_sent and os.path.isfile(welcome_image):
-        try:
-            with open(welcome_image, "rb") as image_file:
-                await update.effective_message.reply_photo(
-                    photo=image_file,
-                    caption=start_caption,
-                    reply_markup=main_kb,
-                )
-            welcome_sent = True
-        except Exception as e:
-            log.warning("Branded welcome card failed: %s", e)
+    context.application.create_task(
+        _deliver_neyronix_intro(),
+        update=update,
+        name="neyronix-start-video",
+    )
+    # Prevent the legacy synchronous fallback below this block from sending
+    # a duplicate welcome message after the immediate acknowledgement.
+    welcome_sent = True
 '''
 
 if old_caption in source:
