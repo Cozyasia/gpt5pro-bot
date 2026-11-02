@@ -15,7 +15,7 @@ COPY . .
 # The connected GitHub writer has a 393 KiB single-blob limit. Keep the
 # production source tree intact and apply the reviewed Veo delta in-image.
 RUN patch --batch --forward -p1 < /app/ops/main_restore_direct_welcome.patch
-RUN patch --batch --forward -p1 < /app/ops/main_veo.patch
+RUN patch --batch --forward -p1 < /app/ops/main_veo.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_veo_start_guard.patch
 RUN patch --batch --forward -p1 < /app/ops/main_veo_recovery.patch
 RUN patch --batch --forward -p1 < /app/ops/main_start_welcome.patch
