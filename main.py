@@ -4720,6 +4720,194 @@ def _set_text_video_wait(context: ContextTypes.DEFAULT_TYPE, engine: str | None 
         context.user_data["text_video_engine"] = engine
 
 
+def _clear_i2v_wait(context: ContextTypes.DEFAULT_TYPE):
+    """Clear the dedicated image-to-video wizard without touching durable photo cache."""
+    if not context:
+        return
+    for key in (
+        "awaiting_i2v_photo",
+        "awaiting_i2v_prompt",
+        "i2v_engine",
+        "i2v_duration",
+        "i2v_aspect",
+        "i2v_reference_ready",
+    ):
+        with contextlib.suppress(Exception):
+            context.user_data.pop(key, None)
+
+
+def _i2v_keyboard(context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
+    """Model/settings keyboard for the explicit reference-image → video flow."""
+    engine = (context.user_data.get("i2v_engine") or "seedance").strip().lower()
+    duration = int(context.user_data.get("i2v_duration") or 8)
+    aspect = str(context.user_data.get("i2v_aspect") or "9:16")
+    def mark(value: str, current: str) -> str:
+        return ("✅ " if value == current else "") + value
+    rows = [
+        [
+            InlineKeyboardButton(mark("Seedance 2.5", engine), callback_data="i2v:engine:seedance"),
+            InlineKeyboardButton(mark("Kling", engine), callback_data="i2v:engine:kling"),
+        ],
+        [
+            InlineKeyboardButton(mark("Runway", engine), callback_data="i2v:engine:runway"),
+            InlineKeyboardButton(mark("Sora 2", engine), callback_data="i2v:engine:sora"),
+        ],
+        [
+            InlineKeyboardButton(mark("4 сек", str(duration)), callback_data="i2v:dur:4"),
+            InlineKeyboardButton(mark("8 сек", str(duration)), callback_data="i2v:dur:8"),
+            InlineKeyboardButton(mark("10 сек", str(duration)), callback_data="i2v:dur:10"),
+        ],
+        [
+            InlineKeyboardButton(mark("15 сек", str(duration)), callback_data="i2v:dur:15"),
+            InlineKeyboardButton(mark("20 сек", str(duration)), callback_data="i2v:dur:20"),
+            InlineKeyboardButton(mark("30 сек", str(duration)), callback_data="i2v:dur:30"),
+        ],
+        [
+            InlineKeyboardButton(mark("9:16", aspect), callback_data="i2v:aspect:9:16"),
+            InlineKeyboardButton(mark("16:9", aspect), callback_data="i2v:aspect:16:9"),
+            InlineKeyboardButton(mark("1:1", aspect), callback_data="i2v:aspect:1:1"),
+        ],
+        [InlineKeyboardButton("✖️ Отмена", callback_data="i2v:cancel")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+async def _handle_i2v_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, q):
+    data = (q.data or "").strip()
+    if data == "i2v:cancel":
+        _clear_i2v_wait(context)
+        await q.answer("Отменено")
+        await q.message.reply_text("Операция «картинка → видео» отменена.")
+        return
+    parts = data.split(":")
+    if len(parts) >= 3 and parts[1] == "engine":
+        engine = parts[2].strip().lower()
+        if engine not in {"seedance", "kling", "runway", "sora"}:
+            await q.answer("Неизвестная модель", show_alert=True)
+            return
+        if engine == "seedance" and not SEEDANCE_ENABLED:
+            await q.answer("Seedance сейчас отключён", show_alert=True)
+            return
+        if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
+            await q.answer("Runway недоступен", show_alert=True)
+            return
+        context.user_data["i2v_engine"] = engine
+        context.user_data["awaiting_i2v_prompt"] = True
+        await q.answer("Модель выбрана")
+        warning = " Sora 2 принимает только сцены без людей." if engine == "sora" else ""
+        await q.message.reply_text(
+            f"✅ Выбрана модель: {engine.title()}.{warning}\n"
+            "Теперь пришлите промпт движения для загруженного изображения.",
+            reply_markup=_i2v_keyboard(context),
+        )
+        return
+    if len(parts) >= 3 and parts[1] == "dur":
+        try:
+            duration = max(4, min(30, int(parts[2])))
+        except (TypeError, ValueError):
+            await q.answer("Неверная длительность", show_alert=True)
+            return
+        context.user_data["i2v_duration"] = duration
+        await q.answer(f"{duration} сек")
+        with contextlib.suppress(Exception):
+            await q.message.edit_reply_markup(reply_markup=_i2v_keyboard(context))
+        return
+    if len(parts) >= 3 and parts[1] == "aspect":
+        aspect = ":".join(parts[2:]).strip()
+        if aspect not in {"9:16", "16:9", "1:1"}:
+            await q.answer("Неверный формат", show_alert=True)
+            return
+        context.user_data["i2v_aspect"] = aspect
+        await q.answer(aspect)
+        with contextlib.suppress(Exception):
+            await q.message.edit_reply_markup(reply_markup=_i2v_keyboard(context))
+        return
+    await q.answer("Неизвестное действие", show_alert=True)
+
+
+async def _start_image_to_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    """Run a true reference-image → video generation with the selected provider."""
+    prompt = (prompt or "").strip()
+    img = _get_cached_photo(update.effective_user.id)
+    if not img:
+        await update.effective_message.reply_text("⚠️ Сначала загрузите референс-фотографию.")
+        return False
+    if not prompt:
+        await update.effective_message.reply_text("Опишите движение и атмосферу для загруженного изображения.")
+        return False
+    engine = (context.user_data.get("i2v_engine") or "seedance").strip().lower()
+    if engine not in {"seedance", "kling", "runway", "sora"}:
+        engine = "seedance"
+    duration = max(4, min(30, int(context.user_data.get("i2v_duration") or 8)))
+    aspect = str(context.user_data.get("i2v_aspect") or "9:16")
+    if aspect not in {"9:16", "16:9", "1:1"}:
+        aspect = "9:16"
+    if engine == "seedance" and not SEEDANCE_ENABLED:
+        await update.effective_message.reply_text("⚠️ Seedance сейчас недоступен. Выберите Kling, Runway или Sora 2.", reply_markup=_i2v_keyboard(context))
+        return False
+    if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
+        await update.effective_message.reply_text("⚠️ Runway отключён в текущей конфигурации.", reply_markup=_i2v_keyboard(context))
+        return False
+    if engine == "sora" and _prompt_likely_has_people(prompt):
+        await update.effective_message.reply_text(
+            "⚠️ Sora 2 в этом боте используется только для сцен без людей. Выберите Seedance, Kling или Runway.",
+            reply_markup=_i2v_keyboard(context),
+        )
+        return False
+    provider_cost = _video_provider_cost_usd(engine, duration)
+    label = {
+        "seedance": "Seedance 2.5 · image→video",
+        "kling": "Kling · image→video",
+        "runway": "Runway · image→video",
+        "sora": "Sora 2 · image→video",
+    }[engine]
+
+    async def _go():
+        await update.effective_message.reply_text(f"🎬 Запускаю {label}: {duration} сек · {aspect}. Референс передан в модель.")
+        try:
+            if engine == "seedance":
+                video = await seedance_generate(
+                    api_key=COMET_API_KEY,
+                    base_url=COMET_BASE_URL,
+                    prompt=prompt,
+                    seconds=duration,
+                    aspect=aspect,
+                    model=SEEDANCE_MODEL,
+                    model_fallbacks=SEEDANCE_MODEL_FALLBACKS,
+                    reference_bytes=img,
+                    reference_name="neyronix_reference.jpg",
+                    reference_mime=sniff_image_mime(img),
+                    create_path=SEEDANCE_CREATE_PATH,
+                    max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+                )
+                await _reply_video_bytes(update, video, f"{label} ✅")
+                return True
+            if engine == "runway":
+                return bool(await _run_runway_animate_photo(update, context, img, prompt, duration, aspect))
+            return bool(await _run_comet_i2v(update, context, engine, img, prompt, duration, aspect))
+        except SeedanceError as exc:
+            detail = str(exc).replace(COMET_API_KEY or "", "[redacted]")[:600]
+            await update.effective_message.reply_text(f"❌ {label}: {detail}")
+            return False
+        except Exception:
+            log.exception("image-to-video generation failed engine=%s", engine)
+            await update.effective_message.reply_text(f"❌ {label}: провайдер не вернул готовое видео. Кредиты не списаны.")
+            return False
+
+    await _try_pay_then_do(
+        update,
+        context,
+        update.effective_user.id,
+        engine,
+        provider_cost,
+        _go,
+        remember_kind=f"image_to_video_{engine}",
+        remember_payload={"prompt": prompt[:500], "duration": duration, "aspect": aspect, "engine": engine},
+        silent_failure=True,
+    )
+    return True
+
+
 async def _handle_vocalclip_upload_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
     _clear_transient_flows(context)
     _set_mode_clean(q.from_user.id, "Развлечения", "vocalclip")
@@ -5238,6 +5426,20 @@ async def on_mode_cb(update, context):
         await _handle_vocalclip_prompt_choice(update, context, q, prefix="act")
         return
 
+    if data == "act:fun:image2video":
+        await q.answer("Картинка → видео")
+        _clear_transient_flows(context)
+        _set_mode_clean(uid, "Развлечения", "image_to_video")
+        context.user_data["awaiting_i2v_photo"] = True
+        context.user_data["i2v_duration"] = 8
+        context.user_data["i2v_aspect"] = "9:16"
+        await q.message.reply_text(
+            "🖼 Картинка → видео\n\nШаг 1/3: загрузите референс-фотографию. "
+            "После этого выберите модель и пришлите промпт движения.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✖️ Отмена", callback_data="i2v:cancel")]]),
+        )
+        return
+
     if data == "act:fun:textvideo":
         await q.answer("Видео по тексту/голосу")
         _clear_transient_flows(context)
@@ -5697,6 +5899,12 @@ def _clear_transient_flows(context):
         "music_video_draft_edit",
         "awaiting_text_video_prompt",
         "text_video_engine",
+        "awaiting_i2v_photo",
+        "awaiting_i2v_prompt",
+        "i2v_engine",
+        "i2v_duration",
+        "i2v_aspect",
+        "i2v_reference_ready",
         "presentation_studio_active",
     ):
         with contextlib.suppress(Exception):
@@ -5883,6 +6091,17 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     data = q.data or ""
+    if data == "fun:image2video":
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "image_to_video")
+        context.user_data["awaiting_i2v_photo"] = True
+        context.user_data["i2v_duration"] = 8
+        context.user_data["i2v_aspect"] = "9:16"
+        return await q.message.reply_text(
+            "🖼 Картинка → видео\n\nШаг 1/3: загрузите референс-фотографию. "
+            "После этого я предложу Seedance, Kling, Runway или Sora 2, затем попрошу промпт движения.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✖️ Отмена", callback_data="i2v:cancel")]]),
+        )
     if data == "fun:img":
         return await q.message.reply_text("Пришли промпт или используй команду /img <описание> — сгенерирую изображение.")
     if data == "fun:revive":
@@ -14393,6 +14612,10 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = (q.data or "").strip()
     try:
+        if data.startswith("i2v:"):
+            await _handle_i2v_callback(update, context, q)
+            return
+
         # Presentation/Catalog Studio v86
         if data.startswith("ps:"):
             try:
@@ -18407,6 +18630,19 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         caption = (update.message.caption or "").strip()
 
+        # Dedicated image-to-video wizard claims the next reference before generic photo routes.
+        if context.user_data.pop("awaiting_i2v_photo", False):
+            context.user_data["i2v_reference_ready"] = True
+            context.user_data.setdefault("i2v_engine", "seedance")
+            context.user_data.setdefault("i2v_duration", 8)
+            context.user_data.setdefault("i2v_aspect", "9:16")
+            await update.effective_message.reply_text(
+                "✅ Референс сохранён.\n\nШаг 2/3: выберите модель, длительность и формат. "
+                "После выбора модели отправьте промпт движения для этого изображения.",
+                reply_markup=_i2v_keyboard(context),
+            )
+            return
+
         # High-fidelity music-video pack owns these four uploads before every generic photo flow.
         identity_slot = _music_video_identity_wait_slot(context)
         # Defensive recovery: Telegram/user_data is process-local and can be lost on a
@@ -20106,14 +20342,21 @@ def build_application() -> "Application":
 
     # Selected text-to-video engine owns the next prompt before generic AI routing.
     async def _route_selected_text_video(update, context):
-        if not context.user_data.get("awaiting_text_video_prompt"):
+        if not (
+            context.user_data.get("awaiting_text_video_prompt")
+            or context.user_data.get("awaiting_i2v_prompt")
+        ):
             return
         incoming = (getattr(update.effective_message, "text", "") or "").strip()
         if not incoming:
             return
-        # Preserve the selection until _start_text_video has inspected it.
-        await _start_text_video(update, context, incoming)
-        _clear_text_video_wait(context)
+        if context.user_data.get("awaiting_i2v_prompt"):
+            await _start_image_to_video(update, context, incoming)
+            _clear_i2v_wait(context)
+        else:
+            # Preserve the selection until _start_text_video has inspected it.
+            await _start_text_video(update, context, incoming)
+            _clear_text_video_wait(context)
         raise ApplicationHandlerStop
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _route_selected_text_video), group=-3)
