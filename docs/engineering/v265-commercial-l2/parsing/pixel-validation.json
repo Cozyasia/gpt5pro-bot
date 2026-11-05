@@ -1,0 +1,13 @@
+{
+  "model": "MediaPipe SelfieMulticlass",
+  "presence_correct": 6,
+  "presence_total": 6,
+  "positive_images": 2,
+  "minimum_required_positive_images": 4,
+  "independent_pixel_mask_ground_truth": true,
+  "positive_pixel_iou_mean": 0.021223679046151342,
+  "case07_source": {"precision": 0.5957161981258366, "recall": 0.035661623285036546, "iou": 0.034818941504178275},
+  "case07_stage1": {"precision": 0.10606060606060606, "recall": 0.008152601592747647, "iou": 0.007628416588124411},
+  "ownership_validated": false,
+  "conclusion": "The model remains a presence detector/gate, not a glasses pixel owner. Do not use it to composite accessories."
+}

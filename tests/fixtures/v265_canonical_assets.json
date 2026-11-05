@@ -1,0 +1,26 @@
+{
+  "research_only": true,
+  "commercial_asset_license_verified": false,
+  "assets": {
+    "bfm.pkl": {
+      "url": "https://raw.githubusercontent.com/cleardusk/3DDFA_V2/master/configs/bfm_noneck_v3.pkl",
+      "sha256": "89ac96480eddc331120f2c8401737c55a5fcc97b10f8a64574e63976c3d246ca"
+    },
+    "tri.pkl": {
+      "url": "https://raw.githubusercontent.com/cleardusk/3DDFA_V2/master/configs/tri.pkl",
+      "sha256": "0562a594d8369f7d1c86306522ff76fd3a2c81cf90ba9443893c1191ad0abbb8"
+    },
+    "param.pkl": {
+      "url": "https://raw.githubusercontent.com/cleardusk/3DDFA_V2/master/configs/param_mean_std_62d_120x120.pkl",
+      "sha256": "090d7150f77cb66c29ddae21e4508fbde59123dcd1dea7facc24a7ed06d1c795"
+    },
+    "regressor.pth": {
+      "url": "https://raw.githubusercontent.com/cleardusk/3DDFA_V2/master/weights/mb05_120x120.pth",
+      "sha256": "f93ed7f1c4c0382b16d7c18480a5f67473c1917a47475a9823924f38aeb27280"
+    },
+    "mobilenet_v1.py": {
+      "url": "https://raw.githubusercontent.com/cleardusk/3DDFA_V2/master/models/mobilenet_v1.py",
+      "sha256": "b05dcb4349b2be5b0e9cb479a6c8baf7e8626f4f8aca3386aafbeeef40354cbb"
+    }
+  }
+}

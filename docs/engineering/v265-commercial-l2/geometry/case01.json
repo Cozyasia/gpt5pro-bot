@@ -1,0 +1,44 @@
+{
+  "case": "case01",
+  "identity_hash": "d4728caee2758cac0053bcc9e087167ce3b50d994a703a786746b04c22e7576f",
+  "source_self_rmse_iod": 0.004565810319036245,
+  "source": {
+    "mouth_width": 0.5734972993182366,
+    "opening": 0.0014514562079027727,
+    "lip_height": 0.14973722670369796,
+    "philtrum": 0.15032431139365696,
+    "mouth_chin": 0.47503405367770796
+  },
+  "target": {
+    "mouth_width": 0.7472851641126326,
+    "opening": 0.002034623728264044,
+    "lip_height": 0.12817520337976185,
+    "philtrum": 0.15033523203172214,
+    "mouth_chin": 0.5034228217136751
+  },
+  "retarget": {
+    "mouth_width": 0.741342034145168,
+    "opening": 0.003978223815073047,
+    "lip_height": 0.17036072624180887,
+    "philtrum": 0.16226880126808846,
+    "mouth_chin": 0.580004244285169
+  },
+  "topology": {
+    "triangles": 898,
+    "orientation_failures": 51,
+    "area_ratio_min": 0.13091972470283508,
+    "area_ratio_max": 4.975697994232178,
+    "edge_stretch_min": 0.13140414655208588,
+    "edge_stretch_max": 3.73445987701416
+  },
+  "mouth_identity_width_error": 0.1678447348269314,
+  "mouth_identity_philtrum_error": 0.011944489874431502,
+  "mouth_identity_chin_error": 0.10497019060746099,
+  "target_opening_error": 0.0019436000868090029,
+  "blendshapes": {
+    "source_jawOpen": 0.003605268895626068,
+    "target_jawOpen": 0.0016575806075707078,
+    "source_smile": 0.0012277523055672646,
+    "target_smile": 0.8337011635303497
+  }
+}

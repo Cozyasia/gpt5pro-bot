@@ -1,0 +1,81 @@
+name: V265 Identity False-Positive Analysis
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/v265-identity-false-positive-analysis.yml"
+      - "neyrobot_prod/v265_identity_consensus.py"
+      - "tests/test_v265_identity_consensus.py"
+      - "scripts/v265_identity_public_calibration.py"
+      - "scripts/v265_source_fidelity_calibration.py"
+      - "scripts/v265_source_core_ablation.py"
+      - "neyrobot_prod/v265_source_fidelity.py"
+      - "neyrobot_prod/dense68_engine_v265.py"
+      - "tests/test_v265_source_fidelity.py"
+      - "tests/test_v265_source_core_experiment.py"
+      - "tests/fixtures/v265_source_fidelity_audit.json"
+
+permissions:
+  contents: read
+
+jobs:
+  model-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned analysis models
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/v265-id-models
+          curl -L --fail --retry 3             https://github.com/yakhyo/uniface/releases/download/weights/mobilenetv2.onnx             -o /tmp/v265-id-models/mobileface_mcp.onnx
+          curl -L --fail --retry 3             https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/w600k_mbf.onnx             -o /tmp/v265-id-models/arcface_w600k_mbf.onnx
+          curl -L --fail --retry 3             https://github.com/yakhyo/pipnet-onnx/releases/download/weights/pipnet_r18_300w_celeba_68.onnx             -o /tmp/v265-id-models/pipnet68.onnx
+          curl -L --fail --retry 3             https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx             -o /tmp/v265-id-models/yunet.onnx
+          sha256sum /tmp/v265-id-models/*
+          mkdir -p /tmp/v265-id-fixtures
+          fixture_base=https://raw.githubusercontent.com/yakhyo/uniface/df87c6531f4d1bdad665882d42d658590e724ea4/assets/source
+          for name in \
+            verify_now_2010.jpg verify_now_2014.jpg verify_now_2024.jpg \
+            verify_bohr_1910.jpg verify_bohr_1935.jpg \
+            verify_einstein_1921.jpg verify_einstein_1947.jpg verify_curie.jpg \
+            pose_center.jpg pose_left.jpg pose_right.jpg; do
+            curl -L --fail --retry 3 "$fixture_base/$name" -o "/tmp/v265-id-fixtures/$name"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-identity-public-fixtures
+          path: /tmp/v265-id-fixtures/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-identity-analysis-models
+          path: /tmp/v265-id-models/
+          if-no-files-found: error
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install production dependencies
+        run: pip install -r requirements.txt
+      - name: Measure public source fidelity (diagnostic, not production acceptance)
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: |
+          cp /tmp/v265-id-models/pipnet68.onnx /tmp/v265-id-models/pipnet.onnx
+          cp /tmp/v265-id-models/mobileface_mcp.onnx /tmp/v265-id-models/mobileface.onnx
+          python -m scripts.v265_source_fidelity_calibration --models /tmp/v265-id-models --fixtures /tmp/v265-id-fixtures --output /tmp/v265-source-fidelity-public.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-source-fidelity-public-measurements-NOT-acceptance
+          path: /tmp/v265-source-fidelity-public.json
+          if-no-files-found: error
+      - name: Public production-size transfer ablation (not Render qualification)
+        env:
+          PROD_HARDENING_ENABLED: "0"
+        run: python -m scripts.v265_source_core_ablation --models /tmp/v265-id-models --fixtures /tmp/v265-id-fixtures --output /tmp/v265-source-core-public.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v265-source-core-public-ablation-NOT-acceptance
+          path: /tmp/v265-source-core-public.json
+          if-no-files-found: error

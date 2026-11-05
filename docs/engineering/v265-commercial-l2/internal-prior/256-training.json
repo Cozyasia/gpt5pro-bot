@@ -1,0 +1,45 @@
+{
+  "scope": "procedural engineering toy only; NOT identity quality",
+  "seed": 265,
+  "canonical_sha256": "8bac80443397e113f41a8b565ea72c59390bc031d9defab289dba7bc0c54e618",
+  "identity_coefficients": 256,
+  "parametric_coefficients": 224,
+  "residual_coefficients": 32,
+  "vertices": 468,
+  "triangles": 898,
+  "identities_train": 48,
+  "identities_holdout": 16,
+  "views_per_identity": 3,
+  "history": [
+    {
+      "step": 0,
+      "mse": 0.16417305171489716,
+      "edge_energy": 0.00017787536489777267,
+      "cross_view_mse": 0.0020050269085913897
+    },
+    {
+      "step": 400,
+      "mse": 0.09971670806407928,
+      "edge_energy": 0.02524379827082157,
+      "cross_view_mse": 0.032089922577142715
+    }
+  ],
+  "holdout_coefficient_mse": 0.24709732830524445,
+  "holdout_zero_prior_mse": 0.1657535284757614,
+  "holdout_cross_view_mse": 0.058753736317157745,
+  "expression_orthogonality_max": 2.2630722185112973e-08,
+  "residual_max_local_magnitude_iod": 0.009509045630693436,
+  "toy_orientation_failures": 0,
+  "toy_area_ratio_range": [
+    0.25264134052268783,
+    1.634713484736955
+  ],
+  "encoder_bytes": 640768,
+  "geometry_buffers_bytes": 1749616,
+  "process_peak_rss_kib": 43716,
+  "training_seconds": 0.39211743499998875,
+  "inference_p50_ms": 0.0586570000109532,
+  "inference_p95_ms": 0.0912170999981754,
+  "real_identity_capacity_proven": false,
+  "production_memory_qualified": false
+}

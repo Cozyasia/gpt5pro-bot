@@ -1,0 +1,294 @@
+{
+  "head": "b2461440fd2762910dc4470929b3000ae986fd95",
+  "run": 34208670705,
+  "reports": [
+    {
+      "mode": "A",
+      "application_constructed": true,
+      "handler_groups": 47,
+      "before_models": [
+        508522496,
+        536870912,
+        141332480,
+        339197952
+      ],
+      "after_models": [
+        524038144,
+        536870912,
+        323014656,
+        140427264
+      ],
+      "rows": [
+        {
+          "iteration": 0,
+          "strict_entry_states": [
+            [
+              480051200,
+              536870912,
+              391184384,
+              62472192
+            ]
+          ],
+          "peak_rss_kib": 462160,
+          "memory_after": [
+            415965184,
+            536870912,
+            347570176,
+            24330240
+          ],
+          "sampled_cgroup_peak": 536870912,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "a89b82cda51354680340ef1dfa22a8f1cbcc26482fd860a752369114cfbcc21a",
+            "9413f2fe95120658fd0c885d2d8c839b06c8fca3591e76272a2b09aaefe8e3a6"
+          ]
+        },
+        {
+          "iteration": 1,
+          "strict_entry_states": [
+            [
+              451989504,
+              536870912,
+              377323520,
+              17567744
+            ]
+          ],
+          "peak_rss_kib": 462160,
+          "memory_after": [
+            439574528,
+            536870912,
+            336748544,
+            22466560
+          ],
+          "sampled_cgroup_peak": 536764416,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "a89b82cda51354680340ef1dfa22a8f1cbcc26482fd860a752369114cfbcc21a",
+            "9413f2fe95120658fd0c885d2d8c839b06c8fca3591e76272a2b09aaefe8e3a6"
+          ]
+        },
+        {
+          "iteration": 2,
+          "strict_entry_states": [
+            [
+              458653696,
+              536870912,
+              372219904,
+              26050560
+            ]
+          ],
+          "peak_rss_kib": 462160,
+          "memory_after": [
+            409686016,
+            536870912,
+            330416128,
+            19902464
+          ],
+          "sampled_cgroup_peak": 536670208,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "a89b82cda51354680340ef1dfa22a8f1cbcc26482fd860a752369114cfbcc21a",
+            "9413f2fe95120658fd0c885d2d8c839b06c8fca3591e76272a2b09aaefe8e3a6"
+          ]
+        }
+      ],
+      "production_memory_qualified": false,
+      "qualification": "real app and warmed PIPNet/MobileFace, no Telegram initialize or live request history"
+    },
+    {
+      "mode": "T",
+      "application_constructed": true,
+      "handler_groups": 47,
+      "before_models": [
+        515166208,
+        536870912,
+        141406208,
+        346480640
+      ],
+      "after_models": [
+        524091392,
+        536870912,
+        323022848,
+        143421440
+      ],
+      "rows": [
+        {
+          "iteration": 0,
+          "strict_entry_states": [
+            [
+              472801280,
+              536870912,
+              386924544,
+              88768512
+            ]
+          ],
+          "peak_rss_kib": 440736,
+          "memory_after": [
+            449372160,
+            536870912,
+            352350208,
+            89030656
+          ],
+          "sampled_cgroup_peak": 536870912,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "cfa3b98015ff71c06637c9734a5c412b48b1f8773203f96132813997d148322c",
+            "afb5c973de745042adfa4a1a05f22079634806455008aae2ea60b1bb084674c2"
+          ]
+        },
+        {
+          "iteration": 1,
+          "strict_entry_states": [
+            [
+              436817920,
+              536870912,
+              366051328,
+              59465728
+            ]
+          ],
+          "peak_rss_kib": 457376,
+          "memory_after": [
+            449945600,
+            536870912,
+            332640256,
+            72286208
+          ],
+          "sampled_cgroup_peak": 536866816,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "cfa3b98015ff71c06637c9734a5c412b48b1f8773203f96132813997d148322c",
+            "afb5c973de745042adfa4a1a05f22079634806455008aae2ea60b1bb084674c2"
+          ]
+        },
+        {
+          "iteration": 2,
+          "strict_entry_states": [
+            [
+              445730816,
+              536870912,
+              358264832,
+              34414592
+            ]
+          ],
+          "peak_rss_kib": 457376,
+          "memory_after": [
+            451825664,
+            536870912,
+            362987520,
+            34410496
+          ],
+          "sampled_cgroup_peak": 535326720,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "cfa3b98015ff71c06637c9734a5c412b48b1f8773203f96132813997d148322c",
+            "afb5c973de745042adfa4a1a05f22079634806455008aae2ea60b1bb084674c2"
+          ]
+        }
+      ],
+      "production_memory_qualified": false,
+      "qualification": "real app and warmed PIPNet/MobileFace, no Telegram initialize or live request history"
+    },
+    {
+      "mode": "H",
+      "application_constructed": true,
+      "handler_groups": 47,
+      "before_models": [
+        507510784,
+        536870912,
+        140963840,
+        338051072
+      ],
+      "after_models": [
+        524292096,
+        536870912,
+        322793472,
+        141201408
+      ],
+      "rows": [
+        {
+          "iteration": 0,
+          "strict_entry_states": [
+            [
+              465498112,
+              536870912,
+              383348736,
+              58904576
+            ]
+          ],
+          "peak_rss_kib": 448040,
+          "memory_after": [
+            437952512,
+            536870912,
+            352538624,
+            52645888
+          ],
+          "sampled_cgroup_peak": 536870912,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "116dc49e3e235ee955eb5da22b3877f76ac81b71fbe1726e1258997772e4e50f",
+            "c0a638a7fa7897e5d2f502d4cc57848decff5f907b8c0c48b68f195789421200"
+          ]
+        },
+        {
+          "iteration": 1,
+          "strict_entry_states": [
+            [
+              469233664,
+              536870912,
+              378421248,
+              55111680
+            ]
+          ],
+          "peak_rss_kib": 449300,
+          "memory_after": [
+            445509632,
+            536870912,
+            365740032,
+            46096384
+          ],
+          "sampled_cgroup_peak": 536805376,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "116dc49e3e235ee955eb5da22b3877f76ac81b71fbe1726e1258997772e4e50f",
+            "c0a638a7fa7897e5d2f502d4cc57848decff5f907b8c0c48b68f195789421200"
+          ]
+        },
+        {
+          "iteration": 2,
+          "strict_entry_states": [
+            [
+              469262336,
+              536870912,
+              378445824,
+              55128064
+            ]
+          ],
+          "peak_rss_kib": 449308,
+          "memory_after": [
+            445149184,
+            536870912,
+            365629440,
+            46116864
+          ],
+          "sampled_cgroup_peak": 536776704,
+          "status": "completed_standard_and_strict",
+          "pid_stable": true,
+          "png_hashes": [
+            "116dc49e3e235ee955eb5da22b3877f76ac81b71fbe1726e1258997772e4e50f",
+            "c0a638a7fa7897e5d2f502d4cc57848decff5f907b8c0c48b68f195789421200"
+          ]
+        }
+      ],
+      "production_memory_qualified": false,
+      "qualification": "real app and warmed PIPNet/MobileFace, no Telegram initialize or live request history"
+    }
+  ]
+}

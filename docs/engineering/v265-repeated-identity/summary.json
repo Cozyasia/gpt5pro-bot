@@ -1,0 +1,481 @@
+{
+  "rows": [
+    {
+      "case": "case01",
+      "mode": "A_baseline",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.043300970300529,
+        "central_chin": 0.04277556427415849,
+        "eyes": 0.0054878947460703514,
+        "inner_face": 0.020611709596537783,
+        "lower_face": 0.03891424061478585,
+        "mouth": 0.018724713979386045,
+        "nose": 0.017212716832579952,
+        "outline": 0.11528002088502395
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case01",
+      "mode": "D_mask_core",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.03766686215211518,
+        "central_chin": 0.06881774968232231,
+        "eyes": 0.003324277730412059,
+        "inner_face": 0.018605896037634146,
+        "lower_face": 0.03917623044033228,
+        "mouth": 0.015014581159517593,
+        "nose": 0.015469141887487036,
+        "outline": 0.10371067584462085
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case01",
+      "mode": "I_ortho_jaw",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.03824951484773537,
+        "central_chin": 0.05648655226597157,
+        "eyes": 0.004030753955107882,
+        "inner_face": 0.0165254963172115,
+        "lower_face": 0.03353442049283637,
+        "mouth": 0.010709168716048913,
+        "nose": 0.011730365981001308,
+        "outline": 0.11047352148908818
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case01",
+      "mode": "K_ortho_silhouette",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.03879423025302968,
+        "central_chin": 0.06099802807666153,
+        "eyes": 0.003719890022926811,
+        "inner_face": 0.01762672657850116,
+        "lower_face": 0.03497370810791628,
+        "mouth": 0.012478953401391652,
+        "nose": 0.013722333275727958,
+        "outline": 0.10995050036452587
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case01",
+      "mode": "I_adaptive_jaw",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.037474354524399595,
+        "central_chin": 0.053928529851476746,
+        "eyes": 0.004597663800930722,
+        "inner_face": 0.016104103476292694,
+        "lower_face": 0.03169090139874363,
+        "mouth": 0.009049439799875185,
+        "nose": 0.011091381838645083,
+        "outline": 0.1082600064408116
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case02",
+      "mode": "A_baseline",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.03579419607621752,
+        "central_chin": 0.06503373205972261,
+        "eyes": 0.006009114901184084,
+        "inner_face": 0.021537358193704552,
+        "lower_face": 0.04882787707766096,
+        "mouth": 0.029547136963235097,
+        "nose": 0.015163881456857918,
+        "outline": 0.0862405404059949
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case02",
+      "mode": "D_mask_core",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.028307187460106277,
+        "central_chin": 0.027026868659110092,
+        "eyes": 0.00466206153501286,
+        "inner_face": 0.01406263773697386,
+        "lower_face": 0.034013318393518024,
+        "mouth": 0.01843520748459188,
+        "nose": 0.013230253761080724,
+        "outline": 0.07332864208635112
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case02",
+      "mode": "I_ortho_jaw",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.02672883278222244,
+        "central_chin": 0.014308483181041456,
+        "eyes": 0.005394790994823949,
+        "inner_face": 0.014343812259861552,
+        "lower_face": 0.031118781127494305,
+        "mouth": 0.021426849822654283,
+        "nose": 0.011128332945922505,
+        "outline": 0.0638776598059839
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case02",
+      "mode": "K_ortho_silhouette",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.02772959481874922,
+        "central_chin": 0.022870701181594396,
+        "eyes": 0.0026731058144163575,
+        "inner_face": 0.015509668179469185,
+        "lower_face": 0.029843955144487996,
+        "mouth": 0.01864642172130119,
+        "nose": 0.013827295397452054,
+        "outline": 0.06568838056049375
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case02",
+      "mode": "I_adaptive_jaw",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.027865570635573062,
+        "central_chin": 0.0178873552690433,
+        "eyes": 0.005292293671810811,
+        "inner_face": 0.01594746012604995,
+        "lower_face": 0.03246270818714598,
+        "mouth": 0.023088535579650016,
+        "nose": 0.013546844097259507,
+        "outline": 0.06396223660114124
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case04",
+      "mode": "A_baseline",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.025784819329315617,
+        "central_chin": 0.03561413112343304,
+        "eyes": 0.008708703540710008,
+        "inner_face": 0.018220844331724943,
+        "lower_face": 0.02751197385155632,
+        "mouth": 0.016801599142352498,
+        "nose": 0.011196949788657594,
+        "outline": 0.05154614787356553
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case04",
+      "mode": "D_mask_core",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.014131278139143569,
+        "central_chin": 0.01147510135742414,
+        "eyes": 0.003198014934547843,
+        "inner_face": 0.006151789764741573,
+        "lower_face": 0.012422457421850311,
+        "mouth": 0.005682795570673892,
+        "nose": 0.005943626643333525,
+        "outline": 0.039009151190470014
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case04",
+      "mode": "I_ortho_jaw",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.0238854861896879,
+        "central_chin": 0.04703994955190357,
+        "eyes": 0.003073493034067006,
+        "inner_face": 0.011083794954456815,
+        "lower_face": 0.027428020214420104,
+        "mouth": 0.010409357060217271,
+        "nose": 0.011658048096270425,
+        "outline": 0.06863576364787176
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case04",
+      "mode": "K_ortho_silhouette",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.024897809379531448,
+        "central_chin": 0.052168275748829436,
+        "eyes": 0.0032862148477984486,
+        "inner_face": 0.01090397068532778,
+        "lower_face": 0.02857689054032882,
+        "mouth": 0.009029366511052043,
+        "nose": 0.010296142306137918,
+        "outline": 0.07416126164981923
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case04",
+      "mode": "I_adaptive_jaw",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.023805030743438153,
+        "central_chin": 0.046798011458848765,
+        "eyes": 0.0030701307109501316,
+        "inner_face": 0.011150530001814932,
+        "lower_face": 0.02723672521909144,
+        "mouth": 0.010569179217719975,
+        "nose": 0.011847866187549358,
+        "outline": 0.06805926499013731
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case05",
+      "mode": "A_baseline",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.06751838884430195,
+        "central_chin": 0.07683709139159432,
+        "eyes": 0.007171573165928304,
+        "inner_face": 0.04034485806272653,
+        "lower_face": 0.07184454475378957,
+        "mouth": 0.04072516114137607,
+        "nose": 0.04873090988337226,
+        "outline": 0.1554787870705931
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case05",
+      "mode": "D_mask_core",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.046481574949680866,
+        "central_chin": 0.07338520270944927,
+        "eyes": 0.006492255421564571,
+        "inner_face": 0.019609319531864296,
+        "lower_face": 0.049792229448171826,
+        "mouth": 0.013495129801726452,
+        "nose": 0.009272657994487959,
+        "outline": 0.13658820294035148
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case05",
+      "mode": "I_ortho_jaw",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.05878458116787694,
+        "central_chin": 0.10015226626641903,
+        "eyes": 0.006599819353769978,
+        "inner_face": 0.023531743919570663,
+        "lower_face": 0.06551813083354749,
+        "mouth": 0.019170935112972062,
+        "nose": 0.011718945070336122,
+        "outline": 0.17806436156223962
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case05",
+      "mode": "K_ortho_silhouette",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.05725715978443677,
+        "central_chin": 0.09264298019118788,
+        "eyes": 0.0062256225142693356,
+        "inner_face": 0.021818001035768347,
+        "lower_face": 0.061787242665822854,
+        "mouth": 0.016238258070498467,
+        "nose": 0.010629451317984465,
+        "outline": 0.17607316176375135
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case06",
+      "mode": "A_baseline",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.06696190411635783,
+        "central_chin": 0.04932910113749139,
+        "eyes": 0.008295341890972861,
+        "inner_face": 0.042923847396622174,
+        "lower_face": 0.07244132433425572,
+        "mouth": 0.05726122346620257,
+        "nose": 0.06047061942596496,
+        "outline": 0.14020641317101235
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case06",
+      "mode": "D_mask_core",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.051429144024427095,
+        "central_chin": 0.06796858155000686,
+        "eyes": 0.006231354977868531,
+        "inner_face": 0.022057545384242,
+        "lower_face": 0.05349063469047746,
+        "mouth": 0.0230868810063985,
+        "nose": 0.01756026060162084,
+        "outline": 0.14764588750364674
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case06",
+      "mode": "I_ortho_jaw",
+      "status": "geometry_rejected"
+    },
+    {
+      "case": "case06",
+      "mode": "K_ortho_silhouette",
+      "status": "geometry_rejected"
+    },
+    {
+      "case": "case07",
+      "mode": "A_baseline",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.0535070891690664,
+        "central_chin": 0.04289393708234534,
+        "eyes": 0.0037941347086649243,
+        "inner_face": 0.026905111008607416,
+        "lower_face": 0.049721502703142545,
+        "mouth": 0.03182205827193148,
+        "nose": 0.040892430799193365,
+        "outline": 0.1361345811928677
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case07",
+      "mode": "D_mask_core",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.049555610926325155,
+        "central_chin": 0.06470891783736078,
+        "eyes": 0.005267298786528678,
+        "inner_face": 0.025839426767884265,
+        "lower_face": 0.05052045353402778,
+        "mouth": 0.03231033680950808,
+        "nose": 0.03294059517632265,
+        "outline": 0.12756348535508483
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case07",
+      "mode": "I_ortho_jaw",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.07003994017154111,
+        "central_chin": 0.07374286209485671,
+        "eyes": 0.006417158847829846,
+        "inner_face": 0.03548528509393977,
+        "lower_face": 0.06609215427492485,
+        "mouth": 0.04369224786679786,
+        "nose": 0.048883023841451136,
+        "outline": 0.18045524252215392
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case07",
+      "mode": "K_ortho_silhouette",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.07052292435437393,
+        "central_chin": 0.08486093923131992,
+        "eyes": 0.006745890442341269,
+        "inner_face": 0.03459779380887997,
+        "lower_face": 0.06642586368740927,
+        "mouth": 0.04087736466370416,
+        "nose": 0.046461412754050885,
+        "outline": 0.18716828283010994
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case08",
+      "mode": "A_baseline",
+      "selected": "strict",
+      "morphology": {
+        "all68": 0.03989575621334555,
+        "central_chin": 0.0644773728430749,
+        "eyes": 0.007280462045517598,
+        "inner_face": 0.0306926234314516,
+        "lower_face": 0.04606838571059527,
+        "mouth": 0.035733498904110546,
+        "nose": 0.019972871311160507,
+        "outline": 0.07346716916107858
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case08",
+      "mode": "D_mask_core",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.015813735887852905,
+        "central_chin": 0.04595902434317167,
+        "eyes": 0.0023971040536365017,
+        "inner_face": 0.008537354398284085,
+        "lower_face": 0.019075061541449997,
+        "mouth": 0.006649431214985987,
+        "nose": 0.006814533149116439,
+        "outline": 0.0442467044644807
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case08",
+      "mode": "I_ortho_jaw",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.024075130222305063,
+        "central_chin": 0.07134664005588594,
+        "eyes": 0.003235528992058623,
+        "inner_face": 0.01085066470530743,
+        "lower_face": 0.029470741850583085,
+        "mouth": 0.007692754572524166,
+        "nose": 0.004401879201220107,
+        "outline": 0.07442428712928241
+      },
+      "status": "produced_not_approved"
+    },
+    {
+      "case": "case08",
+      "mode": "K_ortho_silhouette",
+      "selected": "standard",
+      "morphology": {
+        "all68": 0.024001146872536395,
+        "central_chin": 0.0718851353547428,
+        "eyes": 0.0029972465695119036,
+        "inner_face": 0.010785638622751507,
+        "lower_face": 0.0298643083461426,
+        "mouth": 0.008217666812402668,
+        "nose": 0.004275420382674632,
+        "outline": 0.07442993575106596
+      },
+      "status": "produced_not_approved"
+    }
+  ],
+  "human_production_approved": false,
+  "remote_ci_for_this_revision": "not run",
+  "full_daemon_memory_qualified": false
+}

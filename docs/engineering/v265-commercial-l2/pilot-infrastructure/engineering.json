@@ -1,0 +1,418 @@
+[
+  {
+    "mode": "native",
+    "backbone": "mobilenet_v3_small",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 297904,
+      "peak_rss_kib": 297696,
+      "shared_host_cgroup": {
+        "memory.current": "2303975424",
+        "memory.max": "15032385536",
+        "memory.peak": "2303975424",
+        "cache_bytes": {
+          "file": 1824636928,
+          "inactive_file": 1164660736,
+          "slab_reclaimable": 144012248
+        }
+      }
+    },
+    "parameters": 1056256,
+    "model_bytes": 4225024,
+    "initialization_ms": 1746.3136579999627,
+    "warmed": {
+      "rss_kib": 341324,
+      "peak_rss_kib": 341160,
+      "shared_host_cgroup": {
+        "memory.current": "2315587584",
+        "memory.max": "15032385536",
+        "memory.peak": "2315587584",
+        "cache_bytes": {
+          "file": 1824681984,
+          "inactive_file": 1164668928,
+          "slab_reclaimable": 144039384
+        }
+      }
+    },
+    "latency_ms": {
+      "p50": 5.135920499924396,
+      "p95": 6.999305299586922
+    },
+    "output_shapes": [
+      [
+        1,
+        192
+      ],
+      [
+        1,
+        32
+      ]
+    ],
+    "memory": {
+      "rss_kib": 341928,
+      "peak_rss_kib": 341712,
+      "shared_host_cgroup": {
+        "memory.current": "2316320768",
+        "memory.max": "15032385536",
+        "memory.peak": "2316599296",
+        "cache_bytes": {
+          "file": 1824759808,
+          "inactive_file": 1164689408,
+          "slab_reclaimable": 144062720
+        }
+      }
+    }
+  },
+  {
+    "mode": "export",
+    "backbone": "mobilenet_v3_small",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 298308,
+      "peak_rss_kib": 298020,
+      "shared_host_cgroup": {
+        "memory.current": "2311118848",
+        "memory.max": "15032385536",
+        "memory.peak": "2316599296",
+        "cache_bytes": {
+          "file": 1827237888,
+          "inactive_file": 1166004224,
+          "slab_reclaimable": 144609840
+        }
+      }
+    },
+    "parameters": 1056256,
+    "model_bytes": 4225024,
+    "onnx_bytes": 4213478,
+    "memory": {
+      "rss_kib": 381664,
+      "peak_rss_kib": 385084,
+      "shared_host_cgroup": {
+        "memory.current": "2352996352",
+        "memory.max": "15032385536",
+        "memory.peak": "2359877632",
+        "cache_bytes": {
+          "file": 1827418112,
+          "inactive_file": 1166057472,
+          "slab_reclaimable": 144670648
+        }
+      }
+    }
+  },
+  {
+    "mode": "onnx",
+    "backbone": "mobilenet_v3_small",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 47388,
+      "peak_rss_kib": 47292,
+      "shared_host_cgroup": {
+        "memory.current": "2140467200",
+        "memory.max": "15032385536",
+        "memory.peak": "2359877632",
+        "cache_bytes": {
+          "file": 1827897344,
+          "inactive_file": 1162964992,
+          "slab_reclaimable": 144813624
+        }
+      }
+    },
+    "export_max_abs_error": [
+      7.450580596923828e-09,
+      5.587935447692871e-09
+    ],
+    "onnx_bytes": 4213478,
+    "initialization_ms": 39.738789999319124,
+    "warmed": {
+      "rss_kib": 69624,
+      "peak_rss_kib": 69524,
+      "shared_host_cgroup": {
+        "memory.current": "2157502464",
+        "memory.max": "15032385536",
+        "memory.peak": "2359877632",
+        "cache_bytes": {
+          "file": 1827897344,
+          "inactive_file": 1162964992,
+          "slab_reclaimable": 144813624
+        }
+      }
+    },
+    "latency_ms": {
+      "p50": 1.8334309997953824,
+      "p95": 1.9560824002383015
+    },
+    "output_shapes": [
+      [
+        1,
+        192
+      ],
+      [
+        1,
+        32
+      ]
+    ],
+    "memory": {
+      "rss_kib": 70036,
+      "peak_rss_kib": 69916,
+      "shared_host_cgroup": {
+        "memory.current": "2157662208",
+        "memory.max": "15032385536",
+        "memory.peak": "2359877632",
+        "cache_bytes": {
+          "file": 1828122624,
+          "inactive_file": 1163034624,
+          "slab_reclaimable": 144844664
+        }
+      }
+    }
+  },
+  {
+    "mode": "train_smoke",
+    "backbone": "mobilenet_v3_small",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 298472,
+      "peak_rss_kib": 298196,
+      "shared_host_cgroup": {
+        "memory.current": "2386907136",
+        "memory.max": "15032385536",
+        "memory.peak": "2394955776",
+        "cache_bytes": {
+          "file": 1900515328,
+          "inactive_file": 1226747904,
+          "slab_reclaimable": 147020112
+        }
+      }
+    },
+    "parameters": 1056256,
+    "model_bytes": 4225024,
+    "finite_gradients": true,
+    "steps": 2,
+    "smoke_losses": [
+      0.016852691769599915,
+      0.013810157775878906
+    ],
+    "memory": {
+      "rss_kib": 404828,
+      "peak_rss_kib": 404656,
+      "shared_host_cgroup": {
+        "memory.current": "2457866240",
+        "memory.max": "15032385536",
+        "memory.peak": "2458132480",
+        "cache_bytes": {
+          "file": 1910784000,
+          "inactive_file": 1236971520,
+          "slab_reclaimable": 147352928
+        }
+      }
+    }
+  },
+  {
+    "mode": "native",
+    "backbone": "shufflenet_v2_x0_5",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 298360,
+      "peak_rss_kib": 298112,
+      "shared_host_cgroup": {
+        "memory.current": "2545168384",
+        "memory.max": "15032385536",
+        "memory.peak": "2545455104",
+        "cache_bytes": {
+          "file": 2054967296,
+          "inactive_file": 1368567808,
+          "slab_reclaimable": 151307656
+        }
+      }
+    },
+    "parameters": 571392,
+    "model_bytes": 2285568,
+    "initialization_ms": 1597.9726049999954,
+    "warmed": {
+      "rss_kib": 337352,
+      "peak_rss_kib": 337168,
+      "shared_host_cgroup": {
+        "memory.current": "2558513152",
+        "memory.max": "15032385536",
+        "memory.peak": "2559291392",
+        "cache_bytes": {
+          "file": 2060734464,
+          "inactive_file": 1374334976,
+          "slab_reclaimable": 151465128
+        }
+      }
+    },
+    "latency_ms": {
+      "p50": 8.701949999704084,
+      "p95": 10.82466779985225
+    },
+    "output_shapes": [
+      [
+        1,
+        192
+      ],
+      [
+        1,
+        32
+      ]
+    ],
+    "memory": {
+      "rss_kib": 337444,
+      "peak_rss_kib": 337168,
+      "shared_host_cgroup": {
+        "memory.current": "2568220672",
+        "memory.max": "15032385536",
+        "memory.peak": "2652049408",
+        "cache_bytes": {
+          "file": 2068930560,
+          "inactive_file": 1382506496,
+          "slab_reclaimable": 151883200
+        }
+      }
+    }
+  },
+  {
+    "mode": "export",
+    "backbone": "shufflenet_v2_x0_5",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 298304,
+      "peak_rss_kib": 298056,
+      "shared_host_cgroup": {
+        "memory.current": "2713182208",
+        "memory.max": "15032385536",
+        "memory.peak": "2713182208",
+        "cache_bytes": {
+          "file": 2218008576,
+          "inactive_file": 1531285504,
+          "slab_reclaimable": 156005272
+        }
+      }
+    },
+    "parameters": 571392,
+    "model_bytes": 2285568,
+    "onnx_bytes": 2411207,
+    "memory": {
+      "rss_kib": 377288,
+      "peak_rss_kib": 377052,
+      "shared_host_cgroup": {
+        "memory.current": "2764894208",
+        "memory.max": "15032385536",
+        "memory.peak": "2821672960",
+        "cache_bytes": {
+          "file": 2233016320,
+          "inactive_file": 1546256384,
+          "slab_reclaimable": 156607760
+        }
+      }
+    }
+  },
+  {
+    "mode": "onnx",
+    "backbone": "shufflenet_v2_x0_5",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 47712,
+      "peak_rss_kib": 47560,
+      "shared_host_cgroup": {
+        "memory.current": "2581835776",
+        "memory.max": "15032385536",
+        "memory.peak": "2821672960",
+        "cache_bytes": {
+          "file": 2257100800,
+          "inactive_file": 1570279424,
+          "slab_reclaimable": 157334048
+        }
+      }
+    },
+    "export_max_abs_error": [
+      7.450580596923828e-09,
+      5.587935447692871e-09
+    ],
+    "onnx_bytes": 2411207,
+    "initialization_ms": 56.7672870001843,
+    "warmed": {
+      "rss_kib": 66988,
+      "peak_rss_kib": 66792,
+      "shared_host_cgroup": {
+        "memory.current": "2596040704",
+        "memory.max": "15032385536",
+        "memory.peak": "2821672960",
+        "cache_bytes": {
+          "file": 2257367040,
+          "inactive_file": 1570525184,
+          "slab_reclaimable": 157356760
+        }
+      }
+    },
+    "latency_ms": {
+      "p50": 1.4298709998001868,
+      "p95": 2.1040155497303195
+    },
+    "output_shapes": [
+      [
+        1,
+        192
+      ],
+      [
+        1,
+        32
+      ]
+    ],
+    "memory": {
+      "rss_kib": 67144,
+      "peak_rss_kib": 66968,
+      "shared_host_cgroup": {
+        "memory.current": "2596200448",
+        "memory.max": "15032385536",
+        "memory.peak": "2821672960",
+        "cache_bytes": {
+          "file": 2257367040,
+          "inactive_file": 1570525184,
+          "slab_reclaimable": 157356760
+        }
+      }
+    }
+  },
+  {
+    "mode": "train_smoke",
+    "backbone": "shufflenet_v2_x0_5",
+    "quality_evidence": false,
+    "framework_only": {
+      "rss_kib": 297872,
+      "peak_rss_kib": 297608,
+      "shared_host_cgroup": {
+        "memory.current": "2828111872",
+        "memory.max": "15032385536",
+        "memory.peak": "2828111872",
+        "cache_bytes": {
+          "file": 2329161728,
+          "inactive_file": 1637085184,
+          "slab_reclaimable": 159517480
+        }
+      }
+    },
+    "parameters": 571392,
+    "model_bytes": 2285568,
+    "finite_gradients": true,
+    "steps": 2,
+    "smoke_losses": [
+      0.10049784928560257,
+      0.07212256640195847
+    ],
+    "memory": {
+      "rss_kib": 378492,
+      "peak_rss_kib": 385252,
+      "shared_host_cgroup": {
+        "memory.current": "2883395584",
+        "memory.max": "15032385536",
+        "memory.peak": "2889404416",
+        "cache_bytes": {
+          "file": 2342313984,
+          "inactive_file": 1645424640,
+          "slab_reclaimable": 160787864
+        }
+      }
+    }
+  }
+]

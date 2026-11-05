@@ -1,0 +1,13 @@
+{
+  "reviewer": "user",
+  "case": "case02",
+  "rank": [
+    "I_ortho_jaw",
+    "K_ortho_silhouette",
+    "D_mask_core",
+    "A_baseline"
+  ],
+  "production_approved": false,
+  "evidence": "I improves whole-face identity, jaw/chin silhouette and mouth-to-chin proportions; natural integration, no obvious paste seam. Mouth/expression still differs. K smoother/more generic. No production approval.",
+  "reviewed_head": "d180b496523de3b6b7d5ff821b4634a872214d66"
+}

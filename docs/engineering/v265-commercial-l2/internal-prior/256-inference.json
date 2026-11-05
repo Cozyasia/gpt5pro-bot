@@ -1,0 +1,13 @@
+{
+  "scope": "fresh isolated NumPy toy encoder + canonical decoder + target pose; excludes application and MediaPipe inference",
+  "initial_rss_kib": 22628,
+  "inference_peak_rss_kib": 25912,
+  "p50_ms": 0.057555499978434455,
+  "p95_ms": 0.08846539996056887,
+  "output_shape": [
+    468,
+    3
+  ],
+  "finite": true,
+  "production_qualified": false
+}

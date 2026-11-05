@@ -1,0 +1,12 @@
+{
+  "annotation_method": "manual polygons drawn from RGB images without consulting parser output",
+  "positive_scope": "visible frame plus lens area",
+  "samples": [
+    {"case":"case07","image":"source","tags":["thin-frame","dark-upper-rim"],"polygons":[[[616,653],[819,632],[843,773],[637,787]],[[828,630],[1076,642],[1060,790],[851,770]],[[804,670],[866,665],[866,704],[811,708]]]},
+    {"case":"case07","image":"stage1","tags":["thin-frame","dark-upper-rim","changed-pose"],"polygons":[[[256,411],[397,397],[411,505],[271,516]],[[407,395],[568,410],[554,516],[419,503]],[[390,424],[431,422],[431,453],[395,455]]]},
+    {"case":"case01","image":"source","tags":["no-glasses","dark-brows"],"polygons":[]},
+    {"case":"case02","image":"source","tags":["no-glasses","dark-skin","eye-shadows","high-contrast-eyes"],"polygons":[]},
+    {"case":"case04","image":"source","tags":["no-glasses","monochrome","eye-shadows"],"polygons":[]},
+    {"case":"case08","image":"source","tags":["no-glasses","dark-skin","high-contrast"],"polygons":[]}
+  ]
+}

@@ -1,0 +1,197 @@
+{
+  "dimensions": [
+    1856,
+    2304
+  ],
+  "generated_positive": false,
+  "human_approved": false,
+  "peak_rss_kib": 485752,
+  "results": [
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.000504671499711784,
+        "identity_similarity_cosine": 0.7592469453811646,
+        "inner_face_landmark_nme": 0.016172301024198532,
+        "interocular_ratio_delta": 1.4254750475339861e-05,
+        "left_eye_error": 0.021883027628064156,
+        "max_dense_shift_normalized": 0.012332271505819748,
+        "nose_mouth_axis_delta": 0.00722065195441246,
+        "right_eye_error": 0.008861051872372627,
+        "similarity_rms_normalized": 0.02132154274535611,
+        "source_face_short": 397.4512634277344,
+        "target_face_short": 643.8544921875
+      },
+      "mode": "baseline",
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "person_b_firewall_unchanged": true,
+      "phase": "pre_ocular",
+      "source_morphology": {
+        "all68": 0.018808484073640646,
+        "central_chin": 0.034924837931960266,
+        "eyes": 0.005991621202736372,
+        "inner_face": 0.013080751796911504,
+        "lower_face": 0.021804590519633977,
+        "mouth": 0.012996734136583407,
+        "nose": 0.01138337091779245,
+        "outline": 0.039846519633542556
+      },
+      "strict": false
+    },
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.0074903274012149135,
+        "identity_similarity_cosine": 0.7842011451721191,
+        "inner_face_landmark_nme": 0.017104510217905045,
+        "interocular_ratio_delta": 0.0033388908841525122,
+        "left_eye_error": 0.013550716452300549,
+        "max_dense_shift_normalized": 0.006640446367833953,
+        "nose_mouth_axis_delta": 0.010897183790802956,
+        "right_eye_error": 0.010928292758762836,
+        "similarity_rms_normalized": 0.02132154274535611,
+        "source_face_short": 397.4512634277344,
+        "target_face_short": 643.8544921875
+      },
+      "mode": "baseline",
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "person_b_firewall_unchanged": true,
+      "phase": "pre_ocular",
+      "source_morphology": {
+        "all68": 0.019956933203895622,
+        "central_chin": 0.03257348149479224,
+        "eyes": 0.006305506175479779,
+        "inner_face": 0.015377335804444192,
+        "lower_face": 0.021924615506878745,
+        "mouth": 0.014946453991063754,
+        "nose": 0.01306130521755563,
+        "outline": 0.03673033934760545
+      },
+      "strict": true
+    },
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.0033379862849646225,
+        "identity_similarity_cosine": 0.8524303436279297,
+        "inner_face_landmark_nme": 0.01923888921737671,
+        "interocular_ratio_delta": 0.0004323231785965387,
+        "left_eye_error": 0.013648438267409801,
+        "max_dense_shift_normalized": 0.012332271505819748,
+        "nose_mouth_axis_delta": 0.009533563628792763,
+        "right_eye_error": 0.010240196250379086,
+        "similarity_rms_normalized": 0.02132154274535611,
+        "source_face_short": 397.4512634277344,
+        "target_face_short": 643.8544921875
+      },
+      "mode": "source_core",
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "person_b_firewall_unchanged": true,
+      "phase": "post_ocular",
+      "source_morphology": {
+        "all68": 0.023860358807549026,
+        "central_chin": 0.04924556139030201,
+        "eyes": 0.003342948092351142,
+        "inner_face": 0.01693747856404369,
+        "lower_face": 0.02963023951485994,
+        "mouth": 0.0174220808031515,
+        "nose": 0.010585751575839882,
+        "outline": 0.05033042591916945
+      },
+      "strict": false
+    },
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.0017226115632791306,
+        "identity_similarity_cosine": 0.8623520731925964,
+        "inner_face_landmark_nme": 0.020552540197968483,
+        "interocular_ratio_delta": 0.002444904046369878,
+        "left_eye_error": 0.013905790634453297,
+        "max_dense_shift_normalized": 0.006640446367833953,
+        "nose_mouth_axis_delta": 0.010986006818711758,
+        "right_eye_error": 0.01251322589814663,
+        "similarity_rms_normalized": 0.02132154274535611,
+        "source_face_short": 397.4512634277344,
+        "target_face_short": 643.8544921875
+      },
+      "mode": "source_core",
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "person_b_firewall_unchanged": true,
+      "phase": "post_ocular",
+      "source_morphology": {
+        "all68": 0.021663467419039455,
+        "central_chin": 0.042346714145205085,
+        "eyes": 0.00546250395344099,
+        "inner_face": 0.015152808905108563,
+        "lower_face": 0.026314471163892107,
+        "mouth": 0.015653935336511285,
+        "nose": 0.010977512937426544,
+        "outline": 0.04599436741496681
+      },
+      "strict": true
+    },
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.012715539148965949,
+        "identity_similarity_cosine": 0.92242032289505,
+        "inner_face_landmark_nme": 0.010195155628025532,
+        "interocular_ratio_delta": 0.005376913155060281,
+        "left_eye_error": 0.006080247927457094,
+        "max_dense_shift_normalized": 0.012332271505819748,
+        "nose_mouth_axis_delta": 0.00045595032861456275,
+        "right_eye_error": 0.006351453717797995,
+        "similarity_rms_normalized": 0.02132154274535611,
+        "source_face_short": 397.4512634277344,
+        "target_face_short": 643.8544921875
+      },
+      "mode": "source_core_dense_mask",
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "person_b_firewall_unchanged": true,
+      "phase": "pre_ocular",
+      "source_morphology": {
+        "all68": 0.014549610784638968,
+        "central_chin": 0.026829024870358247,
+        "eyes": 0.0024982360065937304,
+        "inner_face": 0.010871160457444936,
+        "lower_face": 0.015706477378457616,
+        "mouth": 0.008889181342274543,
+        "nose": 0.004594904469935875,
+        "outline": 0.028401055486146944
+      },
+      "strict": false
+    },
+    {
+      "metrics": {
+        "eye_asymmetry_delta": 0.016713248286655824,
+        "identity_similarity_cosine": 0.9193387031555176,
+        "inner_face_landmark_nme": 0.011373547837138176,
+        "interocular_ratio_delta": 0.0038811748344087516,
+        "left_eye_error": 0.006949198432266712,
+        "max_dense_shift_normalized": 0.006640446367833953,
+        "nose_mouth_axis_delta": 0.0002469924511387944,
+        "right_eye_error": 0.0049994573928415775,
+        "similarity_rms_normalized": 0.02132154274535611,
+        "source_face_short": 397.4512634277344,
+        "target_face_short": 643.8544921875
+      },
+      "mode": "source_core_dense_mask",
+      "old_gate_failures": [],
+      "old_gate_pass": true,
+      "person_b_firewall_unchanged": true,
+      "phase": "pre_ocular",
+      "source_morphology": {
+        "all68": 0.015772574232188634,
+        "central_chin": 0.03246262357457503,
+        "eyes": 0.0026282498538110466,
+        "inner_face": 0.011815923819048477,
+        "lower_face": 0.01701693635898739,
+        "mouth": 0.008909063038778276,
+        "nose": 0.005004777632755493,
+        "outline": 0.03128606072258439
+      },
+      "strict": true
+    }
+  ]
+}

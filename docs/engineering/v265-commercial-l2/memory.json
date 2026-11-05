@@ -1,0 +1,11 @@
+{
+  "geometry_peak_rss_kib": 323572,
+  "geometry_model_bytes": 3758596,
+  "canonical_topology_bytes": 45999,
+  "parser_model_bytes": 16371837,
+  "co_resident_parsing_peak_rss_kib": 749836,
+  "512_mib_geometry_only": "pass",
+  "512_mib_complete_candidate": "fail",
+  "1_gib_isolated_worker": "feasible_not_full_runtime_qualified",
+  "2_gib": "provisional_recommendation_for_app_plus_worker_plus_renderer"
+}
