@@ -1,0 +1,28 @@
+name: Studio quote store safety tests
+
+on:
+  push:
+    branches:
+      - feature/studio-explicit-consent-20261023
+  pull_request:
+    paths:
+      - 'neyrobot_prod/studio_quote_store.py'
+      - 'tests/test_studio_quote_store.py'
+      - 'main.py'
+      - '.github/workflows/studio-quote-store.yml'
+  workflow_dispatch:
+
+jobs:
+  quote-store:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify Python syntax
+        run: python -m py_compile main.py neyrobot_prod/studio_quote_store.py tests/test_studio_quote_store.py
+      - name: Run offline quote-store tests (no provider API calls)
+        run: python -m unittest discover -s tests -p 'test_studio_quote_store.py' -v
