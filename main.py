@@ -20331,7 +20331,7 @@ def build_application() -> "Application":
     app.add_handler(CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:"))
     app.add_handler(CallbackQueryHandler(handle_game_callback, pattern=r"^game:"), group=0)
     app.add_handler(CallbackQueryHandler(handle_leisure_callback, pattern=r"^leisure:"), group=0)
-    app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$"))
+    app.add_handler(CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z0-9_]+$"))
 
     # 3b) Подменю Suno: свободный запрос и пресеты
     app.add_handler(CallbackQueryHandler(on_cb_suno,  pattern=r"^suno:"), group=0)
