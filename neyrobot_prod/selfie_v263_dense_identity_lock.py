@@ -32,6 +32,7 @@ from neyrobot_prod import selfie_v253_yunet_source_pixels as v253
 from neyrobot_prod import selfie_v254_landmark_fit_seamless_source as v254
 from neyrobot_prod import selfie_v256_large_scale_source_pixels as v256
 from neyrobot_prod import selfie_v262_landmark_field_compositor as v262
+from neyrobot_prod import selfie_v263_diagnostics as v263diag
 
 VERSION = "v263-dense-identity-lock-2026-08-27"
 _INSTALLED = False
@@ -201,6 +202,11 @@ def _dense_landmarks_68(frame, bbox, model_path: Path, *, label: str):
     std = np.asarray([0.229, 0.224, 0.225], dtype=np.float32) * 255.0
     blob = np.transpose((rgb - mean) / std, (2, 0, 1))[None, ...].astype(np.float32)
 
+    pip_ckpt = v263diag.checkpoint(
+        _log, f"pipnet_{label}.before",
+        dims=f"frame={w}x{h};crop={crop_w}x{crop_h};input=256x256",
+        arrays=(("frame", frame), ("crop", crop), ("resized", resized), ("blob", blob)),
+    )
     net = _pipnet_net(model_path)
     net.setInput(blob)
     try:
@@ -213,6 +219,11 @@ def _dense_landmarks_68(frame, bbox, model_path: Path, *, label: str):
             raise RuntimeError(f"V263 PIPNet returned {len(outputs)} outputs")
         cls_map, offset_x, offset_y = outputs[:3]
 
+    v263diag.checkpoint(
+        _log, f"pipnet_{label}.after", started=pip_ckpt,
+        dims=f"frame={w}x{h};crop={crop_w}x{crop_h};input=256x256",
+        arrays=(("cls_map", cls_map), ("offset_x", offset_x), ("offset_y", offset_y)),
+    )
     cls_map = np.asarray(cls_map, dtype=np.float32)
     offset_x = np.asarray(offset_x, dtype=np.float32)
     offset_y = np.asarray(offset_y, dtype=np.float32)
@@ -273,6 +284,10 @@ def _dense_deform_roi(warped, projected_dense, desired_dense, box, face_min: flo
     x0, y0, x1, y1 = [int(v) for v in box]
     roi_w, roi_h = x1 - x0, y1 - y0
     sigma = max(_DENSE_SIGMA_MIN, min(_DENSE_SIGMA_MAX, float(face_min) * _DENSE_SIGMA_FRACTION))
+    field_ckpt = v263diag.checkpoint(
+        _log, "dense_field.before", dims=f"roi={roi_w}x{roi_h};face_min={float(face_min):.1f}",
+        arrays=(("warped", warped), ("projected_dense", projected_dense), ("desired_dense", desired_dense)),
+    )
     gx = np.arange(x0, x1, dtype=np.float32)[None, :]
     gy = np.arange(y0, y1, dtype=np.float32)[:, None]
     sum_w = np.zeros((roi_h, roi_w), dtype=np.float32)
@@ -295,9 +310,23 @@ def _dense_deform_roi(warped, projected_dense, desired_dense, box, face_min: flo
     disp_y = sum_dy * inv * support
     map_x = np.broadcast_to(gx, (roi_h, roi_w)).copy() - disp_x
     map_y = np.broadcast_to(gy, (roi_h, roi_w)).copy() - disp_y
+    v263diag.checkpoint(
+        _log, "dense_field.after", started=field_ckpt, dims=f"roi={roi_w}x{roi_h}",
+        arrays=(("sum_w", sum_w), ("sum_dx", sum_dx), ("sum_dy", sum_dy), ("inv", inv),
+                ("support", support), ("disp_x", disp_x), ("disp_y", disp_y),
+                ("map_x", map_x), ("map_y", map_y)),
+    )
+    remap_ckpt = v263diag.checkpoint(
+        _log, "remap.before", dims=f"roi={roi_w}x{roi_h}",
+        arrays=(("warped", warped), ("map_x", map_x), ("map_y", map_y)),
+    )
     corrected = cv2.remap(
         warped, map_x, map_y, interpolation=cv2.INTER_LANCZOS4,
         borderMode=cv2.BORDER_REFLECT_101,
+    )
+    v263diag.checkpoint(
+        _log, "remap.after", started=remap_ckpt, dims=f"roi={roi_w}x{roi_h}",
+        arrays=(("corrected_roi", corrected), ("map_x", map_x), ("map_y", map_y)),
     )
     return corrected, sigma, residuals
 
@@ -306,7 +335,18 @@ def _structure_first_compose(corrected, target, mask, box, face_min: float, *, s
     """Geometry first, target colour second, controlled source structure/detail last."""
     import cv2
     import numpy as np
+    compositor_ckpt = v263diag.checkpoint(
+        _log, "structure_first_compositor.before",
+        dims=f"frame={target.shape[1]}x{target.shape[0]}",
+        arrays=(("corrected", corrected), ("target", target), ("mask", mask)),
+    )
+    colour_ckpt = v263diag.checkpoint(
+        _log, "colour_match.before", arrays=(("corrected", corrected), ("target", target), ("mask", mask)),
+    )
     matched = v253._colour_match_lab(corrected, target, mask)
+    v263diag.checkpoint(
+        _log, "colour_match.after", started=colour_ckpt, arrays=(("matched", matched), ("target", target), ("mask", mask)),
+    )
     ys, xs = np.where(mask > 80)
     if xs.size == 0 or ys.size == 0:
         raise RuntimeError("V263 identity mask empty")
@@ -314,12 +354,21 @@ def _structure_first_compose(corrected, target, mask, box, face_min: float, *, s
         int(round((int(xs.min()) + int(xs.max())) * 0.5)),
         int(round((int(ys.min()) + int(ys.max())) * 0.5)),
     )
+    clone_ckpt = v263diag.checkpoint(
+        _log, "seamless_clone.before", arrays=(("matched", matched), ("target", target), ("mask", mask)),
+    )
     try:
         integrated = cv2.seamlessClone(matched, target, mask, center, cv2.NORMAL_CLONE)
+        v263diag.checkpoint(
+            _log, "seamless_clone.after", started=clone_ckpt, arrays=(("integrated", integrated),), note="poisson",
+        )
         blend_mode = "poisson_structure_first"
     except Exception as exc:
         _log("AI_SELFIE_V263_POISSON status=fallback reason=%s:%s", type(exc).__name__, str(exc)[:220])
         integrated = target.copy()
+        v263diag.checkpoint(
+            _log, "seamless_clone.after", started=clone_ckpt, arrays=(("integrated", integrated),), note="fallback",
+        )
         blend_mode = "target_plus_controlled_structure"
 
     x0, y0, x1, y1 = [int(v) for v in box]
@@ -344,6 +393,13 @@ def _structure_first_compose(corrected, target, mask, box, face_min: float, *, s
     ).astype(np.uint8)
     final = integrated
     final[y0:y1, x0:x1] = composed
+    v263diag.checkpoint(
+        _log, "structure_first_compositor.after", started=compositor_ckpt,
+        dims=f"frame={target.shape[1]}x{target.shape[0]};roi={x1-x0}x{y1-y0}",
+        arrays=(("matched", matched), ("integrated", integrated), ("src_f32", src), ("base_f32", base),
+                ("fine_low", fine_low), ("coarse_low", coarse_low), ("structure", structure),
+                ("detail", detail), ("composed", composed), ("final", final)),
+    )
     return final, blend_mode, boundary, structure_strength, detail_strength
 
 
@@ -360,7 +416,7 @@ def _alignment5_from_dense68(dense):
     return np.asarray([eyes[0], eyes[1], nose, mouths[0], mouths[1]], dtype=np.float32)
 
 
-def _mobileface_embedding(frame, dense68, model_path: Path):
+def _mobileface_embedding(frame, dense68, model_path: Path, *, label: str = "unspecified"):
     import cv2
     import numpy as np
     src5 = _alignment5_from_dense68(dense68)
@@ -376,9 +432,17 @@ def _mobileface_embedding(frame, dense68, model_path: Path):
         aligned, scalefactor=1.0 / 127.5, size=(112, 112),
         mean=(127.5, 127.5, 127.5), swapRB=True, crop=False
     )
+    mobile_ckpt = v263diag.checkpoint(
+        _log, f"mobileface_{label}.before", dims=f"frame={frame.shape[1]}x{frame.shape[0]};input=112x112",
+        arrays=(("frame", frame), ("aligned", aligned), ("blob", blob)),
+    )
     net = _mobileface_net(model_path)
     net.setInput(blob)
-    feature = np.asarray(net.forward(), dtype=np.float32).reshape(-1)
+    raw_feature = net.forward()
+    v263diag.checkpoint(
+        _log, f"mobileface_{label}.after", started=mobile_ckpt, arrays=(("raw_feature", raw_feature),),
+    )
+    feature = np.asarray(raw_feature, dtype=np.float32).reshape(-1)
     norm = float(np.linalg.norm(feature))
     if not math.isfinite(norm) or norm < 1.0e-8:
         raise RuntimeError("V263 MobileFace produced invalid embedding")
@@ -477,6 +541,11 @@ def _transfer_attempt(stage1: bytes, source: bytes, yunet_path: Path, dense_path
     target = v253._decode_bgr(stage1)
     source_im = v253._decode_bgr(source)
     th, tw = target.shape[:2]
+    attempt_name = "strict" if strict else "standard"
+    v263diag.checkpoint(
+        _log, f"transfer_{attempt_name}.start", dims=f"target={tw}x{th};source={source_im.shape[1]}x{source_im.shape[0]}",
+        arrays=(("target", target), ("source", source_im)),
+    )
     firewall_x = max(256, min(tw, int(round(tw * 0.55))))
     source_bbox, source_pts5 = v253._yunet_face(source_im, yunet_path, label="source_photo3_v263")
     target_bbox, target_pts5 = v253._yunet_face(target[:, :firewall_x], yunet_path, label="target_person_a_v263")
@@ -494,15 +563,31 @@ def _transfer_attempt(stage1: bytes, source: bytes, yunet_path: Path, dense_path
     if native_face_short < v256._MIN_NATIVE_FACE_SHORT:
         raise RuntimeError(f"V263 source sampling too small: native_short={native_face_short:.1f}")
 
+    src_pip = v263diag.checkpoint(_log, f"{attempt_name}.pipnet_source.before", arrays=(("source", source_im),))
     source_dense = _dense_landmarks_68(source_im, source_bbox, dense_path, label="source_photo3")
+    v263diag.checkpoint(_log, f"{attempt_name}.pipnet_source.after", started=src_pip, arrays=(("source_dense", source_dense),))
+    tgt_pip = v263diag.checkpoint(_log, f"{attempt_name}.pipnet_target.before", arrays=(("target", target),))
     target_dense = _dense_landmarks_68(target, target_bbox, dense_path, label="target_person_a")
+    v263diag.checkpoint(_log, f"{attempt_name}.pipnet_target.after", started=tgt_pip, arrays=(("target_dense", target_dense),))
     projected_dense = v262._project_points(matrix, source_dense)
     desired_dense = _desired_identity_geometry(projected_dense, target_dense, face_min, strict=strict)
+    warp_ckpt = v263diag.checkpoint(
+        _log, f"{attempt_name}.warp_affine.before", dims=f"output={tw}x{th}", arrays=(("source", source_im), ("matrix", matrix)),
+    )
     warped = cv2.warpAffine(
         source_im, matrix, (tw, th), flags=cv2.INTER_LANCZOS4,
         borderMode=cv2.BORDER_REFLECT_101,
     )
+    v263diag.checkpoint(
+        _log, f"{attempt_name}.warp_affine.after", started=warp_ckpt, dims=f"output={tw}x{th}", arrays=(("warped", warped),),
+    )
+    mask_ckpt = v263diag.checkpoint(
+        _log, f"{attempt_name}.anatomical_mask.before", dims=f"frame={tw}x{th};firewall_x={firewall_x}", arrays=(("target", target),),
+    )
     mask = v262._landmark_anatomy_mask(target.shape, target_bbox, target_pts5, firewall_x)
+    v263diag.checkpoint(
+        _log, f"{attempt_name}.anatomical_mask.after", started=mask_ckpt, arrays=(("mask", mask),),
+    )
     mask_pixels = int((mask > 80).sum())
     # Preserve the original 12k guard for normal/large faces, but scale the
     # minimum for legitimately small PERSON-A faces. An absolute 12k floor
@@ -515,21 +600,38 @@ def _transfer_attempt(stage1: bytes, source: bytes, yunet_path: Path, dense_path
     pad = int(round(max(30.0, min(76.0, face_min * 0.090))))
     box = v262._mask_box(mask, pad=pad, firewall_x=firewall_x)
     x0, y0, x1, y1 = box
+    deform_ckpt = v263diag.checkpoint(
+        _log, f"{attempt_name}.dense_deform.before", dims=f"roi={x1-x0}x{y1-y0}", arrays=(("warped", warped),),
+    )
     corrected_roi, field_sigma, dense_residuals = _dense_deform_roi(
         warped, projected_dense, desired_dense, box, face_min
     )
+    v263diag.checkpoint(
+        _log, f"{attempt_name}.dense_deform.after", started=deform_ckpt, arrays=(("corrected_roi", corrected_roi), ("dense_residuals", dense_residuals)),
+    )
     corrected = warped.copy()
     corrected[y0:y1, x0:x1] = corrected_roi
+    compose_ckpt = v263diag.checkpoint(
+        _log, f"{attempt_name}.structure_first_compositor.before", arrays=(("corrected", corrected), ("target", target), ("mask", mask)),
+    )
     final, blend_mode, boundary, structure_strength, detail_strength = _structure_first_compose(
         corrected, target, mask, box, face_min, strict=strict
+    )
+    v263diag.checkpoint(
+        _log, f"{attempt_name}.structure_first_compositor.after", started=compose_ckpt, arrays=(("final", final),),
     )
     final[:, firewall_x:] = target[:, firewall_x:]
 
     final_bbox, _final_pts5 = v253._yunet_face(final[:, :firewall_x], yunet_path, label="final_person_a_v263")
     final_dense = _dense_landmarks_68(final, final_bbox, dense_path, label="final_person_a")
-    source_embedding = _mobileface_embedding(source_im, source_dense, recognition_path)
-    final_embedding = _mobileface_embedding(final, final_dense, recognition_path)
+    source_embedding = _mobileface_embedding(source_im, source_dense, recognition_path, label="source")
+    final_embedding = _mobileface_embedding(final, final_dense, recognition_path, label="final")
+    metrics_ckpt = v263diag.checkpoint(
+        _log, f"{attempt_name}.metrics.before", arrays=(("source_embedding", source_embedding), ("final_embedding", final_embedding),
+                ("desired_dense", desired_dense), ("final_dense", final_dense)),
+    )
     metrics = _quality_metrics(source_embedding, final_embedding, desired_dense, final_dense)
+    v263diag.checkpoint(_log, f"{attempt_name}.metrics.after", started=metrics_ckpt)
 
     ok, encoded = cv2.imencode(".png", final, [cv2.IMWRITE_PNG_COMPRESSION, 2])
     if not ok:
@@ -557,10 +659,14 @@ async def _true_face_transfer_v263(runtime: Any, stage1: bytes, source: bytes, s
     yunet_path = await v253._ensure_yunet_model()
     dense_path, recognition_path = await _ensure_identity_models()
 
+    standard_ckpt = v263diag.checkpoint(_log, "standard_attempt.before", note="strict=false")
     standard, metrics, _ = _transfer_attempt(
         bytes(stage1 or b""), bytes(source or b""), yunet_path, dense_path, recognition_path, strict=False
     )
+    v263diag.checkpoint(_log, "standard_attempt.after", started=standard_ckpt, note="strict=false")
+    gate_ckpt = v263diag.checkpoint(_log, "standard_quality_gate.before")
     passed, failures = _quality_gate(metrics)
+    v263diag.checkpoint(_log, "standard_quality_gate.after", started=gate_ckpt, note="pass" if passed else "fail")
     if passed:
         _log_quality(metrics, path="standard", passed=True, strict_retry_triggered=False, strict_retry_success=False, failures=[])
         runtime.AI_SELFIE_LAST_FACESWAP_PROVIDER = "opencv_dense68_identity_v263_standard"
@@ -570,10 +676,19 @@ async def _true_face_transfer_v263(runtime: Any, stage1: bytes, source: bytes, s
 
     _log_quality(metrics, path="standard", passed=False, strict_retry_triggered=True, strict_retry_success=False, failures=failures)
     _log("AI_SELFIE_V263_STRICT_RETRY strict_retry_triggered=true reason=identity_quality_gate")
+    strict_ckpt = v263diag.checkpoint(_log, "strict_retry.before", note="strict=true")
     strict, strict_metrics, _ = _transfer_attempt(
         bytes(stage1 or b""), bytes(source or b""), yunet_path, dense_path, recognition_path, strict=True
     )
+    v263diag.checkpoint(_log, "strict_retry.transfer_after", started=strict_ckpt, note="strict=true")
+    strict_gate_ckpt = v263diag.checkpoint(_log, "strict_quality_gate.before")
     strict_passed, strict_failures = _quality_gate(strict_metrics)
+    v263diag.checkpoint(
+        _log, "strict_quality_gate.after", started=strict_gate_ckpt, note="pass" if strict_passed else "fail",
+    )
+    v263diag.checkpoint(
+        _log, "strict_retry.after", started=strict_ckpt, note="pass" if strict_passed else "fail",
+    )
     _log_quality(
         strict_metrics, path="strict", passed=strict_passed,
         strict_retry_triggered=True, strict_retry_success=strict_passed, failures=strict_failures,
