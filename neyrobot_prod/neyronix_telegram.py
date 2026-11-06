@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 BRAND_NAME = "NEYRONIX"
 DEFAULT_BOT_USERNAME = "neyronixbot"
 DEFAULT_MENU_URL = "https://neyro-studio-ui.onrender.com/"
-MENU_BUTTON_TEXT = "Открыть NEYRONIX"
+MENU_BUTTON_TEXT = "NEYRONIX"
 
 SHORT_DESCRIPTION = (
     "NEYRONIX — AI-студия для текста, документов, изображений, видео, музыки и речи."

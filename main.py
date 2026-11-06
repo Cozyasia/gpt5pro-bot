@@ -878,7 +878,7 @@ TARIFF_URL = _make_tariff_url("subscribe")
 # ── Telegram profile / pre-start description ──
 AUTO_SET_BOT_PROFILE = os.environ.get("AUTO_SET_BOT_PROFILE", "1").strip().lower() not in ("0", "false", "no", "off")
 AUTO_SET_BOT_MENU = os.environ.get("AUTO_SET_BOT_MENU", "1").strip().lower() not in ("0", "false", "no", "off")
-BOT_MENU_TEXT = os.environ.get("BOT_MENU_TEXT", "Меню ботов").strip()[:64] or "Меню ботов"
+BOT_MENU_TEXT = os.environ.get("BOT_MENU_TEXT", "NEYRONIX").strip()[:64] or "NEYRONIX"
 BOT_PUBLIC_NAME = os.environ.get("BOT_PUBLIC_NAME", "NEYRONIX").strip()[:64]
 BOT_SHORT_DESCRIPTION = os.environ.get(
     "BOT_SHORT_DESCRIPTION",
@@ -18097,6 +18097,28 @@ async def on_text(
             return
         await _start_image_to_video(update, context, text)
         _clear_i2v_wait(context)
+        with contextlib.suppress(Exception):
+            _mode_track_set(update.effective_user.id, "")
+        return
+
+    # The selected image-to-video flow is also durable in SQLite.  This
+    # recovery path covers webhook/process restarts where PTB user_data is
+    # gone, and prevents a motion prompt from falling through to the generic
+    # text-to-video provider chooser.
+    if (
+        _mode_track_get(update.effective_user.id) == "image_to_video"
+        and _get_cached_photo(update.effective_user.id)
+        and not context.user_data.get("awaiting_i2v_photo")
+        and text
+    ):
+        context.user_data.setdefault("i2v_engine", "seedance")
+        context.user_data.setdefault("i2v_duration", 8)
+        context.user_data.setdefault("i2v_aspect", "9:16")
+        context.user_data["awaiting_i2v_prompt"] = True
+        await _start_image_to_video(update, context, text)
+        _clear_i2v_wait(context)
+        with contextlib.suppress(Exception):
+            _mode_track_set(update.effective_user.id, "")
         return
 
     # Studio prompt edit is an explicit one-message draft workflow; no provider call.
@@ -19443,11 +19465,21 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("Картинка → видео")
         _clear_transient_flows(context)
         _set_mode_clean(q.from_user.id, "Развлечения", "image_to_video")
-        context.user_data["awaiting_i2v_photo"] = True
         context.user_data["i2v_duration"] = 8
         context.user_data["i2v_aspect"] = "9:16"
+        cached = _get_cached_photo(q.from_user.id)
+        context.user_data["i2v_reference_ready"] = bool(cached)
+        context.user_data["awaiting_i2v_photo"] = not bool(cached)
+        if cached:
+            await q.message.reply_text(
+                "🖼 Картинка → видео\n\n"
+                "✅ Использую последнее загруженное изображение.\n"
+                "Шаг 2/3: выберите модель, длительность и формат, затем отправьте промпт движения.",
+                reply_markup=_i2v_keyboard(context),
+            )
+            return
         await q.message.reply_text(
-            "🖼 Картинка → видео\\n\\nШаг 1/3: загрузите референс-фотографию. "
+            "🖼 Картинка → видео\n\nШаг 1/3: загрузите референс-фотографию. "
             "После этого выберите модель и пришлите промпт движения.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("✖️ Отмена", callback_data="i2v:cancel")]
@@ -20442,6 +20474,8 @@ def build_application() -> "Application":
         if context.user_data.get("awaiting_i2v_prompt"):
             await _start_image_to_video(update, context, incoming)
             _clear_i2v_wait(context)
+            with contextlib.suppress(Exception):
+                _mode_track_set(update.effective_user.id, "")
         else:
             # Preserve the selection until _start_text_video has inspected it.
             await _start_text_video(update, context, incoming)

@@ -222,14 +222,14 @@ async def _cmd_fixmenu(update: Any, context: Any) -> None:
         before = await context.bot.get_chat_menu_button(chat_id=chat.id)
         await context.bot.set_chat_menu_button(
             chat_id=chat.id,
-            menu_button=MenuButtonWebApp(text="Меню ботов", web_app=WebAppInfo(url=url)),
+            menu_button=MenuButtonWebApp(text="NEYRONIX", web_app=WebAppInfo(url=url)),
         )
         after = await context.bot.get_chat_menu_button(chat_id=chat.id)
         actual = getattr(getattr(after, "web_app", None), "url", "")
         if actual != url:
             raise RuntimeError("Telegram returned a different menu URL")
         await update.effective_message.reply_text(
-            "✅ Меню вашего чата обновлено. Закройте окно Mini App и нажмите «Меню ботов» снова."
+            "✅ Меню вашего чата обновлено. Закройте окно Mini App и нажмите «NEYRONIX» снова."
         )
     except Exception:
         import logging
