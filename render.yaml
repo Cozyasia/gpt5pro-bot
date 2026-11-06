@@ -42,7 +42,7 @@ services:
   - key: AUTO_SET_BOT_MENU
     value: "1"
   - key: BOT_MENU_TEXT
-    value: "Меню ботов"
+    value: "NEYRONIX"
   - key: WEBAPP_URL
     sync: false
   - key: TARIFF_URL
