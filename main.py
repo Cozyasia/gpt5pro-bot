@@ -18721,8 +18721,16 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         caption = (update.message.caption or "").strip()
 
-        # Dedicated image-to-video wizard claims the next reference before generic photo routes.
-        if context.user_data.pop("awaiting_i2v_photo", False):
+        # Dedicated image-to-video wizard claims every new photo while the
+        # durable image_to_video track is active.  Previously this only
+        # checked the transient flag; when a cached reference already
+        # existed, a newly uploaded replacement fell through to the generic
+        # "Фото получено. Что сделать?" menu.
+        i2v_photo_wait = bool(context.user_data.pop("awaiting_i2v_photo", False))
+        if not i2v_photo_wait:
+            with contextlib.suppress(Exception):
+                i2v_photo_wait = _mode_track_get(user_id) == "image_to_video"
+        if i2v_photo_wait:
             context.user_data["i2v_reference_ready"] = True
             context.user_data.setdefault("i2v_engine", "seedance")
             context.user_data.setdefault("i2v_duration", 8)
@@ -19057,6 +19065,24 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if mt.startswith("image/"):
             _cache_photo(update.effective_user.id, raw, getattr(tg_file, "file_path", "") or "")
+
+            # Treat an image sent as a Telegram document exactly like a
+            # regular photo while the image-to-video wizard is active.
+            i2v_document_wait = bool(context.user_data.pop("awaiting_i2v_photo", False))
+            if not i2v_document_wait:
+                with contextlib.suppress(Exception):
+                    i2v_document_wait = _mode_track_get(update.effective_user.id) == "image_to_video"
+            if i2v_document_wait:
+                context.user_data["i2v_reference_ready"] = True
+                context.user_data.setdefault("i2v_engine", "seedance")
+                context.user_data.setdefault("i2v_duration", 8)
+                context.user_data.setdefault("i2v_aspect", "9:16")
+                await update.effective_message.reply_text(
+                    "✅ Референс сохранён.\n\nШаг 2/3: выберите модель, длительность и формат. "
+                    "После выбора модели отправьте промпт движения для этого изображения.",
+                    reply_markup=_i2v_keyboard(context),
+                )
+                return
 
             if context.user_data.pop("music_video_draft", None):
                 context.user_data.pop("music_video_draft_edit", None)
