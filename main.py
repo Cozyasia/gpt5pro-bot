@@ -19968,6 +19968,9 @@ async def _direct_lipsync_render(update: Update, context: ContextTypes.DEFAULT_T
             log.exception("HeyGen Avatar IV transport failed")
             await update.effective_message.reply_text(f"❌ HeyGen Avatar IV не завершился: {str(exc)[:500]}")
             return
+        finally:
+            # Always release the direct lip-sync session, including HeyGen errors.
+            _direct_lipsync_clear(context)
 
     if not (KLING_LIPSYNC_ENABLED and (KLING_API_KEY or COMET_API_KEY)):
         _direct_lipsync_clear(context)
