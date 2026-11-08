@@ -50,6 +50,7 @@ def provider_configuration_status(environ: Mapping[str, str]) -> dict[str, bool]
         "runway": has("RUNWAYML_API_SECRET", "RUNWAY_API_KEY", "RUNWAY_KEY") or comet,
         "luma": has("LUMA_API_KEY"),
         "gemini_image": has("GEMINI_IMAGE_API_KEY"),
+        "heygen_avatar_iv": has("HEYGEN_API_KEY", "HEYGEN_API_TOKEN"),
         "heygen": all(has(name) for name in (
             "HEYGEN_API_KEY", "HEYGEN_AVATAR_ID", "HEYGEN_VOICE_ID",
         )),
