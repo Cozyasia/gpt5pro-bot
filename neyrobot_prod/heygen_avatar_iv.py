@@ -91,9 +91,11 @@ async def create_image_audio_video(
         audio_asset_id = await _upload_asset(client, api_key, audio_bytes, audio_name)
         payload = {
             "type": "image",
-            "image_asset_id": image_asset_id,
+            # HeyGen v3 image mode expects the image discriminator object.
+            # Avatar IV is the default engine for arbitrary-image input;
+            # passing an engine object here is rejected by the image schema.
+            "image": {"type": "asset_id", "asset_id": image_asset_id},
             "audio_asset_id": audio_asset_id,
-            "engine": {"type": "avatar_iv"},
             "title": title,
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
