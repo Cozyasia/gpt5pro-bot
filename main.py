@@ -19805,6 +19805,196 @@ async def on_btn_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _set_medical_waiting(update, context, "")
     await update.effective_message.reply_text(_medical_menu_text(), reply_markup=medicine_kb())
 
+
+# ───────── Direct finished-video Kling Lip Sync ─────────
+# This flow is intentionally separate from Seedance image→video. It accepts an
+# already rendered MP4 plus a voice/script and sends both through Kling Lip Sync.
+_DIRECT_LIPSYNC_STAGE = "direct_lipsync_stage"
+
+def _direct_lipsync_clear(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop(_DIRECT_LIPSYNC_STAGE, None)
+    context.user_data.pop("direct_lipsync_video_bytes", None)
+
+def _direct_lipsync_duration_sync(raw: bytes, suffix: str) -> float:
+    if not raw:
+        return 0.0
+    with tempfile.TemporaryDirectory(prefix="neyronix_direct_lipsync_") as td:
+        path = os.path.join(td, "input" + (suffix if suffix.startswith(".") else "." + suffix))
+        with open(path, "wb") as fh:
+            fh.write(raw)
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=nk=1:nw=1", path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30,
+            )
+            return max(0.0, min(600.0, float((result.stdout or "").strip())))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return 0.0
+
+def _direct_lipsync_normalize_audio_sync(raw: bytes, suffix: str) -> bytes:
+    if not raw:
+        return b""
+    suffix = suffix if suffix.startswith(".") else "." + suffix
+    if suffix.lower() == ".mp3":
+        return raw
+    with tempfile.TemporaryDirectory(prefix="neyronix_direct_lipsync_audio_") as td:
+        src = os.path.join(td, "source" + suffix)
+        out = os.path.join(td, "voice.mp3")
+        with open(src, "wb") as fh:
+            fh.write(raw)
+        result = subprocess.run(
+            [_ffmpeg_exe(), "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+             "-i", src, "-vn", "-ac", "2", "-ar", "44100",
+             "-c:a", "libmp3lame", "-b:a", "128k", out],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90,
+        )
+        if result.returncode != 0 or not os.path.isfile(out):
+            raise RuntimeError("Не удалось преобразовать аудио в MP3.")
+        with open(out, "rb") as fh:
+            return fh.read()
+
+def _direct_lipsync_mux_audio_sync(video_bytes: bytes, audio_bytes: bytes, duration_s: float) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="neyronix_direct_lipsync_mux_") as td:
+        video = os.path.join(td, "synced.mp4")
+        audio = os.path.join(td, "voice.mp3")
+        output = os.path.join(td, "final.mp4")
+        with open(video, "wb") as fh:
+            fh.write(video_bytes)
+        with open(audio, "wb") as fh:
+            fh.write(audio_bytes)
+        result = subprocess.run(
+            [_ffmpeg_exe(), "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+             "-i", video, "-i", audio,
+             "-filter_complex", f"[1:a]apad,atrim=duration={duration_s:.3f}[a]",
+             "-map", "0:v:0", "-map", "[a]", "-t", f"{duration_s:.3f}",
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2",
+             "-movflags", "+faststart", output],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180,
+        )
+        if result.returncode != 0 or not os.path.isfile(output):
+            raise RuntimeError("Kling вернул видео, но финальная аудиодорожка не собрана.")
+        with open(output, "rb") as fh:
+            return fh.read()
+
+async def cmd_lip_sync_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _direct_lipsync_clear(context)
+    context.user_data[_DIRECT_LIPSYNC_STAGE] = "video"
+    await update.effective_message.reply_text(
+        "🎭 Lip Sync готового ролика.\n\n"
+        "Шаг 1/2: отправьте исходный MP4. После этого пришлите MP3/WAV/M4A "
+        "или просто текст — бот создаст естественную русскую озвучку и синхронизирует рот."
+    )
+
+async def _direct_lipsync_render(update: Update, context: ContextTypes.DEFAULT_TYPE, audio_bytes: bytes, audio_name: str):
+    video_bytes = context.user_data.get("direct_lipsync_video_bytes") or b""
+    if not video_bytes:
+        _direct_lipsync_clear(context)
+        await update.effective_message.reply_text("Сначала отправьте MP4 командой /lip_sync_video.")
+        return
+    audio_bytes = await asyncio.to_thread(
+        _direct_lipsync_normalize_audio_sync,
+        audio_bytes,
+        os.path.splitext(audio_name or ".mp3")[1] or ".mp3",
+    )
+    video_s = await asyncio.to_thread(_direct_lipsync_duration_sync, video_bytes, ".mp4")
+    audio_s = await asyncio.to_thread(_direct_lipsync_duration_sync, audio_bytes, ".mp3")
+    duration_s = min(video_s, audio_s, 10.0)
+    if duration_s < 2.0:
+        _direct_lipsync_clear(context)
+        await update.effective_message.reply_text("Видео и аудио должны длиться минимум 2 секунды.")
+        return
+    if not (KLING_LIPSYNC_ENABLED and (KLING_API_KEY or COMET_API_KEY)):
+        _direct_lipsync_clear(context)
+        await update.effective_message.reply_text("❌ Kling Lip Sync не включён или ключ не загружен в Render.")
+        return
+    await update.effective_message.reply_text(
+        f"🎭 Запускаю Kling Lip Sync: {duration_s:.1f} сек. "
+        "Исходный звук будет выключен, останется только новая речь."
+    )
+    try:
+        video_url = _provider_input_url_from_bytes(video_bytes, "input.mp4")
+        audio_url = _provider_input_url_from_bytes(audio_bytes, "voice.mp3")
+        synced = await _run_kling_lipsync_result_bytes(
+            video_url,
+            audio_url,
+            duration_ms=int(round(duration_s * 1000)),
+            max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+        )
+        final = await asyncio.to_thread(
+            _direct_lipsync_mux_audio_sync, synced, audio_bytes, duration_s
+        )
+        bio = BytesIO(final)
+        bio.name = "NEYRONIX_lipsync.mp4"
+        await update.effective_message.reply_video(
+            video=InputFile(bio),
+            caption="✅ Готово: русская речь синхронизирована с движением рта."
+        )
+    except Exception as exc:
+        log.exception("direct Kling lip-sync failed")
+        await update.effective_message.reply_text(
+            f"❌ Lip Sync не завершился: {str(exc)[:500]}"
+        )
+    finally:
+        _direct_lipsync_clear(context)
+
+async def on_direct_lipsync_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "video":
+        return
+    media = update.effective_message.video
+    if not media:
+        return
+    try:
+        tg_file = await _telegram_media_get_file_with_retry(media, label="direct lip-sync video")
+        raw = bytes(await tg_file.download_as_bytearray())
+        if len(raw) > 50 * 1024 * 1024:
+            raise RuntimeError("MP4 больше 50 МБ.")
+        context.user_data["direct_lipsync_video_bytes"] = raw
+        context.user_data[_DIRECT_LIPSYNC_STAGE] = "audio"
+        await update.effective_message.reply_text(
+            "✅ Видео получено.\n\nШаг 2/2: отправьте MP3/WAV/M4A или напишите текст речи."
+        )
+    except Exception as exc:
+        await update.effective_message.reply_text(f"❌ Не удалось принять видео: {str(exc)[:300]}")
+
+async def on_direct_lipsync_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "audio":
+        return
+    message = update.effective_message
+    media = message.audio or message.voice or message.document
+    if not media:
+        return
+    filename = (
+        getattr(media, "file_name", "") or
+        ("voice.ogg" if message.voice else "voice.mp3")
+    )
+    try:
+        tg_file = await _telegram_media_get_file_with_retry(media, label="direct lip-sync audio")
+        raw = bytes(await tg_file.download_as_bytearray())
+        await _direct_lipsync_render(update, context, raw, filename)
+    except Exception as exc:
+        _direct_lipsync_clear(context)
+        await message.reply_text(f"❌ Не удалось принять аудио: {str(exc)[:300]}")
+
+async def on_direct_lipsync_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "audio":
+        return
+    text = (getattr(update.effective_message, "text", "") or "").strip()
+    if not text:
+        return
+    if len(text) > TTS_MAX_CHARS:
+        await update.effective_message.reply_text("Слишком длинный текст для этой короткой сцены.")
+        return
+    try:
+        voice = _avatar_tts_voice_get(context)
+        audio = await asyncio.to_thread(_tts_bytes_sync, text, "mp3", voice)
+        if not audio:
+            raise RuntimeError("TTS не вернул аудио. Проверьте OPENAI_TTS_KEY в Render.")
+        await _direct_lipsync_render(update, context, audio, "voice.mp3")
+    except Exception as exc:
+        _direct_lipsync_clear(context)
+        await update.effective_message.reply_text(f"❌ Не удалось создать озвучку: {str(exc)[:300]}")
+
 # ───────── Приоритетный роутер AI-видеоклипа ─────────
 def _music_video_text_state(context: ContextTypes.DEFAULT_TYPE, user_id: int | None = None) -> str:
     """Активный этап PHOTO -> SONG -> VIDEO. Он всегда выше generic media/capability intents."""
@@ -20570,6 +20760,11 @@ def build_application() -> "Application":
     app.add_handler(MessageHandler(filters.Regex(BTN_NEWCHAT), cmd_newchat), group=0)
 
     # Generic photo-revival regex interceptor removed: explicit revival commands are routed only by on_text.\n    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
+    # Direct finished-video Kling Lip Sync (must run before generic media/text routes).
+    app.add_handler(CommandHandler("lip_sync_video", cmd_lip_sync_video), group=-4)
+    app.add_handler(MessageHandler(filters.VIDEO, on_direct_lipsync_video), group=-4)
+    app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | filters.Document.ALL, on_direct_lipsync_audio), group=-4)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_direct_lipsync_text), group=-4)
     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
 
     # Медиа (фото/доки/видео/гиф) — тоже перед общим текстом
