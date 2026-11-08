@@ -92,6 +92,9 @@ from telegram.ext import (
 from telegram.constants import ChatAction
 from telegram.error import TelegramError, TimedOut, BadRequest
 from presentation_studio import PresentationStudio, StudioConfig
+from neyrobot_prod.heygen_avatar_iv import (
+    HeyGenAvatarIVError, create_image_audio_video, poll_video as poll_heygen_avatar_iv,
+)
 from neyrobot_prod.entertainment import (
     build_keyboard as build_entertainment_keyboard,
     classify_callback as classify_entertainment_callback,
@@ -19814,6 +19817,8 @@ _DIRECT_LIPSYNC_STAGE = "direct_lipsync_stage"
 def _direct_lipsync_clear(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop(_DIRECT_LIPSYNC_STAGE, None)
     context.user_data.pop("direct_lipsync_video_bytes", None)
+    context.user_data.pop("direct_lipsync_image_bytes", None)
+    context.user_data.pop("direct_lipsync_image_name", None)
 
 def _direct_lipsync_duration_sync(raw: bytes, suffix: str) -> float:
     if not raw:
@@ -19831,6 +19836,25 @@ def _direct_lipsync_duration_sync(raw: bytes, suffix: str) -> float:
             return max(0.0, min(600.0, float((result.stdout or "").strip())))
         except (OSError, ValueError, subprocess.TimeoutExpired):
             return 0.0
+
+def _direct_lipsync_first_frame_sync(raw: bytes) -> bytes:
+    if not raw:
+        return b""
+    with tempfile.TemporaryDirectory(prefix="neyronix_avatar_iv_frame_") as td:
+        src = os.path.join(td, "input.mp4")
+        out = os.path.join(td, "frame.png")
+        with open(src, "wb") as fh:
+            fh.write(raw)
+        result = subprocess.run(
+            [_ffmpeg_exe(), "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+             "-i", src, "-frames:v", "1", "-vf",
+             "scale=trunc(iw/2)*2:trunc(ih/2)*2", out],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
+        )
+        if result.returncode != 0 or not os.path.isfile(out):
+            raise RuntimeError("Не удалось извлечь первый кадр MP4.")
+        with open(out, "rb") as fh:
+            return fh.read()
 
 def _direct_lipsync_normalize_audio_sync(raw: bytes, suffix: str) -> bytes:
     if not raw:
@@ -19888,55 +19912,114 @@ async def cmd_lip_sync_video(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def _direct_lipsync_render(update: Update, context: ContextTypes.DEFAULT_TYPE, audio_bytes: bytes, audio_name: str):
     video_bytes = context.user_data.get("direct_lipsync_video_bytes") or b""
-    if not video_bytes:
+    image_bytes = context.user_data.get("direct_lipsync_image_bytes") or b""
+    image_name = context.user_data.get("direct_lipsync_image_name") or "neyronix.png"
+    if not image_bytes and video_bytes:
+        image_bytes = await asyncio.to_thread(_direct_lipsync_first_frame_sync, video_bytes)
+        image_name = "neyronix.png"
+    if not image_bytes and not video_bytes:
         _direct_lipsync_clear(context)
-        await update.effective_message.reply_text("Сначала отправьте MP4 командой /lip_sync_video.")
+        await update.effective_message.reply_text("Сначала отправьте MP4 или фото командой /lip_sync_video.")
         return
+
     audio_bytes = await asyncio.to_thread(
         _direct_lipsync_normalize_audio_sync,
         audio_bytes,
         os.path.splitext(audio_name or ".mp3")[1] or ".mp3",
     )
-    video_s = await asyncio.to_thread(_direct_lipsync_duration_sync, video_bytes, ".mp4")
     audio_s = await asyncio.to_thread(_direct_lipsync_duration_sync, audio_bytes, ".mp3")
-    duration_s = min(video_s, audio_s, 10.0)
-    if duration_s < 2.0:
+    if audio_s < 2.0:
         _direct_lipsync_clear(context)
-        await update.effective_message.reply_text("Видео и аудио должны длиться минимум 2 секунды.")
+        await update.effective_message.reply_text("Аудио должно длиться минимум 2 секунды.")
         return
+
+    heygen_key = (
+        os.getenv("HEYGEN_API_KEY", "").strip()
+        or os.getenv("HEYGEN_API_TOKEN", "").strip()
+    )
+    if heygen_key:
+        await update.effective_message.reply_text(
+            f"🤖 Запускаю HeyGen Avatar IV: {audio_s:.1f} сек. "
+            "Синхронизирую речь с роботом и сохраню фирменный образ NEYRONIX."
+        )
+        try:
+            video_id = await create_image_audio_video(
+                heygen_key, image_bytes, audio_bytes,
+                image_name=image_name, audio_name="voice.mp3",
+                title="NEYRONIX Avatar IV", aspect_ratio="auto", resolution="1080p",
+            )
+            result_url = await poll_heygen_avatar_iv(heygen_key, video_id, max_wait_seconds=1200)
+            async with httpx.AsyncClient(timeout=180) as client:
+                response = await client.get(result_url)
+                response.raise_for_status()
+                result_bytes = response.content
+            bio = BytesIO(result_bytes)
+            bio.name = "NEYRONIX_avatar_iv.mp4"
+            await update.effective_message.reply_video(
+                video=InputFile(bio),
+                caption="✅ Готово: NEYRONIX Avatar IV · русская речь синхронизирована.",
+            )
+            return
+        except HeyGenAvatarIVError as exc:
+            log.exception("HeyGen Avatar IV failed")
+            await update.effective_message.reply_text(f"❌ HeyGen Avatar IV: {str(exc)[:500]}")
+            return
+        except Exception as exc:
+            log.exception("HeyGen Avatar IV transport failed")
+            await update.effective_message.reply_text(f"❌ HeyGen Avatar IV не завершился: {str(exc)[:500]}")
+            return
+
     if not (KLING_LIPSYNC_ENABLED and (KLING_API_KEY or COMET_API_KEY)):
         _direct_lipsync_clear(context)
-        await update.effective_message.reply_text("❌ Kling Lip Sync не включён или ключ не загружен в Render.")
+        await update.effective_message.reply_text(
+            "❌ Для NEYRONIX нужен HEYGEN_API_KEY: Kling Lip Sync распознаёт только человеческие лица."
+        )
         return
     await update.effective_message.reply_text(
-        f"🎭 Запускаю Kling Lip Sync: {duration_s:.1f} сек. "
-        "Исходный звук будет выключен, останется только новая речь."
+        f"🎭 Запускаю Kling Lip Sync: {audio_s:.1f} сек. Исходный звук будет выключен, останется только новая речь."
     )
     try:
         video_url = _provider_input_url_from_bytes(video_bytes, "input.mp4")
         audio_url = _provider_input_url_from_bytes(audio_bytes, "voice.mp3")
         synced = await _run_kling_lipsync_result_bytes(
-            video_url,
-            audio_url,
-            duration_ms=int(round(duration_s * 1000)),
+            video_url, audio_url, duration_ms=int(round(audio_s * 1000)),
             max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
         )
-        final = await asyncio.to_thread(
-            _direct_lipsync_mux_audio_sync, synced, audio_bytes, duration_s
-        )
+        final = await asyncio.to_thread(_direct_lipsync_mux_audio_sync, synced, audio_bytes, audio_s)
         bio = BytesIO(final)
         bio.name = "NEYRONIX_lipsync.mp4"
         await update.effective_message.reply_video(
-            video=InputFile(bio),
-            caption="✅ Готово: русская речь синхронизирована с движением рта."
+            video=InputFile(bio), caption="✅ Готово: русская речь синхронизирована с движением рта."
         )
     except Exception as exc:
         log.exception("direct Kling lip-sync failed")
-        await update.effective_message.reply_text(
-            f"❌ Lip Sync не завершился: {str(exc)[:500]}"
-        )
+        message = str(exc)
+        if "1201" in message or "did not detect a human" in message.lower():
+            message = "Kling не распознал человеческое лицо. Для мультяшного робота нужен HeyGen Avatar IV и переменная HEYGEN_API_KEY."
+        await update.effective_message.reply_text(f"❌ Lip Sync не завершился: {message[:500]}")
     finally:
         _direct_lipsync_clear(context)
+
+async def on_direct_lipsync_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "video":
+        return
+    message = update.effective_message
+    if not message.photo:
+        return
+    try:
+        media = message.photo[-1]
+        tg_file = await _telegram_media_get_file_with_retry(media, label="direct lip-sync image")
+        raw = bytes(await tg_file.download_as_bytearray())
+        if len(raw) > 25 * 1024 * 1024:
+            raise RuntimeError("Изображение больше 25 МБ.")
+        context.user_data["direct_lipsync_image_bytes"] = raw
+        context.user_data["direct_lipsync_image_name"] = "neyronix_reference.jpg"
+        context.user_data[_DIRECT_LIPSYNC_STAGE] = "audio"
+        await message.reply_text(
+            "✅ Референс-фото получено.\n\nШаг 2/2: отправьте MP3/WAV/M4A или напишите текст речи."
+        )
+    except Exception as exc:
+        await message.reply_text(f"❌ Не удалось принять фото: {str(exc)[:300]}")
 
 async def on_direct_lipsync_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "video":
@@ -19950,6 +20033,11 @@ async def on_direct_lipsync_video(update: Update, context: ContextTypes.DEFAULT_
         if len(raw) > 50 * 1024 * 1024:
             raise RuntimeError("MP4 больше 50 МБ.")
         context.user_data["direct_lipsync_video_bytes"] = raw
+        with contextlib.suppress(Exception):
+            context.user_data["direct_lipsync_image_bytes"] = await asyncio.to_thread(
+                _direct_lipsync_first_frame_sync, raw
+            )
+            context.user_data["direct_lipsync_image_name"] = "neyronix_first_frame.png"
         context.user_data[_DIRECT_LIPSYNC_STAGE] = "audio"
         await update.effective_message.reply_text(
             "✅ Видео получено.\n\nШаг 2/2: отправьте MP3/WAV/M4A или напишите текст речи."
@@ -20762,6 +20850,7 @@ def build_application() -> "Application":
     # Generic photo-revival regex interceptor removed: explicit revival commands are routed only by on_text.\n    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
     # Direct finished-video Kling Lip Sync (must run before generic media/text routes).
     app.add_handler(CommandHandler("lip_sync_video", cmd_lip_sync_video), group=-4)
+    app.add_handler(MessageHandler(filters.PHOTO, on_direct_lipsync_photo), group=-4)
     app.add_handler(MessageHandler(filters.VIDEO, on_direct_lipsync_video), group=-4)
     app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | filters.Document.ALL, on_direct_lipsync_audio), group=-4)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_direct_lipsync_text), group=-4)
