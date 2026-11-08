@@ -20020,6 +20020,8 @@ async def on_direct_lipsync_photo(update: Update, context: ContextTypes.DEFAULT_
         )
     except Exception as exc:
         await message.reply_text(f"❌ Не удалось принять фото: {str(exc)[:300]}")
+    # The direct flow owns this update; prevent the generic photo menu from firing.
+    raise ApplicationHandlerStop()
 
 async def on_direct_lipsync_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "video":
@@ -20044,6 +20046,8 @@ async def on_direct_lipsync_video(update: Update, context: ContextTypes.DEFAULT_
         )
     except Exception as exc:
         await update.effective_message.reply_text(f"❌ Не удалось принять видео: {str(exc)[:300]}")
+    # The direct flow owns this update; prevent generic media handlers from firing.
+    raise ApplicationHandlerStop()
 
 async def on_direct_lipsync_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "audio":
@@ -20063,6 +20067,8 @@ async def on_direct_lipsync_audio(update: Update, context: ContextTypes.DEFAULT_
     except Exception as exc:
         _direct_lipsync_clear(context)
         await message.reply_text(f"❌ Не удалось принять аудио: {str(exc)[:300]}")
+    # The direct flow owns this update; prevent generic audio handlers from firing.
+    raise ApplicationHandlerStop()
 
 async def on_direct_lipsync_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get(_DIRECT_LIPSYNC_STAGE) != "audio":
@@ -20082,6 +20088,8 @@ async def on_direct_lipsync_text(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as exc:
         _direct_lipsync_clear(context)
         await update.effective_message.reply_text(f"❌ Не удалось создать озвучку: {str(exc)[:300]}")
+    # The direct flow owns this update; prevent generic text handlers from firing.
+    raise ApplicationHandlerStop()
 
 # ───────── Приоритетный роутер AI-видеоклипа ─────────
 def _music_video_text_state(context: ContextTypes.DEFAULT_TYPE, user_id: int | None = None) -> str:
