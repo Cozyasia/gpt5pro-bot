@@ -91,7 +91,7 @@ async def create_image_audio_video(
         audio_asset_id = await _upload_asset(client, api_key, audio_bytes, audio_name)
         payload = {
             "type": "image",
-            "image": {"type": "asset_id", "asset_id": image_asset_id},
+            "image_asset_id": image_asset_id,
             "audio_asset_id": audio_asset_id,
             "engine": {"type": "avatar_iv"},
             "title": title,
