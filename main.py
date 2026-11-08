@@ -19906,7 +19906,7 @@ async def cmd_lip_sync_video(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data[_DIRECT_LIPSYNC_STAGE] = "video"
     await update.effective_message.reply_text(
         "🎭 Lip Sync готового ролика.\n\n"
-        "Шаг 1/2: отправьте исходный MP4. После этого пришлите MP3/WAV/M4A "
+        "Шаг 1/2: отправьте исходный MP4 или фото. После этого пришлите MP3/WAV/M4A "
         "или просто текст — бот создаст естественную русскую озвучку и синхронизирует рот."
     )
 
