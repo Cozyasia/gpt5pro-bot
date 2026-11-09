@@ -322,10 +322,14 @@ async def _comet_edit(user_photo: bytes, slug: str, scene: str, scene_photo: byt
 
 
 async def _generate_image(user_photo: bytes, slug: str, scene: str, scene_photo: bytes = b"") -> bytes:
-    # Comet is the production route because this service has funded Comet credit;
-    # keep OpenAI only for installations that do not configure Comet at all.
+    # This dedicated lane is billed to the official OpenAI Images account.
+    # Comet remains a compatibility fallback only when no OpenAI key is configured.
+    if str(os.environ.get("OPENAI_API_KEY") or "").strip():
+        return await _openai_edit(user_photo, slug, scene, scene_photo=scene_photo)
     if str(os.environ.get("COMET_API_KEY") or os.environ.get("COMETAPI_KEY") or "").strip():
         return await _comet_edit(user_photo, slug, scene, scene_photo=scene_photo)
+    # Preserve the explicit OpenAI failure (rather than turning it into an
+    # unrelated Comet configuration error) when neither provider is configured.
     return await _openai_edit(user_photo, slug, scene, scene_photo=scene_photo)
 
 
