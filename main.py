@@ -19973,6 +19973,9 @@ async def _direct_lipsync_render(update: Update, context: ContextTypes.DEFAULT_T
                     "сохраню робота и передам голос как аудиореференс."
                 )
                 try:
+                    speech_text = ""
+                    with contextlib.suppress(Exception):
+                        speech_text = await _stt_transcribe_bytes("voice.mp3", audio_bytes)
                     video_id = await create_nonhuman_reference_video(
                         heygen_key,
                         image_bytes,
@@ -19981,6 +19984,7 @@ async def _direct_lipsync_render(update: Update, context: ContextTypes.DEFAULT_T
                         image_name=image_name,
                         audio_name="voice.mp3",
                         title="NEYRONIX HeyGen Video",
+                        speech_text=speech_text,
                         aspect_ratio="auto",
                         resolution="768p",
                     )
