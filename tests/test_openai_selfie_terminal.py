@@ -314,7 +314,7 @@ class SelfieTerminalTest(unittest.IsolatedAsyncioTestCase):
                 refs.append(path)
             with patch.object(self.lane, "_hero_refs", return_value=refs), \
                  patch.object(self.lane.httpx, "AsyncClient", return_value=Client(), create=True), \
-                 patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+                 patch.dict("os.environ", {"OPENAI_API_KEY": "test-key", "OPENAI_SELFIE_IMAGE_MODEL": ""}):
                 await self.real_edit(b"user" * 300, "hero_a", "A quiet park scene")
                 await self.real_edit(b"user" * 300, "hero_b", "Custom", scene_photo=b"scene" * 300)
 
@@ -322,6 +322,21 @@ class SelfieTerminalTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item[2][1][1][0] for item in requests], ["hero_1.jpg", "user.jpg"])
         self.assertEqual(len(requests[0][2]), 4)
         self.assertEqual(len(requests[1][2]), 5)
+        self.assertEqual([item[1]["model"] for item in requests], ["gpt-image-1", "gpt-image-1"])
+
+    async def test_openai_http_error_logs_only_safe_status_and_code(self):
+        async def rejected(*args, **kwargs):
+            raise RuntimeError("OpenAI image edit HTTP 400 [model_not_found]")
+
+        with patch.object(self.lane, "_openai_edit", side_effect=rejected), \
+             self.assertLogs("gpt-bot", level="INFO") as captured:
+            ok = await self.generate()
+
+        self.assertFalse(ok)
+        logs = "\n".join(captured.output)
+        self.assertIn("provider_status=400", logs)
+        self.assertIn("provider_code=model_not_found", logs)
+        self.assertNotIn("A quiet park scene", logs)
 
     async def test_job_log_correlates_request_and_terminal_without_input_data(self):
         with self.assertLogs("gpt-bot", level="INFO") as captured:
