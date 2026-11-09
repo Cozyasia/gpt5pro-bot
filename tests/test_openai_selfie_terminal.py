@@ -336,7 +336,7 @@ class SelfieTerminalTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item[2][1][1][0] for item in requests], ["hero_1.jpg", "user.jpg"])
         self.assertEqual(len(requests[0][2]), 4)
         self.assertEqual(len(requests[1][2]), 5)
-        self.assertEqual([item[1]["model"] for item in requests], ["gpt-image-1", "gpt-image-1"])
+        self.assertEqual([item[1]["model"] for item in requests], ["gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst"])
 
     async def test_openai_http_error_logs_only_safe_status_and_code(self):
         async def rejected(*args, **kwargs):
