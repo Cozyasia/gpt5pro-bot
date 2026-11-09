@@ -166,7 +166,6 @@ async def create_nonhuman_reference_video(
             "resolution": resolution,
             "aspect_ratio": safe_aspect_ratio,
             "prompt_enhancement": "disabled",
-            "title": title,
             "reference_images": [
                 {"type": "asset_id", "asset_id": image_asset_id},
             ],
