@@ -129,6 +129,7 @@ async def create_nonhuman_reference_video(
     image_name: str = "neyronix.png",
     audio_name: str = "voice.mp3",
     title: str = "NEYRONIX HeyGen Video",
+    speech_text: str = "",
     aspect_ratio: str = "auto",
     resolution: str = "768p",
 ) -> str:
@@ -155,12 +156,20 @@ async def create_nonhuman_reference_video(
                 "NEYRONIX robot mascot. Keep its white-and-blue rounded body, "
                 "black face visor, cyan eyes, antennae, chest emblem and NEYRONIX "
                 "branding recognizable throughout the entire shot. The robot "
-                "speaks directly to the viewer, with natural mouth movement "
-                "timed to <Audio 1>, gentle blinking and small welcoming hand "
-                "gestures. Keep the robot centered and preserve the original "
-                "friendly cartoon appearance. No new characters, no extra text, "
-                "no logo changes, no scene cuts, no distorted limbs. "
-                "Use <Audio 1> as the voice and dialogue timing; no music."
+                "speaks directly to the viewer with natural mouth movement timed "
+                "to <Audio 1>, gentle blinking and small welcoming hand gestures. "
+                "Around the robot, show five large friendly floating folder cards, "
+                "appearing one by one and remaining readable in Russian: "
+                "«Медицина», «Обучение», «Видео», «Документы», «Профиль». "
+                "These are the only additional words allowed on screen. Keep the "
+                "robot centered and preserve the original friendly cartoon "
+                "appearance. No new characters, no scene cuts, no distorted limbs, "
+                "no logo changes, no random text, no gibberish, no music. "
+                "Use <Audio 1> as the only voice reference. Speak the dialogue "
+                "once from beginning to end; do not repeat any word or sentence."
+                + (f' The exact Russian dialogue is: «{speech_text.strip()[:1200]}». '
+                   "Say it exactly once and stop when it ends."
+                   if speech_text and speech_text.strip() else "")
             ),
             "duration": duration,
             "resolution": resolution,
