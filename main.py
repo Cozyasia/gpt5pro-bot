@@ -93,7 +93,11 @@ from telegram.constants import ChatAction
 from telegram.error import TelegramError, TimedOut, BadRequest
 from presentation_studio import PresentationStudio, StudioConfig
 from neyrobot_prod.heygen_avatar_iv import (
-    HeyGenAvatarIVError, create_image_audio_video, poll_video as poll_heygen_avatar_iv,
+    HeyGenAvatarIVError,
+    create_image_audio_video,
+    create_nonhuman_reference_video,
+    poll_model_video,
+    poll_video as poll_heygen_avatar_iv,
 )
 from neyrobot_prod.entertainment import (
     build_keyboard as build_entertainment_keyboard,
@@ -19961,8 +19965,58 @@ async def _direct_lipsync_render(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
         except HeyGenAvatarIVError as exc:
+            error_text = str(exc)
+            if "no face detected" in error_text.lower() or "non-human" in error_text.lower():
+                await update.effective_message.reply_text(
+                    "⚠️ HeyGen Avatar IV не принимает мультяшные/нечеловеческие лица. "
+                    "Переключаю NEYRONIX на HeyGen Video reference-to-video: "
+                    "сохраню робота и передам голос как аудиореференс."
+                )
+                try:
+                    video_id = await create_nonhuman_reference_video(
+                        heygen_key,
+                        image_bytes,
+                        audio_bytes,
+                        duration_seconds=max(5, min(15, int(round(audio_s)))),
+                        image_name=image_name,
+                        audio_name="voice.mp3",
+                        title="NEYRONIX HeyGen Video",
+                        aspect_ratio="auto",
+                        resolution="768p",
+                    )
+                    result_url = await poll_model_video(
+                        heygen_key, video_id, max_wait_seconds=1200
+                    )
+                    async with httpx.AsyncClient(timeout=180) as client:
+                        response = await client.get(result_url)
+                        response.raise_for_status()
+                        result_bytes = response.content
+                    bio = BytesIO(result_bytes)
+                    bio.name = "NEYRONIX_heygen_video.mp4"
+                    await update.effective_message.reply_video(
+                        video=InputFile(bio),
+                        caption=(
+                            "✅ Готово: NEYRONIX · HeyGen Video · "
+                            "робот сохранён, аудиореференс использован."
+                        ),
+                    )
+                    return
+                except HeyGenAvatarIVError as fallback_exc:
+                    log.exception("HeyGen Video non-human fallback failed")
+                    await update.effective_message.reply_text(
+                        f"❌ HeyGen Video для робота не завершился: {str(fallback_exc)[:500]}"
+                    )
+                    return
+                except Exception as fallback_exc:
+                    log.exception("HeyGen Video non-human fallback transport failed")
+                    await update.effective_message.reply_text(
+                        f"❌ HeyGen Video для робота не завершился: {str(fallback_exc)[:500]}"
+                    )
+                    return
             log.exception("HeyGen Avatar IV failed")
-            await update.effective_message.reply_text(f"❌ HeyGen Avatar IV: {str(exc)[:500]}")
+            await update.effective_message.reply_text(
+                f"❌ HeyGen Avatar IV: {error_text[:500]}"
+            )
             return
         except Exception as exc:
             log.exception("HeyGen Avatar IV transport failed")
