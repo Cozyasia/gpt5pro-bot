@@ -296,7 +296,7 @@ class SelfieTerminalTest(unittest.IsolatedAsyncioTestCase):
             comet_calls.append((photo, slug, scene, scene_photo))
             return b"PNG" * 1000
 
-        with patch.dict("os.environ", {"COMET_API_KEY": "test-comet"}), \
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "", "COMET_API_KEY": "test-comet"}), \
              patch.object(self.lane, "_comet_edit", side_effect=comet), \
              patch.object(self.lane, "_openai_edit", side_effect=AssertionError("OpenAI must not be selected")):
             await self.generate()
