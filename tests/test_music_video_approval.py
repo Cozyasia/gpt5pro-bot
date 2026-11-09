@@ -108,6 +108,9 @@ def load_flow():
         "PHOTO_CLIP_SCENE_SECONDS": 10, "PHOTO_CLIP_MAX_SCENES": 9,
         "_get_cached_photo": lambda _: b"photo",
         "_mode_track_set": lambda *_: None,
+        # on_text also guards the durable image-to-video state.  The isolated
+        # harness does not initialise SQLite, so model the inactive state here.
+        "_mode_track_get": lambda *_: "",
         "log": SimpleNamespace(exception=lambda *a: None),
         "ScenePlan": ScenePlan,
         "chunk_review_messages": chunk_review_messages,
