@@ -119,6 +119,108 @@ async def create_image_audio_video(
         return video_id
 
 
+
+async def create_nonhuman_reference_video(
+    api_key: str,
+    image_bytes: bytes,
+    audio_bytes: bytes,
+    *,
+    duration_seconds: int = 8,
+    image_name: str = "neyronix.png",
+    audio_name: str = "voice.mp3",
+    title: str = "NEYRONIX HeyGen Video",
+    aspect_ratio: str = "auto",
+    resolution: str = "768p",
+) -> str:
+    """Create a non-human mascot clip with HeyGen Video reference-to-video.
+
+    Avatar IV's direct talking-avatar endpoint may reject a stylized mascot
+    when its face detector cannot classify it as human-like. HeyGen Video's
+    reference mode accepts an image plus an audio reference and is intended
+    for products, characters, and other non-human subjects.
+    """
+    if not api_key:
+        raise HeyGenAvatarIVError("HEYGEN_API_KEY не задан в Render.")
+    duration = max(5, min(15, int(duration_seconds or 8)))
+    async with httpx.AsyncClient(timeout=180) as client:
+        image_asset_id = await _upload_asset(client, api_key, image_bytes, image_name)
+        audio_asset_id = await _upload_asset(client, api_key, audio_bytes, audio_name)
+        payload = {
+            "model": "heygen-video-1",
+            "mode": "reference_to_video",
+            "prompt": (
+                "Use <Picture 1> as the exact visual identity of the friendly "
+                "NEYRONIX robot mascot. Keep its white-and-blue rounded body, "
+                "black face visor, cyan eyes, antennae, chest emblem and NEYRONIX "
+                "branding recognizable throughout the entire shot. The robot "
+                "speaks directly to the viewer, with natural mouth movement "
+                "timed to <Audio 1>, gentle blinking and small welcoming hand "
+                "gestures. Keep the robot centered and preserve the original "
+                "friendly cartoon appearance. No new characters, no extra text, "
+                "no logo changes, no scene cuts, no distorted limbs. "
+                "Use <Audio 1> as the voice and dialogue timing; no music."
+            ),
+            "duration": duration,
+            "resolution": resolution,
+            "aspect_ratio": aspect_ratio,
+            "prompt_enhancement": "disabled",
+            "title": title,
+            "reference_images": [
+                {"type": "asset_id", "asset_id": image_asset_id},
+            ],
+            "reference_audio": [
+                {"type": "asset_id", "asset_id": audio_asset_id},
+            ],
+        }
+        response = await client.post(
+            BASE_URL + "/v3/models/videos",
+            headers={**_headers(api_key), "Content-Type": "application/json"},
+            json=payload,
+        )
+        if response.status_code >= 400:
+            raise HeyGenAvatarIVError(
+                "HeyGen Video не создал видео: " + _message(response)
+            )
+        video_id = _value(response.json(), ("video_id", "id"))
+        if not video_id:
+            raise HeyGenAvatarIVError("HeyGen Video не вернул video_id.")
+        return video_id
+
+
+async def poll_model_video(api_key: str, video_id: str, *, max_wait_seconds: int = 1200) -> str:
+    """Poll a HeyGen Video model generation."""
+    if not api_key or not video_id:
+        raise HeyGenAvatarIVError("Не хватает данных для проверки HeyGen Video.")
+    async with httpx.AsyncClient(timeout=60) as client:
+        for _ in range(max(1, max_wait_seconds // 10)):
+            response = await client.get(
+                BASE_URL + "/v3/models/videos/" + video_id,
+                headers=_headers(api_key),
+            )
+            if response.status_code >= 400:
+                raise HeyGenAvatarIVError(
+                    "Ошибка статуса HeyGen Video: " + _message(response)
+                )
+            payload = response.json()
+            data = payload.get("data", payload) if isinstance(payload, dict) else {}
+            status = str(data.get("status") or data.get("state") or "").lower()
+            if status in {"completed", "complete", "success", "succeeded"}:
+                url = data.get("video_url") or data.get("url")
+                if url:
+                    return str(url)
+                raise HeyGenAvatarIVError(
+                    "HeyGen Video завершил задачу без ссылки на видео."
+                )
+            if status in {"failed", "error", "cancelled", "canceled"}:
+                reason = data.get("failure_message") or data.get("error") or status
+                raise HeyGenAvatarIVError(
+                    "HeyGen Video завершил задачу с ошибкой: " + str(reason)[:400]
+                )
+            await asyncio.sleep(10)
+    raise HeyGenAvatarIVError(
+        "HeyGen Video ещё обрабатывает видео. Повторите проверку позже."
+    )
+
 async def poll_video(api_key: str, video_id: str, *, max_wait_seconds: int = 1200) -> str:
     if not api_key or not video_id:
         raise HeyGenAvatarIVError("Не хватает данных для проверки HeyGen.")
