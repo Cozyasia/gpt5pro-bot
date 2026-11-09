@@ -101,7 +101,9 @@ caption_pattern = re.compile(
     r"^    start_caption = \(\n.*?^    \)\n(?=\n    welcome_(?:image|video) = )",
     re.MULTILINE | re.DOTALL,
 )
-source, caption_replacements = caption_pattern.subn(new_caption + "\\n", source, count=1)
+source, caption_replacements = caption_pattern.subn(
+    lambda _match: new_caption + "\n", source, count=1
+)
 if caption_replacements != 1 and new_caption not in source:
     raise SystemExit("NEYRONIX start caption anchor not found")
 
