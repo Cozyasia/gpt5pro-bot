@@ -289,6 +289,20 @@ class SelfieTerminalTest(unittest.IsolatedAsyncioTestCase):
         await self.generate()
         self.assertEqual(self.edits[0][0], b"front" * 300)
 
+    async def test_comet_key_selects_comet_multi_reference_lane(self):
+        comet_calls = []
+
+        async def comet(photo, slug, scene, scene_photo=b""):
+            comet_calls.append((photo, slug, scene, scene_photo))
+            return b"PNG" * 1000
+
+        with patch.dict("os.environ", {"COMET_API_KEY": "test-comet"}), \
+             patch.object(self.lane, "_comet_edit", side_effect=comet), \
+             patch.object(self.lane, "_openai_edit", side_effect=AssertionError("OpenAI must not be selected")):
+            await self.generate()
+
+        self.assertEqual([item[1] for item in comet_calls], ["hero_a"])
+
     async def test_image_edit_reference_order_for_preset_and_custom_scene(self):
         requests = []
 
