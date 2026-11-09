@@ -117,7 +117,7 @@ class EntertainmentMainWiringTests(unittest.TestCase):
             'CallbackQueryHandler(on_cb_entertainment, pattern=r"^ent:")'
         )
         fun_registration = (
-            'CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z_]+$")'
+            'CallbackQueryHandler(on_cb_fun,   pattern=r"^fun:[a-z0-9_]+$")'
         )
         self.assertIn(ent_registration, self.source)
         self.assertLess(
