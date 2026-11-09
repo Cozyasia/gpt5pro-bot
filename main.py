@@ -249,7 +249,7 @@ CHAT_HISTORY_PAGE_SIZE      = max(4, min(12, int(os.environ.get("CHAT_HISTORY_PA
 # Images:
 OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
-IMAGES_MODEL        = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1").strip() or "gpt-image-1"
+# gpt-image-1 was retired by OpenAI in October 2026. Keep the runtime default\n# on the supported multi-image-capable Images model so /img and image edits do\n# not fail when an environment override is absent.\nIMAGES_MODEL        = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst").strip() or "gpt-image-2.5-sunburst"
 OPENAI_IMAGE_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "medium").strip().lower() or "medium"
 
 # Runway
@@ -3492,7 +3492,7 @@ def _prepare_image_for_edit(img_bytes: bytes) -> tuple[bytes, str, str]:
 
 
 async def _openai_image_edit_bytes(img_bytes: bytes, user_instruction: str) -> bytes | None:
-    """Реальная ретушь через OpenAI Images / gpt-image-1: /images/edits."""
+    """Реальная ретушь через текущую OpenAI Images model: /images/edits."""
     if not OPENAI_IMAGE_KEY:
         return None
     if OPENAI_IMAGE_KEY.startswith("sk-or-"):
@@ -15321,7 +15321,7 @@ async def cmd_diag_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• MODEL: {IMAGES_MODEL}",
     ]
     if "openrouter" in (base or "").lower():
-        lines.append("⚠️ BASE_URL указывает на OpenRouter — там нет gpt-image-1.")
+        lines.append("⚠️ BASE_URL указывает на OpenRouter — там нет официальной OpenAI Images model.")
         lines.append("   Укажи https://api.openai.com/v1 (или свой прокси) в OPENAI_IMAGE_BASE_URL.")
     await update.effective_message.reply_text("\n".join(lines))
 
