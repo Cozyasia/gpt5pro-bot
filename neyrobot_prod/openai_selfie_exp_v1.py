@@ -227,6 +227,108 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str, scene_photo: by
     raise RuntimeError("OpenAI image edit response contained no usable bytes")
 
 
+def _image_mime(raw: bytes) -> str:
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if raw.startswith(b"RIFF") and raw[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def _comet_error(res: Any) -> RuntimeError:
+    provider_code = ""
+    with contextlib.suppress(Exception):
+        error = (res.json() or {}).get("error") or {}
+        provider_code = str(error.get("code") or error.get("type") or "").strip()
+    suffix = f" [{provider_code}]" if provider_code else ""
+    return RuntimeError(f"Comet image edit HTTP {res.status_code}{suffix}")
+
+
+async def _comet_edit(user_photo: bytes, slug: str, scene: str, scene_photo: bytes = b"") -> bytes:
+    """Multi-reference celebrity selfie through the funded Comet image route."""
+    from neyrobot_prod import celebrity_selfie as base
+
+    key = str(os.environ.get("COMET_API_KEY") or os.environ.get("COMETAPI_KEY") or "").strip()
+    if not key:
+        raise RuntimeError("COMET_API_KEY is missing")
+    refs = _hero_refs(slug)
+    meta = base.CHARACTERS.get(slug) or {}
+    required = int(meta.get("required_refs") or 3)
+    if len(refs) != required:
+        raise RuntimeError(f"hero references={len(refs)}/{required}")
+
+    custom_scene = len(scene_photo) >= 1024
+    prompt = _prompt(str(meta.get("name") or slug), scene, custom_scene=custom_scene)
+    images: list[bytes] = []
+    if custom_scene:
+        images.append(bytes(scene_photo))
+    images.append(bytes(user_photo))
+    images.extend(path.read_bytes() for path in refs)
+    parts: list[dict[str, Any]] = [{"text": prompt}]
+    for image in images:
+        parts.append({"inlineData": {"mimeType": _image_mime(image), "data": base64.b64encode(image).decode("ascii")}})
+
+    preferred = str(os.environ.get("COMET_IMAGE_EDIT_MODEL") or "gemini-2.5-flash-image").strip()
+    candidates = [preferred]
+    for model in str(os.environ.get(
+        "COMET_IMAGE_EDIT_FALLBACK_MODELS",
+        "gemini-2.5-flash-image,gemini-2.5-flash-image-preview,gemini-3.1-flash-image",
+    )).split(","):
+        model = model.strip()
+        if model and model not in candidates:
+            candidates.append(model)
+    base_url = str(os.environ.get("COMET_BASE_URL") or "https://api.cometapi.com").rstrip("/")
+    path_template = str(os.environ.get("COMET_IMAGE_EDIT_PATH") or "/v1beta/models/{model}:generateContent")
+    timeout_s = max(60.0, float(os.environ.get("COMET_SELFIE_TIMEOUT_S", "300") or 300))
+    headers = {"Authorization": f"Bearer {key}", "Accept": "application/json", "Content-Type": "application/json"}
+    payload = {"contents": [{"role": "user", "parts": parts}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}}
+    last_error: RuntimeError | None = None
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_s, connect=30.0, write=120.0, read=timeout_s), follow_redirects=True) as client:
+        for model in candidates:
+            res = await client.post(f"{base_url}{path_template.replace('{model}', model)}", headers=headers, json=payload)
+            if res.status_code >= 400:
+                last_error = _comet_error(res)
+                continue
+            data = res.json() or {}
+            image_urls: list[str] = []
+            for candidate in data.get("candidates") or []:
+                for part in ((candidate.get("content") or {}).get("parts") or []):
+                    inline = part.get("inlineData") or part.get("inline_data") or {}
+                    encoded = inline.get("data")
+                    if encoded:
+                        with contextlib.suppress(Exception):
+                            output = base64.b64decode(encoded)
+                            if len(output) > 1024:
+                                return output
+                    url = part.get("url") or ((part.get("image_url") or {}).get("url"))
+                    if isinstance(url, str) and url.startswith("http"):
+                        image_urls.append(url)
+            for item in data.get("data") or []:
+                encoded = item.get("b64_json")
+                if encoded:
+                    with contextlib.suppress(Exception):
+                        output = base64.b64decode(encoded)
+                        if len(output) > 1024:
+                            return output
+                url = item.get("url") or item.get("image_url")
+                if isinstance(url, str) and url.startswith("http"):
+                    image_urls.append(url)
+            for url in image_urls:
+                image = await client.get(url)
+                if image.status_code < 400 and len(image.content) > 1024:
+                    return bytes(image.content)
+            last_error = RuntimeError("Comet image edit response contained no usable bytes")
+    raise last_error or RuntimeError("Comet image edit failed")
+
+
+async def _generate_image(user_photo: bytes, slug: str, scene: str, scene_photo: bytes = b"") -> bytes:
+    # Comet is the production route because this service has funded Comet credit;
+    # keep OpenAI only for installations that do not configure Comet at all.
+    if str(os.environ.get("COMET_API_KEY") or os.environ.get("COMETAPI_KEY") or "").strip():
+        return await _comet_edit(user_photo, slug, scene, scene_photo=scene_photo)
+    return await _openai_edit(user_photo, slug, scene, scene_photo=scene_photo)
+
+
 async def _generate(update: Any, context: Any, scene: str, scene_photo: bytes = b"") -> bool:
     from neyrobot_prod import celebrity_selfie as base
     from telegram.error import NetworkError, TimedOut
@@ -277,7 +379,7 @@ async def _generate(update: Any, context: Any, scene: str, scene_photo: bytes = 
             _job_log(job_id, "progress_send_failed", error_type=type(exc).__name__)
         _job_log(job_id, "image_request_start", attempt=1)
         try:
-            out = await _openai_edit(photo, slug, scene, scene_photo=scene_photo)
+            out = await _generate_image(photo, slug, scene, scene_photo=scene_photo)
         except Exception as exc:
             await fail("image_request_timeout" if isinstance(exc, TimeoutError) or "Timeout" in type(exc).__name__
                        else "image_request_failed", exc)
