@@ -14,6 +14,7 @@ import contextlib
 import io
 import logging
 import os
+import re
 import sys
 import time
 import uuid
@@ -22,7 +23,7 @@ from typing import Any
 
 import httpx
 
-VERSION = "openai-selfie-exp-v1-2026-10-05"
+VERSION = "openai-selfie-exp-v2-2026-11-09"
 PREFIX = "oaiselfie:"
 _HANDLER_FLAG = "_openai_selfie_exp_v1_bound"
 _BUILDER_FLAG = "_openai_selfie_exp_v1_builder"
@@ -173,7 +174,11 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str, scene_photo: by
     required = int(meta.get("required_refs") or 3)
     if len(refs) != required:
         raise RuntimeError(f"hero references={len(refs)}/{required}")
-    model = str(os.environ.get("OPENAI_SELFIE_IMAGE_MODEL") or "gpt-image-2.5-sunburst").strip()
+    # This lane uses the direct OpenAI Images endpoint. Keep its default aligned
+    # with the rest of the bot and with the model actually available from OpenAI.
+    # `gpt-image-2.5-sunburst` was an old placeholder and makes every request
+    # fail immediately unless an environment override happens to mask it.
+    model = str(os.environ.get("OPENAI_SELFIE_IMAGE_MODEL") or "gpt-image-1").strip()
     quality = str(os.environ.get("OPENAI_SELFIE_QUALITY") or "high").strip()
     moderation = str(os.environ.get("OPENAI_SELFIE_MODERATION") or "auto").strip()
     custom_scene = len(scene_photo) >= 1024
@@ -194,8 +199,14 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str, scene_photo: by
                                 headers={"Authorization": f"Bearer {key}"},
                                 data=data, files=files)
     if res.status_code >= 400:
-        detail = res.text[:1000]
-        raise RuntimeError(f"OpenAI image edit HTTP {res.status_code}: {detail}")
+        # Keep the exception useful to the caller but do not write response text
+        # to logs: an upstream provider may echo user-controlled prompt data.
+        provider_code = ""
+        with contextlib.suppress(Exception):
+            error = (res.json() or {}).get("error") or {}
+            provider_code = str(error.get("code") or error.get("type") or "").strip()
+        suffix = f" [{provider_code}]" if provider_code else ""
+        raise RuntimeError(f"OpenAI image edit HTTP {res.status_code}{suffix}")
     payload = res.json()
     items = payload.get("data") or []
     if not items:
@@ -241,7 +252,16 @@ async def _generate(update: Any, context: Any, scene: str, scene_photo: bytes = 
     _job_log(job_id, "accepted", scene_mode="custom" if scene_photo else "preset")
 
     async def fail(stage: str, exc: Exception) -> None:
-        _job_log(job_id, stage, error_type=type(exc).__name__)
+        # The provider status/code is enough to diagnose configuration failures
+        # (for example an invalid model) while keeping photos and prompt text out
+        # of production logs.
+        details: dict[str, Any] = {"error_type": type(exc).__name__}
+        match = re.search(r"HTTP\s+(\d+)(?:\s+\[([^]]+)\])?", str(exc))
+        if match:
+            details["provider_status"] = match.group(1)
+            if match.group(2):
+                details["provider_code"] = match.group(2)
+        _job_log(job_id, stage, **details)
         try:
             await msg.reply_text("❌ Не удалось создать изображение. Попробуйте ещё раз.",
                                  reply_markup=_result_kb(mod))
