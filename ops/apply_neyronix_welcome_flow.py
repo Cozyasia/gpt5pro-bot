@@ -1,24 +1,18 @@
+import re
 from pathlib import Path
 
 
 path = Path("/app/main.py")
 source = path.read_text(encoding="utf-8")
 
-old_caption = '''    start_caption = (
-        "👋 Привет! Я NEYRONIX — мультимодельный AI-бот в Telegram.\n\n"
-        "🚀 Помогаю с текстом и голосом, PDF/DOCX, изображениями, "
-        "Маркетплейсами, AI-видео, музыкой, live-поиском, "
-        "нейропродакшеном и видеообзорами недвижимости.\n\n"
-        "Выберите направление в меню ниже или просто напишите задачу."
-    )'''
 new_caption = '''    start_caption = (
-        "👋 Добро пожаловать в NEYRONIX.\n\n"
-        "Здесь — творческая AI-студия.\n\n"
+        "👋 Добро пожаловать в NEYRONIX.\\n\\n"
+        "Здесь — творческая AI-студия.\\n\\n"
         "🎨 Изображения: генерация, логотипы, Midjourney-стиль, ретушь, "
-        "удаление и замена фона или лица.\n"
+        "удаление и замена фона или лица.\\n"
         "🎬 Видео: по тексту, фото или голосу; оживление фото, аватары, "
-        "Reels/Shorts и мини-фильмы.\n"
-        "🎵 Звук: музыка, вокальные клипы, озвучка и распознавание речи.\n\n"
+        "Reels/Shorts и мини-фильмы.\\n"
+        "🎵 Звук: музыка, вокальные клипы, озвучка и распознавание речи.\\n\\n"
         "Отправьте идею, фото или аудио — либо выберите творческий режим ниже."
     )'''
 
@@ -103,9 +97,12 @@ new_media = '''    # Keep the webhook responsive, but make the first visible /st
     welcome_sent = True
 '''
 
-if old_caption in source:
-    source = source.replace(old_caption, new_caption, 1)
-elif new_caption not in source:
+caption_pattern = re.compile(
+    r"^    start_caption = \(\n.*?^    \)\n(?=\n    welcome_(?:image|video) = )",
+    re.MULTILINE | re.DOTALL,
+)
+source, caption_replacements = caption_pattern.subn(new_caption + "\\n", source, count=1)
+if caption_replacements != 1 and new_caption not in source:
     raise SystemExit("NEYRONIX start caption anchor not found")
 
 if old_media in source:
