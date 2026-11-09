@@ -142,6 +142,8 @@ async def create_nonhuman_reference_video(
     if not api_key:
         raise HeyGenAvatarIVError("HEYGEN_API_KEY не задан в Render.")
     duration = max(5, min(15, int(duration_seconds or 8)))
+    allowed_aspect_ratios = {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"}
+    safe_aspect_ratio = aspect_ratio if aspect_ratio in allowed_aspect_ratios else "adaptive"
     async with httpx.AsyncClient(timeout=180) as client:
         image_asset_id = await _upload_asset(client, api_key, image_bytes, image_name)
         audio_asset_id = await _upload_asset(client, api_key, audio_bytes, audio_name)
@@ -162,7 +164,7 @@ async def create_nonhuman_reference_video(
             ),
             "duration": duration,
             "resolution": resolution,
-            "aspect_ratio": aspect_ratio,
+            "aspect_ratio": safe_aspect_ratio,
             "prompt_enhancement": "disabled",
             "title": title,
             "reference_images": [
