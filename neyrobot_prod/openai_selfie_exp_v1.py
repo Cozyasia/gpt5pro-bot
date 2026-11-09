@@ -174,11 +174,10 @@ async def _openai_edit(user_photo: bytes, slug: str, scene: str, scene_photo: by
     required = int(meta.get("required_refs") or 3)
     if len(refs) != required:
         raise RuntimeError(f"hero references={len(refs)}/{required}")
-    # This lane uses the direct OpenAI Images endpoint. Keep its default aligned
-    # with the rest of the bot and with the model actually available from OpenAI.
-    # `gpt-image-2.5-sunburst` was an old placeholder and makes every request
-    # fail immediately unless an environment override happens to mask it.
-    model = str(os.environ.get("OPENAI_SELFIE_IMAGE_MODEL") or "gpt-image-1").strip()
+    # This lane uses the direct OpenAI Images endpoint. The current supported
+    # default accepts multi-image edits, which this flow needs for the user and
+    # hero references. Keep an explicit environment override for future swaps.
+    model = str(os.environ.get("OPENAI_SELFIE_IMAGE_MODEL") or "gpt-image-2.5-sunburst").strip()
     quality = str(os.environ.get("OPENAI_SELFIE_QUALITY") or "high").strip()
     moderation = str(os.environ.get("OPENAI_SELFIE_MODERATION") or "auto").strip()
     custom_scene = len(scene_photo) >= 1024
