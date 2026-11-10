@@ -1,4 +1,5 @@
 """Regression guard for the supported default OpenAI Images model."""
+import ast
 from pathlib import Path
 import unittest
 
@@ -13,6 +14,17 @@ class OpenAIImageModelCurrentTests(unittest.TestCase):
             'os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst")',
             source,
         )
+        tree = ast.parse(source)
+        image_model_assignments = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "IMAGES_MODEL"
+                for target in node.targets
+            )
+        ]
+        self.assertEqual(len(image_model_assignments), 1)
 
     def test_render_and_sample_do_not_reintroduce_retired_image_model(self):
         for filename in ("render.yaml", "env.sample"):
