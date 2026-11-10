@@ -16767,9 +16767,9 @@ async def _create_and_poll_i2v(
     if "sora" in (caption or "").lower() and is_sora_people_moderation_error(details):
         await update.effective_message.reply_text(_sora_people_moderation_text())
         return False
-    if "invalid api channeltype" in (details or "").lower():
+    if "invalid api channeltype" in (details or "").lower() or ("sora" in (caption or "").lower() and ("model_not_found" in (details or "").lower() or "no available channel" in (details or "").lower())):
         await update.effective_message.reply_text(
-            f"⚠️ {caption}: у текущего провайдера/канала Sora сейчас недоступна (invalid api channelType)."
+            "⚠️ Sora 2 временно недоступна у подключённого провайдера. Выберите Kling, Seedance или Runway — списания за эту неуспешную попытку нет."
         )
         return False
     await update.effective_message.reply_text(f"❌ {caption}: не удалось создать задачу.\n{details[:900]}")
