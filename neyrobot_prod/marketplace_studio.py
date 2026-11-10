@@ -69,7 +69,7 @@ def continue_after_references(project: ProductProject) -> ProductProject:
     if project.stage != Stage.REFERENCES:
         raise ValueError("Continue is not expected")
     if not project.reference_ids:
-        raise ValueError("Upload at least one reference photo")
+        raise ValueError("Загрузите хотя бы одну фотографию товара")
     return replace(project, stage=Stage.BRIEF)
 
 
