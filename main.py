@@ -398,7 +398,7 @@ BG_REPLACE_GENERATE_PRESETS = os.environ.get("BG_REPLACE_GENERATE_PRESETS", "0")
 BG_REPLACE_GENERATE_CUSTOM = os.environ.get("BG_REPLACE_GENERATE_CUSTOM", "1").strip().lower() not in ("0", "false", "no", "off")
 BG_REPLACE_USE_STOCK_BACKGROUNDS = os.environ.get("BG_REPLACE_USE_STOCK_BACKGROUNDS", "1").strip().lower() not in ("0", "false", "no", "off")
 BG_REPLACE_JPEG_QUALITY = int(os.environ.get("BG_REPLACE_JPEG_QUALITY", "94") or 94)
-\n
+
 # Face swap production pipeline:
 # piapi = fast/cheap primary; segmind = quality fallback/premium.
 FACESWAP_ENABLED = os.environ.get("FACESWAP_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
@@ -798,7 +798,7 @@ PLAN_PRICE_TABLE = {
     "start":    {"month": int(os.environ.get("PRICE_START_RUB", "599")),  "quarter": int(os.environ.get("PRICE_START_QUARTER_RUB", "1590")),  "year": int(os.environ.get("PRICE_START_YEAR_RUB", "5990"))},
     "pro":      {"month": int(os.environ.get("PRICE_PRO_RUB", "1990")),    "quarter": int(os.environ.get("PRICE_PRO_QUARTER_RUB", "5490")),    "year": int(os.environ.get("PRICE_PRO_YEAR_RUB", "19900"))},
     "ultimate": {"month": int(os.environ.get("PRICE_ULT_RUB", "4990")),    "quarter": int(os.environ.get("PRICE_ULT_QUARTER_RUB", "13990")),   "year": int(os.environ.get("PRICE_ULT_YEAR_RUB", "49900"))},
-\n}
+}
 TERM_MONTHS = {"month": 1, "quarter": 3, "year": 12}
 
 MIN_RUB_FOR_INVOICE = int(os.environ.get("MIN_RUB_FOR_INVOICE", "100") or "100")
@@ -1198,7 +1198,7 @@ async def get_crypto_rate_text(user_text: str) -> str | None:
         lines.append("")
         lines.append("Источник: Binance spot market data")
         lines.append(f"Обновлено: {now}")
-\n        lines.append("Не является финансовой рекомендацией.")
+        lines.append("Не является финансовой рекомендацией.")
         return "\n".join(lines)
     except Exception as e:
         log.warning("Crypto live rate failed: %s", e)
@@ -1598,7 +1598,7 @@ def get_subscription_until(user_id: int):
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("SELECT until_ts FROM subscriptions WHERE user_id = ?", (user_id,))
-\n    row = cur.fetchone()
+    row = cur.fetchone()
     con.close()
     return None if not row else datetime.fromtimestamp(row[0], tz=timezone.utc)
 
@@ -1998,7 +1998,7 @@ def _usage_row(user_id: int, ymd: str | None = None):
         "free_img_proc_count": int(row[5] or 0),
     }
 
-\ndef _usage_update(user_id: int, **delta):
+def _usage_update(user_id: int, **delta):
     ymd = _today_ymd()
     con = sqlite3.connect(DB_PATH); cur = con.cursor()
     row = _usage_row(user_id, ymd)
@@ -2398,7 +2398,7 @@ SYSTEM_PROMPT = (
     "или после загрузки фото нажать кнопку 🎭 Замена лица; если лиц несколько, бот показывает номера и даёт выбрать целевое лицо. "
     "Для удаления/замены фона: 🔥 Развлечения → 🧼 Удалить фон на фото или 🖼 Заменить фон на фото. "
     "Для оживления фото: 🔥 Развлечения → 🪄 Оживить фото, затем выбрать Runway/Kling/Sora 2 без людей. "
-\n    "Сохраняй контекст беседы: если пользователь отвечает коротко на твой уточняющий вопрос, продолжай предыдущую задачу, "
+    "Сохраняй контекст беседы: если пользователь отвечает коротко на твой уточняющий вопрос, продолжай предыдущую задачу, "
     "а не начинай новую справку. Например, если ранее обсуждался прогноз BTC, ответ 'биткоин' означает Bitcoin/BTC в предыдущем вопросе. "
     "Не давай определение термину, если из истории понятно, что пользователь уточняет предыдущую задачу. "
     "Если нужны актуальные данные, говори, что используешь live-поиск/источники, а не устаревшие знания. "
@@ -2798,7 +2798,7 @@ async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
             log.warning("STT attempt %d failed: %s", attempt+1, e)
             await asyncio.sleep(0.8 * (attempt + 1))
     log.error("STT failed: %s", last_err)
-\n    return ""
+    return ""
 
 
 def _normalize_vocal_source_audio_sync(raw: bytes, filename: str) -> bytes:
@@ -3198,7 +3198,7 @@ async def _ask_image_engine_choice(update: Update, context: ContextTypes.DEFAULT
 async def _run_selected_image_generation(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, requested_engine: str) -> bool:
     engine, reason = _resolve_general_image_engine(prompt, requested_engine)
     provider_cost = MIDJOURNEY_UNIT_COST_USD if engine == "midjourney" else IMG_COST_USD
-\n    engine_title = "Midjourney" if engine == "midjourney" else "OpenAI Images"
+    engine_title = "Midjourney" if engine == "midjourney" else "OpenAI Images"
 
     async def _go():
         try:
@@ -3598,7 +3598,7 @@ async def _edit_own_image_retouch(update: Update, context: ContextTypes.DEFAULT_
         bio.name = "retouched.png"
         await update.effective_message.reply_document(
             InputFile(bio),
-\n            caption="✅ Готово: ретушь выполнена. Проверьте фон и детали; при необходимости можно отправить уточнение, что поправить."
+            caption="✅ Готово: ретушь выполнена. Проверьте фон и детали; при необходимости можно отправить уточнение, что поправить."
         )
         return True
     except Exception as e:
@@ -3998,7 +3998,7 @@ def _music_video_director_plan(video_brief: str, duration: int, scenes: int) -> 
     """Compatibility renderer for already timestamped briefs.
 
     Production compiles one immutable ScenePlan asynchronously before review. This
-\n    synchronous helper remains for callers/tests that only need a display skeleton.
+    synchronous helper remains for callers/tests that only need a display skeleton.
     """
     brief = (video_brief or "").strip()
     if not brief:
@@ -4398,7 +4398,7 @@ async def _stage_music_video_draft(
     return True
 
 async def _on_music_video_draft_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-\n    q = update.callback_query
+    q = update.callback_query
     parts = (q.data or "").split(":")
     draft = context.user_data.get("music_video_draft")
     if len(parts) != 3 or not draft or parts[2] != draft.get("token"):
@@ -4798,7 +4798,7 @@ def _i2v_keyboard(context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
             or normalized == str(current)
             or engine_labels.get(str(current)) == value
         )
-\n        return ("✅ " if selected else "") + value
+        return ("✅ " if selected else "") + value
     rows = [
         [
             InlineKeyboardButton(mark("Seedance 2.5", engine), callback_data="i2v:engine:seedance"),
@@ -5198,7 +5198,7 @@ async def _handle_avatar_script_choice(update: Update, context: ContextTypes.DEF
     else:
         context.user_data["awaiting_avatar_photo"] = True
         await q.message.reply_text(
-\n            "Сначала пришлите портрет человека. После загрузки я предложу выбрать голос, затем попрошу текст. Для реального голоса можно выбрать voice/audio режим.",
+            "Сначала пришлите портрет человека. После загрузки я предложу выбрать голос, затем попрошу текст. Для реального голоса можно выбрать voice/audio режим.",
             reply_markup=_avatar_action_kb(prefix),
         )
 
@@ -5598,7 +5598,7 @@ async def on_mode_cb(update, context):
         _set_mode_clean(uid, "Развлечения", "aiselfie")
         await q.message.reply_text(_ai_selfie_menu_text(), parse_mode="Markdown", reply_markup=_ai_selfie_action_kb("act"))
         return
-\n
+
     if data == "act:fun:aiselfie_upload":
         await q.answer("Загрузите селфи")
         _clear_transient_flows(context)
@@ -5998,7 +5998,7 @@ def _clear_transient_flows(context):
         "i2v_aspect",
         "i2v_reference_ready",
         "presentation_studio_active",
-\n    ):
+    ):
         with contextlib.suppress(Exception):
             context.user_data.pop(key, None)
 
@@ -6398,7 +6398,7 @@ def _revival_engine_from_text(text: str, default: str = "runway") -> str:
     tl = (text or "").lower().replace("ё", "е")
     if "luma" in tl or "лума" in tl:
         return "luma"
-\n    if "sora" in tl or "сора" in tl:
+    if "sora" in tl or "сора" in tl:
         return "sora"
     if "kling" in tl or "клинг" in tl:
         return "kling"
@@ -6798,7 +6798,7 @@ def _pricing_catalog_text() -> str:
         "🖼 Изображения",
         f"• OpenAI Images, 1024×1024 medium — {_retail_credits(IMG_COST_USD)} кр.",
         f"• Midjourney Fast — {_retail_credits(MIDJOURNEY_UNIT_COST_USD)} кр.",
-\n        f"• Обработка/ретушь/фон — от {_retail_credits(IMG_PROCESS_COST_USD)} кр.",
+        f"• Обработка/ретушь/фон — от {_retail_credits(IMG_PROCESS_COST_USD)} кр.",
         f"• AI-селфи — {_retail_credits(AI_SELFIE_UNIT_COST_USD)} кр.",
         "",
         "🎬 Видео",
@@ -7198,7 +7198,7 @@ async def _yoo_create_credit_payment(user_id: int, credits: int, amount_rub: int
     if not resolved:
         raise ValueError("Unknown credit package")
     credits, amount_rub = resolved
-\n    method_key = method_key if method_key in YOO_DIRECT_METHODS else "yoo_all"
+    method_key = method_key if method_key in YOO_DIRECT_METHODS else "yoo_all"
     method = YOO_DIRECT_METHODS[method_key]
     title = f"Пополнение баланса: {credits} кредитов"
     confirmation_type = method.get("confirmation") or "redirect"
@@ -7598,7 +7598,7 @@ async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TY
 async def cmd_img(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
-\n        await update.effective_message.reply_text("Формат: /img <описание>")
+        await update.effective_message.reply_text("Формат: /img <описание>")
         return
 
     async def _go():
@@ -7998,7 +7998,7 @@ async def _presentation_paid_runner(
     deterministic local concepts are supplied by presentation_studio.py when the provider is unavailable.
     This prevents partial logo cards followed by a misleading global error message.
     """
-\n    if feature == "presentation_logo_variants":
+    if feature == "presentation_logo_variants":
         try:
             return await action()
         except Exception as e:
@@ -8398,7 +8398,7 @@ def _suno_preset_instruction(kind: str) -> str:
     presets = {
         "jingle": (
             "🏢 Джингл для бизнеса\n"
-\n            "Напишите: ниша/бренд, город или география, настроение, язык, нужен ли вокал, длительность.\n\n"
+            "Напишите: ниша/бренд, город или география, настроение, язык, нужен ли вокал, длительность.\n\n"
             "Пример: агентство недвижимости на Самуи, 20 секунд, tropical house, luxury, без вокала, запоминающийся брендовый звук."
         ),
         "reels_intro": (
@@ -8798,7 +8798,7 @@ def _prune_provider_input_artifacts(now: float | None = None) -> None:
 def _provider_input_url_from_bytes(raw: bytes, filename: str) -> str:
     """Store a short-lived Render-served provider input and return its HTTPS URL.
 
-\n    The random URL is intentionally opaque.  It carries no Telegram token, user
+    The random URL is intentionally opaque.  It carries no Telegram token, user
     identifier, prompt, or original filename; providers only receive this URL.
     """
     if not isinstance(raw, (bytes, bytearray)) or not raw:
@@ -9198,7 +9198,7 @@ async def _run_kling_avatar_result_bytes(
     audio_file_url: str,
     audio_filename: str,
     audio_mime: str,
-\n    avatar_prompt: str,
+    avatar_prompt: str,
     max_wait_s: int | None = None,
 ) -> bytes | None:
     """Kling Avatar transport for pipelines that must assemble the final MP4 themselves."""
@@ -9598,7 +9598,7 @@ def _concat_video_segments_sync(segments: list[bytes], target_duration: int) -> 
 
 
 def _ffmpeg_exe() -> str:
-\n    try:
+    try:
         import imageio_ffmpeg  # type: ignore
         exe = imageio_ffmpeg.get_ffmpeg_exe()
         if exe:
@@ -9998,7 +9998,7 @@ def _mux_video_audio_files_sync(video_path: str, audio_path: str, target_duratio
         rf"force_original_aspect_ratio=decrease:force_divisible_by=2,fps={int(FFMPEG_MUX_FPS or 24)}"
     )
     attempts.extend([("native-safe", [native_safe], "encode")])
-\n    for name, vf, mode in attempts:
+    for name, vf, mode in attempts:
         tmp_out = output_path + "." + name + ".mp4"
         # The source track must never be looped: a short upload is rejected
         # before rendering instead of silently repeating lyrics in the final MP4.
@@ -10398,7 +10398,7 @@ def _vocal_scene_role_prompt(
     role_plan: dict,
     scene_idx: int,
     scene_count: int,
-\n    *,
+    *,
     scene_plan: "ScenePlan | None" = None,
 ) -> str:
     """Build a strict persistent world-state contract for one chronological scene."""
@@ -10798,7 +10798,7 @@ async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFA
             await q.answer("Аудио подтверждено")
         prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
         keyframe = context.user_data.get("music_video_pending_keyframe")
-\n        scene_plan = context.user_data.get("music_video_pending_scene_plan")
+        scene_plan = context.user_data.get("music_video_pending_scene_plan")
         if manifest:
             prompt = prompt or str(manifest.get("prompt") or "")
             keyframe_path = _load_vocal_job_file_path(user_id, token, "keyframe", "bin")
@@ -11198,7 +11198,7 @@ async def _start_vocal_clip(
                         if scene_plan is not None:
                             contract = scene_plan.scenes[idx - 1]
                             window = verified_lipsync(contract, manifest.get("vocal_intervals") or [])
-\n                            if contract.has_lip_sync and not window and saved_source:
+                            if contract.has_lip_sync and not window and saved_source:
                                 # A user-uploaded track (and some Suno response shapes) has no
                                 # word timing metadata.  This is still genuine audio-driven
                                 # lip-sync: pass the approved scene's exact audio window to
@@ -11598,7 +11598,7 @@ async def _start_video_studio(
             "duration": duration,
             "aspect": plan.aspect,
             "scenes": len(plan.scenes),
-\n            "mode": mode,
+            "mode": mode,
         },
     )
     return True
@@ -11998,7 +11998,7 @@ async def _run_comet_music_video_identity_keyframe(
     face_front: bytes, face_3q: bytes, body_full: bytes, scene_reference: bytes | None, video_brief: str,
     continuity_frame: bytes | None = None,
 ) -> bytes | None:
-\n    """Synthesize an initial keyframe or minimally identity-correct a continuation frame."""
+    """Synthesize an initial keyframe or minimally identity-correct a continuation frame."""
     if not COMET_API_KEY:
         return None
     refs = [
@@ -12398,7 +12398,7 @@ def _find_first_image_b64(obj) -> bytes | None:
         for v in obj:
             out = _find_first_image_b64(v)
             if out:
-\n                return out
+                return out
     return None
 
 
@@ -12798,7 +12798,7 @@ def _build_selfie_background_prompt(kind: str, prompt: str = "") -> str:
     return (
         "Generate only a new background and keep the original main subject completely unchanged: "
         "do not alter the face, hair, clothes, body, pose, proportions or skin texture. "
-\n        + scene + " Avoid: " + negative
+        + scene + " Avoid: " + negative
     ).strip()
 
 
@@ -13198,7 +13198,7 @@ async def _generate_background_only_bytes(size: tuple[int, int], kind: str = "cu
             _bg_note_error(f"background-only generation returned empty output for kind={kind}")
             return None
         bg = Image.open(BytesIO(data)).convert("RGB")
-\n        bg = _fit_cover(bg, size)
+        bg = _fit_cover(bg, size)
         bio = BytesIO()
         bg.save(bio, format="JPEG", quality=max(86, min(98, BG_REPLACE_JPEG_QUALITY)), optimize=True, progressive=True)
         return bio.getvalue()
@@ -13598,7 +13598,7 @@ def _detect_faces_for_choice(img_bytes: bytes) -> list[dict]:
         max_side = int(FACESWAP_DETECTION_MAX_SIDE or 1200)
         if max_side > 0 and max(orig_w, orig_h) > max_side:
             scale = max_side / float(max(orig_w, orig_h))
-\n            im_det = im.resize((max(1, int(orig_w * scale)), max(1, int(orig_h * scale))), Image.LANCZOS)
+            im_det = im.resize((max(1, int(orig_w * scale)), max(1, int(orig_h * scale))), Image.LANCZOS)
         else:
             im_det = im
         arr = np.array(im_det)
@@ -13998,7 +13998,7 @@ async def _piapi_faceswap(target_img: bytes, source_face: bytes, quality: str = 
             # Если PiAPI начнёт поддерживать явный индекс, эти поля уже будут переданы.
             "target_face_index": int(target_index or 0),
             "source_face_index": int(source_index or 0),
-\n        },
+        },
     }
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         r = await client.post(url, headers=headers, json=payload)
@@ -14398,7 +14398,7 @@ async def _handle_payment_start_payload(update: Update, context: ContextTypes.DE
     }
     pack_map = {
         "pay_pack_1000": (1000, 990),
-\n        "pay_pack_3000": (3000, 2790),
+        "pay_pack_3000": (3000, 2790),
         "pay_pack_7000": (7000, 6290),
     }
     if payload not in sub_map and payload not in pack_map:
@@ -14798,7 +14798,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # TOPUP меню
         if data == "topup":
             await q.answer()
-\n            await _send_topup_menu(update, context)
+            await _send_topup_menu(update, context)
             return
 
         # TOPUP RUB
@@ -15198,7 +15198,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data.pop("revival_identity_mode", None)
                     await _start_photo_revival(update, context, engine=engine, img_bytes=img, prompt=revival_prompt)
                 except Exception as e:
-\n                    log.exception("pedit revive failed: %s", e)
+                    log.exception("pedit revive failed: %s", e)
                     await update.effective_message.reply_text("⚠️ Не удалось запустить основной движок. Откройте меню и попробуйте Kling или повторите позже.")
                 return
 
@@ -15598,7 +15598,7 @@ async def _run_luma_video(
                             val = js.get(k)
                             if isinstance(val, str) and val.startswith("http"):
                                 url = val
-\n                                break
+                                break
 
                     if not url:
                         log.error("Luma: ответ без ссылки на видео: %s", js)
@@ -15998,7 +15998,7 @@ async def _run_runway_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         continue
                     await update.effective_message.reply_text("⏳ Runway/Comet: задача принята, ожидаю результат…")
                     ok = bool(await _poll_video_task_generic(
-\n                        update, client, headers, COMET_BASE_URL,
+                        update, client, headers, COMET_BASE_URL,
                         [RUNWAY_COMET_STATUS_PATH, "/runwayml/v1/tasks/{id}", "/v1/tasks/{id}"],
                         task_id, "Runway/Comet text→video · Powered by Runway", RUNWAY_MAX_WAIT_S,
                     ))
@@ -16398,7 +16398,7 @@ def _prepare_sora_reference_image(img_bytes: bytes, aspect: str) -> tuple[bytes,
             im = ImageOps.exif_transpose(im)
         except Exception:
             pass
-\n        im = im.convert("RGB")
+        im = im.convert("RGB")
         w, h = im.size
         target_ratio = tw / th
         cur_ratio = w / max(1, h)
@@ -16798,7 +16798,7 @@ async def _run_luma_animate_photo(update: Update, context: ContextTypes.DEFAULT_
     if not LUMA_API_KEY:
         await update.effective_message.reply_text("❌ Luma: LUMA_API_KEY не задан в ENV.")
         return False
-\n    data_url, tg_url = _image_refs_for_i2v(update, img_bytes)
+    data_url, tg_url = _image_refs_for_i2v(update, img_bytes)
     image_ref = data_url or tg_url
     duration_s = _duration_for_engine("luma", duration_s)
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -17198,7 +17198,7 @@ async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYP
                     )
 
             clips = await resume_veo_job(
-\n                job_directory=directory, duration_seconds=24, spoken_script=script,
+                job_directory=directory, duration_seconds=24, spoken_script=script,
                 visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else re.sub(r"ТЕКСТ ДИКТОРА\s*:\s*.*?(?=\n\s*АУДИО И МОНТАЖ\s*:|\Z)", "", prompt, flags=re.I | re.S).strip(),
                 submit=submit, poll=poll, reference_image=reference_path, assemble=False,
             )
@@ -17598,7 +17598,7 @@ async def _run_runway_comet_animate_photo(update: Update, context: ContextTypes.
             "ratio": ratio,
             "watermark": False,
         }))
-\n        # Формат promptImage как массив с position=first — эквивалентен string и стабильнее на некоторых прокси.
+        # Формат promptImage как массив с position=first — эквивалентен string и стабильнее на некоторых прокси.
         payloads.append((RUNWAY_COMET_CREATE_PATH, {
             "model": model,
             "promptImage": [{"uri": data_url, "position": "first"}],
@@ -17998,7 +17998,7 @@ def _promo_feature_key(engine: str, remember_kind: str = "") -> str:
         return "suno_music"
     if "business_logo" in rk or "logo" in rk:
         return "business_logo"
-\n    if "faceswap" in rk or "face_swap" in rk:
+    if "faceswap" in rk or "face_swap" in rk:
         return "faceswap"
     if "ai_selfie" in rk:
         return "ai_selfie"
@@ -18398,7 +18398,7 @@ async def on_text(
     # Говорящий аватар: портрет уже загружен, но перед текстом требуется выбрать голос.
     if context.user_data.get("awaiting_avatar_voice_choice"):
         tl = (text or "").strip().lower()
-\n        voice_aliases = {
+        voice_aliases = {
             "nova": "nova", "нова": "nova",
             "onyx": "onyx", "оникс": "onyx",
             "alloy": "alloy", "аллой": "alloy",
@@ -18798,7 +18798,7 @@ async def on_text(
         text_for_llm = f"[Режим: {mode}; Подрежим: {track or '-'}]\n{text}"
     else:
         text_for_llm = text
-\n
+
     if _MEDICAL_TERMS_RE.search(text):
         # Явный медицинский вопрос/текст — разбираем как мед. материал.
         await _medical_analyze_text(update, context, text)
@@ -19198,7 +19198,7 @@ async def on_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "✅ Референс сохранён.\n\nШаг 2/3: выберите модель, длительность и формат. "
                     "После выбора модели отправьте промпт движения для этого изображения.",
                     reply_markup=_i2v_keyboard(context),
-\n                )
+                )
                 return
 
             if context.user_data.pop("music_video_draft", None):
@@ -19598,7 +19598,7 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         fn = _pick_first_defined(*fn_names)
         if callable(fn):
             return await fn(update, context, **kwargs)
-\n        return None
+        return None
 
     # The entertainment keyboard still emits the legacy fun: callback for
     # this button. Keep the image-to-video wizard in this fallback router as
@@ -19998,7 +19998,7 @@ def _direct_lipsync_mux_audio_sync(video_bytes: bytes, audio_bytes: bytes, durat
         audio = os.path.join(td, "voice.mp3")
         output = os.path.join(td, "final.mp4")
         with open(video, "wb") as fh:
-\n            fh.write(video_bytes)
+            fh.write(video_bytes)
         with open(audio, "wb") as fh:
             fh.write(audio_bytes)
         result = subprocess.run(
@@ -20398,7 +20398,7 @@ def _official_openai_web_key_available() -> bool:
     return bool(key and not key.startswith("sk-or-"))
 
 
-\ndef _live_search_failure_message() -> str:
+def _live_search_failure_message() -> str:
     tavily_state = _LIVE_SEARCH_LAST_STATUS.get("tavily", {}).get("state", "not_tested")
     openai_state = _LIVE_SEARCH_LAST_STATUS.get("openai", {}).get("state", "not_tested")
     if not TAVILY_API_KEY and not _official_openai_web_key_available():
@@ -20798,7 +20798,7 @@ def build_application() -> "Application":
     app.add_handler(CommandHandler("diag_images",  cmd_diag_images))
     app.add_handler(CommandHandler("diag_video",   cmd_diag_video))
     app.add_handler(CommandHandler("diag_runway",  cmd_diag_runway))
-\n    app.add_handler(CommandHandler("diag_yookassa", cmd_diag_yookassa))
+    app.add_handler(CommandHandler("diag_yookassa", cmd_diag_yookassa))
     app.add_handler(CommandHandler("provider_status", cmd_provider_status))
     app.add_handler(CommandHandler("diag_bg",      cmd_diag_bg))
     app.add_handler(CommandHandler("diag_face",    cmd_diag_face))
@@ -21141,4 +21141,3 @@ def main():
 if __name__ == "__main__":
     main()
 # === END PATCH ===
-\n
