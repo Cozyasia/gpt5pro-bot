@@ -2445,7 +2445,7 @@ _PEOPLE_PROMPT_RE = re.compile(
 )
 
 def _prompt_likely_has_people(prompt: str) -> bool:
-    return bool(_PEOPLE_PROMPT_RE.search(prompt or ""))
+    return bool(_PEOPLE_PROMPT_RE.search(re.sub(r"\b(?:no|without|без)\s+(?:any\s+)?(?:people|persons?|humans?|men|women|girls?|boys?|children|faces?|людей|человека|человек|люди|лиц(?:о|а)?|портрет(?:а|ы)?)\b", " ", str(prompt or ""), flags=re.IGNORECASE)))
 
 def is_smalltalk(text: str) -> bool:
     t = (text or "").strip().lower()
