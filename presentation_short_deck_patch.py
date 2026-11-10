@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import sys
+from copy import deepcopy
 
 
 def _topic(text: str) -> str:
@@ -52,7 +53,8 @@ def apply_short_deck_patch(mod) -> None:
 
     async def parse(raw_brief: str, update=None):
         profile = await original_parse(raw_brief, update)
-        profile["requested_slide_count"] = _count(raw_brief)
+        requested = _count(raw_brief)
+        profile["requested_slide_count"] = requested
         title = _topic(raw_brief)
         if title:
             profile["brand_name"] = title
