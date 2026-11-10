@@ -249,7 +249,10 @@ CHAT_HISTORY_PAGE_SIZE      = max(4, min(12, int(os.environ.get("CHAT_HISTORY_PA
 # Images:
 OPENAI_IMAGE_KEY    = os.environ.get("OPENAI_IMAGE_KEY", "").strip() or OPENAI_API_KEY
 IMAGES_BASE_URL     = (os.environ.get("OPENAI_IMAGE_BASE_URL", "").strip() or "https://api.openai.com/v1")
-# gpt-image-1 was retired by OpenAI in October 2026. Keep the runtime default\n# on the supported multi-image-capable Images model so /img and image edits do\n# not fail when an environment override is absent.\nIMAGES_MODEL        = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst").strip() or "gpt-image-2.5-sunburst"
+# gpt-image-1 was retired by OpenAI in October 2026. Keep the runtime default
+# on the supported multi-image-capable Images model so /img and image edits do
+# not fail when an environment override is absent.
+IMAGES_MODEL        = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst").strip() or "gpt-image-2.5-sunburst"
 OPENAI_IMAGE_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "medium").strip().lower() or "medium"
 
 # Runway
