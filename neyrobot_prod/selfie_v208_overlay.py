@@ -401,6 +401,17 @@ async def _mode_router(update: Any, context: Any) -> None:
     if callable(cleaner):
         cleaner(context)
     key, name = resolved; setter = getattr(mod, "_set_mode_clean", None)
+    # This high-priority compatibility router sees reply-keyboard labels before
+    # the regular handlers in main.py.  Balance and Engines are root actions,
+    # not content modes; passing them to _send_mode_menu produced the misleading
+    # “Режим не найден.” response.
+    root_handler = {
+        "billing": getattr(mod, "cmd_balance", None),
+        "engines": getattr(mod, "cmd_engines", None),
+    }.get(key)
+    if callable(root_handler):
+        await root_handler(update, context)
+        raise ApplicationHandlerStop
     if callable(setter):
         setter(int(user.id), name, "")
     sender = getattr(mod, "_send_mode_menu", None)
