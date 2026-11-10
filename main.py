@@ -2445,7 +2445,19 @@ _PEOPLE_PROMPT_RE = re.compile(
 )
 
 def _prompt_likely_has_people(prompt: str) -> bool:
-    return bool(_PEOPLE_PROMPT_RE.search(re.sub(r"\b(?:no|without|без)\s+(?:any\s+)?(?:people|persons?|humans?|men|women|girls?|boys?|children|faces?|людей|человека|человек|люди|лиц(?:о|а)?|портрет(?:а|ы)?)\b", " ", str(prompt or ""), flags=re.IGNORECASE)))
+    # Sora's no-person safeguard must understand an explicit exclusion.  A
+    # phrase such as "no people, no faces" describes the required absence of
+    # people and must not be rejected as if it requested a portrait.
+    text = str(prompt or "")
+    text = re.sub(
+        r"\b(?:no|without|без)\s+(?:any\s+)?"
+        r"(?:people|persons?|humans?|men|women|girls?|boys?|children|faces?|"
+        r"людей|человека|человек|люди|лиц(?:о|а)?|портрет(?:а|ы)?)\b",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return bool(_PEOPLE_PROMPT_RE.search(text))
 
 def is_smalltalk(text: str) -> bool:
     t = (text or "").strip().lower()
@@ -16618,6 +16630,7 @@ async def _create_and_poll_i2v(
     task_not_exist_soft_fail_s: int = 0,
     silent_soft_fail: bool = False,
     max_wait_s: int | None = None,
+    context: ContextTypes.DEFAULT_TYPE | None = None,
 ) -> bool:
     if not api_key:
         await update.effective_message.reply_text(f"❌ {caption}: API-ключ не задан в ENV.")
@@ -16767,10 +16780,16 @@ async def _create_and_poll_i2v(
     if "sora" in (caption or "").lower() and is_sora_people_moderation_error(details):
         await update.effective_message.reply_text(_sora_people_moderation_text())
         return False
-    if "invalid api channeltype" in (details or "").lower() or ("sora" in (caption or "").lower() and ("model_not_found" in (details or "").lower() or "no available channel" in (details or "").lower())):
+    if "invalid api channeltype" in (details or "").lower() or (
+        "sora" in (caption or "").lower()
+        and ("model_not_found" in (details or "").lower() or "no available channel" in (details or "").lower())
+    ):
         await update.effective_message.reply_text(
-            "⚠️ Sora 2 временно недоступна у подключённого провайдера. Выберите Kling, Seedance или Runway — списания за эту неуспешную попытку нет."
+            "⚠️ Sora 2 временно недоступна у подключённого провайдера. "
+            "Выберите Kling, Seedance или Runway — списания за эту неуспешную попытку нет."
         )
+        if context is not None:
+            context.user_data["_provider_failure_already_reported"] = True
         return False
     await update.effective_message.reply_text(f"❌ {caption}: не удалось создать задачу.\n{details[:900]}")
     return False
@@ -17417,6 +17436,27 @@ async def _run_seedance_direct(
     if not SEEDANCE_ENABLED:
         await update.effective_message.reply_text("Seedance временно отключён в настройках сервиса.")
         return False
+    task_id_box: dict[str, str] = {}
+
+    def _remember_task_id(task_id: str) -> None:
+        """Expose the accepted provider task before its long polling finishes.
+
+        The callback is invoked from ``seedance_generate`` immediately after
+        Comet accepts a task.  Persisting it in the user context makes the
+        pending generation diagnosable and gives the user a concrete support
+        reference instead of a silent wait.
+        """
+        value = str(task_id or "").strip()
+        if not value:
+            return
+        task_id_box["id"] = value
+        context.user_data["seedance_last_task_id"] = value
+        asyncio.create_task(
+            update.effective_message.reply_text(
+                f"⏳ Seedance принял задачу: {value}. Жду готовое видео…"
+            )
+        )
+
     try:
         content = await seedance_generate(
             api_key=COMET_API_KEY,
@@ -17428,7 +17468,19 @@ async def _run_seedance_direct(
             model_fallbacks=SEEDANCE_MODEL_FALLBACKS,
             reference_bytes=reference_bytes,
             create_path=SEEDANCE_CREATE_PATH,
+            on_task_id=_remember_task_id,
         )
+        actual_duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, content)
+        # A paid text-to-video request must not be marked complete if the
+        # provider returned a materially shorter clip than the selected plan.
+        # Returning False makes _try_pay_then_do skip the user-credit commit.
+        if actual_duration and actual_duration < max(0.0, float(duration_s) - 0.35):
+            task_note = f" ID задачи: {task_id_box['id']}." if task_id_box.get("id") else ""
+            await update.effective_message.reply_text(
+                f"❌ Seedance вернул ролик {actual_duration:.1f} сек вместо выбранных {duration_s} сек. "
+                f"Файл не отправлен как успешный результат; списание не подтверждено.{task_note}"
+            )
+            return False
         await _reply_video_bytes(
             update,
             content,
@@ -17442,6 +17494,27 @@ async def _run_seedance_direct(
             "❌ Seedance не смог завершить генерацию: " + str(exc)[:500]
         )
         return False
+
+
+def _generated_video_duration_seconds_sync(video_bytes: bytes) -> float:
+    """Probe a generated MP4 without trusting provider or Telegram metadata."""
+    if not video_bytes:
+        return 0.0
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return 0.0
+    with tempfile.TemporaryDirectory(prefix="neyro_seedance_probe_") as td:
+        path = os.path.join(td, "generated.mp4")
+        with open(path, "wb") as fh:
+            fh.write(video_bytes)
+        try:
+            result = subprocess.run(
+                [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nk=1:nw=1", path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False,
+            )
+            return max(0.0, min(24 * 3600.0, float(result.stdout.decode("utf-8", "ignore").strip())))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return 0.0
 
 
 async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, prompt: str, duration_s: int, aspect: str) -> bool:
@@ -17478,7 +17551,7 @@ async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TY
             (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "seconds": d, "size": size}),
             (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "size": size}),
         ]
-        return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, SORA_API_KEY, payloads, [SORA_STATUS_PATH, "/v1/videos/{id}", "/v1/tasks/{id}"], "Sora 2 text→video · без людей"))
+        return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, SORA_API_KEY, payloads, [SORA_STATUS_PATH, "/v1/videos/{id}", "/v1/tasks/{id}"], "Sora 2 text→video · без людей", context=context))
     if engine == "kling":
         d = str(_duration_for_engine("kling", duration_s))
         # Kling API expects model_name (not model), as in its image2video endpoint.
@@ -17974,6 +18047,12 @@ async def _try_pay_then_do(
 ):
     """Reserve capacity, run provider, and charge only after the action explicitly returns True."""
     username = (update.effective_user.username or "")
+    # Some provider failures are already explained in a safe, actionable message.
+    # Avoid following them with a confusing duplicate generic failure notice.
+    context.user_data.pop("_provider_failure_already_reported", None)
+
+    def _provider_failure_already_reported() -> bool:
+        return bool(context.user_data.pop("_provider_failure_already_reported", False))
 
     promo_ok, promo_left, promo_limit, promo_feature = _try_consume_promo_daily5_quota(user_id, username, engine, remember_kind)
     if promo_ok:
@@ -17985,7 +18064,7 @@ async def _try_pay_then_do(
                 raise RuntimeError("provider returned unsuccessful result")
         except Exception as e:
             log.exception("promo daily5 action failed: %s", e)
-            if not silent_failure:
+            if not silent_failure and not _provider_failure_already_reported():
                 await update.effective_message.reply_text("❌ Задача не выполнена. Промо-кредиты не списываются.")
         return
     if is_promo_daily5_user(user_id, username) and promo_feature:
@@ -18002,7 +18081,7 @@ async def _try_pay_then_do(
                 if result is False: raise RuntimeError("provider returned unsuccessful result")
             except Exception as e:
                 log.exception("free action failed: %s", e)
-                if not silent_failure:
+                if not silent_failure and not _provider_failure_already_reported():
                     await update.effective_message.reply_text("❌ Задача не выполнена. Денежного списания не было.")
             return
         await _send_free_quota_exhausted(update, context, free_kind); return
@@ -18013,7 +18092,7 @@ async def _try_pay_then_do(
             if result is False: raise RuntimeError("provider returned unsuccessful result")
         except Exception as e:
             log.exception("unlimited action failed: %s", e)
-            if not silent_failure:
+            if not silent_failure and not _provider_failure_already_reported():
                 await update.effective_message.reply_text("❌ Задача не выполнена. Попробуйте позже.")
         return
 
@@ -18045,7 +18124,7 @@ async def _try_pay_then_do(
         result = await coro_func()
         if result is not True:
             _credit_release(tx_id, "released")
-            if not silent_failure:
+            if not silent_failure and not _provider_failure_already_reported():
                 await update.effective_message.reply_text("↩️ Генерация не завершилась — кредиты не списаны.")
             return
         if not _credit_commit(tx_id):
@@ -18057,7 +18136,7 @@ async def _try_pay_then_do(
     except Exception as e:
         _credit_release(tx_id, "released")
         log.exception("paid action failed: %s", e)
-        if not silent_failure:
+        if not silent_failure and not _provider_failure_already_reported():
             await update.effective_message.reply_text("❌ Задача не выполнена. Кредиты не списаны.")
 
 
@@ -20999,66 +21078,3 @@ def _configure_marketplace_app(app) -> bool:
     try:
         from neyrobot_prod.marketplace_runtime import initialize_marketplace_runtime
 
-        enabled = initialize_marketplace_runtime(
-            app.bot_data,
-            db_path=DB_PATH,
-            retail_usd=_retail_usd,
-            usd_to_credits=_usd_to_credits,
-        )
-        log.info(
-            "Marketplace Studio runtime %s",
-            "enabled" if enabled else "disabled by feature flag",
-        )
-        return bool(enabled)
-    except Exception as exc:
-        for key in (
-            "marketplace_usd_ledger",
-            "marketplace_quote_service",
-            "marketplace_image_client",
-        ):
-            app.bot_data.pop(key, None)
-        log.error("Marketplace Studio runtime disabled safely: %s", exc)
-        return False
-
-
-def main():
-    log.info("Starting bot patch version: %s", PATCH_VERSION)
-    with contextlib.suppress(Exception):
-        db_init()
-    with contextlib.suppress(Exception):
-        db_init_usage()
-    with contextlib.suppress(Exception):
-        _chat_memory_init()
-    with contextlib.suppress(Exception):
-        _db_init_prefs()
-
-    app = build_application()
-    _configure_marketplace_app(app)
-
-    if USE_WEBHOOK:
-        _install_webapp_checkout_bridge(app)
-        log.info("🚀 WEBHOOK mode. Public URL: %s  Path: %s  Port: %s", PUBLIC_URL, WEBHOOK_PATH, PORT)
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=WEBHOOK_PATH.lstrip("/"),
-            webhook_url=f"{PUBLIC_URL.rstrip('/')}{WEBHOOK_PATH}",
-            secret_token=(WEBHOOK_SECRET or None),
-            allowed_updates=Update.ALL_TYPES,
-        )
-    else:
-        log.info("🚀 POLLING mode.")
-        with contextlib.suppress(Exception):
-            asyncio.get_event_loop().run_until_complete(
-                app.bot.delete_webhook(drop_pending_updates=True)
-            )
-        app.run_polling(
-            close_loop=False,
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=False,
-        )
-
-
-if __name__ == "__main__":
-    main()
-# === END PATCH ===
