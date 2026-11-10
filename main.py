@@ -1411,6 +1411,23 @@ async def openai_live_web_search(user_text: str) -> str | None:
     return None
 
 
+_TELEGRAM_MARKDOWN_LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)")
+
+
+def _telegram_readable_links(text: str) -> str:
+    """Turn model Markdown links into clean Telegram auto-links.
+
+    Live-search summaries are sent as plain Telegram text on purpose: model
+    output can contain unmatched Markdown characters. Without this small
+    normalization Telegram renders ``[Source](https://...)`` literally and
+    then auto-links the URL a second time.
+    """
+    return _TELEGRAM_MARKDOWN_LINK_RE.sub(
+        lambda match: f"{match.group(1).strip()}: {match.group(2)}",
+        text or "",
+    )
+
+
 async def maybe_handle_live_query(update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str) -> bool:
     """
     Возвращает True, если вопрос обработан live-слоем.
@@ -1512,9 +1529,10 @@ async def maybe_handle_live_query(update: Update, context: ContextTypes.DEFAULT_
                         f"Вопрос: {_live_search_query_with_date(text)}"
                     )
                     reply = await ask_openai_text(correction_prompt, web_ctx=ctx, user_id=user_id, chat_id=chat_id)
-                await update.effective_message.reply_text(reply[:3900], disable_web_page_preview=False)
-                if len(reply) > 3900:
-                    await update.effective_message.reply_text(reply[3900:7800], disable_web_page_preview=False)
+                telegram_reply = _telegram_readable_links(reply)
+                await update.effective_message.reply_text(telegram_reply[:3900], disable_web_page_preview=False)
+                if len(telegram_reply) > 3900:
+                    await update.effective_message.reply_text(telegram_reply[3900:7800], disable_web_page_preview=False)
                 _chat_memory_add(user_id, chat_id, "user", original_text)
                 _chat_memory_add(user_id, chat_id, "assistant", reply)
                 with contextlib.suppress(Exception):
@@ -1526,7 +1544,8 @@ async def maybe_handle_live_query(update: Update, context: ContextTypes.DEFAULT_
     # Fallback: OpenAI native web search.
     live_answer = await openai_live_web_search(text)
     if live_answer:
-        await update.effective_message.reply_text(live_answer, disable_web_page_preview=False)
+        telegram_live_answer = _telegram_readable_links(live_answer)
+        await update.effective_message.reply_text(telegram_live_answer, disable_web_page_preview=False)
         _chat_memory_add(user_id, chat_id, "user", original_text)
         _chat_memory_add(user_id, chat_id, "assistant", live_answer)
         with contextlib.suppress(Exception):
