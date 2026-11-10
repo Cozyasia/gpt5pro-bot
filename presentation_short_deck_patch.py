@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
+import time
 from copy import deepcopy
 
 
@@ -95,6 +97,46 @@ def apply_short_deck_patch(mod) -> None:
     mod._neyronix_short_deck_patch = True
 
 
+def apply_short_deck_runtime_guard(mod) -> None:
+    """Restore an explicit 3–7 slide request after late runtime overlays.
+
+    The v118 quality overlay is installed asynchronously after this module and
+    historically enforced a commercial minimum of eight slides.  A short topic
+    deck is not a commercial pitch: return its deterministic structure directly
+    rather than passing it through that late minimum-size validator.
+    """
+    current = getattr(mod, "_generate_structure", None)
+    if not callable(current) or getattr(current, "_neyronix_short_deck_guard", False):
+        return
+
+    async def generate(project, update=None):
+        raw = str(project.get("raw_brief") or "")
+        requested = _count(raw)
+        if requested < 8:
+            profile = project.setdefault("profile", {})
+            profile["requested_slide_count"] = requested
+            title = _topic(raw)
+            if title:
+                profile["brand_name"] = title
+            return _compact_structure(project)
+        return await current(project, update)
+
+    generate._neyronix_short_deck_guard = True
+    mod._generate_structure = generate
+
+
+def install_runtime_guard() -> None:
+    """Apply after asynchronous overlays without delaying startup."""
+    def worker() -> None:
+        for _ in range(300):
+            module = sys.modules.get("presentation_studio")
+            if module is not None:
+                apply_short_deck_runtime_guard(module)
+            time.sleep(0.1)
+
+    threading.Thread(target=worker, daemon=True, name="presentation-short-deck-guard").start()
+
+
 def install_after_v105() -> None:
     if any(getattr(finder, "_neyronix_short_deck_marker", False) for finder in sys.meta_path):
         return
@@ -125,3 +167,4 @@ def install_after_v105() -> None:
             return spec
 
     sys.meta_path.insert(0, Finder())
+    install_runtime_guard()
