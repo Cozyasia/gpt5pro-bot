@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 99459)
-Total output lines: 7000
-
 import hashlib
 import hmac
 # -*- coding: utf-8 -*-
@@ -2798,7 +2795,1378 @@ def _normalize_vocal_source_audio_sync(raw: bytes, filename: str) -> bytes:
         raise ValueError("audio size is outside the 512 B–50 MB limit")
     if str(filename or "").lower().endswith(".mp3"):
         return raw
-    suffix = os.path.splitext…19459 tokens truncated…_prompt
+    suffix = os.path.splitext(str(filename or "audio.bin"))[1].lower() or ".bin"
+    with tempfile.TemporaryDirectory(prefix="neyro_vocal_source_") as td:
+        source_path = os.path.join(td, "source" + suffix)
+        output_path = os.path.join(td, "source.mp3")
+        with open(source_path, "wb") as fh:
+            fh.write(raw)
+        completed = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", source_path,
+                "-map", "0:a:0", "-vn", "-ac", "2", "-ar", "44100",
+                "-c:a", "libmp3lame", "-b:a", "192k", output_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=180,
+            check=False,
+        )
+        if completed.returncode != 0 or not os.path.isfile(output_path):
+            raise RuntimeError("ffmpeg could not normalize the uploaded audio")
+        with open(output_path, "rb") as fh:
+            normalized = fh.read()
+    if not 512 <= len(normalized) <= 50 * 1024 * 1024:
+        raise RuntimeError("normalized audio size is invalid")
+    return normalized
+
+# ───────── Хендлер голосовых/аудио ─────────
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    voice = getattr(msg, "voice", None)
+    audio = getattr(msg, "audio", None)
+    media = voice or audio
+    if not media:
+        await msg.reply_text("Не нашёл голосовой файл.")
+        return
+
+    # Скачиваем файл
+    try:
+        with contextlib.suppress(Exception):
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+
+        tg_file = await context.bot.get_file(media.file_id)
+        buf = BytesIO()
+        await tg_file.download_to_memory(out=buf)
+        raw = buf.getvalue()
+
+        mime = (getattr(media, "mime_type", "") or "").lower()
+        supplied_name = os.path.basename(str(getattr(media, "file_name", "") or ""))
+        if re.fullmatch(r"[A-Za-z0-9_. -]{1,160}\.(?:mp3|wav|m4a|aac|ogg|webm)", supplied_name, re.I):
+            filename = supplied_name
+        elif "ogg" in mime or "opus" in mime:
+            filename = "voice.ogg"
+        elif "webm" in mime:
+            filename = "voice.webm"
+        elif "wav" in mime:
+            filename = "voice.wav"
+        elif "mp3" in mime or "mpeg" in mime or "mpga" in mime:
+            filename = "voice.mp3"
+        else:
+            filename = "voice.ogg"
+
+    except Exception as e:
+        log.exception("TG download error: %s", e)
+        await msg.reply_text("Не удалось скачать голосовое сообщение. Попробуйте отправить его ещё раз, лучше не пересылая, а загрузив напрямую.")
+        return
+
+    if context.user_data.get("awaiting_vocal_clip_audio"):
+        if voice or not audio:
+            await msg.reply_text("Пришлите песню как файл *Audio* (MP3, WAV, M4A/AAC), а не голосовое сообщение.", parse_mode="Markdown")
+            return
+        try:
+            source_audio = await asyncio.to_thread(_normalize_vocal_source_audio_sync, raw, filename)
+            token = uuid.uuid4().hex[:12]
+            await asyncio.to_thread(_save_vocal_artifact, update.effective_user.id, token, "audio", source_audio)
+        except Exception:
+            log.exception("custom vocal source could not be saved")
+            await msg.reply_text("Не удалось подготовить аудиодорожку. Загрузите MP3, WAV или M4A до 50 МБ.")
+            return
+        context.user_data["vocal_source_token"] = token
+        context.user_data["vocal_audio_is_custom"] = True
+        context.user_data.pop("awaiting_vocal_clip_audio", None)
+        if _get_cached_photo(update.effective_user.id):
+            _set_vocal_clip_video_brief_after_custom_audio(context)
+            await msg.reply_text(
+                "✅ Исходная аудиодорожка сохранена. Теперь опишите видеоряд: сцены, настроение, движения, локации. "
+                "Формат будет 9:16; выберите длительность на следующем шаге."
+            )
+        else:
+            context.user_data["awaiting_vocal_clip_photo"] = True
+            await msg.reply_text(
+                "✅ Исходная аудиодорожка сохранена. Теперь пришлите фронтальный портрет одного исполнителя."
+            )
+        return
+
+    # Если пользователь на шаге выбора голоса прислал voice/audio, используем реальный голос без TTS.
+    if context.user_data.get("awaiting_avatar_voice_choice"):
+        context.user_data.pop("awaiting_avatar_voice_choice", None)
+        context.user_data["awaiting_avatar_script"] = True
+
+    # Если пользователь нажал «Говорящий аватар», voice/audio становится речью для загруженного портрета.
+    if context.user_data.get("awaiting_avatar_script"):
+        img = _get_cached_photo(update.effective_user.id)
+        if not img:
+            _clear_avatar_wait(context)
+            await msg.reply_text("Сначала загрузите портрет человека, затем нажмите 🗣 Говорящий аватар.")
+            return
+        _clear_avatar_wait(context)
+        await _start_talking_avatar(
+            update, context, img,
+            audio_bytes=raw,
+            audio_filename=filename,
+            audio_file_url=getattr(tg_file, "file_path", "") or "",
+            audio_mime=mime,
+        )
+        return
+
+    # STT
+    transcript = await _stt_transcribe_bytes(filename, raw)
+    if not transcript:
+        await msg.reply_text("Ошибка при распознавании речи.")
+        return
+
+    transcript = transcript.strip()
+
+    # По умолчанию НЕ показываем отдельную расшифровку voice, чтобы не было 3 сообщений:
+    # 1) текстовый ответ, 2) voice-озвучка, 3) дубль расшифровки.
+    if STT_ECHO_TRANSCRIPT:
+        with contextlib.suppress(Exception):
+            await msg.reply_text(f"🗣️ Распознал: {transcript}")
+
+    # ——— КЛЮЧЕВОЙ МОМЕНТ ———
+    # Больше НЕ создаём фейковый Update, не лезем в Message.text — это запрещено в Telegram API
+    # Теперь мы используем безопасный прокси-метод, который создаёт временный message-объект
+    try:
+        await on_text_with_text(update, context, transcript)
+    except Exception as e:
+        log.exception("Voice->text handler error: %s", e)
+        await msg.reply_text("Упс, произошла ошибка. Я уже разбираюсь.")
+        
+# ───────── Извлечение текста из документов ─────────
+def _safe_decode_txt(b: bytes) -> str:
+    for enc in ("utf-8","cp1251","latin-1"):
+        try:
+            return b.decode(enc)
+        except Exception:
+            continue
+    return b.decode("utf-8", errors="ignore")
+
+def _extract_pdf_text(data: bytes) -> str:
+    try:
+        import PyPDF2
+        rd = PyPDF2.PdfReader(BytesIO(data))
+        parts = []
+        for p in rd.pages:
+            try:
+                parts.append(p.extract_text() or "")
+            except Exception:
+                continue
+        t = "\n".join(parts).strip()
+        if t:
+            return t
+    except Exception:
+        pass
+    try:
+        from pdfminer_high_level import extract_text as pdfminer_extract_text  # may not exist
+    except Exception:
+        pdfminer_extract_text = None  # type: ignore
+    if pdfminer_extract_text:
+        try:
+            return (pdfminer_extract_text(BytesIO(data)) or "").strip()
+        except Exception:
+            pass
+    try:
+        import fitz
+        doc = fitz.open(stream=data, filetype="pdf")
+        txt = []
+        for page in doc:
+            try:
+                txt.append(page.get_text("text"))
+            except Exception:
+                continue
+        return "\n".join(txt)
+    except Exception:
+        pass
+    return ""
+
+def _extract_epub_text(data: bytes) -> str:
+    try:
+        from ebooklib import epub
+        from bs4 import BeautifulSoup
+        book = epub.read_epub(BytesIO(data))
+        chunks = []
+        for item in book.get_items():
+            if item.get_type() == 9:  # DOCUMENT
+                try:
+                    soup = BeautifulSoup(item.get_content(), "html.parser")
+                    txt = soup.get_text(separator=" ", strip=True)
+                    if txt:
+                        chunks.append(txt)
+                except Exception:
+                    continue
+        return "\n".join(chunks).strip()
+    except Exception:
+        return ""
+
+def _extract_docx_text(data: bytes) -> str:
+    try:
+        import docx
+        doc = docx.Document(BytesIO(data))
+        return "\n".join(p.text for p in doc.paragraphs).strip()
+    except Exception:
+        return ""
+
+def _extract_fb2_text(data: bytes) -> str:
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(data)
+        texts = []
+        for elem in root.iter():
+            if elem.text and elem.text.strip():
+                texts.append(elem.text.strip())
+        return " ".join(texts).strip()
+    except Exception:
+        return ""
+
+def extract_text_from_document(data: bytes, filename: str) -> tuple[str, str]:
+    name = (filename or "").lower()
+    if name.endswith(".pdf"):  return _extract_pdf_text(data),  "PDF"
+    if name.endswith(".epub"): return _extract_epub_text(data), "EPUB"
+    if name.endswith(".docx"): return _extract_docx_text(data), "DOCX"
+    if name.endswith(".fb2"):  return _extract_fb2_text(data),  "FB2"
+    if name.endswith(".txt"):  return _safe_decode_txt(data),    "TXT"
+    if name.endswith((".mobi",".azw",".azw3")): return "", "MOBI/AZW"
+    decoded = _safe_decode_txt(data)
+    return decoded if decoded else "", "UNKNOWN"
+
+
+# ───────── Суммаризация длинных текстов ─────────
+async def _summarize_chunk(text: str, query: str | None = None) -> str:
+    prefix = "Суммируй кратко по пунктам основное из фрагмента документа на русском:\n"
+    if query:
+        prefix = (f"Суммируй фрагмент с учётом цели: {query}\n"
+                  f"Дай основные тезисы, факты, цифры. Русский язык.\n")
+    prompt = prefix + text
+    return await ask_openai_text(prompt)
+
+async def summarize_long_text(full_text: str, query: str | None = None) -> str:
+    max_chunk = 8000
+    text = full_text.strip()
+    if len(text) <= max_chunk:
+        return await _summarize_chunk(text, query=query)
+    parts = []
+    i = 0
+    while i < len(text) and len(parts) < 8:
+        parts.append(text[i:i+max_chunk]); i += max_chunk
+    partials = [await _summarize_chunk(p, query=query) for p in parts]
+    combined = "\n\n".join(f"- Фрагмент {idx+1}:\n{s}" for idx, s in enumerate(partials))
+    final_prompt = ("Объедини тезисы по фрагментам в цельное резюме документа: 1) 5–10 главных пунктов; "
+                    "2) ключевые цифры/сроки; 3) вывод/рекомендации. Русский язык.\n\n" + combined)
+    return await ask_openai_text(final_prompt)
+
+
+# ======= Анализ документов (PDF/EPUB/DOCX/FB2/TXT) =======
+async def on_doc_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if not update.message or not update.message.document:
+            return
+        doc = update.message.document
+        tg_file = await doc.get_file()
+        data = await tg_file.download_as_bytearray()
+        text, kind = extract_text_from_document(bytes(data), doc.file_name or "file")
+        if not text.strip():
+            await update.effective_message.reply_text(f"Не удалось извлечь текст из {kind}.")
+            return
+        caption = (update.message.caption or "").strip()
+        goal = caption or None
+        if _should_route_medical(context, update.effective_user.id, caption, doc.file_name or "file"):
+            await _medical_analyze_text(update, context, text, goal=goal)
+            _clear_medicine_wait(context)
+            with contextlib.suppress(Exception):
+                _mode_track_set(update.effective_user.id, "")
+            return
+
+        await update.effective_message.reply_text(f"📄 Извлекаю текст ({kind}), готовлю конспект…")
+        summary = await summarize_long_text(text, query=goal)
+        summary = summary or "Готово."
+        await update.effective_message.reply_text(summary)
+        await maybe_tts_reply(update, context, summary[:TTS_MAX_CHARS])
+    except Exception as e:
+        log.exception("on_doc_analyze error: %s", e)
+    # ничего не бросаем наружу
+
+
+
+# ───────── OpenAI Images (генерация картинок) ─────────
+async def _generate_openai_image_bytes(prompt: str) -> bytes | None:
+    try:
+        try:
+            resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", quality=OPENAI_IMAGE_QUALITY, n=1)
+        except Exception:
+            # Compatibility with proxies that do not expose the quality argument.
+            resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
+        b64 = resp.data[0].b64_json
+        return base64.b64decode(b64) if b64 else None
+    except Exception as e:
+        log.exception("OpenAI image generation error: %s", e)
+        return None
+
+async def _do_img_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str) -> bool:
+    try:
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+        img_bytes = await _generate_openai_image_bytes(prompt)
+        if not img_bytes:
+            await update.effective_message.reply_text("Не удалось создать изображение.")
+            return False
+        await update.effective_message.reply_photo(
+            photo=img_bytes,
+            caption=f"Готово ✅\nДвижок: OpenAI Images\nЗапрос: {prompt}",
+        )
+        return True
+    except Exception as e:
+        log.exception("IMG gen error: %s", e)
+        await update.effective_message.reply_text("Не удалось создать изображение.")
+        return False
+
+
+def _is_text_sensitive_image_prompt(prompt: str) -> bool:
+    return bool(re.search(
+        r"(logo|brand|branding|label|poster|flyer|banner|packag|box|bottle|menu|sign|screen|ui|ux|interface|"
+        r"логотип|лого|бренд|этикет|упаков|бутыл|короб|плакат|баннер|флаер|меню|вывеск|экран|интерфейс)",
+        prompt or "",
+        re.I,
+    ))
+
+
+def _is_atmospheric_image_prompt(prompt: str) -> bool:
+    return bool(re.search(
+        r"(cinematic|editorial|mood|atmospher|luxury|premium|fashion|concept art|fantasy|epic|dramatic|"
+        r"киношн|кинематограф|атмосфер|люкс|премиум|мудборд|фэшн|арт|концепт|эпич|драмат)",
+        prompt or "",
+        re.I,
+    ))
+
+
+def _resolve_general_image_engine(prompt: str, requested_engine: str = "auto") -> tuple[str, str]:
+    requested_engine = (requested_engine or "auto").strip().lower()
+    if requested_engine == "openai":
+        return ("openai", "пользователь выбрал точный движок")
+    if requested_engine == "midjourney":
+        return ("midjourney", "пользователь выбрал художественный движок")
+
+    if _is_text_sensitive_image_prompt(prompt):
+        return ("openai", "обнаружен запрос на текст, логотип, упаковку или точную графику")
+    if _is_atmospheric_image_prompt(prompt) and MIDJOURNEY_ENABLED and COMET_API_KEY:
+        return ("midjourney", "обнаружен атмосферный/кинематографичный художественный запрос")
+    return ("openai", "универсальный режим по умолчанию")
+
+
+def _image_engine_price_label(engine: str) -> str:
+    engine = (engine or "").lower()
+    cost = MIDJOURNEY_UNIT_COST_USD if engine == "midjourney" else IMG_COST_USD
+    return f"{_retail_credits(cost)} кр."
+
+
+def _image_engine_choice_kb(aid: str, prompt: str = "") -> InlineKeyboardMarkup:
+    auto_engine, _ = _resolve_general_image_engine(prompt, "auto")
+    auto_title = "Midjourney" if auto_engine == "midjourney" else "OpenAI"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"✨ Авто: {auto_title} · {_image_engine_price_label(auto_engine)}", callback_data=f"chooseimg:auto:{aid}")],
+        [InlineKeyboardButton(f"🖼 OpenAI Images · {_image_engine_price_label('openai')}", callback_data=f"chooseimg:openai:{aid}")],
+        [InlineKeyboardButton(f"🎨 Midjourney · {_image_engine_price_label('midjourney')}", callback_data=f"chooseimg:midjourney:{aid}")],
+    ])
+
+
+async def _ask_image_engine_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    aid = _new_aid()
+    _pending_actions[aid] = {"kind": "image_generate", "prompt": prompt}
+    mid_note = "доступен" if MIDJOURNEY_ENABLED and COMET_API_KEY else "недоступен сейчас"
+    msg = (
+        "Какой движок использовать для изображения?\n"
+        f"Запрос: «{prompt}»\n\n"
+        "✨ Авто — бот сам выберет лучший маршрут под задачу. Обычно это самый удобный вариант.\n"
+        "🖼 OpenAI Images — когда нужна точность: предметы, продукты, баннеры, логотипы, понятная композиция, текстовые элементы и коммерческие макеты.\n"
+        f"🎨 Midjourney — когда нужен атмосферный, художественный, кинематографичный или fashion/editorial результат. Статус сейчас: {mid_note}.\n\n"
+        "Подсказка: /img — быстрый запуск через OpenAI Images, /mj — прямой запуск Midjourney."
+    )
+    await update.effective_message.reply_text(msg, reply_markup=_image_engine_choice_kb(aid, prompt))
+
+
+async def _run_selected_image_generation(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, requested_engine: str) -> bool:
+    engine, reason = _resolve_general_image_engine(prompt, requested_engine)
+    provider_cost = MIDJOURNEY_UNIT_COST_USD if engine == "midjourney" else IMG_COST_USD
+    engine_title = "Midjourney" if engine == "midjourney" else "OpenAI Images"
+
+    async def _go():
+        try:
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+        except Exception:
+            pass
+        try:
+            if engine == "midjourney":
+                if not MIDJOURNEY_ENABLED:
+                    await update.effective_message.reply_text("❌ Midjourney отключён настройкой MIDJOURNEY_ENABLED=0.")
+                    return False
+                if not COMET_API_KEY:
+                    await update.effective_message.reply_text("❌ Midjourney сейчас недоступен: не задан COMET_API_KEY.")
+                    return False
+                await update.effective_message.reply_text(f"🎨 Движок: {engine_title}. Запускаю генерацию…")
+                img, task_id = await _midjourney_generate_image_bytes(prompt)
+                if not img:
+                    await update.effective_message.reply_text("❌ Midjourney не вернул изображение.")
+                    return False
+                bio = BytesIO(img)
+                bio.name = f"midjourney_{task_id}.jpg"
+                caption = f"Готово ✅\nДвижок: {engine_title}\nПричина выбора: {reason}\nЗапрос: {prompt}"
+                try:
+                    await update.effective_message.reply_photo(photo=InputFile(bio), caption=caption[:1024])
+                except Exception:
+                    bio.seek(0)
+                    await update.effective_message.reply_document(document=InputFile(bio), caption=caption[:1024])
+                return True
+
+            await update.effective_message.reply_text(f"🖼 Движок: {engine_title}. Запускаю генерацию…")
+            img = await _generate_openai_image_bytes(prompt)
+            if not img:
+                await update.effective_message.reply_text("Не удалось создать изображение через OpenAI Images.")
+                return False
+            caption = f"Готово ✅\nДвижок: {engine_title}\nПричина выбора: {reason}\nЗапрос: {prompt}"
+            await update.effective_message.reply_photo(photo=img, caption=caption[:1024])
+            return True
+        except Exception as e:
+            log.exception("Selected image generation failed: %s", e)
+            await update.effective_message.reply_text(f"❌ Ошибка генерации изображения ({engine_title}). Попробуйте ещё раз позже.")
+            return False
+
+    await _try_pay_then_do(
+        update,
+        context,
+        update.effective_user.id,
+        "img",
+        provider_cost,
+        _go,
+        remember_kind="img_generate",
+        remember_payload={"prompt": prompt[:1000], "requested_engine": requested_engine, "resolved_engine": engine},
+    )
+    return True
+
+async def _luma_generate_image_bytes(prompt: str) -> bytes | None:
+    if not LUMA_IMG_BASE_URL or not LUMA_API_KEY:
+        # фолбэк: OpenAI Images
+        try:
+            resp = oai_img.images.generate(model=IMAGES_MODEL, prompt=prompt, size="1024x1024", n=1)
+            return base64.b64decode(resp.data[0].b64_json)
+        except Exception as e:
+            log.exception("OpenAI images fallback error: %s", e)
+            return None
+    try:
+        # Примерный эндпоинт; если у тебя другой — замени path/поля под свой аккаунт.
+        url = f"{LUMA_IMG_BASE_URL}/v1/images"
+        headers = {"Authorization": f"Bearer {LUMA_API_KEY}", "Accept": "application/json"}
+        payload = {"model": LUMA_IMG_MODEL, "prompt": prompt, "size": "1024x1024"}
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(url, headers=headers, json=payload)
+            if r.status_code >= 400:
+                return None
+            j = r.json() or {}
+            b64 = (j.get("data") or [{}])[0].get("b64_json") or j.get("image_base64")
+            return base64.b64decode(b64) if b64 else None
+    except Exception as e:
+        log.exception("Luma image gen error: %s", e)
+        return None
+
+async def _start_luma_img(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    async def _go():
+        img = await _luma_generate_image_bytes(prompt)
+        if not img:
+            await update.effective_message.reply_text("Не удалось создать изображение.")
+            return False
+        await update.effective_message.reply_photo(photo=img, caption=f"🖌 Готово ✅\nЗапрос: {prompt}")
+        return True
+    await _try_pay_then_do(update, context, update.effective_user.id, "img", IMG_COST_USD, _go,
+                           remember_kind="luma_img", remember_payload={"prompt": prompt})
+
+
+async def _midjourney_generate_image_bytes(prompt: str) -> tuple[bytes | None, str]:
+    """Create a Midjourney grid through CometAPI and return bytes plus task id."""
+    if not MIDJOURNEY_ENABLED:
+        raise RuntimeError("Midjourney отключён настройкой MIDJOURNEY_ENABLED=0")
+    if not COMET_API_KEY:
+        raise RuntimeError("Для Midjourney нужен COMET_API_KEY")
+    prompt = re.sub(r"\s+", " ", (prompt or "").strip())
+    if not prompt:
+        raise RuntimeError("Пустой промпт Midjourney")
+    # Add a default version only when the user did not specify one.
+    if MIDJOURNEY_DEFAULT_VERSION and not re.search(r"(?:^|\s)--v(?:ersion)?\s+", prompt, re.I):
+        prompt = f"{prompt} --v {MIDJOURNEY_DEFAULT_VERSION}"
+    mode = MIDJOURNEY_MODE.upper()
+    payload = {
+        "botType": "MID_JOURNEY",
+        "prompt": prompt,
+        "accountFilter": {"modes": [mode]},
+    }
+    headers = {
+        "Authorization": f"Bearer {COMET_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    create_paths = []
+    for path in (MIDJOURNEY_CREATE_PATH, f"{_MJ_PREFIX}/mj/submit/imagine", "/mj/submit/imagine"):
+        if path and path not in create_paths:
+            create_paths.append(path)
+    last_err = ""
+    async with httpx.AsyncClient(timeout=90.0, follow_redirects=True) as client:
+        task_id = ""
+        for path in create_paths:
+            try:
+                r = await client.post(f"{COMET_BASE_URL}{path}", headers=headers, json=payload)
+                if r.status_code >= 400:
+                    last_err = f"POST {path} → {r.status_code}: {_api_error_preview(r)}"
+                    continue
+                js = r.json() or {}
+                code = js.get("code")
+                task_id = str(js.get("result") or js.get("taskId") or js.get("task_id") or js.get("id") or "").strip()
+                if task_id and (code in (None, 1, "1", 200, "200") or str(js.get("description", "")).lower().find("success") >= 0):
+                    break
+                last_err = f"POST {path}: нет task id: {json.dumps(js, ensure_ascii=False)[:700]}"
+            except Exception as e:
+                last_err = f"POST {path}: {e}"
+        if not task_id:
+            raise RuntimeError(last_err or "Midjourney не вернул task id")
+
+        started = time.time()
+        status_paths = []
+        for path in (MIDJOURNEY_STATUS_PATH, "/mj/task/{id}/fetch"):
+            if path and path not in status_paths:
+                status_paths.append(path)
+        last = ""
+        while time.time() - started < MIDJOURNEY_TIMEOUT_S:
+            for path in status_paths:
+                try:
+                    rr = await client.get(f"{COMET_BASE_URL}{path.format(id=task_id)}", headers=headers)
+                    if rr.status_code >= 400:
+                        last = f"GET {path} → {rr.status_code}: {_api_error_preview(rr)}"
+                        continue
+                    js = rr.json() or {}
+                    status = str(js.get("status") or js.get("state") or "").upper()
+                    image_url = (
+                        js.get("imageUrl") or js.get("image_url")
+                        or _extract_first_url(js.get("output"))
+                        or _extract_first_url(js.get("result"))
+                        or _extract_first_url(js.get("data"))
+                    )
+                    if status == "SUCCESS" and image_url:
+                        img_resp = await client.get(str(image_url), headers={"Accept": "image/*"})
+                        img_resp.raise_for_status()
+                        if not img_resp.content:
+                            raise RuntimeError("Midjourney вернул пустое изображение")
+                        return img_resp.content, task_id
+                    if status in ("FAILURE", "FAILED", "ERROR", "CANCELLED", "CANCELED"):
+                        desc = js.get("failReason") or js.get("description") or js.get("error") or js
+                        raise RuntimeError(f"Midjourney task failed: {str(desc)[:900]}")
+                    if status == "MODAL":
+                        raise RuntimeError("Midjourney запросил дополнительный modal-ввод; для обычной генерации измените промпт")
+                    last = json.dumps(js, ensure_ascii=False)[:900]
+                except RuntimeError:
+                    raise
+                except Exception as e:
+                    last = str(e)
+            await asyncio.sleep(MIDJOURNEY_POLL_DELAY_S)
+        raise RuntimeError(f"Midjourney timeout. Последний ответ: {last[:900]}")
+
+
+async def _start_midjourney_image(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
+    prompt = (prompt or "").strip()
+    if not prompt:
+        context.user_data["awaiting_midjourney_prompt"] = True
+        await update.effective_message.reply_text(
+            "🎨 Опишите изображение для Midjourney. Можно добавить параметры --ar, --stylize и --v."
+        )
+        return False
+
+    async def _go():
+        await update.effective_message.reply_text(
+            f"🎨 Midjourney {MIDJOURNEY_MODE.upper()}: задача принята, ожидаю изображение…"
+        )
+        try:
+            img, task_id = await _midjourney_generate_image_bytes(prompt)
+            if not img:
+                return False
+            bio = BytesIO(img); bio.name = f"midjourney_{task_id}.jpg"
+            try:
+                await update.effective_message.reply_photo(photo=InputFile(bio), caption=f"🎨 Midjourney готов ✅\n{prompt[:700]}")
+            except Exception:
+                bio.seek(0)
+                await update.effective_message.reply_document(document=InputFile(bio), caption="🎨 Midjourney готов ✅")
+            return True
+        except Exception as e:
+            log.exception("Midjourney failed: %s", e)
+            await update.effective_message.reply_text(f"❌ Midjourney: {str(e)[:900]}")
+            return False
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        "img", MIDJOURNEY_UNIT_COST_USD, _go,
+        remember_kind="midjourney_imagine",
+        remember_payload={"prompt": prompt[:1000], "mode": MIDJOURNEY_MODE},
+    )
+    return True
+
+
+# ───────── Image retouch / own-image watermark cleanup ─────────
+_RETOUCH_TERMS_RE = re.compile(
+    r"(водян(?:ой|ого|ому|ым|ом)\s+знак|водн(?:ый|ого|ому|ым|ом)\s+знак|watermark|"
+    r"ватермарк|ретуш|ретушир|заретуш|ветошь|"
+    r"(?:убер(?:и|ите|у)|удал(?:и|ите|ить)|сотр(?:и|ите)|замажь|замазать)\s+.{0,80}"
+    r"(?:водян(?:ой|ого|ому|ым|ом)\s+знак|водн(?:ый|ого|ому|ым|ом)\s+знак|watermark|надпись|текст|логотип|лого|эмблем|лишн(?:ий|юю|ее|ие)\s+объект)|"
+    r"очист(?:и|ите|ить)\s+.{0,40}(?:фото|изображен|картинк|photo|image)|"
+    r"лишн(?:ий|юю|ее|ие)\s+(?:надпись|объект|логотип|текст)|"
+    r"надпись\s+на\s+фото|текст\s+на\s+фото|логотип\s+на\s+фото|"
+    r"remove\s+(?:watermark|text|logo|object)|clean\s+(?:image|photo))",
+    re.IGNORECASE,
+)
+
+_OWN_IMAGE_CONFIRM_RE = re.compile(
+    r"(мо[йяёие]|сво[йяёеих]|собственн|мой\s+файл|мой\s+макет|моя\s+фот|"
+    r"есть\s+прав|имею\s+прав|разрешени|я\s+владелец|own\s+image|my\s+image|my\s+photo|i\s+own)",
+    re.IGNORECASE,
+)
+
+
+def _is_image_retouch_request(text: str) -> bool:
+    """True для безопасной ретуши собственного изображения: водяной знак, лишняя надпись, логотип, объект."""
+    return bool(_RETOUCH_TERMS_RE.search(text or ""))
+
+
+def _has_own_image_confirmation(text: str) -> bool:
+    return bool(_OWN_IMAGE_CONFIRM_RE.search(text or ""))
+
+
+def _set_waiting_image_retouch(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = ""):
+    """Следующее фото должно пойти в ретушь собственного изображения, а не в медицину/анализ."""
+    uid = update.effective_user.id
+    _set_mode_clean(uid, "Развлечения", "")
+    _clear_transient_flows(context)
+    context.user_data["awaiting_photo_for"] = "retouch"
+    context.user_data["photo_flow"] = "retouch"
+    context.user_data["retouch_prompt"] = (prompt or "").strip()
+
+
+def _is_waiting_image_retouch(context) -> bool:
+    if not context:
+        return False
+    return (
+        context.user_data.get("awaiting_photo_for") == "retouch"
+        or context.user_data.get("photo_flow") == "retouch"
+    )
+
+
+def _set_retouch_wait_text(context, prompt: str = ""):
+    if not context:
+        return
+    context.user_data["retouch_wait_text"] = "1"
+    if prompt:
+        context.user_data["retouch_prompt"] = prompt.strip()
+
+
+def _is_retouch_wait_text(context) -> bool:
+    return bool(context and context.user_data.get("retouch_wait_text"))
+
+
+def _clear_image_retouch_wait(context):
+    if not context:
+        return
+    for key in ("awaiting_photo_for", "photo_flow", "retouch_prompt", "retouch_wait_text"):
+        with contextlib.suppress(Exception):
+            context.user_data.pop(key, None)
+
+
+def _retouch_user_hint_text() -> str:
+    return (
+        "🧽 Да, могу сделать ретушь собственного изображения.\n\n"
+        "Пришлите фото и, если возможно, укажите где находится элемент: "
+        "например «водяной знак справа снизу», «надпись по центру», «логотип сверху».\n\n"
+        "Важно: я обрабатываю только ваши собственные изображения/макеты или файлы, "
+        "на которые у вас есть право редактирования."
+    )
+
+
+def _retouch_system_prompt(user_instruction: str) -> str:
+    instruction = (user_instruction or "watermark or unwanted text/logo").strip()
+    return (
+        "Edit this user-owned image. Remove only the unwanted watermark/text/logo/object described by the user: "
+        f"{instruction}. Naturally reconstruct the background in that area, preserving texture, lighting, perspective, "
+        "shadows, colors and all important details. Do not change faces, identity, composition, style, objects, "
+        "branding created by the user, or any other part of the image. Keep the result realistic and high quality."
+    )
+
+
+def _prepare_image_for_edit(img_bytes: bytes) -> tuple[bytes, str, str]:
+    """OpenAI image edit лучше кормить PNG. Если PIL недоступен — отправляем исходный файл."""
+    if Image is None:
+        mime = sniff_image_mime(img_bytes)
+        ext = "jpg" if mime == "image/jpeg" else "png"
+        return img_bytes, f"image.{ext}", mime
+    try:
+        im = Image.open(BytesIO(img_bytes)).convert("RGBA")
+        # Ограничиваем размер, чтобы не ловить лимиты multipart, но сохраняем хорошую детализацию.
+        max_side = 1600
+        if max(im.size) > max_side:
+            im.thumbnail((max_side, max_side), Image.LANCZOS)
+        bio = BytesIO()
+        im.save(bio, format="PNG")
+        return bio.getvalue(), "image.png", "image/png"
+    except Exception:
+        mime = sniff_image_mime(img_bytes)
+        ext = "jpg" if mime == "image/jpeg" else "png"
+        return img_bytes, f"image.{ext}", mime
+
+
+async def _openai_image_edit_bytes(img_bytes: bytes, user_instruction: str) -> bytes | None:
+    """Реальная ретушь через текущую OpenAI Images model: /images/edits."""
+    if not OPENAI_IMAGE_KEY:
+        return None
+    if OPENAI_IMAGE_KEY.startswith("sk-or-"):
+        # OpenRouter не умеет OpenAI Images edits.
+        raise RuntimeError("OPENAI_IMAGE_KEY похож на ключ OpenRouter. Для ретуши нужен официальный OpenAI key или совместимый image-edit proxy.")
+
+    edit_bytes, filename, mime = _prepare_image_for_edit(img_bytes)
+    prompt = _retouch_system_prompt(user_instruction)
+    base = (IMAGES_BASE_URL or "https://api.openai.com/v1").rstrip("/")
+    headers = {"Authorization": f"Bearer {OPENAI_IMAGE_KEY}"}
+
+    # Некоторые прокси не любят size, поэтому делаем две попытки.
+    attempts = [
+        {"model": IMAGES_MODEL, "prompt": prompt, "n": "1", "size": "1024x1024"},
+        {"model": IMAGES_MODEL, "prompt": prompt, "n": "1"},
+    ]
+    last_err = ""
+    async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+        for data in attempts:
+            try:
+                files = {"image": (filename, edit_bytes, mime)}
+                r = await client.post(f"{base}/images/edits", headers=headers, data=data, files=files)
+                if r.status_code >= 400:
+                    last_err = f"{r.status_code}: {_api_error_preview(r)}" if "_api_error_preview" in globals() else f"{r.status_code}: {r.text[:500]}"
+                    log.warning("Image edit failed: %s", last_err)
+                    continue
+                js = r.json() or {}
+                item = (js.get("data") or [{}])[0]
+                b64 = item.get("b64_json")
+                if b64:
+                    return base64.b64decode(b64)
+                url = item.get("url") or _extract_first_url(js) if "_extract_first_url" in globals() else item.get("url")
+                if url:
+                    rr = await client.get(url, timeout=180.0)
+                    rr.raise_for_status()
+                    return rr.content
+                last_err = f"нет b64_json/url в ответе: {json.dumps(js, ensure_ascii=False)[:500]}"
+            except Exception as e:
+                last_err = str(e)
+                log.warning("Image edit exception: %s", e)
+                continue
+    raise RuntimeError(last_err or "image edit failed")
+
+
+async def _edit_own_image_retouch(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, instruction: str):
+    """Отправляет фото в AI-ретушь и возвращает результат пользователю."""
+    instruction = (instruction or context.user_data.get("retouch_prompt") or "убрать лишнюю надпись/водяной знак и восстановить фон").strip()
+    if not OPENAI_IMAGE_KEY:
+        await update.effective_message.reply_text("❌ Ретушь недоступна: не задан OPENAI_IMAGE_KEY/OPENAI_API_KEY.")
+        return
+    if OPENAI_IMAGE_KEY.startswith("sk-or-"):
+        await update.effective_message.reply_text(
+            "❌ Для ретуши нужен официальный OpenAI image key. OpenRouter-ключ для image edit не подходит."
+        )
+        return
+
+    await update.effective_message.reply_text(
+        "🧽 Запускаю ретушь собственного изображения через Images. "
+        "Уберу только указанный лишний элемент и постараюсь естественно восстановить фон."
+    )
+    with contextlib.suppress(Exception):
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+    try:
+        out = await _openai_image_edit_bytes(img_bytes, instruction)
+        if not out:
+            await update.effective_message.reply_text("❌ Не удалось получить результат ретуши.")
+            return
+        bio = BytesIO(out)
+        bio.name = "retouched.png"
+        await update.effective_message.reply_document(
+            InputFile(bio),
+            caption="✅ Готово: ретушь выполнена. Проверьте фон и детали; при необходимости можно отправить уточнение, что поправить."
+        )
+        return True
+    except Exception as e:
+        log.exception("image retouch error: %s", e)
+        await update.effective_message.reply_text(
+            "❌ Не удалось выполнить ретушь изображения. "
+            f"Техническая причина: {str(e)[:700]}"
+        )
+        return False
+
+
+async def _start_image_retouch(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, instruction: str):
+    """Платёжная обёртка для ретуши: используем тот же бюджет Images."""
+    if not OPENAI_IMAGE_KEY or OPENAI_IMAGE_KEY.startswith("sk-or-"):
+        return await _edit_own_image_retouch(update, context, img_bytes, instruction)
+
+    async def _go():
+        return await _edit_own_image_retouch(update, context, img_bytes, instruction)
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id,
+        "img", IMG_COST_USD, _go,
+        remember_kind="image_retouch",
+        remember_payload={"instruction": instruction},
+    )
+
+
+# ───────── UI / тексты ─────────
+START_TEXT = (
+    "👋 Привет! Я *NEYRONIX* — мультимодельная AI-студия в Telegram для текста, документов, фото, видео, музыки, речи и live-поиска.\n"
+    "Работаю в продакшн-режимах: сам подбираю подходящий движок под задачу или даю выбрать его вручную через «🧠 Движки».\n"
+    "\n"
+    "🚀 *Что умею:*\n"
+    "• 🎓 *Учёба* — объяснение тем, задачи, эссе/рефераты, конспекты из PDF/EPUB/DOCX, планы к экзаменам, речь ↔ текст.\n"
+    "• 💼 *Работа/Бизнес* — письма, КП, документы, аналитика, ToDo, брифы, презентации, PDF-каталоги, логотипы, удаление водяных знаков, диктовка и озвучка.\n"
+    "• 🔥 *Развлечения* — оживление фото, говорящий аватар, фото→видеоклип с музыкой, клип с вокалом для 1 человека, видео по тексту/голосу, Reels/Shorts, мини-фильмы, сценарии, замена лица, удаление/замена фона, ретушь и музыка Suno.\n"
+    "• 🩺 *Медицина* — справочный разбор выписок, анализов, заключений, МРТ/КТ/снимков и подготовка вопросов врачу. Это не диагноз и не замена очной консультации.\n"
+    "• 🌐 *Актуальная информация* — live-поиск, новости, курсы, факты и данные из интернета.\n"
+    "• 💬 *Мои чаты* — до четырёх отдельных диалогов с собственной памятью и историей.\n"
+    "• 💳 *Баланс и подписка* — тарифы, пополнение, платные генерации и контроль расходов.\n"
+    "\n"
+    "🧩 *Под капотом:* мультимодельная связка GPT/OpenRouter, OpenAI Images/TTS, Deepgram, Tavily, Runway, Sora 2, Kling, Midjourney, Suno, Photoroom, PiAPI, Segmind и CometAPI.\n"
+    "\n"
+    "Выберите режим кнопкой ниже или просто напишите задачу текстом/голосом."
+)
+
+def engines_kb():
+    # Отдельный режим «Движки»: показываем все сервисы/нейросети,
+    # реально подключенные в этой сборке. Кнопки — по одной в строке,
+    # чтобы Telegram на Android не обрезал длинный текст.
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🧠 GPT / OpenRouter", callback_data="engine:gpt")],
+        [InlineKeyboardButton("🖼 OpenAI Images", callback_data="engine:images")],
+        [InlineKeyboardButton("🔊 OpenAI TTS", callback_data="engine:openai_tts")],
+        [InlineKeyboardButton("🗣 Deepgram STT", callback_data="engine:deepgram")],
+        [InlineKeyboardButton("🌐 Tavily поиск", callback_data="engine:tavily")],
+        [InlineKeyboardButton("🎥 Runway видео", callback_data="engine:runway")],
+        [InlineKeyboardButton("🎞 Sora 2 · без людей", callback_data="engine:sora")],
+        [InlineKeyboardButton("🎬 Kling видео", callback_data="engine:kling")],
+        [InlineKeyboardButton("🎨 Midjourney изображения", callback_data="engine:midjourney")],
+        [InlineKeyboardButton("🎵 Suno музыка", callback_data="engine:suno")],
+        [InlineKeyboardButton("🧼 Photoroom фон", callback_data="engine:photoroom")],
+        [InlineKeyboardButton("🎭 PiAPI лицо", callback_data="engine:piapi")],
+        [InlineKeyboardButton("💎 Segmind лицо", callback_data="engine:segmind")],
+        [InlineKeyboardButton("🌉 CometAPI шлюз", callback_data="engine:comet")],
+        [InlineKeyboardButton("💰 Цены генераций", callback_data="pricing:list")],
+    ])
+
+ENGINE_INFO_TEXT = {
+    "gpt": (
+        "🧠 GPT / OpenRouter: основной текстовый мозг бота.\n"
+        "Используется для чата, документов, анализа, учебных и рабочих задач.\n"
+        "Ключи: OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL."
+    ),
+    "images": (
+        "🖼 OpenAI Images: генерация и часть редактирования изображений.\n"
+        "Запуск: /img <описание> или кнопки фото-мастерской.\n"
+        "Ключи: OPENAI_IMAGE_KEY или OPENAI_API_KEY."
+    ),
+    "openai_tts": (
+        "🔊 OpenAI TTS текста голосом.\n"
+        "Используется для режима речь/озвучка.\n"
+        "Ключи: OPENAI_TTS_KEY / OPENAI_TTS_MODEL / OPENAI_TTS_VOICE."
+    ),
+    "deepgram": (
+        "🗣 Deepgram STT: распознавание голосовых сообщений и аудио в текст.\n"
+        "Ключ: DEEPGRAM_API_KEY. Резерв: OPENAI_STT_KEY / Whisper."
+    ),
+    "stt_tts": (
+        "🗣 Речь ↔ текст: связка STT/TTS.\n"
+        "STT: Deepgram или OpenAI Whisper. TTS: OpenAI TTS."
+    ),
+    "tavily": (
+        "🌐 Tavily: live-поиск в интернете для свежих данных, новостей, курсов, законов и источников.\n"
+        "Ключ: TAVILY_API_KEY."
+    ),
+    "runway": (
+        "🎥 Runway: официальная генерация видео по тексту и оживление фото.\n"
+        "Основной маршрут — Runway Developer API; CometAPI и Kling используются только как резерв.\n"
+        "Ключ: RUNWAYML_API_SECRET. Powered by Runway — https://runwayml.com"
+    ),
+    "sora": (
+        "🎞 Sora 2: генерация видео по тексту и фото через CometAPI.\n"
+        "Важно: режим Sora 2 без людей — для фото/видео с людьми лучше Runway или Kling.\n"
+        "Ключ: COMET_API_KEY."
+    ),
+    "kling": (
+        "🎬 Kling: генерация видео по тексту и фото через CometAPI.\n"
+        "Используется для динамичных клипов, Reels/Shorts и fallback для оживления фото.\n"
+        "Ключ: COMET_API_KEY."
+    ),
+    "midjourney": (
+        "🎨 Midjourney: генерация изображений через CometAPI/совместимый канал.\n"
+        "Используется для визуалов, обложек, логотипов и иллюстраций.\n"
+        "Ключ: COMET_API_KEY."
+    ),
+    "photoroom": (
+        "🧼 Photoroom: продакшн-инструмент для удаления и AI-замены фона.\n"
+        "Используется в кнопках «Удалить фон» и «Заменить фон».\n"
+        "Ключ: PHOTOROOM_API_KEY."
+    ),
+    "piapi": (
+        "🎭 PiAPI: быстрый режим замены лица.\n"
+        "Используется как основной быстрый FaceSwap-провайдер.\n"
+        "Ключ: PIAPI_API_KEY."
+    ),
+    "segmind": (
+        "💎 Segmind: премиум/резервный FaceSwap.\n"
+        "Используется для более качественной замены лица и как fallback, когда достаточно кредитов.\n"
+        "Ключ: SEGMIND_API_KEY."
+    ),
+    "comet": (
+        "🌉 CometAPI: общий шлюз для Sora 2, Kling, Runway/Midjourney-каналов и других генеративных моделей.\n"
+        "Ключ: COMET_API_KEY."
+    ),
+}
+
+# ───────── MODES (Учёба / Работа / Развлечения) ─────────
+
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import CallbackQueryHandler, MessageHandler, filters
+
+# Текст корневого меню режимов
+def _modes_root_text() -> str:
+    return (
+        "Выберите режим работы. Бот работает как единый продакшн-центр ИИ:\n"
+        "• 🎓 Учёба — объяснения, задачи, конспекты, экзамены, файлы и голос.\n"
+        "• 💼 Работа/Бизнес — письма, документы, аналитика, презентации, PDF-каталоги, логотипы, ретушь и планы.\n"
+        "• 🔥 Развлечения — фото, видео, Reels/Shorts, мини-фильмы, фон, лицо, AI-селфи, вокальные клипы и музыка.\n"
+        "• 🩺 Медицина — справочный разбор анализов, выписок, заключений и снимков.\n"
+        "• 🧠 Движки — ручной выбор GPT/OpenRouter, OpenAI Images/TTS, Deepgram, Tavily, Runway, Sora 2, Kling, Midjourney, Suno, Photoroom, PiAPI, Segmind и CometAPI.\n"
+        "• 💳 Баланс/подписка — тарифы, пополнение и контроль платных генераций.\n\n"
+        "Можно просто написать запрос — бот сам определит задачу."
+    )
+
+def modes_root_kb() -> InlineKeyboardMarkup:
+    """Full main menu as inline buttons; never reopen the reply keyboard on Back."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎓 Учёба", callback_data="mode:study"),
+         InlineKeyboardButton("💼 Работа/Бизнес", callback_data="mode:work")],
+        [InlineKeyboardButton("🔥 Развлечения", callback_data="mode:fun"),
+         InlineKeyboardButton("🩺 Медицина", callback_data="mode:medicine")],
+        [InlineKeyboardButton("💬 Мои чаты", callback_data="mode:chats"),
+         InlineKeyboardButton("➕ Новый чат", callback_data="mode:newchat")],
+        [InlineKeyboardButton("🧠 Движки", callback_data="mode:engines"),
+         InlineKeyboardButton("🧾 Баланс", callback_data="mode:balance")],
+        [InlineKeyboardButton("⭐ Подписка · Помощь", callback_data="mode:subs_help")],
+    ])
+
+# ── Описание и подменю по режимам
+def _mode_desc(key: str, user_id: int | None = None) -> str:
+    if key == "study":
+        return (
+            "🎓 *Учёба*\n"
+            "Гибрид: GPT-5 для объяснений/конспектов, Vision для фото-задач, "
+            "STT/TTS для голосовых и аудио. Генеративные фото/видео-движки вынесены в отдельный режим «Движки».\n\n"
+            "Быстрые действия ниже. Можно написать свободный запрос (например: "
+            "«сделай конспект из PDF», «объясни интегралы с примерами»)."
+        )
+    if key == "work":
+        return (
+            "💼 *Работа/Бизнес*\n"
+            "Гибрид: GPT-5 для документов, КП, аналитики и структуры; Vision для таблиц/скринов; "
+            "OpenAI Images/Midjourney для логотипов и визуалов; image-edit для удаления водяных знаков; "
+            "полноценный мастер презентаций/каталогов с логотипом, массовой загрузкой фото, AI-визуалами и экспортом PDF+PPTX; STT/TTS для диктовки и озвучки.\n\n"
+            "Быстрые действия ниже. Можно написать свободный запрос: «сделай КП», «создай презентацию на 10 слайдов», "
+            "«собери PDF-каталог объектов», «создай логотип для бренда», «убери водяной знак с фото»."
+        )
+    if key == "fun":
+        if entertainment_menu_v2_enabled(user_id=user_id):
+            return (
+                "🔥 Развлечения\n\n"
+                "Создавайте видео, фото, музыку и готовые проекты — от идеи до "
+                "результата. Выберите, что хотите получить."
+            )
+        return (
+            "🔥 *Развлечения*\n"
+            "Гибрид: GPT-5 (идеи, сценарии, раскадровка), Vision (фото/референсы), "
+            "Sora 2 без людей, Kling и Runway (видео по тексту), Runway/Kling (оживление фото с людьми), Sora 2 — только сцены без людей, STT/TTS (голос и озвучка).\n\n"
+            "Главные быстрые действия: оживить фото, говорящий аватар, AI-видеоклип/песня с музыкой или вокалом, видео по тексту/голосу через Kling/Runway, сделать Reels/Shorts, создать мини-фильм, заменить лицо, удалить или заменить фон на фото.\n"
+            "Можно написать свободный запрос, например: «сделай рилс 20 секунд про виллу на Самуи, стиль luxury, 9:16»."
+        )
+    if key == "medicine":
+        return _medical_menu_text()
+    return "Режим не найден."
+
+def _mode_kb(key: str, user_id: int | None = None) -> InlineKeyboardMarkup:
+    if key == "study":
+        # Все длинные подписи идут по одной кнопке в строке — Telegram на Android не режет текст.
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📚 Конспект PDF/EPUB/DOCX", callback_data="act:study:pdf_summary")],
+            [InlineKeyboardButton("🔍 Объяснить тему", callback_data="act:study:explain")],
+            [InlineKeyboardButton("🧮 Решить задачи", callback_data="act:study:tasks")],
+            [InlineKeyboardButton("✍️ Эссе / реферат", callback_data="act:study:essay")],
+            [InlineKeyboardButton("📝 План к экзамену", callback_data="act:study:exam_plan")],
+            [InlineKeyboardButton("🗣 Речь ↔ текст", callback_data="act:open:voice")],
+            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+        ])
+
+    if key == "work":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📄 Письмо / документ", callback_data="act:work:doc")],
+            [InlineKeyboardButton("📊 Аналитика / сводка", callback_data="act:work:report")],
+            [InlineKeyboardButton("🗂 План / ToDo", callback_data="act:work:plan")],
+            [InlineKeyboardButton("💡 Идеи / бриф", callback_data="act:work:idea")],
+            [InlineKeyboardButton("📊 Презентация PDF + PPTX", callback_data="act:work:presentation")],
+            [InlineKeyboardButton("📕 Каталог PDF + PPTX", callback_data="act:work:catalog_pdf")],
+            [InlineKeyboardButton("🎨 Создать логотип", callback_data="act:work:logo")],
+            [InlineKeyboardButton("🧽 Удалить водяной знак", callback_data="act:work:watermark")],
+            [InlineKeyboardButton("🗣 Речь ↔ текст", callback_data="act:open:voice")],
+            [InlineKeyboardButton("📝 Свободный запрос", callback_data="act:free")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="mode:root")],
+        ])
+
+    if key == "fun":
+        return _fun_quick_kb(user_id)
+
+    if key == "medicine":
+        return medicine_kb()
+
+    return modes_root_kb()
+
+
+# ───────── Подменю: говорящий аватар / фото→видеоклип ─────────
+def _avatar_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
+    """Подменю говорящего аватара. prefix='act' для _mode_kb, prefix='fun' для старого quick-menu."""
+    base = "act:fun" if prefix == "act" else "fun"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📸 Загрузить портрет", callback_data=f"{base}:avatar_upload")],
+        [InlineKeyboardButton("✅ Использовать последнее фото", callback_data=f"{base}:avatar_last")],
+        [InlineKeyboardButton("👩 Голос Nova", callback_data=f"{base}:av_voice_nova"), InlineKeyboardButton("👨 Голос Onyx", callback_data=f"{base}:av_voice_onyx")],
+        [InlineKeyboardButton("⚪ Голос Alloy", callback_data=f"{base}:av_voice_alloy"), InlineKeyboardButton("✨ Голос Shimmer", callback_data=f"{base}:av_voice_shimmer")],
+        [InlineKeyboardButton("📖 Голос Fable", callback_data=f"{base}:av_voice_fable")],
+        [InlineKeyboardButton("📝 Текст → говорящий аватар", callback_data=f"{base}:avatar_text")],
+        [InlineKeyboardButton("🎙 Voice/audio → говорящий аватар", callback_data=f"{base}:avatar_voice")],
+        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun" if prefix == "act" else "fun:back")],
+    ])
+
+
+def _avatar_voice_choice_kb(prefix: str = "act") -> InlineKeyboardMarkup:
+    """Шаг 2 для текстового аватара: выбор TTS-голоса до ввода текста."""
+    base = "act:fun" if prefix == "act" else "fun"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("👩 Nova — мягкий женский", callback_data=f"{base}:av_voice_nova")],
+        [InlineKeyboardButton("👨 Onyx — низкий мужской", callback_data=f"{base}:av_voice_onyx")],
+        [InlineKeyboardButton("✨ Shimmer — светлый женский", callback_data=f"{base}:av_voice_shimmer")],
+        [InlineKeyboardButton("📖 Fable — сторителлинг", callback_data=f"{base}:av_voice_fable")],
+        [InlineKeyboardButton("⚪ Alloy — нейтральный", callback_data=f"{base}:av_voice_alloy")],
+        [InlineKeyboardButton("🎙 Вместо TTS прислать свой voice/audio", callback_data=f"{base}:avatar_voice")],
+        [InlineKeyboardButton("⬅️ Назад к аватару", callback_data=f"{base}:avatar")],
+    ])
+
+
+def _avatar_voice_choice_text() -> str:
+    return (
+        "🎙 Шаг 2/3: выберите голос для текстовой озвучки аватара.\n\n"
+        "Самый естественный вариант — прислать свой MP3/WAV/M4A/AAC или Telegram voice через кнопку «Voice/audio → говорящий аватар».\n"
+        "Если нужен синтез по тексту, выберите один из голосов ниже, затем пришлите фразу для аватара."
+    )
+
+def _avatar_menu_text() -> str:
+    return (
+        "🗣 *Говорящий аватар*\n"
+        "Фото человека → текст, voice или аудио → видео с синхронизацией губ.\n\n"
+        "Последовательность для текста:\n"
+        "1) загрузить портрет;\n"
+        "2) выбрать голос;\n"
+        "3) прислать текст — после этого сразу запускается Kling Avatar.\n\n"
+        "Для самого естественного результата можно вместо TTS прислать свой voice/audio — тогда аватар говорит реальным записанным голосом.\n\n"
+        "Лучше всего работает фронтальный портрет: лицо видно полностью, без сильного поворота и без закрытого рта."
+    )
+
+
+def _photoclip_action_kb(prefix: str = "act") -> InlineKeyboardMarkup:
+    """Unified AI music-video mode: instrumental or vocal, one or more people."""
+    base = "act:fun" if prefix == "act" else "fun"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📸 Загрузить фото", callback_data=f"{base}:photoclip_upload")],
+        [InlineKeyboardButton("✅ Использовать последнее фото", callback_data=f"{base}:photoclip_last")],
+        [InlineKeyboardButton("🎤 Клип с вокалом / lip-sync", callback_data=f"{base}:vocalclip_prompt")],
+        [InlineKeyboardButton("🎬 Кинематографичный клип", callback_data=f"{base}:pc_preset_cinematic")],
+        [InlineKeyboardButton("📱 Reels / Shorts 9:16", callback_data=f"{base}:pc_preset_reels")],
+        [InlineKeyboardButton("🏝 Travel / luxury клип", callback_data=f"{base}:pc_preset_luxury")],
+        [InlineKeyboardButton("💃 Музыкальный клип", callback_data=f"{base}:pc_preset_music")],
+        [InlineKeyboardButton("📣 Рекламный клип", callback_data=f"{base}:pc_preset_ads")],
+        [InlineKeyboardButton("📝 Свой сценарий", callback_data=f"{base}:photoclip_custom")],
+        [InlineKeyboardButton("⬅️ Назад в Развлечения", callback_data="mode:fun" if prefix == "act" else "fun:back")],
+    ])
+
+
+def _photoclip_menu_text() -> str:
+    return (
+        "🎤 *AI-видеоклип / песня*\n"
+        "Фото одного или нескольких людей → музыкальный клип через Kling + Suno.\n\n"
+        "Можно сделать инструментальный клип или клип с вокалом/lip-sync. "
+        "В описании укажите, кто поёт: например «женщина — женский вокал, мужчина — мужской вокал; припев поют вместе». "
+        "Также можно задать движения, взаимодействие героев, стиль, язык, длительность и формат.\n\n"
+        "Длинный инструментальный клип собирается из коротких сцен. "
+        "Для вокального клипа ScenePlan отмечает face-visible интервалы по 2–10 секунд; Kling синхронизирует только их. "
+        "Рекомендуемый формат — 9:16."
+    )
+
+
+def _clip_wants_vocals(prompt: str) -> bool:
+    t = (prompt or "").lower().replace("ё", "е")
+    no_vocals = re.search(r"(без\s+(?:вокал|голос|пени)|инструментал|instrumental|минусов)", t, re.I)
+    explicit_singer = re.search(r"(поет|поют|пою|поем|поешь|петь|sings?|singer|дуэт|duet|женск\w*\s+вокал|мужск\w*\s+вокал|с\s+вокалом|with\s+vocals?)", t, re.I)
+    if no_vocals and not explicit_singer:
+        return False
+    return bool(re.search(r"(вокал|поет|поют|пою|поем|поешь|петь|песня|песню|припев|куплет|lip[ -]?sync|sing|singer|duet|дуэт|мужск(?:ой|им) голос|женск(?:ий|им) голос)", t, re.I))
+
+
+def _music_video_aspect(prompt: str) -> str:
+    match = re.search(r"(?<!\d)(9|16|1|4|3)\s*[:/]\s*(16|9|1|5|4|3)(?!\d)", prompt or "")
+    aspect = f"{match.group(1)}:{match.group(2)}" if match else "9:16"
+    return aspect if aspect in {"9:16", "16:9", "1:1", "4:5", "3:4", "4:3"} else "9:16"
+
+
+def _music_video_approval_kb(token: str, *, duration_locked: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if not duration_locked:
+        rows.append([
+            InlineKeyboardButton("⏱ 10 сек", callback_data=f"mv:dur10:{token}"),
+            InlineKeyboardButton("30 сек", callback_data=f"mv:dur30:{token}"),
+            InlineKeyboardButton("60 сек", callback_data=f"mv:dur60:{token}"),
+            InlineKeyboardButton("90 сек", callback_data=f"mv:dur90:{token}"),
+        ])
+    rows.extend([
+        [InlineKeyboardButton("✨ Сделать промпт автоматически", callback_data=f"mv:auto:{token}")],
+        [InlineKeyboardButton("🎙 По голосовому описанию", callback_data=f"mv:voice:{token}")],
+        [InlineKeyboardButton("✅ Утверждаю", callback_data=f"mv:approve:{token}")],
+        [InlineKeyboardButton("➕ Дополнить", callback_data=f"mv:augment:{token}")],
+        [InlineKeyboardButton("✍️ Написать заново", callback_data=f"mv:rewrite:{token}")],
+    ])
+    return InlineKeyboardMarkup(rows)
+
+
+def _merge_music_video_prompt(original: str, addition: str) -> str:
+    """Append a revision without deleting scene-local timing instructions."""
+    original, addition = (original or "").strip(), (addition or "").strip()
+    aspect_pattern = r"(?<!\d)(?:9|16|1|4|3)\s*[:/]\s*(?:16|9|1|5|4|3)(?!\d)"
+    duration_match = re.search(
+        r"(?i)(?:длительность(?:\s+(?:клипа|видео))?|(?:clip|video)\s+duration)\s*[:—-]?\s*"
+        r"(\d+(?:[.,]\d+)?)\s*(сек\w*|seconds?|s|мин\w*|minutes?|min)",
+        addition,
+    )
+    music_brief, video_brief = _music_video_split_briefs(original)
+    if duration_match:
+        selected = _photo_clip_target_duration(duration_match.group(0))
+        video_brief = _music_video_replace_duration_field(video_brief, selected)
+        addition = (addition[:duration_match.start()] + addition[duration_match.end():]).strip(" ,;.")
+    if re.search(aspect_pattern, addition):
+        video_brief = re.sub(aspect_pattern, "", video_brief).strip(" ,;")
+    if addition:
+        video_brief = f"{video_brief.strip()}\nДополнение: {addition}".strip()
+    return _music_video_join_briefs(music_brief, video_brief)
+
+
+def _music_video_split_briefs(prompt: str) -> tuple[str, str]:
+    """Return (music_brief, video_brief) from the structured music-video prompt."""
+    raw = (prompt or "").strip()
+    marker_music = "[MUSIC_BRIEF]"
+    marker_video = "[VIDEO_BRIEF]"
+    if marker_music in raw and marker_video in raw:
+        music = raw.split(marker_music, 1)[1].split(marker_video, 1)[0].strip()
+        video = raw.split(marker_video, 1)[1].strip()
+        return music, video
+    return raw, raw
+
+
+def _music_video_join_briefs(music_brief: str, video_brief: str) -> str:
+    return f"[MUSIC_BRIEF]\n{(music_brief or '').strip()}\n\n[VIDEO_BRIEF]\n{(video_brief or '').strip()}".strip()
+
+
+def _music_video_director_plan(video_brief: str, duration: int, scenes: int) -> str:
+    """Compatibility renderer for already timestamped briefs.
+
+    Production compiles one immutable ScenePlan asynchronously before review. This
+    synchronous helper remains for callers/tests that only need a display skeleton.
+    """
+    brief = (video_brief or "").strip()
+    if not brief:
+        return "Сценарий видео ещё не задан."
+    try:
+        plan = scene_plan_from_explicit_timeline(
+            brief,
+            duration_s=int(duration),
+            aspect=_music_video_aspect(brief),
+            wants_vocals=False,
+            vocal_start_s=None,
+        )
+        return "\n".join(
+            f"{int(scene.start_s)//60}:{int(scene.start_s)%60:02d}–"
+            f"{int(scene.end_s)//60}:{int(scene.end_s)%60:02d} — {scene.action}"
+            for scene in plan.scenes
+        )
+    except ValueError:
+        if int(scenes) <= 1:
+            return f"0:00–0:{int(duration):02d} — {brief}"
+        return "Сцены компилируются один раз перед утверждением; повторная эвристическая нарезка запрещена."
+
+
+def _music_video_vocal_start_hint(music_brief: str) -> float:
+    """Extract an explicit intro length; a user-requested 'short intro' means 2s."""
+    text = (music_brief or "").lower().replace("ё", "е")
+    patterns = (
+        r"(?:вступлен\w*|интро|intro)\D{0,30}(\d+(?:[.,]\d+)?)\s*(?:сек|seconds?|s)\b",
+        r"(\d+(?:[.,]\d+)?)\s*(?:сек|seconds?|s)\D{0,30}(?:вступлен\w*|интро|intro)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            return max(0.0, float(match.group(1).replace(",", ".")))
+    if re.search(r"(?:коротк\w*\s+)?(?:инструментальн\w*\s+)?(?:вступлен\w*|интро|intro).{0,100}(?:без вокал|без голос|no vocals?)", text, re.I | re.S):
+        return 2.0
+    return 0.0
+
+
+def _music_video_extract_json_object(raw: str) -> dict:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+        text = re.sub(r"\s*```$", "", text)
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("ScenePlan compiler returned no JSON object")
+    payload = json.loads(text[start:end + 1])
+    if not isinstance(payload, dict):
+        raise ValueError("ScenePlan compiler JSON must be an object")
+    return payload
+
+
+def _music_video_single_scene_plan(
+    music_brief: str,
+    video_brief: str,
+    duration: int,
+    aspect: str,
+    *,
+    force_vocal_lipsync: bool = False,
+) -> ScenePlan:
+    wants_vocals = bool(force_vocal_lipsync or _clip_wants_vocals(music_brief))
+    hinted_vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    # The explicit «Клип с вокалом» mode is an instruction to lip-sync.  It must
+    # not depend on a keyword surviving the user/LLM music brief, so scene 1 is
+    # eligible for the approved audio-driven vocal interval by default.
+    if force_vocal_lipsync and hinted_vocal_start is None:
+        hinted_vocal_start = 0.0
+    vocal_start = (
+        float(hinted_vocal_start)
+        if hinted_vocal_start is not None and float(hinted_vocal_start) < duration
+        else None
+    )
+    lip_sync_required = bool(wants_vocals and vocal_start is not None and duration - vocal_start >= 2)
+    lip_start = vocal_start if wants_vocals and vocal_start is not None and duration - vocal_start >= 2 else None
+    payload = {
+        "duration_s": int(duration),
+        "aspect": aspect,
+        "vocal_start_s": vocal_start,
+        "scenes": [{
+            "index": 1,
+            "start_s": 0,
+            "end_s": int(duration),
+            "action": (video_brief or "").strip(),
+            "start_state": "Use the supplied starting keyframe as the exact physical start.",
+            "end_state": "Finish at the last physically implied state in the approved action.",
+            "world_state": ["single chronological scene", "identity and visible props persist"],
+            "completed_actions": [],
+            "future_count": 0,
+            "lip_sync_start_s": lip_start,
+            "lip_sync_end_s": int(duration) if lip_start is not None else None,
+        }],
+    }
+    return scene_plan_from_dict(
+        payload,
+        expected_duration_s=int(duration),
+        expected_aspect=aspect,
+        require_lip_sync=lip_sync_required,
+    )
+
+
+async def _compile_music_video_scene_plan(
+    music_brief: str,
+    video_brief: str,
+    duration: int,
+    aspect: str,
+    *,
+    user_id: int = 0,
+    chat_id: int = 0,
+    force_vocal_lipsync: bool = False,
+) -> ScenePlan:
+    """Compile exactly once; validation rejects incomplete or stale model output."""
+    duration = int(duration)
+    wants_vocals = bool(force_vocal_lipsync or _clip_wants_vocals(music_brief))
+    vocal_start = _music_video_vocal_start_hint(music_brief) if wants_vocals else None
+    if force_vocal_lipsync and vocal_start is None:
+        vocal_start = 0.0
+    lip_sync_required = bool(wants_vocals and vocal_start is not None and duration - vocal_start >= 2)
+    try:
+        explicit = scene_plan_from_explicit_timeline(
+            video_brief,
+            duration_s=duration,
+            aspect=aspect,
+            wants_vocals=wants_vocals,
+            vocal_start_s=vocal_start,
+        )
+        return scene_plan_from_dict(
+            explicit.as_dict(),
+            expected_duration_s=duration,
+            expected_aspect=aspect,
+            require_lip_sync=lip_sync_required,
+        )
+    except ValueError:
+        pass
+    if duration <= 10:
+        return _music_video_single_scene_plan(
+            music_brief,
+            video_brief,
+            duration,
+            aspect,
+            force_vocal_lipsync=force_vocal_lipsync,
+        )
+
+    scene_seconds = max(5, min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10)))
+    scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (duration + scene_seconds - 1) // scene_seconds))
+    compiler_prompt = (
+        "Compile the supplied Russian/English music-video briefs into strict JSON only. "
+        "Preserve every user fact and chronological action; invent nothing. The lead Character Identity Pack protagonist is the singer "
+        "when the music brief specifies a solo vocal and no different singer. Future people, props, vehicles, locations and seat assignments "
+        "must not appear early. Completed actions never restart. Each scene is contiguous and at most 10 seconds. "
+        "For every scene return exact action, physical start_state, physical end_state, persistent world_state strings, completed_actions, "
+        "future_count, and one optional absolute lip_sync_start_s/lip_sync_end_s interval. Lip-sync intervals are only where the singer's face "
+        "is visible and vocals are active, each 2-10 seconds. A vocal plan must contain at least one interval. "
+        f"Approved duration: {duration}. Approved aspect: {aspect}. Required scenes: {scene_count}. "
+        f"Vocal start hint: {vocal_start if vocal_start is not None else 'none'}. "
+        "Schema: {duration_s:int, aspect:str, vocal_start_s:number|null, scenes:[{index:int,start_s:number,end_s:number,"
+        "action:str,start_state:str,end_state:str,world_state:[str],completed_actions:[str],future_count:int,"
+        "lip_sync_start_s:number|null,lip_sync_end_s:number|null}]}.\n\n"
+        f"MUSIC_BRIEF:\n{(music_brief or '').strip()}\n\nVIDEO_BRIEF:\n{(video_brief or '').strip()}"
+    )
+    raw = await ask_openai_text(
+        compiler_prompt,
+        user_id=user_id,
+        chat_id=chat_id,
+        extra_system="You are a deterministic film continuity compiler. Return one JSON object and no prose.",
+    )
+    try:
+        return scene_plan_from_dict(
+            _music_video_extract_json_object(raw),
+            expected_duration_s=duration,
+            expected_aspect=aspect,
+            require_lip_sync=lip_sync_required,
+        )
+    except Exception as exc:
+        # The LLM sometimes writes a scene longer than Kling's hard 10s limit.
+        # Retry the *compiler only* with the exact validation failure, before
+        # refusing the draft. Never run Suno/Kling or silently stretch scenes.
+        first_error = str(exc)
+        repair_prompt = (
+            compiler_prompt
             + "\n\nPREVIOUS COMPILER OUTPUT (INVALID):\n"
             + str(raw)[:12000]
             + "\nVALIDATION ERROR: " + first_error
@@ -5630,9 +6998,6 @@ SUBS_TIERS = {
         "title": "ULTIMATE",
         "rub": PRICE_ULT_RUB,
         "usd": PRICE_ULT_USD,
-Warning: truncated output (original token count: 90981)
-Total output lines: 7000
-
         "credits": SUBSCRIPTION_CREDITS.get("ultimate", 3500),
         "features": [
             "💬 Максимальные GPT-лимиты",
@@ -8820,7 +10185,836 @@ def _mux_video_audio_sync(video_bytes: bytes, audio_bytes: bytes | None, target_
                     "-stream_loop", "-1", "-fflags", "+genpts", "-i", vin,
                     "-stream_loop", "-1", "-i", a_in,
                     "-t", str(target_duration_s),
-                    "-map", "0:v:0"…10981 tokens truncated…                while True:
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-vf", "scale=-2:540,fps=20",
+                    "-c:v", "libx264", "-preset", "ultrafast",
+                    "-crf", "35", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", "96k",
+                    "-shortest", "-movflags", "+faststart",
+                    out_small,
+                ],
+                out_small,
+                False,
+            ))
+
+            last_err = ""
+            best_too_large: bytes | None = None
+            for name, cmd, out_path, accept_only_if_small in attempts:
+                left = max(20, timeout_s - int(time.time() - started))
+                log.info("ffmpeg mux attempt=%s video=%s audio=%s duration=%s max_bytes=%s timeout_left=%s", name, len(video_bytes), len(audio_bytes), target_duration_s, max_bytes, left)
+                try:
+                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=left)
+                except subprocess.TimeoutExpired:
+                    last_err = f"{name}: timeout after {left}s"
+                    log.warning("ffmpeg mux timeout: %s", last_err)
+                    continue
+                if res.returncode != 0:
+                    last_err = f"{name}: rc={res.returncode} stderr={res.stderr.decode('utf-8', 'ignore')[-1500:]}"
+                    log.warning("ffmpeg mux failed: %s", last_err)
+                    continue
+                if not os.path.exists(out_path):
+                    last_err = f"{name}: output missing"
+                    continue
+                with open(out_path, "rb") as f:
+                    final = f.read()
+                if not final or len(final) <= 1024:
+                    last_err = f"{name}: empty output"
+                    continue
+                log.info("ffmpeg mux ok attempt=%s output=%s elapsed=%.1fs", name, len(final), time.time() - started)
+                if len(final) <= max_bytes:
+                    return final
+                best_too_large = final
+                last_err = f"{name}: output too large {len(final)} > {max_bytes}"
+                log.warning("ffmpeg mux output too large: %s", last_err)
+                if accept_only_if_small:
+                    continue
+            if best_too_large and PHOTO_CLIP_SEND_BASE_IF_MUX_FAILS:
+                return best_too_large
+            log.warning("ffmpeg mux all attempts failed/too-large: %s", last_err[-1500:])
+            return None
+    except Exception as e:
+        log.warning("mux_video_audio exception: %s", e)
+        return None
+
+
+
+
+
+def _trim_audio_for_vocal_clip_sync(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
+    """Telegram/Suno often returns a full 2-4 minute song, while Kling Avatar is much more reliable
+    on short audio. Trim/re-encode to a safe MP3 fragment for lip-sync.
+    """
+    if not audio_bytes:
+        return audio_bytes
+    max_seconds = max(8, min(90, int(max_seconds or 65)))
+    try:
+        ffmpeg = _ffmpeg_exe()
+        with tempfile.TemporaryDirectory() as td:
+            src = os.path.join(td, "suno_full.mp3")
+            out = os.path.join(td, "suno_lipsync_safe.mp3")
+            with open(src, "wb") as f:
+                f.write(audio_bytes)
+            cmd = [
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", src,
+                "-t", str(max_seconds),
+                "-vn", "-ac", "2", "-ar", "44100",
+                "-c:a", "libmp3lame", "-b:a", "128k",
+                out,
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+            if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 2048:
+                with open(out, "rb") as f:
+                    return f.read()
+            log.warning("vocal clip audio trim failed: rc=%s err=%s", res.returncode, res.stderr.decode("utf-8", "ignore")[-500:])
+    except Exception as e:
+        log.warning("vocal clip audio trim exception: %s", e)
+    return audio_bytes
+
+async def _trim_audio_for_vocal_clip(audio_bytes: bytes, max_seconds: int = 65) -> bytes:
+    return await asyncio.to_thread(_trim_audio_for_vocal_clip_sync, audio_bytes, max_seconds)
+
+
+def _vocal_audio_duration_seconds_sync(audio_bytes: bytes) -> float:
+    """Return a bounded exact source duration without trusting Telegram metadata."""
+    if not audio_bytes:
+        return 0.0
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return 0.0
+    with tempfile.TemporaryDirectory(prefix="neyro_vocal_probe_") as td:
+        path = os.path.join(td, "source.mp3")
+        with open(path, "wb") as fh:
+            fh.write(audio_bytes)
+        try:
+            result = subprocess.run(
+                [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nk=1:nw=1", path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False,
+            )
+            return max(0.0, min(24 * 3600.0, float(result.stdout.decode("utf-8", "ignore").strip())))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return 0.0
+
+def _vocal_clip_role_plan(prompt: str, performer_count: int) -> dict:
+    """Infer explicit singer roles only from the user's direction; never invent gender from pixels."""
+    t = (prompt or "").lower().replace("ё", "е")
+    female = bool(re.search(r"(женщин|девуш|женск(?:ий|им|ого)?\s+(?:вокал|голос)|female\s+vocal|woman\s+sings?)", t, re.I))
+    male = bool(re.search(r"(мужчин|парень|мужск(?:ой|им|ого)?\s+(?:вокал|голос)|male\s+vocal|man\s+sings?)", t, re.I))
+    duet = bool(re.search(r"(вместе|дуэт|припев.*(?:оба|вместе)|оба.*(?:поют|петь)|duet|sing\s+together)", t, re.I))
+    if performer_count <= 1:
+        return {"mode": "solo", "female": female, "male": male, "duet": False}
+    if female and male:
+        return {"mode": "mixed_duet", "female": True, "male": True, "duet": duet}
+    return {"mode": "group", "female": female, "male": male, "duet": duet}
+
+
+def _music_video_story_beats(base_prompt: str, scene_count: int) -> list[str]:
+    """Split a director brief into scene-local action contracts instead of repeating the whole story."""
+    source = (base_prompt or "").replace("\r\n", "\n").strip()
+    n = max(1, int(scene_count))
+    # Prefer the user's explicit timeline. Sentence splitting used to merge adjacent
+    # 0–10/10–20/20–30 lines and leak later people, props and actions into early scenes.
+    timeline_re = re.compile(
+        r"(?im)^[ \t]*(\d{1,3})\s*[-–—]\s*(\d{1,3})\s*"
+        r"(?:сек(?:унд\w*)?|s(?:ec(?:ond)?s?)?)?\s*[:：]\s*"
+    )
+    markers = list(timeline_re.finditer(source))
+    if markers:
+        explicit = []
+        for pos, marker in enumerate(markers):
+            end = markers[pos + 1].start() if pos + 1 < len(markers) else len(source)
+            chunk = source[marker.end():end]
+            chunk = re.split(
+                r"(?im)\n\s*(?:обязательные\s+условия|global\s+constraints|continuity\s+rules)\s*:",
+                chunk,
+                maxsplit=1,
+            )[0]
+            chunk = re.sub(r"\s+", " ", chunk).strip(" \n\t;-")
+            if chunk:
+                explicit.append(chunk[:1050])
+        if explicit:
+            if len(explicit) == n:
+                return explicit
+            if len(explicit) > n:
+                grouped = []
+                for i in range(n):
+                    a = int(round(i * len(explicit) / n))
+                    b = int(round((i + 1) * len(explicit) / n))
+                    grouped.append(" ".join(explicit[a:max(a + 1, b)])[:1050])
+                return grouped
+            return explicit + [
+                "Continue only the unfinished physical motion from the preceding block; do not replay it."
+            ] * (n - len(explicit))
+
+    text = re.sub(r"\s+", " ", (base_prompt or "").strip())
+    if not text:
+        return ["Continue the requested action naturally."] * n
+    # Sentence-level chronological allocation is deterministic and keeps future actions
+    # out of early Kling prompts. Identity/global constraints remain in the master lock.
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    action = [s for s in sentences if not re.search(
+        r"(identity lock|критически важно|сохранять форму|face_front|face_3q|body_full|не менять лицо|"
+        r"максимальн.*фотореал|движения естествен|никаких телепортац|каждая следующая часть|"
+        r"если .*вокал|губы|subtitles|watermark)", s, re.I)]
+    if not action:
+        action = sentences or [text]
+    out = []
+    for i in range(n):
+        a = int(round(i * len(action) / n))
+        b = int(round((i + 1) * len(action) / n))
+        chunk = action[a:max(a + 1, b)]
+        out.append(" ".join(chunk)[:1050])
+    return out
+
+
+def _music_video_world_state_ledger(base_prompt: str, scene_idx: int, scene_count: int) -> dict:
+    """Build the authoritative per-scene timeline state without exposing future content."""
+    beats = _music_video_story_beats(base_prompt, scene_count)
+    index = min(max(0, int(scene_idx) - 1), len(beats) - 1)
+    completed = beats[:index]
+    return {
+        "current": beats[index],
+        "completed": " | ".join(completed)[-900:] if completed else "none — begin from the supplied starting keyframe",
+        "future_count": max(0, len(beats) - index - 1),
+        "is_first": index == 0,
+        "is_last": index == len(beats) - 1,
+    }
+
+
+def _vocal_scene_role_prompt(
+    base_prompt: str,
+    role_plan: dict,
+    scene_idx: int,
+    scene_count: int,
+    *,
+    scene_plan: "ScenePlan | None" = None,
+) -> str:
+    """Build a strict persistent world-state contract for one chronological scene."""
+    mode = role_plan.get("mode")
+    role = "single lead protagonist" if mode == "solo" else "preserve only performer roles explicitly requested by the user"
+    if scene_plan is not None:
+        if scene_count != len(scene_plan.scenes) or not 1 <= scene_idx <= len(scene_plan.scenes):
+            raise ValueError("ScenePlan/provider scene selection mismatch")
+        contract = scene_plan.scenes[scene_idx - 1]
+        ledger = {
+            "current": contract.action,
+            "completed": " | ".join(contract.completed_actions) or "none — begin from the supplied starting keyframe",
+            "future_count": contract.future_count,
+            "is_first": scene_idx == 1,
+            "is_last": scene_idx == len(scene_plan.scenes),
+            "start_state": contract.start_state,
+            "end_state": contract.end_state,
+            "world_state": " | ".join(contract.world_state),
+        }
+    else:
+        # Compatibility for legacy non-approved callers only. Production always
+        # passes the exact immutable plan reviewed by the user.
+        ledger = _music_video_world_state_ledger(base_prompt, scene_idx, scene_count)
+        ledger.update({
+            "start_state": (
+                "use the supplied starting keyframe as the physical start"
+                if ledger["is_first"] else "use the continuation frame as the exact physical end state of the preceding scene"
+            ),
+            "end_state": "finish at the last physically implied state of the current action",
+            "world_state": "preserve every established person, prop, location, vehicle and spatial relation",
+        })
+    start = (
+        f"{ledger['start_state']}; use the supplied starting keyframe as the physical start"
+        if ledger["is_first"] else
+        f"{ledger['start_state']}; use the continuation frame as the exact physical end state of the preceding scene"
+    )
+    return (
+        "MANDATORY USER VIDEO DIRECTION. "
+        f"SCENE {scene_idx}/{scene_count}. PRIMARY SUBJECT: the Character Identity Pack protagonist. "
+        f"REQUIRED ACTION CONTRACT FOR THIS SCENE ONLY — CURRENT ACTION: {ledger['current']} "
+        f"START STATE: {start}. "
+        f"END STATE: {ledger['end_state']}. "
+        f"WORLD STATE: {ledger['world_state']}. "
+        f"COMPLETED ACTIONS (history only; never replay): {ledger['completed']}. "
+        f"UNOPENED FUTURE: {ledger['future_count']} block(s); do not introduce future people, props, vehicles, locations or actions, "
+        "and do not execute actions belonging to later scenes. Perform the current action once; do not restart the story or replay history. "
+        "WORLD LOCKS: Preserve spatial direction, wardrobe, doors, seat assignments, prop ownership/position and every established person/object. "
+        "FORBIDDEN TRANSITIONS: no teleportation, duplicates, extra limbs, geometry warping, role/seat swaps, disappearing objects, "
+        "or a supporting character become the protagonist. "
+        f"ROLE: {role}. IDENTITY: FACE_FRONT=frontal face, FACE_3Q=turned-face geometry, BODY_FULL=body. "
+        "Continuation controls world/pose, never identity. Preserve age, face, hair and body. "
+        "THIS IS A NARRATIVE ACTION SHOT, NOT A DANCE OR PERFORMANCE SHOT unless the exact action says otherwise. "
+        "Photorealistic motion; neutral mouth unless lip-sync is active; no text."
+    )
+
+
+async def _extract_audio_segment_bytes(audio_bytes: bytes, start_s: float, duration_s: float) -> bytes:
+    def _cut() -> bytes:
+        ffmpeg = _ffmpeg_exe()
+        try:
+            with tempfile.TemporaryDirectory(prefix="neyro_vocal_scene_") as td:
+                src = os.path.join(td, "full.mp3")
+                out = os.path.join(td, "scene.mp3")
+                with open(src, "wb") as fh:
+                    fh.write(audio_bytes)
+                cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", str(max(0, start_s)), "-i", src,
+                       "-t", str(max(2, duration_s)), "-vn", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", out]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+                if res.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 1024:
+                    with open(out, "rb") as fh:
+                        return fh.read()
+        except Exception as e:
+            log.warning("vocal scene audio cut failed: %s", e)
+        return b""
+    return await asyncio.to_thread(_cut)
+
+
+async def _apply_kling_lipsync_to_scene_file(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    audio_bytes: bytes,
+    scene_path: str,
+    contract,
+    directory: str,
+    on_provider_state=None,
+    audio_part_path: str = "",
+    existing_task_id: str = "",
+    sync_file_ops: bool = False,
+) -> str:
+    """Replace only one ScenePlan vocal interval and fail closed on any transport/provider error."""
+    if not contract.has_lip_sync:
+        return scene_path
+    absolute_start = float(contract.lip_sync_start_s)
+    absolute_end = float(contract.lip_sync_end_s)
+    relative_start = absolute_start - float(contract.start_s)
+    relative_end = absolute_end - float(contract.start_s)
+    duration = absolute_end - absolute_start
+    interval_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsync_input.mp4")
+    if sync_file_ops:
+        interval_path = _extract_video_interval_file_sync(scene_path, relative_start, duration, interval_path)
+    else:
+        interval_path = await asyncio.to_thread(
+            _extract_video_interval_file_sync,
+            scene_path,
+            relative_start,
+            duration,
+            interval_path,
+        )
+    if not interval_path:
+        raise RuntimeError(f"Не удалось подготовить video interval для lip-sync сцены {contract.index}.")
+    video_url = await asyncio.to_thread(
+        _provider_input_url_from_file,
+        interval_path,
+        f"scene_{contract.index:02d}_lipsync.mp4",
+    )
+    audio_part = Path(audio_part_path).read_bytes() if audio_part_path else await _extract_audio_segment_bytes(audio_bytes, absolute_start, duration)
+    if not audio_part:
+        raise RuntimeError(f"Не удалось извлечь точный audio interval для lip-sync сцены {contract.index}.")
+    audio_url = _provider_input_url_from_bytes(
+        audio_part,
+        f"scene_{contract.index:02d}_lipsync.mp3",
+    )
+    del audio_part
+    if not video_url.startswith("https://") or not audio_url.startswith("https://"):
+        raise RuntimeError(f"Не удалось получить HTTPS inputs для lip-sync сцены {contract.index}.")
+    synced_bytes = await _run_kling_lipsync_result_bytes(
+        video_url,
+        audio_url,
+        duration_ms=int(round(duration * 1000)),
+        max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+        on_provider_state=on_provider_state,
+        existing_task_id=existing_task_id,
+    )
+    synced_path = _write_video_segment_file(directory, 1000 + contract.index, synced_bytes)
+    del synced_bytes
+    output_path = os.path.join(directory, f"scene_{contract.index:02d}_lipsynced.mp4")
+    if sync_file_ops:
+        output_path = _replace_video_interval_file_sync(
+            scene_path, synced_path, relative_start, relative_end,
+            float(contract.duration_s), output_path,
+        )
+    else:
+        output_path = await asyncio.to_thread(
+            _replace_video_interval_file_sync,
+            scene_path,
+            synced_path,
+            relative_start,
+            relative_end,
+            float(contract.duration_s),
+            output_path,
+        )
+    if not output_path:
+        raise RuntimeError(f"Не удалось встроить lip-sync interval в сцену {contract.index}.")
+    return output_path
+
+
+def _vocal_clip_provider_cost_usd(duration_s: int, lip_sync_jobs: int) -> float:
+    """Provider reserve for Seedance visual scenes and real audio-driven lip-sync.
+
+    Suno is billed as its own completed stage before the human audio-review
+    gate.  This function deliberately excludes it, so approving a saved song
+    cannot charge Suno twice.
+    """
+    visual = max(4, int(duration_s or 10)) * float(SEEDANCE_COST_PER_SECOND_USD)
+    lipsync = max(0, int(lip_sync_jobs or 0)) * float(VOCAL_CLIP_KLING_LIPSYNC_COST_USD)
+    return round(visual + lipsync, 4)
+
+
+def _vocal_artifact_path(user_id: int, token: str, kind: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or kind not in ("audio", "video"):
+        raise ValueError("invalid vocal artifact reference")
+    suffix = "mp3" if kind == "audio" else "mp4"
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{kind}.{suffix}")
+
+
+def _vocal_job_path(user_id: int, token: str, name: str, extension: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{12}", token or "") or not re.fullmatch(r"[a-z0-9_]{1,48}", name or "") or extension not in ("json", "mp4", "bin"):
+        raise ValueError("invalid vocal job artifact reference")
+    return os.path.join(VOCAL_CLIP_ARTIFACT_DIR, str(int(user_id)), f"{token}_{name}.{extension}")
+
+
+def _save_vocal_job_manifest(user_id: int, token: str, manifest: dict) -> None:
+    path = _vocal_job_path(user_id, token, "job", "json"); os.makedirs(os.path.dirname(path), exist_ok=True)
+    raw = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    if len(raw) > 2 * 1024 * 1024: raise RuntimeError("vocal job manifest too large")
+    tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(raw)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+
+
+def _load_vocal_job_manifest(user_id: int, token: str) -> dict | None:
+    try:
+        path = _vocal_job_path(user_id, token, "job", "json"); st = os.stat(path)
+        if st.st_size > 2 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400: return None
+        with open(path, encoding="utf-8") as fh: value = json.load(fh)
+        return value if isinstance(value, dict) and value.get("schema") == 1 else None
+    except (OSError, ValueError, json.JSONDecodeError): return None
+
+
+def _save_vocal_job_file(user_id: int, token: str, name: str, extension: str, data: bytes) -> str:
+    path = _vocal_job_path(user_id, token, name, extension)
+    if not data or len(data) > 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(tmp, "wb") as fh: fh.write(data)
+        os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _save_vocal_job_file_from_path(user_id: int, token: str, name: str, extension: str, source: str) -> str:
+    path = _vocal_job_path(user_id, token, name, extension); size = os.path.getsize(source)
+    if not 1 <= size <= 50 * 1024 * 1024: raise RuntimeError("vocal job artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True); tmp = path + "." + uuid.uuid4().hex + ".tmp"
+    try: shutil.copyfile(source, tmp); os.replace(tmp, path); os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError): os.unlink(tmp)
+    return path
+
+
+def _load_vocal_job_file_path(user_id: int, token: str, name: str, extension: str) -> str | None:
+    try:
+        path = _vocal_job_path(user_id, token, name, extension); st = os.stat(path)
+        return path if 1 <= st.st_size <= 50 * 1024 * 1024 and time.time() - st.st_mtime <= 7 * 86400 else None
+    except (OSError, ValueError): return None
+
+
+def _extract_vocal_intervals(payload: object, duration_s: float) -> list[tuple[float, float]]:
+    raw = []
+    def walk(value):
+        if isinstance(value, list):
+            for item in value: walk(item)
+        elif isinstance(value, dict):
+            def number(*keys):
+                for key in keys:
+                    try:
+                        if value.get(key) is not None: return float(value[key])
+                    except (TypeError, ValueError): pass
+            start, end = number("startS", "start_s", "start", "startTime"), number("endS", "end_s", "end", "endTime")
+            text = value.get("word") or value.get("text") or value.get("lyric")
+            if start is not None and end is not None and str(text or "").strip():
+                if max(start, end) > max(100, duration_s * 10): start, end = start / 1000, end / 1000
+                if min(duration_s, end) > max(0, start): raw.append((max(0, start), min(duration_s, end)))
+            else:
+                for item in value.values(): walk(item)
+    walk(payload); merged = []
+    for start, end in sorted(set(raw)):
+        if merged and start - merged[-1][1] <= .5: merged[-1][1] = max(merged[-1][1], end)
+        else: merged.append([start, end])
+    return [(round(a, 3), round(b, 3)) for a, b in merged if b - a >= 2]
+
+
+def _verified_lipsync_window(contract, intervals) -> tuple[float, float] | None:
+    if contract.lip_sync_start_s is None or contract.lip_sync_end_s is None: return None
+    candidates = [(max(float(contract.lip_sync_start_s), a), min(float(contract.lip_sync_end_s), b)) for a, b in intervals or []]
+    candidates = [item for item in candidates if item[1] - item[0] >= 2]
+    return max(candidates, key=lambda item: item[1] - item[0]) if candidates else None
+
+
+def _prune_vocal_artifacts(user_dir: str) -> None:
+    """Keep a few recent tracks and failed deliveries on Render's persistent disk."""
+    if not os.path.isdir(user_dir):
+        return
+    now = time.time()
+    groups: dict[str, list[tuple[float, str]]] = {"audio": [], "video": []}
+    for entry in os.scandir(user_dir):
+        match = re.fullmatch(r"[0-9a-f]{12}_(audio|video)\.(?:mp3|mp4)", entry.name)
+        if not match or not entry.is_file(follow_symlinks=False):
+            continue
+        try:
+            modified = entry.stat().st_mtime
+            if now - modified > 7 * 86400:
+                os.unlink(entry.path)
+            else:
+                groups[match.group(1)].append((modified, entry.path))
+        except OSError:
+            log.exception("vocal artifact cleanup failed")
+    for kind, files in groups.items():
+        files.sort(reverse=True)
+        for _, path in files[5 if kind == "audio" else 2:]:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+
+
+def _save_vocal_artifact(user_id: int, token: str, kind: str, data: bytes) -> None:
+    path = _vocal_artifact_path(user_id, token, kind)
+    if not data or len(data) > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(temporary, "wb") as file:
+            file.write(data)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+
+
+def _save_vocal_artifact_file(user_id: int, token: str, kind: str, source_path: str) -> str:
+    """Atomically persist an artifact with file-to-file copying and bounded size."""
+    path = _vocal_artifact_path(user_id, token, kind)
+    try:
+        size = os.path.getsize(source_path)
+    except OSError as exc:
+        raise RuntimeError("vocal artifact source missing") from exc
+    if size < 512 or size > 50 * 1024 * 1024:
+        raise RuntimeError("vocal artifact size invalid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        shutil.copyfile(source_path, temporary)
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+    _prune_vocal_artifacts(os.path.dirname(path))
+    return path
+
+
+def _load_vocal_artifact_path(user_id: int, token: str, kind: str) -> str | None:
+    try:
+        path = _vocal_artifact_path(user_id, token, kind)
+        st = os.stat(path)
+        if st.st_size < 512 or st.st_size > 50 * 1024 * 1024 or time.time() - st.st_mtime > 7 * 86400:
+            return None
+        return path
+    except (OSError, ValueError):
+        return None
+
+
+def _load_vocal_artifact(user_id: int, token: str, kind: str) -> bytes | None:
+    try:
+        path = _load_vocal_artifact_path(user_id, token, kind)
+        if not path:
+            return None
+        with open(path, "rb") as file:
+            return file.read()
+    except (OSError, ValueError):
+        return None
+
+
+def _vocal_song_kb(token: str, *, pending: bool = False, resume: bool = False) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton("🎵 Скачать полную песню", callback_data=f"mvfile:audio:{token}")]]
+    if pending:
+        rows.extend([
+            [InlineKeyboardButton("✅ Подтвердить это аудио", callback_data=f"mvfile:approveaudio:{token}")],
+            [InlineKeyboardButton("🔄 Сгенерировать другое аудио", callback_data=f"mvfile:regenaudio:{token}")],
+            [InlineKeyboardButton("✏️ Изменить промпт аудио", callback_data=f"mvfile:editaudio:{token}")],
+        ])
+    else:
+        if resume: rows.append([InlineKeyboardButton("🔄 Повторить создание клипа", callback_data=f"mvfile:resume:{token}")])
+        rows.append([InlineKeyboardButton("🔁 Использовать эту песню в следующем клипе", callback_data=f"mvfile:use:{token}")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _send_vocal_song_file(message, data: bytes, token: str) -> None:
+    song = BytesIO(data)
+    song.name = "source_vocal_track.mp3"
+    await message.reply_document(
+        document=InputFile(song), caption="🎵 Исходная вокальная аудиодорожка. Сохраните её: клип использует этот трек без TTS-замены.",
+        reply_markup=_vocal_song_kb(token),
+        write_timeout=VIDEO_SEND_WRITE_TIMEOUT_S, read_timeout=120,
+    )
+
+
+async def _on_vocal_artifact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    parts = (q.data or "").split(":")
+    if len(parts) != 3 or parts[1] not in ("audio", "use", "video", "approveaudio", "regenaudio", "editaudio", "resume"):
+        await q.answer("Неизвестное действие")
+        return
+    kind, token, user_id = parts[1], parts[2], q.from_user.id
+    video_path = _load_vocal_artifact_path(user_id, token, "video") if kind == "video" else None
+    data = None if kind == "video" else _load_vocal_artifact(user_id, token, "audio")
+    if not (video_path or data):
+        await q.answer("Файл больше недоступен")
+        await q.message.reply_text("Файл для этого клипа не найден или срок его хранения истёк.")
+        return
+    if kind in ("approveaudio", "resume"):
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        manifest = _load_vocal_job_manifest(user_id, token)
+        if pending_token != token and not manifest:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            await q.message.reply_text("⚠️ Этот вариант уже не является текущим. Подтвердите последнее сгенерированное аудио.")
+            return
+        context.user_data["vocal_source_token"] = token
+        with contextlib.suppress(BadRequest):
+            await q.answer("Аудио подтверждено")
+        prompt = (context.user_data.get("music_video_pending_prompt") or "").strip()
+        keyframe = context.user_data.get("music_video_pending_keyframe")
+        scene_plan = context.user_data.get("music_video_pending_scene_plan")
+        if manifest:
+            prompt = prompt or str(manifest.get("prompt") or "")
+            keyframe_path = _load_vocal_job_file_path(user_id, token, "keyframe", "bin")
+            if not keyframe and keyframe_path:
+                with open(keyframe_path, "rb") as fh: keyframe = fh.read()
+            raw_plan = manifest.get("scene_plan")
+            if not isinstance(scene_plan, ScenePlan) and isinstance(raw_plan, dict):
+                scene_plan = scene_plan_from_dict(raw_plan, expected_duration_s=int(manifest["target_duration_s"]), expected_aspect=str(manifest["aspect"]), require_lip_sync=raw_plan.get("vocal_start_s") is not None)
+        if not prompt or not keyframe or not isinstance(scene_plan, ScenePlan):
+            await q.message.reply_text("✅ Аудио подтверждено. Состояние клипа устарело — утвердите сценарий ещё раз.")
+            return
+        # Rehydrate the process-local review state from the durable checkpoint.
+        # _start_vocal_clip will republish this saved keyframe to an HTTPS URL, but
+        # must not pay Gemini/Comet to synthesize it again after a restart.
+        context.user_data["music_video_pending_prompt"] = prompt
+        context.user_data["music_video_pending_audio_token"] = token
+        context.user_data["music_video_pending_scene_plan"] = scene_plan
+        context.user_data["music_video_pending_keyframe"] = keyframe
+        context.user_data.pop("music_video_pending_keyframe_url", None)
+        await q.message.reply_text("✅ Аудио подтверждено. Продолжаю этот же клип — запускаю видеогенерацию.")
+        await _start_vocal_clip(
+            update,
+            context,
+            keyframe,
+            prompt,
+            target_duration_s=scene_plan.duration_s,
+            scene_plan=scene_plan,
+        )
+        return
+    if kind == "editaudio":
+        pending_token = context.user_data.get("music_video_pending_audio_token")
+        if pending_token != token:
+            with contextlib.suppress(BadRequest):
+                await q.answer("Это не текущий вариант")
+            return
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data["awaiting_music_video_audio_prompt_edit"] = True
+        with contextlib.suppress(BadRequest):
+            await q.answer("Жду новый промпт")
+        old_brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        await q.message.reply_text(
+            "✏️ Отправьте новый промпт для песни целиком. Можно дополнить старую идею или полностью переписать её.\n\n"
+            "Текущий промпт:\n" + old_brief[:3000]
+        )
+        return
+    if kind == "regenaudio":
+        context.user_data.pop("vocal_source_token", None)
+        context.user_data.pop("music_video_pending_audio_token", None)
+        with contextlib.suppress(BadRequest):
+            await q.answer("Генерирую другой вариант")
+        brief = (context.user_data.get("music_video_pending_music_brief") or "").strip()
+        if not brief:
+            await q.message.reply_text("Состояние музыкального задания устарело. Утвердите сценарий ещё раз.")
+            return
+        await q.message.reply_text("🔄 Генерирую другой вариант по тому же музыкальному заданию. Видео пока не запускаю.")
+        fresh = await _run_suno_music_result_bytes(update, brief)
+        if not fresh:
+            await q.message.reply_text("❌ Suno не вернул новый вариант. Старое аудио остаётся доступным.")
+            return
+        new_token = uuid.uuid4().hex[:12]
+        context.user_data["music_video_pending_audio_token"] = new_token
+        await asyncio.to_thread(_save_vocal_artifact, user_id, new_token, "audio", fresh)
+        await _send_vocal_song_file(q.message, fresh, new_token)
+        await q.message.reply_text(
+            "🎧 Проверьте новый вариант.",
+            reply_markup=_vocal_song_kb(new_token, pending=True),
+        )
+        return
+    if kind == "use":
+        context.user_data["vocal_source_token"] = token
+        await q.answer("Песня выбрана")
+        await q.message.reply_text(
+            "🎵 Для следующего вокального клипа выбрана именно эта песня. "
+            "Откройте режим AI-видеоклипа, пришлите фото и описание, затем утвердите сценарий. "
+            "Suno не будет создавать новую запись."
+        )
+    elif kind == "audio":
+        with contextlib.suppress(BadRequest):
+            await q.answer("Отправляю полную песню")
+        try:
+            await _send_vocal_song_file(q.message, data, token)
+        except Exception:
+            log.exception("vocal source audio resend failed")
+            await q.message.reply_text("Не удалось отправить аудио через Telegram. Нажмите кнопку ещё раз позднее.")
+    else:
+        with contextlib.suppress(BadRequest):
+            await q.answer("Повторно отправляю готовый клип")
+        try:
+            await _reply_video_file(update, video_path, "Готовый AI-видеоклип ✅")
+            with contextlib.suppress(OSError):
+                os.unlink(_vocal_artifact_path(user_id, token, "video"))
+        except Exception:
+            log.exception("saved vocal video resend failed")
+            await q.message.reply_text(
+                "Telegram снова прервал отправку. Готовый клип сохранён; повторите отправку этой кнопкой позднее."
+            )
+
+
+async def _start_vocal_clip(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    img_bytes: bytes,
+    user_prompt: str,
+    *,
+    target_duration_s: int | None = None,
+    scene_plan: "ScenePlan | None" = None,
+):
+    """Suno/custom song -> Seedance scenes -> audio-driven Kling lip-sync -> one MP4."""
+    prompt = (user_prompt or "").strip()
+    if not prompt:
+        await update.effective_message.reply_text("Опишите песню/клип: стиль, язык, кто поёт, тип вокала, настроение и длительность.")
+        return
+    try:
+        faces = _detect_faces_for_choice(img_bytes) if FACESWAP_FACE_DETECTION_ENABLED else []
+    except Exception:
+        faces = []
+    performer_count = max(1, len(faces))
+    target_duration = (
+        max(5, min(int(PHOTO_CLIP_MAX_DURATION_S or 90), int(target_duration_s)))
+        if target_duration_s is not None else _photo_clip_target_duration(prompt)
+    )
+    if scene_plan is not None:
+        if scene_plan.duration_s != target_duration or scene_plan.aspect != _music_video_aspect(prompt):
+            raise ValueError("approved ScenePlan no longer matches provider parameters")
+        scene_count = len(scene_plan.scenes)
+        scene_s = max(1, int(max(scene.duration_s for scene in scene_plan.scenes)))
+        planned_lipsync = tuple(scene for scene in scene_plan.scenes if scene.has_lip_sync)
+        if scene_plan.vocal_start_s is not None and not planned_lipsync:
+            await update.effective_message.reply_text(
+                "❌ В утверждённом вокальном ScenePlan нет face-visible lip-sync интервала. Видео не запускаю."
+            )
+            return False
+        if planned_lipsync and (not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY)):
+            await update.effective_message.reply_text(
+                "❌ Kling lip-sync сейчас недоступен. Несинхронизированный вокальный клип не отправляю."
+            )
+            return False
+    else:
+        scene_s = min(10, int(PHOTO_CLIP_SCENE_SECONDS or 10))
+        scene_count = max(1, min(PHOTO_CLIP_MAX_SCENES, (target_duration + scene_s - 1) // scene_s))
+        planned_lipsync = ()
+    role_plan = _vocal_clip_role_plan(prompt, performer_count)
+    user_id = update.effective_user.id
+    source_token = getattr(context, "user_data", {}).get("vocal_source_token", "")
+    saved_source = _load_vocal_artifact(user_id, source_token, "audio") if source_token else None
+    if source_token and not saved_source:
+        context.user_data.pop("vocal_source_token", None)
+        await update.effective_message.reply_text(
+            "Выбранная песня больше не доступна. Сценарий не запущен и кредиты не списаны. "
+            "Выберите сохранённый трек снова или утвердите сценарий для новой песни Suno."
+        )
+        return
+    duration_probe = globals().get("_vocal_audio_duration_seconds_sync")
+    if saved_source and callable(duration_probe):
+        source_duration = await asyncio.to_thread(duration_probe, saved_source)
+        if source_duration <= 0:
+            await update.effective_message.reply_text(
+                "❌ Не удалось определить длительность выбранной аудиодорожки. Загрузите MP3, WAV или M4A заново."
+            )
+            return False
+        if source_duration + 0.25 < target_duration:
+            await update.effective_message.reply_text(
+                f"❌ Аудиодорожка длится только ~{source_duration:.1f} сек, а сценарий рассчитан на {target_duration} сек. "
+                "Выберите более короткую длительность: трек не будет зациклен."
+            )
+            return False
+    # Comet documents image references for this Seedance endpoint, not an
+    # audio-reference contract.  Seedance therefore renders mute base footage;
+    # Kling receives the actual audio in the later lip-sync pass.
+    if "SEEDANCE_ENABLED" in globals() and (not SEEDANCE_ENABLED or not COMET_API_KEY):
+        await update.effective_message.reply_text(
+            "❌ Seedance 2.5 сейчас недоступен. Вокальный клип не запускаю, "
+            "потому что нельзя заменить настоящий lip-sync обычной анимацией."
+        )
+        return False
+    img_digest = hashlib.sha1((img_bytes or b"")[:256000]).hexdigest()[:16]
+    job_key = f"vocal:{user_id}:{img_digest}:{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:16]}:{target_duration}"
+    if job_key in _vocal_clip_background_jobs:
+        await update.effective_message.reply_text("⏳ Такой AI-видеоклип уже обрабатывается. Дождитесь результата, чтобы не получить дубли.")
+        return
+
+    async def _job():
+        _vocal_clip_background_jobs.add(job_key)
+        song_token = source_token or uuid.uuid4().hex[:12]
+        video_token = uuid.uuid4().hex[:12]
+        final_saved = False
+        heartbeat_stop = asyncio.Event()
+        # Some legacy callers load this function in isolation.  Keep checkpointing
+        # optional there, while the production module always provides every helper.
+        load_manifest = globals().get("_load_vocal_job_manifest", lambda *_: None)
+        save_manifest = globals().get("_save_vocal_job_manifest", lambda *_: None)
+        save_job_file = globals().get("_save_vocal_job_file", lambda *_: "")
+        load_job_file_path = globals().get("_load_vocal_job_file_path", lambda *_: None)
+        save_job_path = globals().get(
+            "_save_vocal_job_file_from_path", lambda _u, _t, _n, _e, path: path
+        )
+        verified_lipsync = globals().get("_verified_lipsync_window", lambda *_: None)
+        aspect_fn = globals().get("_music_video_aspect", lambda _: "9:16")
+        now_fn = globals().get("time")
+        now_s = int(now_fn.time()) if now_fn is not None else 0
+        manifest = load_manifest(user_id, song_token) or {
+            "schema": 1,
+            "created_at": now_s,
+            "prompt": prompt,
+            "target_duration_s": target_duration,
+            "aspect": scene_plan.aspect if scene_plan else aspect_fn(prompt),
+            "scene_plan": scene_plan.as_dict() if scene_plan else None,
+            "scene_plan_fingerprint": scene_plan.fingerprint if scene_plan else "",
+            "provider_tasks": {},
+            "completed_stages": [],
+            "vocal_intervals": [],
+            "last_error": "",
+        }
+        def checkpoint(stage="", **changes):
+            if stage and stage not in manifest["completed_stages"]: manifest["completed_stages"].append(stage)
+            manifest.update(changes)
+            manifest["updated_at"] = int(now_fn.time()) if now_fn is not None else 0
+            save_manifest(user_id, song_token, manifest)
+        def provider_state(key, value):
+            if key == "vocal_intervals": manifest[key] = value
+            else: manifest["provider_tasks"][key] = value
+            checkpoint()
+
+        async def _progress_heartbeat():
+            # Long provider renders can legitimately be quiet for several minutes.
+            # Keep the user informed without touching provider/billing state.
+            try:
+                while True:
                     try:
                         await asyncio.wait_for(heartbeat_stop.wait(), timeout=150)
                         return
@@ -11804,9 +13998,6 @@ async def _piapi_faceswap(target_img: bytes, source_face: bytes, quality: str = 
         except Exception:
             obj = {}
         direct = await _extract_image_bytes_from_json_or_response(r, client)
-Warning: truncated output (original token count: 97990)
-Total output lines: 7064
-
         if direct:
             return _normalize_output_image_bytes(direct)
         data = obj.get("data") if isinstance(obj, dict) else None
@@ -14750,7 +16941,1255 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
     return False
 
 
-async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int…17990 tokens truncated…
+async def _run_veo_extend_chain(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
+    """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
+    import fcntl
+    import hashlib
+    import re
+    from neyrobot_prod.veo_comet_adapter import submit_veo_task
+    from neyrobot_prod.veo_extend_15_pipeline import create_extended_video
+
+    root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
+    directory = os.path.join(root, job_hash)
+    os.makedirs(directory, exist_ok=True)
+    # Persist the presenter snapshot inside the job, not in volatile user cache.
+    reference_path = None
+    if context.user_data.get("veo_use_presenter_reference"):
+        from pathlib import Path
+        import tempfile
+        photo_bytes = _get_cached_photo(update.effective_user.id)
+        if not photo_bytes:
+            await update.effective_message.reply_text("⚠️ Референс ведущего не найден. Сначала отправьте фотографию, затем повторите запрос. Кредиты за Veo не списывались на этом этапе.")
+            return False
+        reference_path = str(Path(directory) / "presenter_reference.jpg")
+        if not os.path.exists(reference_path):
+            fd, tmp = tempfile.mkstemp(prefix=".presenter_", dir=directory)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(photo_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, reference_path)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+    lock_path = os.path.join(directory, ".lock")
+    with open(lock_path, "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("⏳ Этот ролик уже создаётся. Дождитесь завершения.")
+            return False
+        async def submit(scene_prompt, index):
+            await update.effective_message.reply_text("🎬 Veo: начальная генерация 8 секунд")
+            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt, reference_image=reference_path)
+        async def poll(task_id):
+            log.info("VEO_SCENE_POLL_START job=%s task_id=%s", job_hash, task_id)
+            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                result = await _poll_video_task_for_bytes(
+                    client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                    COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"],
+                    task_id, "Veo Multi-Scene", max_wait_s=1200,
+                )
+            log.info("VEO_SCENE_POLL_DONE job=%s task_id=%s bytes=%s", job_hash, task_id, len(result or b""))
+            return result
+        try:
+            result = await create_extended_video(
+                directory=directory, prompt=prompt, duration_seconds=duration, base_url=COMET_BASE_URL,
+                api_key=COMET_API_KEY, fast_model=VEO_FAST_MODEL,
+                poll=poll, reference_image=reference_path,
+                progress=lambda message: update.effective_message.reply_text("🎬 " + message))
+            log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
+            await _reply_video_file(update, str(result), f"🎬 Veo 3.1 · {duration} сек · native Veo Extend · 9:16")
+            log.info("VEO_DELIVERY_DONE job=%s", job_hash)
+            return True
+        except Exception as exc:
+            log.exception("Veo multiscene job failed job=%s", job_hash)
+            await update.effective_message.reply_text(
+                "⚠️ Veo: генерация остановлена. Оплаченные сцены не будут отправлены повторно автоматически. "
+                + str(exc)[:220])
+            return False
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+async def _run_veo_multiscene(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, duration: int) -> bool:
+    """Persistent Veo scene jobs; never resubmit an uncertain paid task."""
+    if 8 < duration <= 148:
+        return await _run_veo_extend_chain(update, context, prompt, duration)
+    import fcntl
+    import hashlib
+    import re
+    from neyrobot_prod.veo_comet_adapter import submit_veo_task
+    from neyrobot_prod.veo_resumable_pipeline import resume_veo_job
+
+    script = ""  # Native Veo speech comes from the complete user prompt.
+    root = os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs")
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|" + str(duration) + "|" + prompt).encode("utf-8")).hexdigest()[:24]
+    directory = os.path.join(root, job_hash)
+    os.makedirs(directory, exist_ok=True)
+    # Persist the presenter snapshot inside the job, not in volatile user cache.
+    reference_path = None
+    if context.user_data.get("veo_use_presenter_reference"):
+        from pathlib import Path
+        import tempfile
+        photo_bytes = _get_cached_photo(update.effective_user.id)
+        if not photo_bytes:
+            await update.effective_message.reply_text("⚠️ Референс ведущего не найден. Сначала отправьте фотографию, затем повторите запрос. Кредиты за Veo не списывались на этом этапе.")
+            return False
+        reference_path = str(Path(directory) / "presenter_reference.jpg")
+        if not os.path.exists(reference_path):
+            fd, tmp = tempfile.mkstemp(prefix=".presenter_", dir=directory)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(photo_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, reference_path)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+    lock_path = os.path.join(directory, ".lock")
+    with open(lock_path, "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("⏳ Этот ролик уже создаётся. Дождитесь завершения.")
+            return False
+        async def submit(scene_prompt, index):
+            await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/{(duration + 7) // 8}")
+            return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt, reference_image=reference_path)
+        async def poll(task_id):
+            log.info("VEO_SCENE_POLL_START job=%s task_id=%s", job_hash, task_id)
+            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                result = await _poll_video_task_for_bytes(
+                    client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                    COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"],
+                    task_id, "Veo Multi-Scene", max_wait_s=1200,
+                )
+            log.info("VEO_SCENE_POLL_DONE job=%s task_id=%s bytes=%s", job_hash, task_id, len(result or b""))
+            return result
+        try:
+            result = await resume_veo_job(
+                job_directory=directory, duration_seconds=duration,
+                spoken_script=script, visual_brief=prompt, submit=submit, poll=poll, reference_image=reference_path)
+            log.info("VEO_ASSEMBLY_DONE job=%s output=%s", job_hash, result)
+            await _reply_video_file(update, str(result), f"🎬 Veo 3.1 Fast · {duration} сек · 9:16")
+            log.info("VEO_DELIVERY_DONE job=%s", job_hash)
+            return True
+        except Exception as exc:
+            log.exception("Veo multiscene job failed job=%s", job_hash)
+            await update.effective_message.reply_text(
+                "⚠️ Veo: генерация остановлена. Оплаченные сцены не будут отправлены повторно автоматически. "
+                + str(exc)[:220])
+            return False
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+async def _run_veo_24s_lipsync(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, *, resume_directory=None, recovery_only: bool = False) -> bool:
+    """Durable single-voice workflow: TTS -> 3 Veo -> 3 Kling -> final mux."""
+    import fcntl
+    import hashlib
+    import re
+    from pathlib import Path
+    from neyrobot_prod.veo_24s_state import (
+        begin_lipsync_submission, load_state, mark_lipsync_accepted,
+        mark_lipsync_completed, mark_lipsync_uncertain, record_job_metadata,
+    )
+    from neyrobot_prod.veo_assembler import assemble_vertical_video, probe_duration
+    from neyrobot_prod.veo_comet_adapter import submit_veo_task
+    from neyrobot_prod.veo_resumable_pipeline import resume_veo_job
+    from neyrobot_prod.veo_tts_timeline import fit_tts_master_to_24_seconds, mux_master_voice, split_tts_master
+    from neyrobot_prod.veo_voice_preflight import validate_voice_scenes
+
+    match = re.search(r'(?:произносит|говорит|says)\s*[:：]\s*[«"“](.+?)[»"”]', prompt, re.I | re.S)
+    script = match.group(1).strip() if match else ""
+    if not script:
+        narrator = re.search(r"ТЕКСТ ДИКТОРА\s*:\s*(.*?)(?=\n\s*АУДИО И МОНТАЖ\s*:|\Z)", prompt, re.I | re.S)
+        if narrator:
+            script = narrator.group(1).strip().strip("«»")
+    if not script:
+        await update.effective_message.reply_text("⚠️ Для 24-секундного ролика нужен точный русский текст после «Говорит:». Генерация не запущена.")
+        return False
+    if not OPENAI_TTS_KEY:
+        await update.effective_message.reply_text("⚠️ OpenAI TTS не настроен. Veo и Kling не были запущены.")
+        return False
+    if context.user_data.get("veo_use_presenter_reference") and (not KLING_LIPSYNC_ENABLED or not (KLING_API_KEY or COMET_API_KEY)):
+        await update.effective_message.reply_text("⚠️ Kling Lip-Sync не настроен. Veo и TTS не были запущены.")
+        return False
+
+    root = Path(os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs"))
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_chat.id) + "|" + str(update.effective_message.message_id) + "|24|" + prompt).encode("utf-8")).hexdigest()[:24]
+    directory = Path(resume_directory) if resume_directory else root / job_hash
+    directory.mkdir(parents=True, exist_ok=True)
+    workflow_path = directory / "workflow_24s.json"
+    reference_path = None
+    saved_reference = str(load_state(workflow_path).get("job", {}).get("reference_image") or "")
+    if saved_reference and Path(saved_reference).is_file():
+        reference_path = Path(saved_reference)
+    elif context.user_data.get("veo_use_presenter_reference"):
+        photo = _get_cached_photo(update.effective_user.id)
+        if not photo or len(photo) > 10 * 1024 * 1024 or photo[:3] != bytes((255, 216, 255)):
+            await update.effective_message.reply_text("⚠️ Для ведущего нужен сохранённый JPEG до 10 МБ. Платные задачи не запущены.")
+            return False
+        reference_path = directory / "presenter_reference.jpg"
+        if not reference_path.exists():
+            reference_path.write_bytes(photo)
+
+    record_job_metadata(workflow_path, spoken_script=script, prompt=prompt, duration_seconds=24,
+                        reference_image=str(reference_path) if reference_path else "", status="preflight")
+    with open(directory / ".lock", "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("⏳ Этот 24-секундный ролик уже обрабатывается.")
+            return False
+        try:
+            source_tts, master_tts = directory / "tts_master_source.mp3", directory / "tts_master.wav"
+            if not master_tts.exists():
+                if not source_tts.exists():
+                    await update.effective_message.reply_text("🎙️ Создаю единую русскую озвучку 24 сек…")
+                    raw_tts = _tts_bytes_sync(script, "mp3")
+                    if not raw_tts:
+                        raise RuntimeError("OpenAI TTS did not return audio")
+                    source_tts.write_bytes(raw_tts)
+                try:
+                    fit_tts_master_to_24_seconds(source_tts, master_tts)
+                except ValueError as exc:
+                    raise RuntimeError("Текст не подходит под естественный 24-секундный темп. Сократите или расширьте текст и повторите: " + str(exc)) from exc
+            split_tts_master(master_tts, directory)
+            record_job_metadata(workflow_path, tts_master=str(master_tts),
+                                tts_slices=[str(directory / f"tts_scene_{i:02d}.wav") for i in range(1, 4)], status="tts_ready")
+
+            async def submit(scene_prompt, index):
+                if recovery_only:
+                    raise RuntimeError("Безопасное восстановление: новая платная Veo-генерация запрещена. Нужны сохранённые файлы или task ID.")
+                await update.effective_message.reply_text(f"🎬 Veo: сцена {index}/3")
+                return await submit_veo_task(COMET_BASE_URL, COMET_API_KEY, VEO_FAST_MODEL, scene_prompt,
+                                             reference_image=str(reference_path) if reference_path else None)
+
+            async def poll(task_id):
+                async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                    return await _poll_video_task_for_bytes(
+                        client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                        COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"], task_id,
+                        "Veo 24-second", max_wait_s=1200,
+                    )
+
+            clips = await resume_veo_job(
+                job_directory=directory, duration_seconds=24, spoken_script=script,
+                visual_brief=(prompt[:match.start()] + prompt[match.end():]).strip() if match else re.sub(r"ТЕКСТ ДИКТОРА\s*:\s*.*?(?=\n\s*АУДИО И МОНТАЖ\s*:|\Z)", "", prompt, flags=re.I | re.S).strip(),
+                submit=submit, poll=poll, reference_image=reference_path, assemble=False,
+            )
+            if not isinstance(clips, list):
+                raise RuntimeError("Veo 24-second scene pipeline did not return scene files")
+            voice_scenes = validate_voice_scenes(directory, script, require_audio_slices=bool(context.user_data.get("veo_use_presenter_reference")))
+            master_bytes, synced_paths = master_tts.read_bytes(), []
+            # Narrator-only commercials have no speaking face; do not submit paid lip-sync tasks.
+            if not context.user_data.get("veo_use_presenter_reference"):
+                synced_paths = [Path(scene.video_path) for scene in voice_scenes]
+            for voice_scene in (voice_scenes if context.user_data.get("veo_use_presenter_reference") else []):
+                final_scene = directory / f"scene_{voice_scene.index:02d}_lipsynced.mp4"
+                item = load_state(workflow_path)["lipsync"].get(str(voice_scene.index), {})
+                if item.get("state") == "completed" and final_scene.is_file() and final_scene.stat().st_size >= 1024:
+                    synced_paths.append(final_scene)
+                    continue
+                existing_task_id = str(item.get("task_id") or "") if item.get("state") == "accepted" else ""
+                if not existing_task_id:
+                    begin_lipsync_submission(workflow_path, voice_scene.index)
+                await update.effective_message.reply_text(f"🎭 Kling Lip-Sync: сцена {voice_scene.index}/3")
+                contract = types.SimpleNamespace(index=voice_scene.index, start_s=voice_scene.start_seconds,
+                    end_s=voice_scene.end_seconds, duration_s=8.0, has_lip_sync=True,
+                    lip_sync_start_s=voice_scene.start_seconds, lip_sync_end_s=voice_scene.end_seconds)
+                try:
+                    synced = await _apply_kling_lipsync_to_scene_file(
+                        update, context, master_bytes, str(voice_scene.video_path), contract, str(directory),
+                        audio_part_path=str(voice_scene.audio_path), existing_task_id=existing_task_id, sync_file_ops=True,
+                        on_provider_state=lambda key, value, i=voice_scene.index: mark_lipsync_accepted(workflow_path, i, value) if key == "lip_sync_task_id" else None,
+                    )
+                except Exception:
+                    if load_state(workflow_path)["lipsync"].get(str(voice_scene.index), {}).get("state") == "submitting":
+                        mark_lipsync_uncertain(workflow_path, voice_scene.index)
+                    raise
+                synced_path = Path(synced)
+                mark_lipsync_completed(workflow_path, voice_scene.index, str(synced_path))
+                synced_paths.append(synced_path)
+
+            visual = directory / "visual_24s.mp4"
+            assemble_vertical_video(synced_paths, visual, 24)
+            final = mux_master_voice(visual, master_tts, directory / "final_24s.mp4")
+            if abs(probe_duration(final) - 24.0) > 0.15:
+                raise RuntimeError("Final 24-second video duration validation failed")
+            record_job_metadata(workflow_path, status="completed", final_mp4=str(final))
+            await _reply_video_file(update, str(final), "🎬 Veo 3.1 Fast · 24 сек · единая русская озвучка · Kling Lip-Sync")
+            return True
+        except Exception as exc:
+            record_job_metadata(workflow_path, status="blocked", error=str(exc)[:500])
+            log.exception("Veo 24-second workflow failed job=%s", job_hash)
+            await update.effective_message.reply_text("⚠️ 24-секундный Veo остановлен. Подтверждённые Veo/Kling ID и файлы сохранены; автоматический повтор оплаченных задач заблокирован. " + str(exc)[:280])
+            return False
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+async def cmd_veo_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Explicit one-step Veo native-audio extension. Never resubmit paid POST."""
+    import json
+    import os
+    import hashlib
+    from pathlib import Path
+    from neyrobot_prod.veo_extend_comet import extend_veo
+    if not OWNER_ID or update.effective_user.id != OWNER_ID:
+        await update.effective_message.reply_text("Команда Veo Extend доступна владельцу.")
+        return
+    raw = " ".join(context.args).strip()
+    if " | " not in raw:
+        await update.effective_message.reply_text(
+            "Формат: /veo_extend https://provider.example/video.mp4 | Продолжи сцену, сохрани того же ведущего, речь на русском.\\n"
+            "Одна команда = одно платное продление на 7 секунд. Исходное видео должно быть создано Veo и доступно провайдеру.")
+        return
+    video_uri, continuation = [x.strip() for x in raw.split(" | ", 1)]
+    if not video_uri.startswith("https://") or not continuation:
+        await update.effective_message.reply_text("Нужны HTTPS-ссылка на Veo-видео и текст продолжения.")
+        return
+    if not COMET_API_KEY:
+        await update.effective_message.reply_text("COMET_API_KEY не настроен. Никаких списаний.")
+        return
+    model = os.getenv("VEO_EXTEND_MODEL", "veo-3.1")
+    root = Path(os.getenv("VEO_JOBS_DIR", "/data/veo_jobs")) / "extensions"
+    root.mkdir(parents=True, exist_ok=True)
+    job_hash = hashlib.sha256((str(update.effective_user.id) + "|" + str(update.effective_message.message_id) + "|" + raw).encode()).hexdigest()[:24]
+    journal = root / (job_hash + ".json")
+    if journal.exists():
+        await update.effective_message.reply_text("Эта команда уже зарегистрирована; повторный платный вызов запрещён. Журнал: " + job_hash)
+        return
+    journal.write_text(json.dumps({"status": "submitting", "source": video_uri, "prompt": continuation, "model": model}, ensure_ascii=False))
+    await update.effective_message.reply_text("🎞️ Veo Extend: отправляю одно продление +7 секунд с native audio. Новые вызовы автоматически не повторяются.")
+    try:
+        result_uri, payload = await extend_veo(COMET_BASE_URL, COMET_API_KEY, video_uri, continuation, model=model)
+        journal.write_text(json.dumps({"status": "accepted", "source": video_uri, "prompt": continuation, "model": model, "response": payload}, ensure_ascii=False, default=str))
+        if result_uri:
+            await update.effective_message.reply_text("✅ CometAPI вернул ссылку на продлённое видео: " + result_uri)
+        else:
+            await update.effective_message.reply_text("⏳ CometAPI принял запрос, но не вернул прямую ссылку на видео. Ответ сохранён в журнале " + job_hash + ". Не запускайте повторно — нужна проверка статуса задачи.")
+    except Exception as exc:
+        journal.write_text(json.dumps({"status": "uncertain_or_failed", "source": video_uri, "error": str(exc)}, ensure_ascii=False))
+        await update.effective_message.reply_text("⚠️ Veo Extend: " + str(exc)[:350] + ". Повтор автоматически запрещён.")
+
+
+async def cmd_heygen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Create a single Russian-speaking HeyGen presenter clip from /heygen text."""
+    import os
+    from neyrobot_prod.heygen_adapter import create_presenter_video, poll_presenter_video
+    script = " ".join(context.args).strip()
+    if not script:
+        await update.effective_message.reply_text("Использование: /heygen Ваш русский текст ведущего. До запуска проверьте стоимость HeyGen.")
+        return
+    key = os.getenv("HEYGEN_API_KEY", "")
+    avatar = os.getenv("HEYGEN_AVATAR_ID", "")
+    voice = os.getenv("HEYGEN_VOICE_ID", "")
+    if not (key and avatar and voice):
+        await update.effective_message.reply_text("HeyGen пока не настроен: нужны HEYGEN_API_KEY, HEYGEN_AVATAR_ID и HEYGEN_VOICE_ID в Render. Генерация не запускалась.")
+        return
+    if len(script) > 5000:
+        await update.effective_message.reply_text("Текст слишком длинный: максимум 5000 символов.")
+        return
+    await update.effective_message.reply_text("🎬 HeyGen: создаю видео с одним ведущим и русской речью.")
+    try:
+        video_id = await create_presenter_video(key, avatar, voice, script)
+        await update.effective_message.reply_text("HeyGen video ID: " + video_id + ". Ожидаю готовности.")
+        video_url = await poll_presenter_video(key, video_id)
+        await update.effective_message.reply_video(video=video_url, caption="🎬 HeyGen · AI-ведущий · русская речь")
+    except Exception as exc:
+        log.exception("HeyGen generation failed")
+        await update.effective_message.reply_text("⚠️ HeyGen: " + str(exc)[:350] + ". Не запускайте повторно без проверки статуса оплаченной задачи.")
+
+
+async def cmd_veo_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner-only recovery: poll existing paid IDs; never submit a new scene."""
+    import fcntl
+    import asyncio
+    from pathlib import Path
+    from neyrobot_prod.veo_task_journal import read_job, mark_scene
+    from neyrobot_prod.veo_scene_artifacts import save_scene, load_scene, list_complete_scenes
+    from neyrobot_prod.veo_assembler import assemble_vertical_video
+
+    if not OWNER_ID or update.effective_user.id != OWNER_ID:
+        await update.effective_message.reply_text("Команда доступна только владельцу бота.")
+        return
+    root = Path(os.environ.get("VEO_JOBS_DIR", "/data/veo_jobs"))
+    if context.args:
+        requested = root / context.args[0].strip()
+        workflow = requested / "workflow_24s.json"
+        if workflow.is_file():
+            from neyrobot_prod.veo_24s_state import load_state
+            prompt = str(load_state(workflow).get("job", {}).get("prompt") or "")
+            if not prompt:
+                await update.effective_message.reply_text("В 24-секундном задании нет исходного промпта; повторная отправка задач заблокирована.")
+                return
+            await update.effective_message.reply_text("♻️ Восстанавливаю 24-секундное задание только по сохранённым TTS/Veo/Kling checkpoint’ам.")
+            await _run_veo_24s_lipsync(update, context, prompt, resume_directory=requested, recovery_only=True)
+            return
+    jobs = sorted(root.glob("*/journal.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not jobs:
+        await update.effective_message.reply_text("На постоянном диске не найдено журналов Veo.")
+        return
+    if context.args:
+        wanted = context.args[0].strip()
+        jobs = [p for p in jobs if p.parent.name == wanted]
+        if not jobs:
+            await update.effective_message.reply_text("Задание с таким идентификатором не найдено.")
+            return
+    else:
+        jobs = [p for p in jobs if len(read_job(p).get("scenes", {})) == 4]
+        if not jobs:
+            await update.effective_message.reply_text("Журнал четырёхсценного видео не найден. Проверьте /data/veo_jobs.")
+            return
+    journal = jobs[0]
+    directory = journal.parent
+    duration = 30 if len(read_job(journal)["scenes"]) == 4 else None
+    if duration is None:
+        await update.effective_message.reply_text("Автовосстановление поддерживает только 30-секундное видео; новые платные задачи не создаются.")
+        return
+    with open(directory / ".lock", "a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            await update.effective_message.reply_text("Задание сейчас обрабатывается другим процессом.")
+            return
+        try:
+            states = read_job(journal)["scenes"]
+            await update.effective_message.reply_text(
+                "Восстановление Veo " + directory.name + ": " +
+                ", ".join(str(i) + "=" + states.get(str(i), {}).get("state", "missing") for i in range(1, 5)))
+            for i in range(1, 5):
+                item = read_job(journal)["scenes"].get(str(i), {})
+                state, task_id = item.get("state"), item.get("task_id")
+                if state == "completed":
+                    # Verify on disk without loading the entire paid MP4 into bot RAM.
+                    scene_path = directory / f"scene_{i:02d}.mp4"
+                    if not scene_path.is_file() or scene_path.stat().st_size < 1024:
+                        raise FileNotFoundError(f"Veo scene {i} marked completed but artifact is missing")
+                    log.info("VEO_RECOVER_SCENE_ON_DISK job=%s scene=%s bytes=%s", directory.name, i, scene_path.stat().st_size)
+                    continue
+                if not task_id:
+                    await update.effective_message.reply_text(
+                        f"Сцена {i}: нет подтверждённого ID CometAPI. Повторная платная отправка заблокирована. "
+                        "Требуется сверка с провайдером.")
+                    return
+                async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                    payload = await _poll_video_task_for_bytes(
+                        client, {"Authorization": f"Bearer {COMET_API_KEY}", "Accept": "application/json"},
+                        COMET_BASE_URL, ["/v1/videos/{id}", "/v1/tasks/{id}"],
+                        task_id, "Veo Multi-Scene", max_wait_s=1200)
+                if not payload:
+                    await update.effective_message.reply_text(
+                        f"Сцена {i}: видео пока не получено; ID задачи сохранён, повторной оплаты нет.")
+                    return
+                await asyncio.to_thread(save_scene, directory, i, payload)
+                mark_scene(journal, i, "completed", task_id)
+            clips = list_complete_scenes(directory, 4)
+            log.info("VEO_RECOVER_ASSEMBLY_START job=%s files=%s", directory.name, [p.stat().st_size for p in clips])
+            result = await asyncio.to_thread(assemble_vertical_video, clips, directory / "final.mp4", duration)
+            log.info("VEO_RECOVER_ASSEMBLY_DONE job=%s output_bytes=%s", directory.name, result.stat().st_size)
+            await _reply_video_file(update, str(result), "🎬 Veo 3.1 Fast · восстановлено · 30 сек · 9:16")
+        except Exception as exc:
+            log.exception("Veo recovery failed job=%s", directory.name)
+            await update.effective_message.reply_text("Восстановление Veo остановлено: " + str(exc)[:300])
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+
+async def _run_seedance_direct(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    duration_s: int,
+    aspect: str,
+    *,
+    reference_bytes: bytes | None = None,
+    caption_prefix: str = "Seedance 2.5",
+) -> bool:
+    """Run one Seedance scene and deliver it as an MP4."""
+    if not SEEDANCE_ENABLED:
+        await update.effective_message.reply_text("Seedance временно отключён в настройках сервиса.")
+        return False
+    try:
+        content = await seedance_generate(
+            api_key=COMET_API_KEY,
+            base_url=COMET_BASE_URL,
+            prompt=prompt,
+            seconds=duration_s,
+            aspect=aspect,
+            model=SEEDANCE_MODEL,
+            model_fallbacks=SEEDANCE_MODEL_FALLBACKS,
+            reference_bytes=reference_bytes,
+            create_path=SEEDANCE_CREATE_PATH,
+        )
+        await _reply_video_bytes(
+            update,
+            content,
+            caption=f"{caption_prefix} · {duration_s} сек · {aspect}",
+            task_id=f"seedance:{uuid.uuid4().hex}",
+        )
+        return True
+    except Exception as exc:
+        log.exception("Seedance generation failed")
+        await update.effective_message.reply_text(
+            "❌ Seedance не смог завершить генерацию: " + str(exc)[:500]
+        )
+        return False
+
+
+async def _run_comet_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, engine: str, prompt: str, duration_s: int, aspect: str) -> bool:
+    """Text-to-video through CometAPI: Sora 2, Kling, or Runway."""
+    engine = (engine or "").lower().strip(); prompt = (prompt or "").strip()
+    if not prompt:
+        await update.effective_message.reply_text("❌ Пустой запрос для видео.")
+        return False
+    if engine == "sora" and _prompt_likely_has_people(prompt):
+        await update.effective_message.reply_text("⚠️ Sora 2 доступна только для сцен без людей. Используйте Kling или Runway.")
+        return False
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    if engine == "seedance":
+        return await _run_seedance_direct(update, context, prompt, duration_s, aspect)
+    if engine == "runway":
+        return bool(await _run_runway_video(update, context, prompt, duration_s, aspect))
+    if engine == "veo":
+        # CometAPI documents POST /v1/videos as multipart fields model, prompt, size.
+        # Do not invent unsupported resolution/audio flags or retry a billed task.
+        veo_prompt = (prompt + "\n\nGenerate native synchronized dialogue and ambient audio. "
+                      "Any spoken dialogue must be in Russian (ru-RU), never English. "
+                      "Pronounce quoted Russian dialogue verbatim, with accurate lip synchronization. "
+                      "No English narration or translation.").strip()
+        payload = {"__multipart": {"data": {"model": VEO_FAST_MODEL, "prompt": veo_prompt,
+                                           "size": "9:16"}, "files": {}}}
+        return bool(await _create_and_poll_i2v(
+            update, COMET_BASE_URL, COMET_API_KEY,
+            [("/v1/videos", payload)], ["/v1/videos/{id}", "/v1/tasks/{id}"],
+            "Google Veo 3.1 Fast · native audio", max_wait_s=1200))
+    if engine == "sora":
+        d = _duration_for_engine("sora", duration_s); size, _, _ = _sora_size_for_aspect(aspect)
+        payloads = [
+            (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "seconds": str(d), "size": size}),
+            (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "seconds": d, "size": size}),
+            (SORA_CREATE_PATH, {"model": SORA_MODEL, "prompt": prompt, "size": size}),
+        ]
+        return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, SORA_API_KEY, payloads, [SORA_STATUS_PATH, "/v1/videos/{id}", "/v1/tasks/{id}"], "Sora 2 text→video · без людей"))
+    if engine == "kling":
+        d = str(_duration_for_engine("kling", duration_s))
+        # Kling API expects model_name (not model), as in its image2video endpoint.
+        # Keep a single canonical payload; alternate shapes are only for creation failures.
+        payloads = [
+            (KLING_TEXT_CREATE_PATH, {
+                "model_name": KLING_MODEL,
+                "prompt": prompt,
+                "duration": d,
+                "aspect_ratio": aspect,
+                "mode": "pro",
+                "sound": "on" if context.user_data.get("kling_text_sound", False) else "off",
+            }),
+        ]
+        return bool(await _create_and_poll_i2v(update, COMET_BASE_URL, KLING_API_KEY, payloads, [KLING_TEXT_STATUS_PATH, "/kling/v1/videos/text2video/{id}", "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"], "Kling text→video"))
+    await update.effective_message.reply_text("❌ Неизвестный text→video движок. Доступны Sora 2 без людей, Kling и Runway.")
+    return False
+
+async def _run_runway_comet_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str) -> bool:
+    if not (RUNWAY_IMAGE2VIDEO_ENABLED and RUNWAY_USE_COMET and COMET_API_KEY):
+        return False
+    if not _provider_is_available("runway_i2v"):
+        log.warning("Runway/Comet skipped: cooldown %ss", _provider_cooldown_left("runway_i2v"))
+        return False
+
+    img_bytes, prep_note = _prepare_i2v_source_image(img_bytes, aspect)
+    if prep_note:
+        log.info("Runway i2v source prepared: %s", prep_note)
+    data_url, tg_url = _image_refs_for_i2v(update, img_bytes)
+
+    duration = _duration_for_engine("runway", duration_s)
+    ratio = _ratio_for_aspect(aspect)
+
+    payloads = []
+    # Для image→video на Comet не используем gen4.5 первым: у вас он часто отвечает no available channel.
+    # gen4_turbo/gen3a_turbo — нормальные кандидаты для оживления фото.
+    for model in _runway_i2v_model_candidates():
+        # Основной формат Runway API 2024-11-06.
+        payloads.append((RUNWAY_COMET_CREATE_PATH, {
+            "model": model,
+            "promptImage": data_url,
+            "promptText": prompt,
+            "duration": duration,
+            "ratio": ratio,
+            "watermark": False,
+        }))
+        # Формат promptImage как массив с position=first — эквивалентен string и стабильнее на некоторых прокси.
+        payloads.append((RUNWAY_COMET_CREATE_PATH, {
+            "model": model,
+            "promptImage": [{"uri": data_url, "position": "first"}],
+            "promptText": prompt,
+            "duration": duration,
+            "ratio": ratio,
+            "watermark": False,
+        }))
+        # snake_case fallback для совместимости с разными прокси.
+        payloads.append((RUNWAY_COMET_CREATE_PATH, {
+            "model": model,
+            "prompt_image": data_url,
+            "prompt_text": prompt,
+            "duration": duration,
+            "ratio": ratio,
+            "watermark": False,
+        }))
+
+    # Запасной вариант через Telegram URL, если Comet не примет data-uri.
+    if tg_url and tg_url.startswith("https://"):
+        for model in _runway_i2v_model_candidates():
+            payloads.append((RUNWAY_COMET_CREATE_PATH, {
+                "model": model,
+                "promptImage": tg_url,
+                "promptText": prompt,
+                "duration": duration,
+                "ratio": ratio,
+                "watermark": False,
+            }))
+
+    return await _create_and_poll_i2v(
+        update,
+        COMET_BASE_URL,
+        COMET_API_KEY,
+        payloads,
+        [RUNWAY_COMET_STATUS_PATH, "/runwayml/v1/tasks/{id}", "/v1/tasks/{id}"],
+        "Runway/Comet image→video",
+        task_not_exist_soft_fail_s=RUNWAY_TASK_NOT_EXIST_FALLBACK_S,
+        silent_soft_fail=True,
+    )
+
+# ───────── Runway: анимация загруженного фото (image→video) ─────────
+async def _run_runway_direct_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str) -> bool:
+    """Official Runway image→video using ephemeral upload + task polling."""
+    if not (RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY):
+        return False
+
+    img_bytes, prep_note = _prepare_i2v_source_image(img_bytes, aspect)
+    if prep_note:
+        log.info("Runway direct i2v source prepared: %s", prep_note)
+    mime_type = sniff_image_mime(img_bytes)
+    if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
+        mime_type = "image/jpeg"
+    extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(mime_type, "jpg")
+    filename = f"runway_input.{extension}"
+    ratio = _runway_direct_ratio(aspect)
+    duration = max(2, min(10, int(duration_s or 5)))
+    last_err = ""
+
+    for model in _runway_direct_i2v_model_candidates():
+        try:
+            async with _runway_official_client() as rw:
+                task_id = await rw.create_image_to_video(
+                    image_bytes=img_bytes,
+                    filename=filename,
+                    mime_type=mime_type,
+                    prompt_text=prompt,
+                    model=model,
+                    ratio=ratio,
+                    duration=duration,
+                    endpoint=RUNWAY_I2V_PATH,
+                    upload_endpoint=RUNWAY_UPLOAD_PATH,
+                )
+                await update.effective_message.reply_text(
+                    f"⏳ Runway {model}: изображение загружено, задача принята. Ожидаю результат…"
+                )
+                result = await rw.wait_for_task(task_id, timeout_s=RUNWAY_MAX_WAIT_S)
+
+            async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as dl_client:
+                await _reply_video_from_url(
+                    update, dl_client, result.first_output,
+                    "✨ Оживил фото ✅ · Powered by Runway",
+                    task_id=task_id,
+                )
+            _provider_mark_success("runway_direct")
+            return True
+        except RunwayAPIError as e:
+            last_err = str(e)
+            log.warning("Runway direct i2v model=%s failed: %s", model, e)
+            # Authentication, billing, moderation and invalid-input errors are not fixed by switching models.
+            code = (e.failure_code or "").upper()
+            if e.status_code in {400, 401, 402, 403} or code.startswith("SAFETY"):
+                _provider_last_error["runway_direct"] = last_err[:700]
+                context.user_data["_runway_direct_hard_stop"] = True
+                await update.effective_message.reply_text(_runway_user_error_text(e))
+                return False
+            continue
+        except Exception as e:
+            last_err = str(e)
+            log.warning("Runway direct i2v exception model=%s: %s", model, e)
+            continue
+
+    if last_err:
+        _provider_last_error["runway_direct"] = last_err[:700]
+        _provider_mark_failure("runway_direct", last_err)
+    return False
+
+
+async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, prompt: str, duration_s: int, aspect: str):
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.RECORD_VIDEO)
+    prompt = (prompt or "animate the input photo with subtle camera motion, lifelike micro-movements; keep the original person, do not transform identity, do not add phone frames or UI").strip()
+    seconds = _duration_for_engine("runway", duration_s)
+    ratio = _ratio_for_aspect(aspect)
+    bad_src_note = _looks_like_screenshot_or_bad_i2v_source(img_bytes)
+    if bad_src_note and I2V_WARN_BAD_SOURCE:
+        with contextlib.suppress(Exception):
+            if I2V_BAD_SOURCE_POLICY == "ask_clean":
+                await update.effective_message.reply_text("ℹ️ " + bad_src_note + "\n\nПришлите чистое фото, чтобы получить стабильный результат.")
+                return False
+            await update.effective_message.reply_text("ℹ️ " + bad_src_note + "\nПродолжаю обработку, но качество может быть хуже.")
+
+    # v88: официальный Runway Developer API — основной маршрут.
+    context.user_data.pop("_runway_direct_hard_stop", None)
+    if RUNWAY_DIRECT_FIRST and RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY:
+        try:
+            if await _run_runway_direct_animate_photo(update, context, img_bytes, prompt, seconds, aspect):
+                _provider_mark_success("runway_direct")
+                return True
+            if context.user_data.pop("_runway_direct_hard_stop", False):
+                return False
+            _provider_mark_failure("runway_direct", _provider_last_error.get("runway_direct", "direct i2v failed"))
+        except Exception as e:
+            _provider_mark_failure("runway_direct", str(e))
+            log.warning("Runway direct i2v failed; trying Comet: %s", e)
+
+    # Comet is only a fallback; its Runway distributor channel can disappear independently.
+    try:
+        if await _run_runway_comet_animate_photo(update, context, img_bytes, prompt, seconds, aspect):
+            return True
+    except Exception as e:
+        log.warning("Runway Comet route failed: %s", e)
+
+    if (not RUNWAY_DIRECT_FIRST) and RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY:
+        try:
+            if await _run_runway_direct_animate_photo(update, context, img_bytes, prompt, seconds, aspect):
+                _provider_mark_success("runway_direct")
+                return True
+            if context.user_data.pop("_runway_direct_hard_stop", False):
+                return False
+        except Exception as e:
+            _provider_mark_failure("runway_direct", str(e))
+            log.warning("Runway direct fallback failed: %s", e)
+
+    if RUNWAY_AUTO_FALLBACK_KLING and COMET_API_KEY:
+        await update.effective_message.reply_text(RUNWAY_PUBLIC_FALLBACK_TEXT)
+        return bool(await _run_comet_i2v(update, context, "kling", img_bytes, prompt, seconds, aspect))
+
+    if RUNWAY_API_KEY:
+        await update.effective_message.reply_text("⚠️ Официальный Runway не принял задачу. Проверьте RUNWAYML_API_SECRET (Environment/Secret File) и API-кредиты: /diag_runway auth")
+    else:
+        await update.effective_message.reply_text("⚠️ Для постоянного доступа к Runway добавьте RUNWAYML_API_SECRET в Render Secret File runway.env или Environment.")
+    return False
+
+# ───────── Покупки/инвойсы ─────────
+def _plan_rub(tier: str, term: str) -> int:
+    tier = (tier or "pro").lower()
+    term = (term or "month").lower()
+    return int(PLAN_PRICE_TABLE.get(tier, PLAN_PRICE_TABLE["pro"]).get(term, PLAN_PRICE_TABLE["pro"]["month"]))
+
+def _plan_payload_and_amount(tier: str, months: int) -> tuple[str, int, str]:
+    term = {1: "month", 3: "quarter", 12: "year"}.get(months, "month")
+    amount = _plan_rub(tier, term)
+    title = f"Подписка {tier.upper()} ({term})"
+    payload = f"sub:{tier}:{months}"
+    return payload, amount, title
+
+async def _send_invoice_rub(title: str, desc: str, amount_rub: int, payload: str, update: Update) -> bool:
+    try:
+        # берём токен и валюту из двух источников (старый PROVIDER_TOKEN ИЛИ новый YOOKASSA_PROVIDER_TOKEN)
+        token = (PROVIDER_TOKEN or YOOKASSA_PROVIDER_TOKEN)
+        curr  = (CURRENCY if (CURRENCY and CURRENCY != "RUB") else YOOKASSA_CURRENCY) or "RUB"
+
+        if not token:
+            await update.effective_message.reply_text("⚠️ ЮKassa не настроена (нет токена).")
+            return False
+
+        prices = [LabeledPrice(label=_ascii_label(title), amount=int(amount_rub) * 100)]
+
+        await update.effective_message.reply_invoice(
+            title=title,
+            description=desc[:255],
+            payload=payload,
+            provider_token=token,
+            currency=curr,
+            prices=prices,
+            need_email=False,
+            need_name=False,
+            need_phone_number=False,
+            need_shipping_address=False,
+            is_flexible=False
+        )
+        return True
+
+    except Exception as e:
+        log.exception("send_invoice error: %s", e)
+        try:
+            await update.effective_message.reply_text("Не удалось выставить счёт.")
+        except Exception:
+            pass
+        return False
+
+async def on_precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        q = update.pre_checkout_query
+        await q.answer(ok=True)
+    except Exception as e:
+        log.exception("precheckout error: %s", e)
+
+async def on_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        sp = update.message.successful_payment
+        payload = sp.invoice_payload or ""
+        total_minor = sp.total_amount or 0
+        rub = total_minor / 100.0
+        uid = update.effective_user.id
+
+        if payload.startswith("sub:"):
+            _, tier, months = payload.split(":", 2)
+            months = int(months)
+            until = activate_subscription_with_tier(uid, tier, months)
+            await update.effective_message.reply_text(f"✅ Подписка {tier.upper()} активирована до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр.")
+            return
+
+        if payload.startswith("topup:"):
+            try:
+                _, credits_s, rub_s = payload.split(":", 2)
+                resolved = _credit_pack_resolve(int(credits_s), int(rub_s))
+                if resolved:
+                    credits, expected_rub = resolved
+                    _wallet_total_add(uid, _credits_to_usd(credits))
+                    await update.effective_message.reply_text(
+                        f"✅ Оплата прошла успешно. Начислено: {credits} кредитов за {expected_rub} ₽."
+                    )
+                    return
+            except Exception:
+                log.exception("Failed to parse topup payload: %s", payload)
+
+        # Любое иное payload — пополнение единого кошелька
+        usd = _credits_to_usd(rub)
+        _wallet_total_add(uid, usd)
+        await update.effective_message.reply_text(f"💳 Пополнение: {rub:.0f} ₽. Начислено: {_credits_fmt_from_usd(usd)}.")
+    except Exception as e:
+        log.exception("successful_payment handler error: %s", e)
+
+
+# ───────── CryptoBot ─────────
+CRYPTO_PAY_API_TOKEN = os.environ.get("CRYPTO_PAY_API_TOKEN", "").strip()
+CRYPTO_BASE = "https://pay.crypt.bot/api"
+TON_USD_RATE = float(os.environ.get("TON_USD_RATE", "5.0") or "5.0")  # запасной курс
+
+async def _crypto_create_invoice(usd_amount: float, asset: str = "USDT", description: str = "") -> tuple[str|None, str|None, float, str]:
+    if not CRYPTO_PAY_API_TOKEN:
+        return None, None, 0.0, asset
+    try:
+        payload = {"asset": asset, "amount": round(float(usd_amount), 2), "description": description or "Top-up"}
+        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(f"{CRYPTO_BASE}/createInvoice", headers=headers, json=payload)
+            j = r.json()
+            ok = j.get("ok") is True
+            if not ok:
+                return None, None, 0.0, asset
+            res = j.get("result", {})
+            return str(res.get("invoice_id")), res.get("pay_url"), float(res.get("amount", usd_amount)), res.get("asset") or asset
+    except Exception as e:
+        log.exception("crypto create error: %s", e)
+        return None, None, 0.0, asset
+
+async def _crypto_get_invoice(invoice_id: str) -> dict | None:
+    if not CRYPTO_PAY_API_TOKEN:
+        return None
+    try:
+        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN}
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get(f"{CRYPTO_BASE}/getInvoices?invoice_ids={invoice_id}", headers=headers)
+            j = r.json()
+            if not j.get("ok"):
+                return None
+            items = (j.get("result", {}) or {}).get("items", [])
+            return items[0] if items else None
+    except Exception as e:
+        log.exception("crypto get error: %s", e)
+        return None
+
+async def _poll_crypto_invoice(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, user_id: int, invoice_id: str, usd_amount: float):
+    try:
+        for _ in range(120):  # ~12 минут при 6с задержке
+            inv = await _crypto_get_invoice(invoice_id)
+            st = (inv or {}).get("status", "").lower() if inv else ""
+            if st == "paid":
+                _wallet_total_add(user_id, float(usd_amount))
+                with contextlib.suppress(Exception):
+                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                        text=f"✅ CryptoBot: платёж подтверждён. Начислено: {_credits_fmt_from_usd(float(usd_amount))}.")
+                return
+            if st in ("expired", "cancelled", "canceled", "failed"):
+                with contextlib.suppress(Exception):
+                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                        text=f"❌ CryptoBot: платёж не завершён (статус: {st}).")
+                return
+            await asyncio.sleep(6.0)
+        with contextlib.suppress(Exception):
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                text="⌛ CryptoBot: время ожидания вышло. Нажмите «🔎 Проверить» позже.")
+    except Exception as e:
+        log.exception("crypto poll error: %s", e)
+
+async def _poll_crypto_sub_invoice(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+    invoice_id: str,
+    tier: str,
+    months: int
+):
+    try:
+        for _ in range(120):  # ~12 минут при задержке 6с
+            inv = await _crypto_get_invoice(invoice_id)
+            st = (inv or {}).get("status", "").lower() if inv else ""
+            if st == "paid":
+                until = activate_subscription_with_tier(user_id, tier, months)
+                with contextlib.suppress(Exception):
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id, message_id=message_id,
+                        text=f"✅ CryptoBot: платёж подтверждён.\n"
+                             f"Подписка {tier.upper()} активна до {until.strftime('%Y-%m-%d')}.\n🪙 Кредиты начислены: {SUBSCRIPTION_CREDITS.get((tier or '').lower(), 0) * int(months)} кр."
+                    )
+                return
+            if st in ("expired", "cancelled", "canceled", "failed"):
+                with contextlib.suppress(Exception):
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id, message_id=message_id,
+                        text=f"❌ CryptoBot: оплата не завершена (статус: {st})."
+                    )
+                return
+            await asyncio.sleep(6.0)
+
+        # Таймаут
+        with contextlib.suppress(Exception):
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id,
+                text="⌛ CryptoBot: время ожидания вышло. Нажмите «🔎 Проверить» или оплатите заново."
+            )
+    except Exception as e:
+        log.exception("crypto poll (subscription) error: %s", e)
+
+
+# ───────── Предложение пополнения ─────────
+async def _send_topup_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # v83: пользователю показываем кредиты, внутри legacy-баланс хранится в техническом эквиваленте.
+    small_cr = int(os.environ.get("CREDIT_PACK_SMALL_CREDITS", "1000") or 1000)
+    mid_cr = int(os.environ.get("CREDIT_PACK_MID_CREDITS", "3000") or 3000)
+    big_cr = int(os.environ.get("CREDIT_PACK_BIG_CREDITS", "7000") or 7000)
+    small_rub = int(os.environ.get("CREDIT_PACK_SMALL_RUB", "990") or 990)
+    mid_rub = int(os.environ.get("CREDIT_PACK_MID_RUB", "2790") or 2790)
+    big_rub = int(os.environ.get("CREDIT_PACK_BIG_RUB", "6290") or 6290)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"{small_cr} кр. • {small_rub} ₽", callback_data=f"topup:rub:{small_rub}"),
+         InlineKeyboardButton(f"{mid_cr} кр. • {mid_rub} ₽", callback_data=f"topup:rub:{mid_rub}")],
+        [InlineKeyboardButton(f"{big_cr} кр. • {big_rub} ₽", callback_data=f"topup:rub:{big_rub}")],
+        [InlineKeyboardButton(f"Crypto ~{small_cr} кр.", callback_data=f"topup:crypto:{_credits_to_usd(small_cr):.2f}"),
+         InlineKeyboardButton(f"Crypto ~{mid_cr} кр.", callback_data=f"topup:crypto:{_credits_to_usd(mid_cr):.2f}")],
+    ])
+    await update.effective_message.reply_text(
+        "🪙 Кредиты используются для тяжёлых функций: видео, музыка, AI-фото, FaceSwap, говорящий аватар и премиум-рендеры.\n"
+        "1 кредит = 1 ₽. Выберите пакет:",
+        reply_markup=kb,
+    )
+
+
+# ───────── Промо-квоты по функциям ─────────
+def _promo_feature_key(engine: str, remember_kind: str = "") -> str:
+    rk = (remember_kind or "").strip().lower()
+    eng = (engine or "").strip().lower()
+    if "vocal" in rk and ("clip" in rk or "lipsync" in rk):
+        return "vocal_lipsync_clip"
+    if "photo_music_clip" in rk or "photo_clip" in rk:
+        return "photo_music_clip"
+    if "talking_avatar" in rk or "avatar" in rk:
+        return "talking_avatar"
+    if rk.startswith("text_video") or rk.startswith("video_"):
+        return rk
+    if "revive_photo" in rk:
+        return rk
+    if "suno" in rk:
+        return "suno_music"
+    if "business_logo" in rk or "logo" in rk:
+        return "business_logo"
+    if "faceswap" in rk or "face_swap" in rk:
+        return "faceswap"
+    if "ai_selfie" in rk:
+        return "ai_selfie"
+    if "removebg" in rk or "remove_background" in rk:
+        return "remove_background"
+    if "replacebg" in rk or "replace_background" in rk:
+        return "replace_background"
+    if "outpaint" in rk:
+        return "outpaint"
+    if "image_retouch" in rk or "retouch" in rk:
+        return "image_retouch"
+    if "img_generate" in rk or "image_generate" in rk or eng == "img":
+        return "image_generation"
+    return rk or eng or "function"
+
+def _promo_quota_kv_key(user_id: int, feature: str, ymd: str | None = None) -> str:
+    safe = re.sub(r"[^a-z0-9_\-]+", "_", (feature or "function").lower())[:80]
+    return f"promo5:{user_id}:{ymd or _today_ymd()}:{safe}"
+
+def _try_consume_promo_daily5_quota(user_id: int, username: str | None, engine: str, remember_kind: str = "") -> tuple[bool, int, int, str]:
+    if not is_promo_daily5_user(user_id, username):
+        return False, 0, PROMO_DAILY5_PER_FUNCTION_LIMIT, ""
+    feature = _promo_feature_key(engine, remember_kind)
+    limit = max(0, int(PROMO_DAILY5_PER_FUNCTION_LIMIT))
+    if limit <= 0:
+        return False, 0, limit, feature
+    key = _promo_quota_kv_key(user_id, feature)
+    used = int(kv_get(key, "0") or "0")
+    if used >= limit:
+        return False, 0, limit, feature
+    kv_set(key, str(used + 1))
+    return True, max(0, limit - used - 1), limit, feature
+
+
+# ───────── Попытка оплатить → выполнить ─────────
+async def _try_pay_then_do(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    engine: str,
+    est_cost_usd: float,
+    coro_func,
+    remember_kind: str = "",
+    remember_payload: dict | None = None,
+    silent_failure: bool = False,
+):
+    """Reserve capacity, run provider, and charge only after the action explicitly returns True."""
+    username = (update.effective_user.username or "")
+
+    promo_ok, promo_left, promo_limit, promo_feature = _try_consume_promo_daily5_quota(user_id, username, engine, remember_kind)
+    if promo_ok:
+        try:
+            with contextlib.suppress(Exception):
+                await update.effective_message.reply_text(f"🎁 Промо-доступ: функция «{promo_feature}». Осталось сегодня: {promo_left}/{promo_limit}.")
+            result = await coro_func()
+            if result is False:
+                raise RuntimeError("provider returned unsuccessful result")
+        except Exception as e:
+            log.exception("promo daily5 action failed: %s", e)
+            if not silent_failure:
+                await update.effective_message.reply_text("❌ Задача не выполнена. Промо-кредиты не списываются.")
+        return
+    if is_promo_daily5_user(user_id, username) and promo_feature:
+        await update.effective_message.reply_text(f"Промо-лимит на функцию «{promo_feature}» сегодня исчерпан: {promo_limit}/{promo_limit}. GPT-чат остаётся безлимитным.")
+        return
+
+    free_kind = _free_quota_category(engine, remember_kind)
+    if free_kind and get_subscription_tier(user_id) == "free" and not is_unlimited(user_id, username):
+        q_ok, q_left, q_limit = _try_consume_free_daily_quota(user_id, username, free_kind)
+        if q_ok:
+            try:
+                with contextlib.suppress(Exception): await update.effective_message.reply_text(f"🎁 Бесплатное действие: {_free_quota_label(free_kind)}. Осталось сегодня: {q_left}/{q_limit}.")
+                result = await coro_func()
+                if result is False: raise RuntimeError("provider returned unsuccessful result")
+            except Exception as e:
+                log.exception("free action failed: %s", e)
+                if not silent_failure:
+                    await update.effective_message.reply_text("❌ Задача не выполнена. Денежного списания не было.")
+            return
+        await _send_free_quota_exhausted(update, context, free_kind); return
+
+    if is_unlimited(user_id, username):
+        try:
+            result = await coro_func()
+            if result is False: raise RuntimeError("provider returned unsuccessful result")
+        except Exception as e:
+            log.exception("unlimited action failed: %s", e)
+            if not silent_failure:
+                await update.effective_message.reply_text("❌ Задача не выполнена. Попробуйте позже.")
+        return
+
+    provider_cost = max(0.0, float(est_cost_usd or 0.0))
+    retail_usd = _retail_usd(provider_cost)
+    price_credits = _retail_credits(provider_cost)
+    tx_id = None
+    try:
+        tx_id, available_before = _credit_reserve(user_id, engine, remember_kind or engine, provider_cost, retail_usd, remember_payload)
+    except Exception as e:
+        log.exception("credit reserve failed: %s", e)
+        await update.effective_message.reply_text("❌ Не удалось проверить кредитный баланс. Попробуйте ещё раз.")
+        return
+
+    if not tx_id:
+        available_cr = int(round(_usd_to_credits(available_before)))
+        missing_cr = max(0, price_credits - available_cr)
+        await update.effective_message.reply_text(
+            f"Недостаточно кредитов. Стоимость: {price_credits} кр. Доступно: {available_cr} кр. Не хватает: {missing_cr} кр.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⭐ Тарифы", web_app=WebAppInfo(url=TARIFF_URL))],[InlineKeyboardButton("➕ Пополнить баланс", callback_data="topup")]])
+        )
+        return
+
+    after_cr = max(0, int(round(_usd_to_credits(available_before - retail_usd))))
+    with contextlib.suppress(Exception):
+        await update.effective_message.reply_text(f"🪙 Стоимость: {price_credits} кр. Списание произойдёт только после успешного результата. После выполнения останется: {after_cr} кр.")
+
+    try:
+        result = await coro_func()
+        if result is not True:
+            _credit_release(tx_id, "released")
+            if not silent_failure:
+                await update.effective_message.reply_text("↩️ Генерация не завершилась — кредиты не списаны.")
+            return
+        if not _credit_commit(tx_id):
+            _credit_release(tx_id, "released")
+            await update.effective_message.reply_text("⚠️ Результат получен, но списание не зафиксировано. Обратитесь в поддержку, повторно запускать оплату не нужно.")
+            return
+        with contextlib.suppress(Exception):
+            await update.effective_message.reply_text(f"✅ Списано: {price_credits} кр.")
+    except Exception as e:
+        _credit_release(tx_id, "released")
+        log.exception("paid action failed: %s", e)
+        if not silent_failure:
+            await update.effective_message.reply_text("❌ Задача не выполнена. Кредиты не списаны.")
+
+
+async def cmd_diag_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id if user else 0
+    username = user.username if user else ""
+    await update.effective_message.reply_text(
+        "🔐 Access diagnostic\n"
+        f"user_id: {user_id}\n"
+        f"username: @{username or '-'}\n"
+        f"unlimited: {is_unlimited(user_id, username)}\n"
+        f"promo_unlim_gpt: {is_promo_unlim_gpt(user_id, username)}\n"
+        f"promo_daily5: {is_promo_daily5_user(user_id, username)}\n"
+        f"promo_limit_per_function: {PROMO_DAILY5_PER_FUNCTION_LIMIT}"
+    )
+
+# ───────── /plans ─────────
+async def cmd_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lines = ["⭐ Тарифы и кредиты:", "Подписка открывает доступ, кредиты расходуются на тяжёлые генерации."]
+    for tier, terms in PLAN_PRICE_TABLE.items():
+        lines.append(f"— {tier.upper()}: "
+                     f"{terms['month']}₽/мес • {terms['quarter']}₽/квартал • {terms['year']}₽/год • {SUBSCRIPTION_CREDITS.get(tier,0)} кр./мес")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("START 1 мес",    callback_data="buy:start:1"),
+         InlineKeyboardButton("PRO 1 мес",      callback_data="buy:pro:1")],
+        [InlineKeyboardButton("ULTIMATE 1 мес", callback_data="buy:ultimate:1")],
+        [InlineKeyboardButton("Мини-витрина",    web_app=WebAppInfo(url=TARIFF_URL))]
+    ])
+    await update.effective_message.reply_text("\n".join(lines), reply_markup=kb)
+
+
+# ───────── Обёртка для передачи произвольного текста (напр. из STT) ─────────
+async def on_text_with_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+):
+    """
+    Обёртка для передачи текста (например, после STT) в on_text,
+    без попыток изменить update.message (read-only!).
+    """
+    text = (text or "").strip()
+    if not text:
+        await update.effective_message.reply_text("Не удалось распознать текст.")
+        return
+
+    await on_text(update, context, manual_text=text)
+
+
+# ───────── Текстовый вход ─────────
+async def on_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    manual_text: str | None = None,
+):
+    # Если текст передан извне → используем его
+    # иначе — обычный текст сообщения
+    if manual_text is not None:
+        text = manual_text.strip()
+    else:
+        text = (update.message.text or "").strip()
+
+    # Image-to-video owns the next text message completely.  Keep this guard
+    # inside the canonical text router as well as the priority handler in
+    # build_application(): webhook restarts, duplicate callback routes, or a
+    # generic capability/medical matcher must never reinterpret the motion
+    # prompt as another task.
+    if context.user_data.get("awaiting_i2v_prompt"):
+        if not _get_cached_photo(update.effective_user.id):
+            _clear_i2v_wait(context)
+            await update.effective_message.reply_text(
+                "⚠️ Референс изображения не найден. Откройте «Картинка → видео» и загрузите фото ещё раз."
+            )
+            return
+        await _start_image_to_video(update, context, text)
+        _clear_i2v_wait(context)
+        with contextlib.suppress(Exception):
+            _mode_track_set(update.effective_user.id, "")
+        return
+
+    # The selected image-to-video flow is also durable in SQLite.  This
+    # recovery path covers webhook/process restarts where PTB user_data is
+    # gone, and prevents a motion prompt from falling through to the generic
+    # text-to-video provider chooser.
+    if (
+        _mode_track_get(update.effective_user.id) == "image_to_video"
+        and _get_cached_photo(update.effective_user.id)
+        and not context.user_data.get("awaiting_i2v_photo")
+        and text
+    ):
+        context.user_data.setdefault("i2v_engine", "seedance")
+        context.user_data.setdefault("i2v_duration", 8)
+        context.user_data.setdefault("i2v_aspect", "9:16")
+        context.user_data["awaiting_i2v_prompt"] = True
+        await _start_image_to_video(update, context, text)
+        _clear_i2v_wait(context)
+        with contextlib.suppress(Exception):
+            _mode_track_set(update.effective_user.id, "")
+        return
+
+    # Studio prompt edit is an explicit one-message draft workflow; no provider call.
+    if context.user_data.get("studio_prompt_awaiting_edit"):
+        from neyrobot_prod.studio_prompt_handlers import receive_prompt_draft
+        if await receive_prompt_draft(update, context, text):
+            return
+
+    # Idempotency guard: the priority Presentation Studio handler may already own this update.
+    with contextlib.suppress(Exception):
+        if context.chat_data.get("_presentation_last_update_token") == _presentation_update_token(update):
+            return
+
+    # Rename virtual chat before routing the message to GPT.
+    rename_cid = context.user_data.pop("awaiting_chat_rename", None)
+    if rename_cid:
+        if _chat_rename(update.effective_user.id, update.effective_chat.id, int(rename_cid), text):
+            await update.effective_message.reply_text("✅ Название чата обновлено.", reply_markup=_chat_list_kb(update.effective_user.id, update.effective_chat.id))
+        else:
+            await update.effective_message.reply_text("Не удалось переименовать чат.")
+        return
+
+    if context.user_data.pop("awaiting_midjourney_prompt", None):
+        await _start_midjourney_image(update, context, text)
+        return
+
+    # Active presentation/catalog project has absolute priority over generic GPT/live-search routing.
+    _studio = _presentation_studio_get()
+    if await _studio.handle_text(update, context, text):
+        return
+    # When a project is active but the current stage expects a button/upload rather than free text,
+    # never pass the same message to generic GPT or live-search.
+    _active_presentation = _studio._active_project(update.effective_user.id, update.effective_chat.id)
     if _active_presentation:
         await update.effective_message.reply_text(
             "Проект презентации активен. На этом этапе используйте кнопки мастера или нажмите «Продолжить»."
