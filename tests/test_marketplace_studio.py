@@ -23,7 +23,7 @@ class MarketplaceStudioTests(unittest.TestCase):
 
     def test_empty_references_blocked(self):
         p = select_marketplace(select_output(ProductProject(), Output.VIDEO), Marketplace.GENERIC)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "Загрузите хотя бы одну фотографию товара"):
             continue_after_references(p)
 
     def test_upload_cap_and_wrong_stage(self):
