@@ -12,8 +12,8 @@ import asyncio
 import contextlib
 from typing import Any
 
-VERSION = "v121-educational-content-safe-2026-11-11"
-_FLAG = "_V121_EDUCATIONAL_BUILD_PATCHED"
+VERSION = "v122-educational-completion-release-2026-11-11"
+_FLAG = "_V122_EDUCATIONAL_BUILD_PATCHED"
 
 _COMMERCIAL_RE = (
     "продаж", "реклам", "коммерческ", "бренд", "компани", "клиент",
@@ -82,6 +82,17 @@ def patch_module(mod: Any) -> bool:
     if getattr(mod, _FLAG, False):
         return True
     previous_callback = mod.on_callback
+    original_active_project = mod.PresentationStudio._active_project
+
+    def active_project(self: Any, user_id: int, chat_id: int) -> dict[str, Any] | None:
+        # A completed project stays available for downloads/new-project actions,
+        # but must not capture unrelated chat messages forever.
+        project = original_active_project(self, user_id, chat_id)
+        if project and str(project.get("stage") or project.get("state") or "") == "done":
+            return None
+        return project
+
+    mod.PresentationStudio._active_project = active_project
 
     async def on_callback(update: Any, context: Any) -> None:
         q = getattr(update, "callback_query", None)
