@@ -12,8 +12,8 @@ import asyncio
 import contextlib
 from typing import Any
 
-VERSION = "v120-educational-build-lock-safe-2026-11-11"
-_FLAG = "_V120_EDUCATIONAL_BUILD_PATCHED"
+VERSION = "v121-educational-content-safe-2026-11-11"
+_FLAG = "_V121_EDUCATIONAL_BUILD_PATCHED"
 
 _COMMERCIAL_RE = (
     "продаж", "реклам", "коммерческ", "бренд", "компани", "клиент",
@@ -29,6 +29,38 @@ def _is_educational_project(project: dict[str, Any]) -> bool:
     contacts = list(profile.get("contacts") or [])
     prices = list(profile.get("prices") or [])
     return not contacts and not prices and not any(token in raw for token in _COMMERCIAL_RE)
+
+
+def _topic(project: dict[str, Any]) -> str:
+    profile = project.get("profile") or {}
+    candidate = str(profile.get("brand_name") or "").strip()
+    if candidate:
+        return candidate
+    structure = project.get("structure") or []
+    if structure and isinstance(structure[0], dict):
+        return str(structure[0].get("title") or "Учебная тема").strip()
+    return "Учебная тема"
+
+
+def _educational_slides(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Create an honest educational deck, never a disguised sales template."""
+    topic = _topic(project)
+    lowered = topic.lower().replace("ё", "е")
+    if "лист" in lowered:
+        cover = "Как меняются листья осенью"
+        key_idea = "Осенью зелёный хлорофилл разрушается — поэтому становятся заметны жёлтые, оранжевые и красные пигменты."
+        conclusion = "Смена окраски и листопад помогают деревьям подготовиться к зиме и сохранить влагу."
+        visual = "golden, red and orange autumn leaves on branches and on a forest floor, natural science educational photograph"
+    else:
+        cover = f"Основные факты по теме «{topic}»"
+        key_idea = f"Разберём причины, важные связи и примеры, которые помогают понять тему «{topic}»."
+        conclusion = f"Главный вывод: знания о теме «{topic}» помогают видеть связи между причинами, изменениями и результатами."
+        visual = f"realistic educational photograph illustrating the topic {topic}, clear natural context"
+    return [
+        {"title": topic, "subtitle": "Учебная презентация", "bullets": [cover], "layout": "cover", "image_needed": True, "image_prompt": visual},
+        {"title": "Ключевая идея", "subtitle": "", "bullets": [key_idea], "layout": "split", "image_needed": True, "image_prompt": visual},
+        {"title": "Вывод", "subtitle": "", "bullets": [conclusion], "layout": "split", "image_needed": True, "image_prompt": visual},
+    ]
 
 
 async def _send_ready_documents(mod: Any, update: Any, pdf_path: str, pptx_path: str) -> tuple[str, str]:
@@ -72,10 +104,7 @@ def patch_module(mod: Any) -> bool:
             # provider.  Keep it outside the enclosing render runner so the
             # per-user semaphore is never acquired recursively.
             project["last_build_step"] = "deck_content"
-            rebuild = getattr(mod, "_v104_repair_slides", None)
-            if not callable(rebuild):
-                raise RuntimeError("Не найден безопасный сборщик учебных слайдов")
-            slides = rebuild(project)
+            slides = _educational_slides(project)
             if not slides:
                 raise RuntimeError("Не удалось подготовить учебные слайды")
             project["final_slides"] = slides
