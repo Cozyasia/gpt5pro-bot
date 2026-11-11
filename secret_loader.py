@@ -24,6 +24,7 @@ _LOADED_SOURCES: dict[str, str] = {}
 _BOOTSTRAPPED = False
 _PRESENTATION_V106_PATCHED = False
 _PRESENTATION_V107_PATCHED = False
+_PRESENTATION_EDUCATIONAL_BUILD_PATCHED = False
 _MEDICAL_V108_PATCHED = False
 _MEDICAL_CARD_V109_PATCHED = False
 _MEDICAL_CARD_V110_PATCHED = False
@@ -110,6 +111,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
     Returns a mapping of loaded key -> source path.
     """
     global _BOOTSTRAPPED, _PRESENTATION_V106_PATCHED, _PRESENTATION_V107_PATCHED
+    global _PRESENTATION_EDUCATIONAL_BUILD_PATCHED
     global _MEDICAL_V108_PATCHED, _MEDICAL_CARD_V109_PATCHED, _MEDICAL_CARD_V110_PATCHED
     global _MEDICAL_ENGINE_V111_PATCHED, _MEDICAL_V114_OVERLAY_PATCHED
     global _GENERAL_TEXT_ROUTER_V114_PATCHED, _MODEL_POLICY_V115_PATCHED
@@ -157,6 +159,17 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             from presentation_v107_patch import patch_module
             patch_module(_presentation_studio)
             _PRESENTATION_V107_PATCHED = True
+        except Exception:
+            pass
+
+    # Non-commercial educational presentations must not be blocked by
+    # business-only contact requirements. This wrapper owns only the final build.
+    if not _PRESENTATION_EDUCATIONAL_BUILD_PATCHED:
+        try:
+            import presentation_studio as _presentation_studio
+            from presentation_education_build_patch import patch_module as patch_educational_build
+            patch_educational_build(_presentation_studio)
+            _PRESENTATION_EDUCATIONAL_BUILD_PATCHED = True
         except Exception:
             pass
 
