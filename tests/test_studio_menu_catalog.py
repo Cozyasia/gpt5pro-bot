@@ -10,12 +10,12 @@ class StudioCatalogTests(unittest.TestCase):
         "market": "ent:brief:product_ad",
         "celebrity": "fun:aiselfie",
         "realty": "revideo:start",
-        "photo": "engine:images",
+        "photo": "ent:menu:photo",
         "music": "fun:music",
         "study": "mode:study",
         "work": "mode:work",
         "assistant": "mode:root",
-        "advert": "ent:brief:product_ad",
+        "advert": "ent:brief:ugc_ad",
     }
 
     def test_all_sections_unique(self):
@@ -33,6 +33,11 @@ class StudioCatalogTests(unittest.TestCase):
 
     def test_unknown_mode_fails_closed(self):
         self.assertIsNone(verified_callback("unknown"))
+
+    def test_distinct_user_promises_do_not_share_a_workflow(self):
+        """Marketplace cards and product commercials start different jobs."""
+        callbacks = {section.slug: section.callback for section in SECTIONS}
+        self.assertNotEqual(callbacks["market"], callbacks["advert"])
 
 
 if __name__ == "__main__":

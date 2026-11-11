@@ -9,9 +9,9 @@ class StartRouteTests(unittest.TestCase):
         expected = {
             "medicine": "mode:medicine", "video": "act:fun:textvideo",
             "market": "ent:brief:product_ad", "celebrity": "fun:aiselfie",
-            "realty": "revideo:start", "photo": "engine:images",
+            "realty": "revideo:start", "photo": "ent:menu:photo",
             "music": "fun:music", "study": "mode:study", "work": "mode:work",
-            "assistant": "mode:root", "advert": "ent:brief:product_ad",
+            "assistant": "mode:root", "advert": "ent:brief:ugc_ad",
         }
         for slug, callback in expected.items():
             self.assertEqual(parse_studio_start(["studio_" + slug]), (slug, callback))

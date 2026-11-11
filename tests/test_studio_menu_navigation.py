@@ -10,12 +10,12 @@ class StudioNavigationTests(unittest.TestCase):
             "market": "ent:brief:product_ad",
             "celebrity": "fun:aiselfie",
             "realty": "revideo:start",
-            "photo": "engine:images",
+            "photo": "ent:menu:photo",
             "music": "fun:music",
             "study": "mode:study",
             "work": "mode:work",
             "assistant": "mode:root",
-            "advert": "ent:brief:product_ad",
+            "advert": "ent:brief:ugc_ad",
         }
         for slug, expected in expected_routes.items():
             self.assertEqual(resolve_navigation(json.dumps({"v": 1, "action": "open_mode", "route": slug})), expected)

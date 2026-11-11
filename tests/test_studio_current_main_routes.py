@@ -8,7 +8,7 @@ class CurrentMainRouteTests(unittest.TestCase):
         self.assertEqual(verified_callback("medicine"),"mode:medicine")
         self.assertEqual(verified_callback("study"),"mode:study")
         self.assertEqual(verified_callback("work"),"mode:work")
-        self.assertEqual(verified_callback("photo"),"engine:images")
+        self.assertEqual(verified_callback("photo"),"ent:menu:photo")
         self.assertEqual(verified_callback("video"),"act:fun:textvideo")
     def test_legacy_routes_rejected(self):
         for route in ("mode:medicine","mode:study","mode:work","engine:images","engine:kling"):

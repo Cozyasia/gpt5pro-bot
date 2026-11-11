@@ -21,12 +21,12 @@ SECTIONS = (
     StudioSection("video", "AI-Видео", "act:fun:textvideo", "current main: on_mode_cb"),
     StudioSection("realty", "Недвижимость", "revideo:start", "current main commit #221"),
     StudioSection("celebrity", "Селфи со звездой", "fun:aiselfie", "current main: AI-selfie high-priority handler"),
-    StudioSection("photo", "AI-Фотостудия", "engine:images", "current main: engine callback handler"),
+    StudioSection("photo", "AI-Фотостудия", "ent:menu:photo", "current main: photo/effects menu"),
     StudioSection("music", "Музыка", "fun:music", "current main: on_cb_fun"),
     StudioSection("study", "Учёба", "mode:study", "current main: on_mode_cb"),
     StudioSection("work", "Работа", "mode:work", "current main: on_mode_cb"),
     StudioSection("assistant", "AI-Ассистент", "mode:root", "current main: on_mode_cb"),
-    StudioSection("advert", "Реклама товара", "ent:brief:product_ad", "current main commit #221"),
+    StudioSection("advert", "Реклама товара", "ent:brief:ugc_ad", "current main: UGC advertising brief"),
 )
 
 
