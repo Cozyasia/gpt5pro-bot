@@ -7,6 +7,7 @@ commercial intent and no real contact data.
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import Any
 
@@ -82,7 +83,41 @@ def patch_module(mod: Any) -> bool:
             )
 
         async def render_action():
-            return await mod._build_files(project, update, context)
+            # Educational briefs are allowed to have no CTA or contact channels.
+            # Build deterministic approved slide copy directly, avoiding the
+            # business-only preflight overlay in the legacy runtime.
+            project["last_build_step"] = "deck_content"
+            rebuild = getattr(mod, "_v104_repair_slides", None)
+            if not callable(rebuild):
+                raise RuntimeError("Не найден безопасный сборщик учебных слайдов")
+            slides = rebuild(project)
+            if not slides:
+                raise RuntimeError("Не удалось подготовить учебные слайды")
+            project["final_slides"] = slides
+            mod._save(project["user_id"], project)
+
+            project["last_build_step"] = "image_generation"
+            images = await mod._prepare_slide_images(project, slides, update, context)
+            pdir = mod._project_dir(project["user_id"], project["project_id"])
+            sanitize = getattr(mod, "_v99_sanitize_images", None)
+            if callable(sanitize):
+                images = sanitize(images, pdir)
+            project["slide_images"] = {str(key): value for key, value in images.items()}
+            mod._save(project["user_id"], project)
+
+            project["last_build_step"] = "pptx_render"
+            brand = mod._safe_filename(project.get("profile", {}).get("brand_name", "presentation"))
+            pptx_path = pdir / f"{brand}_presentation.pptx"
+            pdf_path = pdir / f"{brand}_presentation.pdf"
+            await asyncio.to_thread(mod._build_pptx, project, slides, images, pptx_path)
+            project["last_build_step"] = "pdf_render"
+            await asyncio.to_thread(mod._build_pdf, project, slides, images, pdf_path)
+            project["pptx_path"] = str(pptx_path)
+            project["pdf_path"] = str(pdf_path)
+            project["stage"] = "done"
+            project["last_build_step"] = "files_ready"
+            mod._save(project["user_id"], project)
+            return str(pdf_path), str(pptx_path)
 
         try:
             runner = getattr(mod, "_STUDIO_PAID_RUNNER", None)
