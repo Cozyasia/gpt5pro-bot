@@ -6260,6 +6260,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _handle_payment_start_payload(update, context):
         return
     from neyrobot_prod.studio_menu_start import studio_start_markup
+    from neyrobot_prod.studio_menu_shortcuts import resolve_shortcut
+    shortcut = resolve_shortcut(context.args)
+    if shortcut == "plans":
+        await cmd_plans(update, context)
+        return
+    if shortcut == "balance":
+        await cmd_balance(update, context)
+        return
+
     studio_entry = studio_start_markup(context.args)
     if studio_entry is not None:
         studio_title, studio_markup = studio_entry
