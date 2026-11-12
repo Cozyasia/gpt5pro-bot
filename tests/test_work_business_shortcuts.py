@@ -22,11 +22,16 @@ class WorkBusinessShortcutsTests(unittest.TestCase):
         body = ast.get_source_segment(self.source, fn)
         self.assertIn('InlineKeyboardButton("🛍 Маркетплейсы", callback_data="ent:brief:product_ad")', body)
         self.assertIn('InlineKeyboardButton("📱 UGC-реклама", callback_data="ent:brief:ugc_ad")', body)
+        self.assertIn('InlineKeyboardButton("🏢 Реклама услуг", callback_data="ent:brief:service_ad")', body)
         self.assertIn('InlineKeyboardButton("🏡 Реклама недвижимости", callback_data="ent:brief:real_estate_ad")', body)
 
-    def test_real_estate_ad_has_the_same_clear_label_in_both_menus(self):
-        self.assertIn('(_button("🏡 Реклама недвижимости", "ent:brief:real_estate_ad"),)', CATALOG.read_text(encoding="utf-8"))
-        self.assertIn('"real_estate_ad": ("🏡 Реклама недвижимости"', PRODUCTION.read_text(encoding="utf-8"))
+    def test_service_and_real_estate_ads_have_distinct_public_contracts(self):
+        catalog = CATALOG.read_text(encoding="utf-8")
+        production = PRODUCTION.read_text(encoding="utf-8")
+        self.assertIn('(_button("🏢 Реклама услуг", "ent:brief:service_ad"),)', catalog)
+        self.assertIn('(_button("🏡 Реклама недвижимости", "ent:brief:real_estate_ad"),)', catalog)
+        self.assertIn('"service_ad": ("🏢 Реклама услуг"', production)
+        self.assertIn('"real_estate_ad": ("🏡 Реклама недвижимости"', production)
 
 
 if __name__ == "__main__":
