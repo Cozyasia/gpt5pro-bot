@@ -169,6 +169,50 @@ class EntertainmentMainWiringTests(unittest.TestCase):
             with self.subTest(action=action):
                 self.assertIn(f'"{action}"', active_source)
 
+    def test_photo_edit_actions_have_real_photo_intake(self):
+        handlers = self._functions("on_cb_fun")
+        active_source = ast.get_source_segment(self.source, handlers[-1]) or ""
+        for action in ("retouch", "remove_object", "outpaint", "vision"):
+            with self.subTest(action=action):
+                self.assertIn(f'"{action}"', active_source)
+        self.assertIn("_set_waiting_image_retouch", active_source)
+        self.assertIn("_set_waiting_outpaint", active_source)
+        self.assertIn("_set_waiting_image_vision", active_source)
+
+    def test_trend_templates_have_dedicated_runtime_entry_actions(self):
+        handlers = self._functions("on_cb_fun")
+        active_source = ast.get_source_segment(self.source, handlers[-1]) or ""
+        for action in ("photo_dance", "in_movie", "video_greeting", "video_faceswap"):
+            with self.subTest(action=action):
+                self.assertIn(f'action == "{action}"', active_source)
+        self.assertIn("revival_preset_prompt", active_source)
+        self.assertIn("ai_selfie_preset_prompt", active_source)
+        self.assertIn("video_greeting_mode", active_source)
+
+    def test_postproduction_actions_have_dedicated_runtime_owners(self):
+        handlers = self._functions("on_cb_fun")
+        active_source = ast.get_source_segment(self.source, handlers[-1]) or ""
+        for action in ("before_after", "outfit", "continue_video", "video_translation"):
+            with self.subTest(action=action):
+                self.assertIn(f'action == "{action}"', active_source)
+        self.assertIn("awaiting_before_after", active_source)
+        self.assertIn("awaiting_video_continue_upload", active_source)
+        self.assertIn("awaiting_video_translation_upload", active_source)
+
+    def test_postproduction_media_owners_are_registered_before_generic_video(self):
+        self.assertIn("on_media_workflow_video", self.source)
+        self.assertIn("on_media_workflow_text", self.source)
+        self.assertIn("on_media_workflow_video", self.source)
+        self.assertIn('filters.Document.FileExtension("mp4")', self.source)
+
+    def test_photo_handler_owns_outpaint_and_vision_waiting_states(self):
+        photo_handler = self._source_for("on_photo")
+        self.assertIn("_is_waiting_outpaint", photo_handler)
+        self.assertIn("_is_waiting_image_vision", photo_handler)
+        self.assertIn("_pedit_outpaint", photo_handler)
+        self.assertIn("_describe_image", photo_handler)
+        self.assertIn("revival_preset_prompt", photo_handler)
+
     def test_persistent_root_keyboard_labels_are_unchanged(self):
         node = self._functions("main_keyboard")[0]
 
