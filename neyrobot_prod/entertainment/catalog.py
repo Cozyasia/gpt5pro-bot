@@ -87,7 +87,8 @@ _MENUS: dict[str, MenuSpec] = {
         rows=(
             (_button("✨ Фото оживает", "fun:revive"),),
             (_button("🗣 Фото говорит", "fun:avatar"),),
-            (_button("🎭 Заменить лицо в видео", "fun:video_faceswap"),),
+            (_button("🎬 Замена героя в видео", "fun:hero_replace"),),
+            (_button("🎭 Быстрая замена лица", "fun:video_faceswap"),),
             (_button("💃 Фото танцует", "fun:photo_dance"),),
             (_button("🎞 Я в кино", "fun:in_movie"),),
             (_button("⭐ Селфи со звездой", "fun:aiselfie"),),
