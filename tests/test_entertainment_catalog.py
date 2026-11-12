@@ -157,7 +157,10 @@ class EntertainmentCatalogTests(unittest.TestCase):
     def test_phase_one_active_routes_reuse_existing_fun_callbacks(self):
         expected = {
             "production": {"fun:video_director"},
-            "trends": {"fun:revive", "fun:avatar", "fun:aiselfie", "fun:reels"},
+            "trends": {
+                "fun:revive", "fun:avatar", "fun:aiselfie", "fun:reels",
+                "fun:photo_dance", "fun:in_movie", "fun:video_greeting", "fun:video_faceswap",
+            },
             "video": {
                 "fun:textvideo",
                 "fun:revive",
@@ -167,6 +170,7 @@ class EntertainmentCatalogTests(unittest.TestCase):
                 "fun:video_director",
                 "fun:video_montage",
                 "fun:vocalclip",
+                "fun:continue_video",
             },
             "photo": {
                 "fun:img",
@@ -174,11 +178,72 @@ class EntertainmentCatalogTests(unittest.TestCase):
                 "fun:faceswap",
                 "fun:removebg",
                 "fun:replacebg",
+                "fun:retouch",
+                "fun:remove_object",
+                "fun:outpaint",
+                "fun:vision",
+                "fun:outfit",
             },
         }
         for menu_id, callbacks in expected.items():
             with self.subTest(menu_id=menu_id):
                 self.assertTrue(callbacks.issubset(set(self._callbacks(menu_id))))
+
+    def test_photo_editing_routes_are_live_not_coming_soon(self):
+        photo = get_menu("photo")
+        by_callback = {
+            button.callback_data: button
+            for row in photo.rows
+            for button in row
+        }
+        expected = {
+            "fun:retouch": "✨ Ретушь / убрать лишнее",
+            "fun:remove_object": "🧽 Удалить объект или текст",
+            "fun:outpaint": "↔️ Расширить кадр",
+            "fun:vision": "👁 Что на фото?",
+        }
+        self.assertEqual(set(expected), set(expected) & set(by_callback))
+        for callback, label in expected.items():
+            with self.subTest(callback=callback):
+                self.assertEqual(label, by_callback[callback].text)
+                self.assertEqual("active", by_callback[callback].status)
+
+    def test_trend_templates_reuse_real_media_workflows(self):
+        trends = get_menu("trends")
+        by_callback = {
+            button.callback_data: button
+            for row in trends.rows
+            for button in row
+        }
+        expected = {
+            "fun:photo_dance": "💃 Фото танцует",
+            "fun:in_movie": "🎞 Я в кино",
+            "fun:video_greeting": "🎁 Видео-поздравление",
+            "fun:video_faceswap": "🎭 Заменить лицо в видео",
+        }
+        self.assertEqual(set(expected), set(expected) & set(by_callback))
+        for callback, label in expected.items():
+            with self.subTest(callback=callback):
+                self.assertEqual(label, by_callback[callback].text)
+                self.assertEqual("active", by_callback[callback].status)
+
+    def test_remaining_soon_items_are_replaced_by_real_workflow_routes(self):
+        expected = {
+            "production": {"fun:video_translation"},
+            "trends": {"fun:before_after", "fun:outfit"},
+            "video": {"fun:continue_video"},
+            "photo": {"fun:outfit"},
+        }
+        for menu_id, callbacks in expected.items():
+            with self.subTest(menu_id=menu_id):
+                buttons = {
+                    button.callback_data: button
+                    for row in get_menu(menu_id).rows
+                    for button in row
+                }
+                self.assertTrue(callbacks.issubset(buttons))
+                for callback in callbacks:
+                    self.assertEqual("active", buttons[callback].status)
 
     def test_vocal_clip_is_reachable_from_create_video(self):
         matches = [
@@ -194,7 +259,7 @@ class EntertainmentCatalogTests(unittest.TestCase):
         self.assertEqual(production.rows[0][0].text, "🏡 AI-видеообзор недвижимости")
         active = [button for row in production.rows for button in row
                   if button.callback_data.startswith("ent:brief:")]
-        self.assertEqual(len(active), 7)
+        self.assertEqual(len(active), 8)
         self.assertTrue(all(button.status == "active" for button in active))
         self.assertTrue(any("услуг" in button.text.lower() for button in active))
         self.assertTrue(any("UGC" in button.text for button in active))
