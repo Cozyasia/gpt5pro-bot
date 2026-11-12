@@ -27,7 +27,9 @@ class ProductionTests(unittest.TestCase):
         return q.message.texts, context.user_data
 
     def test_all_briefs_have_descriptions(self):
-        self.assertEqual(len(BRIEFS), 9)
+        self.assertEqual(len(BRIEFS), 10)
+        self.assertIn("service_ad", BRIEFS)
+        self.assertIn("real_estate_ad", BRIEFS)
         for mode in BRIEFS:
             if mode == 'product_ad':
                 continue
