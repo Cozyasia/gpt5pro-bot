@@ -69,6 +69,7 @@ _MENUS: dict[str, MenuSpec] = {
             (_button("🏡 AI-видеообзор недвижимости", "revideo:start"),),
             (_button("🛍 Маркетплейсы", "ent:brief:product_ad"),),
             (_button("📱 UGC-реклама", "ent:brief:ugc_ad"),),
+            (_button("🏢 Реклама услуг", "ent:brief:service_ad"),),
             (_button("🏡 Реклама недвижимости", "ent:brief:real_estate_ad"),),
             (_button("👤 Экспертное видео", "ent:brief:expert_video"),),
             (_button("💎 Брендовый ролик", "ent:brief:brand_video"),),
