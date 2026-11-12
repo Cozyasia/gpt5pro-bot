@@ -3783,7 +3783,8 @@ def _mode_desc(key: str, user_id: int | None = None) -> str:
             "💼 *Работа/Бизнес*\n"
             "Гибрид: GPT-5 для документов, КП, аналитики и структуры; Vision для таблиц/скринов; "
             "OpenAI Images/Midjourney для логотипов и визуалов; image-edit для удаления водяных знаков; "
-            "полноценный мастер презентаций/каталогов с логотипом, массовой загрузкой фото, AI-визуалами и экспортом PDF+PPTX; STT/TTS для диктовки и озвучки.\n\n"
+            "полноценный мастер презентаций/каталогов с логотипом, массовой загрузкой фото, AI-визуалами и экспортом PDF+PPTX; "
+            "маркетплейсы и UGC-реклама; STT/TTS для диктовки и озвучки.\n\n"
             "Быстрые действия ниже. Можно написать свободный запрос: «сделай КП», «создай презентацию на 10 слайдов», "
             "«собери PDF-каталог объектов», «создай логотип для бренда», «убери водяной знак с фото»."
         )
@@ -3825,6 +3826,8 @@ def _mode_kb(key: str, user_id: int | None = None) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📊 Аналитика / сводка", callback_data="act:work:report")],
             [InlineKeyboardButton("🗂 План / ToDo", callback_data="act:work:plan")],
             [InlineKeyboardButton("💡 Идеи / бриф", callback_data="act:work:idea")],
+            [InlineKeyboardButton("🛍 Маркетплейсы", callback_data="ent:brief:product_ad")],
+            [InlineKeyboardButton("📱 UGC-реклама", callback_data="ent:brief:ugc_ad")],
             [InlineKeyboardButton("📊 Презентация PDF + PPTX", callback_data="act:work:presentation")],
             [InlineKeyboardButton("📕 Каталог PDF + PPTX", callback_data="act:work:catalog_pdf")],
             [InlineKeyboardButton("🎨 Создать логотип", callback_data="act:work:logo")],
