@@ -419,6 +419,12 @@ FACESWAP_POLL_DELAY_S = float(os.environ.get("FACESWAP_POLL_DELAY_S", "2.5") or 
 VIDEO_FACESWAP_MAX_SECONDS = int(os.environ.get("VIDEO_FACESWAP_MAX_SECONDS", "6") or 6)
 VIDEO_FACESWAP_FPS = int(os.environ.get("VIDEO_FACESWAP_FPS", "6") or 6)
 VIDEO_FACESWAP_MAX_MB = int(os.environ.get("VIDEO_FACESWAP_MAX_MB", "25") or 25)
+# Full-character replacement is a true video-editing workflow, not the
+# frame-by-frame face swap above.  Keep v1 deliberately narrow until the
+# shot-quality gate is proven on production material.
+HERO_REPLACE_MAX_SECONDS = int(os.environ.get("HERO_REPLACE_MAX_SECONDS", "10") or 10)
+HERO_REPLACE_MAX_MB = int(os.environ.get("HERO_REPLACE_MAX_MB", "50") or 50)
+HERO_REPLACE_MODEL = os.environ.get("HERO_REPLACE_MODEL", "aleph2").strip() or "aleph2"
 FACESWAP_INPUT_MAX_SIDE = int(os.environ.get("FACESWAP_INPUT_MAX_SIDE", "1600") or 1600)
 FACESWAP_OUTPUT_MAX_SIDE = int(os.environ.get("FACESWAP_OUTPUT_MAX_SIDE", "1600") or 1600)
 FACESWAP_RESULT_AS_DOCUMENT = os.environ.get("FACESWAP_RESULT_AS_DOCUMENT", "0").strip().lower() in ("1", "true", "yes", "on")
@@ -672,6 +678,9 @@ SORA_COST_PER_SECOND_USD = _pricing_cost("SORA_COST_PER_SECOND_USD", 0.10)
 SORA_PRO_COST_PER_SECOND_USD = _pricing_cost("SORA_PRO_COST_PER_SECOND_USD", 0.30)
 KLING_5S_COST_USD = _pricing_cost("KLING_5S_COST_USD", 0.23)
 RUNWAY_COST_PER_SECOND_USD = _pricing_cost("RUNWAY_COST_PER_SECOND_USD", 0.12)
+HERO_REPLACE_COST_PER_SECOND_USD = _pricing_cost(
+    "HERO_REPLACE_COST_PER_SECOND_USD", RUNWAY_COST_PER_SECOND_USD
+)
 RUNWAY_TURBO_COST_PER_SECOND_USD = _pricing_cost("RUNWAY_TURBO_COST_PER_SECOND_USD", 0.05)
 RUNWAY_5S_COST_USD = _pricing_cost("RUNWAY_5S_COST_USD", RUNWAY_COST_PER_SECOND_USD * 5)
 SORA_UNIT_COST_USD = _pricing_cost("SORA_UNIT_COST_USD", SORA_COST_PER_SECOND_USD * 5)
@@ -6194,6 +6203,17 @@ def _clear_transient_flows(context):
         "video_faceswap_target",
         "video_faceswap_consent_pending",
         "video_faceswap_consent_confirmed",
+        "hero_replace_consent_pending",
+        "hero_replace_consent_confirmed",
+        "awaiting_hero_replace_video",
+        "hero_replace_video",
+        "hero_replace_pack_slot",
+        "hero_replace_face_front",
+        "hero_replace_face_3q",
+        "hero_replace_body_full",
+        "awaiting_hero_replace_brief",
+        "hero_replace_brief",
+        "hero_replace_anchor",
         "presentation_studio_active",
     ):
         with contextlib.suppress(Exception):
@@ -9635,6 +9655,30 @@ def _extract_last_video_frame_sync(video_bytes: bytes) -> bytes | None:
                     return fh.read()
     except Exception as exc:
         log.warning("continuation frame extraction failed: %s", exc)
+    return None
+
+
+def _extract_first_video_frame_sync(video_bytes: bytes) -> bytes | None:
+    """Extract the source-frame anchor for a controlled video-to-video edit."""
+    if not video_bytes:
+        return None
+    ffmpeg = _ffmpeg_exe()
+    try:
+        with tempfile.TemporaryDirectory(prefix="neyro_hero_anchor_") as td:
+            src = os.path.join(td, "source.mp4")
+            out = os.path.join(td, "first.jpg")
+            with open(src, "wb") as fh:
+                fh.write(video_bytes)
+            result = subprocess.run(
+                [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", "0.05", "-i", src,
+                 "-frames:v", "1", "-q:v", "2", out],
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=60,
+            )
+            if result.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 1024:
+                with open(out, "rb") as fh:
+                    return fh.read()
+    except Exception as exc:
+        log.warning("hero replacement first-frame extraction failed: %s", exc)
     return None
 
 
@@ -19075,6 +19119,41 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # Full-character video replacement owns a separate three-angle pack.
+        # It must never reuse the music-video cache: mixed identities after a
+        # restart are substantially worse than requiring the user to re-upload.
+        hero_slot = str(context.user_data.get("hero_replace_pack_slot") or "")
+        if hero_slot:
+            if not context.user_data.get("hero_replace_consent_confirmed"):
+                _clear_transient_flows(context)
+                await update.effective_message.reply_text("Подтверждение прав устарело. Откройте «Замена героя в видео» заново.")
+                return
+            if hero_slot == "face_front":
+                context.user_data["hero_replace_face_front"] = img
+                context.user_data["hero_replace_pack_slot"] = "face_3q"
+                await update.effective_message.reply_text(
+                    "✅ Шаг 2/5. Анфас сохранён.\n\nШаг 3/5: пришлите тот же образ в ракурсе 30–45° (3/4)."
+                )
+                return
+            if hero_slot == "face_3q":
+                context.user_data["hero_replace_face_3q"] = img
+                context.user_data["hero_replace_pack_slot"] = "body_full"
+                await update.effective_message.reply_text(
+                    "✅ Шаг 3/5. Ракурс 3/4 сохранён.\n\nШаг 4/5: пришлите фото героя в ПОЛНЫЙ РОСТ — голова, тело и обувь должны быть видны."
+                )
+                return
+            if hero_slot == "body_full":
+                context.user_data["hero_replace_body_full"] = img
+                context.user_data.pop("hero_replace_pack_slot", None)
+                context.user_data["awaiting_hero_replace_brief"] = True
+                await update.effective_message.reply_text(
+                    "✅ Шаг 4/5. Character Pack готов: анфас + 3/4 + полный рост.\n\n"
+                    "Шаг 5/5: опишите героя и образ в ролике: одежду, материалы, волосы, аксессуары. "
+                    "Если нужно точно сохранить одежду с референса, так и напишите: «сохранить одежду с полного роста». "
+                    "Если герой в исходнике говорит или поёт, обязательно напишите это — добавлю отдельный audio-driven lip-sync по оригинальной дорожке."
+                )
+                return
+
         # High-fidelity music-video pack owns these four uploads before every generic photo flow.
         identity_slot = _music_video_identity_wait_slot(context)
         # Defensive recovery: Telegram/user_data is process-local and can be lost on a
@@ -20037,13 +20116,70 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if action == "hero_replace":
+        await q.answer("Замена героя в видео")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "hero_replace")
+        context.user_data["hero_replace_consent_pending"] = True
+        await q.message.reply_text(
+            "🎬 Замена героя в видео\n\n"
+            f"Это не face-swap: я заменю одного главного человека целиком — лицо, тело и одежду — "
+            f"в исходном MP4 до {HERO_REPLACE_MAX_SECONDS} секунд. Камера, темп, сцена и звук сохраняются настолько, "
+            "насколько это позволяет видео-редактирование.\n\n"
+            "Подготовьте Character Pack: 1) портрет анфас, 2) портрет в 3/4, 3) фото в полный рост. "
+            "Лучше всего работает один человек в кадре без склеек и без крупной речи в камеру.\n\n"
+            "Продолжая, вы подтверждаете права на исходное видео и референсы, а также согласие людей в кадре.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Подтверждаю права", callback_data="fun:hero_replace_confirm")],
+                [InlineKeyboardButton("✖️ Отмена", callback_data="fun:hero_replace_cancel")],
+            ]),
+        )
+        return
+
+    if action == "hero_replace_confirm":
+        if not context.user_data.pop("hero_replace_consent_pending", False):
+            await q.answer("Откройте сценарий заново", show_alert=True)
+            return
+        context.user_data["hero_replace_consent_confirmed"] = True
+        context.user_data["awaiting_hero_replace_video"] = True
+        await q.answer("Подтверждено")
+        await q.message.reply_text(
+            f"✅ Шаг 1/5. Пришлите исходный MP4 до {HERO_REPLACE_MAX_MB} МБ и до {HERO_REPLACE_MAX_SECONDS} секунд. "
+            "В нём должен быть один главный человек; не используйте ролики с монтажными склейками."
+        )
+        return
+
+    if action == "hero_replace_cancel":
+        _clear_transient_flows(context)
+        await q.answer("Отменено")
+        await q.message.reply_text("Замена героя отменена. Файлы не приняты в обработку.")
+        return
+
+    if action == "hero_replace_anchor_confirm":
+        source = context.user_data.get("hero_replace_video", b"")
+        anchor = context.user_data.get("hero_replace_anchor", b"")
+        brief = str(context.user_data.get("hero_replace_brief") or "")
+        if not source or not anchor or not brief:
+            await q.answer("Контрольный кадр устарел", show_alert=True)
+            _clear_transient_flows(context)
+            return
+        await q.answer("Контрольный кадр утверждён")
+        await _run_hero_replacement(update, context, source, brief, anchor)
+        return
+
+    if action == "hero_replace_anchor_cancel":
+        _clear_transient_flows(context)
+        await q.answer("Отменено")
+        await q.message.reply_text("Замена героя отменена до запуска video-to-video. Кредиты за видео не списывались.")
+        return
+
     if action == "video_faceswap":
-        await q.answer("Замена лица в видео")
+        await q.answer("Быстрая замена лица")
         _clear_transient_flows(context)
         _set_mode_clean(q.from_user.id, "Развлечения", "video_faceswap")
         context.user_data["video_faceswap_consent_pending"] = True
         await q.message.reply_text(
-            "🎭 Замена лица в коротком видео\n\n"
+            "🎭 Быстрая замена лица в коротком видео\n\n"
             f"Поддерживается MP4 до {VIDEO_FACESWAP_MAX_MB} МБ и до {VIDEO_FACESWAP_MAX_SECONDS} секунд, где видно одно лицо. "
             "Сначала понадобится видео, затем чёткое фото лица-источника.\n\n"
             "Продолжая, вы подтверждаете, что у вас есть право использовать лица и видео, а также согласие людей в кадре.",
@@ -20910,6 +21046,202 @@ async def _run_video_continuation(update: Update, context: ContextTypes.DEFAULT_
     return True
 
 
+def _hero_replacement_prompt(brief: str) -> str:
+    """A narrow, positive edit instruction for a single-subject character swap."""
+    user_brief = (brief or "preserve the wardrobe and appearance from the full-body reference").strip()[:900]
+    return (
+        "Replace the single main person in this source video completely with the character shown in the supplied "
+        "first-frame keyframe. Preserve the exact camera framing, lens, shot timing, pose sequence, walking or hand "
+        "motion, environment, props, lighting direction and original audio. Keep exactly one main person. Preserve a "
+        "consistent face, body proportions, hair, wardrobe and accessories for the replacement character in every frame. "
+        "Do not add people, extra limbs, duplicate faces, text, logos, cuts, camera changes or a new background. "
+        f"Character direction: {user_brief}"
+    )
+
+
+def _hero_replacement_requires_lipsync(brief: str) -> bool:
+    """Only run a second billed pass when the user declares visible speech/vocals."""
+    return bool(re.search(
+        r"(?:по[её]т|песн|вокал|рэп|читает|говорит|разговар|реч[ьи]|диалог|lip[ -]?sync|синхрон.*губ)",
+        brief or "", re.I,
+    ))
+
+
+def _fit_hero_anchor_to_source(anchor: bytes, source_frame: bytes) -> bytes:
+    """Match the keyframe aspect to the source; Aleph follows the keyframe framing."""
+    if Image is None:
+        return anchor
+    try:
+        src = Image.open(BytesIO(source_frame)).convert("RGB")
+        image = Image.open(BytesIO(anchor)).convert("RGB")
+        sw, sh = src.size
+        ratio = sw / max(1, sh)
+        iw, ih = image.size
+        if iw / max(1, ih) > ratio:
+            crop_w = max(1, int(ih * ratio)); left = max(0, (iw - crop_w) // 2)
+            image = image.crop((left, 0, left + crop_w, ih))
+        else:
+            crop_h = max(1, int(iw / ratio)); top = max(0, (ih - crop_h) // 2)
+            image = image.crop((0, top, iw, top + crop_h))
+        image = image.resize((sw, sh), getattr(Image, "Resampling", Image).LANCZOS)
+        out = BytesIO(); image.save(out, format="PNG", optimize=True)
+        return out.getvalue()
+    except Exception as exc:
+        log.warning("hero anchor aspect fit failed: %s", exc)
+        return anchor
+
+
+async def _make_hero_replacement_anchor(source_frame: bytes, refs: list[tuple[str, bytes]], brief: str) -> bytes:
+    """Create the approved first-frame visual from source framing plus a three-view Character Pack.
+
+    The result is a dedicated keyframe, not a disguised face swap.  If a multi-reference
+    image edit is unavailable, fail closed rather than silently removing body/clothing control.
+    """
+    if not OPENAI_IMAGE_KEY or OPENAI_IMAGE_KEY.startswith("sk-or-"):
+        raise RuntimeError("Для сборки Character Pack нужен официальный ключ OpenAI Images.")
+    if len(refs) != 3 or any(not data for _, data in refs):
+        raise RuntimeError("Character Pack неполный: нужны анфас, 3/4 и полный рост.")
+    prompt = (
+        "Create an exact first-frame keyframe for a video character replacement. Image 1 is the original video frame: "
+        "keep its camera, crop, composition, background, props, light, shadows and pose exactly. Replace only its single "
+        "main person completely with the same character represented by images 2, 3 and 4. Image 2 is face front, image 3 "
+        "is face three-quarter, image 4 is full body and wardrobe. Preserve that character's identity, full body, clothing, "
+        "hair and accessories. No other changes, no extra people, no duplicate body parts, no text or logos. "
+        f"Requested character direction: {(brief or '')[:700]}"
+    )
+    base = (IMAGES_BASE_URL or "https://api.openai.com/v1").rstrip("/")
+    headers = {"Authorization": f"Bearer {OPENAI_IMAGE_KEY}"}
+    images = [("source_frame.png", source_frame)] + [(f"{name}.png", data) for name, data in refs]
+    # Different compatible image gateways use either image[] or repeated image.
+    # Both attempts include every reference; we do not degrade to a one-photo face edit.
+    attempts = ("image[]", "image")
+    last_error = ""
+    async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as client:
+        for field in attempts:
+            files = [
+                (field, (name, data, sniff_image_mime(data)))
+                for name, data in images
+            ]
+            try:
+                response = await client.post(
+                    f"{base}/images/edits", headers=headers,
+                    data={"model": IMAGES_MODEL, "prompt": prompt, "n": "1"}, files=files,
+                )
+                if response.status_code >= 400:
+                    last_error = f"HTTP {response.status_code}: {response.text[:500]}"
+                    continue
+                payload = response.json() or {}
+                item = (payload.get("data") or [{}])[0]
+                raw = base64.b64decode(item["b64_json"]) if item.get("b64_json") else b""
+                if not raw and item.get("url"):
+                    downloaded = await client.get(item["url"], timeout=180.0)
+                    downloaded.raise_for_status(); raw = downloaded.content
+                if raw:
+                    return _fit_hero_anchor_to_source(raw, source_frame)
+                last_error = "пустой ответ image edit"
+            except Exception as exc:
+                last_error = str(exc)
+                log.warning("hero replacement anchor attempt failed: %s", exc)
+    raise RuntimeError(last_error or "не удалось собрать контрольный кадр героя")
+
+
+async def _run_hero_replacement(update: Update, context: ContextTypes.DEFAULT_TYPE, source: bytes, brief: str, anchor: bytes) -> bool:
+    """Execute the complete-character V2V branch through the official Runway API."""
+    duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, source)
+    if not 3.0 <= duration <= HERO_REPLACE_MAX_SECONDS:
+        await update.effective_message.reply_text(
+            f"❌ Для этой версии сценария нужен MP4 от 3 до {HERO_REPLACE_MAX_SECONDS} секунд."
+        )
+        return False
+    if not context.user_data.get("hero_replace_consent_confirmed"):
+        await update.effective_message.reply_text("Подтверждение прав не найдено. Начните сценарий заново.")
+        return False
+    if not (RUNWAY_DIRECT_ENABLED and RUNWAY_API_KEY):
+        await update.effective_message.reply_text("❌ Для замены героя нужен настроенный официальный Runway API-ключ.")
+        return False
+    if not anchor:
+        await update.effective_message.reply_text("Контрольный кадр не найден. Начните сценарий заново.")
+        return False
+    lipsync_required = _hero_replacement_requires_lipsync(brief)
+    if lipsync_required and not (KLING_LIPSYNC_ENABLED and (KLING_API_KEY or COMET_API_KEY)):
+        await update.effective_message.reply_text(
+            "❌ В ролике заявлена речь/вокал, но Kling Lip Sync сейчас недоступен. "
+            "Video-to-video не запускаю, чтобы не отдать несинхронизированный результат."
+        )
+        return False
+
+    provider_cost = round(
+        max(3.0, duration) * HERO_REPLACE_COST_PER_SECOND_USD
+        + (VOCAL_CLIP_KLING_LIPSYNC_COST_USD if lipsync_required else 0.0),
+        4,
+    )
+    user_id = update.effective_user.id
+
+    async def _go():
+        try:
+            await update.effective_message.reply_text(
+                "🎬 Запускаю подтверждённый контрольный кадр в video-to-video: заменяю героя целиком и сохраняю движение, сцену и звук…"
+            )
+            async with _runway_official_client() as rw:
+                task_id = await rw.create_video_to_video(
+                    video_bytes=source, video_filename="source.mp4", video_mime_type="video/mp4",
+                    prompt_text=_hero_replacement_prompt(brief), model=HERO_REPLACE_MODEL,
+                    keyframe_bytes=anchor, keyframe_filename="hero_anchor.png", keyframe_mime_type="image/png",
+                )
+                result = await rw.wait_for_task(task_id, timeout_s=RUNWAY_MAX_WAIT_S)
+            async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as client:
+                response = await client.get(result.first_output)
+                response.raise_for_status()
+                output = response.content
+            output_duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, output)
+            if output_duration < max(2.0, duration * 0.55):
+                raise RuntimeError("контроль качества отклонил слишком короткий результат")
+            if lipsync_required:
+                await update.effective_message.reply_text(
+                    "🎤 Применяю второй проход Kling Lip Sync по оригинальной русской аудиодорожке…"
+                )
+                original_audio = await asyncio.to_thread(_extract_video_audio_sync, source)
+                if not original_audio:
+                    raise RuntimeError("не удалось извлечь оригинальную аудиодорожку для lip-sync")
+                video_url = _provider_input_url_from_bytes(output, "hero_replacement.mp4")
+                audio_url = _provider_input_url_from_bytes(original_audio, "original_audio.mp3")
+                synced = await _run_kling_lipsync_result_bytes(
+                    video_url, audio_url, duration_ms=int(round(output_duration * 1000)),
+                    max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+                )
+                output = await asyncio.to_thread(
+                    _direct_lipsync_mux_audio_sync, synced, original_audio, output_duration
+                )
+            final_caption = (
+                "✅ Герой в видео заменён целиком: Character Pack → контрольный кадр → video-to-video"
+                + (" → lip-sync по оригинальной аудиодорожке. " if lipsync_required else ". ")
+                + "Результат используйте только с правами на исходник и образ."
+            )
+            await _reply_video_bytes(update, output, final_caption, task_id=task_id)
+            _provider_mark_success("runway_hero_replace")
+            return True
+        except RunwayAPIError as exc:
+            _provider_mark_failure("runway_hero_replace", str(exc))
+            await update.effective_message.reply_text(_runway_user_error_text(exc))
+            return False
+        except Exception as exc:
+            log.exception("hero replacement failed")
+            await update.effective_message.reply_text(f"❌ Замена героя не завершилась: {str(exc)[:500]}")
+            return False
+        finally:
+            # Retain no raw identity/reference assets after this attempt.
+            for key in ("hero_replace_video", "hero_replace_face_front", "hero_replace_face_3q", "hero_replace_body_full", "hero_replace_brief", "hero_replace_anchor", "hero_replace_consent_confirmed"):
+                context.user_data.pop(key, None)
+
+    await _try_pay_then_do(
+        update, context, user_id, "runway", provider_cost, _go,
+        remember_kind="hero_replace_video",
+        remember_payload={"seconds": round(duration, 2), "model": HERO_REPLACE_MODEL, "character_pack": 3, "lipsync": lipsync_required},
+        silent_failure=True,
+    )
+    return True
+
+
 async def _run_video_faceswap(update: Update, context: ContextTypes.DEFAULT_TYPE, target_video: bytes, source_face: bytes):
     if not FACESWAP_ENABLED:
         await update.effective_message.reply_text("❌ Замена лица сейчас отключена на сервере.")
@@ -20999,7 +21331,7 @@ async def _run_video_faceswap(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def on_media_workflow_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (context.user_data.get("awaiting_video_continue_upload") or context.user_data.get("awaiting_video_translation_upload") or context.user_data.get("awaiting_video_faceswap_target")):
+    if not (context.user_data.get("awaiting_video_continue_upload") or context.user_data.get("awaiting_video_translation_upload") or context.user_data.get("awaiting_video_faceswap_target") or context.user_data.get("awaiting_hero_replace_video")):
         return
     media = update.effective_message.video or update.effective_message.document
     if not media:
@@ -21011,10 +21343,32 @@ async def on_media_workflow_video(update: Update, context: ContextTypes.DEFAULT_
             raise RuntimeError("Нужен файл MP4.")
         tg_file = await _telegram_media_get_file_with_retry(media, label="postproduction video")
         raw = bytes(await tg_file.download_as_bytearray())
-        max_bytes = VIDEO_FACESWAP_MAX_MB * 1024 * 1024 if context.user_data.get("awaiting_video_faceswap_target") else 50 * 1024 * 1024
+        if context.user_data.get("awaiting_hero_replace_video"):
+            max_bytes = HERO_REPLACE_MAX_MB * 1024 * 1024
+        elif context.user_data.get("awaiting_video_faceswap_target"):
+            max_bytes = VIDEO_FACESWAP_MAX_MB * 1024 * 1024
+        else:
+            max_bytes = 50 * 1024 * 1024
         if not 1024 <= len(raw) <= max_bytes:
             raise RuntimeError("MP4 должен быть от 1 КБ до 50 МБ.")
-        if context.user_data.pop("awaiting_video_faceswap_target", False):
+        if context.user_data.pop("awaiting_hero_replace_video", False):
+            if not context.user_data.get("hero_replace_consent_confirmed"):
+                await update.effective_message.reply_text("Для этой операции сначала подтвердите права на видео и референсы.")
+                return
+            duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, raw)
+            if not 3.0 <= duration <= HERO_REPLACE_MAX_SECONDS:
+                await update.effective_message.reply_text(
+                    f"❌ Для первого запуска нужен ролик от 3 до {HERO_REPLACE_MAX_SECONDS} секунд. "
+                    "Длинные и многосценовые ролики будут обрабатываться отдельным монтажным конвейером."
+                )
+                return
+            context.user_data["hero_replace_video"] = raw
+            context.user_data["hero_replace_pack_slot"] = "face_front"
+            await update.effective_message.reply_text(
+                "✅ Шаг 1/5. Видео принято.\n\nШаг 2/5: пришлите портрет героя АНФАС. "
+                "Лицо должно быть хорошо видно, без маски и сильных фильтров."
+            )
+        elif context.user_data.pop("awaiting_video_faceswap_target", False):
             if not context.user_data.get("video_faceswap_consent_confirmed"):
                 context.user_data.pop("video_faceswap_target", None)
                 await update.effective_message.reply_text("Для этой операции сначала подтвердите права на использование лиц.")
@@ -21040,6 +21394,48 @@ async def on_media_workflow_video(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def on_media_workflow_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("awaiting_hero_replace_brief"):
+        brief = (getattr(update.effective_message, "text", "") or "").strip()
+        if not brief:
+            return
+        source = context.user_data.get("hero_replace_video", b"")
+        context.user_data.pop("awaiting_hero_replace_brief", None)
+        if not source:
+            await update.effective_message.reply_text("Исходный MP4 не найден. Откройте «Замена героя в видео» и загрузите его снова.")
+        else:
+            refs = [
+                ("face_front", context.user_data.get("hero_replace_face_front", b"")),
+                ("face_3q", context.user_data.get("hero_replace_face_3q", b"")),
+                ("body_full", context.user_data.get("hero_replace_body_full", b"")),
+            ]
+            try:
+                await update.effective_message.reply_text("🧩 Собираю контрольный кадр по трём ракурсам героя…")
+                source_frame = await asyncio.to_thread(_extract_first_video_frame_sync, source)
+                if not source_frame:
+                    raise RuntimeError("не удалось извлечь первый кадр MP4")
+                anchor = await _make_hero_replacement_anchor(source_frame, refs, brief)
+                context.user_data["hero_replace_brief"] = brief
+                context.user_data["hero_replace_anchor"] = anchor
+                preview = BytesIO(anchor); preview.name = "hero_anchor.png"
+                await update.effective_message.reply_photo(
+                    InputFile(preview),
+                    caption=(
+                        "Шаг 5/5 — контрольный кадр. Проверьте, что это именно нужный герой, его одежда и поза в исходной сцене. "
+                        "После подтверждения запущу платное video-to-video."
+                    ),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("✅ Запустить замену героя", callback_data="fun:hero_replace_anchor_confirm")],
+                        [InlineKeyboardButton("✖️ Отмена", callback_data="fun:hero_replace_anchor_cancel")],
+                    ]),
+                )
+            except Exception as exc:
+                log.exception("hero replacement anchor preparation failed")
+                await update.effective_message.reply_text(
+                    f"❌ Не удалось собрать контрольный кадр: {str(exc)[:500]}. Video-to-video не запускался и кредиты за видео не списывались."
+                )
+                _clear_transient_flows(context)
+        raise ApplicationHandlerStop()
+
     if not context.user_data.get("awaiting_video_continue_prompt"):
         return
     prompt = (getattr(update.effective_message, "text", "") or "").strip()

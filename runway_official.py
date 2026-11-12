@@ -4,6 +4,7 @@
 Implements the documented REST flow without exposing the API secret:
 - POST /v1/text_to_video
 - POST /v1/image_to_video
+- POST /v1/video_to_video
 - GET  /v1/tasks/{id}
 - GET  /v1/organization
 - POST /v1/uploads + presigned multipart upload
@@ -372,6 +373,58 @@ class RunwayOfficialClient:
             "ratio": ratio,
             "duration": max(2, min(10, int(duration))),
         }
+        response = await self._request("POST", endpoint, json_body=payload)
+        self._raise_for_error(response)
+        data = _json_or_text(response)
+        task_id = str((data or {}).get("id") or (data or {}).get("taskId") or "") if isinstance(data, dict) else ""
+        if not task_id:
+            raise RunwayAPIError(f"Runway did not return a task id: {str(data)[:800]}")
+        return task_id
+
+    async def create_video_to_video(
+        self,
+        *,
+        video_bytes: bytes,
+        video_filename: str,
+        video_mime_type: str,
+        prompt_text: str,
+        model: str = "aleph2",
+        keyframe_bytes: bytes | None = None,
+        keyframe_filename: str = "character_anchor.png",
+        keyframe_mime_type: str = "image/png",
+        endpoint: str = "/v1/video_to_video",
+        upload_endpoint: str = "/v1/uploads",
+    ) -> str:
+        """Start a real video edit with an optional first-frame keyframe.
+
+        The source and keyframe are deliberately uploaded as short-lived Runway
+        assets: Telegram file URLs contain a bot token and must never be passed
+        to a third party.  Aleph uses the keyframe to keep a controlled subject
+        replacement anchored to the original framing.
+        """
+        prompt = (prompt_text or "").strip()[:1000]
+        if not prompt:
+            raise RunwayAPIError("Runway video-to-video prompt is empty")
+        video_ref = await self.upload_ephemeral(
+            content=video_bytes,
+            filename=video_filename,
+            mime_type=video_mime_type,
+            endpoint=upload_endpoint,
+        )
+        payload: dict[str, Any] = {
+            "model": model or "aleph2",
+            "videoUri": video_ref,
+            "promptText": prompt,
+        }
+        if keyframe_bytes:
+            anchor_ref = await self.upload_ephemeral(
+                content=keyframe_bytes,
+                filename=keyframe_filename,
+                mime_type=keyframe_mime_type,
+                endpoint=upload_endpoint,
+            )
+            payload["keyframes"] = [{"uri": anchor_ref, "seconds": 0}]
+
         response = await self._request("POST", endpoint, json_body=payload)
         self._raise_for_error(response)
         data = _json_or_text(response)
