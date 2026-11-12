@@ -182,7 +182,7 @@ class EntertainmentMainWiringTests(unittest.TestCase):
     def test_trend_templates_have_dedicated_runtime_entry_actions(self):
         handlers = self._functions("on_cb_fun")
         active_source = ast.get_source_segment(self.source, handlers[-1]) or ""
-        for action in ("photo_dance", "in_movie", "video_greeting", "video_faceswap"):
+        for action in ("photo_dance", "in_movie", "video_greeting", "hero_replace", "video_faceswap"):
             with self.subTest(action=action):
                 self.assertIn(f'action == "{action}"', active_source)
         self.assertIn("revival_preset_prompt", active_source)
@@ -192,12 +192,41 @@ class EntertainmentMainWiringTests(unittest.TestCase):
     def test_postproduction_actions_have_dedicated_runtime_owners(self):
         handlers = self._functions("on_cb_fun")
         active_source = ast.get_source_segment(self.source, handlers[-1]) or ""
-        for action in ("before_after", "outfit", "continue_video", "video_translation"):
+        for action in ("before_after", "outfit", "continue_video", "video_translation", "hero_replace"):
             with self.subTest(action=action):
                 self.assertIn(f'action == "{action}"', active_source)
         self.assertIn("awaiting_before_after", active_source)
         self.assertIn("awaiting_video_continue_upload", active_source)
         self.assertIn("awaiting_video_translation_upload", active_source)
+
+    def test_hero_replacement_uses_consent_character_pack_and_anchor_gate(self):
+        handlers = self._functions("on_cb_fun")
+        active_source = ast.get_source_segment(self.source, handlers[-1]) or ""
+        for action in ("hero_replace", "hero_replace_confirm", "hero_replace_anchor_confirm"):
+            with self.subTest(action=action):
+                self.assertIn(f'action == "{action}"', active_source)
+        self.assertIn("hero_replace_consent_confirmed", active_source)
+        self.assertIn("hero_replace_pack_slot", self._source_for("on_photo"))
+        text_handler = self._source_for("on_media_workflow_text")
+        self.assertIn("hero_replace_anchor", text_handler)
+        self.assertIn('callback_data="fun:hero_replace_anchor_confirm"', text_handler)
+        self.assertIn("create_video_to_video", self.source)
+
+    def test_video_faceswap_requires_explicit_rights_confirmation_before_upload(self):
+        handlers = self._functions("on_cb_fun")
+        active_source = ast.get_source_segment(self.source, handlers[-1]) or ""
+        self.assertIn('action == "video_faceswap_confirm"', active_source)
+        self.assertIn('action == "video_faceswap_cancel"', active_source)
+        self.assertIn("video_faceswap_consent_pending", active_source)
+        self.assertIn("video_faceswap_consent_confirmed", active_source)
+        self.assertIn('callback_data="fun:video_faceswap_confirm"', active_source)
+
+        photo_handler = self._source_for("on_photo")
+        self.assertIn("consent_confirmed = context.user_data.pop", photo_handler)
+        self.assertIn("if not consent_confirmed:", photo_handler)
+
+        video_handler = self._source_for("on_media_workflow_video")
+        self.assertIn("video_faceswap_consent_confirmed", video_handler)
 
     def test_postproduction_media_owners_are_registered_before_generic_video(self):
         self.assertIn("on_media_workflow_video", self.source)
