@@ -6192,6 +6192,8 @@ def _clear_transient_flows(context):
         "awaiting_video_faceswap_target",
         "awaiting_video_faceswap_source",
         "video_faceswap_target",
+        "video_faceswap_consent_pending",
+        "video_faceswap_consent_confirmed",
         "presentation_studio_active",
     ):
         with contextlib.suppress(Exception):
@@ -19136,8 +19138,12 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if context.user_data.get("awaiting_video_faceswap_source"):
             target_video = context.user_data.pop("video_faceswap_target", b"")
             context.user_data.pop("awaiting_video_faceswap_source", None)
+            consent_confirmed = context.user_data.pop("video_faceswap_consent_confirmed", False)
             if not target_video:
                 await update.effective_message.reply_text("Исходный MP4 не найден. Начните «Заменить лицо в видео» заново.")
+                return
+            if not consent_confirmed:
+                await update.effective_message.reply_text("Для этой операции нужно подтвердить права на использование лиц. Начните сценарий заново.")
                 return
             await _run_video_faceswap(update, context, target_video, img)
             return
@@ -20035,11 +20041,35 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("Замена лица в видео")
         _clear_transient_flows(context)
         _set_mode_clean(q.from_user.id, "Развлечения", "video_faceswap")
-        context.user_data["awaiting_video_faceswap_target"] = True
+        context.user_data["video_faceswap_consent_pending"] = True
         await q.message.reply_text(
-            f"🎭 Пришлите свой MP4 до {VIDEO_FACESWAP_MAX_MB} МБ и до {VIDEO_FACESWAP_MAX_SECONDS} секунд, где видно одно лицо. "
-            "Затем пришлите фото лица-источника. Используйте только собственные материалы или материалы с явным разрешением людей в кадре."
+            "🎭 Замена лица в коротком видео\n\n"
+            f"Поддерживается MP4 до {VIDEO_FACESWAP_MAX_MB} МБ и до {VIDEO_FACESWAP_MAX_SECONDS} секунд, где видно одно лицо. "
+            "Сначала понадобится видео, затем чёткое фото лица-источника.\n\n"
+            "Продолжая, вы подтверждаете, что у вас есть право использовать лица и видео, а также согласие людей в кадре.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Подтверждаю права", callback_data="fun:video_faceswap_confirm")],
+                [InlineKeyboardButton("✖️ Отмена", callback_data="fun:video_faceswap_cancel")],
+            ]),
         )
+        return
+
+    if action == "video_faceswap_confirm":
+        if not context.user_data.pop("video_faceswap_consent_pending", False):
+            await q.answer("Откройте сценарий заново", show_alert=True)
+            return
+        context.user_data["video_faceswap_consent_confirmed"] = True
+        context.user_data["awaiting_video_faceswap_target"] = True
+        await q.answer("Подтверждено")
+        await q.message.reply_text(
+            f"✅ Пришлите MP4 до {VIDEO_FACESWAP_MAX_MB} МБ и до {VIDEO_FACESWAP_MAX_SECONDS} секунд, где видно одно лицо."
+        )
+        return
+
+    if action == "video_faceswap_cancel":
+        _clear_transient_flows(context)
+        await q.answer("Отменено")
+        await q.message.reply_text("Замена лица в видео отменена. Никакие файлы не приняты в обработку.")
         return
 
     if action == "outfit":
@@ -20985,10 +21015,14 @@ async def on_media_workflow_video(update: Update, context: ContextTypes.DEFAULT_
         if not 1024 <= len(raw) <= max_bytes:
             raise RuntimeError("MP4 должен быть от 1 КБ до 50 МБ.")
         if context.user_data.pop("awaiting_video_faceswap_target", False):
+            if not context.user_data.get("video_faceswap_consent_confirmed"):
+                context.user_data.pop("video_faceswap_target", None)
+                await update.effective_message.reply_text("Для этой операции сначала подтвердите права на использование лиц.")
+                return
             context.user_data["video_faceswap_target"] = raw
             context.user_data["awaiting_video_faceswap_source"] = True
             await update.effective_message.reply_text(
-                "✅ Видео получено. Теперь пришлите чёткое фото лица-источника анфас. Подтвердите, что у вас есть право использовать это лицо."
+                "✅ Видео получено. Теперь пришлите чёткое фото лица-источника анфас."
             )
         elif context.user_data.pop("awaiting_video_continue_upload", False):
             context.user_data["video_continue_source"] = raw
