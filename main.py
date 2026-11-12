@@ -416,6 +416,9 @@ FACESWAP_FAST_COST_USD = _pricing_cost("FACESWAP_FAST_COST_USD", 0.03)
 FACESWAP_PREMIUM_COST_USD = _pricing_cost("FACESWAP_PREMIUM_COST_USD", 0.12)
 FACESWAP_TIMEOUT_S = float(os.environ.get("FACESWAP_TIMEOUT_S", "300") or 300)
 FACESWAP_POLL_DELAY_S = float(os.environ.get("FACESWAP_POLL_DELAY_S", "2.5") or 2.5)
+VIDEO_FACESWAP_MAX_SECONDS = int(os.environ.get("VIDEO_FACESWAP_MAX_SECONDS", "6") or 6)
+VIDEO_FACESWAP_FPS = int(os.environ.get("VIDEO_FACESWAP_FPS", "6") or 6)
+VIDEO_FACESWAP_MAX_MB = int(os.environ.get("VIDEO_FACESWAP_MAX_MB", "25") or 25)
 FACESWAP_INPUT_MAX_SIDE = int(os.environ.get("FACESWAP_INPUT_MAX_SIDE", "1600") or 1600)
 FACESWAP_OUTPUT_MAX_SIDE = int(os.environ.get("FACESWAP_OUTPUT_MAX_SIDE", "1600") or 1600)
 FACESWAP_RESULT_AS_DOCUMENT = os.environ.get("FACESWAP_RESULT_AS_DOCUMENT", "0").strip().lower() in ("1", "true", "yes", "on")
@@ -3484,6 +3487,131 @@ def _clear_image_retouch_wait(context):
             context.user_data.pop(key, None)
 
 
+def _set_waiting_outpaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Claim the next uploaded image for canvas expansion."""
+    _set_mode_clean(update.effective_user.id, "Развлечения", "outpaint")
+    _clear_transient_flows(context)
+    context.user_data["awaiting_photo_for"] = "outpaint"
+    context.user_data["photo_flow"] = "outpaint"
+
+
+def _is_waiting_outpaint(context) -> bool:
+    return bool(context and (
+        context.user_data.get("awaiting_photo_for") == "outpaint"
+        or context.user_data.get("photo_flow") == "outpaint"
+    ))
+
+
+def _clear_outpaint_wait(context):
+    if not context:
+        return
+    if context.user_data.get("awaiting_photo_for") == "outpaint":
+        context.user_data.pop("awaiting_photo_for", None)
+    if context.user_data.get("photo_flow") == "outpaint":
+        context.user_data.pop("photo_flow", None)
+
+
+def _set_waiting_image_vision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Claim the next uploaded image for an ordinary visual description."""
+    _set_mode_clean(update.effective_user.id, "Развлечения", "image_vision")
+    _clear_transient_flows(context)
+    context.user_data["awaiting_photo_for"] = "vision"
+    context.user_data["photo_flow"] = "vision"
+
+
+def _is_waiting_image_vision(context) -> bool:
+    return bool(context and (
+        context.user_data.get("awaiting_photo_for") == "vision"
+        or context.user_data.get("photo_flow") == "vision"
+    ))
+
+
+def _clear_image_vision_wait(context):
+    if not context:
+        return
+    if context.user_data.get("awaiting_photo_for") == "vision":
+        context.user_data.pop("awaiting_photo_for", None)
+    if context.user_data.get("photo_flow") == "vision":
+        context.user_data.pop("photo_flow", None)
+
+
+async def _describe_image(update: Update, img_bytes: bytes):
+    """Return a short, user-facing visual description without opening a medical flow."""
+    try:
+        b64 = base64.b64encode(img_bytes).decode("ascii")
+        answer = await ask_openai_vision(
+            "Опиши фото и весь видимый на нём текст кратко и нейтрально.",
+            b64,
+            sniff_image_mime(img_bytes),
+        )
+        await update.effective_message.reply_text(answer or "Не удалось распознать детали на фото.")
+        return bool(answer)
+    except Exception as e:
+        log.exception("image vision error: %s", e)
+        await update.effective_message.reply_text(
+            "❌ Не удалось проанализировать фото. Попробуйте ещё раз или отправьте изображение меньшего размера."
+        )
+        return False
+
+
+def _clear_before_after_wait(context):
+    if not context:
+        return
+    for key in ("awaiting_before_after", "before_after_before"):
+        context.user_data.pop(key, None)
+
+
+def _make_before_after_image_sync(before: bytes, after: bytes) -> bytes:
+    if Image is None or ImageDraw is None:
+        raise RuntimeError("Pillow не установлен.")
+    with Image.open(BytesIO(before)) as source_before, Image.open(BytesIO(after)) as source_after:
+        left = source_before.convert("RGB")
+        right = source_after.convert("RGB")
+        max_side = 1600
+        for image in (left, right):
+            if max(image.size) > max_side:
+                image.thumbnail((max_side, max_side), Image.LANCZOS)
+        height = max(left.height, right.height)
+        def fit(image):
+            canvas = Image.new("RGB", (image.width, height), "white")
+            canvas.paste(image, (0, (height - image.height) // 2))
+            return canvas
+        left, right = fit(left), fit(right)
+        label_h, gap = max(54, height // 18), 12
+        canvas = Image.new("RGB", (left.width + right.width + gap, height + label_h), "white")
+        canvas.paste(left, (0, label_h))
+        canvas.paste(right, (left.width + gap, label_h))
+        draw = ImageDraw.Draw(canvas)
+        font = ImageFont.load_default() if ImageFont else None
+        draw.text((16, 16), "ДО", fill="black", font=font)
+        draw.text((left.width + gap + 16, 16), "ПОСЛЕ", fill="black", font=font)
+        output = BytesIO()
+        canvas.save(output, format="JPEG", quality=92, optimize=True)
+        return output.getvalue()
+
+
+def _set_waiting_outfit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    _set_mode_clean(update.effective_user.id, "Развлечения", "outfit")
+    _clear_transient_flows(context)
+    context.user_data["awaiting_photo_for"] = "outfit"
+    context.user_data["photo_flow"] = "outfit"
+
+
+def _is_waiting_outfit(context) -> bool:
+    return bool(context and (
+        context.user_data.get("awaiting_photo_for") == "outfit"
+        or context.user_data.get("photo_flow") == "outfit"
+    ))
+
+
+def _clear_outfit_wait(context):
+    if not context:
+        return
+    for key in ("awaiting_photo_for", "photo_flow", "outfit_wait_text"):
+        if context.user_data.get(key) == "outfit" or key == "outfit_wait_text":
+            context.user_data.pop(key, None)
+
+
 def _retouch_user_hint_text() -> str:
     return (
         "🧽 Да, могу сделать ретушь собственного изображения.\n\n"
@@ -3525,7 +3653,12 @@ def _prepare_image_for_edit(img_bytes: bytes) -> tuple[bytes, str, str]:
         return img_bytes, f"image.{ext}", mime
 
 
-async def _openai_image_edit_bytes(img_bytes: bytes, user_instruction: str) -> bytes | None:
+async def _openai_image_edit_bytes(
+    img_bytes: bytes,
+    user_instruction: str,
+    *,
+    system_prompt: str | None = None,
+) -> bytes | None:
     """Реальная ретушь через текущую OpenAI Images model: /images/edits."""
     if not OPENAI_IMAGE_KEY:
         return None
@@ -3534,7 +3667,7 @@ async def _openai_image_edit_bytes(img_bytes: bytes, user_instruction: str) -> b
         raise RuntimeError("OPENAI_IMAGE_KEY похож на ключ OpenRouter. Для ретуши нужен официальный OpenAI key или совместимый image-edit proxy.")
 
     edit_bytes, filename, mime = _prepare_image_for_edit(img_bytes)
-    prompt = _retouch_system_prompt(user_instruction)
+    prompt = system_prompt or _retouch_system_prompt(user_instruction)
     base = (IMAGES_BASE_URL or "https://api.openai.com/v1").rstrip("/")
     headers = {"Authorization": f"Bearer {OPENAI_IMAGE_KEY}"}
 
@@ -3623,6 +3756,51 @@ async def _start_image_retouch(update: Update, context: ContextTypes.DEFAULT_TYP
         "img", IMG_COST_USD, _go,
         remember_kind="image_retouch",
         remember_payload={"instruction": instruction},
+    )
+
+
+def _outfit_system_prompt(user_instruction: str) -> str:
+    instruction = (user_instruction or "a clean, appropriate new outfit").strip()
+    return (
+        "Edit the user's own photo. Change only the clothing, accessories and styling exactly as requested: "
+        f"{instruction}. Preserve the person's identity, face, age, pose, body proportions, hands, background, "
+        "lighting and composition. Produce a realistic, appropriate editorial-fashion result. Do not add text, logos, "
+        "new people or change the user's identity."
+    )
+
+
+async def _start_outfit_change(update: Update, context: ContextTypes.DEFAULT_TYPE, img_bytes: bytes, instruction: str):
+    instruction = (instruction or "a clean, appropriate new outfit").strip()
+    if not OPENAI_IMAGE_KEY or OPENAI_IMAGE_KEY.startswith("sk-or-"):
+        await update.effective_message.reply_text(
+            "❌ Смена образа недоступна: нужен официальный ключ OpenAI Images, поддерживающий редактирование фото."
+        )
+        return False
+
+    async def _go():
+        await update.effective_message.reply_text("👗 Меняю только образ, сохраняя лицо, позу и сцену…")
+        try:
+            result = await _openai_image_edit_bytes(
+                img_bytes, instruction, system_prompt=_outfit_system_prompt(instruction)
+            )
+            if not result:
+                await update.effective_message.reply_text("❌ Модель не вернула изображение.")
+                return False
+            bio = BytesIO(result); bio.name = "new_outfit.png"
+            await update.effective_message.reply_document(
+                InputFile(bio),
+                caption="✅ Готово: образ изменён. Лицо и композиция сохранены настолько, насколько это позволил исходник.",
+            )
+            return True
+        except Exception as exc:
+            log.exception("outfit change failed: %s", exc)
+            await update.effective_message.reply_text(f"❌ Не удалось сменить образ: {str(exc)[:500]}")
+            return False
+
+    await _try_pay_then_do(
+        update, context, update.effective_user.id, "img", IMG_COST_USD, _go,
+        remember_kind="image_outfit_change",
+        remember_payload={"instruction": instruction[:500]},
     )
 
 
@@ -5177,6 +5355,7 @@ def _clear_ai_selfie_wait(context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("awaiting_ai_selfie_prompt", None)
     context.user_data.pop("awaiting_ai_selfie_photo", None)
     context.user_data.pop("ai_selfie_preset_prompt", None)
+    context.user_data.pop("in_movie_mode", None)
 
 
 async def _handle_avatar_upload_choice(update: Update, context: ContextTypes.DEFAULT_TYPE, q, prefix: str = "act"):
@@ -6002,6 +6181,17 @@ def _clear_transient_flows(context):
         "i2v_duration",
         "i2v_aspect",
         "i2v_reference_ready",
+        "awaiting_before_after",
+        "before_after_before",
+        "outfit_wait_text",
+        "awaiting_video_continue_upload",
+        "video_continue_source",
+        "awaiting_video_continue_prompt",
+        "awaiting_video_translation_upload",
+        "video_translation_language",
+        "awaiting_video_faceswap_target",
+        "awaiting_video_faceswap_source",
+        "video_faceswap_target",
         "presentation_studio_active",
     ):
         with contextlib.suppress(Exception):
@@ -8760,6 +8950,7 @@ def _clear_avatar_wait(context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("awaiting_avatar_voice_choice", None)
     context.user_data.pop("awaiting_avatar_photo", None)
     context.user_data.pop("avatar_pending_script", None)
+    context.user_data.pop("video_greeting_mode", None)
 
 
 def _clear_photo_clip_wait(context: ContextTypes.DEFAULT_TYPE):
@@ -18397,6 +18588,15 @@ async def on_text(
         await _start_image_retouch(update, context, img, instruction)
         return
 
+    if context.user_data.get("outfit_wait_text"):
+        img = _get_cached_photo(update.effective_user.id)
+        context.user_data.pop("outfit_wait_text", None)
+        if not img:
+            await update.effective_message.reply_text("Сначала пришлите фото, затем опишите новый образ.", reply_markup=main_kb)
+            return
+        await _start_outfit_change(update, context, img, text)
+        return
+
     # AI-селфи: фото уже загружено, ждём сцену/знаменитость/персонажа.
     if context.user_data.get("awaiting_ai_selfie_prompt"):
         img = _get_cached_photo(update.effective_user.id)
@@ -18933,6 +19133,48 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        if context.user_data.get("awaiting_video_faceswap_source"):
+            target_video = context.user_data.pop("video_faceswap_target", b"")
+            context.user_data.pop("awaiting_video_faceswap_source", None)
+            if not target_video:
+                await update.effective_message.reply_text("Исходный MP4 не найден. Начните «Заменить лицо в видео» заново.")
+                return
+            await _run_video_faceswap(update, context, target_video, img)
+            return
+
+        before_after_stage = context.user_data.get("awaiting_before_after")
+        if before_after_stage == "before":
+            context.user_data["before_after_before"] = img
+            context.user_data["awaiting_before_after"] = "after"
+            await update.effective_message.reply_text("✅ Фото «До» сохранено. Теперь пришлите фото «После».")
+            return
+        if before_after_stage == "after":
+            before = context.user_data.get("before_after_before") or b""
+            _clear_before_after_wait(context)
+            try:
+                result = await asyncio.to_thread(_make_before_after_image_sync, before, img)
+                bio = BytesIO(result); bio.name = "before_after.jpg"
+                await update.effective_message.reply_photo(
+                    InputFile(bio), caption="✅ Готово: сравнение «До / После»."
+                )
+            except Exception as exc:
+                log.exception("before/after collage failed: %s", exc)
+                await update.effective_message.reply_text("❌ Не удалось собрать сравнение. Пришлите два обычных изображения и попробуйте снова.")
+            return
+
+        if _is_waiting_outfit(context):
+            instruction = caption.strip()
+            if not instruction:
+                _clear_outfit_wait(context)
+                context.user_data["outfit_wait_text"] = True
+                await update.effective_message.reply_text(
+                    "👗 Фото получено. Теперь одним сообщением опишите новый образ: одежду, стиль, цвета и аксессуары."
+                )
+                return
+            _clear_outfit_wait(context)
+            await _start_outfit_change(update, context, img, instruction)
+            return
+
         # 0) Замена лица: двухшаговый режим должен срабатывать раньше остальных фото-веток.
         if context.user_data.get("faceswap_flow") == "await_target":
             await _maybe_choose_target_face(update, context, user_id, img)
@@ -18981,7 +19223,12 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop("awaiting_ai_selfie_photo", None)
             preset = (context.user_data.get("ai_selfie_preset_prompt", "") or "").strip()
             _set_ai_selfie_wait(context)
-            if preset:
+            if context.user_data.get("in_movie_mode"):
+                await update.effective_message.reply_text(
+                    "🎞 Селфи получено. Опишите кино-сцену: жанр, локацию, эпоху, одежду и настроение. "
+                    "Например: «неоновый детектив, ночной Токио, кожаная куртка, дождь»."
+                )
+            elif preset:
                 await update.effective_message.reply_text("🤳 Селфи получено. Пресет выбран. Теперь напишите имя знаменитости/персонажа и детали сцены.")
             else:
                 await update.effective_message.reply_text("🤳 Селфи получено. Теперь напишите, с кем/где сделать AI-фото: знаменитость, персонаж, премьера, реклама, travel/luxury.")
@@ -18993,8 +19240,13 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Do not silently skip voice selection because a stale voice remained from an earlier avatar session.
             context.user_data.pop("avatar_tts_voice", None)
             _set_avatar_voice_choice_wait(context)
+            intro = (
+                "✅ Портрет получен для поздравления. Шаг 2/3: выберите голос для текстовой озвучки или пришлите свой voice/audio."
+                if context.user_data.get("video_greeting_mode")
+                else "✅ Портрет получен. Шаг 2/3: выберите голос для текстовой озвучки или пришлите свой voice/audio."
+            )
             await update.effective_message.reply_text(
-                "✅ Портрет получен. Шаг 2/3: выберите голос для текстовой озвучки или пришлите свой voice/audio.",
+                intro,
                 reply_markup=_avatar_voice_choice_kb("act"),
             )
             return
@@ -19070,6 +19322,22 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _pedit_replacebg(update, context, img, kind=kind, prompt=prompt)
             return
 
+        if _is_waiting_outpaint(context):
+            _clear_medicine_wait(context)
+            _clear_outpaint_wait(context)
+            with contextlib.suppress(Exception):
+                _mode_track_set(user_id, "")
+            await _pedit_outpaint(update, context, img)
+            return
+
+        if _is_waiting_image_vision(context):
+            _clear_medicine_wait(context)
+            _clear_image_vision_wait(context)
+            with contextlib.suppress(Exception):
+                _mode_track_set(user_id, "")
+            await _describe_image(update, img)
+            return
+
         # 0) Ретушь собственного изображения / удаление лишней надписи / watermark.
         # Это должно перебивать медицинский контекст, если пользователь явно просит ретушь.
         if caption and _is_image_retouch_request(caption):
@@ -19102,7 +19370,14 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 2) Если перед фото пользователь голосом/текстом спросил про оживление фото —
         # показываем фото-мастерскую, а не медицинский анализ.
         if _is_waiting_photo_revival(context):
+            preset_prompt = (context.user_data.pop("revival_preset_prompt", "") or "").strip()
             _clear_photo_revival_wait(context)
+            if preset_prompt:
+                await update.effective_message.reply_text("💃 Фото получено. Запускаю танцевальный ролик…")
+                await _start_photo_revival(
+                    update, context, engine="runway", img_bytes=img, prompt=preset_prompt
+                )
+                return
             await update.effective_message.reply_text(
                 "Фото получено. Выберите сценарий оживления:",
                 reply_markup=photo_revival_actions_kb(),
@@ -19651,6 +19926,152 @@ async def on_cb_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "quiz":
         from neyrobot_prod.entertainment.game_telegram import handle_game_menu
         return await handle_game_menu(update, context)
+
+    if action in {"retouch", "remove_object"}:
+        label = "Ретушь" if action == "retouch" else "Удаление объекта или текста"
+        await q.answer(label)
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "retouch")
+        cached = _get_cached_photo(q.from_user.id)
+        if cached:
+            _set_retouch_wait_text(context)
+            await q.message.reply_text(
+                "🧽 Использую последнее фото. Напишите, что именно убрать и где это находится: "
+                "текст, логотип, водяной знак или лишний объект.\n\n"
+                "Отправляя задание, вы подтверждаете право редактировать это изображение."
+            )
+            return
+        _set_waiting_image_retouch(update, context)
+        await q.message.reply_text(
+            "🧽 Пришлите своё фото и в подписи укажите, что убрать и где это находится. "
+            "Например: «убрать надпись справа снизу» или «удалить лишний объект слева».\n\n"
+            "Отправляя задание, вы подтверждаете право редактировать это изображение."
+        )
+        return
+
+    if action == "outpaint":
+        await q.answer("Расширение кадра")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "outpaint")
+        cached = _get_cached_photo(q.from_user.id)
+        if cached:
+            await q.message.reply_text("↔️ Расширяю последнее фото, сохраняя исходный кадр по центру.")
+            await _pedit_outpaint(update, context, cached)
+            return
+        _set_waiting_outpaint(update, context)
+        await q.message.reply_text(
+            "↔️ Пришлите фото. Я расширю холст и мягко продолжу края фона вокруг исходного кадра."
+        )
+        return
+
+    if action == "vision":
+        await q.answer("Анализ фото")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "image_vision")
+        cached = _get_cached_photo(q.from_user.id)
+        if cached:
+            await q.message.reply_text("👁 Анализирую последнее фото…")
+            await _describe_image(update, cached)
+            return
+        _set_waiting_image_vision(update, context)
+        await q.message.reply_text("👁 Пришлите фото — кратко опишу содержимое и видимый текст.")
+        return
+
+    if action == "photo_dance":
+        await q.answer("Танец из фото")
+        _set_waiting_photo_revival(update, context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "photo_dance")
+        context.user_data["revival_preset_prompt"] = (
+            "A single person from the source photo performs a natural, energetic dance. "
+            "Preserve the person's identity, face, clothing and body proportions. "
+            "Full-body movement where possible, realistic anatomy, smooth stable camera, no text or logos."
+        )
+        await q.message.reply_text(
+            "💃 Пришлите портрет или фото в полный рост. Я создам короткий танцевальный ролик, "
+            "сохраняя лицо и одежду человека на исходнике."
+        )
+        return
+
+    if action == "in_movie":
+        await q.answer("Я в кино")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "in_movie")
+        context.user_data["awaiting_ai_selfie_photo"] = True
+        context.user_data["in_movie_mode"] = True
+        context.user_data["ai_selfie_preset_prompt"] = (
+            "Create a cinematic film still using the user's supplied selfie as the protagonist. "
+            "Preserve the user's identity and facial features. Premium film lighting, realistic set design, "
+            "cinematic depth of field, no text, no logos, 4:5."
+        )
+        await q.message.reply_text(
+            "🎞 Пришлите своё селфи. Затем выберите жанр, локацию и образ сцены — "
+            "создам реалистичный кадр из кино с вами в главной роли."
+        )
+        return
+
+    if action == "video_greeting":
+        await q.answer("Видео-поздравление")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "video_greeting")
+        context.user_data["awaiting_avatar_photo"] = True
+        context.user_data["video_greeting_mode"] = True
+        await q.message.reply_text(
+            "🎁 Пришлите портрет человека. Затем выберите голос и напишите текст поздравления — "
+            "бот сделает короткое видео с синхронизированной речью."
+        )
+        return
+
+    if action == "before_after":
+        await q.answer("До / После")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "before_after")
+        context.user_data["awaiting_before_after"] = "before"
+        await q.message.reply_text(
+            "↔️ Пришлите первое фото — состояние «До». Затем я попрошу второе фото «После» и соберу один сравнительный кадр."
+        )
+        return
+
+    if action == "video_faceswap":
+        await q.answer("Замена лица в видео")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "video_faceswap")
+        context.user_data["awaiting_video_faceswap_target"] = True
+        await q.message.reply_text(
+            f"🎭 Пришлите свой MP4 до {VIDEO_FACESWAP_MAX_MB} МБ и до {VIDEO_FACESWAP_MAX_SECONDS} секунд, где видно одно лицо. "
+            "Затем пришлите фото лица-источника. Используйте только собственные материалы или материалы с явным разрешением людей в кадре."
+        )
+        return
+
+    if action == "outfit":
+        await q.answer("Сменить образ")
+        _set_waiting_outfit(update, context)
+        await q.message.reply_text(
+            "👗 Пришлите своё фото и в подписи опишите новый образ: одежду, стиль, цвета и аксессуары. "
+            "Например: «чёрный вечерний костюм, мягкий студийный свет». Отправляя фото, вы подтверждаете право его редактировать."
+        )
+        return
+
+    if action == "continue_video":
+        await q.answer("Продолжить видео")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Развлечения", "continue_video")
+        context.user_data["awaiting_video_continue_upload"] = True
+        await q.message.reply_text(
+            "➕ Пришлите исходный MP4 до 50 МБ. Я извлеку его последний кадр, создам следующий фрагмент через image→video и склею оба ролика."
+        )
+        return
+
+    if action == "video_translation":
+        await q.answer("Перевод и озвучка")
+        _clear_transient_flows(context)
+        _set_mode_clean(q.from_user.id, "Нейро Продакшен", "video_translation")
+        context.user_data["awaiting_video_translation_upload"] = True
+        context.user_data["video_translation_language"] = "Russian"
+        await q.message.reply_text(
+            "🌍 Пришлите MP4 до 50 МБ. По умолчанию переведу речь на русский, создам новую озвучку и соберу видео с синхронной по длительности аудиодорожкой. "
+            "Чтобы выбрать другой язык, укажите его в подписи к видео, например: «перевести на английский»."
+        )
+        return
 
     if action == "avatar":
         await q.answer("Говорящий аватар")
@@ -20274,6 +20695,328 @@ async def on_direct_lipsync_text(update: Update, context: ContextTypes.DEFAULT_T
         _direct_lipsync_clear(context)
         await update.effective_message.reply_text(f"❌ Не удалось создать озвучку: {str(exc)[:300]}")
     # The direct flow owns this update; prevent generic text handlers from firing.
+    raise ApplicationHandlerStop()
+
+
+def _extract_video_audio_sync(video_bytes: bytes) -> bytes:
+    if not video_bytes:
+        raise ValueError("empty video")
+    with tempfile.TemporaryDirectory(prefix="neyro_translate_audio_") as td:
+        source = os.path.join(td, "source.mp4")
+        output = os.path.join(td, "speech.mp3")
+        with open(source, "wb") as fh:
+            fh.write(video_bytes)
+        result = subprocess.run(
+            [_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error", "-i", source,
+             "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "24000", "-c:a", "libmp3lame", "-b:a", "96k", output],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180,
+        )
+        if result.returncode != 0 or not os.path.isfile(output) or os.path.getsize(output) < 512:
+            raise RuntimeError("В видео не найдена пригодная аудиодорожка.")
+        with open(output, "rb") as fh:
+            return fh.read()
+
+
+def _split_tts_text(text: str, limit: int) -> list[str]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    limit = max(120, int(limit or 1000))
+    parts: list[str] = []
+    current = ""
+    for sentence in re.split(r"(?<=[.!?。！？])\s+", text):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if current and len(current) + len(sentence) + 1 > limit:
+            parts.append(current)
+            current = ""
+        while len(sentence) > limit:
+            cut = sentence.rfind(" ", 0, limit)
+            cut = cut if cut > limit // 2 else limit
+            parts.append(sentence[:cut].strip())
+            sentence = sentence[cut:].strip()
+        current = (current + " " + sentence).strip()
+    if current:
+        parts.append(current)
+    return parts
+
+
+def _concat_audio_mp3_sync(parts: list[bytes]) -> bytes:
+    if not parts:
+        raise ValueError("no TTS parts")
+    if len(parts) == 1:
+        return parts[0]
+    with tempfile.TemporaryDirectory(prefix="neyro_translate_tts_") as td:
+        manifest = os.path.join(td, "concat.txt")
+        for index, content in enumerate(parts):
+            path = os.path.join(td, f"part_{index:02d}.mp3")
+            with open(path, "wb") as fh:
+                fh.write(content)
+        with open(manifest, "w", encoding="utf-8") as fh:
+            for index in range(len(parts)):
+                fh.write(f"file '{os.path.join(td, f'part_{index:02d}.mp3')}'\n")
+        output = os.path.join(td, "speech.mp3")
+        result = subprocess.run(
+            [_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0",
+             "-i", manifest, "-c:a", "libmp3lame", "-b:a", "128k", output],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180,
+        )
+        if result.returncode != 0 or not os.path.isfile(output):
+            raise RuntimeError("Не удалось собрать озвучку.")
+        with open(output, "rb") as fh:
+            return fh.read()
+
+
+def _mux_translated_audio_sync(video_bytes: bytes, audio_bytes: bytes, duration_s: float) -> bytes:
+    if not 1.0 <= float(duration_s) <= 180.0:
+        raise ValueError("Поддерживаются видео длительностью от 1 до 180 секунд.")
+    with tempfile.TemporaryDirectory(prefix="neyro_translate_mux_") as td:
+        video = os.path.join(td, "source.mp4")
+        audio = os.path.join(td, "translation.mp3")
+        output = os.path.join(td, "translated.mp4")
+        with open(video, "wb") as fh:
+            fh.write(video_bytes)
+        with open(audio, "wb") as fh:
+            fh.write(audio_bytes)
+        # atempo changes only the new audio duration; the picture remains intact.
+        audio_duration = _direct_lipsync_duration_sync(audio_bytes, ".mp3")
+        if audio_duration < 0.2:
+            raise RuntimeError("Озвучка получилась пустой.")
+        tempo = max(0.5, min(2.0, audio_duration / float(duration_s)))
+        if abs(audio_duration / float(duration_s)) > 2.0:
+            raise RuntimeError("Переведённый текст слишком сильно отличается по длительности от исходного видео.")
+        result = subprocess.run(
+            [_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error", "-i", video, "-i", audio,
+             "-filter:a", f"atempo={tempo:.5f},apad,atrim=duration={float(duration_s):.3f}",
+             "-map", "0:v:0", "-map", "1:a:0", "-t", f"{float(duration_s):.3f}",
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", output],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=240,
+        )
+        if result.returncode != 0 or not os.path.isfile(output) or os.path.getsize(output) < 1024:
+            raise RuntimeError("Не удалось собрать MP4 с новой озвучкой.")
+        with open(output, "rb") as fh:
+            return fh.read()
+
+
+def _translation_target_from_caption(caption: str) -> str:
+    text = (caption or "").strip()
+    match = re.search(r"(?:на|to)\s+([A-Za-zА-Яа-яЁё\- ]{2,40})", text, re.I)
+    return (match.group(1).strip() if match else "Russian")
+
+
+async def _run_video_translation(update: Update, context: ContextTypes.DEFAULT_TYPE, video_bytes: bytes, target_language: str):
+    duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, video_bytes)
+    if not 1.0 <= duration <= 180.0:
+        await update.effective_message.reply_text("❌ Поддерживаются MP4 длительностью от 1 до 180 секунд.")
+        return False
+    if not OPENAI_STT_KEY or not OPENAI_TTS_KEY:
+        await update.effective_message.reply_text("❌ Для перевода видео нужны настроенные STT и TTS ключи OpenAI.")
+        return False
+    await update.effective_message.reply_text("🌍 Извлекаю речь, перевожу, создаю озвучку и собираю MP4…")
+    try:
+        source_audio = await asyncio.to_thread(_extract_video_audio_sync, video_bytes)
+        transcript = await _stt_transcribe_bytes("source.mp3", source_audio)
+        if not transcript:
+            raise RuntimeError("Не удалось распознать речь в видео.")
+        translation = await ask_openai_text(
+            f"Translate this spoken-video transcript into {target_language}. Preserve meaning, names, tone and paragraph breaks. "
+            "Return only the translated narration, with no notes:\n\n" + transcript
+        )
+        parts = _split_tts_text(translation, TTS_MAX_CHARS)
+        generated = [await asyncio.to_thread(_tts_bytes_sync, part, "mp3", _avatar_tts_voice_get(context)) for part in parts]
+        if not generated or any(not item for item in generated):
+            raise RuntimeError("TTS не вернул озвучку.")
+        speech = await asyncio.to_thread(_concat_audio_mp3_sync, [item for item in generated if item])
+        final = await asyncio.to_thread(_mux_translated_audio_sync, video_bytes, speech, duration)
+        await _reply_video_bytes(
+            update, final,
+            f"✅ Перевод и озвучка готовы · язык: {target_language}. Длительность новой аудиодорожки синхронизирована с роликом.",
+        )
+        return True
+    except Exception as exc:
+        log.exception("video translation failed")
+        await update.effective_message.reply_text(f"❌ Не удалось перевести и озвучить видео: {str(exc)[:500]}")
+        return False
+
+
+async def _run_video_continuation(update: Update, context: ContextTypes.DEFAULT_TYPE, source: bytes, prompt: str):
+    if not SEEDANCE_ENABLED:
+        await update.effective_message.reply_text("❌ Продолжение видео требует включённого Seedance/CometAPI.")
+        return False
+    frame = await asyncio.to_thread(_extract_last_video_frame_sync, source)
+    if not frame:
+        await update.effective_message.reply_text("❌ Не удалось извлечь последний кадр исходного MP4.")
+        return False
+    duration, aspect = 8, "16:9"
+    cost = _video_provider_cost_usd("seedance", duration)
+    async def _go():
+        await update.effective_message.reply_text("➕ Создаю следующий фрагмент от последнего кадра и склеиваю ролик…")
+        try:
+            continuation = await seedance_generate(
+                api_key=COMET_API_KEY, base_url=COMET_BASE_URL, prompt=prompt,
+                seconds=duration, aspect=aspect, model=SEEDANCE_MODEL,
+                model_fallbacks=SEEDANCE_MODEL_FALLBACKS, reference_bytes=frame,
+                reference_name="continuation_last_frame.jpg", reference_mime="image/jpeg",
+                create_path=SEEDANCE_CREATE_PATH, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+            )
+            original_duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, source)
+            final = await asyncio.to_thread(
+                _concat_video_segments_sync, [source, continuation], int(max(1, round(original_duration + duration)))
+            )
+            if not final:
+                raise RuntimeError("Не удалось склеить исходный и новый фрагменты.")
+            await _reply_video_bytes(update, final, "✅ Видео продолжено и собрано в один MP4.")
+            return True
+        except Exception as exc:
+            log.exception("video continuation failed")
+            await update.effective_message.reply_text(f"❌ Не удалось продолжить видео: {str(exc)[:500]}")
+            return False
+    await _try_pay_then_do(
+        update, context, update.effective_user.id, "seedance", cost, _go,
+        remember_kind="video_continuation_seedance",
+        remember_payload={"prompt": prompt[:500], "duration": duration}, silent_failure=True,
+    )
+    return True
+
+
+async def _run_video_faceswap(update: Update, context: ContextTypes.DEFAULT_TYPE, target_video: bytes, source_face: bytes):
+    if not FACESWAP_ENABLED:
+        await update.effective_message.reply_text("❌ Замена лица сейчас отключена на сервере.")
+        return False
+    duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, target_video)
+    if not 0.5 <= duration <= VIDEO_FACESWAP_MAX_SECONDS:
+        await update.effective_message.reply_text(
+            f"❌ Для стабильной замены лица поддерживаются ролики до {VIDEO_FACESWAP_MAX_SECONDS} секунд."
+        )
+        return False
+    user_id = update.effective_user.id
+    providers = _faceswap_provider_order("fast", user_id)
+    if not providers:
+        await update.effective_message.reply_text("❌ Не настроен провайдер замены лица для видео.")
+        return False
+    source_crop = _faceswap_crop_source_face(source_face, (_detect_faces_for_choice(source_face) or [None])[0])
+    frame_cost = max(1, int(round(duration * VIDEO_FACESWAP_FPS))) * FACESWAP_FAST_COST_USD
+
+    async def _go():
+        await update.effective_message.reply_text(
+            "🎭 Обрабатываю короткое видео покадрово. Сохраняю оригинальные движение, одежду, фон и звук; это может занять несколько минут."
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="neyro_video_faceswap_") as td:
+                source_path = os.path.join(td, "source.mp4")
+                frame_dir = os.path.join(td, "frames")
+                result_dir = os.path.join(td, "result")
+                os.makedirs(frame_dir, exist_ok=True)
+                os.makedirs(result_dir, exist_ok=True)
+                with open(source_path, "wb") as fh:
+                    fh.write(target_video)
+                extract = subprocess.run(
+                    [_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error", "-i", source_path,
+                     "-t", f"{duration:.3f}", "-vf", f"fps={VIDEO_FACESWAP_FPS}",
+                     os.path.join(frame_dir, "frame_%04d.jpg")],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180,
+                )
+                frames = sorted(
+                    os.path.join(frame_dir, name) for name in os.listdir(frame_dir) if name.endswith(".jpg")
+                )
+                if extract.returncode != 0 or not frames:
+                    raise RuntimeError("Не удалось извлечь кадры из MP4.")
+                for index, frame_path in enumerate(frames, 1):
+                    with open(frame_path, "rb") as fh:
+                        frame = fh.read()
+                    swapped = None
+                    for provider in providers:
+                        try:
+                            swapped = await asyncio.wait_for(
+                                _run_faceswap_provider(provider, frame, source_crop, "fast"),
+                                timeout=FACESWAP_TIMEOUT_S + 30,
+                            )
+                            if swapped:
+                                break
+                        except Exception as exc:
+                            log.warning("video faceswap frame=%s provider=%s error=%s", index, provider, exc)
+                    if not swapped:
+                        raise RuntimeError(f"Провайдер не обработал кадр {index} из {len(frames)}.")
+                    with open(os.path.join(result_dir, f"frame_{index:04d}.jpg"), "wb") as fh:
+                        fh.write(swapped)
+                output = os.path.join(td, "video_faceswap.mp4")
+                assemble = subprocess.run(
+                    [_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error", "-framerate", str(VIDEO_FACESWAP_FPS),
+                     "-i", os.path.join(result_dir, "frame_%04d.jpg"), "-i", source_path,
+                     "-map", "0:v:0", "-map", "1:a?", "-t", f"{duration:.3f}", "-r", "24",
+                     "-c:v", "libx264", "-preset", FFMPEG_MUX_REENCODE_PRESET, "-crf", str(FFMPEG_MUX_CRF),
+                     "-c:a", "aac", "-movflags", "+faststart", output],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=240,
+                )
+                if assemble.returncode != 0 or not os.path.isfile(output):
+                    raise RuntimeError("Не удалось собрать видео после замены лица.")
+                with open(output, "rb") as fh:
+                    result = fh.read()
+            await _reply_video_bytes(update, result, "✅ Лицо в коротком видео заменено. Используйте результат только с согласия людей в кадре.")
+            return True
+        except Exception as exc:
+            log.exception("video faceswap failed")
+            await update.effective_message.reply_text(f"❌ Не удалось заменить лицо в видео: {str(exc)[:500]}")
+            return False
+
+    await _try_pay_then_do(
+        update, context, user_id, "img", frame_cost, _go,
+        remember_kind="video_faceswap_frames",
+        remember_payload={"seconds": round(duration, 2), "fps": VIDEO_FACESWAP_FPS}, silent_failure=True,
+    )
+    return True
+
+
+async def on_media_workflow_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not (context.user_data.get("awaiting_video_continue_upload") or context.user_data.get("awaiting_video_translation_upload") or context.user_data.get("awaiting_video_faceswap_target")):
+        return
+    media = update.effective_message.video or update.effective_message.document
+    if not media:
+        return
+    try:
+        filename = (getattr(media, "file_name", "") or "").lower()
+        mime = (getattr(media, "mime_type", "") or "").lower()
+        if update.effective_message.document and not (filename.endswith(".mp4") or mime.startswith("video/")):
+            raise RuntimeError("Нужен файл MP4.")
+        tg_file = await _telegram_media_get_file_with_retry(media, label="postproduction video")
+        raw = bytes(await tg_file.download_as_bytearray())
+        max_bytes = VIDEO_FACESWAP_MAX_MB * 1024 * 1024 if context.user_data.get("awaiting_video_faceswap_target") else 50 * 1024 * 1024
+        if not 1024 <= len(raw) <= max_bytes:
+            raise RuntimeError("MP4 должен быть от 1 КБ до 50 МБ.")
+        if context.user_data.pop("awaiting_video_faceswap_target", False):
+            context.user_data["video_faceswap_target"] = raw
+            context.user_data["awaiting_video_faceswap_source"] = True
+            await update.effective_message.reply_text(
+                "✅ Видео получено. Теперь пришлите чёткое фото лица-источника анфас. Подтвердите, что у вас есть право использовать это лицо."
+            )
+        elif context.user_data.pop("awaiting_video_continue_upload", False):
+            context.user_data["video_continue_source"] = raw
+            context.user_data["awaiting_video_continue_prompt"] = True
+            await update.effective_message.reply_text(
+                "✅ Исходное видео получено. Опишите, что должно происходить в следующем фрагменте (по умолчанию 8 секунд, 16:9)."
+            )
+        else:
+            context.user_data.pop("awaiting_video_translation_upload", None)
+            target = _translation_target_from_caption(getattr(update.effective_message, "caption", ""))
+            await _run_video_translation(update, context, raw, target)
+    except Exception as exc:
+        await update.effective_message.reply_text(f"❌ Не удалось принять MP4: {str(exc)[:300]}")
+    raise ApplicationHandlerStop()
+
+
+async def on_media_workflow_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data.get("awaiting_video_continue_prompt"):
+        return
+    prompt = (getattr(update.effective_message, "text", "") or "").strip()
+    if not prompt:
+        return
+    source = context.user_data.pop("video_continue_source", b"")
+    context.user_data.pop("awaiting_video_continue_prompt", None)
+    if not source:
+        await update.effective_message.reply_text("Исходный MP4 не найден. Откройте «Продолжить видео» и загрузите его снова.")
+    else:
+        await _run_video_continuation(update, context, source, prompt)
     raise ApplicationHandlerStop()
 
 # ───────── Приоритетный роутер AI-видеоклипа ─────────
@@ -20979,6 +21722,7 @@ def build_application() -> "Application":
             _clear_text_video_wait(context)
         raise ApplicationHandlerStop
 
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_media_workflow_text), group=-5)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _route_selected_text_video), group=-3)
 
     # Active AI-videoclip state owns text before presentation/capability/generic media routing.
@@ -21042,6 +21786,10 @@ def build_application() -> "Application":
 
     # Generic photo-revival regex interceptor removed: explicit revival commands are routed only by on_text.\n    # ➕ Позитивный авто-ответ на «а умеешь ли…» — до общего текста (отдельная группа, ниже кнопок)
     # Direct finished-video Kling Lip Sync (must run before generic media/text routes).
+    app.add_handler(
+        MessageHandler(filters.VIDEO | filters.Document.FileExtension("mp4"), on_media_workflow_video),
+        group=-5,
+    )
     app.add_handler(CommandHandler("lip_sync_video", cmd_lip_sync_video), group=-4)
     app.add_handler(MessageHandler(filters.PHOTO, on_direct_lipsync_photo), group=-4)
     app.add_handler(MessageHandler(filters.VIDEO, on_direct_lipsync_video), group=-4)
