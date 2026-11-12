@@ -219,7 +219,8 @@ class EntertainmentCatalogTests(unittest.TestCase):
             "fun:photo_dance": "💃 Фото танцует",
             "fun:in_movie": "🎞 Я в кино",
             "fun:video_greeting": "🎁 Видео-поздравление",
-            "fun:video_faceswap": "🎭 Заменить лицо в видео",
+            "fun:hero_replace": "🎬 Замена героя в видео",
+            "fun:video_faceswap": "🎭 Быстрая замена лица",
         }
         self.assertEqual(set(expected), set(expected) & set(by_callback))
         for callback, label in expected.items():
