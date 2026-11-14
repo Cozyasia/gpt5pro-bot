@@ -4965,6 +4965,7 @@ def _clear_i2v_wait(context: ContextTypes.DEFAULT_TYPE):
         "i2v_aspect",
         "i2v_reference_ready",
         "i2v_reference_has_person",
+        "i2v_kling_relay_unsupported",
     ):
         with contextlib.suppress(Exception):
             context.user_data.pop(key, None)
@@ -16154,6 +16155,17 @@ def _is_runway_unavailable_text(s: str) -> bool:
     )
     return any(x in t for x in needles)
 
+
+def _is_unsupported_relay_mode_error(value: object) -> bool:
+    """Recognize a gateway route that cannot execute the requested API endpoint.
+
+    This is a gateway capability error, not a rejected image, prompt, or
+    generated task. It is intentionally matched narrowly so ordinary Kling
+    validation errors keep their normal handling.
+    """
+    text = str(value or "").lower()
+    return "unsupported relay mode" in text or "invalid_relay_mode" in text
+
 def _looks_like_screenshot_or_bad_i2v_source(img_bytes: bytes) -> str:
     """Soft heuristic only: warn user if input looks like a phone screenshot/frame."""
     if Image is None:
@@ -16976,6 +16988,7 @@ async def _create_and_poll_i2v(
     silent_soft_fail: bool = False,
     max_wait_s: int | None = None,
     context: ContextTypes.DEFAULT_TYPE | None = None,
+    suppress_unsupported_relay_mode: bool = False,
 ) -> bool:
     if not api_key:
         await update.effective_message.reply_text(f"❌ {caption}: API-ключ не задан в ENV.")
@@ -17114,6 +17127,16 @@ async def _create_and_poll_i2v(
         details = "\n".join(all_errors[-5:])
     else:
         details = last_err
+
+    # The connected gateway can advertise Kling while its image→video relay
+    # route is not provisioned. Do not expose that transport JSON to a user
+    # and, critically, return False so the payment wrapper releases the held
+    # credit rather than treating this as a rendered video.
+    if suppress_unsupported_relay_mode and _is_unsupported_relay_mode_error(details):
+        log.warning("%s gateway route unsupported: %s", caption, details[:1500])
+        if context is not None:
+            context.user_data["i2v_kling_relay_unsupported"] = True
+        return False
 
     if "runway" in (caption or "").lower():
         if _is_runway_unavailable_text(details):
@@ -17291,15 +17314,33 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
             ),
         ]
 
-        # Explicit Kling action must remain Kling: no Runway/Sora fallback.
-        return bool(await _create_and_poll_i2v(
+        # Explicit Kling action must remain Kling: never launch a different
+        # paid provider behind the user's back. If its gateway route is
+        # unavailable, return the user to the same wizard with Runway selected.
+        kling_ok = bool(await _create_and_poll_i2v(
             update,
             COMET_BASE_URL,
             KLING_API_KEY,
             payloads,
             ["/kling/v1/videos/image2video/{id}", KLING_STATUS_PATH, "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"],
             "Kling image→video",
+            context=context,
+            suppress_unsupported_relay_mode=True,
         ))
+        if not kling_ok and context.user_data.pop("i2v_kling_relay_unsupported", False):
+            _provider_mark_failure("kling_i2v", "unsupported relay mode")
+            context.user_data["i2v_engine"] = "runway"
+            await update.effective_message.reply_text(
+                "⚠️ Kling image→video временно недоступен через подключённый шлюз. "
+                "Это не связано с вашим фото или промптом; списание за попытку не выполнено.\n\n"
+                "Я выбрал Runway. Нажмите его при необходимости и повторно отправьте тот же промпт — "
+                "видео будет создано уже через Runway.",
+                reply_markup=_i2v_keyboard(context, update.effective_user.id),
+            )
+            return False
+        if kling_ok:
+            _provider_mark_success("kling_i2v")
+        return kling_ok
 
     await update.effective_message.reply_text("❌ Неизвестный Comet image→video движок.")
     return False
