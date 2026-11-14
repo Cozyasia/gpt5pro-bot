@@ -1,0 +1,12 @@
+diff --git a/main.py b/main.py
+--- a/main.py
++++ b/main.py
+@@ -15750,7 +15750,7 @@ async def cmd_diag_runway(update: Update, context: ContextTypes.DEFAULT_TYPE):
+     if "auth" in args:
+         ok, detail = await _runway_direct_org_info()
+         prefix = "✅ Официальный Runway API доступен" if ok else "❌ Официальный Runway API не готов"
+-        await update.effective_message.reply_text(prefix + "\n" + detail)
++        await update.effective_message.reply_text((prefix + "\n" + detail)[:3900])
+         return
+ 
+     lines = [
