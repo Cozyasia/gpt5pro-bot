@@ -27,6 +27,7 @@ RUN patch --batch --forward -p1 < /app/ops/main_kling_prefer_comet_key.patch || 
 RUN patch --batch --forward -p1 < /app/ops/main_kling_text2video_compat.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_disable_kling_i2v.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_limit_runway_diag_output.patch || true
+RUN patch --batch --forward -p1 < /app/ops/main_disable_kling_i2v_fallback.patch || true
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]
