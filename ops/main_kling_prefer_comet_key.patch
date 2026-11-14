@@ -1,0 +1,16 @@
+diff --git a/main.py b/main.py
+index cfa5ec1..26c6fec 100644
+--- a/main.py
++++ b/main.py
+@@ -601,7 +601,10 @@ if SORA_MODEL.lower() in ("", "sora", "sora-1", "sora1"):
+     SORA_MODEL = "sora-2"
+ SORA_CREATE_PATH = os.environ.get("SORA_CREATE_PATH", "/v1/videos").strip() or "/v1/videos"
+ SORA_STATUS_PATH = os.environ.get("SORA_STATUS_PATH", "/v1/videos/{id}").strip() or "/v1/videos/{id}"
+-KLING_API_KEY  = (os.environ.get("KLING_API_KEY") or COMET_API_KEY).strip()
++# Prefer the canonical Comet credential. A separately provisioned legacy
++# KLING_API_KEY may be bound to an obsolete relay channel even while the
++# current Comet account itself has Kling access.
++KLING_API_KEY  = (COMET_API_KEY or os.environ.get("KLING_API_KEY") or "").strip()
+ KLING_MODEL    = os.environ.get("KLING_MODEL", "kling-v3").strip()
+ # The legacy v1.6/v2.6 tracks have become unreliable on Comet's current
+ # Kling relay. The live image-to-video contract uses the v3 family. Keep a
