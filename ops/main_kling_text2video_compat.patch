@@ -1,0 +1,46 @@
+diff --git a/main.py b/main.py
+--- a/main.py
++++ b/main.py
+@@ -17301,19 +17304,21 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
+             safe_prompt = (safe_prompt + "; " + I2V_KLING_SAFE_PROMPT_SUFFIX).strip("; ")
+ 
+         kling_image_ref = tg_url if (tg_url and tg_url.startswith("https://")) else data_url
++        payload = {
++            "model_name": KLING_MODEL,
++            "prompt": safe_prompt,
++            "image": kling_image_ref,
++            "duration": d,
++            "aspect_ratio": aspect,
++            "mode": "std",
++            "sound": "off",
++        }
++        # Some Comet relay pools expose the legacy Kling-compatible
++        # image-reference flow through text2video. It is attempted only
++        # after the explicit image2video route rejects the request.
+         payloads = [
+-            (
+-                KLING_CREATE_PATH,
+-                {
+-                    "model_name": KLING_MODEL,
+-                    "prompt": safe_prompt,
+-                    "image": kling_image_ref,
+-                    "duration": d,
+-                    "aspect_ratio": aspect,
+-                    "mode": "std",
+-                    "sound": "off",
+-                },
+-            ),
++            (KLING_CREATE_PATH, payload),
++            ("/kling/v1/videos/text2video", payload),
+         ]
+ 
+         # Explicit Kling action must remain Kling: never launch a different
+@@ -17324,7 +17329,7 @@ async def _run_comet_i2v(update: Update, context: ContextTypes.DEFAULT_TYPE, eng
+             COMET_BASE_URL,
+             KLING_API_KEY,
+             payloads,
+-            ["/kling/v1/videos/image2video/{id}", KLING_STATUS_PATH, "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"],
++            ["/kling/v1/videos/image2video/{id}", "/kling/v1/videos/text2video/{id}", KLING_STATUS_PATH, "/kling/v1/videos/{id}", "/v1/tasks/{id}", "/v1/videos/{id}"],
+             "Kling image→video",
+             context=context,
+             suppress_unsupported_relay_mode=True,
