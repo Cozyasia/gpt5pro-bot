@@ -1,0 +1,15 @@
+diff --git a/main.py b/main.py
+--- a/main.py
++++ b/main.py
+@@ -18154,10 +18154,6 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
+         except Exception as e:
+             _provider_mark_failure("runway_direct", str(e))
+             log.warning("Runway direct fallback failed: %s", e)
+ 
+-    if RUNWAY_AUTO_FALLBACK_KLING and COMET_API_KEY:
+-        await update.effective_message.reply_text(RUNWAY_PUBLIC_FALLBACK_TEXT)
+-        return bool(await _run_comet_i2v(update, context, "kling", img_bytes, prompt, seconds, aspect))
+-
+     if RUNWAY_API_KEY:
+         await update.effective_message.reply_text("⚠️ Официальный Runway не принял задачу. Проверьте RUNWAYML_API_SECRET (Environment/Secret File) и API-кредиты: /diag_runway auth")
+     else:
