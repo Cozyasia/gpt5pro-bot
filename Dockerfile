@@ -24,6 +24,7 @@ RUN patch --batch --forward -p1 < /app/ops/main_cryptobot_secret.patch || true
 RUN patch --batch --forward -p1 < /app/ops/secret_loader_short_deck.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_kling_v3_contract.patch || true
 RUN patch --batch --forward -p1 < /app/ops/main_kling_prefer_comet_key.patch || true
+RUN patch --batch --forward -p1 < /app/ops/main_kling_text2video_compat.patch || true
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]
