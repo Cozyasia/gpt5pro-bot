@@ -1,0 +1,25 @@
+name: NEYRONIX transaction regression
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'property_video_billing.py'
+      - 'tests/test_property_video_billing.py'
+      - 'tests/test_neyronix_billing_transactions.py'
+      - '.github/workflows/neyronix-transaction-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sqlite-billing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Existing billing tests
+        run: python -m unittest discover -s tests -p 'test_property_video_billing.py' -v
+      - name: Transaction regression tests
+        run: python -m unittest discover -s tests -p 'test_neyronix_billing_transactions.py' -v
