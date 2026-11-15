@@ -2132,12 +2132,24 @@ def _round_credit_amount(value: float) -> int:
     raw = max(0.0, float(value or 0.0))
     return int(((raw + step - 1e-9) // step) * step) if raw else 0
 
+# Feature flag: leave disabled until legacy wallet balances, top-ups, and
+# subscription grants have been migrated to the new USD-denominated credit scale.
+NEYRONIX_USD_CREDITS_ENABLED = os.environ.get("NEYRONIX_USD_CREDITS_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+
 def _retail_credits(provider_cost_usd: float) -> int:
+    if NEYRONIX_USD_CREDITS_ENABLED:
+        from neyronix_pricing import retail_credits
+        # Integer credits are used by legacy UI; round UP, never down.
+        from decimal import ROUND_CEILING
+        return int(retail_credits(provider_cost_usd).to_integral_value(rounding=ROUND_CEILING))
     base_rub = max(0.0, float(provider_cost_usd or 0.0)) * max(1e-9, USD_RUB) * GENERATION_PRICE_MULTIPLIER
     credits = base_rub / max(1e-9, CREDIT_RUB_VALUE) + GENERATION_FIXED_OVERHEAD_CREDITS
     return max(GENERATION_PRICE_ROUND_TO, _round_credit_amount(credits)) if provider_cost_usd > 0 else 0
 
 def _retail_usd(provider_cost_usd: float) -> float:
+    if NEYRONIX_USD_CREDITS_ENABLED:
+        # One credit = 0.10 USD in the new wallet scheme.
+        return round(_retail_credits(provider_cost_usd) / 10.0, 4)
     return _credits_to_usd(_retail_credits(provider_cost_usd))
 
 def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
