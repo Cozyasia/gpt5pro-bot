@@ -18504,6 +18504,63 @@ def _try_consume_promo_daily5_quota(user_id: int, username: str | None, engine: 
 
 
 # ───────── Попытка оплатить → выполнить ─────────
+# Opt-in confirmation gate: keep legacy behavior unchanged until QA approves.
+NEYRONIX_PAID_CONFIRM_ENABLED = os.environ.get("NEYRONIX_PAID_CONFIRM_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+async def _neyronix_paid_quote_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from neyronix_quotes import validate_confirmation
+    q = update.callback_query
+    data = q.data or ""
+    parts = data.split(":")
+    if len(parts) != 3 or parts[0] != "nq" or parts[1] not in ("yes", "no"):
+        await q.answer("Недопустимое подтверждение", show_alert=True)
+        return
+    token = parts[2]
+    pending = context.application.bot_data.setdefault("_neyronix_pending_quotes", {})
+    record = pending.get(token)
+    if not record:
+        await q.answer("Предложение истекло. Запустите запрос заново.", show_alert=True)
+        return
+    quote, original_update, coro_func, engine, feature, provider_cost, retail_usd, payload, silent_failure = record
+    if not validate_confirmation(quote, user_id=q.from_user.id, token=token):
+        await q.answer("Предложение недоступно или истекло.", show_alert=True)
+        return
+    # One-shot removal before any awaits prevents duplicate charges.
+    pending.pop(token, None)
+    await q.answer()
+    if parts[1] == "no":
+        await q.message.reply_text("Отменено. Кредиты не списаны.")
+        return
+    try:
+        tx_id, available = _credit_reserve(q.from_user.id, engine, feature, provider_cost, retail_usd, payload)
+    except Exception:
+        log.exception("Quote confirmation reserve failed")
+        await q.message.reply_text("Не удалось зарезервировать кредиты. Попробуйте позже.")
+        return
+    if not tx_id:
+        await q.message.reply_text("Недостаточно кредитов. Пополните баланс и повторите запрос.")
+        return
+    try:
+        await q.message.reply_text("✅ Подтверждено. Генерация запущена.")
+        result = await coro_func()
+        if result is not True:
+            _credit_release(tx_id, "released")
+            if not silent_failure:
+                await q.message.reply_text("Генерация не завершена. Кредиты не списаны.")
+            return
+        if not _credit_commit(tx_id):
+            _credit_release(tx_id, "released")
+            await q.message.reply_text("Результат получен, но списание не подтверждено. Обратитесь в поддержку.")
+            return
+        await q.message.reply_text(f"✅ Списано: {_retail_credits(provider_cost):g} кр.")
+    except Exception:
+        _credit_release(tx_id, "released")
+        log.exception("Confirmed paid generation failed")
+        if not silent_failure:
+            await q.message.reply_text("Генерация завершилась ошибкой. Кредиты не списаны.")
+
+
 async def _try_pay_then_do(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -18581,6 +18638,40 @@ async def _try_pay_then_do(
     if not math.isfinite(retail_usd) or not math.isfinite(price_credits) or retail_usd <= 0 or price_credits <= 0:
         log.error("Invalid paid generation quote: engine=%s feature=%s", engine, remember_kind)
         await update.effective_message.reply_text("⚠️ Стоимость сейчас недоступна. Генерация не запущена.")
+        return
+    if NEYRONIX_PAID_CONFIRM_ENABLED:
+        from neyronix_quotes import make_quote, customer_summary
+        quote = make_quote(
+            user_id=user_id, engine=engine, feature=remember_kind or engine,
+            provider_cost_usd=provider_cost, metadata=remember_payload,
+        )
+        available = _wallet_available_get(user_id)
+        summary = customer_summary(quote, _usd_to_credits(available))
+        if not summary["can_afford"]:
+            await update.effective_message.reply_text(
+                f"Недостаточно кредитов. Стоимость: {summary['price_credits']} кр. "
+                f"Доступно: {summary['balance_credits']} кр."
+            )
+            return
+        pending = context.application.bot_data.setdefault("_neyronix_pending_quotes", {})
+        # A new quote supersedes older outstanding quotes from this customer.
+        for old_token, old_record in list(pending.items()):
+            if old_record[0].user_id == user_id:
+                pending.pop(old_token, None)
+        pending[quote.token] = (
+            quote, update, coro_func, engine, remember_kind or engine,
+            provider_cost, retail_usd, remember_payload, silent_failure,
+        )
+        await update.effective_message.reply_text(
+            f"🪙 Стоимость: {summary['price_credits']} кр. "
+            f"Баланс: {summary['balance_credits']} кр. "
+            f"После выполнения: {summary['remaining_credits']} кр.\\n"
+            "Подтвердите запуск. Списание только после успешного результата.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Подтвердить генерацию", callback_data=f"nq:yes:{quote.token}"),
+                InlineKeyboardButton("❌ Отмена", callback_data=f"nq:no:{quote.token}"),
+            ]]),
+        )
         return
     tx_id = None
     try:
@@ -22369,6 +22460,9 @@ def build_application() -> "Application":
 
     # 3b) Подменю Suno: свободный запрос и пресеты
     app.add_handler(CallbackQueryHandler(on_cb_suno,  pattern=r"^suno:"), group=0)
+
+    # Paid quote confirmation must be handled before the generic callback router.
+    app.add_handler(CallbackQueryHandler(_neyronix_paid_quote_callback, pattern=r"^nq:(?:yes|no):[0-9a-f]{32}$"), group=0)
 
     # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
     # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
