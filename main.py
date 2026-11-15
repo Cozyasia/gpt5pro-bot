@@ -5229,10 +5229,14 @@ async def _start_image_to_video(update: Update, context: ContextTypes.DEFAULT_TY
     engine = (context.user_data.get("i2v_engine") or "seedance").strip().lower()
     allowed_engines = _i2v_allowed_engines(context, update.effective_user.id)
     if engine not in allowed_engines:
-        engine = allowed_engines[0]
-        context.user_data["i2v_engine"] = engine
+        await update.effective_message.reply_text(
+            "⚠️ Выбранная модель недоступна. Выберите другую — автоматическая замена запрещена.",
+            reply_markup=_i2v_keyboard(context),
+        )
+        return False
     if engine not in {"seedance", "kling", "runway", "sora"}:
-        engine = "seedance"
+        await update.effective_message.reply_text("⚠️ Неизвестная модель Image-to-Video.")
+        return False
     duration = max(4, min(30, int(context.user_data.get("i2v_duration") or 8)))
     aspect = str(context.user_data.get("i2v_aspect") or "9:16")
     if aspect not in {"9:16", "16:9", "1:1"}:
