@@ -18069,6 +18069,13 @@ async def _run_runway_direct_animate_photo(update: Update, context: ContextTypes
                     "✨ Оживил фото ✅ · Powered by Runway",
                     task_id=task_id,
                 )
+            await update.effective_message.reply_text(
+                "✅ Генерация завершена. Выберите дальнейшее действие:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🏠 Главное меню", callback_data="mode:root"),
+                     InlineKeyboardButton("⬅️ Назад", callback_data="mode:fun")],
+                ]),
+            )
             _provider_mark_success("runway_direct")
             return True
         except RunwayAPIError as e:
