@@ -4966,6 +4966,7 @@ def _clear_i2v_wait(context: ContextTypes.DEFAULT_TYPE):
         "i2v_reference_ready",
         "i2v_reference_has_person",
         "i2v_kling_relay_unsupported",
+        "i2v_runway_model",
     ):
         with contextlib.suppress(Exception):
             context.user_data.pop(key, None)
@@ -5053,7 +5054,14 @@ def _i2v_keyboard(
     rows = [
         engine_buttons[index:index + 2]
         for index in range(0, len(engine_buttons), 2)
-    ] + [
+    ]
+    if engine == "runway":
+        selected_model = str(context.user_data.get("i2v_runway_model") or "gen4.5")
+        rows.append([
+            InlineKeyboardButton(("✅ " if selected_model == "gen4_turbo" else "") + "⚡ Gen-4 Turbo · Эконом", callback_data="i2v:model:gen4_turbo"),
+            InlineKeyboardButton(("✅ " if selected_model == "gen4.5" else "") + "💎 Gen-4.5 · Качество", callback_data="i2v:model:gen4.5"),
+        ])
+    rows += [
         [
             InlineKeyboardButton(mark("4 сек", str(duration)), callback_data="i2v:dur:4"),
             InlineKeyboardButton(mark("8 сек", str(duration)), callback_data="i2v:dur:8"),
@@ -5125,11 +5133,25 @@ async def _handle_i2v_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=_i2v_keyboard(context, q.from_user.id),
             )
         return
+    if len(parts) == 3 and parts[1] == "model":
+        model = parts[2].strip().lower()
+        if model not in {"gen4.5", "gen4_turbo"} or context.user_data.get("i2v_engine") != "runway":
+            await q.answer("Выберите Runway", show_alert=True)
+            return
+        context.user_data["i2v_runway_model"] = model
+        if model == "gen4_turbo" and int(context.user_data.get("i2v_duration") or 8) not in (5, 10):
+            context.user_data["i2v_duration"] = 5
+        await q.answer("Версия Runway выбрана")
+        await q.message.edit_reply_markup(reply_markup=_i2v_keyboard(context, q.from_user.id))
+        return
     if len(parts) >= 3 and parts[1] == "dur":
         try:
             duration = max(4, min(30, int(parts[2])))
         except (TypeError, ValueError):
             await q.answer("Неверная длительность", show_alert=True)
+            return
+        if context.user_data.get("i2v_engine") == "runway" and context.user_data.get("i2v_runway_model") == "gen4_turbo" and duration not in (5, 10):
+            await q.answer("Gen-4 Turbo: 5 или 10 секунд", show_alert=True)
             return
         context.user_data["i2v_duration"] = duration
         await q.answer(f"{duration} сек")
@@ -18044,7 +18066,9 @@ async def _run_runway_direct_animate_photo(update: Update, context: ContextTypes
     duration = max(2, min(10, int(duration_s or 5)))
     last_err = ""
 
-    for model in _runway_direct_i2v_model_candidates():
+    selected_model = str(context.user_data.get("i2v_runway_model") or "").strip()
+    model_candidates = (selected_model,) if selected_model in {"gen4.5", "gen4_turbo"} else _runway_direct_i2v_model_candidates()
+    for model in model_candidates:
         try:
             async with _runway_official_client() as rw:
                 task_id = await rw.create_image_to_video(
@@ -18126,6 +18150,11 @@ async def _run_runway_animate_photo(update: Update, context: ContextTypes.DEFAUL
         except Exception as e:
             _provider_mark_failure("runway_direct", str(e))
             log.warning("Runway direct i2v failed; trying Comet: %s", e)
+
+    # Explicit model selection must never silently switch to Comet or Kling.
+    if context.user_data.get("i2v_runway_model") in {"gen4.5", "gen4_turbo"}:
+        await update.effective_message.reply_text("⚠️ Выбранная версия Runway не выполнила задачу. Модель не заменялась; попробуйте другую версию вручную.")
+        return False
 
     # Comet is only a fallback; its Runway distributor channel can disappear independently.
     try:
