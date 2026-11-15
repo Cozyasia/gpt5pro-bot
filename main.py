@@ -22,6 +22,7 @@ import tempfile
 import subprocess
 import contextlib
 import random
+import math
 
 # ───────── Render Secret Files bootstrap ─────────
 # Must run before any API keys are read from os.environ.
