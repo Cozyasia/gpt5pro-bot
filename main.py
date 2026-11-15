@@ -2180,7 +2180,10 @@ def _video_provider_cost_usd(engine: str, duration_s: int, model: str = "") -> f
                 pass
             log.error("Invalid internal Runway model rate for %s", model)
             return float("nan")  # Fail closed in paid flow.
-        log.warning("Missing model-specific Runway rate for %s; using legacy engine estimate", model)
+        # Never quote a different model's estimated cost for an explicitly
+        # selected Runway model: block until its actual rate is configured.
+        log.error("Missing model-specific Runway rate for %s; generation quote blocked", model)
+        return float("nan")
     d = _duration_for_engine(engine, duration_s) if "_duration_for_engine" in globals() else max(5, int(duration_s or 5))
     if engine == "veo":
         return round(((int(duration_s or 8) + 7) // 8) * 8 * VEO_FAST_COST_PER_SECOND_USD, 4)
