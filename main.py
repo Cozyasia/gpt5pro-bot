@@ -2115,9 +2115,13 @@ else:
     }
 
 def _credits_to_usd(credits: float) -> float:
+    if globals().get("NEYRONIX_USD_CREDITS_ENABLED", False):
+        return round(float(credits) / 10.0, 4)
     return round(float(credits) * CREDIT_USD_VALUE, 4)
 
 def _usd_to_credits(usd: float) -> float:
+    if globals().get("NEYRONIX_USD_CREDITS_ENABLED", False):
+        return float(usd) * 10.0
     return float(usd) / max(1e-9, CREDIT_USD_VALUE)
 
 def _credits_fmt_from_usd(usd: float) -> str:
@@ -2134,7 +2138,13 @@ def _round_credit_amount(value: float) -> int:
 
 # Feature flag: leave disabled until legacy wallet balances, top-ups, and
 # subscription grants have been migrated to the new USD-denominated credit scale.
-NEYRONIX_USD_CREDITS_ENABLED = os.environ.get("NEYRONIX_USD_CREDITS_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+# Two independent opt-ins prevent accidental revaluation of legacy wallet funds.
+# A verified wallet migration and top-up audit are mandatory before enabling.
+_NEYRONIX_NEW_CREDITS_REQUESTED = os.environ.get("NEYRONIX_USD_CREDITS_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+_NEYRONIX_WALLET_MIGRATION_VERIFIED = os.environ.get("NEYRONIX_WALLET_MIGRATION_VERIFIED", "0").strip().lower() in ("1", "true", "yes", "on")
+NEYRONIX_USD_CREDITS_ENABLED = _NEYRONIX_NEW_CREDITS_REQUESTED and _NEYRONIX_WALLET_MIGRATION_VERIFIED
+if _NEYRONIX_NEW_CREDITS_REQUESTED and not _NEYRONIX_WALLET_MIGRATION_VERIFIED:
+    log.error("NEYRONIX USD credits requested without verified wallet migration; keeping legacy pricing")
 
 def _retail_credits(provider_cost_usd: float) -> int:
     if NEYRONIX_USD_CREDITS_ENABLED:
