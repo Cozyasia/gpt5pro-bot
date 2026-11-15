@@ -12005,9 +12005,11 @@ async def _start_text_video(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     duration, aspect = parse_video_opts(prompt)
     engine = (context.user_data.get("text_video_engine") or TEXT_VIDEO_DEFAULT_ENGINE or "kling").strip().lower()
     if engine == "runway" and not TEXT_VIDEO_ALLOW_RUNWAY:
-        engine = "kling"
+        await update.effective_message.reply_text("⚠️ Runway сейчас отключён. Выберите другую модель — автоматическая замена запрещена.")
+        return False
     if engine not in ("sora", "runway", "kling", "veo", "seedance"):
-        engine = "kling"
+        await update.effective_message.reply_text("⚠️ Неизвестная модель видео. Выберите модель заново.")
+        return False
     if engine == "veo":
         duration, aspect = int(context.user_data.get("veo_text_duration", 8)), "9:16"
         if duration not in (8, 15, 24, 30, 60):
