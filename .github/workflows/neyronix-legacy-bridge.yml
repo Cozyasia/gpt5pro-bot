@@ -1,0 +1,22 @@
+name: NEYRONIX legacy credit bridge
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'neyronix_legacy_bridge.py'
+      - 'neyronix_pricing.py'
+      - 'tests/test_neyronix_legacy_bridge.py'
+      - '.github/workflows/neyronix-legacy-bridge.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quote-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p 'test_neyronix_legacy_bridge.py' -v
