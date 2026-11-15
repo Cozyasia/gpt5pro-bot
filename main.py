@@ -5064,6 +5064,7 @@ def _i2v_keyboard(
     rows += [
         [
             InlineKeyboardButton(mark("4 сек", str(duration)), callback_data="i2v:dur:4"),
+            InlineKeyboardButton(mark("5 сек", str(duration)), callback_data="i2v:dur:5"),
             InlineKeyboardButton(mark("8 сек", str(duration)), callback_data="i2v:dur:8"),
             InlineKeyboardButton(mark("10 сек", str(duration)), callback_data="i2v:dur:10"),
         ],
@@ -5111,6 +5112,8 @@ async def _handle_i2v_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await q.answer("Для фото с человеком доступны Kling и Runway", show_alert=True)
             return
         context.user_data["i2v_engine"] = engine
+        if engine == "runway":
+            context.user_data.setdefault("i2v_runway_model", "gen4.5")
         has_reference = bool(
             context.user_data.get("i2v_reference_ready")
             or _get_cached_photo(q.from_user.id)
