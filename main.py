@@ -18563,8 +18563,15 @@ async def _try_pay_then_do(
                 await update.effective_message.reply_text("❌ Задача не выполнена. Попробуйте позже.")
         return
 
-    provider_cost = max(0.0, float(est_cost_usd or 0.0))
-    retail_usd = _retail_usd(provider_cost)
+    try:
+        provider_cost = float(est_cost_usd)
+        if not math.isfinite(provider_cost) or provider_cost <= 0:
+            raise ValueError("invalid provider estimate")
+        retail_usd = _retail_usd(provider_cost)
+    except (TypeError, ValueError, OverflowError):
+        log.error("Missing or invalid provider estimate: engine=%s feature=%s", engine, remember_kind)
+        await update.effective_message.reply_text("⚠️ Стоимость сейчас недоступна. Генерация не запущена.")
+        return
     price_credits = _retail_credits(provider_cost)
     # A single, immutable price is used for reservation and customer display.
     # Reject invalid pricing instead of accidentally running a paid job for free.
