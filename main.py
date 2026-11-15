@@ -2149,9 +2149,8 @@ if _NEYRONIX_NEW_CREDITS_REQUESTED and not _NEYRONIX_WALLET_MIGRATION_VERIFIED:
 def _retail_credits(provider_cost_usd: float) -> int:
     if NEYRONIX_USD_CREDITS_ENABLED:
         from neyronix_pricing import retail_credits
-        # Integer credits are used by legacy UI; round UP, never down.
-        from decimal import ROUND_CEILING
-        return int(retail_credits(provider_cost_usd).to_integral_value(rounding=ROUND_CEILING))
+        # Preserve tenths of a credit; never inflate a 0.2-credit quote to 1.
+        return float(retail_credits(provider_cost_usd))
     base_rub = max(0.0, float(provider_cost_usd or 0.0)) * max(1e-9, USD_RUB) * GENERATION_PRICE_MULTIPLIER
     credits = base_rub / max(1e-9, CREDIT_RUB_VALUE) + GENERATION_FIXED_OVERHEAD_CREDITS
     return max(GENERATION_PRICE_ROUND_TO, _round_credit_amount(credits)) if provider_cost_usd > 0 else 0
@@ -18546,6 +18545,12 @@ async def _try_pay_then_do(
     provider_cost = max(0.0, float(est_cost_usd or 0.0))
     retail_usd = _retail_usd(provider_cost)
     price_credits = _retail_credits(provider_cost)
+    # A single, immutable price is used for reservation and customer display.
+    # Reject invalid pricing instead of accidentally running a paid job for free.
+    if not math.isfinite(retail_usd) or not math.isfinite(price_credits) or retail_usd <= 0 or price_credits <= 0:
+        log.error("Invalid paid generation quote: engine=%s feature=%s", engine, remember_kind)
+        await update.effective_message.reply_text("⚠️ Стоимость сейчас недоступна. Генерация не запущена.")
+        return
     tx_id = None
     try:
         tx_id, available_before = _credit_reserve(user_id, engine, remember_kind or engine, provider_cost, retail_usd, remember_payload)
