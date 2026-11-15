@@ -2162,8 +2162,25 @@ def _retail_usd(provider_cost_usd: float) -> float:
         return round(_retail_credits(provider_cost_usd) / 10.0, 4)
     return _credits_to_usd(_retail_credits(provider_cost_usd))
 
-def _video_provider_cost_usd(engine: str, duration_s: int) -> float:
+def _video_provider_cost_usd(engine: str, duration_s: int, model: str = "") -> float:
     engine = (engine or "").strip().lower()
+    model = (model or "").strip().lower()
+    # Explicit Runway model rates are configurable per API version; never expose
+    # these internal provider costs to Telegram or Mini App clients.
+    if engine == "runway" and model in {"gen4.5", "gen4_turbo"}:
+        env_name = {"gen4.5": "RUNWAY_GEN45_COST_PER_SECOND_USD",
+                    "gen4_turbo": "RUNWAY_GEN4_TURBO_COST_PER_SECOND_USD"}[model]
+        configured = os.environ.get(env_name, "").strip()
+        if configured:
+            try:
+                rate = float(configured)
+                if math.isfinite(rate) and rate > 0:
+                    return round(max(2, int(duration_s or 5)) * rate, 4)
+            except (TypeError, ValueError):
+                pass
+            log.error("Invalid internal Runway model rate for %s", model)
+            return float("nan")  # Fail closed in paid flow.
+        log.warning("Missing model-specific Runway rate for %s; using legacy engine estimate", model)
     d = _duration_for_engine(engine, duration_s) if "_duration_for_engine" in globals() else max(5, int(duration_s or 5))
     if engine == "veo":
         return round(((int(duration_s or 8) + 7) // 8) * 8 * VEO_FAST_COST_PER_SECOND_USD, 4)
@@ -5229,7 +5246,10 @@ async def _start_image_to_video(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=_i2v_keyboard(context),
         )
         return False
-    provider_cost = _video_provider_cost_usd(engine, duration)
+    provider_cost = _video_provider_cost_usd(
+        engine, duration,
+        model=str(context.user_data.get("i2v_runway_model") or "") if engine == "runway" else "",
+    )
     label = {
         "seedance": "Seedance 2.5 · image→video",
         "kling": "Kling · image→video",
