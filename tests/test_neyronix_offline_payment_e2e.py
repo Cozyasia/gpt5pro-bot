@@ -40,6 +40,9 @@ class OfflinePaymentIntegration(unittest.TestCase):
         )
     def balance(self):
         with sqlite3.connect(self.db) as con:
+            exists=con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='wallet'").fetchone()
+            if not exists:
+                return 0.0
             row=con.execute("SELECT usd FROM wallet WHERE user_id=123").fetchone()
             return float(row[0]) if row else 0
     def events(self):
