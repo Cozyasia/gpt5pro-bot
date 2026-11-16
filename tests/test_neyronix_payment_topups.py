@@ -17,13 +17,13 @@ class PaymentTopupTests(unittest.TestCase):
             return con.execute("SELECT usd FROM wallet WHERE user_id=123").fetchone()[0]
     def credit(self,**kwargs):
         args=dict(provider="yookassa",payment_id="payment-1",user_id=123,
-                  credits=1000,rub=990,credits_per_usd="0.1")
+                  credits=1000,rub=990,credits_per_usd="100")
         args.update(kwargs)
         return credit_confirmed_payment(self.db,**args)
     def test_exactly_once(self):
         self.assertEqual(self.credit(),"credited")
         self.assertEqual(self.credit(),"already_credited")
-        self.assertEqual(self.balance(),10000)
+        self.assertEqual(self.balance(),10)
     def test_mismatched_replay_rejected(self):
         self.credit()
         with self.assertRaises(ValueError): self.credit(credits=3000)
@@ -31,13 +31,13 @@ class PaymentTopupTests(unittest.TestCase):
     def test_provider_scopes_payment_ids(self):
         self.credit()
         self.assertEqual(self.credit(provider="telegram"),"credited")
-        self.assertEqual(self.balance(),20000)
+        self.assertEqual(self.balance(),20)
     def test_invalid_terms_cannot_credit(self):
         for value in ("NaN",0,-1):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError): self.credit(credits_per_usd=value)
         self.assertEqual(self.balance(),0)
-    def test_missing_wallet_fails_closed(self):
+    def test_unsafe_legacy_conversion_is_blocked(self):\n        with self.assertRaises(ValueError): self.credit(credits_per_usd="0.1")\n        self.assertEqual(self.balance(),0)\n    def test_missing_wallet_fails_closed(self):
         with sqlite3.connect(self.db) as con: con.execute("DROP TABLE wallet")
         with self.assertRaises(ValueError): self.credit()
         with sqlite3.connect(self.db) as con:
