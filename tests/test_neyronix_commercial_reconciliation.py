@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from neyronix_pricing import CREDITS_PER_USD, retail_credits
+from neyrobot_prod.credit_store_v201 import catalog, resolve_pack, store_text
 from neyrobot_prod.payments import process_once
 from property_video_billing import reserve, mark_delivered, refund_before_submission, record_operation, record_result
 
@@ -28,6 +29,21 @@ class OfflineCommercialReconciliation(unittest.TestCase):
         return process_once(self.mod, provider="offline", payment_id=payment_id,
                             user_id=123, kind="credit_topup", amount=rub,
                             currency="RUB", metadata={"credits": credits, "amount_rub": rub})
+
+    def test_store_display_and_checkout_catalog_match_offline_settlement(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ", {
+            "CREDIT_PACK_SMALL_CREDITS": "1000", "CREDIT_PACK_SMALL_RUB": "990",
+            "CREDIT_PACK_MID_CREDITS": "3000", "CREDIT_PACK_MID_RUB": "2790",
+            "CREDIT_PACK_BIG_CREDITS": "7000", "CREDIT_PACK_BIG_RUB": "6290",
+        }):
+            packs = catalog()
+            self.assertEqual([(p.credits, p.rub) for p in packs], list(PACKAGES))
+            self.assertNotIn("1 кредит = 1 ₽", store_text(self.mod))
+            for credits, rub in PACKAGES:
+                self.assertEqual(resolve_pack(credits, rub), (credits, rub))
+                self.assertIsNone(resolve_pack(credits, rub + 1))
+                self.assertAlmostEqual(credits / float(CREDITS_PER_USD), credits / 100)
 
     def test_all_packages_purchase_spend_refund_and_margin(self):
         self.assertEqual(int(CREDITS_PER_USD), 100)
