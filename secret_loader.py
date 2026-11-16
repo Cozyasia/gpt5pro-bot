@@ -105,35 +105,56 @@ def parse_secret_file(path: str | os.PathLike[str]) -> dict[str, str]:
 
 
 def _activate_staging_credit_file() -> bool:
-    """Opt-in on staging only; fail closed if any financial state is nonempty."""
+    """Stage-only opt-in with durable scale marker; never silently revert after sales."""
     import sqlite3
 
     expected_db = "/data/neyronix-live/subs.db"
-    flag = Path("/data/neyronix-live/credit-scale-v1.approved")
+    base = Path("/data/neyronix-live")
+    flag = base / "credit-scale-v1.approved"
+    marker = base / "credit-scale-v1.active"
+    token = "NEYRONIX_STAGING_CREDIT_SCALE_V1_APPROVED"
     if os.environ.get("DB_PATH") != expected_db or not flag.is_file():
         return False
     try:
-        if flag.read_text(encoding="utf-8").strip() != "NEYRONIX_STAGING_CREDIT_SCALE_V1_APPROVED":
+        if flag.read_text(encoding="utf-8").strip() != token:
             return False
-        with sqlite3.connect(f"file:{expected_db}?mode=ro", uri=True, timeout=5) as db:
-            db.execute("PRAGMA query_only=ON")
-            if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                return False
-            for column in ("usd", "luma_usd", "runway_usd", "img_usd"):
-                if db.execute(
-                    f"SELECT COUNT(*) FROM wallet WHERE {column} IS NULL OR {column} != 0"
-                ).fetchone()[0]:
-                    return False
-            for table in ("payment_events", "credit_ledger", "subscriptions", "property_video_charges"):
-                if db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]:
-                    return False
         # Explicit Render environment values take priority; never override a denial.
         for key in ("NEYRONIX_USD_CREDITS_ENABLED", "NEYRONIX_WALLET_MIGRATION_VERIFIED"):
             if key in os.environ and os.environ[key].strip().lower() not in ("1", "true", "yes", "on"):
                 return False
+        with sqlite3.connect(f"file:{expected_db}?mode=ro", uri=True, timeout=5) as db:
+            db.execute("PRAGMA query_only=ON")
+            if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                return False
+            if marker.is_file():
+                # After the first purchase the database is no longer empty. The
+                # durable marker pins its conversion scale across restarts.
+                if marker.read_text(encoding="utf-8").strip() != token:
+                    return False
+                mode = "durable"
+            else:
+                for column in ("usd", "luma_usd", "runway_usd", "img_usd"):
+                    if db.execute(
+                        f"SELECT COUNT(*) FROM wallet WHERE {column} IS NULL OR {column} != 0"
+                    ).fetchone()[0]:
+                        return False
+                for table in ("payment_events", "credit_ledger", "subscriptions", "property_video_charges"):
+                    if db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]:
+                        return False
+                # Exclusive creation prevents accidentally replacing an existing
+                # marker. File and SQLite live on the same persistent Render disk.
+                try:
+                    with marker.open("x", encoding="utf-8") as handle:
+                        handle.write(token + "\\n")
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                except FileExistsError:
+                    if marker.read_text(encoding="utf-8").strip() != token:
+                        return False
+                mode = "initial"
         os.environ.setdefault("NEYRONIX_USD_CREDITS_ENABLED", "1")
         os.environ.setdefault("NEYRONIX_WALLET_MIGRATION_VERIFIED", "1")
-        print("[neyronix-staging] credit scale v1 enabled after zero-state database audit")
+        print(f"[neyronix-staging] credit scale v1 enabled ({mode} marker)")
         return True
     except (OSError, UnicodeError, sqlite3.Error, ValueError) as exc:
         print(f"[neyronix-staging] credit scale remains disabled: {type(exc).__name__}")
