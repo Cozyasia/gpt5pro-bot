@@ -64,6 +64,43 @@ class OfflinePaymentIntegration(unittest.TestCase):
         asyncio.run(successful_payment_handler(self.runtime,update,None))
         self.assertAlmostEqual(self.balance(),30.0)
         self.assertEqual(self.events(),1)
+    def test_all_packages_persist_after_restart_and_replay(self):
+        for credits, rub in ((1000, 990), (3000, 2790), (7000, 6290)):
+            with self.subTest(credits=credits):
+                with tempfile.TemporaryDirectory() as folder:
+                    path = str(Path(folder) / "restart.sqlite")
+                    original = self.runtime
+                    self.runtime = SimpleNamespace(**vars(original))
+                    self.runtime.DB_PATH = path
+                    update = self.make_update(
+                        amount=rub * 100, payload=f"topup:{credits}:{rub}",
+                        charge=f"persistent-{credits}"
+                    )
+                    asyncio.run(successful_payment_handler(self.runtime, update, None))
+                    self.assertAlmostEqual(self.balance(), credits / 100)
+                    self.assertEqual(self.events(), 1)
+                    # Simulate process restart: discard runtime object and reopen SQLite.
+                    self.runtime = SimpleNamespace(**vars(self.runtime))
+                    with sqlite3.connect(path) as con:
+                        self.assertEqual(con.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                        self.assertAlmostEqual(con.execute("SELECT usd FROM wallet WHERE user_id=123").fetchone()[0], credits / 100)
+                        self.assertEqual(con.execute("SELECT COUNT(*) FROM payment_events WHERE status='processed'").fetchone()[0], 1)
+                    asyncio.run(successful_payment_handler(self.runtime, update, None))
+                    self.assertAlmostEqual(self.balance(), credits / 100)
+                    self.assertEqual(self.events(), 1)
+                    self.runtime = original
+
+    def test_replay_with_conflicting_payment_terms_is_rejected_after_restart(self):
+        asyncio.run(successful_payment_handler(self.runtime, self.make_update(), None))
+        self.runtime = SimpleNamespace(**vars(self.runtime))
+        with self.assertRaises(ValueError):
+            process_once(self.runtime, provider="telegram", payment_id="charge-1",
+                         provider_charge_id="telegram-charge-1", user_id=123,
+                         kind="credit_topup", amount=990, currency="RUB",
+                         metadata={"credits":1000,"amount_rub":990,"invoice_payload":"topup:1000:990"})
+        self.assertAlmostEqual(self.balance(), 30)
+        self.assertEqual(self.events(), 1)
+
     def test_wrong_price_rejected_at_precheckout(self):
         for amount in (249000,279001,0):
             q=FakePrecheckout("topup:3000:2790",amount)
