@@ -48,7 +48,8 @@ class OfflinePaymentIntegration(unittest.TestCase):
     def make_update(self, amount=279000, currency="RUB", payload="topup:3000:2790", charge="charge-1"):
         sp=SimpleNamespace(currency=currency,total_amount=amount,invoice_payload=payload,
                            provider_payment_charge_id=charge,telegram_payment_charge_id="telegram-"+charge)
-        return SimpleNamespace(effective_user=SimpleNamespace(id=123),message=FakeMessage(sp))
+        message=FakeMessage(sp)
+        return SimpleNamespace(effective_user=SimpleNamespace(id=123),message=message,effective_message=message)
     def test_checkout_credit_and_replay(self):
         q=FakePrecheckout("topup:3000:2790",279000)
         asyncio.run(precheckout_handler(self.runtime,SimpleNamespace(pre_checkout_query=q),None))
