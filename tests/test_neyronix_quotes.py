@@ -13,9 +13,9 @@ class QuoteTests(unittest.TestCase):
 
     def test_customer_summary_is_private(self):
         q = make_quote(user_id=42, engine="runway", feature="i2v", provider_cost_usd="1", metadata={"provider_cost_usd": "1"}, now=100)
-        summary = customer_summary(q, "20")
-        self.assertEqual(summary["price_credits"], "15.0")
-        self.assertEqual(summary["remaining_credits"], "5.0")
+        summary = customer_summary(q, "250")
+        self.assertEqual(summary["price_credits"], "200")
+        self.assertEqual(summary["remaining_credits"], "50")
         self.assertTrue(summary["can_afford"])
         self.assertNotIn("provider_cost_usd", str(summary))
         self.assertNotIn("metadata", str(summary))
