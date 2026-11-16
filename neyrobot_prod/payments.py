@@ -276,6 +276,8 @@ async def successful_payment_handler(mod: Any, update: Any, context: Any) -> Non
     payment_id = provider_charge or telegram_charge
     if not payment_id:
         raise RuntimeError("Telegram payment has no charge id")
+    if currency.upper() != "RUB":
+        raise ValueError("Unexpected Telegram payment currency")
     kind, metadata = _parse_telegram_payload(mod, payload, amount)
     result = process_once(
         mod,
@@ -337,7 +339,9 @@ async def poll_yoo_credit(mod: Any, context: Any, chat_id: int, message_id: int,
         if status == "succeeded":
             amount_obj = (payment or {}).get("amount") or {}
             paid = float(amount_obj.get("value") or 0)
-            if abs(paid - float(amount_rub)) > 1.0:
+            if str(amount_obj.get("currency") or "").upper() != "RUB":
+                raise RuntimeError("YooKassa currency mismatch")
+            if abs(paid - float(amount_rub)) > 0.001:
                 raise RuntimeError("YooKassa amount mismatch")
             result = process_once(
                 mod,
