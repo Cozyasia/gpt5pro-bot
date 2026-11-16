@@ -1,0 +1,24 @@
+name: NEYRONIX unified pricing regression
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'neyronix_pricing.py'
+      - 'neyronix_quotes.py'
+      - 'neyrobot_prod/credit_store_v201.py'
+      - 'tests/test_neyronix_pricing.py'
+      - 'tests/test_neyronix_pricing_regression.py'
+      - '.github/workflows/neyronix-unified-pricing.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pricing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install httpx
+      - run: python -m unittest discover -s tests -p 'test_neyronix_pricing*.py' -v
