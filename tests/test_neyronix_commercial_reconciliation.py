@@ -6,6 +6,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from neyronix_pricing import CREDITS_PER_USD, retail_credits
+import sys
+from unittest.mock import patch
+from types import ModuleType
+
+# Store display tests do not make HTTP requests; CI installs only stdlib dependencies.
+if 'httpx' not in sys.modules:
+    try:
+        import httpx
+    except ImportError:
+        sys.modules['httpx'] = ModuleType('httpx')
 from neyrobot_prod.credit_store_v201 import catalog, resolve_pack, store_text
 from neyrobot_prod.payments import process_once
 from property_video_billing import reserve, mark_delivered, refund_before_submission, record_operation, record_result
