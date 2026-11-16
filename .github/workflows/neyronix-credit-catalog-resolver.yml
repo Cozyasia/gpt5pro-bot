@@ -1,0 +1,21 @@
+name: NEYRONIX credit catalog resolver
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'main.py'
+      - 'tests/test_neyronix_credit_catalog_resolver.py'
+      - '.github/workflows/neyronix-credit-catalog-resolver.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile main.py
+      - run: python -m unittest discover -s tests -p 'test_neyronix_credit_catalog_resolver.py' -v

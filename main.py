@@ -7558,9 +7558,11 @@ def _credit_pack_resolve(requested_credits: int = 0, requested_rub: int = 0) -> 
     """Разрешает только зафиксированные пакеты; значения из WebApp не считаются доверенными."""
     for credits_raw, rub_raw in CREDIT_PACKAGES_RUB.items():
         credits, rub = int(credits_raw), int(rub_raw)
-        if requested_credits and requested_credits == credits:
-            return credits, rub
-        if requested_rub and requested_rub == rub:
+        if requested_credits and requested_credits != credits:
+            continue
+        if requested_rub and requested_rub != rub:
+            continue
+        if requested_credits or requested_rub:
             return credits, rub
     return None
 
