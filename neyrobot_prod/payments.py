@@ -318,6 +318,12 @@ async def poll_yoo_subscription(mod: Any, context: Any, chat_id: int, message_id
         if status == "succeeded":
             amount_obj = (payment or {}).get("amount") or {}
             amount = float(amount_obj.get("value") or 0)
+            plan = (getattr(mod, "SUBS_TIERS", {}) or {}).get(str(plan_key).lower().strip()) or {}
+            expected = float(plan.get("rub") or 0) * int(months)
+            if str(amount_obj.get("currency") or "").upper() != "RUB":
+                raise RuntimeError("YooKassa subscription currency mismatch")
+            if expected <= 0 or int(months) not in {1, 3, 6, 12} or abs(amount - expected) > 0.001:
+                raise RuntimeError("YooKassa subscription amount mismatch")
             result = process_once(
                 mod,
                 provider="yookassa",
