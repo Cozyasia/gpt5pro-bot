@@ -1,0 +1,21 @@
+name: NEYRONIX billing contract inspection
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'scripts/inspect_billing_contract.py'
+      - 'tests/test_neyronix_billing_contract_inspection.py'
+      - '.github/workflows/neyronix-billing-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p 'test_neyronix_billing_contract_inspection.py' -v
+      - run: python scripts/inspect_billing_contract.py main.py
