@@ -16,7 +16,7 @@ if 'httpx' not in sys.modules:
         import httpx
     except ImportError:
         sys.modules['httpx'] = ModuleType('httpx')
-from neyrobot_prod.credit_store_v201 import catalog, resolve_pack, store_text
+from neyrobot_prod.credit_store_v201 import catalog, resolve_pack, store_text, store_keyboard, methods_keyboard
 from neyrobot_prod.payments import process_once
 from property_video_billing import reserve, mark_delivered, refund_before_submission, record_operation, record_result
 
@@ -54,6 +54,49 @@ class OfflineCommercialReconciliation(unittest.TestCase):
                 self.assertEqual(resolve_pack(credits, rub), (credits, rub))
                 self.assertIsNone(resolve_pack(credits, rub + 1))
                 self.assertAlmostEqual(credits / float(CREDITS_PER_USD), credits / 100)
+
+    def test_telegram_store_rendering_and_callback_routes_offline(self):
+        class FakeButton:
+            def __init__(self, text, callback_data=None, url=None):
+                self.text, self.callback_data, self.url = text, callback_data, url
+
+        class FakeMarkup:
+            def __init__(self, inline_keyboard):
+                self.inline_keyboard = inline_keyboard
+
+        ui = SimpleNamespace(
+            InlineKeyboardButton=FakeButton, InlineKeyboardMarkup=FakeMarkup,
+            _user_balance_get=lambda uid: 28.6,
+            _credits_fmt_from_usd=lambda usd: f"{usd * 100:,.0f}".replace(",", " "),
+            YOO_SBP_ENABLED=True, YOO_SBERPAY_ENABLED=True,
+            YOO_TPAY_ENABLED=True, YOO_MIRPAY_ENABLED=True,
+            YOOKASSA_PROVIDER_TOKEN="", CRYPTO_PAY_API_TOKEN="",
+        )
+        with patch("neyrobot_prod.credit_store_v201._runtime_module", return_value=None), patch.dict("os.environ", {
+            "CREDIT_PACK_SMALL_CREDITS": "1000", "CREDIT_PACK_SMALL_RUB": "990",
+            "CREDIT_PACK_MID_CREDITS": "3000", "CREDIT_PACK_MID_RUB": "2790",
+            "CREDIT_PACK_BIG_CREDITS": "7000", "CREDIT_PACK_BIG_RUB": "6290",
+        }):
+            message = store_text(ui, 123)
+            self.assertIn("Текущий баланс: 2 860", message)
+            keyboard = store_keyboard(ui).inline_keyboard
+            self.assertEqual(len(keyboard), 4)
+            for row, (credits, rub) in zip(keyboard[:3], PACKAGES):
+                self.assertEqual(len(row), 1)
+                button = row[0]
+                self.assertIn(f"{credits:,}".replace(",", " "), button.text)
+                self.assertIn(f"{rub:,}".replace(",", " "), button.text)
+                self.assertEqual(resolve_pack(credits, rub), (credits, rub))
+                self.assertTrue(button.callback_data.startswith("credit:v201:pack:"))
+            self.assertEqual(keyboard[-1][0].callback_data, "plan:root")
+            for pack in catalog():
+                methods = methods_keyboard(ui, pack).inline_keyboard
+                callbacks = [button.callback_data for row in methods for button in row]
+                self.assertIn(f"credit:v201:pay:yoo_sbp:{pack.key}", callbacks)
+                self.assertIn(f"credit:v201:pay:yoo_all:{pack.key}", callbacks)
+                self.assertIn("credit:v201:open", callbacks)
+                self.assertFalse(any(":telegram:" in (cb or "") for cb in callbacks))
+                self.assertFalse(any(":crypto:" in (cb or "") for cb in callbacks))
 
     def test_all_packages_purchase_spend_refund_and_margin(self):
         self.assertEqual(int(CREDITS_PER_USD), 100)
