@@ -15,7 +15,7 @@ def inspect(db_path: str) -> dict:
     path = Path(db_path).resolve(strict=True)
     if not path.is_file():
         raise ValueError("Expected a SQLite file")
-    con = sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         con.execute("PRAGMA query_only=ON")
         tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -53,6 +53,19 @@ def inspect(db_path: str) -> dict:
             if table == "subscriptions" and "until_ts" in columns:
                 result["subscriptions"] = {"active": con.execute(
                     "SELECT COUNT(*) FROM subscriptions WHERE until_ts>CAST(strftime('%s','now') AS INTEGER)").fetchone()[0]}
+        if "wallet" in tables and "credit_ledger" in tables:
+            wallet_columns = {r[1] for r in con.execute("PRAGMA table_info(wallet)")}
+            ledger_columns = {r[1] for r in con.execute("PRAGMA table_info(credit_ledger)")}
+            if {"user_id", "usd"}.issubset(wallet_columns) and {"user_id", "retail_usd", "status"}.issubset(ledger_columns):
+                overdrawn = con.execute(
+                    "SELECT COUNT(*) FROM ("
+                    "SELECT w.user_id FROM wallet w "
+                    "LEFT JOIN credit_ledger l ON l.user_id=w.user_id AND l.status='reserved' "
+                    "GROUP BY w.user_id HAVING COALESCE(w.usd,0)+0.000001 < COALESCE(SUM(l.retail_usd),0))"
+                ).fetchone()[0]
+                result["reserved_over_balance_accounts"] = overdrawn
+                if overdrawn:
+                    result["warnings"].append("Reservations exceed wallet balance for some accounts")
         result["warnings"].append("Legacy credit valuation and top-up history require explicit business reconciliation")
         return result
     finally:
