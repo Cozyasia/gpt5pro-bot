@@ -1,5 +1,6 @@
 """Read-only, offline migration readiness checks. No production data access."""
 import ast
+import secret_loader
 from neyrobot_prod.wallet_migration_audit import inspect
 import sqlite3
 import tempfile
@@ -9,6 +10,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 class WalletMigrationReadiness(unittest.TestCase):
+    def test_file_activation_is_fail_closed_without_approval(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ", {"DB_PATH": "/data/neyronix-live/subs.db"}, clear=True):
+            self.assertFalse(secret_loader._activate_staging_credit_file())
+            self.assertNotIn("NEYRONIX_USD_CREDITS_ENABLED", __import__("os").environ)
+
     def test_migration_is_explicitly_double_gated(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
         self.assertIn('os.environ.get("NEYRONIX_USD_CREDITS_ENABLED", "0")', source)
