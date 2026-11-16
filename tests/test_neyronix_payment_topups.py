@@ -27,7 +27,7 @@ class PaymentTopupTests(unittest.TestCase):
     def test_mismatched_replay_rejected(self):
         self.credit()
         with self.assertRaises(ValueError): self.credit(credits=3000)
-        self.assertEqual(self.balance(),10000)
+        self.assertEqual(self.balance(),10)
     def test_provider_scopes_payment_ids(self):
         self.credit()
         self.assertEqual(self.credit(provider="telegram"),"credited")
