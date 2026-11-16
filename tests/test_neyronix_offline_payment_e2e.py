@@ -46,7 +46,7 @@ class OfflinePaymentIntegration(unittest.TestCase):
             row=con.execute("SELECT usd FROM wallet WHERE user_id=123").fetchone()
             return float(row[0]) if row else 0
     def events(self):
-        with sqlite3.connect(self.db) as con:
+        with sqlite3.connect(self.runtime.DB_PATH) as con:
             return con.execute("SELECT COUNT(*) FROM payment_events WHERE status='processed'").fetchone()[0]
     def make_update(self, amount=279000, currency="RUB", payload="topup:3000:2790", charge="charge-1"):
         sp=SimpleNamespace(currency=currency,total_amount=amount,invoice_payload=payload,
