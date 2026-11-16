@@ -39,7 +39,7 @@ class OfflinePaymentIntegration(unittest.TestCase):
             _credits_to_usd=lambda credits: credits/100.0,
         )
     def balance(self):
-        with sqlite3.connect(self.db) as con:
+        with sqlite3.connect(self.runtime.DB_PATH) as con:
             exists=con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='wallet'").fetchone()
             if not exists:
                 return 0.0
