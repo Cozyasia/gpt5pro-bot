@@ -104,6 +104,42 @@ def parse_secret_file(path: str | os.PathLike[str]) -> dict[str, str]:
     return result
 
 
+def _activate_staging_credit_file() -> bool:
+    """Opt-in on staging only; fail closed if any financial state is nonempty."""
+    import sqlite3
+
+    expected_db = "/data/neyronix-live/subs.db"
+    flag = Path("/data/neyronix-live/credit-scale-v1.approved")
+    if os.environ.get("DB_PATH") != expected_db or not flag.is_file():
+        return False
+    try:
+        if flag.read_text(encoding="utf-8").strip() != "NEYRONIX_STAGING_CREDIT_SCALE_V1_APPROVED":
+            return False
+        with sqlite3.connect(f"file:{expected_db}?mode=ro", uri=True, timeout=5) as db:
+            db.execute("PRAGMA query_only=ON")
+            if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                return False
+            for column in ("usd", "luma_usd", "runway_usd", "img_usd"):
+                if db.execute(
+                    f"SELECT COUNT(*) FROM wallet WHERE {column} IS NULL OR {column} != 0"
+                ).fetchone()[0]:
+                    return False
+            for table in ("payment_events", "credit_ledger", "subscriptions", "property_video_charges"):
+                if db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]:
+                    return False
+        # Explicit Render environment values take priority; never override a denial.
+        for key in ("NEYRONIX_USD_CREDITS_ENABLED", "NEYRONIX_WALLET_MIGRATION_VERIFIED"):
+            if key in os.environ and os.environ[key].strip().lower() not in ("1", "true", "yes", "on"):
+                return False
+        os.environ.setdefault("NEYRONIX_USD_CREDITS_ENABLED", "1")
+        os.environ.setdefault("NEYRONIX_WALLET_MIGRATION_VERIFIED", "1")
+        print("[neyronix-staging] credit scale v1 enabled after zero-state database audit")
+        return True
+    except (OSError, UnicodeError, sqlite3.Error, ValueError) as exc:
+        print(f"[neyronix-staging] credit scale remains disabled: {type(exc).__name__}")
+        return False
+
+
 def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str, str]:
     """Load values from existing secret files into os.environ once.
 
@@ -127,6 +163,7 @@ def bootstrap_secret_environment(paths: Iterable[str] | None = None) -> dict[str
             if not (os.environ.get(key) or "").strip():
                 os.environ[key] = value
                 _LOADED_SOURCES[key] = str(path)
+    _activate_staging_credit_file()
     _BOOTSTRAPPED = True
 
     # This module is imported directly by main.py before the Telegram application
