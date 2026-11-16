@@ -5,6 +5,7 @@ on:
     paths:
       - 'neyrobot_prod/payments.py'
       - 'tests/test_neyronix_offline_payment_e2e.py'
+      - 'tests/test_neyronix_payment_validation.py'
       - '.github/workflows/neyronix-offline-payment-e2e.yml'
   workflow_dispatch:
 permissions:
@@ -18,3 +19,4 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m unittest discover -s tests -p 'test_neyronix_offline_payment_e2e.py' -v
+      - run: python -m unittest discover -s tests -p 'test_neyronix_payment_validation.py' -v
