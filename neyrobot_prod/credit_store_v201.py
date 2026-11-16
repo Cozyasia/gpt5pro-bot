@@ -49,9 +49,16 @@ def _normalise_credits(raw: int, canonical: int) -> int:
 def catalog() -> tuple[CreditPack, ...]:
     specs = (
         ("small", "CREDIT_PACK_SMALL_CREDITS", 1000, "CREDIT_PACK_SMALL_RUB", 990),
-        ("mid", "CREDIT_PACK_MID_CREDITS", 3000, "CREDIT_PACK_MID_RUB", 2490),
-        ("big", "CREDIT_PACK_BIG_CREDITS", 7000, "CREDIT_PACK_BIG_RUB", 4990),
+        ("mid", "CREDIT_PACK_MID_CREDITS", 3000, "CREDIT_PACK_MID_RUB", 2790),
+        ("big", "CREDIT_PACK_BIG_CREDITS", 7000, "CREDIT_PACK_BIG_RUB", 6290),
     )
+    runtime = _runtime_module()
+    runtime_catalog = getattr(runtime, "CREDIT_PACKAGES_RUB", None) if runtime is not None else None
+    if isinstance(runtime_catalog, dict) and runtime_catalog:
+        pairs = sorted((int(credits), int(rub)) for credits, rub in runtime_catalog.items())
+        if len(pairs) != 3 or any(credits <= 0 or rub <= 0 for credits, rub in pairs):
+            raise ValueError("Invalid runtime credit catalog")
+        return tuple(CreditPack(key, credits, rub) for key, (credits, rub) in zip(("small", "mid", "big"), pairs))
     packs: list[CreditPack] = []
     for key, credits_name, canonical_credits, rub_name, default_rub in specs:
         credits = _normalise_credits(_int_env(credits_name, canonical_credits), canonical_credits)
