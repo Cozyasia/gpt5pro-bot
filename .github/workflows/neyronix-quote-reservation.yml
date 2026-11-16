@@ -7,6 +7,7 @@ on:
       - 'tests/test_neyronix_credit_scale_safety.py'
       - 'tests/test_neyronix_commercial_reconciliation.py'
       - 'tests/test_neyronix_wallet_migration_readiness.py'
+      - 'neyrobot_prod/wallet_migration_audit.py'
       - 'property_video_billing.py'
       - 'tests/test_neyronix_quote_integrity.py'
       - 'tests/test_neyronix_billing_transactions.py'
