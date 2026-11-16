@@ -16,6 +16,49 @@ class WalletMigrationReadiness(unittest.TestCase):
             self.assertFalse(secret_loader._activate_staging_credit_file())
             self.assertNotIn("NEYRONIX_USD_CREDITS_ENABLED", __import__("os").environ)
 
+    def test_marker_survives_restart_with_paid_wallet_and_events(self):
+        from unittest.mock import patch
+        import os
+        token = "NEYRONIX_STAGING_CREDIT_SCALE_V1_APPROVED"
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            db = base / "subs.db"
+            (base / "credit-scale-v1.approved").write_text(token, encoding="utf-8")
+            with sqlite3.connect(db) as con:
+                con.execute("CREATE TABLE wallet(user_id INTEGER PRIMARY KEY, usd REAL, luma_usd REAL, runway_usd REAL, img_usd REAL)")
+                for table in ("payment_events", "credit_ledger", "subscriptions", "property_video_charges"):
+                    con.execute(f"CREATE TABLE {table}(id INTEGER PRIMARY KEY)")
+            with patch.dict(os.environ, {"DB_PATH": str(db)}, clear=True):
+                self.assertTrue(secret_loader._activate_staging_credit_file(_test_base=base))
+                self.assertEqual((base / "credit-scale-v1.active").read_text().strip(), token)
+                self.assertEqual(os.environ["NEYRONIX_USD_CREDITS_ENABLED"], "1")
+            with sqlite3.connect(db) as con:
+                con.execute("INSERT INTO wallet VALUES (123,30,0,0,0)")
+                con.execute("INSERT INTO payment_events VALUES (1)")
+            with patch.dict(os.environ, {"DB_PATH": str(db)}, clear=True):
+                self.assertTrue(secret_loader._activate_staging_credit_file(_test_base=base))
+                self.assertEqual(os.environ["NEYRONIX_WALLET_MIGRATION_VERIFIED"], "1")
+            with sqlite3.connect(db) as con:
+                self.assertEqual(con.execute("SELECT usd FROM wallet WHERE user_id=123").fetchone()[0], 30)
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM payment_events").fetchone()[0], 1)
+
+    def test_nonzero_wallet_without_marker_cannot_activate(self):
+        from unittest.mock import patch
+        import os
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            db = base / "subs.db"
+            (base / "credit-scale-v1.approved").write_text("NEYRONIX_STAGING_CREDIT_SCALE_V1_APPROVED")
+            with sqlite3.connect(db) as con:
+                con.execute("CREATE TABLE wallet(user_id INTEGER, usd REAL, luma_usd REAL, runway_usd REAL, img_usd REAL)")
+                con.execute("INSERT INTO wallet VALUES (123,30,0,0,0)")
+                for table in ("payment_events", "credit_ledger", "subscriptions", "property_video_charges"):
+                    con.execute(f"CREATE TABLE {table}(id INTEGER)")
+            with patch.dict(os.environ, {"DB_PATH": str(db)}, clear=True):
+                self.assertFalse(secret_loader._activate_staging_credit_file(_test_base=base))
+                self.assertNotIn("NEYRONIX_USD_CREDITS_ENABLED", os.environ)
+                self.assertFalse((base / "credit-scale-v1.active").exists())
+
     def test_migration_is_explicitly_double_gated(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
         self.assertIn('os.environ.get("NEYRONIX_USD_CREDITS_ENABLED", "0")', source)
