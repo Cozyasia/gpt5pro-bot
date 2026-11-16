@@ -211,7 +211,9 @@ def _parse_telegram_payload(mod: Any, payload: str, rub: float) -> tuple[str, di
     if raw.startswith("topup:"):
         _, credits_s, rub_s = raw.split(":", 2)
         resolver = getattr(mod, "_credit_pack_resolve", None)
-        resolved = resolver(int(credits_s), int(rub_s)) if callable(resolver) else (int(credits_s), int(rub_s))
+        if not callable(resolver):
+            raise ValueError("Credit package catalog unavailable")
+        resolved = resolver(int(credits_s), int(rub_s))
         if not resolved:
             raise ValueError("Unknown credit package")
         credits, expected_rub = resolved
@@ -282,6 +284,9 @@ async def successful_payment_handler(mod: Any, update: Any, context: Any) -> Non
         raise RuntimeError("Telegram payment has no charge id")
     if currency.upper() != "RUB":
         raise ValueError("Unexpected Telegram payment currency")
+    expected = _expected_precheckout(mod, payload)
+    if expected is None or expected != (currency.upper(), amount_minor):
+        raise ValueError("Paid Telegram invoice does not match current catalog")
     kind, metadata = _parse_telegram_payload(mod, payload, amount)
     result = process_once(
         mod,
