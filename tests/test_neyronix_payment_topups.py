@@ -45,4 +45,20 @@ class PaymentTopupTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.credit()
         with sqlite3.connect(self.db) as con:
             self.assertIsNone(con.execute("SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'neyronix_confirmed_topups\'").fetchone())
+    def test_concurrent_duplicate_is_credited_once(self):
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results=list(pool.map(lambda _: self.credit(), range(16)))
+        self.assertEqual(results.count("credited"),1)
+        self.assertEqual(results.count("already_credited"),15)
+        self.assertEqual(self.balance(),10)
+    def test_new_payment_ids_credit_separately(self):
+        self.credit()
+        self.assertEqual(self.credit(payment_id="payment-2"),"credited")
+        self.assertEqual(self.balance(),20)
+    def test_conflicting_user_cannot_reuse_payment(self):
+        self.credit()
+        with self.assertRaises(ValueError):
+            self.credit(user_id=456)
+        self.assertEqual(self.balance(),10)
 if __name__=="__main__": unittest.main()
