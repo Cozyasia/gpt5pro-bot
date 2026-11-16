@@ -15,7 +15,7 @@ class PaymentLedgerSmokeTests(unittest.TestCase):
                       user_id=56789,kind="credit_topup",amount=990.0,currency="RUB",
                       metadata={"credits":1000,"amount_rub":990,"invoice_payload":"topup:1000:990"})
             first=process_once(runtime,**args)
-            self.assertTrue(first.applied)
+            self.assertTrue(first.processed)
             self.assertFalse(first.duplicate)
             with sqlite3.connect(db) as con:
                 balance=con.execute("SELECT usd FROM wallet WHERE user_id=?",(56789,)).fetchone()[0]
@@ -25,6 +25,7 @@ class PaymentLedgerSmokeTests(unittest.TestCase):
             self.assertEqual(count,1)
             second=process_once(runtime,**args)
             self.assertTrue(second.duplicate)
+            self.assertFalse(second.processed)
             with sqlite3.connect(db) as con:
                 balance2=con.execute("SELECT usd FROM wallet WHERE user_id=?",(56789,)).fetchone()[0]
             self.assertAlmostEqual(balance2,balance)
