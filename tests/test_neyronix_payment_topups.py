@@ -41,5 +41,5 @@ class PaymentTopupTests(unittest.TestCase):
         with sqlite3.connect(self.db) as con: con.execute("DROP TABLE wallet")
         with self.assertRaises(ValueError): self.credit()
         with sqlite3.connect(self.db) as con:
-            self.assertEqual(con.execute("SELECT count(*) FROM neyronix_confirmed_topups").fetchone()[0],0)
+            self.assertIsNone(con.execute("SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'neyronix_confirmed_topups\'").fetchone())
 if __name__=="__main__": unittest.main()
