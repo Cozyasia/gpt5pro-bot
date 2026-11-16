@@ -11,9 +11,9 @@ from neyronix_quotes import make_quote, validate_confirmation, customer_summary
 
 class PricingSafetyTests(unittest.TestCase):
     def test_fractional_rounding_is_upward(self):
-        self.assertEqual(retail_credits("0.001"), Decimal("0.1"))
-        self.assertEqual(retail_credits("1"), Decimal("15.0"))
-        self.assertEqual(retail_credits("1.001"), Decimal("15.1"))
+        self.assertEqual(retail_credits("0.001"), Decimal("5"))
+        self.assertEqual(retail_credits("1"), Decimal("200"))
+        self.assertEqual(retail_credits("1.001"), Decimal("205"))
 
     def test_invalid_provider_costs_fail_closed(self):
         for value in ("NaN", "Infinity", "-1", "invalid"):
@@ -23,7 +23,7 @@ class PricingSafetyTests(unittest.TestCase):
 
     def test_public_quote_never_exposes_wholesale(self):
         quote = public_quote(model="runway", mode="i2v", duration=5, provider_cost_usd="1")
-        self.assertEqual(quote["price_credits"], "15.0")
+        self.assertEqual(quote["price_credits"], "200")
         self.assertNotIn("provider_cost_usd", quote)
         self.assertNotIn("multiplier", quote)
 
@@ -41,11 +41,11 @@ class PricingSafetyTests(unittest.TestCase):
         first = customer_summary(quote, "20")
         second = customer_summary(quote, "20")
         self.assertEqual(first, second)
-        self.assertEqual(first["remaining_credits"], "5.0")
+        self.assertEqual(first["remaining_credits"], "0")
 
     def test_topup_units_are_not_legacy_ruble_credits(self):
         # Explicitly document the incompatibility; do not silently migrate wallets.
-        self.assertEqual(credits_from_usd("1"), Decimal("10"))
+        self.assertEqual(credits_from_usd("1"), Decimal("100"))
         from neyrobot_prod.credit_store_v201 import catalog
         packs = catalog()
         self.assertTrue(packs)

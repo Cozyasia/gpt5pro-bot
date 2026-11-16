@@ -5,9 +5,9 @@ Enable wallet migration only after balances and top-up conversion are audited.
 """
 from decimal import Decimal, ROUND_CEILING
 
-CREDITS_PER_USD = Decimal("10")
-RETAIL_MULTIPLIER = Decimal("1.50")
-CREDIT_QUANTUM = Decimal("0.1")
+CREDITS_PER_USD = Decimal("100")
+RETAIL_MULTIPLIER = Decimal("2.00")
+CREDIT_QUANTUM = Decimal("5")
 
 
 def retail_credits(provider_cost_usd, *, multiplier=RETAIL_MULTIPLIER):
