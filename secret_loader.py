@@ -104,12 +104,12 @@ def parse_secret_file(path: str | os.PathLike[str]) -> dict[str, str]:
     return result
 
 
-def _activate_staging_credit_file() -> bool:
+def _activate_staging_credit_file(*, _test_base: Path | None = None) -> bool:
     """Stage-only opt-in with durable scale marker; never silently revert after sales."""
     import sqlite3
 
-    expected_db = "/data/neyronix-live/subs.db"
-    base = Path("/data/neyronix-live")
+    base = _test_base if _test_base is not None else Path("/data/neyronix-live")
+    expected_db = str(base / "subs.db")
     flag = base / "credit-scale-v1.approved"
     marker = base / "credit-scale-v1.active"
     token = "NEYRONIX_STAGING_CREDIT_SCALE_V1_APPROVED"
