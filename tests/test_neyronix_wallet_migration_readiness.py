@@ -1,5 +1,6 @@
 """Read-only, offline migration readiness checks. No production data access."""
 import ast
+from neyrobot_prod.wallet_migration_audit import inspect
 import sqlite3
 import tempfile
 import unittest
@@ -16,6 +17,28 @@ class WalletMigrationReadiness(unittest.TestCase):
             "NEYRONIX_USD_CREDITS_ENABLED = _NEYRONIX_NEW_CREDITS_REQUESTED and _NEYRONIX_WALLET_MIGRATION_VERIFIED",
             source,
         )
+
+    def test_snapshot_audit_reports_aggregates_and_never_marks_ready(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = str(Path(folder) / "audit.sqlite")
+            with sqlite3.connect(db) as con:
+                con.execute("CREATE TABLE wallet(user_id INTEGER PRIMARY KEY, usd REAL)")
+                con.execute("CREATE TABLE payment_events(id INTEGER PRIMARY KEY, status TEXT)")
+                con.execute("CREATE TABLE credit_ledger(status TEXT, retail_usd REAL)")
+                con.execute("CREATE TABLE subscriptions(until_ts INTEGER)")
+                con.execute("CREATE TABLE property_video_charges(job_id TEXT)")
+                con.executemany("INSERT INTO wallet VALUES (?,?)", [(11, 10.0), (22, 30.0)])
+                con.execute("INSERT INTO payment_events VALUES (1,'processed')")
+                con.execute("INSERT INTO credit_ledger VALUES ('reserved',1.4)")
+            before = Path(db).read_bytes()
+            report = inspect(db)
+            self.assertEqual(report["wallet"]["accounts"], 2)
+            self.assertEqual(report["wallet"]["total_internal_usd"], 40.0)
+            self.assertEqual(report["ledger"]["reserved_usd"], 1.4)
+            self.assertEqual(report["payments_by_status"]["processed"], 1)
+            self.assertFalse(report["ready_for_migration"])
+            self.assertNotIn("11", str(report))
+            self.assertEqual(before, Path(db).read_bytes())
 
     def test_dry_run_inventory_does_not_change_wallet_or_payments(self):
         with tempfile.TemporaryDirectory() as folder:
