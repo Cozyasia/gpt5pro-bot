@@ -22345,9 +22345,24 @@ def build_application() -> "Application":
     app.add_handler(CommandHandler("voice_off",    cmd_voice_off))
     app.add_handler(CommandHandler("medicine",     cmd_mode_medicine))
 
+    _payment_precheckout_handler = on_precheckout
+    _payment_successful_handler = on_successful_payment
+    # Secure billing is opt-in until staging reconciliation is complete.
+    # Never silently fall back to legacy handlers when explicitly enabled.
+    if (os.environ.get("NEYRONIX_SECURE_PAYMENTS_ENABLED") or "").strip().lower() in ("1", "true", "yes", "on"):
+        import sys
+        from neyrobot_prod.payments import patch_runtime, precheckout_handler
+        _payment_module = sys.modules[__name__]
+        if not patch_runtime(_payment_module):
+            raise RuntimeError("Secure payments enabled but required runtime dependencies are missing")
+        async def _secure_precheckout(update, context):
+            await precheckout_handler(_payment_module, update, context)
+        _payment_precheckout_handler = _secure_precheckout
+        _payment_successful_handler = _payment_module.on_successful_payment
+        log.info("Secure payment handlers registered (Telegram/YooKassa/CryptoBot)")
     # Платежи
-    app.add_handler(PreCheckoutQueryHandler(on_precheckout))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, on_successful_payment))
+    app.add_handler(PreCheckoutQueryHandler(_payment_precheckout_handler))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, _payment_successful_handler))
 
     # >>> PATCH START — Handlers wiring (WebApp + callbacks + media + text) >>>
 
