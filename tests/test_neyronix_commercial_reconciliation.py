@@ -98,6 +98,67 @@ class OfflineCommercialReconciliation(unittest.TestCase):
                 self.assertFalse(any(":telegram:" in (cb or "") for cb in callbacks))
                 self.assertFalse(any(":crypto:" in (cb or "") for cb in callbacks))
 
+    def test_callback_checkout_dry_run_no_external_payment(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        from neyrobot_prod import credit_store_v201 as store
+
+        class StopHandler(Exception):
+            pass
+
+        telegram_ext = ModuleType("telegram.ext")
+        telegram_ext.ApplicationHandlerStop = StopHandler
+        replies = []
+        created = []
+        invoices = []
+        message = SimpleNamespace(
+            reply_text=AsyncMock(side_effect=lambda text, **kw: replies.append((text, kw)) or SimpleNamespace(chat=SimpleNamespace(id=123), message_id=456))
+        )
+        user = SimpleNamespace(id=123)
+        query = SimpleNamespace(data="", answer=AsyncMock())
+        update = SimpleNamespace(callback_query=query, effective_user=user, effective_message=message, effective_chat=SimpleNamespace(id=123))
+        async def fake_creator(uid, credits, rub, method):
+            created.append((uid, credits, rub, method))
+            return {"id": "offline-id", "confirmation": {"confirmation_url": "https://example.invalid/offline"}}
+        bot = SimpleNamespace(send_invoice=AsyncMock(side_effect=lambda **kw: invoices.append(kw)))
+        context = SimpleNamespace(bot=bot, application=SimpleNamespace(create_task=lambda coro: coro.close()))
+        runtime = SimpleNamespace(
+            BOT_TOKEN="fake", InlineKeyboardButton=lambda text, callback_data=None, url=None: SimpleNamespace(text=text, callback_data=callback_data, url=url),
+            InlineKeyboardMarkup=lambda rows: SimpleNamespace(inline_keyboard=rows),
+            _user_balance_get=lambda uid: 10.0, _credits_fmt_from_usd=lambda usd: str(int(usd * 100)),
+            YOO_DIRECT_METHODS={"yoo_sbp": {"label": "SBP"}},
+            _yoo_direct_configured=lambda: True,
+            _yoo_create_credit_payment=fake_creator,
+            _poll_yoo_credit_payment=AsyncMock(),
+            YOOKASSA_PROVIDER_TOKEN="offline-test-token",
+            LabeledPrice=lambda label, amount: SimpleNamespace(label=label, amount=amount),
+        )
+        async def press(data):
+            query.data = data
+            try:
+                await store.callback(update, context)
+            except StopHandler:
+                return
+            self.fail("Expected handler stop")
+
+        with patch.dict(sys.modules, {"telegram.ext": telegram_ext}), patch.object(store, "_runtime_module", return_value=runtime):
+            asyncio.run(press("credit:v201:open"))
+            self.assertIn("Покупка кредитов", replies[-1][0])
+            asyncio.run(press("credit:v201:pack:mid"))
+            self.assertIn("3 000 кредитов за 2 790 ₽", replies[-1][0])
+            asyncio.run(press("credit:v201:pay:yoo_sbp:mid"))
+            self.assertEqual(created, [(123, 3000, 2790, "yoo_sbp")])
+            self.assertIn("example.invalid/offline", replies[-1][1]["reply_markup"].inline_keyboard[0][0].url)
+            asyncio.run(press("credit:v201:pay:telegram:small"))
+            self.assertEqual(len(invoices), 1)
+            self.assertEqual(invoices[0]["payload"], "topup:1000:990")
+            self.assertEqual(invoices[0]["prices"][0].amount, 99000)
+            self.assertEqual(invoices[0]["currency"], "RUB")
+            asyncio.run(press("credit:v201:pay:yoo_sbp:invalid"))
+            self.assertEqual(len(created), 1)
+            self.assertIn("Покупка кредитов", replies[-1][0])
+        self.assertEqual(len(invoices), 1)
+
     def test_all_packages_purchase_spend_refund_and_margin(self):
         self.assertEqual(int(CREDITS_PER_USD), 100)
         for credits, rub in PACKAGES:
