@@ -123,11 +123,15 @@ def process_once(
             text = str(exc).lower()
             if "unique" in text or "constraint" in text:
                 row = con.execute(
-                    "SELECT status,kind,metadata_json FROM payment_events WHERE provider=? AND (payment_id=? OR provider_charge_id=?) ORDER BY id DESC LIMIT 1",
+                    "SELECT status,kind,metadata_json,user_id,amount,currency FROM payment_events WHERE provider=? AND (payment_id=? OR (provider_charge_id=? AND provider_charge_id IS NOT NULL)) ORDER BY id DESC LIMIT 1",
                     (provider, payment_id, charge_id),
                 ).fetchone()
                 con.rollback()
-                return PaymentResult(False, True, row[1] if row else kind, message="Платёж уже обработан ранее.")
+                if row is None or int(row[3]) != int(user_id) or row[1] != kind or str(row[5]).upper() != currency or abs(float(row[4]) - float(amount)) > 0.001:
+                    raise ValueError("Payment identifier reused with conflicting terms")
+                if json.loads(row[2] or "{}") != metadata:
+                    raise ValueError("Payment identifier reused with conflicting metadata")
+                return PaymentResult(False, True, row[1], message="Платёж уже обработан ранее.")
             raise
 
         credits = 0
