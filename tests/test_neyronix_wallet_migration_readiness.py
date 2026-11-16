@@ -40,6 +40,24 @@ class WalletMigrationReadiness(unittest.TestCase):
             self.assertNotIn("11", str(report))
             self.assertEqual(before, Path(db).read_bytes())
 
+    def test_overreserved_wallet_is_flagged_and_backup_is_recoverable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            original = Path(folder) / "snapshot.sqlite"
+            backup = Path(folder) / "backup.sqlite"
+            with sqlite3.connect(original) as con:
+                con.execute("CREATE TABLE wallet(user_id INTEGER PRIMARY KEY, usd REAL)")
+                con.execute("CREATE TABLE credit_ledger(user_id INTEGER, status TEXT, retail_usd REAL)")
+                con.execute("INSERT INTO wallet VALUES (101,1.0)")
+                con.execute("INSERT INTO credit_ledger VALUES (101,'reserved',1.4)")
+            with sqlite3.connect(original) as src, sqlite3.connect(backup) as dst:
+                src.backup(dst)
+            report = inspect(str(backup))
+            self.assertEqual(report["reserved_over_balance_accounts"], 1)
+            self.assertFalse(report["ready_for_migration"])
+            with sqlite3.connect(backup) as con:
+                self.assertEqual(con.execute("SELECT usd FROM wallet").fetchone()[0], 1.0)
+            self.assertNotIn("101", str(report))
+
     def test_dry_run_inventory_does_not_change_wallet_or_payments(self):
         with tempfile.TemporaryDirectory() as folder:
             db = str(Path(folder) / "snapshot.sqlite")
