@@ -37,7 +37,10 @@ class PaymentTopupTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError): self.credit(credits_per_usd=value)
         self.assertEqual(self.balance(),0)
-    def test_unsafe_legacy_conversion_is_blocked(self):\n        with self.assertRaises(ValueError): self.credit(credits_per_usd="0.1")\n        self.assertEqual(self.balance(),0)\n    def test_missing_wallet_fails_closed(self):
+    def test_unsafe_legacy_conversion_is_blocked(self):
+        with self.assertRaises(ValueError): self.credit(credits_per_usd="0.1")
+        self.assertEqual(self.balance(),0)
+    def test_missing_wallet_fails_closed(self):
         with sqlite3.connect(self.db) as con: con.execute("DROP TABLE wallet")
         with self.assertRaises(ValueError): self.credit()
         with sqlite3.connect(self.db) as con:

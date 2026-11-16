@@ -23,7 +23,12 @@ def credit_confirmed_payment(db_path, *, provider, payment_id, user_id,
     if qty <= 0 or qty != qty.to_integral_value() or amount_rub <= 0 or rate <= 0:
         raise ValueError("Invalid payment terms")
     usd=qty/rate
-    # Fail closed: credited USD must not exceed the RUB amount paid, even\n    # under the most conservative possible 1 RUB/USD bound. A verified\n    # settlement conversion is still required before live integration.\n    if usd > amount_rub:\n        raise ValueError("Unsafe top-up conversion: USD credit exceeds RUB payment")\n    # Exact decimal fingerprints, so replays with different terms are rejected.
+    # Fail closed: credited USD must not exceed the RUB amount paid, even
+    # under the most conservative possible 1 RUB/USD bound. A verified
+    # settlement conversion is still required before live integration.
+    if usd > amount_rub:
+        raise ValueError("Unsafe top-up conversion: USD credit exceeds RUB payment")
+    # Exact decimal fingerprints, so replays with different terms are rejected.
     fingerprint=(int(user_id),str(qty.normalize()),str(amount_rub.normalize()),str(rate.normalize()))
     con=sqlite3.connect(db_path,timeout=30,isolation_level=None)
     try:
