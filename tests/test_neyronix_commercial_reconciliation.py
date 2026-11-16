@@ -159,6 +159,42 @@ class OfflineCommercialReconciliation(unittest.TestCase):
             self.assertIn("Покупка кредитов", replies[-1][0])
         self.assertEqual(len(invoices), 1)
 
+    def test_provider_readiness_disabled_paths_never_create_payment(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        from neyrobot_prod import credit_store_v201 as store
+
+        replies = []
+        msg = SimpleNamespace(reply_text=AsyncMock(side_effect=lambda text, **kw: replies.append(text)))
+        update = SimpleNamespace(effective_message=msg, effective_user=SimpleNamespace(id=123),
+                                 effective_chat=SimpleNamespace(id=123))
+        bot = SimpleNamespace(send_invoice=AsyncMock())
+        ctx = SimpleNamespace(bot=bot)
+        creator = AsyncMock()
+        runtime = SimpleNamespace(
+            YOO_SBP_ENABLED=False, YOO_SBERPAY_ENABLED=False, YOO_TPAY_ENABLED=False,
+            YOO_MIRPAY_ENABLED=False, YOOKASSA_PROVIDER_TOKEN="", CRYPTO_PAY_API_TOKEN="",
+            _yoo_direct_configured=lambda: False,
+            _yoo_create_credit_payment=creator,
+            InlineKeyboardButton=lambda text, callback_data=None, url=None: SimpleNamespace(
+                text=text, callback_data=callback_data, url=url),
+            InlineKeyboardMarkup=lambda rows: SimpleNamespace(inline_keyboard=rows),
+        )
+        pack = store.CreditPack("small", 1000, 990)
+        buttons = [b.callback_data for row in store.methods_keyboard(runtime, pack).inline_keyboard for b in row]
+        self.assertFalse(any(":yoo_sbp:" in b or ":yoo_sberpay:" in b or ":yoo_tpay:" in b
+                             or ":yoo_mirpay:" in b or ":telegram:" in b or ":crypto:" in b
+                             for b in buttons))
+        asyncio.run(store._create_yoo(runtime, update, ctx, pack, "yoo_all"))
+        asyncio.run(store._create_telegram_invoice(runtime, update, ctx, pack))
+        asyncio.run(store._create_crypto(runtime, update, ctx, pack))
+        creator.assert_not_awaited()
+        bot.send_invoice.assert_not_awaited()
+        self.assertEqual(len(replies), 3)
+        self.assertIn("не настроена", replies[0])
+        self.assertIn("не подключена", replies[1])
+        self.assertIn("не подключён", replies[2])
+
     def test_all_packages_purchase_spend_refund_and_margin(self):
         self.assertEqual(int(CREDITS_PER_USD), 100)
         for credits, rub in PACKAGES:
