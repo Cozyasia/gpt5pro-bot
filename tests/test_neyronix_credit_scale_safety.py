@@ -11,6 +11,36 @@ from neyronix_pricing import CREDITS_PER_USD, credits_from_usd, retail_credits
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 class CreditScaleSafetyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        source = (ROOT / "main.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        names = {"_credits_to_usd", "_usd_to_credits", "_credits_fmt_from_usd",
+                 "_retail_credits", "_retail_usd"}
+        selected = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+        namespace = {"NEYRONIX_USD_CREDITS_ENABLED": True, "CREDIT_USD_VALUE": 0.01}
+        exec(compile(ast.Module(body=selected, type_ignores=[]), str(ROOT / "main.py"), "exec"), namespace)
+        cls.wallet = namespace
+
+    def test_roundtrip_new_wallet_conversion(self):
+        for credits in (0, 5, 140, 1000, 3000, 7000):
+            usd = self.wallet["_credits_to_usd"](credits)
+            self.assertAlmostEqual(usd, credits / 100, places=4)
+            self.assertAlmostEqual(self.wallet["_usd_to_credits"](usd), credits, places=4)
+
+    def test_purchase_packages_and_retail_deduction(self):
+        for credits, expected_usd in ((1000, 10), (3000, 30), (7000, 70)):
+            self.assertEqual(self.wallet["_credits_to_usd"](credits), expected_usd)
+        self.assertEqual(self.wallet["_retail_credits"](0.70), 140)
+        self.assertEqual(self.wallet["_retail_usd"](0.70), 1.4)
+        self.assertEqual(self.wallet["_usd_to_credits"](30 - 1.4), 2860)
+
+    def test_legacy_conversion_unchanged(self):
+        self.wallet["NEYRONIX_USD_CREDITS_ENABLED"] = False
+        self.assertEqual(self.wallet["_credits_to_usd"](1000), 10)
+        self.assertEqual(self.wallet["_usd_to_credits"](10), 1000)
+        self.wallet["NEYRONIX_USD_CREDITS_ENABLED"] = True
+
     def test_package_scale_and_pricing_scale(self):
         self.assertEqual(CREDITS_PER_USD, Decimal("100"))
         self.assertEqual(credits_from_usd("10"), Decimal("1000"))
