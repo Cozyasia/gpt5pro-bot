@@ -1,0 +1,23 @@
+name: NEYRONIX quote and reservation regression
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'neyronix_pricing.py'
+      - 'property_video_billing.py'
+      - 'tests/test_neyronix_quote_integrity.py'
+      - 'tests/test_neyronix_billing_transactions.py'
+      - '.github/workflows/neyronix-quote-reservation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p 'test_neyronix_quote_integrity.py' -v
+      - run: python -m unittest discover -s tests -p 'test_neyronix_billing_transactions.py' -v
