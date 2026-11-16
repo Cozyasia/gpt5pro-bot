@@ -2117,12 +2117,12 @@ else:
 
 def _credits_to_usd(credits: float) -> float:
     if globals().get("NEYRONIX_USD_CREDITS_ENABLED", False):
-        return round(float(credits) / 10.0, 4)
+        return round(float(credits) / float(__import__('neyronix_pricing').CREDITS_PER_USD), 4)
     return round(float(credits) * CREDIT_USD_VALUE, 4)
 
 def _usd_to_credits(usd: float) -> float:
     if globals().get("NEYRONIX_USD_CREDITS_ENABLED", False):
-        return float(usd) * 10.0
+        return float(usd) * float(__import__('neyronix_pricing').CREDITS_PER_USD)
     return float(usd) / max(1e-9, CREDIT_USD_VALUE)
 
 def _credits_fmt_from_usd(usd: float) -> str:
@@ -2150,7 +2150,7 @@ if _NEYRONIX_NEW_CREDITS_REQUESTED and not _NEYRONIX_WALLET_MIGRATION_VERIFIED:
 def _retail_credits(provider_cost_usd: float) -> int:
     if NEYRONIX_USD_CREDITS_ENABLED:
         from neyronix_pricing import retail_credits
-        # Preserve tenths of a credit; never inflate a 0.2-credit quote to 1.
+        # Retail quotes use the canonical five-credit quantum.
         return float(retail_credits(provider_cost_usd))
     base_rub = max(0.0, float(provider_cost_usd or 0.0)) * max(1e-9, USD_RUB) * GENERATION_PRICE_MULTIPLIER
     credits = base_rub / max(1e-9, CREDIT_RUB_VALUE) + GENERATION_FIXED_OVERHEAD_CREDITS
@@ -2158,8 +2158,8 @@ def _retail_credits(provider_cost_usd: float) -> int:
 
 def _retail_usd(provider_cost_usd: float) -> float:
     if NEYRONIX_USD_CREDITS_ENABLED:
-        # One credit = 0.10 USD in the new wallet scheme.
-        return round(_retail_credits(provider_cost_usd) / 10.0, 4)
+        # Use the same canonical credit scale as neyronix_pricing.
+        return _credits_to_usd(_retail_credits(provider_cost_usd))
     return _credits_to_usd(_retail_credits(provider_cost_usd))
 
 def _video_provider_cost_usd(engine: str, duration_s: int, model: str = "") -> float:
