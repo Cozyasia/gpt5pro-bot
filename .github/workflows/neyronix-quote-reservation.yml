@@ -6,6 +6,7 @@ on:
       - 'neyronix_pricing.py'
       - 'tests/test_neyronix_credit_scale_safety.py'
       - 'tests/test_neyronix_commercial_reconciliation.py'
+      - 'tests/test_neyronix_wallet_migration_readiness.py'
       - 'property_video_billing.py'
       - 'tests/test_neyronix_quote_integrity.py'
       - 'tests/test_neyronix_billing_transactions.py'
@@ -25,3 +26,4 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_neyronix_billing_transactions.py' -v
       - run: python -m unittest discover -s tests -p 'test_neyronix_credit_scale_safety.py' -v
       - run: python -m unittest discover -s tests -p 'test_neyronix_commercial_reconciliation.py' -v
+      - run: python -m unittest discover -s tests -p 'test_neyronix_wallet_migration_readiness.py' -v
