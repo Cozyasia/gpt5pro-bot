@@ -145,7 +145,7 @@ def _activate_staging_credit_file() -> bool:
                 # marker. File and SQLite live on the same persistent Render disk.
                 try:
                     with marker.open("x", encoding="utf-8") as handle:
-                        handle.write(token + "\\n")
+                        handle.write(token + "\n")
                         handle.flush()
                         os.fsync(handle.fileno())
                 except FileExistsError:
