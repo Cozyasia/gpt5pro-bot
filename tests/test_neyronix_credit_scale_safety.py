@@ -26,10 +26,13 @@ class CreditScaleSafetyTests(unittest.TestCase):
         self.assertIn("_NEYRONIX_WALLET_MIGRATION_VERIFIED", source)
         self.assertIn("NEYRONIX_USD_CREDITS_ENABLED = _NEYRONIX_NEW_CREDITS_REQUESTED and _NEYRONIX_WALLET_MIGRATION_VERIFIED", source)
         conversion = ast.get_source_segment(source, functions["_credits_to_usd"])
-        self.assertIn("float(credits) / 10.0", conversion)
-        # The legacy new-mode divisor (10) is incompatible with the pricing module (100).
-        # This test documents the block; do NOT silently enable migration.
-        self.assertNotEqual(Decimal("10"), CREDITS_PER_USD)
+        self.assertIn("CREDITS_PER_USD", conversion)
+        reverse = ast.get_source_segment(source, functions["_usd_to_credits"])
+        self.assertIn("CREDITS_PER_USD", reverse)
+        retail = ast.get_source_segment(source, functions["_retail_usd"])
+        self.assertIn("_credits_to_usd(_retail_credits(provider_cost_usd))", retail)
+        # Migration remains gated; new-mode conversion now matches canonical pricing.
+        self.assertEqual(Decimal("100"), CREDITS_PER_USD)
 
 if __name__ == "__main__":
     unittest.main()
