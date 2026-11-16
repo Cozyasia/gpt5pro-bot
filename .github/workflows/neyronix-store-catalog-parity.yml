@@ -1,0 +1,21 @@
+name: NEYRONIX store catalog parity
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'neyrobot_prod/credit_store_v201.py'
+      - 'tests/test_neyronix_store_catalog_parity.py'
+      - '.github/workflows/neyronix-store-catalog-parity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install httpx
+      - run: python -m unittest discover -s tests -p 'test_neyronix_store_catalog_parity.py' -v
