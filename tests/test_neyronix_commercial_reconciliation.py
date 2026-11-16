@@ -32,7 +32,7 @@ class OfflineCommercialReconciliation(unittest.TestCase):
 
     def test_store_display_and_checkout_catalog_match_offline_settlement(self):
         from unittest.mock import patch
-        with patch.dict("os.environ", {
+        with patch("neyrobot_prod.credit_store_v201._runtime_module", return_value=None), patch.dict("os.environ", {
             "CREDIT_PACK_SMALL_CREDITS": "1000", "CREDIT_PACK_SMALL_RUB": "990",
             "CREDIT_PACK_MID_CREDITS": "3000", "CREDIT_PACK_MID_RUB": "2790",
             "CREDIT_PACK_BIG_CREDITS": "7000", "CREDIT_PACK_BIG_RUB": "6290",
