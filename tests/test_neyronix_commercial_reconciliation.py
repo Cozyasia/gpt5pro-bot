@@ -123,7 +123,7 @@ class OfflineCommercialReconciliation(unittest.TestCase):
         bot = SimpleNamespace(send_invoice=AsyncMock(side_effect=lambda **kw: invoices.append(kw)))
         context = SimpleNamespace(bot=bot, application=SimpleNamespace(create_task=lambda coro: coro.close()))
         runtime = SimpleNamespace(
-            BOT_TOKEN="fake", InlineKeyboardButton=lambda text, callback_data=None, url=None: SimpleNamespace(text=text, callback_data=callback_data, url=url),
+            DB_PATH=self.db, BOT_TOKEN="fake", InlineKeyboardButton=lambda text, callback_data=None, url=None: SimpleNamespace(text=text, callback_data=callback_data, url=url),
             InlineKeyboardMarkup=lambda rows: SimpleNamespace(inline_keyboard=rows),
             _user_balance_get=lambda uid: 10.0, _credits_fmt_from_usd=lambda usd: str(int(usd * 100)),
             YOO_DIRECT_METHODS={"yoo_sbp": {"label": "SBP"}},

@@ -205,18 +205,16 @@ async def _create_yoo(mod: Any, update: Any, context: Any, pack: CreditPack, met
     url = confirmation.get("confirmation_url") or confirmation.get("external_url") or ""
     if not payment_id or not url:
         raise RuntimeError("ЮKassa не вернула id или ссылку подтверждения")
+    from neyrobot_prod.crypto_invoice_recovery_v1 import register_yoo
+    register_yoo(str(getattr(mod, "DB_PATH", "") or ""), payment_id, int(update.effective_user.id), pack.credits, pack.rub)
     label = _method_label(mod, method)
     markup = _kb(mod, [[(f"{label} — оплатить", "url", url)], [("⬅️ К способам", "cb", f"credit:v201:pack:{pack.key}")]])
-    msg = await update.effective_message.reply_text(
+    await update.effective_message.reply_text(
         f"🪙 {_fmt_int(pack.credits)} кредитов за {_fmt_int(pack.rub)} ₽.\n"
         f"Способ: {label}. Откройте ссылку; после подтверждения кредиты начислятся автоматически.",
         reply_markup=markup,
     )
-    poller = getattr(mod, "_poll_yoo_credit_payment", None)
-    if callable(poller):
-        context.application.create_task(
-            poller(context, msg.chat.id, msg.message_id, update.effective_user.id, payment_id, pack.credits, pack.rub)
-        )
+
 
 
 async def _create_telegram_invoice(mod: Any, update: Any, context: Any, pack: CreditPack) -> None:
@@ -309,13 +307,15 @@ async def _create_crypto(mod: Any, update: Any, context: Any, pack: CreditPack) 
     url = item.get("bot_invoice_url") or item.get("pay_url") or item.get("mini_app_invoice_url") or ""
     if not invoice_id or not url:
         raise RuntimeError("CryptoBot не вернул invoice_id/pay_url")
+    from neyrobot_prod.crypto_invoice_recovery_v1 import register
+    register(str(getattr(mod, "DB_PATH", "") or ""), invoice_id, int(update.effective_user.id),
+             pack.credits, pack.rub, body["amount"], body["asset"], payload)
     markup = _kb(mod, [[("💠 Открыть CryptoBot", "url", url)], [("⬅️ К способам", "cb", f"credit:v201:pack:{pack.key}")]])
-    msg = await update.effective_message.reply_text(
+    await update.effective_message.reply_text(
         f"🪙 {_fmt_int(pack.credits)} кредитов за {_fmt_int(pack.rub)} ₽ · примерно {amount:.2f} USDT.\n"
         "Курс для CryptoBot фиксируется настройкой магазина; после оплаты кредиты начислятся автоматически.",
         reply_markup=markup,
     )
-    context.application.create_task(_poll_crypto(mod, context, msg, pack, invoice_id, int(update.effective_user.id)))
 
 
 async def callback(update: Any, context: Any) -> None:
@@ -408,6 +408,16 @@ def install_builder_hook() -> bool:
         if not getattr(app, class_flag, False):
             app.add_handler(CallbackQueryHandler(callback, pattern=r"^(?:topup(?:$|:)|credit:v201:)"), group=-31)
             app.add_handler(CommandHandler("diag_credit_store", diag), group=-31)
+            original_post_init = app.post_init
+            async def post_init(application):
+                if original_post_init is not None:
+                    await original_post_init(application)
+                mod = _runtime_module()
+                if mod is not None:
+                    from neyrobot_prod.crypto_invoice_recovery_v1 import worker
+                    application.bot_data["_credit_store_recovery_task"] = asyncio.create_task(
+                        worker(mod, application.bot, _crypto_status), name="credit-store-payment-recovery")
+            app.post_init = post_init
             setattr(app, class_flag, True)
         return app
     ApplicationBuilder.build = build

@@ -4,6 +4,9 @@ on:
     branches: [work/neyronix-migration-20261028]
     paths:
       - 'neyrobot_prod/credit_store_v201.py'
+      - 'neyrobot_prod/crypto_invoice_recovery_v1.py'
+      - 'tests/test_crypto_invoice_recovery_v1.py'
+      - 'tests/test_neyronix_commercial_reconciliation.py'
       - 'tests/test_neyronix_store_catalog_parity.py'
       - '.github/workflows/neyronix-store-catalog-parity.yml'
   workflow_dispatch:
@@ -19,3 +22,5 @@ jobs:
           python-version: '3.11'
       - run: pip install httpx
       - run: python -m unittest discover -s tests -p 'test_neyronix_store_catalog_parity.py' -v
+      - run: python -m unittest discover -s tests -p 'test_crypto_invoice_recovery_v1.py' -v
+      - run: python -m unittest discover -s tests -p 'test_neyronix_commercial_reconciliation.py' -v
