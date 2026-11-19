@@ -1,0 +1,22 @@
+name: NEYRONIX Kling input security
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'main.py'
+      - 'tests/test_kling_i2v_safe_reference.py'
+      - 'tests/test_provider_input_artifacts.py'
+      - '.github/workflows/neyronix-kling-reference.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  input-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p 'test_kling_i2v_safe_reference.py' -v
+      - run: python -m unittest discover -s tests -p 'test_provider_input_artifacts.py' -v
