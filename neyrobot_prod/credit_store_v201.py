@@ -18,6 +18,8 @@ from typing import Any
 
 import httpx
 
+from neyronix_pricing import CREDIT_PACKAGES
+
 VERSION = "v201-credit-store-2026-07-25"
 _BUILDER_HOOKED = False
 _WORKER_STARTED = False
@@ -47,10 +49,9 @@ def _normalise_credits(raw: int, canonical: int) -> int:
 
 
 def catalog() -> tuple[CreditPack, ...]:
-    specs = (
-        ("small", "CREDIT_PACK_SMALL_CREDITS", 1000, "CREDIT_PACK_SMALL_RUB", 990),
-        ("mid", "CREDIT_PACK_MID_CREDITS", 3000, "CREDIT_PACK_MID_RUB", 2790),
-        ("big", "CREDIT_PACK_BIG_CREDITS", 7000, "CREDIT_PACK_BIG_RUB", 6290),
+    specs = tuple(
+        (key, f"CREDIT_PACK_{key.upper()}_CREDITS", credits, f"CREDIT_PACK_{key.upper()}_RUB", rub)
+        for key, credits, rub in CREDIT_PACKAGES
     )
     runtime = _runtime_module()
     runtime_catalog = getattr(runtime, "CREDIT_PACKAGES_RUB", None) if runtime is not None else None

@@ -42,18 +42,18 @@ class CreditAndSelfieV201Tests(unittest.TestCase):
         os.environ["CREDIT_PACK_BIG_CREDITS"] = "700"
         self.assertEqual(
             [(pack.credits, pack.rub) for pack in credit_store.catalog()],
-            [(1000, 990), (3000, 2490), (7000, 4990)],
+            [(1000, 990), (3000, 2790), (7000, 6290)],
         )
         self.assertEqual(credit_store.resolve_pack(100, 990), (1000, 990))
-        self.assertEqual(credit_store.resolve_pack(300, 2490), (3000, 2490))
-        self.assertIsNone(credit_store.resolve_pack(100, 2490))
+        self.assertEqual(credit_store.resolve_pack(300, 2790), (3000, 2790))
+        self.assertIsNone(credit_store.resolve_pack(100, 2790))
 
     def test_credit_buttons_use_canonical_numbers(self):
         mod = types.SimpleNamespace(InlineKeyboardButton=Button, InlineKeyboardMarkup=Markup)
         labels = [button.text for row in credit_store.store_keyboard(mod).inline_keyboard for button in row]
         self.assertIn("🪙 1 000 кр. · 990 ₽", labels)
-        self.assertIn("🪙 3 000 кр. · 2 490 ₽", labels)
-        self.assertIn("🪙 7 000 кр. · 4 990 ₽", labels)
+        self.assertIn("🪙 3 000 кр. · 2 790 ₽", labels)
+        self.assertIn("🪙 7 000 кр. · 6 290 ₽", labels)
 
     def test_selfie_payload_contains_user_plus_three_character_refs(self):
         images = [(letter, "image/jpeg") for letter in ("a", "b", "c", "d")]

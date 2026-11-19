@@ -23,8 +23,8 @@ class CommercialNumbersV201Tests(unittest.TestCase):
         self.assertEqual(mod.SUBSCRIPTION_CREDITS, commercial.CANONICAL_INCLUDED)
         self.assertEqual(mod.SUBS_TIERS["ultimate"]["credits"], 3500)
         self.assertIn("🪙 3500 кредитов каждый месяц", mod.SUBS_TIERS["ultimate"]["features"])
-        self.assertEqual(mod.CREDIT_PACKAGES_RUB, {1000: 990, 3000: 2490, 7000: 4990})
-        self.assertEqual([(p.credits, p.rub) for p in store.catalog()], [(1000, 990), (3000, 2490), (7000, 4990)])
+        self.assertEqual(mod.CREDIT_PACKAGES_RUB, {1000: 990, 3000: 2790, 7000: 6290})
+        self.assertEqual([(p.credits, p.rub) for p in store.catalog()], [(1000, 990), (3000, 2790), (7000, 6290)])
 
 
 if __name__ == "__main__":

@@ -15,8 +15,10 @@ import threading
 import time
 from typing import Any
 
+from neyronix_pricing import CREDIT_PACKAGES
+
 VERSION = "v201-commercial-numbers-2026-07-25"
-CANONICAL_PACKAGES = (("small", 1000, 990), ("mid", 3000, 2490), ("big", 7000, 4990))
+CANONICAL_PACKAGES = CREDIT_PACKAGES
 CANONICAL_INCLUDED = {"start": 200, "pro": 1200, "ultimate": 3500}
 _WORKER_STARTED = False
 

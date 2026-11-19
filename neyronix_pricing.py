@@ -8,6 +8,7 @@ from decimal import Decimal, ROUND_CEILING
 CREDITS_PER_USD = Decimal("100")
 RETAIL_MULTIPLIER = Decimal("2.00")
 CREDIT_QUANTUM = Decimal("5")
+CREDIT_PACKAGES = (("small", 1000, 990), ("mid", 3000, 2790), ("big", 7000, 6290))
 
 
 def retail_credits(provider_cost_usd, *, multiplier=RETAIL_MULTIPLIER):
