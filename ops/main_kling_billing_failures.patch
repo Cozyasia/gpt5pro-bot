@@ -1,21 +1,29 @@
 diff --git a/main.py b/main.py
 --- a/main.py
 +++ b/main.py
-@@ -17001,5 +17001,5 @@
+@@ -16966,4 +16966,7 @@
+ 
+             st = str(js.get("status") or js.get("state") or js.get("task_status") or "").lower()
++            if "kling" in (caption or "").lower() and isinstance(js.get("data"), dict):
++                task_data = js["data"]
++                st = str(task_data.get("task_status") or task_data.get("status") or task_data.get("state") or st).lower()
+ 
+             # Comet/Runway иногда отдаёт task_not_exist внутри JSON при 200 OK.
+@@ -17001,5 +17004,5 @@
                              log.warning("%s content download exception: %s", caption, e)
                      await update.effective_message.reply_text(f"⚠️ {caption}: задача готова, но ссылка/MP4 на видео не найдены.")
 -                    return True
 +                    return False if "kling" in (caption or "").lower() else True
                  await _reply_video_from_url(update, client, url, f"{caption} ✅", task_id=task_id)
                  if "runway" in (caption or "").lower():
-@@ -17028,5 +17028,5 @@
+@@ -17028,5 +17031,5 @@
                              f"❌ Kling {mode}: ошибка генерации. ID: {task_id}. Попробуйте ещё раз."
                          )
 -                    return True
 +                    return False
                  await update.effective_message.reply_text(f"❌ {caption}: ошибка рендера.")
                  return True
-@@ -17071,5 +17071,5 @@
+@@ -17071,5 +17074,5 @@
      if not api_key:
          await update.effective_message.reply_text(f"❌ {caption}: API-ключ не задан в ENV.")
 -        return True
