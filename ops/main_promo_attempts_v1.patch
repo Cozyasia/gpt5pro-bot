@@ -1,0 +1,57 @@
+diff --git a/main.py b/main.py
+--- a/main.py
++++ b/main.py
+@@ -18496,17 +18496,14 @@
+     return f"promo5:{user_id}:{ymd or _today_ymd()}:{safe}"
+ 
+-def _try_consume_promo_daily5_quota(user_id: int, username: str | None, engine: str, remember_kind: str = "") -> tuple[bool, int, int, str]:
++def _try_consume_promo_daily5_quota(user_id: int, username: str | None, engine: str, remember_kind: str = "") -> tuple[bool, int, int, str, str | None]:
+     if not is_promo_daily5_user(user_id, username):
+-        return False, 0, PROMO_DAILY5_PER_FUNCTION_LIMIT, ""
++        return False, 0, PROMO_DAILY5_PER_FUNCTION_LIMIT, "", None
+     feature = _promo_feature_key(engine, remember_kind)
+     limit = max(0, int(PROMO_DAILY5_PER_FUNCTION_LIMIT))
+     if limit <= 0:
+-        return False, 0, limit, feature
+-    key = _promo_quota_kv_key(user_id, feature)
+-    used = int(kv_get(key, "0") or "0")
+-    if used >= limit:
+-        return False, 0, limit, feature
+-    kv_set(key, str(used + 1))
+-    return True, max(0, limit - used - 1), limit, feature
++        return False, 0, limit, feature, None
++    from neyrobot_prod.promo_attempts_v1 import reserve
++    token, remaining = reserve(DB_PATH, _promo_quota_kv_key(user_id, feature), limit)
++    return bool(token), remaining, limit, feature, token
+ 
+ 
+@@ -18589,5 +18586,5 @@
+         return bool(context.user_data.pop("_provider_failure_already_reported", False))
+ 
+-    promo_ok, promo_left, promo_limit, promo_feature = _try_consume_promo_daily5_quota(user_id, username, engine, remember_kind)
++    promo_ok, promo_left, promo_limit, promo_feature, promo_token = _try_consume_promo_daily5_quota(user_id, username, engine, remember_kind)
+     if promo_ok:
+         try:
+@@ -18599,6 +18596,20 @@
+         except Exception as e:
+             log.exception("promo daily5 action failed: %s", e)
+-            if not silent_failure and not _provider_failure_already_reported():
+-                await update.effective_message.reply_text("❌ Задача не выполнена. Промо-кредиты не списываются.")
++            try:
++                from neyrobot_prod.promo_attempts_v1 import finish
++                if not finish(DB_PATH, promo_token, success=False):
++                    raise RuntimeError("promo reservation not released")
++            except Exception:
++                log.exception("Failed to release promo reservation")
++                await update.effective_message.reply_text("⚠️ Не удалось подтвердить возврат промо-попытки. Обратитесь в поддержку.")
++            else:
++                if not silent_failure and not _provider_failure_already_reported():
++                    await update.effective_message.reply_text("❌ Задача не выполнена. Промо-попытка возвращена.")
++        else:
++            try:
++                from neyrobot_prod.promo_attempts_v1 import finish
++                finish(DB_PATH, promo_token, success=True)
++            except Exception:
++                log.exception("Failed to finalize promo reservation")
+         return
+     if is_promo_daily5_user(user_id, username) and promo_feature:
