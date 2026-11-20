@@ -1,0 +1,52 @@
+--- a/main.py
++++ b/main.py
+@@ -17084,4 +17084,7 @@
+     all_errors: list[str] = []
+ 
++    is_kling_request = "kling" in (caption or "").lower()
++    task_id = ""
++    request_sent = False
+     async with httpx.AsyncClient(timeout=90.0) as client:
+         for path, payload in create_payloads:
+@@ -17096,4 +17099,5 @@
+                 # должен уходить multipart/form-data, а не JSON. В этом режиме
+                 # Content-Type не ставим вручную — httpx сам добавит boundary.
++                request_sent = True
+                 if isinstance(payload, dict) and payload.get("__multipart"):
+                     mp = payload.get("__multipart") or {}
+@@ -17105,4 +17109,11 @@
+                     r = await client.post(f"{base_url}{path}", headers=headers, json=payload)
+ 
++                if r.status_code >= 500 and is_kling_request:
++                    log.warning("Kling create server error status=%s; outcome uncertain", r.status_code)
++                    await update.effective_message.reply_text(
++                        "⚠️ Kling: сервер вернул ошибку, статус задачи неизвестен. "
++                        "Автоматический повтор отключён. Перед новым запуском проверьте историю провайдера."
++                    )
++                    return False
+                 if r.status_code >= 400:
+                     mode = "multipart" if isinstance(payload, dict) and payload.get("__multipart") else "json"
+@@ -17173,4 +17184,10 @@
+ 
+                 if not task_id:
++                    if is_kling_request:
++                        await update.effective_message.reply_text(
++                            "⚠️ Kling: ответ получен без ID задачи, её статус неизвестен. "
++                            "Автоматический повтор отключён. Перед новым запуском проверьте историю провайдера."
++                        )
++                        return False
+                     last_err = f"POST {path}: нет id задачи в ответе {json.dumps(js, ensure_ascii=False)[:700]}"
+                     all_errors.append(last_err)
+@@ -17200,4 +17217,12 @@
+ 
+             except Exception as e:
++                if is_kling_request and request_sent:
++                    log.warning("Kling request outcome uncertain task_id=%s error_type=%s", task_id or "unknown", type(e).__name__)
++                    detail = f" ID задачи: {task_id}." if task_id else " ID задачи неизвестен."
++                    await update.effective_message.reply_text(
++                        "⚠️ Kling: связь прервалась, статус генерации неизвестен." + detail +
++                        " Автоматический повтор отключён. Перед новым запуском проверьте историю провайдера."
++                    )
++                    return False
+                 last_err = f"POST {path}: {e}"
+                 all_errors.append(last_err)
