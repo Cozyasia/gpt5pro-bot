@@ -1,7 +1,7 @@
 diff --git a/main.py b/main.py
 --- a/main.py
 +++ b/main.py
-@@ -592,6 +592,10 @@ I2V_WARN_BAD_SOURCE = os.environ.get("I2V_WARN_BAD_SOURCE", "1").strip().lower()
+@@ -593,6 +593,10 @@
  I2V_AUTOCROP_BLACK_BORDERS = os.environ.get("I2V_AUTOCROP_BLACK_BORDERS", "1").strip().lower() not in ("0", "false", "no", "off")
  I2V_MAX_SOURCE_SIDE = int(os.environ.get("I2V_MAX_SOURCE_SIDE", "1280") or 1280)
  I2V_BAD_SOURCE_POLICY = os.environ.get("I2V_BAD_SOURCE_POLICY", "warn_continue").strip().lower()  # warn_continue | ask_clean
@@ -12,7 +12,7 @@ diff --git a/main.py b/main.py
  I2V_KLING_SAFE_PROMPT_SUFFIX = os.environ.get("I2V_KLING_SAFE_PROMPT_SUFFIX", "animate only the person/photo content; do not create phone screens, app interface, black borders, UI overlays, or screenshots; keep identity and original composition").strip()
  SORA_API_KEY   = (os.environ.get("SORA_API_KEY") or COMET_API_KEY).strip()
  SORA_MODEL     = os.environ.get("SORA_MODEL", "sora-2").strip()
-@@ -5004,11 +5008,14 @@ def _i2v_allowed_engines(
+@@ -5044,11 +5048,14 @@
      user_id: int | None = None,
  ) -> tuple[str, ...]:
      """Return providers compatible with the stored image-to-video reference."""
@@ -29,12 +29,16 @@ diff --git a/main.py b/main.py
  
  
  def _i2v_person_reference_notice() -> str:
-@@ -5016,7 +5023,9 @@ def _i2v_person_reference_notice() -> str:
+@@ -5056,7 +5063,11 @@
          "👤 На референсе обнаружен человек.\n\n"
          "Для такого изображения Seedance 2.5 и Sora 2 здесь не предлагаются: "
          "эти подключённые каналы могут отклонять портреты на модерации.\n\n"
 -        "Выберите Kling или Runway, затем укажите движение."
-+        "Kling временно выключен: подключённый шлюз Comet отклоняет его "
-+        "запросы до создания задачи. Для этого сценария доступен Runway — "
-+        "укажите движение."
++        + ("Выберите Kling или Runway, затем укажите движение."
++           if globals().get("I2V_KLING_ENABLED", False) else
++           "Kling временно выключен: подключённый шлюз Comet отклоняет его "
++           "запросы до создания задачи. Для этого сценария доступен Runway — "
++           "укажите движение.")
      )
+ 
+ 
