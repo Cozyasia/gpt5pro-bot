@@ -4,6 +4,8 @@ on:
     branches: [work/neyronix-migration-20261028]
     paths:
       - 'main.py'
+      - 'ops/main_kling_billing_failures.patch'
+      - 'tests/test_kling_billing_failure.py'
       - 'tests/test_kling_i2v_safe_reference.py'
       - 'tests/test_provider_input_artifacts.py'
       - '.github/workflows/neyronix-kling-reference.yml'
@@ -20,3 +22,4 @@ jobs:
           python-version: '3.11'
       - run: python -m unittest discover -s tests -p 'test_kling_i2v_safe_reference.py' -v
       - run: python -m unittest discover -s tests -p 'test_provider_input_artifacts.py' -v
+      - run: python -m unittest discover -s tests -p 'test_kling_billing_failure.py' -v
