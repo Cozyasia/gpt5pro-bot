@@ -35,4 +35,22 @@ class Tests(unittest.TestCase):
   deliver=AsyncMock();self.ns['_reply_video_from_url']=deliver
   out=asyncio.run(self.ns['_poll_video_task_generic'](self.update,client,{},'https://example.invalid',['/task/{id}'],'1','Kling image→video'))
   self.assertIs(out,True);deliver.assert_awaited_once()
+ def test_nested_kling_failure_is_reported_immediately(self):
+  response=SimpleNamespace(status_code=200,json=lambda:{'data':{'task_status':'failed','task_status_msg':'failure'}})
+  client=SimpleNamespace(get=AsyncMock(return_value=response))
+  out=asyncio.run(self.ns['_poll_video_task_generic'](self.update,client,{},'https://example.invalid',['/task/{id}'],'1','Kling image→video',max_wait_s=-1))
+  self.assertIs(out,False)
+  self.assertIn('ошибка генерации', self.update.effective_message.reply_text.await_args.args[0])
+ def test_nested_kling_processing_url_is_not_delivered(self):
+  response=SimpleNamespace(status_code=200,json=lambda:{'data':{'task_status':'processing','url':'https://example.invalid/progress'}})
+  client=SimpleNamespace(get=AsyncMock(return_value=response));deliver=AsyncMock();self.ns['_reply_video_from_url']=deliver
+  self.ns['_extract_first_url']=lambda v: v.get('data',{}).get('url') if isinstance(v,dict) else None
+  out=asyncio.run(self.ns['_poll_video_task_generic'](self.update,client,{},'https://example.invalid',['/task/{id}'],'1','Kling image→video',max_wait_s=-1))
+  self.assertIs(out,False);deliver.assert_not_awaited()
+ def test_nested_kling_succeeded_delivers_video(self):
+  response=SimpleNamespace(status_code=200,json=lambda:{'data':{'task_status':'succeed','url':'https://example.invalid/result.mp4'}})
+  client=SimpleNamespace(get=AsyncMock(return_value=response));deliver=AsyncMock();self.ns['_reply_video_from_url']=deliver
+  self.ns['_extract_first_url']=lambda v: v.get('data',{}).get('url') if isinstance(v,dict) else None
+  out=asyncio.run(self.ns['_poll_video_task_generic'](self.update,client,{},'https://example.invalid',['/task/{id}'],'1','Kling image→video',max_wait_s=-1))
+  self.assertIs(out,True);deliver.assert_awaited_once()
 if __name__=='__main__':unittest.main()
