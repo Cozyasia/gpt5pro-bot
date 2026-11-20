@@ -1,0 +1,23 @@
+name: NEYRONIX promo attempt recovery
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'main.py'
+      - 'ops/main_promo_attempts_v1.patch'
+      - 'neyrobot_prod/promo_attempts_v1.py'
+      - 'tests/test_promo_attempt*.py'
+      - '.github/workflows/neyronix-promo-attempts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  promo-attempts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install httpx
+      - run: python -m unittest discover -s tests -p 'test_promo_attempt*.py' -v
