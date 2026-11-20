@@ -1,0 +1,84 @@
+--- a/main.py
++++ b/main.py
+@@ -16604,5 +16604,5 @@
+     return await asyncio.to_thread(_compress_video_for_telegram_sync, video_bytes, max_mb)
+ 
+-async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = "", *, ad_captions=None, ad_text_color="auto"):
++async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = "", *, ad_captions=None, ad_text_color="auto", target_aspect=None):
+     """One Telegram upload per provider task; never resend after an ambiguous timeout."""
+     headers = {"User-Agent": "GPT5StudioAI/1.0", "Accept": "video/mp4,video/*,*/*;q=0.8"}
+@@ -16613,4 +16613,6 @@
+         raise RuntimeError("Provider returned invalid video content")
+     downloaded = r.content
++    if target_aspect:
++        downloaded, caption = await _fit_kling_delivery(downloaded, caption, target_aspect)
+     if TELEGRAM_VIDEO_COMPRESS_ON_FAIL and len(downloaded) > max(5, int(TELEGRAM_RESULT_MAX_MB or 48)) * 1024 * 1024:
+         compact = await _compress_video_for_telegram(downloaded, TELEGRAM_RESULT_MAX_MB)
+@@ -16653,7 +16655,21 @@
+ 
+ 
+-async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_id: str = ""):
++async def _fit_kling_delivery(content: bytes, caption: str, aspect: str):
++    try:
++        from neyrobot_prod.kling_aspect_delivery import normalize_kling_video
++        fitted, changed = await asyncio.to_thread(normalize_kling_video, content, aspect)
++        if changed:
++            caption += "\nФормат подогнан без обрезки кадра, с размытым фоном."
++        return fitted, caption
++    except Exception:
++        log.exception("Kling video aspect conversion failed; delivering original")
++        return content, caption + "\n⚠️ Не удалось подогнать формат; отправлен оригинал."
++
++
++async def _reply_video_bytes(update: Update, content: bytes, caption: str, task_id: str = "", *, target_aspect=None):
+     if not content or len(content) < 512:
+         raise RuntimeError(f"empty video bytes: {len(content or b'')} bytes")
++    if target_aspect:
++        content, caption = await _fit_kling_delivery(content, caption, target_aspect)
+     chat_id = getattr(getattr(update, "effective_chat", None), "id", "na")
+     dedupe_key = _video_result_key(chat_id, task_id=task_id, content=content)
+@@ -16908,4 +16924,5 @@
+     task_not_exist_soft_fail_s: int = 0,
+     silent_soft_fail: bool = False,
++    target_aspect: str | None = None,
+ ) -> bool:
+     """
+@@ -16998,5 +17015,5 @@
+                             cr = await client.get(content_url, headers=headers, timeout=240.0, follow_redirects=True)
+                             if cr.status_code < 400 and cr.content and "application/json" not in (cr.headers.get("content-type") or "").lower():
+-                                await _reply_video_bytes(update, cr.content, f"{caption} ✅", task_id=task_id)
++                                await _reply_video_bytes(update, cr.content, f"{caption} ✅", task_id=task_id, target_aspect=target_aspect)
+                                 return True
+                             log.warning("%s content download failed: %s %s", caption, cr.status_code, _api_error_preview(cr))
+@@ -17005,5 +17022,5 @@
+                     await update.effective_message.reply_text(f"⚠️ {caption}: задача готова, но ссылка/MP4 на видео не найдены.")
+                     return False if "kling" in (caption or "").lower() else True
+-                await _reply_video_from_url(update, client, url, f"{caption} ✅", task_id=task_id)
++                await _reply_video_from_url(update, client, url, f"{caption} ✅", task_id=task_id, target_aspect=target_aspect)
+                 if "runway" in (caption or "").lower():
+                     _provider_mark_success("runway_i2v")
+@@ -17071,4 +17088,5 @@
+     context: ContextTypes.DEFAULT_TYPE | None = None,
+     suppress_unsupported_relay_mode: bool = False,
++    target_aspect: str | None = None,
+ ) -> bool:
+     if not api_key:
+@@ -17140,5 +17158,5 @@
+ 
+                 if ready_url:
+-                    await _reply_video_from_url(update, client, ready_url, f"{caption} ✅")
++                    await _reply_video_from_url(update, client, ready_url, f"{caption} ✅", target_aspect=target_aspect)
+                     return True
+ 
+@@ -17214,4 +17232,5 @@
+                     task_not_exist_soft_fail_s=task_not_exist_soft_fail_s,
+                     silent_soft_fail=silent_soft_fail,
++                    target_aspect=target_aspect,
+                 )
+ 
+@@ -17432,4 +17451,5 @@
+             context=context,
+             suppress_unsupported_relay_mode=True,
++            target_aspect=aspect,
+         ))
+         if not kling_ok and context.user_data.pop("i2v_kling_relay_unsupported", False):
