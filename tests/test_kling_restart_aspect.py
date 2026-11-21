@@ -79,3 +79,22 @@ class KlingDeliveryIntegrationTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 await ns['_reply_video_bytes'](update,b'x'*512,'done',task_id='task1',target_aspect='9:16')
             self.assertEqual(send.await_count,1)
+
+class KlingDeliveryRepeatRegistrationTest(unittest.TestCase):
+    def test_reregistration_does_not_clear_uncertain_delivery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            mod=SimpleNamespace(DB_PATH=str(Path(tmp)/'db.sqlite'))
+            kwargs=dict(user_id=3,chat_id=7,feature='video_generation',provider='kling',provider_task_id='task1')
+            jobs.begin_job(mod,**kwargs)
+            self.assertTrue(jobs.claim_kling_delivery(mod.DB_PATH,7,'task1'))
+            jobs.begin_job(mod,**kwargs)
+            self.assertFalse(jobs.claim_kling_delivery(mod.DB_PATH,7,'task1'))
+            self.assertEqual(jobs.pending_jobs(mod),[])
+    def test_repeat_registration_never_resets_pending_financial_settlement(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as tmp:
+            mod=SimpleNamespace(DB_PATH=str(Path(tmp)/'db.sqlite'))
+            kwargs=dict(user_id=3,chat_id=7,feature='video_generation',provider='kling',provider_task_id='task1')
+            jid=jobs.begin_job(mod,**kwargs);jobs.update_job(mod,jid,state='settlement_success')
+            jobs.begin_job(mod,**kwargs);jobs.update_job(mod,jid,state='polling')
+            with sqlite3.connect(mod.DB_PATH) as c:self.assertEqual(c.execute('SELECT state FROM durable_jobs WHERE job_id=?',(jid,)).fetchone()[0],'settlement_success')
