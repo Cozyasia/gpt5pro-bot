@@ -1,0 +1,27 @@
+--- a/main.py
++++ b/main.py
+@@ -16604,4 +16604,12 @@
+     return await asyncio.to_thread(_compress_video_for_telegram_sync, video_bytes, max_mb)
+ 
++async def _claim_kling_video_delivery(chat_id, task_id, target_aspect):
++    if task_id and target_aspect:
++        from neyrobot_prod.jobs import claim_kling_delivery
++        claimed = await asyncio.to_thread(claim_kling_delivery, DB_PATH, chat_id, task_id)
++        if not claimed:
++            raise RuntimeError("Kling delivery already attempted; status requires review")
++
++
+ async def _reply_video_from_url(update: Update, client: httpx.AsyncClient, url: str, caption: str, task_id: str = "", *, ad_captions=None, ad_text_color="auto", target_aspect=None):
+     """One Telegram upload per provider task; never resend after an ambiguous timeout."""
+@@ -16637,4 +16645,5 @@
+         log.info("reply_video_from_url: duplicate suppressed task_id=%s", task_id)
+         return
++    await _claim_kling_video_delivery(chat_id, task_id, target_aspect)
+     bio = BytesIO(downloaded)
+     bio.name = "result.mp4"
+@@ -16677,4 +16686,5 @@
+         log.info("reply_video_bytes: duplicate suppressed task_id=%s", task_id)
+         return
++    await _claim_kling_video_delivery(chat_id, task_id, target_aspect)
+     sent_ok = False
+     try:
