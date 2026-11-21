@@ -135,6 +135,34 @@ def pending_jobs(mod: Any, limit: int = 50) -> list[dict[str, Any]]:
     return result
 
 
+def claim_kling_delivery(db_path: str, chat_id: int, task_id: str) -> bool:
+    """Claim a persisted Kling task before sending; uncertain sends are never replayed."""
+    if not db_path or not task_id:
+        return True
+    init_schema(db_path)
+    con = connect(db_path)
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT job_id, state FROM durable_jobs WHERE provider=? AND provider_task_id=? AND chat_id=? ORDER BY created_ts DESC LIMIT 1",
+            ("kling", str(task_id), int(chat_id)),
+        ).fetchone()
+        if not row:
+            con.commit()
+            return True  # Jobs created before durable tracking retain their old behavior.
+        if row[1] not in {"pending", "polling", "recovering"}:
+            con.commit()
+            return False
+        con.execute("UPDATE durable_jobs SET state='delivery_uncertain',updated_ts=? WHERE job_id=?", (int(time.time()), row[0]))
+        con.commit()
+        return True
+    except BaseException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
 class _MessageProxy:
     def __init__(self, bot: Any, chat_id: int):
         self.bot = bot
@@ -197,8 +225,11 @@ async def _recover_generic_video(mod: Any, app: Any, job: dict[str, Any]) -> boo
     provider = str(job.get("provider") or "comet")
     proxy = _UpdateProxy(app.bot, int(job["chat_id"]), int(job["user_id"]))
     headers = _provider_headers(mod, provider)
+    # Older entries do not carry a selected aspect; preserve their existing behavior.
+    aspect = payload.get("target_aspect")
+    poll_options = {"target_aspect": aspect} if aspect in {"9:16", "16:9", "1:1"} else {}
     async with httpx.AsyncClient(timeout=90.0, follow_redirects=True) as client:
-        return bool(await original(proxy, client, headers, base_url, status_paths, task_id, caption, max_wait_s))
+        return bool(await original(proxy, client, headers, base_url, status_paths, task_id, caption, max_wait_s, **poll_options))
 
 
 async def recover_pending(mod: Any, app: Any) -> None:
@@ -265,6 +296,10 @@ def patch_runtime(mod: Any) -> bool:
             uid, chat_id = _ids(update)
             low = (caption or "").lower()
             provider = "sora" if "sora" in low else "kling" if "kling" in low else "runway" if "runway" in low else "comet"
+            payload = {"base_url": base_url, "status_paths": list(status_paths or []), "caption": caption, "max_wait_s": int(max_wait_s or 1200)}
+            aspect = kwargs.get("target_aspect")
+            if provider == "kling" and aspect in {"9:16", "16:9", "1:1"}:
+                payload["target_aspect"] = aspect
             job_id = begin_job(
                 mod,
                 user_id=uid,
@@ -272,7 +307,7 @@ def patch_runtime(mod: Any) -> bool:
                 feature="video_generation",
                 provider=provider,
                 provider_task_id=str(task_id),
-                payload={"base_url": base_url, "status_paths": list(status_paths or []), "caption": caption, "max_wait_s": int(max_wait_s or 1200)},
+                payload=payload,
             )
             update_job(mod, job_id, state="polling")
             try:
