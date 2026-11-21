@@ -33,6 +33,7 @@ RUN patch --batch --forward -p1 < /app/ops/main_promo_attempts_v1.patch
 RUN patch --batch --forward -p1 < /app/ops/main_kling_no_duplicate.patch
 RUN patch --batch --forward -p1 < /app/ops/main_kling_aspect_delivery.patch
 RUN patch --batch --forward -p1 < /app/ops/main_kling_delivery_claim.patch
+RUN patch --batch --forward -p1 < /app/ops/main_kling_finance_recovery.patch
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]
