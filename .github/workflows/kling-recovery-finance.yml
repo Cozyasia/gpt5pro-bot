@@ -1,0 +1,25 @@
+name: Kling recovery and finance
+on:
+  push:
+    branches: [work/neyronix-migration-20261028]
+    paths:
+      - 'neyrobot_prod/jobs.py'
+      - 'neyrobot_prod/bootstrap.py'
+      - 'neyrobot_prod/kling_*'
+      - 'ops/main_kling*.patch'
+      - 'tests/test_kling*.py'
+      - '.github/workflows/kling-recovery-finance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install httpx pillow
+      - run: |
+          python -m unittest tests.test_kling_finance_scope tests.test_kling_settlement_v2 tests.test_kling_finance_wiring tests.test_kling_promo_finance_integration tests.test_kling_process_restart tests.test_kling_recovery_startup tests.test_kling_restart_aspect tests.test_kling_no_duplicate_create tests.test_kling_billing_failure tests.test_kling_aspect_delivery tests.test_kling_aspect_wiring tests.test_promo_attempt_recovery tests.test_promo_attempt_wiring
