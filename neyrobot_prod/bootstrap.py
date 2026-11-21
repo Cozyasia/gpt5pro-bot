@@ -207,8 +207,24 @@ async def _post_init_recovery(app: Any, previous: Any = None) -> None:
     mod = _runtime_module()
     if mod is None or not _flag("JOB_RECOVERY_ENABLED", True):
         return
-    from .jobs import recover_pending
-    await recover_pending(mod, app)
+    from .jobs import patch_runtime, recover_pending
+    patch_runtime(mod)
+    existing = app.bot_data.get("_neyronix_recovery_task")
+    if existing and not existing.done():
+        return
+
+    async def recover_loop() -> None:
+        while True:
+            try:
+                await recover_pending(mod, app)
+            except Exception:
+                logger = getattr(mod, "log", None)
+                if logger:
+                    logger.exception("Provider job recovery scan failed")
+            await asyncio.sleep(60)
+
+    # Polling a pending video can take minutes; it must not block webhook startup.
+    app.bot_data["_neyronix_recovery_task"] = asyncio.create_task(recover_loop(), name="neyronix-provider-recovery")
 
 
 async def _cmd_fixmenu(update: Any, context: Any) -> None:
