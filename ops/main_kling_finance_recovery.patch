@@ -1,0 +1,148 @@
+--- a/main.py
++++ b/main.py
+@@ -2362,7 +2362,7 @@
+     cutoff = int(time.time()) - max(300, int(CREDIT_RESERVATION_TTL_S or 10800))
+     if user_id is None:
+-        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE status='reserved' AND feature!='marketplace_cards' AND created_ts<?", (int(time.time()), cutoff))
++        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE status='reserved' AND feature NOT IN ('marketplace_cards','image_to_video_kling','revive_photo_kling') AND created_ts<?", (int(time.time()), cutoff))
+     else:
+-        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE user_id=? AND status='reserved' AND feature!='marketplace_cards' AND created_ts<?", (int(time.time()), int(user_id), cutoff))
++        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE user_id=? AND status='reserved' AND feature NOT IN ('marketplace_cards','image_to_video_kling','revive_photo_kling') AND created_ts<?", (int(time.time()), int(user_id), cutoff))
+ 
+ 
+@@ -17149,5 +17149,11 @@
+                         except Exception as e:
+                             log.warning("%s content download exception: %s", caption, e)
++                    if "kling" in (caption or "").lower():
++                        from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                        raise_if_scoped()
+                     await update.effective_message.reply_text(f"⚠️ {caption}: задача готова, но ссылка/MP4 на видео не найдены.")
++                    if "kling" in (caption or "").lower():
++                        from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                        raise_if_scoped()
+                     return False if "kling" in (caption or "").lower() else True
+                 await _reply_video_from_url(update, client, url, f"{caption} ✅", task_id=task_id, target_aspect=target_aspect)
+@@ -17199,5 +17205,11 @@
+                 _provider_mark_failure("runway_i2v", last_body[:700])
+                 return False
++            if "kling" in (caption or "").lower():
++                from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                raise_if_scoped()
+             await update.effective_message.reply_text(f"⌛ {caption}: время ожидания вышло. Последний ответ: {last_body[:500]}")
++            if "kling" in (caption or "").lower():
++                from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                raise_if_scoped()
+             return False
+ 
+@@ -17258,8 +17270,12 @@
+                 if r.status_code >= 500 and is_kling_request:
+                     log.warning("Kling create server error status=%s; outcome uncertain", r.status_code)
++                    from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                    raise_if_scoped()
+                     await update.effective_message.reply_text(
+                         "⚠️ Kling: сервер вернул ошибку, статус задачи неизвестен. "
+                         "Автоматический повтор отключён. Перед новым запуском проверьте историю провайдера."
+                     )
++                    from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                    raise_if_scoped()
+                     return False
+                 if r.status_code >= 400:
+@@ -17332,8 +17348,12 @@
+                 if not task_id:
+                     if is_kling_request:
++                        from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                        raise_if_scoped()
+                         await update.effective_message.reply_text(
+                             "⚠️ Kling: ответ получен без ID задачи, её статус неизвестен. "
+                             "Автоматический повтор отключён. Перед новым запуском проверьте историю провайдера."
+                         )
++                        from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                        raise_if_scoped()
+                         return False
+                     last_err = f"POST {path}: нет id задачи в ответе {json.dumps(js, ensure_ascii=False)[:700]}"
+@@ -17341,4 +17361,17 @@
+                     continue
+ 
++                if is_kling_request and target_aspect:
++                    from neyrobot_prod.jobs import begin_job
++                    from neyrobot_prod.kling_finance_scope import current
++                    uid = int(getattr(getattr(update, "effective_user", None), "id", 0) or 0)
++                    chat_id = int(getattr(getattr(update, "effective_chat", None), "id", 0) or 0)
++                    saved = {"base_url": base_url, "status_paths": list(status_paths or []), "caption": caption,
++                             "max_wait_s": int(max_wait_s or max(LUMA_MAX_WAIT_S, RUNWAY_MAX_WAIT_S)), "target_aspect": target_aspect}
++                    finance = current()
++                    if finance and finance.get("user_id") == uid:
++                        saved["finance"] = dict(finance)
++                    from types import SimpleNamespace
++                    begin_job(SimpleNamespace(DB_PATH=DB_PATH), user_id=uid, chat_id=chat_id,
++                              feature="video_generation", provider="kling", provider_task_id=task_id, payload=saved)
+                 if "kling talking avatar" in (caption or "").lower():
+                     await update.effective_message.reply_text(
+@@ -17367,4 +17400,6 @@
+                 if is_kling_request and request_sent:
+                     log.warning("Kling request outcome uncertain task_id=%s error_type=%s", task_id or "unknown", type(e).__name__)
++                    from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                    raise_if_scoped()
+                     detail = f" ID задачи: {task_id}." if task_id else " ID задачи неизвестен."
+                     await update.effective_message.reply_text(
+@@ -17372,4 +17407,6 @@
+                         " Автоматический повтор отключён. Перед новым запуском проверьте историю провайдера."
+                     )
++                    from neyrobot_prod.kling_finance_scope import raise_if_scoped
++                    raise_if_scoped()
+                     return False
+                 last_err = f"POST {path}: {e}"
+@@ -18807,4 +18844,5 @@
+ async def _neyronix_paid_quote_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+     from neyronix_quotes import validate_confirmation
++    from neyrobot_prod.kling_finance_scope import run_scoped, OutcomeUnknown
+     q = update.callback_query
+     data = q.data or ""
+@@ -18840,5 +18878,5 @@
+     try:
+         await q.message.reply_text("✅ Подтверждено. Генерация запущена.")
+-        result = await coro_func()
++        result = await run_scoped(coro_func, "credit", tx_id, q.from_user.id, feature)
+         if result is not True:
+             _credit_release(tx_id, "released")
+@@ -18851,4 +18889,7 @@
+             return
+         await q.message.reply_text(f"✅ Списано: {_retail_credits(provider_cost):g} кр.")
++    except OutcomeUnknown:
++        await q.message.reply_text("⚠️ Статус задачи уточняется. Резерв сохранён; не запускайте повторно до проверки.")
++        return
+     except Exception:
+         _credit_release(tx_id, "released")
+@@ -18870,4 +18911,5 @@
+ ):
+     """Reserve capacity, run provider, and charge only after the action explicitly returns True."""
++    from neyrobot_prod.kling_finance_scope import run_scoped, OutcomeUnknown
+     username = (update.effective_user.username or "")
+     # Some provider failures are already explained in a safe, actionable message.
+@@ -18883,7 +18925,10 @@
+             with contextlib.suppress(Exception):
+                 await update.effective_message.reply_text(f"🎁 Промо-доступ: функция «{promo_feature}». Осталось сегодня: {promo_left}/{promo_limit}.")
+-            result = await coro_func()
++            result = await run_scoped(coro_func, "promo", promo_token, user_id, remember_kind)
+             if result is False:
+                 raise RuntimeError("provider returned unsuccessful result")
++        except OutcomeUnknown:
++            await update.effective_message.reply_text("⚠️ Статус задачи уточняется. Промо-попытка сохранена; не запускайте повторно до проверки.")
++            return
+         except Exception as e:
+             log.exception("promo daily5 action failed: %s", e)
+@@ -19006,5 +19051,5 @@
+ 
+     try:
+-        result = await coro_func()
++        result = await run_scoped(coro_func, "credit", tx_id, user_id, remember_kind)
+         if result is not True:
+             _credit_release(tx_id, "released")
+@@ -19018,4 +19063,7 @@
+         with contextlib.suppress(Exception):
+             await update.effective_message.reply_text(f"✅ Списано: {price_credits} кр.")
++    except OutcomeUnknown:
++        await update.effective_message.reply_text("⚠️ Статус задачи уточняется. Резерв сохранён; не запускайте повторно до проверки.")
++        return
+     except Exception as e:
+         _credit_release(tx_id, "released")
