@@ -14,7 +14,9 @@ from typing import Any
 import httpx
 
 from .db import connect, init_schema, record_event
+from .kling_finance_scope import OutcomeUnknown
 
+_PROCESS_INSTANCE = uuid.uuid4().hex
 _ACTIVE_RECOVERY: set[str] = set()
 _RECOVERY_LOCK = asyncio.Lock()
 
@@ -52,8 +54,8 @@ def begin_job(
                VALUES (?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(job_id) DO UPDATE SET
                  provider_task_id=excluded.provider_task_id,
-                 state=CASE WHEN durable_jobs.state IN ('completed','failed','cancelled') THEN durable_jobs.state ELSE 'pending' END,
-                 payload_json=excluded.payload_json,
+                 state=CASE WHEN durable_jobs.state IN ('completed','failed','cancelled','delivery_uncertain','settlement_success','settlement_failed','finance_review') THEN durable_jobs.state ELSE 'pending' END,
+                 payload_json=durable_jobs.payload_json,
                  updated_ts=excluded.updated_ts,
                  next_poll_ts=excluded.next_poll_ts""",
             (
@@ -64,7 +66,7 @@ def begin_job(
                 str(provider or "provider")[:40],
                 str(provider_task_id or "")[:200],
                 "pending",
-                _json(payload or {}),
+                _json({**(payload or {}), "_process_instance": _PROCESS_INSTANCE}),
                 now,
                 now,
                 now,
@@ -101,24 +103,24 @@ def update_job(mod: Any, job_id: str, *, state: str | None = None, result_url: s
     values.append(job_id)
     con = connect(db_path)
     try:
-        con.execute(f"UPDATE durable_jobs SET {', '.join(fields)} WHERE job_id=?", values)
+        guard = " AND state NOT IN ('delivery_uncertain','settlement_success','settlement_failed','finance_review','completed','cancelled')" if state in {"polling", "recovering"} else (" AND state != 'delivery_uncertain'" if state == "failed" else "")
+        con.execute(f"UPDATE durable_jobs SET {', '.join(fields)} WHERE job_id=?{guard}", values)
         con.commit()
     finally:
         con.close()
 
 
-def pending_jobs(mod: Any, limit: int = 50) -> list[dict[str, Any]]:
+def pending_jobs(mod: Any, limit: int = 50, *, exclude_current: bool = False) -> list[dict[str, Any]]:
     db_path = _db_path(mod)
     init_schema(db_path)
     con = connect(db_path)
     try:
-        rows = con.execute(
-            """SELECT job_id,user_id,chat_id,feature,provider,provider_task_id,state,payload_json,attempts,created_ts,updated_ts
+        exclusion = " AND instr(COALESCE(payload_json,''), ?) = 0" if exclude_current else ""
+        query = """SELECT job_id,user_id,chat_id,feature,provider,provider_task_id,state,payload_json,attempts,created_ts,updated_ts
                FROM durable_jobs
-               WHERE state IN ('pending','polling','recovering')
-               ORDER BY updated_ts ASC LIMIT ?""",
-            (max(1, min(200, int(limit))),),
-        ).fetchall()
+               WHERE state IN ('pending','polling','recovering','settlement_success','settlement_failed')"""
+        args = ([_PROCESS_INSTANCE] if exclude_current else []) + [max(1, min(200, int(limit)))]
+        rows = con.execute(query + exclusion + " ORDER BY updated_ts ASC LIMIT ?", args).fetchall()
     finally:
         con.close()
     result = []
@@ -133,6 +135,25 @@ def pending_jobs(mod: Any, limit: int = 50) -> list[dict[str, Any]]:
             "attempts": row[8], "created_ts": row[9], "updated_ts": row[10],
         })
     return result
+
+
+def release_process_ownership(mod: Any, job_id: str) -> None:
+    """Allow this process's background worker to resume a stopped poll."""
+    con = connect(_db_path(mod))
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute("SELECT state,payload_json FROM durable_jobs WHERE job_id=?", (job_id,)).fetchone()
+        if row and row[0] in {"pending", "polling"}:
+            payload = json.loads(row[1] or "{}")
+            if payload.get("_process_instance") == _PROCESS_INSTANCE:
+                payload["_process_instance"] = ""
+                con.execute("UPDATE durable_jobs SET payload_json=?,updated_ts=? WHERE job_id=?", (_json(payload), int(time.time()), job_id))
+        con.commit()
+    except BaseException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
 
 
 def claim_kling_delivery(db_path: str, chat_id: int, task_id: str) -> bool:
@@ -229,17 +250,46 @@ async def _recover_generic_video(mod: Any, app: Any, job: dict[str, Any]) -> boo
     aspect = payload.get("target_aspect")
     poll_options = {"target_aspect": aspect} if aspect in {"9:16", "16:9", "1:1"} else {}
     async with httpx.AsyncClient(timeout=90.0, follow_redirects=True) as client:
-        return bool(await original(proxy, client, headers, base_url, status_paths, task_id, caption, max_wait_s, **poll_options))
+        async def poll():
+            return await original(proxy, client, headers, base_url, status_paths, task_id, caption, max_wait_s, **poll_options)
+        finance = payload.get("finance")
+        if provider == "kling" and isinstance(finance, dict):
+            from .kling_finance_scope import run_scoped
+            return bool(await run_scoped(poll, finance.get("kind"), finance.get("reference"), job["user_id"], "image_to_video_kling"))
+        return bool(await poll())
+
+
+def settle_job_finance(mod: Any, job: dict[str, Any], outcome: str) -> bool:
+    finance = (job.get("payload") or {}).get("finance")
+    if not finance:
+        return False
+    if not isinstance(finance, dict) or int(finance.get("user_id") or 0) != int(job["user_id"]):
+        raise ValueError("job finance ownership mismatch")
+    from .kling_settlement_v2 import link, finalize
+    link(_db_path(mod), str(job["job_id"]), int(job["user_id"]), str(finance.get("kind") or ""), str(finance.get("reference") or ""))
+    finalize(_db_path(mod), str(job["job_id"]), outcome)
+    return True
 
 
 async def recover_pending(mod: Any, app: Any) -> None:
     async with _RECOVERY_LOCK:
-        for job in pending_jobs(mod, 100):
+        for job in pending_jobs(mod, 100, exclude_current=True):
             job_id = str(job["job_id"])
+            if (job.get("payload") or {}).get("_process_instance") == _PROCESS_INSTANCE:
+                continue  # A live task in this process owns this job.
             if job_id in _ACTIVE_RECOVERY:
                 continue
+            if job.get("state") in {"settlement_success", "settlement_failed"}:
+                try:
+                    outcome = "delivered" if job["state"] == "settlement_success" else "failed"
+                    settle_job_finance(mod, job, outcome)
+                    update_job(mod, job_id, state="completed" if outcome == "delivered" else "failed")
+                except Exception as exc:
+                    update_job(mod, job_id, state="finance_review", error=type(exc).__name__)
+                continue
             if int(time.time()) - int(job.get("created_ts") or 0) > 24 * 3600:
-                update_job(mod, job_id, state="failed", error="Recovery window expired")
+                # An expired recovery window does not prove a paid provider failed.
+                update_job(mod, job_id, state="finance_review" if (job.get("payload") or {}).get("finance") else "failed", error="Recovery window expired")
                 continue
             _ACTIVE_RECOVERY.add(job_id)
             update_job(mod, job_id, state="recovering", next_poll_ts=int(time.time()) + 30)
@@ -251,12 +301,18 @@ async def recover_pending(mod: Any, app: Any) -> None:
                     ok = await _recover_generic_video(mod, app, job)
                 else:
                     ok = False
+                finance = (job.get("payload") or {}).get("finance")
+                if provider == "kling" and finance:
+                    update_job(mod, job_id, state="settlement_success" if ok else "settlement_failed")
+                    settle_job_finance(mod, job, "delivered" if ok else "failed")
                 update_job(mod, job_id, state="completed" if ok else "failed", error="" if ok else "Recovery returned no result")
                 if not ok:
                     with contextlib.suppress(Exception):
                         await app.bot.send_message(chat_id=int(job["chat_id"]), text=f"⚠️ Не удалось автоматически восстановить задачу {job_id}. Повторное списание не выполнялось; обратитесь в поддержку.")
+            except OutcomeUnknown:
+                update_job(mod, job_id, state="polling", error="Provider or delivery outcome unknown")
             except Exception as exc:
-                update_job(mod, job_id, state="failed", error=repr(exc))
+                update_job(mod, job_id, state="finance_review" if (job.get("payload") or {}).get("finance") else "failed", error=repr(exc))
                 record_event(_db_path(mod), "job_recovery_error", severity="error", user_id=int(job.get("user_id") or 0), feature=str(job.get("feature") or ""), details={"job_id": job_id, "error": repr(exc)})
             finally:
                 _ACTIVE_RECOVERY.discard(job_id)
@@ -300,6 +356,10 @@ def patch_runtime(mod: Any) -> bool:
             aspect = kwargs.get("target_aspect")
             if provider == "kling" and aspect in {"9:16", "16:9", "1:1"}:
                 payload["target_aspect"] = aspect
+                from .kling_finance_scope import current
+                finance = current()
+                if finance and finance.get("user_id") == uid:
+                    payload["finance"] = dict(finance)
             job_id = begin_job(
                 mod,
                 user_id=uid,
@@ -312,8 +372,16 @@ def patch_runtime(mod: Any) -> bool:
             update_job(mod, job_id, state="polling")
             try:
                 ok = bool(await original_video(update, client, headers, base_url, status_paths, task_id, caption, max_wait_s, *args, **kwargs))
-                update_job(mod, job_id, state="completed" if ok else "failed")
+                state = ("settlement_success" if ok else "settlement_failed") if payload.get("finance") else ("completed" if ok else "failed")
+                update_job(mod, job_id, state=state)
                 return ok
+            except OutcomeUnknown:
+                update_job(mod, job_id, state="polling", error="Provider or delivery outcome unknown")
+                release_process_ownership(mod, job_id)
+                raise
+            except asyncio.CancelledError:
+                release_process_ownership(mod, job_id)
+                raise
             except Exception as exc:
                 update_job(mod, job_id, state="failed", error=repr(exc))
                 raise
