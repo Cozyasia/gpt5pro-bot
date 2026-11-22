@@ -1,0 +1,42 @@
+--- a/main.py
++++ b/main.py
+@@ -5248,9 +5248,16 @@
+ 
+ 
+ async def _start_image_to_video(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str):
++    if (context.user_data.get("i2v_engine") or "seedance").strip().lower() == "kling":
++        from neyrobot_prod.kling_background import schedule_i2v
++        return await schedule_i2v(update, context, prompt, _start_image_to_video_inline, _get_cached_photo)
++    return await _start_image_to_video_inline(update, context, prompt)
++
++
++async def _start_image_to_video_inline(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, reference_bytes=None):
+     """Run a true reference-image → video generation with the selected provider."""
+     prompt = (prompt or "").strip()
+-    img = _get_cached_photo(update.effective_user.id)
++    img = reference_bytes if reference_bytes is not None else _get_cached_photo(update.effective_user.id)
+     if not img:
+         await update.effective_message.reply_text("⚠️ Сначала загрузите референс-фотографию.")
+         return False
+@@ -22915,7 +22922,20 @@
+     app.add_handler(CallbackQueryHandler(on_cb_suno,  pattern=r"^suno:"), group=0)
+ 
+     # Paid quote confirmation must be handled before the generic callback router.
+-    app.add_handler(CallbackQueryHandler(_neyronix_paid_quote_callback, pattern=r"^nq:(?:yes|no):[0-9a-f]{32}$"), group=0)
++    async def _neyronix_paid_quote_dispatch(update, context):
++        q = update.callback_query
++        parts = (q.data or "").split(":")
++        pending = context.application.bot_data.get("_neyronix_pending_quotes", {})
++        record = pending.get(parts[2]) if len(parts) == 3 else None
++        if (len(parts) == 3 and parts[1] == "yes" and record
++                and record[4] == "image_to_video_kling"
++                and record[0].user_id == q.from_user.id):
++            from neyrobot_prod.kling_background import schedule_confirmation
++            await schedule_confirmation(update, context, _neyronix_paid_quote_callback)
++            return
++        await _neyronix_paid_quote_callback(update, context)
++
++    app.add_handler(CallbackQueryHandler(_neyronix_paid_quote_dispatch, pattern=r"^nq:(?:yes|no):[0-9a-f]{32}$"), group=0)
+ 
+     # 4) Остальной catch-all (pedit/topup/engine/buy и т.п.)
+     # Размещаем в приоритетной группе, чтобы колбэки обрабатывались сразу
