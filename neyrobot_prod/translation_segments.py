@@ -104,3 +104,15 @@ async def sync_translated_video(video: bytes, duration: float, sync_segment) -> 
         result = await asyncio.to_thread(_assemble, source, directory, outputs, duration)
         await asyncio.to_thread(_validate_video, directory / 'final.mp4', duration)
         return result
+
+
+async def kling_sync_segment(video: bytes, audio: bytes, duration_ms: int, publish, provider) -> bytes:
+    """Submit one paired clip to the existing Kling integration once."""
+    import asyncio
+    if not video or not audio or not 2000 <= duration_ms <= 10000:
+        raise ValueError('Invalid video, audio or duration for Kling')
+    video_url = await asyncio.to_thread(publish, video, 'translation_video.mp4')
+    audio_url = await asyncio.to_thread(publish, audio, 'translation_audio.mp3')
+    if not all(str(url).startswith('https://') for url in (video_url, audio_url)):
+        raise RuntimeError('Provider media URLs are unavailable')
+    return await provider(video_url, audio_url, duration_ms=duration_ms)
