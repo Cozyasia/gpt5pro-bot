@@ -1,0 +1,11 @@
+--- a/main.py
++++ b/main.py
+@@ -735,7 +735,7 @@
+ VEO_24S_TTS_COST_PER_MINUTE_USD = _pricing_cost("VEO_24S_TTS_COST_PER_MINUTE_USD", 0.015)
+ TEXT_VIDEO_ALLOW_RUNWAY = os.environ.get("TEXT_VIDEO_ALLOW_RUNWAY", "1").strip().lower() not in ("0", "false", "no", "off")
+ SEEDANCE_ENABLED = os.environ.get("SEEDANCE_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
+-SEEDANCE_MODEL = os.environ.get("SEEDANCE_MODEL", "seedance-2-5-260628").strip() or "seedance-2-5-260628"
++SEEDANCE_MODEL = os.environ.get("SEEDANCE_MODEL", "seedance-2-5").strip() or "seedance-2-5"
+ SEEDANCE_MODEL_FALLBACKS = [item.strip() for item in os.environ.get("SEEDANCE_MODEL_FALLBACKS", "seedance-2-5,seedance-2-5-260628").split(",") if item.strip()]
+ SEEDANCE_CREATE_PATH = os.environ.get("SEEDANCE_CREATE_PATH", "/v1/videos").strip() or "/v1/videos"
+ SEEDANCE_COST_PER_SECOND_USD = _pricing_cost("SEEDANCE_COST_PER_SECOND_USD", 0.10)

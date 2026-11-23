@@ -38,6 +38,7 @@ RUN patch --batch --forward -p1 < /app/ops/main_kling_background.patch
 RUN patch --batch --forward -p1 < /app/ops/main_continuation_media.patch
 RUN patch --batch --forward -p1 < /app/ops/main_seedance_aspect.patch
 RUN patch --batch --forward -p1 < /app/ops/main_seedance_option_ack.patch
+RUN patch --batch --forward -p1 < /app/ops/main_seedance_model.patch
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]
