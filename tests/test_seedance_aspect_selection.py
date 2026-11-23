@@ -7,12 +7,13 @@ def patched_source():
  with tempfile.TemporaryDirectory() as td:
   (Path(td)/'main.py').write_bytes((ROOT/'main.py').read_bytes())
   names=_regex.findall(r'patch --batch --forward -p1 < /app/(ops/\S+)', (ROOT/'Dockerfile').read_text())
-  names += ['ops/main_kling_delivery_claim.patch','ops/main_kling_finance_recovery.patch','ops/main_kling_background.patch','ops/main_continuation_media.patch','ops/main_seedance_aspect.patch']
+  names += ['ops/main_kling_delivery_claim.patch','ops/main_kling_finance_recovery.patch','ops/main_kling_background.patch','ops/main_continuation_media.patch','ops/main_seedance_aspect.patch','ops/main_seedance_option_ack.patch']
+  names=list(dict.fromkeys(names))
   for name in names:
    path=ROOT/name
    if not path.exists(): continue
    result=subprocess.run(['patch','--batch','--forward','-p1','-i',str(path)],cwd=td,capture_output=True)
-   if name in ('ops/main_continuation_media.patch','ops/main_seedance_aspect.patch') and result.returncode:
+   if name in ('ops/main_continuation_media.patch','ops/main_seedance_aspect.patch','ops/main_seedance_option_ack.patch') and result.returncode:
     raise RuntimeError('patch failed: '+name)
   return (Path(td)/'main.py').read_text()
 
@@ -55,9 +56,10 @@ class TestSeedanceCallback(unittest.IsolatedAsyncioTestCase):
   keyboard=lambda ctx:ctx.user_data['seedance_text_aspect']
   env={'ApplicationHandlerStop':Stop,'contextlib':contextlib,'_seedance_duration_keyboard':keyboard}
   exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<callback>','exec'),env)
-  msg=SimpleNamespace(edit_reply_markup=AsyncMock())
+  msg=SimpleNamespace(edit_reply_markup=AsyncMock(), reply_text=AsyncMock())
   query=SimpleNamespace(data='seedance_aspect:16:9',answer=AsyncMock(),message=msg)
   ctx=SimpleNamespace(user_data={'awaiting_text_video_prompt':True,'text_video_engine':'seedance'})
   with self.assertRaises(Stop):await env['_on_seedance_aspect_callback'](SimpleNamespace(callback_query=query),ctx)
   self.assertEqual(ctx.user_data['seedance_text_aspect'],'16:9')
   msg.edit_reply_markup.assert_awaited_once_with(reply_markup='16:9')
+  self.assertIn('16:9', msg.reply_text.await_args.args[0])

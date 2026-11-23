@@ -1,0 +1,14 @@
+--- a/main.py
++++ b/main.py
+@@ -22912,6 +22912,11 @@
+         await q.answer(f"Формат: {aspect}")
+         with contextlib.suppress(Exception):
+             await q.message.edit_reply_markup(reply_markup=_seedance_duration_keyboard(context))
++        seconds = int(context.user_data.get("seedance_text_duration", 10))
++        await q.message.reply_text(
++            f"✅ Seedance 2.5 · {seconds} секунд · {aspect}. Теперь отправьте промпт.",
++            reply_markup=_seedance_duration_keyboard(context),
++        )
+         raise ApplicationHandlerStop
+ 
+     app.add_handler(CallbackQueryHandler(
