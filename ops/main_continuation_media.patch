@@ -1,0 +1,39 @@
+--- a/main.py
++++ b/main.py
+@@ -21713,7 +21713,14 @@
+     if not frame:
+         await update.effective_message.reply_text("❌ Не удалось извлечь последний кадр исходного MP4.")
+         return False
+-    duration, aspect = 8, "16:9"
++    from neyrobot_prod.continuation_media import source_aspect, join_continuation
++    try:
++        aspect = await asyncio.to_thread(source_aspect, source)
++    except Exception:
++        log.exception("video continuation source probe failed")
++        await update.effective_message.reply_text("❌ Не удалось определить формат исходного MP4. Генерация не запущена.")
++        return False
++    duration = 8
+     cost = _video_provider_cost_usd("seedance", duration)
+     async def _go():
+         await update.effective_message.reply_text("➕ Создаю следующий фрагмент от последнего кадра и склеиваю ролик…")
+@@ -21725,10 +21732,7 @@
+                 reference_name="continuation_last_frame.jpg", reference_mime="image/jpeg",
+                 create_path=SEEDANCE_CREATE_PATH, max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+             )
+-            original_duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, source)
+-            final = await asyncio.to_thread(
+-                _concat_video_segments_sync, [source, continuation], int(max(1, round(original_duration + duration)))
+-            )
++            final = await asyncio.to_thread(join_continuation, source, continuation)
+             if not final:
+                 raise RuntimeError("Не удалось склеить исходный и новый фрагменты.")
+             await _reply_video_bytes(update, final, "✅ Видео продолжено и собрано в один MP4.")
+@@ -22081,7 +22085,7 @@
+             context.user_data["video_continue_source"] = raw
+             context.user_data["awaiting_video_continue_prompt"] = True
+             await update.effective_message.reply_text(
+-                "✅ Исходное видео получено. Опишите, что должно происходить в следующем фрагменте (по умолчанию 8 секунд, 16:9)."
++                "✅ Исходное видео получено. Опишите, что должно происходить в следующем фрагменте (8 секунд; формат определяется по исходному видео)."
+             )
+         else:
+             context.user_data.pop("awaiting_video_translation_upload", None)
