@@ -1,0 +1,15 @@
+--- a/main.py
++++ b/main.py
+@@ -5486,7 +5486,11 @@
+         await q.answer("Неизвестная настройка", show_alert=True)
+         return
+     await q.answer("Настройки сохранены")
+-    await q.message.edit_reply_markup(reply_markup=_kling_video_options_keyboard(context))
++    try:
++        await q.message.edit_reply_markup(reply_markup=_kling_video_options_keyboard(context))
++    except BadRequest as exc:
++        if "Message is not modified" not in str(exc):
++            raise
+ 
+ 
+ def _seedance_duration_keyboard(context):
