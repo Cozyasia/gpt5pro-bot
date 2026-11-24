@@ -18,6 +18,25 @@ class TranslationSegmentTests(unittest.TestCase):
             with self.assertRaises(ValueError): plan_segments(duration)
 
 class VideoTranslationPipelineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_provider_timestamp_fits_actual_video_and_audio(self):
+        import subprocess, tempfile, json
+        from pathlib import Path
+        from neyrobot_prod.translation_segments import sync_translated_video
+        with tempfile.TemporaryDirectory() as td:
+            source = Path(td) / 'source.mp4'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=160x90:rate=7',
+                            '-f','lavfi','-i','sine=frequency=600','-t','10.01','-c:v','libx264',
+                            '-c:a','aac',str(source)],check=True)
+            async def provider(video, audio, duration_ms):
+                for suffix, content in (('mp4',video),('mp3',audio)):
+                    path = Path(td) / ('probe.' + suffix)
+                    path.write_bytes(content)
+                    metadata = json.loads(subprocess.check_output(['ffprobe','-v','error',
+                        '-show_entries','format=duration','-of','json',str(path)]))
+                    self.assertLessEqual(duration_ms, float(metadata['format']['duration']) * 1000)
+                return video
+            await sync_translated_video(source.read_bytes(), 10.01, provider)
+
     async def test_splits_syncs_and_reassembles_with_audio(self):
         import asyncio, subprocess, tempfile, json
         from pathlib import Path
@@ -33,7 +52,8 @@ class VideoTranslationPipelineTests(unittest.IsolatedAsyncioTestCase):
                 return video
             result=await sync_translated_video(source.read_bytes(),11,provider)
             self.assertEqual(len(calls),2)
-            self.assertEqual(sum(calls),11000)
+            self.assertGreaterEqual(sum(calls),10950)
+            self.assertLessEqual(sum(calls),11000)
             out=Path(td)/'out.mp4';out.write_bytes(result)
             meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(out)]))
             self.assertTrue(any(s['codec_type']=='audio' for s in meta['streams']))

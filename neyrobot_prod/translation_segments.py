@@ -62,6 +62,24 @@ def _validate_video(path, expected_duration):
         raise RuntimeError('Invalid lip-sync video') from exc
 
 
+def _media_duration(path):
+    import json
+    import shutil
+    import subprocess
+    exe = shutil.which('ffprobe')
+    if not exe:
+        raise RuntimeError('ffprobe is unavailable')
+    try:
+        proc = subprocess.run([exe, '-v', 'error', '-show_entries', 'format=duration',
+                               '-of', 'json', str(path)], check=True, capture_output=True, timeout=30)
+        duration = float(json.loads(proc.stdout)['format']['duration'])
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError('invalid duration')
+        return duration
+    except (subprocess.SubprocessError, ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError('Cannot determine media duration') from exc
+
+
 def _assemble(source, directory, outputs, duration):
     manifest = directory / 'list.txt'
     manifest.write_text(''.join(f"file 'part_{i:03}.mp4'\n" for i in range(len(outputs))), encoding='utf-8')
@@ -94,7 +112,17 @@ async def sync_translated_video(video: bytes, duration: float, sync_segment) -> 
         outputs = []
         for index, (start, end) in enumerate(spans):
             segment, audio = await asyncio.to_thread(_split_one, source, directory, index, start, end)
-            result = await sync_segment(segment, audio, min(10000, round((end-start)*1000)))
+            video_length, audio_length = await asyncio.gather(
+                asyncio.to_thread(_media_duration, directory / f'input_{index:03}.mp4'),
+                asyncio.to_thread(_media_duration, directory / f'audio_{index:03}.mp3'),
+            )
+            # Encoders may round the final frame down, making the actual clip
+            # shorter than the requested segment despite MP3 encoder padding.
+            available_ms = math.floor(min(end-start, video_length, audio_length, 10.0) * 1000)
+            duration_ms = available_ms - 10 if available_ms >= 2010 else available_ms
+            if duration_ms < 2000:
+                raise RuntimeError(f'Lip-sync segment {index+1} is shorter than 2 seconds')
+            result = await sync_segment(segment, audio, duration_ms)
             if not isinstance(result, (bytes, bytearray)) or len(result) < 1024:
                 raise RuntimeError(f'Lip-sync segment {index+1} is invalid')
             path = directory / f'part_{index:03}.mp4'
