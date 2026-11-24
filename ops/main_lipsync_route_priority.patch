@@ -1,0 +1,39 @@
+--- a/main.py
++++ b/main.py
+@@ -6388,6 +6388,10 @@
+         "awaiting_before_after",
+         "before_after_before",
+         "outfit_wait_text",
++        "direct_lipsync_stage",
++        "direct_lipsync_video_bytes",
++        "direct_lipsync_image_bytes",
++        "direct_lipsync_image_name",
+         "awaiting_video_continue_upload",
+         "video_continue_source",
+         "awaiting_video_continue_prompt",
+@@ -21328,6 +21332,7 @@
+             return fh.read()
+ 
+ async def cmd_lip_sync_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
++    _clear_transient_flows(context)
+     _direct_lipsync_clear(context)
+     context.user_data[_DIRECT_LIPSYNC_STAGE] = "video"
+     await update.effective_message.reply_text(
+@@ -21561,7 +21566,7 @@
+         return
+     if len(text) > TTS_MAX_CHARS:
+         await update.effective_message.reply_text("Слишком длинный текст для этой короткой сцены.")
+-        return
++        raise ApplicationHandlerStop()
+     try:
+         voice = _avatar_tts_voice_get(context)
+         audio = await asyncio.to_thread(_tts_bytes_sync, text, "mp3", voice)
+@@ -23072,7 +23077,7 @@
+     app.add_handler(MessageHandler(filters.PHOTO, on_direct_lipsync_photo), group=-4)
+     app.add_handler(MessageHandler(filters.VIDEO, on_direct_lipsync_video), group=-4)
+     app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | filters.Document.ALL, on_direct_lipsync_audio), group=-4)
+-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_direct_lipsync_text), group=-4)
++    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_direct_lipsync_text), group=-6)
+     app.add_handler(MessageHandler(filters.Regex(_CAPS_PATTERN), on_capabilities_qa), group=1)
+ 
+     # Медиа (фото/доки/видео/гиф) — тоже перед общим текстом
