@@ -16,6 +16,33 @@ def plan_segments(duration: float) -> list[tuple[float, float]]:
     return list(zip(boundaries, boundaries[1:]))
 
 
+def estimate_provider_cost(duration, *, identify_per_segment, lipsync_per_segment,
+                           transcription, translation, speech):
+    """Estimate provider cost from explicit, independently configured rates.
+
+    The speech and language components are total estimates for this job;
+    identification and lip-sync each run once per segment. Retail markup is
+    deliberately applied by the existing billing layer, not here.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    def positive(value):
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise ValueError('A valid provider cost is required') from exc
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError('A valid provider cost is required')
+        return amount
+
+    count = len(plan_segments(duration))
+    identify = positive(identify_per_segment)
+    lipsync = positive(lipsync_per_segment)
+    return count * (identify + lipsync) + sum(
+        (positive(transcription), positive(translation), positive(speech)), Decimal(0)
+    )
+
+
 def _ffmpeg(*args: str, timeout: int = 180) -> None:
     import subprocess
     import shutil

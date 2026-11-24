@@ -2,6 +2,20 @@ import unittest
 from neyrobot_prod.translation_segments import plan_segments
 
 class TranslationSegmentTests(unittest.TestCase):
+    def test_quote_counts_every_provider_step(self):
+        from decimal import Decimal
+        from neyrobot_prod.translation_segments import estimate_provider_cost
+        cost = estimate_provider_cost(21, identify_per_segment='0.007',
+            lipsync_per_segment='0.070', transcription='0.01', translation='0.02', speech='0.03')
+        self.assertEqual(cost, Decimal('0.291'))
+
+    def test_quote_rejects_missing_invalid_or_nonfinite_costs(self):
+        from neyrobot_prod.translation_segments import estimate_provider_cost
+        for bad in (None, 0, -1, float('nan'), float('inf'), 'bad'):
+            with self.assertRaises(ValueError):
+                estimate_provider_cost(5, identify_per_segment=bad, lipsync_per_segment='.07',
+                    transcription='.01', translation='.01', speech='.01')
+
     def test_lengths_cover_video_without_gaps(self):
         for duration in (2, 9.9, 10, 10.1, 11, 21, 59.7, 180):
             spans = plan_segments(duration)
