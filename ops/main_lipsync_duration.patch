@@ -1,0 +1,61 @@
+--- a/main.py
++++ b/main.py
+@@ -21341,6 +21341,29 @@
+         "или просто текст — бот создаст естественную русскую озвучку и синхронизирует рот."
+     )
+ 
++def _direct_lipsync_fit_audio_sync(raw: bytes, source_duration: float, video_duration: float) -> bytes:
++    # Leave room for MP3 encoder delay and provider timestamp rounding.
++    target = video_duration - 0.35
++    if target < 2.0 or source_duration / target > 1.35:
++        raise ValueError("Речь не помещается в видео. Сократите текст или выберите более длинный ролик.")
++    with tempfile.TemporaryDirectory(prefix="neyronix_lipsync_fit_") as td:
++        src, out = os.path.join(td, "source.mp3"), os.path.join(td, "fitted.mp3")
++        with open(src, "wb") as fh:
++            fh.write(raw)
++        result = subprocess.run(
++            [_ffmpeg_exe(), "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-i", src,
++             "-filter:a", f"atempo={source_duration / target:.6f}", "-c:a", "libmp3lame", "-b:a", "128k", out],
++            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90,
++        )
++        if result.returncode or not os.path.isfile(out):
++            raise RuntimeError("Не удалось подогнать речь по длительности видео.")
++        with open(out, "rb") as fh:
++            fitted = fh.read()
++        actual = _direct_lipsync_duration_sync(fitted, ".mp3")
++        if actual < 2.0 or actual > video_duration - 0.10:
++            raise ValueError("Речь не помещается в видео. Сократите текст или выберите более длинный ролик.")
++        return fitted
++
+ async def _direct_lipsync_render(update: Update, context: ContextTypes.DEFAULT_TYPE, audio_bytes: bytes, audio_name: str):
+     video_bytes = context.user_data.get("direct_lipsync_video_bytes") or b""
+     image_bytes = context.user_data.get("direct_lipsync_image_bytes") or b""
+@@ -21465,6 +21488,19 @@
+         _direct_lipsync_clear(context)
+         await update.effective_message.reply_text("❌ Kling Lip Sync для обработки видео сейчас не настроен.")
+         return
++    video_s = await asyncio.to_thread(_direct_lipsync_duration_sync, video_bytes, ".mp4")
++    if not 2.0 <= video_s <= 10.0:
++        _direct_lipsync_clear(context)
++        await update.effective_message.reply_text("❌ Для Kling Lip Sync нужен ролик длительностью от 2 до 10 секунд.")
++        return
++    if audio_s > video_s - 0.15:
++        try:
++            audio_bytes = await asyncio.to_thread(_direct_lipsync_fit_audio_sync, audio_bytes, audio_s, video_s)
++            audio_s = await asyncio.to_thread(_direct_lipsync_duration_sync, audio_bytes, ".mp3")
++        except (ValueError, RuntimeError) as exc:
++            _direct_lipsync_clear(context)
++            await update.effective_message.reply_text(f"❌ {exc}")
++            return
+     await update.effective_message.reply_text(
+         f"🎭 Запускаю Kling Lip Sync: {audio_s:.1f} сек. Исходный звук будет выключен, останется только новая речь."
+     )
+@@ -21475,7 +21511,7 @@
+             video_url, audio_url, duration_ms=int(round(audio_s * 1000)),
+             max_wait_s=VOCAL_CLIP_KLING_MAX_WAIT_S,
+         )
+-        final = await asyncio.to_thread(_direct_lipsync_mux_audio_sync, synced, audio_bytes, audio_s)
++        final = await asyncio.to_thread(_direct_lipsync_mux_audio_sync, synced, audio_bytes, video_s)
+         bio = BytesIO(final)
+         bio.name = "NEYRONIX_lipsync.mp4"
+         await update.effective_message.reply_video(
