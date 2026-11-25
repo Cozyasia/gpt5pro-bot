@@ -87,7 +87,7 @@ class TranslationPaidExecutorTests(unittest.IsolatedAsyncioTestCase):
  async def test_execute_delivers_then_charges_once(self):
   events=[]
   async def render(on_task):events.append('render');on_task('task-1');return b'video'
-  async def send(video):events.append('send');self.assertEqual(video,b'video')
+  async def send(video):events.append('send');self.assertEqual(video,b'video');return True
   kwargs=dict(provider_cost=1,retail_cost=2,credits=20,render=render,deliver=send)
   result=await ledger.execute(self.db,'request',1,**kwargs)
   second=await ledger.execute(self.db,'request',1,**kwargs)
@@ -96,6 +96,12 @@ class TranslationPaidExecutorTests(unittest.IsolatedAsyncioTestCase):
  async def test_uncertain_provider_or_delivery_keeps_hold(self):
   async def render(on_task):on_task('task-1');return b'video'
   async def send(video):raise TimeoutError('delivery ambiguous')
+  state=await ledger.execute(self.db,'request',1,provider_cost=1,retail_cost=2,credits=20,render=render,deliver=send)
+  self.assertEqual(state,'unknown')
+  with sqlite3.connect(self.db) as c:self.assertEqual(c.execute('SELECT status FROM credit_ledger').fetchone()[0],'reserved')
+ async def test_unconfirmed_delivery_does_not_charge(self):
+  async def render(on_task):on_task('task-1');return b'video'
+  async def send(video):return None
   state=await ledger.execute(self.db,'request',1,provider_cost=1,retail_cost=2,credits=20,render=render,deliver=send)
   self.assertEqual(state,'unknown')
   with sqlite3.connect(self.db) as c:self.assertEqual(c.execute('SELECT status FROM credit_ledger').fetchone()[0],'reserved')

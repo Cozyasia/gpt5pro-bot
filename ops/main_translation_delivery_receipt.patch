@@ -1,0 +1,19 @@
+--- a/main.py
++++ b/main.py
+@@ -16827,7 +16827,7 @@
+     dedupe_key = _video_result_key(chat_id, task_id=task_id, content=content)
+     if _mark_video_sent_once(dedupe_key):
+         log.info("reply_video_bytes: duplicate suppressed task_id=%s", task_id)
+-        return
++        return False
+     await _claim_kling_video_delivery(chat_id, task_id, target_aspect)
+     sent_ok = False
+     try:
+@@ -16848,6 +16848,7 @@
+         if not sent_ok:
+             # Timeout is ambiguous: Telegram may have delivered the file.
+             log.warning("reply_video_bytes: uncertain delivery, suppressing retries task_id=%s", task_id)
++    return True
+ 
+ 
+ def _compress_telegram_video_sync(source: str, target: str, max_bytes: int = 48 * 1024 * 1024) -> str:

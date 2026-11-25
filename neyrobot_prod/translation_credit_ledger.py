@@ -165,7 +165,7 @@ async def execute(path, request_id, user_id, *, provider_cost, retail_cost, cred
         return 'unknown'
     try:
         sent = await deliver(video)
-        if sent is False:
+        if sent is not True:
             raise RuntimeError('delivery was not confirmed')
     except Exception:
         settle(path, request_id, user_id, 'unknown')
