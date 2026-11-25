@@ -1,0 +1,27 @@
+--- a/main.py
++++ b/main.py
+@@ -21720,10 +21720,10 @@
+             return fh.read()
+ 
+ 
+-def _translation_target_from_caption(caption: str) -> str:
++def _translation_target_from_caption(caption: str, default: str = "Russian") -> str:
+     text = (caption or "").strip()
+-    match = re.search(r"(?:на|to)\s+([A-Za-zА-Яа-яЁё\- ]{2,40})", text, re.I)
+-    return (match.group(1).strip() if match else "Russian")
++    match = re.search(r"(?:^|\s)(?:на|to)\s+([A-Za-zА-Яа-яЁё\- ]{2,40})", text, re.I)
++    return match.group(1).strip() if match else default
+ 
+ 
+ def _can_run_translation_test(user_id: int) -> bool:
+@@ -22197,8 +22197,8 @@
+         else:
+             context.user_data.pop("awaiting_video_translation_upload", None)
+             caption = getattr(update.effective_message, "caption", "") or ""
+-            target = ("English" if context.user_data.get("video_translation_lipsync_test") and not caption
+-                      else _translation_target_from_caption(caption))
++            default_language = "English" if context.user_data.get("video_translation_lipsync_test") else "Russian"
++            target = _translation_target_from_caption(caption, default=default_language)
+             await _run_video_translation(update, context, raw, target)
+     except Exception as exc:
+         await update.effective_message.reply_text(f"❌ Не удалось принять MP4: {str(exc)[:300]}")
