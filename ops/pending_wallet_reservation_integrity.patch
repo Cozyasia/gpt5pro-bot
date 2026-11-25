@@ -1,0 +1,108 @@
+From 43ebc00283e35932643b7d37b150663bbb080175 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 25 Nov 2026 14:44:08 +0200
+Subject: [PATCH] Protect reserved wallet funds from direct debits
+
+---
+ main.py                                    | 34 +++++++++++------
+ tests/test_wallet_reservation_integrity.py | 43 ++++++++++++++++++++++
+ 2 files changed, 66 insertions(+), 11 deletions(-)
+ create mode 100644 tests/test_wallet_reservation_integrity.py
+
+diff --git a/main.py b/main.py
+index 0f14b4e..48503eb 100644
+--- a/main.py
++++ b/main.py
+@@ -2076,17 +2076,29 @@ def _wallet_total_add(user_id: int, usd: float):
+     con.commit(); con.close()
+ 
+ def _wallet_total_take(user_id: int, usd: float) -> bool:
+-    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+-    cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (int(user_id),))
+-    con.commit()
+-    cur.execute("SELECT usd FROM wallet WHERE user_id=?", (int(user_id),))
+-    row = cur.fetchone()
+-    bal = float(row[0] if row and row[0] is not None else 0.0)
+-    if bal + 1e-9 < usd:
+-        con.close(); return False
+-    cur.execute("UPDATE wallet SET usd = usd - ? WHERE user_id=?", (float(usd), user_id))
+-    con.commit(); con.close()
+-    return True
++    amount = float(usd)
++    if not math.isfinite(amount) or amount < 0:
++        return False
++    con = sqlite3.connect(DB_PATH, timeout=30)
++    try:
++        cur = con.cursor()
++        cur.execute("BEGIN IMMEDIATE")
++        cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (int(user_id),))
++        cur.execute("SELECT COALESCE(usd,0) FROM wallet WHERE user_id=?", (int(user_id),))
++        balance = float(cur.fetchone()[0])
++        cur.execute("SELECT COALESCE(SUM(retail_usd),0) FROM credit_ledger WHERE user_id=? AND status='reserved'", (int(user_id),))
++        reserved = float(cur.fetchone()[0])
++        if balance - reserved + 1e-9 < amount:
++            con.rollback()
++            return False
++        cur.execute("UPDATE wallet SET usd=COALESCE(usd,0)-? WHERE user_id=?", (amount, int(user_id)))
++        con.commit()
++        return True
++    except BaseException:
++        con.rollback()
++        raise
++    finally:
++        con.close()
+ 
+ # ───────── Лимиты/цены ─────────
+ _USD_RUB_ENV = _env_float("USD_RUB", 100.0)
+diff --git a/tests/test_wallet_reservation_integrity.py b/tests/test_wallet_reservation_integrity.py
+new file mode 100644
+index 0000000..9f58b4b
+--- /dev/null
++++ b/tests/test_wallet_reservation_integrity.py
+@@ -0,0 +1,43 @@
++import ast
++import math
++import sqlite3
++import tempfile
++import unittest
++from concurrent.futures import ThreadPoolExecutor
++from pathlib import Path
++
++
++class WalletReservationIntegrityTests(unittest.TestCase):
++    def test_direct_debit_respects_reserved_generation(self):
++        tree = ast.parse(Path('main.py').read_text())
++        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_wallet_total_take')
++        with tempfile.TemporaryDirectory() as td:
++            path = str(Path(td) / 'wallet.db')
++            with sqlite3.connect(path) as db:
++                db.executescript("""CREATE TABLE wallet(user_id INTEGER PRIMARY KEY, usd REAL);
++                CREATE TABLE credit_ledger(user_id INTEGER, retail_usd REAL, status TEXT);
++                INSERT INTO wallet VALUES (1, 10);
++                INSERT INTO credit_ledger VALUES (1, 8, 'reserved');""")
++            env = {'sqlite3': sqlite3, 'math': math, 'DB_PATH': path}
++            exec(compile(ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[])), '<wallet>', 'exec'), env)
++            self.assertFalse(env['_wallet_total_take'](1, 3))
++            self.assertFalse(env['_wallet_total_take'](1, float('nan')))
++            self.assertTrue(env['_wallet_total_take'](1, 2))
++            with sqlite3.connect(path) as db:
++                self.assertEqual(db.execute('SELECT usd FROM wallet WHERE user_id=1').fetchone()[0], 8)
++
++    def test_concurrent_debits_cannot_spend_same_available_balance(self):
++        tree = ast.parse(Path('main.py').read_text())
++        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_wallet_total_take')
++        with tempfile.TemporaryDirectory() as td:
++            path = str(Path(td) / 'wallet.db')
++            with sqlite3.connect(path) as db:
++                db.executescript("""CREATE TABLE wallet(user_id INTEGER PRIMARY KEY, usd REAL);
++                CREATE TABLE credit_ledger(user_id INTEGER, retail_usd REAL, status TEXT);
++                INSERT INTO wallet VALUES (1, 10);
++                INSERT INTO credit_ledger VALUES (1, 8, 'reserved');""")
++            env = {'sqlite3': sqlite3, 'math': math, 'DB_PATH': path}
++            exec(compile(ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[])), '<wallet>', 'exec'), env)
++            with ThreadPoolExecutor(max_workers=2) as pool:
++                results = list(pool.map(lambda _: env['_wallet_total_take'](1, 2), range(2)))
++            self.assertEqual(sorted(results), [False, True])
+-- 
+2.56.1
+
