@@ -1,0 +1,27 @@
+--- a/main.py
++++ b/main.py
+@@ -21726,8 +21726,14 @@
+     return (match.group(1).strip() if match else "Russian")
+ 
+ 
++def _can_run_translation_test(user_id: int) -> bool:
++    configured = os.getenv("VIDEO_TRANSLATION_TEST_USER_ID", "").strip()
++    return bool(user_id and ((OWNER_ID and user_id == OWNER_ID) or
++                             (configured.isdecimal() and str(user_id) == configured)))
++
++
+ async def cmd_owner_translation_sync_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+-    if not OWNER_ID or not update.effective_user or update.effective_user.id != OWNER_ID:
++    if not update.effective_user or not _can_run_translation_test(update.effective_user.id):
+         await update.effective_message.reply_text("❌ Этот тест доступен только владельцу.")
+         return
+     _clear_transient_flows(context)
+@@ -21756,7 +21762,7 @@
+ 
+ async def _run_video_translation(update: Update, context: ContextTypes.DEFAULT_TYPE, video_bytes: bytes, target_language: str):
+     sync_test = bool(context.user_data.pop("video_translation_lipsync_test", False))
+-    if sync_test and (not OWNER_ID or not update.effective_user or update.effective_user.id != OWNER_ID):
++    if sync_test and (not update.effective_user or not _can_run_translation_test(update.effective_user.id)):
+         await update.effective_message.reply_text("❌ Этот тест доступен только владельцу.")
+         return False
+     duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, video_bytes)

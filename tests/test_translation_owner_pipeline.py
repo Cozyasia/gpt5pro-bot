@@ -8,10 +8,34 @@ from unittest.mock import AsyncMock
 from test_seedance_aspect_selection import patched_source
 
 class TranslationOwnerPipelineTests(unittest.IsolatedAsyncioTestCase):
+ async def test_test_allowlist_accepts_only_configured_account_or_owner(self):
+  import os
+  from unittest.mock import patch
+  tree=ast.parse(patched_source(include_owner=True))
+  fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_can_run_translation_test')
+  env={'os':os,'OWNER_ID':42}
+  exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<allowlist>','exec'),env)
+  with patch.dict(os.environ,{'VIDEO_TRANSLATION_TEST_USER_ID':'99'}):
+   self.assertTrue(env['_can_run_translation_test'](42))
+   self.assertTrue(env['_can_run_translation_test'](99))
+   self.assertFalse(env['_can_run_translation_test'](98))
+  with patch.dict(os.environ,{'VIDEO_TRANSLATION_TEST_USER_ID':'99,98'}):
+   self.assertFalse(env['_can_run_translation_test'](99))
+
+ async def test_explicitly_configured_test_account_can_start(self):
+  tree=ast.parse(patched_source(include_owner=True))
+  fn=next(n for n in tree.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='cmd_owner_translation_sync_test')
+  env={'Update':object,'ContextTypes':SimpleNamespace(DEFAULT_TYPE=object),'OWNER_ID':42,
+       '_can_run_translation_test':lambda user_id:user_id in (42,99), '_clear_transient_flows':lambda c:None}
+  exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<command>','exec'),env)
+  message=SimpleNamespace(reply_text=AsyncMock()); context=SimpleNamespace(user_data={})
+  await env['cmd_owner_translation_sync_test'](SimpleNamespace(effective_user=SimpleNamespace(id=99),effective_message=message),context)
+  self.assertTrue(context.user_data.get('video_translation_lipsync_test'))
+
  async def test_non_owner_cannot_enable_paid_test(self):
   tree=ast.parse(patched_source(include_owner=True))
   fn=next(n for n in tree.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='cmd_owner_translation_sync_test')
-  env={'Update':object,'ContextTypes':SimpleNamespace(DEFAULT_TYPE=object),'OWNER_ID':42}
+  env={'Update':object,'ContextTypes':SimpleNamespace(DEFAULT_TYPE=object),'OWNER_ID':42,'_can_run_translation_test':lambda user_id:user_id == 42}
   exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<command>','exec'),env)
   message=SimpleNamespace(reply_text=AsyncMock())
   context=SimpleNamespace(user_data={})
@@ -25,7 +49,7 @@ class TranslationOwnerPipelineTests(unittest.IsolatedAsyncioTestCase):
   sync=AsyncMock(return_value=b'synchronized')
   reply=AsyncMock()
   env={'asyncio':asyncio,'Update':object,'ContextTypes':SimpleNamespace(DEFAULT_TYPE=object),
-   'OWNER_ID':42,'OPENAI_STT_KEY':'set','OPENAI_TTS_KEY':'set',
+   'OWNER_ID':42,'_can_run_translation_test':lambda user_id:user_id == 42,'OPENAI_STT_KEY':'set','OPENAI_TTS_KEY':'set',
    '_generated_video_duration_seconds_sync':lambda _:5.0,'_extract_video_audio_sync':lambda _:b'audio',
    '_stt_transcribe_bytes':AsyncMock(return_value='Привет'), 'ask_openai_text':AsyncMock(return_value='Hello'),
    '_split_tts_text':lambda t,n:[t], 'TTS_MAX_CHARS':1000,'_tts_bytes_sync':lambda *args:b'voice',
