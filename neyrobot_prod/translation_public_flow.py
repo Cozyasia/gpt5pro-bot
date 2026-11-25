@@ -12,7 +12,7 @@ from .translation_segments import kling_sync_segment, sync_translated_video
 
 async def run_short_translation(*, db_path, request_id, user_id, source_video,
                                 duration, language, quote,
-                                transcribe_and_dub, publish, kling, deliver):
+                                transcribe_and_dub, publish, kling, deliver, charge_user=True):
     """Reserve, translate, synchronize, deliver and settle a single segment.
 
     The outer caller must display the same quote before invoking this function.
@@ -51,5 +51,5 @@ async def run_short_translation(*, db_path, request_id, user_id, source_video,
         return await sync_translated_video(dubbed, duration, segment)
 
     return await translation_paid_service.run_quoted(
-        db_path, request_id, user_id, quote, render=render, deliver=deliver,
+        db_path, request_id, user_id, quote, render=render, deliver=deliver, charge_user=charge_user,
     )

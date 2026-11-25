@@ -39,7 +39,7 @@ def make_quote(duration, *, pricing, retail_quote):
     return TranslationQuote(duration, provider, retail, credits)
 
 
-async def run_quoted(db_path, request_id, user_id, quote, *, render, deliver):
+async def run_quoted(db_path, request_id, user_id, quote, *, render, deliver, charge_user=True):
     """Use the exact quote shown to the customer; no recalculation on launch."""
     if not isinstance(quote, TranslationQuote):
         raise ValueError('a confirmed quote is required')
@@ -51,7 +51,7 @@ async def run_quoted(db_path, request_id, user_id, quote, *, render, deliver):
         raise ValueError('invalid confirmed quote')
     state = await execute(db_path, request_id, user_id, provider_cost=quote.provider_cost,
                           retail_cost=quote.retail_cost, credits=quote.credits,
-                          render=render, deliver=deliver)
+                          render=render, deliver=deliver, charge_user=charge_user)
     return TranslationResult(state, quote.provider_cost, quote.retail_cost, quote.credits)
 
 

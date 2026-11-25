@@ -63,6 +63,12 @@ class TranslationCreditLedgerTests(unittest.TestCase):
  def test_other_reservations_reduce_available_balance(self):
   self.reserve(retail=8)
   with self.assertRaises(ValueError):self.reserve(key='update-2',retail=3)
+ def test_existing_attempt_schema_is_migrated_without_changing_paid_terms(self):
+  with sqlite3.connect(self.db) as c:
+   c.execute('CREATE TABLE translation_attempts (request_id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,tx_id TEXT NOT NULL UNIQUE,provider_cost REAL NOT NULL,retail_cost REAL NOT NULL,credits REAL NOT NULL,state TEXT NOT NULL,provider_task_id TEXT NOT NULL DEFAULT "",updated_ts INTEGER NOT NULL)')
+  self.reserve()
+  with sqlite3.connect(self.db) as c:
+   self.assertEqual(c.execute('SELECT charge_user FROM translation_attempts').fetchone(),(1,))
 
 class TranslationReservationExpiryTests(unittest.TestCase):
  def test_stale_cleanup_does_not_release_unresolved_translation(self):
@@ -84,6 +90,30 @@ class TranslationPaidExecutorTests(unittest.IsolatedAsyncioTestCase):
   with sqlite3.connect(self.db) as c:
    c.executescript('''CREATE TABLE wallet(user_id INTEGER PRIMARY KEY,usd REAL); INSERT INTO wallet VALUES(1,10); CREATE TABLE credit_ledger(tx_id TEXT PRIMARY KEY,user_id INTEGER,feature TEXT,engine TEXT,provider_cost_usd REAL,retail_usd REAL,credits REAL,status TEXT,metadata_json TEXT,created_ts INTEGER,updated_ts INTEGER);''')
  async def asyncTearDown(self):self.tmp.cleanup()
+ async def test_unlimited_user_can_finish_without_wallet_debit_or_replay(self):
+  calls=[]
+  async def render(on_task): calls.append('render'); on_task('unlimited-task'); return b'video'
+  async def send(video): calls.append('send'); return True
+  with sqlite3.connect(self.db) as c: c.execute('UPDATE wallet SET usd=0 WHERE user_id=1')
+  kwargs=dict(provider_cost=1,retail_cost=2,credits=20,render=render,deliver=send,charge_user=False)
+  self.assertEqual(await ledger.execute(self.db,'unlimited',1,**kwargs),'delivered')
+  self.assertEqual(await ledger.execute(self.db,'unlimited',1,**kwargs),'already_started')
+  self.assertEqual(calls,['render','send'])
+  with sqlite3.connect(self.db) as c:
+   self.assertEqual(c.execute('SELECT usd FROM wallet').fetchone()[0],0)
+   self.assertEqual(c.execute('SELECT retail_usd,credits,status FROM credit_ledger').fetchone(),(0,0,'delivered_no_charge'))
+  with self.assertRaises(ValueError):
+   await ledger.execute(self.db,'unlimited',1,**{**kwargs,'charge_user':True})
+ async def test_unlimited_uncertain_delivery_remains_reserved_and_never_replays(self):
+  calls=[]
+  async def render(on_task): calls.append('render'); on_task('unlimited-task'); return b'video'
+  async def send(video): calls.append('send'); raise TimeoutError()
+  kwargs=dict(provider_cost=1,retail_cost=2,credits=20,render=render,deliver=send,charge_user=False)
+  self.assertEqual(await ledger.execute(self.db,'unlimited',1,**kwargs),'unknown')
+  self.assertEqual(await ledger.execute(self.db,'unlimited',1,**kwargs),'already_started')
+  self.assertEqual(calls,['render','send'])
+  with sqlite3.connect(self.db) as c:
+   self.assertEqual(c.execute('SELECT retail_usd,status FROM credit_ledger').fetchone(),(0,'reserved'))
  async def test_execute_delivers_then_charges_once(self):
   events=[]
   async def render(on_task):events.append('render');on_task('task-1');return b'video'

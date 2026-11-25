@@ -14,7 +14,8 @@ _SCHEMA = '''CREATE TABLE IF NOT EXISTS translation_attempts (
  request_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
  tx_id TEXT NOT NULL UNIQUE, provider_cost REAL NOT NULL,
  retail_cost REAL NOT NULL, credits REAL NOT NULL,
- state TEXT NOT NULL, provider_task_id TEXT NOT NULL DEFAULT '', updated_ts INTEGER NOT NULL)'''
+ state TEXT NOT NULL, provider_task_id TEXT NOT NULL DEFAULT '', updated_ts INTEGER NOT NULL,
+ charge_user INTEGER NOT NULL DEFAULT 1)'''
 
 
 def _connect(path):
@@ -26,6 +27,8 @@ def _connect(path):
 def _begin(con):
     con.execute('BEGIN IMMEDIATE')
     con.execute(_SCHEMA)
+    if 'charge_user' not in {row[1] for row in con.execute('PRAGMA table_info(translation_attempts)')}:
+        con.execute('ALTER TABLE translation_attempts ADD COLUMN charge_user INTEGER NOT NULL DEFAULT 1')
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS translation_provider_task_unique ON translation_attempts(provider_task_id) WHERE provider_task_id != ''")
 
 
@@ -36,7 +39,9 @@ def _get(con, request_id, user_id):
     return row
 
 
-def reserve(path, request_id, user_id, *, provider_cost, retail_cost, credits):
+def reserve(path, request_id, user_id, *, provider_cost, retail_cost, credits, charge_user=True):
+    if type(charge_user) is not bool:
+        raise ValueError('invalid billing mode')
     if not isinstance(request_id,str) or not request_id or len(request_id)>200 or int(user_id)<=0:
         raise ValueError('invalid request identity')
     vals = tuple(float(x) for x in (provider_cost, retail_cost, credits))
@@ -45,21 +50,21 @@ def reserve(path, request_id, user_id, *, provider_cost, retail_cost, credits):
     con = _connect(path)
     try:
         _begin(con)
-        old = con.execute('SELECT user_id,tx_id,provider_cost,retail_cost,credits FROM translation_attempts WHERE request_id=?', (request_id,)).fetchone()
+        old = con.execute('SELECT user_id,tx_id,provider_cost,retail_cost,credits,charge_user FROM translation_attempts WHERE request_id=?', (request_id,)).fetchone()
         if old:
-            if old[0] != int(user_id) or tuple(old[2:]) != vals:
+            if old[0] != int(user_id) or tuple(old[2:5]) != vals or old[5] != int(charge_user):
                 raise ValueError('request identity or quote mismatch')
             con.commit(); return old[1]
         wallet = con.execute('SELECT COALESCE(usd,0) FROM wallet WHERE user_id=?', (int(user_id),)).fetchone()
         balance = float(wallet[0]) if wallet else 0.0
         holds = float(con.execute("SELECT COALESCE(SUM(retail_usd),0) FROM credit_ledger WHERE user_id=? AND status='reserved'", (int(user_id),)).fetchone()[0])
-        if not math.isfinite(balance) or not math.isfinite(holds) or balance - holds + 1e-9 < vals[1]:
+        if not math.isfinite(balance) or not math.isfinite(holds) or (charge_user and balance - holds + 1e-9 < vals[1]):
             raise ValueError('insufficient balance')
         tx_id = uuid.uuid4().hex; now = int(time.time())
         con.execute('INSERT INTO credit_ledger(tx_id,user_id,feature,engine,provider_cost_usd,retail_usd,credits,status,metadata_json,created_ts,updated_ts) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                    (tx_id,int(user_id),'video_translation_lipsync','kling',*vals,'reserved',json.dumps({'request_id':request_id}),now,now))
-        con.execute('INSERT INTO translation_attempts(request_id,user_id,tx_id,provider_cost,retail_cost,credits,state,updated_ts) VALUES(?,?,?,?,?,?,?,?)',
-                    (request_id,int(user_id),tx_id,*vals,'reserved',now))
+                    (tx_id,int(user_id),'video_translation_lipsync','kling',vals[0],vals[1] if charge_user else 0,vals[2] if charge_user else 0,'reserved',json.dumps({'request_id':request_id, 'charge_user':charge_user}),now,now))
+        con.execute('INSERT INTO translation_attempts(request_id,user_id,tx_id,provider_cost,retail_cost,credits,state,updated_ts,charge_user) VALUES(?,?,?,?,?,?,?,?,?)',
+                    (request_id,int(user_id),tx_id,*vals,'reserved',now,int(charge_user)))
         con.commit(); return tx_id
     except BaseException:
         con.rollback(); raise
@@ -118,11 +123,13 @@ def settle(path, request_id, user_id, outcome):
         entry=con.execute('SELECT user_id,retail_usd,status FROM credit_ledger WHERE tx_id=?',(row[1],)).fetchone()
         if not entry or entry[0] != int(user_id) or entry[2] != 'reserved':
             raise ValueError('reservation unavailable')
-        if outcome == 'delivered':
+        charge_user = bool(con.execute('SELECT charge_user FROM translation_attempts WHERE request_id=?', (request_id,)).fetchone()[0])
+        if outcome == 'delivered' and charge_user:
             cur=con.execute('UPDATE wallet SET usd=COALESCE(usd,0)-? WHERE user_id=? AND COALESCE(usd,0)+1e-9>=?',(float(entry[1]),int(user_id),float(entry[1])))
             if cur.rowcount != 1: raise ValueError('insufficient balance')
         now=int(time.time())
-        con.execute('UPDATE credit_ledger SET status=?,updated_ts=? WHERE tx_id=?',('charged' if outcome=='delivered' else 'released',now,row[1]))
+        status = ('charged' if charge_user else 'delivered_no_charge') if outcome == 'delivered' else 'released'
+        con.execute('UPDATE credit_ledger SET status=?,updated_ts=? WHERE tx_id=?',(status,now,row[1]))
         con.execute('UPDATE translation_attempts SET state=?,updated_ts=? WHERE request_id=?',(outcome,now,request_id))
         con.commit(); return True
     except BaseException:
@@ -134,14 +141,14 @@ class ConfirmedFailure(Exception):
     """A terminal failure known not to have produced a deliverable result."""
 
 
-async def execute(path, request_id, user_id, *, provider_cost, retail_cost, credits, render, deliver):
+async def execute(path, request_id, user_id, *, provider_cost, retail_cost, credits, render, deliver, charge_user=True):
     """Run one paid attempt without replaying ambiguous work or deliveries.
 
     render receives a synchronous callback to record the provider's task ID.
     A retry of the same request never re-runs the provider. Unknown outcomes
     retain the reservation for explicit reconciliation.
     """
-    reserve(path, request_id, user_id, provider_cost=provider_cost, retail_cost=retail_cost, credits=credits)
+    reserve(path, request_id, user_id, provider_cost=provider_cost, retail_cost=retail_cost, credits=credits, charge_user=charge_user)
     if not begin_provider(path, request_id, user_id):
         return 'already_started'
     def on_task(task_id):

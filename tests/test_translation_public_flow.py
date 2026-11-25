@@ -41,6 +41,15 @@ class PublicTranslationFlowTests(unittest.IsolatedAsyncioTestCase):
   self.assertEqual((first.state,second.state),('delivered','already_started'))
   self.assertEqual(self.wallet(),(9.5,'charged'))
   self.assertEqual(self.events,[('dub','English'),('kling',5000),('deliver',b'provider video')])
+ async def test_unlimited_mode_reaches_adapter_without_charging_wallet(self):
+  async def sync(video,duration,segment):return await segment(b'clip',b'audio',5000)
+  args=self.args();args['charge_user']=False
+  with sqlite3.connect(self.db) as db:db.execute('UPDATE wallet SET usd=0')
+  with patch.object(flow,'sync_translated_video',sync):
+   self.assertEqual((await flow.run_short_translation(**args)).state,'delivered')
+   self.assertEqual((await flow.run_short_translation(**args)).state,'already_started')
+  self.assertEqual(self.wallet(),(0,'delivered_no_charge'))
+  self.assertEqual(self.events,[('dub','English'),('kling',5000),('deliver',b'provider video')])
  async def test_no_provider_task_means_no_delivery_or_charge(self):
   args=self.args()
   async def kling(*args,**kwargs):return b'video'
