@@ -47,6 +47,8 @@ RUN patch --batch --forward -p1 < /app/ops/main_owner_translation_test.patch
 RUN patch --batch --forward -p1 < /app/ops/main_translation_test_allowlist.patch
 RUN patch --batch --forward -p1 < /app/ops/main_translation_test_file_access.patch
 RUN patch --batch --forward -p1 < /app/ops/main_translation_language_fix.patch
+RUN patch --batch --forward -p1 < /app/ops/main_translation_reservation_guard.patch
+RUN patch --batch --forward -p1 < /app/ops/main_translation_delivery_receipt.patch
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]

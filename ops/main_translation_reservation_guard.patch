@@ -1,0 +1,14 @@
+--- a/main.py
++++ b/main.py
+@@ -2361,9 +2361,9 @@
+ def _credit_release_stale(cur, user_id: int | None = None):
+     cutoff = int(time.time()) - max(300, int(CREDIT_RESERVATION_TTL_S or 10800))
+     if user_id is None:
+-        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE status='reserved' AND feature NOT IN ('marketplace_cards','image_to_video_kling','revive_photo_kling') AND created_ts<?", (int(time.time()), cutoff))
++        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE status='reserved' AND feature NOT IN ('marketplace_cards','image_to_video_kling','revive_photo_kling','video_translation_lipsync') AND created_ts<?", (int(time.time()), cutoff))
+     else:
+-        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE user_id=? AND status='reserved' AND feature NOT IN ('marketplace_cards','image_to_video_kling','revive_photo_kling') AND created_ts<?", (int(time.time()), int(user_id), cutoff))
++        cur.execute("UPDATE credit_ledger SET status='released_timeout', updated_ts=? WHERE user_id=? AND status='reserved' AND feature NOT IN ('marketplace_cards','image_to_video_kling','revive_photo_kling','video_translation_lipsync') AND created_ts<?", (int(time.time()), int(user_id), cutoff))
+ 
+ 
+ def _wallet_reserved_total_get(user_id: int) -> float:
