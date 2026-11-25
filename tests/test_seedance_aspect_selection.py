@@ -3,17 +3,18 @@ from pathlib import Path
 from types import SimpleNamespace
 import subprocess, tempfile, re as _regex
 ROOT=Path(__file__).resolve().parents[1]
-def patched_source():
+def patched_source(include_owner=False):
  with tempfile.TemporaryDirectory() as td:
   (Path(td)/'main.py').write_bytes((ROOT/'main.py').read_bytes())
   names=_regex.findall(r'patch --batch --forward -p1 < /app/(ops/\S+)', (ROOT/'Dockerfile').read_text())
-  names += ['ops/main_kling_delivery_claim.patch','ops/main_kling_finance_recovery.patch','ops/main_kling_background.patch','ops/main_continuation_media.patch','ops/main_seedance_aspect.patch','ops/main_seedance_option_ack.patch','ops/main_seedance_model.patch','ops/main_kling_options_idempotent.patch','ops/main_lipsync_route_priority.patch']
+  names += ['ops/main_kling_delivery_claim.patch','ops/main_kling_finance_recovery.patch','ops/main_kling_background.patch','ops/main_continuation_media.patch','ops/main_seedance_aspect.patch','ops/main_seedance_option_ack.patch','ops/main_seedance_model.patch','ops/main_kling_options_idempotent.patch','ops/main_lipsync_route_priority.patch','ops/main_lipsync_video_provider.patch','ops/main_lipsync_duration.patch','ops/main_owner_translation_test.patch']
   names=list(dict.fromkeys(names))
+  if not include_owner: names=[n for n in names if n not in ('ops/main_lipsync_video_provider.patch','ops/main_lipsync_duration.patch','ops/main_owner_translation_test.patch')]
   for name in names:
    path=ROOT/name
    if not path.exists(): continue
    result=subprocess.run(['patch','--batch','--forward','-p1','-i',str(path)],cwd=td,capture_output=True)
-   if name in ('ops/main_continuation_media.patch','ops/main_seedance_aspect.patch','ops/main_seedance_option_ack.patch','ops/main_seedance_model.patch','ops/main_kling_options_idempotent.patch','ops/main_lipsync_route_priority.patch') and result.returncode:
+   if name in ('ops/main_continuation_media.patch','ops/main_seedance_aspect.patch','ops/main_seedance_option_ack.patch','ops/main_seedance_model.patch','ops/main_kling_options_idempotent.patch','ops/main_lipsync_route_priority.patch','ops/main_lipsync_video_provider.patch','ops/main_lipsync_duration.patch','ops/main_owner_translation_test.patch') and result.returncode:
     raise RuntimeError('patch failed: '+name)
   return (Path(td)/'main.py').read_text()
 

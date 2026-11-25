@@ -43,6 +43,7 @@ RUN patch --batch --forward -p1 < /app/ops/main_kling_options_idempotent.patch
 RUN patch --batch --forward -p1 < /app/ops/main_lipsync_route_priority.patch
 RUN patch --batch --forward -p1 < /app/ops/main_lipsync_video_provider.patch
 RUN patch --batch --forward -p1 < /app/ops/main_lipsync_duration.patch
+RUN patch --batch --forward -p1 < /app/ops/main_owner_translation_test.patch
 RUN pip install --no-cache-dir -r requirements.txt
 RUN chmod +x /app/ops/start_telegram_local.sh
 ENTRYPOINT ["/usr/bin/tini","--"]

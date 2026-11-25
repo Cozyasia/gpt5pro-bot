@@ -1,0 +1,91 @@
+--- a/main.py
++++ b/main.py
+@@ -6397,6 +6397,7 @@
+         "awaiting_video_continue_prompt",
+         "awaiting_video_translation_upload",
+         "video_translation_language",
++        "video_translation_lipsync_test",
+         "awaiting_video_faceswap_target",
+         "awaiting_video_faceswap_source",
+         "video_faceswap_target",
+@@ -21725,8 +21726,43 @@
+     return (match.group(1).strip() if match else "Russian")
+ 
+ 
++async def cmd_owner_translation_sync_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
++    if not OWNER_ID or not update.effective_user or update.effective_user.id != OWNER_ID:
++        await update.effective_message.reply_text("❌ Этот тест доступен только владельцу.")
++        return
++    _clear_transient_flows(context)
++    context.user_data["awaiting_video_translation_upload"] = True
++    context.user_data["video_translation_lipsync_test"] = True
++    await update.effective_message.reply_text(
++        "🌍 Тест перевода с синхронизацией: отправьте MP4 с речью длительностью от 2 до 10 секунд. "
++        "По умолчанию речь будет переведена на английский. Используются платные провайдеры."
++    )
++
++
++async def _sync_owner_translated_video(video_bytes: bytes, duration: float) -> bytes:
++    from neyrobot_prod.translation_segments import sync_translated_video, kling_sync_segment
++
++    async def provider(video_url, audio_url, duration_ms):
++        return await _run_kling_lipsync_result_bytes(
++            video_url, audio_url, duration_ms=duration_ms,
++            on_provider_state=lambda key, value: log.info("translation lip-sync %s=%s", key, value),
++        )
++
++    async def one_segment(video, audio, duration_ms):
++        return await kling_sync_segment(video, audio, duration_ms, _provider_input_url_from_bytes, provider)
++
++    return await sync_translated_video(video_bytes, duration, one_segment)
++
++
+ async def _run_video_translation(update: Update, context: ContextTypes.DEFAULT_TYPE, video_bytes: bytes, target_language: str):
++    sync_test = bool(context.user_data.pop("video_translation_lipsync_test", False))
++    if sync_test and (not OWNER_ID or not update.effective_user or update.effective_user.id != OWNER_ID):
++        await update.effective_message.reply_text("❌ Этот тест доступен только владельцу.")
++        return False
+     duration = await asyncio.to_thread(_generated_video_duration_seconds_sync, video_bytes)
++    if sync_test and not 2.0 <= duration <= 10.0:
++        await update.effective_message.reply_text("❌ Для теста синхронизации нужен MP4 от 2 до 10 секунд.")
++        return False
+     if not 1.0 <= duration <= 180.0:
+         await update.effective_message.reply_text("❌ Поддерживаются MP4 длительностью от 1 до 180 секунд.")
+         return False
+@@ -21749,10 +21785,13 @@
+             raise RuntimeError("TTS не вернул озвучку.")
+         speech = await asyncio.to_thread(_concat_audio_mp3_sync, [item for item in generated if item])
+         final = await asyncio.to_thread(_mux_translated_audio_sync, video_bytes, speech, duration)
+-        await _reply_video_bytes(
+-            update, final,
+-            f"✅ Перевод и озвучка готовы · язык: {target_language}. Длительность новой аудиодорожки синхронизирована с роликом.",
+-        )
++        if sync_test:
++            await update.effective_message.reply_text("🎭 Тест: применяю Kling Lip Sync к переведённой речи…")
++            final = await _sync_owner_translated_video(final, duration)
++        caption = f"✅ Перевод и озвучка готовы · язык: {target_language}."
++        if sync_test:
++            caption += " Тест Kling Lip Sync завершён."
++        await _reply_video_bytes(update, final, caption)
+         return True
+     except Exception as exc:
+         log.exception("video translation failed")
+@@ -22144,7 +22183,9 @@
+             )
+         else:
+             context.user_data.pop("awaiting_video_translation_upload", None)
+-            target = _translation_target_from_caption(getattr(update.effective_message, "caption", ""))
++            caption = getattr(update.effective_message, "caption", "") or ""
++            target = ("English" if context.user_data.get("video_translation_lipsync_test") and not caption
++                      else _translation_target_from_caption(caption))
+             await _run_video_translation(update, context, raw, target)
+     except Exception as exc:
+         await update.effective_message.reply_text(f"❌ Не удалось принять MP4: {str(exc)[:300]}")
+@@ -23112,6 +23153,7 @@
+         group=-5,
+     )
+     app.add_handler(CommandHandler("lip_sync_video", cmd_lip_sync_video), group=-4)
++    app.add_handler(CommandHandler("video_translation_sync_test", cmd_owner_translation_sync_test), group=-4)
+     app.add_handler(MessageHandler(filters.PHOTO, on_direct_lipsync_photo), group=-4)
+     app.add_handler(MessageHandler(filters.VIDEO, on_direct_lipsync_video), group=-4)
+     app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | filters.Document.ALL, on_direct_lipsync_audio), group=-4)
