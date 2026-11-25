@@ -33,3 +33,17 @@ class TranslationPaidServiceTests(unittest.IsolatedAsyncioTestCase):
   async def render(cb):self.fail('provider must not be started')
   async def deliver(v):self.fail('delivery must not start')
   with self.assertRaises(ValueError):await service.run(self.db,'req',1,5,pricing=self.pricing(),retail_quote=lambda c:(float('nan'),20),render=render,deliver=deliver)
+ async def test_confirmed_quote_is_not_recalculated(self):
+  quote=service.make_quote(5,pricing=self.pricing(),retail_quote=lambda cost:(.5,50))
+  async def render(cb):cb('quoted-task');return b'video'
+  async def deliver(video):return True
+  result=await service.run_quoted(self.db,'quoted-request',1,quote,render=render,deliver=deliver)
+  self.assertEqual((result.retail_cost,result.credits),(.5,50))
+  with sqlite3.connect(self.db) as db:
+   self.assertEqual(db.execute('SELECT usd FROM wallet').fetchone()[0],9.5)
+ async def test_invalid_confirmed_quote_does_not_start(self):
+  async def render(cb):self.fail('provider must not be started')
+  async def deliver(v):self.fail('delivery must not start')
+  quote=service.TranslationQuote(5,.1,.01,5)
+  with self.assertRaises(ValueError):
+   await service.run_quoted(self.db,'bad-quote',1,quote,render=render,deliver=deliver)
