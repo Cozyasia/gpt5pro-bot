@@ -1,0 +1,16 @@
+--- a/main.py
++++ b/main.py
+@@ -21728,6 +21728,13 @@
+ 
+ def _can_run_translation_test(user_id: int) -> bool:
+     configured = os.getenv("VIDEO_TRANSLATION_TEST_USER_ID", "").strip()
++    if not configured:
++        try:
++            path = os.path.join(os.path.dirname(DB_PATH), ".video_translation_test_user")
++            with open(path, "r", encoding="ascii") as fh:
++                configured = fh.read(32).strip()
++        except (OSError, UnicodeError):
++            configured = ""
+     return bool(user_id and ((OWNER_ID and user_id == OWNER_ID) or
+                              (configured.isdecimal() and str(user_id) == configured)))
+ 

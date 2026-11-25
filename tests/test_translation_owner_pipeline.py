@@ -8,6 +8,21 @@ from unittest.mock import AsyncMock
 from test_seedance_aspect_selection import patched_source
 
 class TranslationOwnerPipelineTests(unittest.IsolatedAsyncioTestCase):
+ async def test_test_access_can_be_scoped_to_a_persistent_file(self):
+  import os
+  from unittest.mock import patch
+  tree=ast.parse(patched_source(include_owner=True))
+  fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_can_run_translation_test')
+  with tempfile.TemporaryDirectory() as td:
+   allow=Path(td)/'.video_translation_test_user'; allow.write_text('99')
+   env={'os':os,'OWNER_ID':42,'DB_PATH':str(Path(td)/'subs.db')}
+   exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<allow>','exec'),env)
+   with patch.dict(os.environ,{},clear=True):
+    self.assertTrue(env['_can_run_translation_test'](99))
+    self.assertFalse(env['_can_run_translation_test'](98))
+    allow.unlink()
+    self.assertFalse(env['_can_run_translation_test'](99))
+
  async def test_test_allowlist_accepts_only_configured_account_or_owner(self):
   import os
   from unittest.mock import patch
