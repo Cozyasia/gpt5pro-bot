@@ -113,7 +113,7 @@ def settle(path, request_id, user_id, outcome):
             if state == 'reserved': raise ValueError('provider has not started')
             con.execute("UPDATE translation_attempts SET state='unknown',updated_ts=? WHERE request_id=?",(int(time.time()),request_id))
             con.commit(); return False
-        if outcome == 'delivered' and (state != 'submitted' or not row[3]):
+        if outcome == 'delivered' and (state not in ('submitted', 'unknown') or not row[3]):
             raise ValueError('provider result not established')
         entry=con.execute('SELECT user_id,retail_usd,status FROM credit_ledger WHERE tx_id=?',(row[1],)).fetchone()
         if not entry or entry[0] != int(user_id) or entry[2] != 'reserved':

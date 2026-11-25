@@ -26,6 +26,12 @@ class TranslationCreditLedgerTests(unittest.TestCase):
  def test_unknown_outcome_preserves_reservation(self):
   self.reserve();ledger.begin_provider(self.db,'update-1',1);ledger.settle(self.db,'update-1',1,'unknown')
   self.assertEqual(self.state(),(10,'reserved'))
+ def test_unknown_delivery_can_be_reconciled_without_second_charge(self):
+  self.reserve();ledger.begin_provider(self.db,'update-1',1);ledger.record_provider_task(self.db,'update-1',1,'task-1')
+  ledger.settle(self.db,'update-1',1,'unknown')
+  self.assertTrue(ledger.settle(self.db,'update-1',1,'delivered'))
+  self.assertFalse(ledger.settle(self.db,'update-1',1,'delivered'))
+  self.assertEqual(self.state(),(8,'charged'))
  def test_confirmed_failure_releases_reservation(self):
   self.reserve();ledger.begin_provider(self.db,'update-1',1);ledger.settle(self.db,'update-1',1,'failed')
   self.assertEqual(self.state(),(10,'released'))
