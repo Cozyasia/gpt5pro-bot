@@ -23,6 +23,13 @@ PRICE_KEYS = {'identify_per_segment': 'TRANSLATION_IDENTIFY_USD',
               'speech': 'TRANSLATION_TTS_USD'}
 
 
+def enabled_for_user(user_id):
+    if os.getenv('TRANSLATION_QUOTED_FLOW_ENABLED', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+        return True
+    allowed = {s.strip() for s in os.getenv('TRANSLATION_QUOTED_TEST_USER_IDS', '').split(',') if s.strip().isdigit()}
+    return bool(user_id and str(user_id) in allowed)
+
+
 def _keyboard(g, rows):
     return g['InlineKeyboardMarkup']([[g['InlineKeyboardButton'](label, callback_data=data)
                                        for label, data in row] for row in rows])
@@ -65,6 +72,11 @@ async def prepare(update, context, video, g):
         return
     user = update.effective_user
     unlimited = bool(g['is_unlimited'](user.id, user.username or ''))
+    if (os.getenv('TRANSLATION_QUOTED_TEST_USER_IDS', '').strip()
+            and os.getenv('TRANSLATION_QUOTED_FLOW_ENABLED', '').strip().lower() not in ('1', 'true', 'yes', 'on')
+            and not unlimited):
+        await update.effective_message.reply_text('⚠️ Тест доступен только для безлимитного аккаунта. Кредиты не списаны.')
+        return
     if g['is_promo_daily5_user'](user.id, user.username or ''):
         await update.effective_message.reply_text('⚠️ Перевод для вашего промо-тарифа пока недоступен. Кредиты не списаны.')
         return

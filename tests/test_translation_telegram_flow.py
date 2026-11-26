@@ -7,6 +7,22 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from neyrobot_prod import translation_telegram_flow as flow
 
+class AccessTests(unittest.TestCase):
+ def test_restricted_test_access_and_global_switch(self):
+  with patch.dict(os.environ, {}, clear=True):
+   self.assertFalse(flow.enabled_for_user(12))
+  with patch.dict(os.environ, {'TRANSLATION_QUOTED_TEST_USER_IDS':'12, 17'}, clear=True):
+   self.assertTrue(flow.enabled_for_user(12))
+   self.assertFalse(flow.enabled_for_user(13))
+  with patch.dict(os.environ, {'TRANSLATION_QUOTED_FLOW_ENABLED':'true'}, clear=True):
+   self.assertTrue(flow.enabled_for_user(13))
+
+ def test_rendered_integration_checks_access_at_entry_and_callback(self):
+  from test_seedance_aspect_selection import patched_source
+  source=patched_source(include_owner=True)
+  self.assertIn('enabled_for_user(q.from_user.id)', source)
+  self.assertIn('enabled_for_user(update.effective_user.id)', source)
+
 class Message:
  def __init__(self): self.message_id=47; self.sent=[]
  async def reply_text(self,text,**kw): self.sent.append((text,kw))
@@ -63,6 +79,12 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
   self.enabled=False;self.g['is_promo_daily5_user']=lambda *args:True
   with patch.dict(os.environ,self.rates):await flow.prepare(self.update,self.ctx,b'video',self.g)
   self.assertIn('промо-тарифа',self.msg.sent[-1][0])
+  self.assertFalse(self.ctx.application.bot_data.get('_translation_quotes'))
+ async def test_test_only_mode_rejects_non_unlimited_accounts(self):
+  self.enabled=False
+  with patch.dict(os.environ,{**self.rates,'TRANSLATION_QUOTED_TEST_USER_IDS':'12'},clear=True):
+   await flow.prepare(self.update,self.ctx,b'video',self.g)
+  self.assertIn('тест',self.msg.sent[-1][0].lower())
   self.assertFalse(self.ctx.application.bot_data.get('_translation_quotes'))
  async def test_other_account_cannot_confirm_quote(self):
   with patch.dict(os.environ,self.rates):await flow.prepare(self.update,self.ctx,b'video',self.g)
