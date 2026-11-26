@@ -1,0 +1,65 @@
+--- a/main.py
++++ b/main.py
+@@ -6408,6 +6408,8 @@
+         "video_continue_source",
+         "awaiting_video_continue_prompt",
+         "awaiting_video_translation_upload",
++        "translation_choose_language",
++        "video_translation_lipsync_public",
+         "video_translation_language",
+         "video_translation_lipsync_test",
+         "awaiting_video_faceswap_target",
+@@ -9772,6 +9774,7 @@
+     max_wait_s: int | None = None,
+     on_provider_state=None,
+     existing_task_id: str = "",
++    retry_identify_unknown: bool = True,
+ ) -> bytes:
+     """Documented Comet/Kling identify-face -> advanced-lip-sync transport."""
+     if not KLING_LIPSYNC_ENABLED:
+@@ -9787,7 +9790,7 @@
+     async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+         task_id = str(existing_task_id or "").strip()
+         if not task_id:
+-            identified = await _kling_post_json_with_retry(client, KLING_IDENTIFY_FACE_PATH, headers, {"video_url": video_url}, "Kling identify-face")
++            identified = await _kling_post_json_with_retry(client, KLING_IDENTIFY_FACE_PATH, headers, {"video_url": video_url}, "Kling identify-face", retry_unknown_post=retry_identify_unknown)
+             data = _provider_data_object(identified)
+             session_id = str(data.get("session_id") or identified.get("session_id") or "").strip()
+             faces = data.get("face_data") or data.get("faces") or []
+@@ -20957,6 +20960,10 @@
+         return
+ 
+     if action == "video_translation":
++        if os.getenv("TRANSLATION_QUOTED_FLOW_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on"):
++            from neyrobot_prod.translation_telegram_flow import open_menu
++            await open_menu(update, context, globals())
++            return
+         await q.answer("Перевод и озвучка")
+         _clear_transient_flows(context)
+         _set_mode_clean(q.from_user.id, "Нейро Продакшен", "video_translation")
+@@ -22212,7 +22219,11 @@
+             caption = getattr(update.effective_message, "caption", "") or ""
+             default_language = "English" if context.user_data.get("video_translation_lipsync_test") else "Russian"
+             target = _translation_target_from_caption(caption, default=default_language)
+-            await _run_video_translation(update, context, raw, target)
++            if context.user_data.pop("video_translation_lipsync_public", False):
++                from neyrobot_prod.translation_telegram_flow import prepare
++                await prepare(update, context, raw, globals())
++            else:
++                await _run_video_translation(update, context, raw, target)
+     except Exception as exc:
+         await update.effective_message.reply_text(f"❌ Не удалось принять MP4: {str(exc)[:300]}")
+     raise ApplicationHandlerStop()
+@@ -23069,6 +23080,12 @@
+     # 3b) Подменю Suno: свободный запрос и пресеты
+     app.add_handler(CallbackQueryHandler(on_cb_suno,  pattern=r"^suno:"), group=0)
+ 
++    async def _translation_callback(update, context):
++        from neyrobot_prod.translation_telegram_flow import callback
++        await callback(update, context, globals())
++
++    app.add_handler(CallbackQueryHandler(_translation_callback, pattern=r"^vtr:(?:lang:(?:ru|en|th|es)|(?:yes|no):[0-9a-f]{32})$"), group=0)
++
+     # Paid quote confirmation must be handled before the generic callback router.
+     async def _neyronix_paid_quote_dispatch(update, context):
+         q = update.callback_query

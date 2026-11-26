@@ -1,0 +1,45 @@
+diff --git a/main.py b/main.py
+index 0f14b4e..48503eb 100644
+--- a/main.py
++++ b/main.py
+@@ -2076,17 +2076,29 @@ def _wallet_total_add(user_id: int, usd: float):
+     con.commit(); con.close()
+ 
+ def _wallet_total_take(user_id: int, usd: float) -> bool:
+-    con = sqlite3.connect(DB_PATH); cur = con.cursor()
+-    cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (int(user_id),))
+-    con.commit()
+-    cur.execute("SELECT usd FROM wallet WHERE user_id=?", (int(user_id),))
+-    row = cur.fetchone()
+-    bal = float(row[0] if row and row[0] is not None else 0.0)
+-    if bal + 1e-9 < usd:
+-        con.close(); return False
+-    cur.execute("UPDATE wallet SET usd = usd - ? WHERE user_id=?", (float(usd), user_id))
+-    con.commit(); con.close()
+-    return True
++    amount = float(usd)
++    if not math.isfinite(amount) or amount < 0:
++        return False
++    con = sqlite3.connect(DB_PATH, timeout=30)
++    try:
++        cur = con.cursor()
++        cur.execute("BEGIN IMMEDIATE")
++        cur.execute("INSERT OR IGNORE INTO wallet(user_id) VALUES (?)", (int(user_id),))
++        cur.execute("SELECT COALESCE(usd,0) FROM wallet WHERE user_id=?", (int(user_id),))
++        balance = float(cur.fetchone()[0])
++        cur.execute("SELECT COALESCE(SUM(retail_usd),0) FROM credit_ledger WHERE user_id=? AND status='reserved'", (int(user_id),))
++        reserved = float(cur.fetchone()[0])
++        if balance - reserved + 1e-9 < amount:
++            con.rollback()
++            return False
++        cur.execute("UPDATE wallet SET usd=COALESCE(usd,0)-? WHERE user_id=?", (amount, int(user_id)))
++        con.commit()
++        return True
++    except BaseException:
++        con.rollback()
++        raise
++    finally:
++        con.close()
+ 
+ # ───────── Лимиты/цены ─────────
+ _USD_RUB_ENV = _env_float("USD_RUB", 100.0)
