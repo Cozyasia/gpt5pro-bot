@@ -1,5 +1,73 @@
 --- a/main.py
 +++ b/main.py
+@@ -2629,7 +2629,7 @@
+     except Exception:
+         return OPENAI_MODEL
+ 
+-async def ask_openai_text(user_text: str, web_ctx: str = "", user_id: int | None = None, chat_id: int | None = None, extra_system: str = "") -> str:
++async def ask_openai_text(user_text: str, web_ctx: str = "", user_id: int | None = None, chat_id: int | None = None, extra_system: str = "", *, max_attempts: int = 3) -> str:
+     """
+     Универсальный запрос к LLM:
+     - поддерживает OpenRouter (через OPENAI_API_KEY = sk-or-...);
+@@ -2682,7 +2682,7 @@
+ 
+     last_err: Exception | None = None
+ 
+-    for attempt in range(3):
++    for attempt in range(max(1, min(3, int(max_attempts)))):
+         try:
+             async with httpx.AsyncClient(
+                 base_url=base_url,
+@@ -2785,7 +2785,7 @@
+ 
+ 
+ # ───────── Надёжный TTS через REST (OGG/Opus) ─────────
+-def _tts_bytes_sync(text: str, audio_format: str = "opus", voice: str | None = None) -> bytes | None:
++def _tts_bytes_sync(text: str, audio_format: str = "opus", voice: str | None = None, *, max_attempts: int = 3) -> bytes | None:
+     try:
+         if not OPENAI_TTS_KEY:
+             return None
+@@ -2804,7 +2804,7 @@
+             "Content-Type": "application/json"
+         }
+         r = None
+-        for attempt in range(3):
++        for attempt in range(max(1, min(3, int(max_attempts)))):
+             try:
+                 with httpx.Client(timeout=httpx.Timeout(connect=15.0, read=180.0, write=30.0, pool=15.0)) as client:
+                     r = client.post(url, headers=headers, json=payload)
+@@ -2812,7 +2812,7 @@
+                 break
+             except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError) as exc:
+                 log.warning("TTS transient transport failure attempt %s/3: %s", attempt + 1, type(exc).__name__)
+-                if attempt == 2:
++                if attempt + 1 >= max(1, min(3, int(max_attempts))):
+                     raise
+                 time.sleep(2 ** attempt)
+         data = r.content if r is not None and r.content else None
+@@ -2866,17 +2866,17 @@
+ OPENAI_STT_KEY      = (os.getenv("OPENAI_STT_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+ OPENAI_STT_BASE_URL = (os.getenv("OPENAI_STT_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+ 
+-def _oai_stt_client():
+-    return _OpenAI_STT(api_key=OPENAI_STT_KEY, base_url=OPENAI_STT_BASE_URL)
++def _oai_stt_client(*, max_retries=2):
++    return _OpenAI_STT(api_key=OPENAI_STT_KEY, base_url=OPENAI_STT_BASE_URL, max_retries=max_retries)
+ 
+-async def _stt_transcribe_bytes(filename: str, raw: bytes) -> str:
++async def _stt_transcribe_bytes(filename: str, raw: bytes, *, max_attempts: int = 3) -> str:
+     last_err = None
+-    for attempt in range(3):
++    for attempt in range(max(1, min(3, int(max_attempts)))):
+         try:
+             bio = BytesIO(raw)
+             bio.name = filename
+             bio.seek(0)
+-            resp = _oai_stt_client().audio.transcriptions.create(
++            resp = _oai_stt_client(max_retries=0 if max_attempts == 1 else 2).audio.transcriptions.create(
+                 model=OPENAI_STT_MODEL,
+                 file=bio,
+             )
 @@ -6408,6 +6408,8 @@
          "video_continue_source",
          "awaiting_video_continue_prompt",
@@ -37,7 +105,16 @@
          await q.answer("Перевод и озвучка")
          _clear_transient_flows(context)
          _set_mode_clean(q.from_user.id, "Нейро Продакшен", "video_translation")
-@@ -22212,7 +22219,11 @@
+@@ -22164,6 +22171,8 @@
+         mime = (getattr(media, "mime_type", "") or "").lower()
+         if update.effective_message.document and not (filename.endswith(".mp4") or mime.startswith("video/")):
+             raise RuntimeError("Нужен файл MP4.")
++        if context.user_data.get("video_translation_lipsync_public") and (getattr(media, "file_size", 0) or 0) > 50 * 1024 * 1024:
++            raise RuntimeError("MP4 должен быть до 50 МБ.")
+         tg_file = await _telegram_media_get_file_with_retry(media, label="postproduction video")
+         raw = bytes(await tg_file.download_as_bytearray())
+         if context.user_data.get("awaiting_hero_replace_video"):
+@@ -22212,7 +22221,11 @@
              caption = getattr(update.effective_message, "caption", "") or ""
              default_language = "English" if context.user_data.get("video_translation_lipsync_test") else "Russian"
              target = _translation_target_from_caption(caption, default=default_language)
@@ -50,7 +127,7 @@
      except Exception as exc:
          await update.effective_message.reply_text(f"❌ Не удалось принять MP4: {str(exc)[:300]}")
      raise ApplicationHandlerStop()
-@@ -23069,6 +23080,12 @@
+@@ -23069,6 +23082,12 @@
      # 3b) Подменю Suno: свободный запрос и пресеты
      app.add_handler(CallbackQueryHandler(on_cb_suno,  pattern=r"^suno:"), group=0)
  

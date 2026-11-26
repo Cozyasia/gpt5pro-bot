@@ -23,9 +23,10 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
   self.enabled=True
   self.g={'InlineKeyboardButton':lambda text,callback_data: (text,callback_data),
     'InlineKeyboardMarkup':lambda rows:rows,'_generated_video_duration_seconds_sync':lambda v:5.0,
-    'OPENAI_STT_KEY':'x','OPENAI_TTS_KEY':'x','KLING_LIPSYNC_ENABLED':True,'KLING_API_KEY':'',
+    'OPENAI_STT_KEY':'x','OPENAI_TTS_KEY':'x','TEXT_API_KEY':'x','KLING_LIPSYNC_ENABLED':True,'KLING_API_KEY':'',
     'COMET_API_KEY':'x','_retail_usd':lambda cost:.5,'_retail_credits':lambda cost:50,
-    'is_unlimited':lambda uid,name:self.enabled,'_wallet_available_get':lambda uid:10,'DB_PATH':'unused',
+    'is_unlimited':lambda uid,name:self.enabled,'is_promo_daily5_user':lambda uid,name:False,
+    '_wallet_available_get':lambda uid:10,'DB_PATH':'unused',
     '_provider_input_url_from_bytes':lambda *args:'https://example.org'}
   self.rates={v:'0.01' for v in flow.PRICE_KEYS.values()}
  async def test_quote_unlimited_then_duplicate_confirmation_runs_once(self):
@@ -50,6 +51,19 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
   q=Query(self.msg,'vtr:yes:'+token,self.user);self.update.callback_query=q
   with patch.object(flow,'run_short_translation') as run: await flow.callback(self.update,self.ctx,self.g)
   run.assert_not_called();self.assertIn('изменились',q.answers[-1][0][0])
+ async def test_busy_service_keeps_quote_without_starting(self):
+  with patch.dict(os.environ,self.rates):await flow.prepare(self.update,self.ctx,b'video',self.g)
+  token=next(iter(self.ctx.application.bot_data['_translation_quotes']))
+  self.ctx.application.bot_data['_translation_running']={'one','two'}
+  q=Query(self.msg,'vtr:yes:'+token,self.user);self.update.callback_query=q
+  with patch.object(flow,'run_short_translation') as run:await flow.callback(self.update,self.ctx,self.g)
+  run.assert_not_called();self.assertIn(token,self.ctx.application.bot_data['_translation_quotes'])
+  self.assertIn('занят',q.answers[-1][0][0])
+ async def test_promo_account_is_not_accidentally_charged(self):
+  self.enabled=False;self.g['is_promo_daily5_user']=lambda *args:True
+  with patch.dict(os.environ,self.rates):await flow.prepare(self.update,self.ctx,b'video',self.g)
+  self.assertIn('промо-тарифа',self.msg.sent[-1][0])
+  self.assertFalse(self.ctx.application.bot_data.get('_translation_quotes'))
  async def test_other_account_cannot_confirm_quote(self):
   with patch.dict(os.environ,self.rates):await flow.prepare(self.update,self.ctx,b'video',self.g)
   token=next(iter(self.ctx.application.bot_data['_translation_quotes']))
@@ -57,8 +71,8 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
   with patch.object(flow,'run_short_translation') as run: await flow.callback(self.update,self.ctx,self.g)
   run.assert_not_called();self.assertIn(token,self.ctx.application.bot_data['_translation_quotes'])
  async def test_translation_failure_text_is_not_sent_to_tts_or_kling(self):
-  async def stt(*args): return 'speech'
-  async def translate(*args): return '⚠️ Сейчас не получилось получить ответ от модели. Попробуйте позже.'
+  async def stt(*args,**kwargs): return 'speech'
+  async def translate(*args,**kwargs): return '⚠️ Сейчас не получилось получить ответ от модели. Попробуйте позже.'
   def tts(*args):self.fail('must not synthesize an error message')
   self.g.update(_extract_video_audio_sync=lambda video:b'audio',_stt_transcribe_bytes=stt,
                 ask_openai_text=translate,_tts_bytes_sync=tts)
@@ -81,8 +95,8 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
    feature TEXT,engine TEXT,provider_cost_usd REAL,retail_usd REAL,credits REAL,status TEXT,
    metadata_json TEXT,created_ts INTEGER,updated_ts INTEGER);''')
    self.enabled=False; events=[]
-   async def stt(*args):return 'hello'
-   async def translate(*args):return 'hola'
+   async def stt(*args,**kwargs):return 'hello'
+   async def translate(*args,**kwargs):return 'hola'
    async def kling(video,audio,**kw):events.append('kling');kw['on_provider_state']('lip_sync_task_id','job-1');return b'result'
    async def reply(update,video,caption,**kw):
     with sqlite3.connect(db) as c:self.assertEqual(c.execute('SELECT usd FROM wallet').fetchone()[0],1)
@@ -90,7 +104,7 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
    async def sync(video,duration,segment):return await segment(b'clip',b'audio',5000)
    self.g.update(DB_PATH=db,_extract_video_audio_sync=lambda v:b'audio',_stt_transcribe_bytes=stt,
     ask_openai_text=translate,_split_tts_text=lambda t,n:[t],TTS_MAX_CHARS=100,
-    _tts_bytes_sync=lambda *a:b'speech',_avatar_tts_voice_get=lambda c:'voice',
+    _tts_bytes_sync=lambda *a,**kw:b'speech',_avatar_tts_voice_get=lambda c:'voice',
     _concat_audio_mp3_sync=lambda parts:b'audio',_mux_translated_audio_sync=lambda *a:b'video',
     _run_kling_lipsync_result_bytes=kling,_reply_video_bytes=reply)
    with patch.dict(os.environ,self.rates),patch.object(translation_public_flow,'sync_translated_video',sync):
@@ -112,3 +126,41 @@ class DeploymentIntegrationTests(unittest.TestCase):
   self.assertIn('CallbackQueryHandler(_translation_callback',source)
   self.assertIn('retry_unknown_post=retry_identify_unknown',source)
   self.assertIn("status='reserved'\", (int(user_id),))",source)
+
+class NoRetryTests(unittest.IsolatedAsyncioTestCase):
+ async def test_translation_stt_makes_only_one_provider_attempt(self):
+  import ast,asyncio
+  from test_seedance_aspect_selection import patched_source
+  tree=ast.parse(patched_source(include_owner=True))
+  nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in ('_oai_stt_client','_stt_transcribe_bytes')]
+  from io import BytesIO
+  calls=[]
+  class Client:
+   def __init__(self,**kw): calls.append(('client',kw['max_retries'])); self.audio=SimpleNamespace(transcriptions=self)
+   def create(self,**kw): calls.append(('request',None)); raise TimeoutError('uncertain')
+  async def sleep(*args): pass
+  env={'_OpenAI_STT':Client,'OPENAI_STT_KEY':'x','OPENAI_STT_BASE_URL':'https://example.test',
+       'OPENAI_STT_MODEL':'model','BytesIO':BytesIO,'asyncio':SimpleNamespace(sleep=sleep),
+       'log':SimpleNamespace(warning=lambda *a:None,error=lambda *a:None)}
+  exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),'<stt>','exec'),env)
+  self.assertEqual(await env['_stt_transcribe_bytes']('file.mp3',b'audio',max_attempts=1),'')
+  self.assertEqual(calls,[('client',0),('request',None)])
+ async def test_translation_tts_makes_only_one_provider_attempt(self):
+  import ast
+  from test_seedance_aspect_selection import patched_source
+  tree=ast.parse(patched_source(include_owner=True))
+  fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_tts_bytes_sync')
+  calls=[]
+  class Timeout(Exception):pass
+  class Client:
+   def __init__(self,**kw):pass
+   def __enter__(self):return self
+   def __exit__(self,*args):pass
+   def post(self,*a,**kw):calls.append('post');raise Timeout()
+  http=SimpleNamespace(Client=Client,Timeout=lambda **kw:None,ReadTimeout=Timeout,ConnectTimeout=Timeout,ConnectError=Timeout)
+  env={'httpx':http,'OPENAI_TTS_KEY':'test','OPENAI_TTS_BASE_URL':'https://example.test',
+       'OPENAI_TTS_MODEL':'test','OPENAI_TTS_VOICE':'alloy',
+       'log':SimpleNamespace(warning=lambda *a:None,exception=lambda *a:None,info=lambda *a:None)}
+  exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<tts>','exec'),env)
+  self.assertIsNone(env['_tts_bytes_sync']('text','mp3',max_attempts=1))
+  self.assertEqual(calls,['post'])

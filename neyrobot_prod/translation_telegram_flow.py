@@ -54,7 +54,7 @@ async def prepare(update, context, video, g):
     if not math.isfinite(duration) or not 2 <= duration <= 10:
         await update.effective_message.reply_text('Нужен MP4 с речью длительностью от 2 до 10 секунд и размером до 50 МБ.')
         return
-    if not (g['OPENAI_STT_KEY'] and g['OPENAI_TTS_KEY'] and g['KLING_LIPSYNC_ENABLED'] and
+    if not (g['OPENAI_STT_KEY'] and g['OPENAI_TTS_KEY'] and g['TEXT_API_KEY'] and g['KLING_LIPSYNC_ENABLED'] and
             (g['KLING_API_KEY'] or g['COMET_API_KEY'])):
         await update.effective_message.reply_text('⚠️ Перевод с синхронизацией сейчас недоступен. Попробуйте позже.')
         return
@@ -65,6 +65,9 @@ async def prepare(update, context, video, g):
         return
     user = update.effective_user
     unlimited = bool(g['is_unlimited'](user.id, user.username or ''))
+    if g['is_promo_daily5_user'](user.id, user.username or ''):
+        await update.effective_message.reply_text('⚠️ Перевод для вашего промо-тарифа пока недоступен. Кредиты не списаны.')
+        return
     if not unlimited and g['_wallet_available_get'](user.id) + 1e-9 < quote.retail_cost:
         await update.effective_message.reply_text(f'Недостаточно кредитов. Стоимость: {quote.credits:g} кр. Пополните баланс и загрузите видео заново.')
         return
@@ -111,27 +114,38 @@ async def callback(update, context, g):
     item = pending.get(parts[2])
     if not item or item['user_id'] != q.from_user.id or item['chat_id'] != update.effective_chat.id:
         await q.answer('Предложение недоступно или истекло.', show_alert=True); return
+    running = context.application.bot_data.setdefault('_translation_running', set())
+    if parts[1] == 'yes' and len(running) >= 2:
+        await q.answer('Сервис занят. Подождите и нажмите ещё раз.', show_alert=True); return
     pending.pop(parts[2], None)
     if item['expires'] < time.time():
         await q.answer('Предложение истекло. Загрузите видео заново.', show_alert=True); return
     if parts[1] == 'no':
         await q.answer(); await q.message.reply_text('Отменено. Кредиты не списаны.'); return
     current_unlimited = bool(g['is_unlimited'](q.from_user.id, q.from_user.username or ''))
-    if current_unlimited != item['unlimited']:
+    if current_unlimited != item['unlimited'] or g['is_promo_daily5_user'](q.from_user.id, q.from_user.username or ''):
         await q.answer('Условия аккаунта изменились. Загрузите видео заново.', show_alert=True); return
+    running.add(parts[2])
+    try:
+        await _execute_confirmed(q, context, g, item)
+    finally:
+        running.discard(parts[2])
+
+
+async def _execute_confirmed(q, context, g, item):
     await q.answer()
     await q.message.reply_text('🌍 Принято. Перевожу речь, создаю озвучку и синхронизирую губы. Это может занять несколько минут.')
 
     async def dub(video, duration, language):
         source_audio = await asyncio.to_thread(g['_extract_video_audio_sync'], video)
-        transcript = await g['_stt_transcribe_bytes']('source.mp3', source_audio)
+        transcript = await g['_stt_transcribe_bytes']('source.mp3', source_audio, max_attempts=1)
         if not transcript: raise RuntimeError('empty transcript')
         translated = await g['ask_openai_text'](
-            f'Translate this spoken-video transcript into {language}. Preserve meaning, names, tone and paragraph breaks. Return only the translated narration, with no notes:\n\n' + transcript)
+            f'Translate this spoken-video transcript into {language}. Preserve meaning, names, tone and paragraph breaks. Return only the translated narration, with no notes:\n\n' + transcript, max_attempts=1)
         if not translated or translated.startswith('⚠️ Сейчас не получилось получить ответ от модели.'):
             raise RuntimeError('translation model did not return a translation')
         parts = g['_split_tts_text'](translated, g['TTS_MAX_CHARS'])
-        speech = [await asyncio.to_thread(g['_tts_bytes_sync'], part, 'mp3', g['_avatar_tts_voice_get'](context)) for part in parts]
+        speech = [await asyncio.to_thread(g['_tts_bytes_sync'], part, 'mp3', g['_avatar_tts_voice_get'](context), max_attempts=1) for part in parts]
         if not speech or any(not v for v in speech): raise RuntimeError('empty speech')
         audio = await asyncio.to_thread(g['_concat_audio_mp3_sync'], speech)
         return await asyncio.to_thread(g['_mux_translated_audio_sync'], video, audio, duration)
