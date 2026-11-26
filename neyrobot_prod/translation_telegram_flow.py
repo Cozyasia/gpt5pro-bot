@@ -6,10 +6,12 @@ An operation identifier derived from the incoming message is persisted by the
 ledger before any provider call, including after a Telegram update is replayed.
 """
 import asyncio
+import json
 import math
 import os
 import secrets
 import time
+from pathlib import Path
 
 from .translation_paid_service import make_quote
 from .translation_public_flow import run_short_translation
@@ -23,11 +25,42 @@ PRICE_KEYS = {'identify_per_segment': 'TRANSLATION_IDENTIFY_USD',
               'speech': 'TRANSLATION_TTS_USD'}
 
 
+def _test_file_config():
+    """Read optional scoped settings beside the database; malformed files fail closed."""
+    db_path = os.environ.get('DB_PATH', '').strip()
+    if not db_path:
+        return None
+    try:
+        path = Path(db_path).parent / 'translation_quoted_test.json'
+        if path.stat().st_size > 16384:
+            return None
+        data = json.loads(path.read_text(encoding='utf-8'))
+        user_id = data['user_id']
+        prices = data['prices']
+        if type(user_id) is not int or user_id <= 0 or not isinstance(prices, dict):
+            return None
+        if any(isinstance(prices.get(key), bool) or not isinstance(prices.get(key), (int, float))
+               or not math.isfinite(prices[key]) or prices[key] <= 0 for key in PRICE_KEYS):
+            return None
+        return data
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
+        return None
+
+
+def _restricted_test_mode():
+    return (os.getenv('TRANSLATION_QUOTED_FLOW_ENABLED', '').strip().lower() not in ('1', 'true', 'yes', 'on')
+            and bool(os.getenv('TRANSLATION_QUOTED_TEST_USER_IDS', '').strip() or _test_file_config()))
+
+
 def enabled_for_user(user_id):
     if os.getenv('TRANSLATION_QUOTED_FLOW_ENABLED', '').strip().lower() in ('1', 'true', 'yes', 'on'):
         return True
-    allowed = {s.strip() for s in os.getenv('TRANSLATION_QUOTED_TEST_USER_IDS', '').split(',') if s.strip().isdigit()}
-    return bool(user_id and str(user_id) in allowed)
+    configured = os.getenv('TRANSLATION_QUOTED_TEST_USER_IDS', '').strip()
+    if configured:
+        allowed = {s.strip() for s in configured.split(',') if s.strip().isdigit()}
+        return bool(user_id and str(user_id) in allowed)
+    config = _test_file_config()
+    return bool(user_id and config and user_id == config['user_id'])
 
 
 def _keyboard(g, rows):
@@ -37,7 +70,9 @@ def _keyboard(g, rows):
 
 def _rates():
     # Explicitly configured totals are estimates for the maximum supported clip.
-    return {key: os.environ.get(name) for key, name in PRICE_KEYS.items()}
+    config = _test_file_config() if _restricted_test_mode() else None
+    return {key: os.environ.get(name, config['prices'][key] if config else None)
+            for key, name in PRICE_KEYS.items()}
 
 
 async def open_menu(update, context, g):
@@ -72,9 +107,7 @@ async def prepare(update, context, video, g):
         return
     user = update.effective_user
     unlimited = bool(g['is_unlimited'](user.id, user.username or ''))
-    if (os.getenv('TRANSLATION_QUOTED_TEST_USER_IDS', '').strip()
-            and os.getenv('TRANSLATION_QUOTED_FLOW_ENABLED', '').strip().lower() not in ('1', 'true', 'yes', 'on')
-            and not unlimited):
+    if _restricted_test_mode() and not unlimited:
         await update.effective_message.reply_text('⚠️ Тест доступен только для безлимитного аккаунта. Кредиты не списаны.')
         return
     if g['is_promo_daily5_user'](user.id, user.username or ''):
@@ -185,3 +218,4 @@ async def _execute_confirmed(q, context, g, item):
     except Exception:
         g['log'].exception('quoted translation execution failed')
         await q.message.reply_text('⚠️ Статус уточняется. Не запускайте запрос повторно; обратитесь в поддержку.')
+

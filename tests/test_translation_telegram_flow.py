@@ -1,4 +1,5 @@
 import os
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -83,6 +84,13 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
  async def test_test_only_mode_rejects_non_unlimited_accounts(self):
   self.enabled=False
   with patch.dict(os.environ,{**self.rates,'TRANSLATION_QUOTED_TEST_USER_IDS':'12'},clear=True):
+   await flow.prepare(self.update,self.ctx,b'video',self.g)
+  self.assertIn('тест',self.msg.sent[-1][0].lower())
+  self.assertFalse(self.ctx.application.bot_data.get('_translation_quotes'))
+ async def test_file_test_mode_rejects_non_unlimited_accounts(self):
+  self.enabled=False
+  with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, {'DB_PATH':root+'/db.sqlite'}, clear=True):
+   Path(root,'translation_quoted_test.json').write_text(json.dumps({'user_id':12,'prices':{key:0.01 for key in flow.PRICE_KEYS}}))
    await flow.prepare(self.update,self.ctx,b'video',self.g)
   self.assertIn('тест',self.msg.sent[-1][0].lower())
   self.assertFalse(self.ctx.application.bot_data.get('_translation_quotes'))
@@ -186,3 +194,4 @@ class NoRetryTests(unittest.IsolatedAsyncioTestCase):
   exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<tts>','exec'),env)
   self.assertIsNone(env['_tts_bytes_sync']('text','mp3',max_attempts=1))
   self.assertEqual(calls,['post'])
+
